@@ -62,6 +62,10 @@ MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
     {ActionStatus.RUNNING, ActionStatus.INTERRUPTED, ActionStatus.CHECKING_BATCH}
 )
 
+# Status detail naming the `agac retry` that put an action back to pending, by its
+# manifest's ``created_at``. Removed when a reset makes what the action holds stale.
+REPAIRED_BY = "repaired_by"
+
 
 def _as_count(value: Any) -> int | None:
     """*value* as a record count, or None if it is not one."""
@@ -179,6 +183,7 @@ class ActionStateManager:
                 details = self.action_status.setdefault(name, {})
                 details["status"] = ActionStatus.PENDING
                 details.pop("max_records", None)
+                details.pop(REPAIRED_BY, None)
             self._save_status()
 
     def is_completed(self, action_name: str) -> bool:

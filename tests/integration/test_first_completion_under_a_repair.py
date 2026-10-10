@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage import get_storage_backend
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
@@ -92,6 +93,18 @@ def _fail(project, record_id, action=ACTION):
         backend.close()
 
 
+def _a_failed_record(project):
+    backend = _backend(project)
+    try:
+        return sorted(
+            row["record_id"]
+            for row in backend.get_disposition(ACTION, disposition="failed")
+            if row["record_id"] != "__node__"
+        )[0]
+    finally:
+        backend.close()
+
+
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     """Eight records through one local tool action — no network, no limit."""
@@ -113,19 +126,30 @@ def project(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def repair_reaches_a_new_action(project):
+def repair_reaches_a_new_action(project, monkeypatch):
     """A repair whose downstream reaches an action that has never completed.
 
-    `agac retry` re-runs its starting action and everything below it, so an
-    action added to the workflow after the last run is repaired without ever
-    having completed. Asserted rather than assumed: the whole defect depends on
-    this action having no stamp when the repair reaches it.
+    `agac retry` re-runs its starting action and everything below it. An action
+    added to the workflow is skipped by the first run that reaches it when the
+    action it reads fails every record, so the repair of one of those records
+    is the first to complete it. Asserted rather than assumed: the whole defect
+    depends on this action having no stamp when the repair reaches it.
     """
     config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(config.read_text().rstrip("\n") + "\n" + SECOND_ACTION)
     (project / "tools" / WORKFLOW / "tag.py").write_text(TAG_TOOL)
-    assert _stamp(project, SECOND) == {}, "the second action must not have completed yet"
-    _fail(project, _guids(project)[-1])
+    run_tool = tool_client.execute_user_defined_function
+
+    def flatten_fails(udf_name, *args, **kwargs):
+        if udf_name == "flatten_pages":
+            raise RuntimeError("the tool blew up")
+        return run_tool(udf_name, *args, **kwargs)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(tool_client, "execute_user_defined_function", flatten_fails)
+        CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert _stamp(project, SECOND)["status"] == "skipped"
+    assert "record_limit" not in _stamp(project, SECOND), "the second action has completed"
     return project
 
 
@@ -135,7 +159,8 @@ class TestAFirstCompletionRecordsTheCapItRanUnder:
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
 
         result = CliRunner().invoke(
-            cli, ["retry", "-a", WORKFLOW, "--record", _guids(repair_reaches_a_new_action)[-1]]
+            cli,
+            ["retry", "-a", WORKFLOW, "--record", _a_failed_record(repair_reaches_a_new_action)],
         )
 
         assert result.exit_code == 0, result.output
@@ -156,7 +181,8 @@ class TestAFirstCompletionRecordsTheCapItRanUnder:
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
 
         result = CliRunner().invoke(
-            cli, ["retry", "-a", WORKFLOW, "--record", _guids(repair_reaches_a_new_action)[-1]]
+            cli,
+            ["retry", "-a", WORKFLOW, "--record", _a_failed_record(repair_reaches_a_new_action)],
         )
 
         assert result.exit_code == 0, result.output
@@ -174,7 +200,9 @@ class TestAFirstCompletionRecordsTheCapItRanUnder:
         project = repair_reaches_a_new_action
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
         assert (
-            CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", _guids(project)[-1]])
+            CliRunner().invoke(
+                cli, ["retry", "-a", WORKFLOW, "--record", _a_failed_record(project)]
+            )
         ).exit_code == 0
         capped = _stored_records(project, SECOND)
         assert capped < RECORDS, "fixture failed to truncate the first completion"
@@ -232,15 +260,15 @@ class TestAnUnlimitedFirstCompletionIsStillUnlimited:
         """`null` is the honest stamp when nothing was in force, and a later run
         under nothing in force reads no change and skips.
 
-        The action holds only the records the repair named, not everything — so
-        it is skipped holding one row of eight. Nothing lies about a limit here:
-        what goes unrecorded is coverage, and no limit stamp can record a
-        narrowing the repair did. Pinned as it stands rather than as it ought to
-        be; see the follow-up filed with this change."""
+        The action holds the one record the repair named, the only one the action
+        it reads now answers; the other seven are still failed there, for a later
+        repair to reach."""
         project = repair_reaches_a_new_action
         monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
         assert (
-            CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", _guids(project)[-1]])
+            CliRunner().invoke(
+                cli, ["retry", "-a", WORKFLOW, "--record", _a_failed_record(project)]
+            )
         ).exit_code == 0
         assert _stamp(project, SECOND)["record_limit"] is None
         settled = _stored_records(project, SECOND)
@@ -262,7 +290,9 @@ class TestAnUncappedRepairNeverVouchesForALaterLimit:
         project = repair_reaches_a_new_action
         monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
         assert (
-            CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", _guids(project)[-1]])
+            CliRunner().invoke(
+                cli, ["retry", "-a", WORKFLOW, "--record", _a_failed_record(project)]
+            )
         ).exit_code == 0
         assert _stored_records(project, SECOND) < RECORDS
 

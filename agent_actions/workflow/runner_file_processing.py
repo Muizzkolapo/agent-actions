@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import is_action_fatal, raised_by_exhaustion_policy
+from agent_actions.errors import every_record_failed, is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -58,10 +58,14 @@ class CollectedErrors:
     halt_message: str | None = None
     fatal: Exception | None = None
     fatal_message: str | None = None
+    # Outside the cap too: one file lost partway among many failed whole decides it.
+    left_input_unreached: bool = False
 
     def record(self, relative_path: object, exc: Exception) -> None:
         if len(self.messages) < _MAX_TRACKED_ERRORS:
             self.messages.append(f"{relative_path}: {exc}")
+        if not every_record_failed(exc):
+            self.left_input_unreached = True
         # Deliberately outside the cap: the halt may be the fiftieth failure,
         # and it is the one signal the next run cannot reconstruct.
         if raised_by_exhaustion_policy(exc):
@@ -74,6 +78,7 @@ class CollectedErrors:
 
     def merge(self, other: CollectedErrors) -> None:
         self.messages.extend(other.messages)
+        self.left_input_unreached = self.left_input_unreached or other.left_input_unreached
         if self.halt is None:
             self.halt, self.halt_message = other.halt, other.halt_message
         if self.fatal is None:
@@ -221,8 +226,11 @@ def _raise_all_files_failed(
     cause where there is one, and otherwise the first action-fatal cause:
     chaining the first failure of any kind loses the halt whenever another
     file failed before it.
+
+    Marked as failing all of its input only when each file failed on every one
+    of its records: a file stopped partway leaves records nothing reached.
     """
-    from agent_actions.errors import DependencyError
+    from agent_actions.errors import DependencyError, mark_every_file_failed
 
     # The action-fatal cause leads when there is one: the sample is capped, so
     # a halt that failed after the cap would otherwise appear only on the chain.
@@ -231,7 +239,7 @@ def _raise_all_files_failed(
         or _format_error_sample(errors.messages)
         or "Check logs for details."
     )
-    raise DependencyError(
+    error = DependencyError(
         f"Action '{action_name}': {detail} (Found {files_found} files but failed to process any.)",
         context={
             "action": action_name,
@@ -241,6 +249,9 @@ def _raise_all_files_failed(
         },
         cause=errors.action_fatal,
     )
+    if errors.action_fatal is None and not errors.left_input_unreached:
+        mark_every_file_failed(error)
+    raise error
 
 
 def _raise_action_fatal(
@@ -930,7 +941,20 @@ def process_from_storage_backend(
 
 
 def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
-    """Walk upstream data directories and process each file with the given strategy."""
+    """Walk upstream data directories and process each file with the given strategy.
+
+    A pass that ends without raising may still have lost files to per-file failures.
+    The runner is told whether any of them left records unreached, for the executor
+    to read should every record it did reach have failed.
+    """
+    unreached = runner.input_left_unreached
+    unreached.discard(params.action_name)
+    if _walk_and_process(runner, params).left_input_unreached:
+        unreached.add(params.action_name)
+
+
+def _walk_and_process(runner: ActionRunner, params: FileProcessParams) -> CollectedErrors:
+    """The walk behind ``process_files``, returning the per-file errors it tolerated."""
     if runner.storage_backend is not None:
         all_targets = all(is_target_directory(d) for d in params.upstream_data_dirs)
         if all_targets:
@@ -944,7 +968,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                         params.upstream_data_dirs,
                         errors,
                     )
-                return
+                return errors
             if files_found > 0:
                 # Data was found in DB but processing failed
                 # Don't fall through to filesystem (virtual paths don't exist)
@@ -978,7 +1002,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             _raise_action_fatal(
                 params.action_name, files_found, files_processed, params.upstream_data_dirs, errors
             )
-        return
+        return errors
 
     total_found = 0
     total_processed = 0
@@ -1009,3 +1033,4 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
         _raise_action_fatal(
             params.action_name, total_found, total_processed, params.upstream_data_dirs, all_errors
         )
+    return all_errors

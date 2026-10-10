@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.record.reasons import EVERY_INPUT_FAILED
 from agent_actions.storage.backend import (
     DISPOSITION_FAILED,
     DISPOSITION_SKIPPED,
@@ -707,7 +708,11 @@ class TestTotalFailureEscalation:
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_total_failure_writes_failed_disposition(self, mock_fire, executor, mock_deps):
-        """Total failure must write DISPOSITION_FAILED node-level sentinel for re-run safety."""
+        """Total failure must write DISPOSITION_FAILED node-level sentinel for re-run safety.
+
+        Marked as reaching every record, so a retry tells it from a failure that
+        stopped the action partway and still owes records.
+        """
         mock_deps.action_runner.storage_backend.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
@@ -728,7 +733,7 @@ class TestTotalFailureEscalation:
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_FAILED,
             reason="Action 'agent_a' failed: all records produced errors"[:500],
-            detail=None,
+            detail=EVERY_INPUT_FAILED,
         )
 
     @patch("agent_actions.workflow.executor.fire_event")

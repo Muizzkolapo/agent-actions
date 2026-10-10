@@ -9,6 +9,7 @@ import datetime
 import json
 import logging
 import traceback
+from collections.abc import Container
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,8 @@ from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_SKIPPED,
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
@@ -48,17 +51,19 @@ def _write_manifest(
     record_ids: list[str],
     downstream_actions: list[str],
     dispositions: list[dict],
-) -> None:
-    """Write a retry manifest before clearing dispositions."""
+) -> str:
+    """Write a retry manifest before clearing dispositions, returning its ``created_at``."""
+    created_at = datetime.datetime.now(datetime.UTC).isoformat()
     manifest = {
         "from_action": from_action,
         "record_ids": sorted(record_ids),
         "downstream_actions": downstream_actions,
         "dispositions": dispositions,
-        "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "created_at": created_at,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_json_write(path, manifest, indent=2)
+    return created_at
 
 
 def _read_manifest(path: Path) -> dict[str, Any] | None:
@@ -144,6 +149,7 @@ class RetryCommand:
         # makes its own status transitions once it knows what to retry.
         workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
         execution_order = list(workflow.execution_order)
+        state_mgr = workflow.services.core.state_manager
 
         failures = self._find_failures(backend, execution_order)
 
@@ -187,17 +193,30 @@ class RetryCommand:
 
         from_idx = execution_order.index(from_action)
         downstream_actions = execution_order[from_idx:]
+        record_ids = {r["record_id"] for r in target_records}
+        repairing = self._records_this_repair_may_process(record_ids, downstream_actions, failures)
+        owed = self._batches_owed(backend, downstream_actions)
 
         # Above the dry-run return as well as the manifest: a refusal costs nothing
         # here, and a dry run that withheld it would describe a retry that is not
-        # going to happen.
-        self._settle_batches_in_flight(backend, downstream_actions)
+        # going to happen. Unfinished actions first, since abandoning a batch writes.
+        # Every action, not only the range: the run executes whatever is not complete.
+        if repairing:
+            resumed = self._left_by_an_interrupted_retry(prior_manifest, state_mgr)
+            holding = {action for action, *_ in owed}
+            readers = workflow.services.core.action_executor.readers_of
+            self._refuse_to_narrow_the_unfinished(
+                state_mgr,
+                backend,
+                [a for a in execution_order if a not in resumed],
+                holding_a_batch=holding,
+                reading_a_batch={reader for action in holding for reader in readers(action)},
+            )
+        self._settle_batches_in_flight(backend, owed)
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
             return
-
-        record_ids = {r["record_id"] for r in target_records}
 
         logger.info(
             "Clearing dispositions for retry: records=%s, actions=%s. "
@@ -213,7 +232,7 @@ class RetryCommand:
             snapshot_dispositions.extend(r for r in rows if r.get("record_id") in record_ids)
 
         # Write manifest — if this fails, we abort (no dispositions cleared).
-        _write_manifest(
+        created_at = _write_manifest(
             manifest_file,
             from_action,
             list(record_ids),
@@ -221,9 +240,7 @@ class RetryCommand:
             snapshot_dispositions,
         )
 
-        workflow.set_retried_records(
-            self._records_this_repair_may_process(record_ids, downstream_actions, failures)
-        )
+        workflow.set_retried_records(repairing)
 
         cleared = 0
         for action in downstream_actions:
@@ -248,13 +265,13 @@ class RetryCommand:
         self.console.print("\n[bold]Re-running workflow...[/bold]\n")
 
         # Reset action-level status for downstream actions to PENDING so the
-        # coordinator doesn't skip them as "already completed."
+        # coordinator doesn't skip them as "already completed." Stamped, so a retry
+        # resuming this one after an interrupt knows which it left that way.
         # Deferred import: avoid circular import at module load time.
-        from agent_actions.workflow.managers.state import ActionStatus
+        from agent_actions.workflow.managers.state import REPAIRED_BY, ActionStatus
 
-        state_mgr = workflow.services.core.state_manager
         for action in downstream_actions:
-            state_mgr.update_status(action, ActionStatus.PENDING)
+            state_mgr.update_status(action, ActionStatus.PENDING, **{REPAIRED_BY: created_at})
 
         tracker = RunTracker(project_root=project_root)
         run_id = tracker.start_workflow_run(
@@ -322,25 +339,159 @@ class RetryCommand:
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
 
-    def _settle_batches_in_flight(self, backend, actions: list[str]) -> None:
-        """Decide what a batch nobody has collected means for this repair.
+    @staticmethod
+    def _left_by_an_interrupted_retry(manifest: dict[str, Any] | None, state_mgr) -> set[str]:
+        """What an interrupted retry put back to pending and nothing has reset since.
 
-        It owns the records it was submitted for. A repair starting on top of one
-        submits a second batch over the same file, and whichever is collected last
-        wins while the other is paid for and discarded — so by default this
-        refuses, before anything is cleared.
+        Read from the stamp that retry left beside each status, not from its manifest
+        alone: only a retry reads or deletes the manifest, so it outlives any number of
+        plain runs, and a reset by one of them leaves the action as unfinished as any.
+        """
+        from agent_actions.workflow.managers.state import REPAIRED_BY
 
-        That holds for a batch that has finished and not been collected as much as
-        for one still out: the repair clears the registry entry, which is all that
-        names it. Whether such a batch is still owed is asked of its records, not
-        of the entry or the action: an entry written before ``collected_at`` existed
-        has no stamp either, and an action can complete past a file it skipped.
+        if not manifest or not manifest.get("created_at"):
+            return set()
+        return {
+            action
+            for action in manifest.get("downstream_actions", [])
+            if state_mgr.get_status_details(action).get(REPAIRED_BY) == manifest["created_at"]
+        }
 
-        Two exceptions. A dry run reports the refusal instead of raising: it is
-        the documented way to see what a retry would do, and it changes nothing
-        either way. And ``--abandon-in-flight`` proceeds, because every remedy the
-        refusal names needs the provider to answer about the batch, which it
-        cannot when it has forgotten the id.
+    def _refuse_to_narrow_the_unfinished(
+        self,
+        state_mgr,
+        backend,
+        actions: list[str],
+        *,
+        holding_a_batch: Container[str] = (),
+        reading_a_batch: Container[str] = (),
+    ) -> None:
+        """Refuse a repair that would narrow an action holding no answer for some record.
+
+        A repair carries what each action holds for the records it does not name. An
+        action never run since it was put back to pending, stopped partway through its
+        records, or whose output is gone has answered none of the ones it had not
+        reached, so narrowing it completes it without them and nothing runs it again.
+        A plain run finishes it.
+
+        Callers leave out what an interrupted retry put back to pending: it had
+        finished before that retry, and retrying again resumes it. Not refused either:
+        a failure that reached all of the action's input, which the repair is for, and
+        a halt by ``on_exhausted: raise``, which a plain run will not resume. An action
+        holding a batch nobody has collected, or reading one that does, is left to
+        that batch's own refusal, which ``--abandon-in-flight`` is the way past.
+        """
+        from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+
+        # What a collect pass leaves: stopped, failed, or completed past a file it skipped.
+        # A run stopped while submitting cannot be told from one stopped collecting.
+        left_by_collecting = {ActionStatus.CHECKING_BATCH, ActionStatus.FAILED, *COMPLETED_STATUSES}
+        unfinished = []
+        for action in actions:
+            status = state_mgr.get_status(action)
+            if action in reading_a_batch or (
+                action in holding_a_batch and status in left_by_collecting
+            ):
+                continue
+            label = self._unfinished_as(backend, action, status)
+            if label:
+                unfinished.append(f"{action} ({label})")
+        if not unfinished:
+            return
+
+        reason = (
+            f"{len(unfinished)} action(s) hold no current answer for some of their records "
+            f"({', '.join(unfinished)}). A retry answers only the records it names and "
+            f"carries what each action holds for the rest, so it would complete them "
+            f"without those answers. Run the workflow first — agac run -a "
+            f"{self.agent_name} — then retry."
+        )
+        if self.args.dry_run:
+            self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
+            return
+        raise click.ClickException(reason)
+
+    @classmethod
+    def _unfinished_as(cls, backend, action: str, status) -> str | None:
+        """How *action* is left without an answer for some record, or None if it is not."""
+        from agent_actions.workflow.executor import (
+            action_failed_every_input,
+            action_is_halted,
+            completed_output_stands,
+        )
+        from agent_actions.workflow.managers.state import (
+            COMPLETED_STATUSES,
+            MID_PROCESSING_STATUSES,
+            ActionStatus,
+        )
+
+        if status in COMPLETED_STATUSES:
+            return None if completed_output_stands(backend, action) else "its output is gone"
+        if status in MID_PROCESSING_STATUSES or status == ActionStatus.PENDING:
+            return ActionStatus(status).value
+        if status != ActionStatus.FAILED or action_is_halted(backend, action):
+            return None
+        reached_all = action_failed_every_input(backend, action) or cls._batches_answer_all_sent(
+            backend, action
+        )
+        if reached_all and not cls._holds_rows_its_failure_did_not_reach(backend, action):
+            return None
+        return ActionStatus.FAILED.value
+
+    @classmethod
+    def _batches_answer_all_sent(cls, backend, action: str) -> bool:
+        """Whether a batch action holds an answer or a failure for every record it sent.
+
+        Its batches were sent all of its input, which the submission walks before any
+        is collected; a collect pass that failed on a file marks that file's records
+        failed and writes no node-level marker.
+        """
+        from agent_actions.errors import ProcessingError
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        jobs = BatchRegistryManager(backend, action).get_all_jobs()
+        if not jobs:
+            return False
+        held = {row["record_id"]: row["disposition"] for row in backend.get_disposition(action)}
+        for file_name, entry in jobs.items():
+            try:
+                sent = cls._records_sent(backend, action, entry.parent_file_name or file_name)
+            except ProcessingError:
+                return False
+            if any(held.get(record_id) in (None, DISPOSITION_DEFERRED) for record_id in sent):
+                return False
+        return True
+
+    @staticmethod
+    def _holds_rows_its_failure_did_not_reach(backend, action: str) -> bool:
+        """Whether a failed action holds a row of a record its failing run did not reach.
+
+        A run that fails every record writes no output, so every row is older. The row
+        of a record holding a disposition was answered since the action was last reset,
+        or failed and is reached by a later retry. Any other row predates that reset —
+        its record left the input, or is filtered or scoped out, keeping no row — and
+        narrowing would carry it.
+        """
+        reached = {
+            row["record_id"]
+            for row in backend.get_disposition(action)
+            if row.get("disposition") not in (DISPOSITION_FILTERED, DISPOSITION_SKIPPED)
+        }
+        return any(
+            guid not in reached and parent not in reached
+            for guid, parent in backend.target_row_identities(action)
+        )
+
+    def _batches_owed(self, backend, actions: list[str]) -> list[tuple[str, str, str, str]]:
+        """Every batch nobody has collected that this repair would lose, as
+        (action, batch_id, file_name, state).
+
+        It owns the records it was submitted for. That holds for a batch that has
+        finished and not been collected as much as for one still out: the repair
+        clears the registry entry, which is all that names it. Whether such a batch
+        is still owed is asked of its records, not of the entry or the action: an
+        entry written before ``collected_at`` existed has no stamp either, and an
+        action can complete past a file it skipped.
         """
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
@@ -353,6 +504,21 @@ class RetryCommand:
                     backend, [(action, entry.batch_id, file_name, "")]
                 ):
                     owed.append((action, entry.batch_id, file_name, "finished, not collected"))
+        return owed
+
+    def _settle_batches_in_flight(self, backend, owed: list[tuple[str, str, str, str]]) -> None:
+        """Decide what the batches this repair would lose (``_batches_owed``) mean for it.
+
+        A repair starting on top of one submits a second batch over the same file, and
+        whichever is collected last wins while the other is paid for and discarded —
+        so by default this refuses, before anything is cleared.
+
+        Two exceptions. A dry run reports the refusal instead of raising: it is
+        the documented way to see what a retry would do, and it changes nothing
+        either way. And ``--abandon-in-flight`` proceeds, because every remedy the
+        refusal names needs the provider to answer about the batch, which it
+        cannot when it has forgotten the id.
+        """
         if not owed:
             return
 
@@ -415,9 +581,6 @@ class RetryCommand:
         paying it.
         """
         from agent_actions.errors import ProcessingError
-        from agent_actions.llm.batch.core.batch_constants import FilterStatus
-        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
         waiting: set[tuple[str, str]] = set()
@@ -434,9 +597,7 @@ class RetryCommand:
                 entry = jobs.get(file_name)
                 sent_as = (entry.parent_file_name if entry else None) or file_name
                 try:
-                    context_map = BatchContextManager.load_batch_context_map(
-                        backend, action, sent_as
-                    )
+                    sent = cls._records_sent(backend, action, sent_as)
                 except ProcessingError as e:
                     logger.warning(
                         "Batch %s (%s) has no readable record of what it was sent, so every "
@@ -447,18 +608,33 @@ class RetryCommand:
                     )
                     waiting.update(cls._deferred_record_ids(backend, {action}))
                     continue
-                for sent in context_map.values():
-                    if BatchContextMetadata.get_filter_status(sent) != FilterStatus.INCLUDED:
-                        continue
-                    # Marked failed under its custom_id, it would be a failure a later
-                    # retry clears and cannot select.
-                    record_id = sent.get("source_guid")
-                    if not record_id:
-                        continue
+                for record_id in sent:
                     held = dispositions.get(record_id)
                     if held is None or held == DISPOSITION_DEFERRED:
                         waiting.add((action, record_id))
         return sorted(waiting)
+
+    @staticmethod
+    def _records_sent(backend, action: str, sent_as: str) -> list[str]:
+        """The records a batch of *action* was sent, read from the context map of *sent_as*.
+
+        A record sent without a ``source_guid`` is left out: collection refuses it and
+        records nothing for it, and marked under its custom_id it would be a failure a
+        later retry clears and cannot select.
+
+        Raises ``ProcessingError`` when that map cannot be read.
+        """
+        from agent_actions.llm.batch.core.batch_constants import FilterStatus
+        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+
+        context_map = BatchContextManager.load_batch_context_map(backend, action, sent_as)
+        return [
+            sent["source_guid"]
+            for sent in context_map.values()
+            if BatchContextMetadata.get_filter_status(sent) == FilterStatus.INCLUDED
+            and sent.get("source_guid")
+        ]
 
     @staticmethod
     def _deferred_record_ids(backend, actions: set[str]) -> list[tuple[str, str]]:

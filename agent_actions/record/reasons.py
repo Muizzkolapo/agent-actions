@@ -54,6 +54,9 @@ PARSE_ERROR = "parse_error"
 # Node-level disposition ``detail``; read on the next run to tell a deliberate
 # halt from a transient failure worth retrying.
 HALTED_ON_EXHAUSTED = "halted_on_exhausted"
+# Node-level disposition ``detail`` of an action that reached all of its input and failed
+# on every part of it, which `agac retry` may narrow, unlike one stopped partway.
+EVERY_INPUT_FAILED = "every_input_failed"
 
 # -- Action-level skip reasons -----------------------------------------------
 GUARD_FILTERED_ALL = "All records guard-filtered — no output produced"

@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.errors import AgentActionsError, terminal_failure
+from agent_actions.errors import AgentActionsError, mark_every_record_failed, terminal_failure
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
@@ -175,7 +175,10 @@ class CollectionStats:
             # name.
             cause = self.dominant_cause
             named = f"Action '{action_name}' {tally}"
-            raise terminal_failure(f"{cause} — {named}" if cause else named)
+            # Every record was reached: the loop re-raises anything that stops it partway.
+            raise mark_every_record_failed(
+                terminal_failure(f"{cause} — {named}" if cause else named)
+            )
 
     @property
     def dominant_cause(self) -> str:

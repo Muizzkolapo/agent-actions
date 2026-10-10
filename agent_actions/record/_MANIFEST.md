@@ -11,7 +11,7 @@ Single authority for record content assembly. Every action type, granularity, an
 | `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError` | - |
 | `tracking.py` | Module | `TrackedItem`, `is_input_position` | - |
 | `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `CASCADE_BLOCKING_VALUES` | - |
-| `reasons.py` | Module | Canonical reason string constants for disposition writes, tombstones, and telemetry (`SUCCESS`, `GUARD_SKIP`, `OBSERVE_FIELD_MISSING`, `SOURCE_UNRESOLVED`, ...). The exhaustion family names which recovery layer gave up: `RETRY_EXHAUSTED`, `EXPECTATIONS_EXHAUSTED`. Action-level skip reasons: `GUARD_FILTERED_ALL`, `NO_INPUT_FILES`. | - |
+| `reasons.py` | Module | Canonical reason string constants for disposition writes, tombstones, and telemetry (`SUCCESS`, `GUARD_SKIP`, `OBSERVE_FIELD_MISSING`, `SOURCE_UNRESOLVED`, ...). The exhaustion family names which recovery layer gave up: `RETRY_EXHAUSTED`, `EXPECTATIONS_EXHAUSTED`. Action-level skip reasons: `GUARD_FILTERED_ALL`, `NO_INPUT_FILES`. Node-level failure details: `HALTED_ON_EXHAUSTED`, and `EVERY_INPUT_FAILED` for an action that reached all of its input and failed on every part of it. | - |
 | `__init__.py` | Re-export | `RecordState` | - |
 
 ## Project Surface

@@ -123,6 +123,53 @@ fails. The remedy is upstream: give the record its `source_guid` back where it
 is produced. A batch run that sends nothing at all refuses it the same way, and
 since nothing in such a run succeeds, the action fails.
 
+## A retry needs every action it runs to hold an answer for every record
+
+Carrying what an action holds for the records the retry did not name is only
+right when that is an answer for each of them. An action that did not finish its
+last run — added since then, put back to pending because something it reads was
+edited, or stopped partway through its records by an interrupt, a kill or an
+error — holds none for the records that run had not reached. Nor does a
+completed action whose stored output is gone. A retry that narrowed it would
+complete it without them, and nothing would run it again.
+
+That covers every action the retry runs, not only those from its starting point:
+the run behind it executes whatever is not complete, wherever it sits, so an
+action added beside the one that failed, which may run before it, counts too.
+
+So a retry that names records refuses, before it changes anything, when such an
+action is in the workflow:
+
+```
+1 action(s) hold no current answer for some of their records (enrich
+(interrupted)). A retry answers only the records it names and carries what each
+action holds for the rest, so it would complete them without those answers. Run
+the workflow first — agac run -a my_workflow — then retry.
+```
+
+Run the workflow, which finishes those actions, then retry. `--dry-run` reports
+the refusal instead of raising it.
+
+A failed action is not refused when its last run reached every record and every
+one failed: each holds its failure, which is what a retry is for. That is known
+when every record it was given failed, when every input file failed on all of its
+records, or, for a batch action, when every record its batches were sent with a
+`source_guid` holds an answer or a failure. It is refused even then if it still
+holds a row for a record that run did not reach: a reset keeps an action's rows
+until it writes again, and one that failed on everything wrote nothing, so a row
+for a record its input no longer has, or now filters, would be carried for good.
+A failure that stopped partway — an error that ends a file at one record, or one
+recorded before this release, which cannot say — is refused.
+
+Not refused either: an action left unfinished by a retry that was itself
+interrupted had finished before that retry, so running `retry` again resumes it,
+as long as no run has reset it since. An action holding a batch nobody has
+collected, and one that reads it, are left to the batch's own refusal below,
+which `--abandon-in-flight` gets past. And an action halted by `on_exhausted:
+raise` is not refused, because `agac run` does not resume a halt; a retry with a
+record to re-run still completes a halted action without the records past the
+halt (#1267).
+
 ## Retrying an action that runs in batch mode
 
 An action configured [`run_mode: batch`](../execution/run-modes.md) is repaired

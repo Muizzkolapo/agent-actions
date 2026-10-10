@@ -100,6 +100,8 @@ class ActionRunner:
         # Records this run is repairing, named by id. A record limit admits them
         # on top of its own N rather than cutting them loose.
         self.retried_records: frozenset[str] = frozenset()
+        # Actions whose last file walk lost a file before reaching all of its records.
+        self.input_left_unreached: set[str] = set()
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
         self.project_root: Path | None = None  # Set by service_init.initialize_services

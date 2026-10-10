@@ -2,9 +2,14 @@
 
 from unittest.mock import MagicMock
 
+import click
+
 from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import RetryCommand
+from agent_actions.record.reasons import EVERY_INPUT_FAILED, HALTED_ON_EXHAUSTED
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from tests.unit.cli.conftest import make_mock_backend
 
 
@@ -274,7 +279,9 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
         command = RetryCommand(RetryCommandArgs(agent="wf", abandon_in_flight=True, dry_run=True))
         command.console = MagicMock()
 
-        command._settle_batches_in_flight(backend, ["summarize", "score"])
+        command._settle_batches_in_flight(
+            backend, command._batches_owed(backend, ["summarize", "score"])
+        )
 
         backend.set_disposition.assert_not_called()
         reported = " ".join(str(c.args[0]) for c in command.console.print.call_args_list)
@@ -285,9 +292,132 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
         command = RetryCommand(RetryCommandArgs(agent="wf", abandon_in_flight=True))
         command.console = MagicMock()
 
-        command._settle_batches_in_flight(backend, ["summarize", "score"])
+        command._settle_batches_in_flight(
+            backend, command._batches_owed(backend, ["summarize", "score"])
+        )
 
         moved = [c.args[1] for c in backend.set_disposition.call_args_list]
         assert moved == ["summarize_r1"], (
             f"abandoning one action's batch moved another action's records: {moved}"
         )
+
+
+class TestARepairNarrowsOnlyWhatFinished:
+    """Which actions a repair may narrow, read from their status and how they failed.
+
+    Narrowing carries what an action holds for the records the repair does not name,
+    which is an answer only where its last run reached every record.
+    """
+
+    @staticmethod
+    def _states(tmp_path, status, *, failed_as=None, node_failure=True):
+        state_mgr = ActionStateManager(tmp_path / "status.json", ["extract", "classify"])
+        state_mgr.update_status("extract", ActionStatus.COMPLETED)
+        state_mgr.update_status("classify", ActionStatus(status))
+        backend = SQLiteBackend(str(tmp_path / "store.db"), "wf")
+        backend.initialize()
+        backend.write_target("extract", "pages.json", [{"source_guid": "g0"}])
+        if status.startswith("completed"):
+            backend.write_target("classify", "pages.json", [{"source_guid": "g0"}])
+        if status == "failed" and node_failure:
+            backend.set_disposition(
+                "classify", NODE_LEVEL_RECORD_ID, "failed", reason="r", detail=failed_as
+            )
+        return state_mgr, backend
+
+    @staticmethod
+    def _command(dry_run=False):
+        command = RetryCommand(RetryCommandArgs(agent="wf", dry_run=dry_run))
+        command.console = MagicMock()
+        return command
+
+    def _refused(self, tmp_path, status, **kwargs):
+        state_mgr, backend = self._states(tmp_path, status, **kwargs)
+        try:
+            self._command()._refuse_to_narrow_the_unfinished(
+                state_mgr, backend, ["extract", "classify"]
+            )
+        except click.ClickException as refusal:
+            return refusal.message
+        finally:
+            backend.close()
+        return None
+
+    def test_an_action_never_run_since_it_was_put_back_is_refused(self, tmp_path):
+        assert "classify (pending)" in self._refused(tmp_path, "pending")
+
+    def test_an_action_a_run_was_stopped_in_is_refused(self, tmp_path):
+        for status in ("running", "interrupted", "checking_batch"):
+            target = tmp_path / status
+            target.mkdir()
+            assert f"classify ({status})" in self._refused(target, status)
+
+    def test_an_action_an_error_stopped_is_refused(self, tmp_path):
+        assert "classify (failed)" in self._refused(tmp_path, "failed")
+
+    def test_an_action_swept_to_failed_without_a_node_failure_is_refused(self, tmp_path):
+        """What the coordinator leaves when an error escapes the action that was running."""
+        assert self._refused(tmp_path, "failed", node_failure=False) is not None
+
+    def test_an_action_that_failed_on_all_of_its_input_is_narrowed(self, tmp_path):
+        """Every record holds its failure, so the records not named are still found."""
+        assert self._refused(tmp_path, "failed", failed_as=EVERY_INPUT_FAILED) is None
+
+    def test_a_halted_action_is_narrowed(self, tmp_path):
+        """A plain run does not resume a halt, so refusing would leave no way on."""
+        assert self._refused(tmp_path, "failed", failed_as=HALTED_ON_EXHAUSTED) is None
+
+    def test_completed_skipped_and_submitted_actions_are_narrowed(self, tmp_path):
+        """A skipped action owes nothing its source has not failed, and a batch still
+        out is settled by a refusal of its own."""
+        for status in ("completed", "completed_with_failures", "skipped", "batch_submitted"):
+            target = tmp_path / status
+            target.mkdir()
+            assert self._refused(target, status) is None, status
+
+    def _refused_holding(self, tmp_path, row, disposition):
+        """`classify` failed on every record it was given and still holds *row*."""
+        state_mgr, backend = self._states(tmp_path, "failed", failed_as=EVERY_INPUT_FAILED)
+        try:
+            backend.write_target("classify", "pages.json", [row])
+            if disposition is not None:
+                backend.set_disposition("classify", "g0", disposition, reason="r")
+            self._command()._refuse_to_narrow_the_unfinished(
+                state_mgr, backend, ["extract", "classify"]
+            )
+        except click.ClickException as refusal:
+            return refusal.message
+        finally:
+            backend.close()
+        return None
+
+    def test_a_failure_still_holding_a_row_its_run_did_not_reach_is_refused(self, tmp_path):
+        """A reset deletes no row and a run failing everything writes none, so a row of a
+        record that run gave no disposition, or filtered or scoped out, which keeps no
+        row, is from before the reset; narrowing would carry it for good."""
+        for disposition in (None, "filtered", "skipped"):
+            target = tmp_path / str(disposition)
+            target.mkdir()
+            refused = self._refused_holding(target, {"source_guid": "g0"}, disposition)
+            assert "classify (failed)" in (refused or ""), disposition
+
+    def test_a_failure_holding_rows_of_records_it_reached_is_narrowed(self, tmp_path):
+        for disposition in ("failed", "success", "passthrough"):
+            target = tmp_path / disposition
+            target.mkdir()
+            assert self._refused_holding(target, {"source_guid": "g0"}, disposition) is None
+
+    def test_a_row_the_action_minted_is_reached_through_its_parent(self, tmp_path):
+        row = {"source_guid": "m0", "parent_source_guid": "g0"}
+        assert self._refused_holding(tmp_path, row, "failed") is None
+
+    def test_a_dry_run_reports_the_refusal_instead(self, tmp_path):
+        state_mgr, backend = self._states(tmp_path, "interrupted")
+        command = self._command(dry_run=True)
+        try:
+            command._refuse_to_narrow_the_unfinished(state_mgr, backend, ["extract", "classify"])
+        finally:
+            backend.close()
+
+        reported = " ".join(str(c.args[0]) for c in command.console.print.call_args_list)
+        assert "would be refused" in reported and "classify (interrupted)" in reported
