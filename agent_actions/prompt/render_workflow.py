@@ -648,7 +648,11 @@ def render_pipeline_with_templates(
     # Step 1: Jinja2 template rendering. A tag naming what only a record or a version
     # supplies is left in place, marked, for the stage that has the name.
     deferral = defer_unresolved_tags(
-        yaml_content, env, exports.names | set(env.globals), exports.carrying
+        yaml_content,
+        env,
+        exports.names | set(env.globals),
+        exports.carrying,
+        include=functools.partial(loader.leaves_tags, env),
     )
     tested = exports.tested | deferral.tested
     if tested:

@@ -16,6 +16,7 @@ the record with its definition, or fails the load if the definition is in templa
 
 from __future__ import annotations
 
+import functools
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -28,6 +29,8 @@ from jinja2 import Environment, FileSystemLoader, nodes
 OPEN = ""
 CLOSE = ""
 _MARKED = re.compile(f"{OPEN}(.*?){CLOSE}", re.S)
+# Joins an included template's name to the names its includer binds at load there.
+_CONTEXT = "\ue002"
 _LITERALS = "_agac_literal_text"
 
 _RAW_BLOCK = re.compile(r"\{%[-+]?\s*raw\s*[-+]?%\}.*?\{%[-+]?\s*endraw\s*[-+]?%\}", re.S)
@@ -111,38 +114,60 @@ class Deferral:
     per_record: set[str] = field(default_factory=set)  # names left for later wherever used
     carrying: set[str] = field(default_factory=set)  # top-level names holding a later tag
     tested: set[str] = field(default_factory=set)  # such names from elsewhere tested at load
+    leaves_tags: bool = False  # what it outputs can hold a tag left for later
+
+
+# Whether a template, included where the given names are bound at load, leaves a tag.
+IncludeLeavesTags = Callable[[str, frozenset[str]], bool]
 
 
 def defer_unresolved_tags(
-    source: str, env: Environment, known: Iterable[str], carrying: Iterable[str] = ()
+    source: str,
+    env: Environment,
+    known: Iterable[str],
+    carrying: Iterable[str] = (),
+    inherited: Iterable[str] = (),
+    include: IncludeLeavesTags | None = None,
+    in_macros: Iterable[str] = (),
 ) -> Deferral:
     """Mark every tag of *source* whose names the load cannot bind.
 
     *known* is what the load binds besides the file's own `set`, `import`, loop and macro
     names: the environment's globals and the templates folder's exports. *carrying* are
-    the exports whose value holds a tag left for later. A file whose tags cannot be read
-    is returned unchanged, so the render reports its syntax error.
+    the exports whose value holds a tag left for later. *inherited* are the names an
+    includer binds at load, when *source* is an included template. *in_macros* are bound
+    only by the time a macro runs: the exports of templates/ files not loaded yet. A file
+    whose tags cannot be read is returned unchanged, so the render reports its syntax error.
+
+    An `{% include %}` with context names its template together with the names bound at
+    load where it stands, which `DeferringFileSystemLoader` reads them from.
     """
     tags = _scan(source)
     if tags is None or not _pair_blocks(tags):
         return Deferral(source)
-    known = set(known) | _ALWAYS_BOUND
+    inherited = frozenset(inherited)
+    known = set(known) | inherited | _ALWAYS_BOUND
     # A name a deferred tag assigns, or a load-time value a tag tests although it holds a
     # tag left for later, waits for the record in its scope: its definition, every other
     # assignment and every read, or the load would freeze it. Repeat until nothing new waits.
     forced: frozenset[_Key] = frozenset()
     while True:
-        resolver = _Resolver(env, known, forced, frozenset(carrying))
+        resolver = _Resolver(
+            env, known, forced, frozenset(carrying), inherited, include, frozenset(in_macros)
+        )
         resolver.walk(tags)
         if resolver.force <= forced:
             break
         forced |= resolver.force
     pieces = []
     cursor = 0
-    for index in sorted(resolver.deferred):
+    for index in sorted(resolver.deferred | set(resolver.includes)):
         tag = tags[index]
         pieces.append(source[cursor : tag.start])
-        pieces.append(f"{OPEN}{{% raw %}}{tag.text}{{% endraw %}}{CLOSE}")
+        if index in resolver.deferred:
+            pieces.append(f"{OPEN}{{% raw %}}{tag.text}{{% endraw %}}{CLOSE}")
+        else:
+            pieces.append(resolver.includes[index])
         cursor = tag.end
     pieces.append(source[cursor:])
     return Deferral(
@@ -153,6 +178,7 @@ def defer_unresolved_tags(
             name for name, state in resolver.scopes[0].names.items() if isinstance(state, _Carry)
         },
         tested=resolver.tested,
+        leaves_tags=bool(resolver.deferred) or resolver.output_carries,
     )
 
 
@@ -219,19 +245,50 @@ def template_folder_exports(env: Environment, templates_folder: Path) -> Templat
 
 
 class DeferringFileSystemLoader(FileSystemLoader):
-    """A templates folder whose files leave unresolved tags for later, as the workflow does."""
+    """A templates folder whose files leave unresolved tags for later, as the workflow does.
+
+    An included file also renders at load the names its includer binds there, which the
+    include passes in the template name, so each place it is included has its own copy.
+    """
 
     def __init__(self, searchpath: str):
         super().__init__(searchpath)
         self.exports = TemplateExports()
+        self._reading: set[str] = set()
 
     def get_source(
         self, environment: Environment, template: str
     ) -> tuple[str, str, Callable[[], bool]]:
-        source, filename, uptodate = super().get_source(environment, template)
-        known = self.exports.names | set(environment.globals)
-        deferral = defer_unresolved_tags(source, environment, known, self.exports.carrying)
-        return deferral.source, filename, uptodate
+        name, _, context = template.partition(_CONTEXT)
+        inherited = frozenset(context.split(",")) if context else frozenset()
+        source, filename, uptodate = super().get_source(environment, name)
+        return self._defer(environment, source, inherited).source, filename, uptodate
+
+    def leaves_tags(self, environment: Environment, template: str, names: frozenset[str]) -> bool:
+        """Whether *template*, included where *names* are bound at load, leaves a tag."""
+        if template in self._reading:
+            return False  # it includes itself; rendering it raises
+        self._reading.add(template)
+        try:
+            source = super().get_source(environment, template)[0]
+            return self._defer(environment, source, names).leaves_tags
+        except jinja2.TemplateNotFound:
+            return False  # including it raises
+        finally:
+            self._reading.discard(template)
+
+    def _defer(self, environment: Environment, source: str, inherited: frozenset[str]) -> Deferral:
+        # Loading the folder makes each file's exports globals in turn, so a file's top
+        # level can count only on those already loaded, and its macros on all of them.
+        return defer_unresolved_tags(
+            source,
+            environment,
+            set(environment.globals),
+            self.exports.carrying,
+            inherited,
+            functools.partial(self.leaves_tags, environment),
+            in_macros=self.exports.names,
+        )
 
 
 def _bound_by(node: nodes.Node) -> set[str]:
@@ -361,17 +418,25 @@ class _Resolver:
         known: set[str],
         forced: frozenset[_Key],
         carrying: frozenset[str],
+        inherited: frozenset[str],
+        include: IncludeLeavesTags | None,
+        in_macros: frozenset[str],
     ):
         self.env = env
         self.known = known
         self.forced = forced  # left for later on an earlier pass
         self.carrying = carrying  # exports of templates/ whose value holds a later tag
+        self.inherited = inherited
+        self.include = include
+        self.in_macros = in_macros  # bound by the time a macro runs
         self.scopes: list[_Scope] = [_Scope(-1)]
         self.frames: list[_Frame] = []  # open blocks
         self.deferred: set[int] = set()
         self.unresolved: set[str] = set()
         self.force: set[_Key] = set()  # to leave for later on the next pass
         self.tested: set[str] = set()
+        self.includes: dict[int, str] = {}  # include tag -> the same, naming its context
+        self.output_carries = False  # what the source outputs holds a tag left for later
 
     def walk(self, tags: list[_Tag]) -> None:
         for index, tag in enumerate(tags):
@@ -515,6 +580,28 @@ class _Resolver:
                 name, bound = (alias, alias) if isinstance(alias, str) else alias
                 state: _State = _Carry(None, name) if name in self.carrying else _LOAD
                 self.scopes[-1].names[bound] = state
+        elif isinstance(node, nodes.Include):
+            self._include(index, tag, node)
+
+    def _include(self, index: int, tag: _Tag, node: nodes.Include) -> None:
+        """An included template renders at load what is bound here at load; the tags it
+        leaves for later land here."""
+        if self._later(_free(node.template)):
+            self._defer([index])
+            return
+        templates = _template_names(node.template)
+        if templates is None:
+            return  # named by a variable: it sees the globals and the folder's exports
+        site: frozenset[str] = frozenset()
+        if node.with_context:
+            names = self.inherited.union(*(scope.names for scope in self.scopes))
+            site = frozenset(n for n in names if self._state(n) in (_LOAD, _MODULE))
+        for template in templates:
+            if self.include is not None and self.include(template, site):
+                self._carries()
+        if site:
+            context = _CONTEXT + ",".join(sorted(site))
+            self.includes[index] = _include_tag(tag.text, node, [t + context for t in templates])
 
     def _assign(self, index: int, node: nodes.Assign) -> None:
         """Bind a `set`; one inside a deferred block, of a value only a record has, or to a
@@ -559,6 +646,7 @@ class _Resolver:
             if frame.captures:
                 frame.carries = True
                 return
+        self.output_carries = True
 
     def _within_deferred(self) -> bool:
         return any(frame.deferred for frame in self.frames)
@@ -588,9 +676,10 @@ class _Resolver:
         for scope in reversed(self.scopes):
             if name in scope.names:
                 return scope.names[name]
-        if name in self.carrying:
-            return _Carry(None, name)
-        return _LOAD if name in self.known else None
+        in_macro = any(isinstance(frame.node, nodes.Macro) for frame in self.frames)
+        if name in self.known or (in_macro and name in self.in_macros):
+            return _Carry(None, name) if name in self.carrying else _LOAD
+        return None
 
     def _parse(self, text: str) -> nodes.Node | None:
         try:
@@ -640,6 +729,26 @@ def _references(node: nodes.Node) -> list[nodes.Node]:
         for ref in found
         if id(ref) not in tested and not (isinstance(ref, nodes.Name) and ref.ctx != "load")
     ]
+
+
+def _template_names(expr: nodes.Node) -> list[str] | None:
+    """The templates an `{% include %}` names, or None unless it names them literally."""
+    exprs: list[nodes.Node] = [expr]
+    if isinstance(expr, nodes.List | nodes.Tuple):
+        exprs = list(expr.items)
+    names = [e.value for e in exprs if isinstance(e, nodes.Const) and isinstance(e.value, str)]
+    return names if len(names) == len(exprs) else None
+
+
+def _include_tag(text: str, node: nodes.Include, templates: list[str]) -> str:
+    """The `{% include %}` *text* with *templates* for what it names."""
+    opening = re.match(r"\{%[-+]?", text)
+    closing = re.search(r"[-+]?%\}\Z", text)
+    assert opening is not None and closing is not None  # it was scanned as a statement
+    quoted = ['"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"' for name in templates]
+    target = quoted[0] if isinstance(node.template, nodes.Const) else f"[{', '.join(quoted)}]"
+    missing = " ignore missing" if node.ignore_missing else ""
+    return f"{opening.group()} include {target}{missing} {closing.group()}"
 
 
 def _free_all(exprs: Iterable[nodes.Node]) -> set[str]:
