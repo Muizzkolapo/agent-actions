@@ -1,15 +1,17 @@
-"""A FILE tool that raises on one file fails that file's records (1298).
+"""A FILE tool that fails on one file fails that file's records (1298).
 
 A `granularity: File` tool is handed a whole file and answers it as one result, which
-names no record. When it raised, the walk logged the file and went on: nothing was
-stored for the file and no disposition named any of its records, so the action read
-`completed` with exit 0. `agac retry` found nothing to retry and the next run found the
-action complete. After an edit the file kept its rows from before it, and under a retry
-the repaired record was left with no disposition at all.
+names no record. When it raised, or answered with output its schema refused, the walk
+logged the file and went on: nothing was stored for the file and no disposition named
+any of its records, so the action read `completed` with exit 0. `agac retry` found
+nothing to retry and the next run found the action complete. After an edit the file
+kept its rows from before it, and under a retry the repaired record was left with no
+disposition at all.
 
 Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
 provider. Only the fault is stood in for: while a flag file exists, the tool raises on
-the file holding page alpha.
+the file holding page alpha, answers page alpha with a summary its schema refuses, or
+answers that file with one row for both its pages that its schema refuses.
 """
 
 import json
@@ -28,26 +30,36 @@ PAGES = {
 }
 BROKEN_FILE = "pages1.json"
 FLAG = "pages1_breaks"
+MISSHAPE_FLAG = "alpha_misshapen"
+COLLAPSE_FLAG = "pages1_collapses"
 UPSTREAM_FLAG = "alpha_fails_upstream"
 ACTION = "roll_up"
 
 # Answers every record of its file with what it read, tagged with what the `tag` file
-# says; while the flag file exists, it raises on the file holding page alpha.
+# says. While its flag file exists, it raises on the file holding page alpha; answers page
+# alpha with a summary that is not a string; or answers that file with one row naming
+# both its pages, whose summary is not a string.
 ROLL_UP = "roll_up_or_break"
 ROLL_UP_TOOL = f"""from pathlib import Path
 from typing import Any
 
 from agent_actions import udf_tool
-from agent_actions.utils.udf_management.registry import Granularity
+from agent_actions.utils.udf_management.registry import FileUDFResult, Granularity
 
 
 @udf_tool(granularity=Granularity.FILE)
-def {ROLL_UP}(data: Any, *args) -> list[dict]:
-    if Path({FLAG!r}).exists() and any(r.get("page_content") == "Page alpha." for r in data):
+def {ROLL_UP}(data: Any, *args):
+    pages1 = any(r.get("page_content") == "Page alpha." for r in data)
+    if Path({FLAG!r}).exists() and pages1:
         raise RuntimeError("the roll-up of pages1 broke")
+    if Path({COLLAPSE_FLAG!r}).exists() and pages1:
+        rolled = {{"summary": len(data), "exam_density": "low"}}
+        return FileUDFResult(outputs=[{{"source_index": list(range(len(data))), "data": rolled}}])
     for record in data:
         record["summary"] = Path("tag").read_text() + " " + str(record.get("summary"))
         record["exam_density"] = "low"
+        if Path({MISSHAPE_FLAG!r}).exists() and record.get("page_content") == "Page alpha.":
+            record["summary"] = 42
     return data
 """
 
@@ -195,15 +207,19 @@ class _Project:
         return backend
 
     def summaries(self) -> dict[str, list[str]]:
-        """The summary each stored row of each stored file of the tool holds, by file."""
+        """The summary each stored row of each stored file of the tool holds, by file.
+
+        A summary that is not a string is shown as one, so a row the schema refused
+        is counted rather than passed over.
+        """
         backend = self._backend()
         try:
             return {
                 path: sorted(
-                    output["summary"]
+                    str(output["summary"])
                     for row in backend.read_target(ACTION, path)
                     if isinstance(output := row.get("content", {}).get(ACTION), dict)
-                    and isinstance(output.get("summary"), str)
+                    and "summary" in output
                 )
                 for path in sorted(backend.list_target_files(ACTION))
             }
@@ -348,4 +364,80 @@ def test_a_retry_the_tool_raises_under_fails_the_record_it_repaired(below_a_tool
     assert "Nothing to retry" not in result.output, result.output
     assert project.dispositions()["Page alpha."][0] == "success"
     assert "v1 v1 Page alpha." in project.summaries()[BROKEN_FILE]
+    assert project.status() == "completed"
+
+
+def test_an_answer_its_schema_refuses_fails_only_the_record_it_answers(project):
+    """The tool returns; the check of its output against the schema fails page alpha's
+    answer alone, which names page alpha. Page beta's answer is stored."""
+    project.breaks(flag=MISSHAPE_FLAG)
+
+    project.run("--fresh")
+
+    dispositions = project.dispositions()
+    assert _broken_pages(dispositions) == {
+        "Page alpha.": "failed",
+        "Page beta.": "success",
+        "Page gamma.": "success",
+        "Page delta.": "success",
+    }, "nothing names the records of the file whose output the schema refused"
+    assert "42 is not of type 'string'" in (dispositions["Page alpha."][1] or "")
+    assert project.status() == "completed_with_failures"
+    stored = project.summaries()
+    assert len(stored[BROKEN_FILE]) == 1 and stored[BROKEN_FILE][0].startswith("v1 ")
+    assert len(stored["pages2.json"]) == 2
+
+    project.breaks(on=False, flag=MISSHAPE_FLAG)
+    result = project.retry()
+
+    assert result.exit_code == 0, result.output
+    assert "Nothing to retry" not in result.output, result.output
+    assert set(_broken_pages(project.dispositions()).values()) == {"success"}
+    pages1 = project.summaries()[BROKEN_FILE]
+    assert len(pages1) == 2 and all(summary.startswith("v1 ") for summary in pages1)
+    assert project.status() == "completed"
+
+
+def test_after_an_edit_a_refused_answer_keeps_no_row_from_before_it(project):
+    project.run("--fresh")
+    assert project.status() == "completed"
+    project.edit_upstream()
+    project.tag("v2")
+    project.breaks(flag=MISSHAPE_FLAG)
+
+    project.run()
+
+    stored = project.summaries()
+    assert len(stored[BROKEN_FILE]) == 1, "a row from before the edit, or none for page beta"
+    assert all(summary.startswith("v2 ") for rows in stored.values() for summary in rows)
+    dispositions = _broken_pages(project.dispositions())
+    assert dispositions["Page alpha."] == "failed"
+    assert dispositions["Page beta."] == "success"
+    assert project.status() == "completed_with_failures"
+
+
+def test_a_refused_answer_naming_every_record_of_its_file_fails_them_all(project):
+    """One row answers both pages of the file, so the schema refusing it fails both."""
+    project.breaks(flag=COLLAPSE_FLAG)
+
+    project.run("--fresh")
+
+    dispositions = project.dispositions()
+    assert _broken_pages(dispositions) == {
+        "Page alpha.": "failed",
+        "Page beta.": "failed",
+        "Page gamma.": "success",
+        "Page delta.": "success",
+    }
+    assert "2 is not of type 'string'" in (dispositions["Page beta."][1] or "")
+    assert project.status() == "completed_with_failures"
+    assert project.summaries().get(BROKEN_FILE, []) == []
+
+    project.breaks(on=False, flag=COLLAPSE_FLAG)
+    result = project.retry()
+
+    assert result.exit_code == 0, result.output
+    assert "Nothing to retry" not in result.output, result.output
+    assert set(_broken_pages(project.dispositions()).values()) == {"success"}
+    assert len(project.summaries()[BROKEN_FILE]) == 2
     assert project.status() == "completed"

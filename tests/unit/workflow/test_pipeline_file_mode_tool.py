@@ -620,6 +620,131 @@ def test_a_tool_that_raises_fails_every_record_it_was_handed():
     assert [r.input_record for r in results] == originals
 
 
+# --- Output the action's schema refuses ---
+
+_SCORE_SCHEMA = {
+    "type": "object",
+    "properties": {"score": {"type": "number"}},
+    "required": ["score"],
+}
+
+
+def _three_records():
+    """A context whose schema wants a numeric score, and three records for it."""
+    context = _make_context()
+    context.agent_config["json_output_schema"] = _SCORE_SCHEMA
+    records = [
+        {"source_guid": f"sg-{n}", "content": {"prev": {"id": n}, "source": {"n": n}}}
+        for n in (1, 2, 3)
+    ]
+    context.source_data = records
+    return context, records
+
+
+def _answer(context, records, raw_response):
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=(raw_response, True),
+    ):
+        return FileToolStrategy().invoke(records, context)
+
+
+def _failed(results) -> dict[str, str]:
+    return {r.source_guid: r.error or "" for r in results if r.status == ProcessingStatus.FAILED}
+
+
+def _stored(results) -> list[tuple[str, object]]:
+    """Each row the file's result holds, as (its guid, its score)."""
+    return [
+        (row["source_guid"], row["content"]["my_file_tool"]["score"])
+        for r in results
+        if r.status == ProcessingStatus.SUCCESS
+        for row in r.data
+    ]
+
+
+@pytest.mark.parametrize("shape", ["tracked_items", "file_udf_result"])
+def test_an_answer_its_schema_refuses_fails_only_the_record_it_answers(shape):
+    """Checked one output row at a time, a refusal names the row, and the row names its
+    record: that record fails and the rest of the file is stored."""
+    context, records = _three_records()
+    scores = [1, "high", 3]
+    if shape == "tracked_items":
+        raw = [TrackedItem({"score": s}, source_index=i) for i, s in enumerate(scores)]
+    else:
+        raw = FileUDFResult(
+            outputs=[{"source_index": i, "data": {"score": s}} for i, s in enumerate(scores)]
+        )
+
+    results = _answer(context, records, raw)
+
+    failed = _failed(results)
+    assert list(failed) == ["sg-2"]
+    assert "(item 1)" in failed["sg-2"]
+    assert "'high' is not of type 'number'" in failed["sg-2"]
+    assert next(r for r in results if r.source_guid == "sg-2").input_record == records[1]
+    assert _stored(results) == [("sg-1", 1), ("sg-3", 3)]
+    assert all(r.status != ProcessingStatus.UNPROCESSED for r in results)
+
+
+def test_every_answer_of_a_record_goes_with_the_one_its_schema_refuses():
+    """A record answered with several rows is failed whole when one is refused."""
+    context, records = _three_records()
+    raw = FileUDFResult(
+        outputs=[
+            {"source_index": 0, "data": {"score": 1}},
+            {"source_index": 1, "data": {"score": 2}},
+            {"source_index": 1, "data": {"score": "high"}},
+            {"source_index": 2, "data": {"score": 3}},
+        ]
+    )
+
+    results = _answer(context, records, raw)
+
+    assert list(_failed(results)) == ["sg-2"]
+    assert [score for _, score in _stored(results)] == [1, 3]
+    assert all(r.status != ProcessingStatus.UNPROCESSED for r in results)
+
+
+@pytest.mark.parametrize(
+    "outputs",
+    [
+        pytest.param(
+            [
+                {"source_index": [0, 1], "data": {"score": "high"}},
+                {"source_index": 2, "data": {"score": 3}},
+            ],
+            id="a refused row naming several records",
+        ),
+        pytest.param(
+            [
+                {"source_index": None, "data": {"score": "high"}},
+                {"source_index": 0, "data": {"score": 1}},
+            ],
+            id="a refused row naming none",
+        ),
+        pytest.param(
+            [
+                {"source_index": 0, "data": {"score": "high"}},
+                {"source_index": [0, 1], "data": {"score": 2}},
+                {"source_index": 2, "data": {"score": 3}},
+            ],
+            id="a refused record another record's row was answered with",
+        ),
+    ],
+)
+def test_a_refusal_no_one_record_answers_for_fails_every_record_of_the_file(outputs):
+    context, records = _three_records()
+
+    results = _answer(context, records, FileUDFResult(outputs=outputs))
+
+    failed = _failed(results)
+    assert list(failed) == ["sg-1", "sg-2", "sg-3"]
+    assert all("'high' is not of type 'number'" in error for error in failed.values())
+    assert _stored(results) == []
+    assert [r.input_record for r in results] == records
+
+
 # --- _strip_internal_fields list handling ---
 
 
