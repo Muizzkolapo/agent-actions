@@ -1,0 +1,18 @@
+kind: Bug Fix
+body: >-
+  The workflows in the bundled skill's references now pass pre-flight. Fourteen YAML blocks
+  of `loop-patterns.md`, `workflow-patterns.md` and `pooling-approach.md` were refused by it,
+  so a workflow copied from them did not run. Nine had an action reading another, in its
+  context scope or its guard, that it did not depend on, or a version merge with no
+  `dependencies`: an action reads only what is upstream of it through `dependencies`, and
+  pre-flight refuses a name that is not. The others left a first action with no
+  `context_scope` or a FILE-granularity tool with no `dependencies`, and several read an
+  action the block never showed. Each block now declares the `dependencies` and
+  `context_scope` it needs and shows the actions it reads, and a version merge depends on its
+  base name. The HITL gate's guard on the merged decision named the merge's own output, which
+  does not exist yet when the guard runs, so it filtered every record; it now sits on the
+  action after the merge. The `# dependency anchor` comments, which applied the observe rule
+  to actions that declared no dependency, are gone, and the skill's rules say that naming an
+  action does not wire it in. A test loads every block of the skill as `agac run` does and
+  runs its pre-flight.
+time: 2026-10-10T14:00:00Z

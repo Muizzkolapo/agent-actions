@@ -27,7 +27,9 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `SKILL.md` (project structure) | `seed_data/*.json` | Reads | — |
 | `SKILL.md` (project structure) | `agent_io/staging/` | Reads | — |
 | `SKILL.md` (project structure) | `agent_io/target/{action}/` | Reads | — |
-| `references/workflow-patterns.md` | `agent_config/{workflow}.yml` | Reads | `actions[].versions`, `actions[].version_consumption`, `actions[].guard` |
+| `references/workflow-patterns.md` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies`, `actions[].versions`, `actions[].version_consumption`, `actions[].guard`, `actions[].context_scope` |
+| `references/loop-patterns.md` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies`, `actions[].version_consumption`, `actions[].guard`, `actions[].context_scope` |
+| `references/pooling-approach.md` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies`, `actions[].versions`, `actions[].version_consumption`, `actions[].context_scope` |
 | `references/context-scoping.md` | `agent_config/{workflow}.yml` | Reads | `actions[].context_scope` |
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
