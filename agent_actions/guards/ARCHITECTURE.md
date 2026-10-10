@@ -292,6 +292,9 @@ BATCH:
   A record the disposition gate carries as done is judged too, with no
   prompt rendered, as online's guard above its gate judges it; one the
   action above blocked is not, as preparation judges none.
+  A file whose batch is out, or finished and not collected, is not sent
+  again, so nothing of it is judged: its collect writes the answers to
+  what the guard passed when the batch was sent.
 
 ONLINE:
   Guards run per-record in task_preparer, BEFORE the LLM call.

@@ -544,8 +544,10 @@ where the guard filters every input the action holds nothing and reads skipped. 
 guard still passes stays carried. An error while judging propagates, as one in online's
 guard does: judging has no handler that fails one record alone, so a guard UDF's write to
 any carried input stops the action, not only one in the rows rehearsed before submitting.
-An input the action above blocked is not judged, as preparation judges none; where this
-and the skip's disposition still differ from online is listed below.
+An input the action above blocked is not judged, as preparation judges none. Nor is an
+input of a file whose batch is out, or finished and not collected: the file is not sent
+again, so the gate carries nothing of it, and its collect writes what the batch brings.
+Where these and the skip's disposition still differ from online is listed below.
 
 When preparation leaves nothing to send -- the guard skipped or filtered every input, the
 action above blocked it, or its prompt could not be prepared -- submission collects and
@@ -654,6 +656,12 @@ one exception noted last:
 - An answered input the action above has since blocked is not put to the guard, so it
   keeps its answer when the guard now turns it away. Online's guard runs before its
   cascade split and replaces it with a tombstone, or with nothing.
+- An input whose batch is out, or finished and not collected, when the guard's verdict on
+  it changes keeps the answer that batch brings: the guard judged it when the batch was
+  sent, and collecting it judges nothing. Online, which has nothing out between runs, puts
+  it to the guard in the run that resumes the action and replaces it with a tombstone, or
+  with nothing. Batch keeps the answer while the action stands completed; a later run that
+  runs the action again carries the input and judges it then.
 - An expanding input sent again that fails, while something else succeeds, keeps the rows
   it minted before beside its failure row. Online holds the failure row alone.
 - A row naming several inputs is always carried.
