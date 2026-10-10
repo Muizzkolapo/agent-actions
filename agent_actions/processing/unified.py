@@ -63,7 +63,7 @@ class ProcessingStrategy(Protocol):
 class UnifiedProcessor:
     """Unified record processing pipeline.
 
-    Shared skeleton: guard -> cascade filter -> invoke -> enrich -> collect.
+    Shared skeleton: guard -> gate -> cascade filter -> invoke -> enrich -> collect.
     The strategy controls only the invocation step.
     """
 
@@ -85,7 +85,10 @@ class UnifiedProcessor:
         raw_records: list[dict[str, Any]] | None = None,
         repair_inputs: list[dict[str, Any]] | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
-        """Guard-filter, quarantine, invoke, enrich and collect, in that order.
+        """Guard-filter, gate, quarantine, invoke, enrich and collect, in that order.
+
+        The guard does not judge a record an action above failed or cascade-skipped: it
+        passes on, and is carried by the gate or quarantined, as batch decides it.
 
         *raw_records* is the pre-scope list FILE mode passes alongside the scoped
         *records*; the guard is evaluated against it, so it decides which records survive
