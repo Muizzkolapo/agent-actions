@@ -578,7 +578,7 @@ class TestProcessFromStorageBackend:
             action_config={"agent_type": "test"},
             action_name="test_agent",
             strategy=_make_strategy(),
-            upstream_data_dirs=[str(tmp_path / "staging" / "dep")],
+            upstream_data_dirs=[str(tmp_path / "agent_io" / "staging")],
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
@@ -915,8 +915,9 @@ class TestProcessFiles:
         assert strategy.execute.call_count == 2
 
     @patch("agent_actions.workflow.runner_file_processing.logger")
-    def test_no_files_warns(self, mock_logger, runner, tmp_path):
-        """No files found → calls _warn_no_files_found."""
+    def test_no_files_under_a_repair_warns(self, mock_logger, runner, tmp_path):
+        """A repair touches only its records; finding no file is no reason to delete the rest."""
+        runner.retried_records = frozenset({"r1"})
         strategy = _make_strategy()
         empty = tmp_path / "empty"
         empty.mkdir()

@@ -36,6 +36,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class NoInputFilesError(RuntimeError):
+    """A full walk found no input file, so the action has nothing to answer from.
+
+    Raised rather than returned so the executor skips the action and deletes what
+    it stored before: a run that walks no file rewrites none of it.
+    """
+
+    def __init__(self, action_name: str, upstream_data_dirs: list[str]) -> None:
+        self.action_name = action_name
+        self.upstream_data_dirs = upstream_data_dirs
+        super().__init__(f"'{action_name}' found no input file in {upstream_data_dirs}")
+
+
 @dataclass
 class CollectedErrors:
     """Per-file failures for one collector pass."""
@@ -82,8 +95,12 @@ class CollectedErrors:
 
 
 def is_target_directory(path: str) -> bool:
-    """Return True if path is a target directory (not staging)."""
-    return "target" in path and "staging" not in path
+    """Whether *path* is an action's output, ``.../target/<action>``.
+
+    Judged by its own components: a substring test on the whole path let the
+    directories a project sits under, such as ``staging-env/``, decide it.
+    """
+    return Path(path).parent.name == "target"
 
 
 _MAX_TRACKED_ERRORS = 10  # Cap to avoid unbounded memory on mass failure
@@ -141,12 +158,13 @@ def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]]) -> list[Path
     Not ``rglob``: it drops such a directory's whole subtree and raises nothing,
     handing back the directory entry alone — which the question above answers
     correctly as "not a regular file", so no loss is ever declared. A ``batch``
-    directory is left out, its files being skipped whether or not it opens.
+    directory below *root* is left out, its files being skipped whether or not it
+    opens.
     """
 
     def _note(exc: OSError) -> None:
         failed = Path(exc.filename) if exc.filename else root
-        if "batch" not in failed.parts:
+        if "batch" not in failed.relative_to(root).parts:
             unreadable.append((failed, exc))
 
     return walk_files(root, _note)
@@ -303,12 +321,15 @@ def should_skip_item(
     an entry that survives all of them is asked whether it is a regular file, and
     that question can fail — the caller has to treat the failure as a loss rather
     than as a skip.
+
+    A ``batch`` directory counts only below *input_path*: one the project sits
+    under would leave out every file it stages.
     """
-    if "batch" in item.parts:
+    relative_path = item.relative_to(input_path)
+    if "batch" in relative_path.parts:
         return True
     if item.name.startswith("."):
         return True
-    relative_path = item.relative_to(input_path)
     if relative_path in processed_paths:
         return True
     if file_type_filter and item.suffix.lstrip(".").lower() not in file_type_filter:
@@ -388,7 +409,8 @@ def collect_files_from_upstream(
             continue
 
         for item in _walk_files(input_path, lost):
-            if "batch" in item.parts:
+            relative_path = item.relative_to(input_path)
+            if "batch" in relative_path.parts:
                 continue
             if item.name.startswith("."):
                 continue
@@ -400,13 +422,26 @@ def collect_files_from_upstream(
                 lost.append((item, e))
                 continue
 
-            relative_path = item.relative_to(input_path)
             if relative_path not in files_by_relative_path:
                 files_by_relative_path[relative_path] = []
             files_by_relative_path[relative_path].append(item)
 
     grouped = {path: files_by_relative_path[path] for path in sorted(files_by_relative_path)}
     return grouped, sorted(lost, key=lambda pair: pair[0])
+
+
+def _found_no_input(runner: ActionRunner, params: FileProcessParams) -> None:
+    """End a walk that found no file: a repair carries on, anything else raises.
+
+    A repair touches only the records it named, so finding nothing is no reason
+    to delete the rest; the single-directory walk narrows to their files, which
+    may all be gone. A file limit needs no exemption: it stops a walk only after
+    it has taken a file.
+    """
+    if runner.retried_records:
+        warn_no_files_found(params)
+        return
+    raise NoInputFilesError(params.action_name, params.upstream_data_dirs)
 
 
 def warn_no_files_found(params: FileProcessParams) -> None:
@@ -469,9 +504,9 @@ def process_directory_files(
             if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
                 continue
         except OSError as e:
-            # Counted as found because `files_found == 0` is the one path where
-            # process_files neither raises nor warns: a walk that lost every entry
-            # would otherwise complete green and empty.
+            # Counted as found because a walk that found nothing is skipped as
+            # having no input and its stored rows deleted; a walk that lost every
+            # entry has to fail instead.
             files_seen += 1
             errors.record(item.relative_to(input_path), e)
             _lose_file(runner, params.action_name)
@@ -749,9 +784,9 @@ def process_from_storage_backend(
 
     data_by_path: dict[str, list[tuple[str, Any]]] = {}
     # Entries that never reached data_by_path. files_found is computed from what was READ,
-    # so without this a walk that loses everything returns (0, 0) and process_files'
-    # `files_found > 0` gate never fires: the action completes as though its input had
-    # never existed. #1026 fixed the same shape for the two filesystem walks by widening
+    # so without this a walk that loses everything returns (0, 0) and falls through to a
+    # walk that finds nothing: the action is skipped and its rows deleted as though its
+    # input were gone. #1026 fixed the same shape for the two filesystem walks by widening
     # files_seen; this walker counts differently, hence a separate tally.
     lost = 0
 
@@ -759,7 +794,7 @@ def process_from_storage_backend(
         input_path = Path(input_directory)
         action_name = input_path.name
 
-        if "staging" in str(input_path):
+        if input_path.name == "staging":
             continue
 
         try:
@@ -938,7 +973,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
                 _raise_all_files_failed(
                     params.action_name, files_found, params.upstream_data_dirs, errors
                 )
-            warn_no_files_found(params)
+            _found_no_input(runner, params)
         elif errors.action_fatal is not None:
             _raise_action_fatal(
                 params.action_name, files_found, files_processed, params.upstream_data_dirs, errors
@@ -969,7 +1004,7 @@ def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
             _raise_all_files_failed(
                 params.action_name, total_found, params.upstream_data_dirs, all_errors
             )
-        warn_no_files_found(params)
+        _found_no_input(runner, params)
     elif all_errors.action_fatal is not None:
         _raise_action_fatal(
             params.action_name, total_found, total_processed, params.upstream_data_dirs, all_errors

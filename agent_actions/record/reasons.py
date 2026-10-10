@@ -57,3 +57,4 @@ HALTED_ON_EXHAUSTED = "halted_on_exhausted"
 
 # -- Action-level skip reasons -----------------------------------------------
 GUARD_FILTERED_ALL = "All records guard-filtered — no output produced"
+NO_INPUT_FILES = "No input file found — no output produced"
