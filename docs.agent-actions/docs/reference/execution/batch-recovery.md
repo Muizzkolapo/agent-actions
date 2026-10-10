@@ -53,8 +53,17 @@ After retrieving batch results, the system compares the expected record IDs agai
 A retry is prepared again from each record's stored context, with the action's dependencies
 and version, so its prompt reads the same upstream answers and its guard decides as it did for
 the first request. The run's `workflow.*` values are not handed to it yet. A record whose
-prompt reads them is not retried: nothing is sent for it, and it is stored `cascade_skipped`.
+prompt reads them is not retried: nothing is sent for it, and it is failed as below.
 A guard that reads them cannot be evaluated on a retry, and the collect run fails.
+
+### A record nothing sends again
+
+A record the provider left out of its results that no retry will send again is failed, with
+the reason `batch_not_returned`. That is a record of an action with retry off, or one whose
+retry batch did not go out, because it could not be prepared or the provider refused it.
+The action completes with failures (`completed_with_failures`), the actions that read it
+skip the record, and [`agac retry`](../cli/retry) sends it again. Once its answer is
+collected, the actions that read it answer it too.
 
 ### Configuration
 

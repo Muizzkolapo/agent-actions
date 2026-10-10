@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A record a batch provider leaves out of a file's results is now that action's failure
+  when nothing will send it again: with no `retry:` block, with `retry: false` or
+  `enabled: false`, or when the retry batch that would resend it could not be prepared or
+  was refused by the provider. It was stored as a cascade casualty, `unprocessed` with the
+  reason `batch_not_returned`, so the action read `completed` and the run reported success,
+  `agac retry` found nothing to retry, and every later run skipped the action; only
+  `agac run --fresh` brought the record back, by sending every record of the workflow
+  again. A version merge run as the batch action lost its record the same way. The record
+  is now `failed` with the reason `batch_not_returned`: the action completes with failures,
+  the actions that read it skip it as before, and `agac retry` sends it again, after which
+  they answer it. When the provider answered none of the action's records, the action
+  fails, and the next run sends them again.
+time: 2026-10-10T19:16:07Z

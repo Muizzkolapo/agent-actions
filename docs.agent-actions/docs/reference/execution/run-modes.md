@@ -95,6 +95,14 @@ while checking whether its batches have finished pauses the same way. It keeps p
 as long as the provider cannot be asked; to give up on those batches instead,
 `agac run --fresh` sends every record of the workflow again.
 
+### When the provider leaves a record out
+
+A batch can come back finished with a record missing from its results. An action with a
+`retry:` block sends that record again in a retry batch ([Batch Recovery](./batch-recovery)).
+Without one, or once nothing will send it again, the record is failed with the reason
+`batch_not_returned`: the action completes with failures, the actions that read it skip the
+record, and `agac retry` sends it again.
+
 ### When the provider ends a batch without results
 
 agac reads nothing from a batch the provider failed or cancelled before it finished, in this
