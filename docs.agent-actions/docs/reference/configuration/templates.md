@@ -76,7 +76,7 @@ Create macros that accept parameters:
     prompt: $prompts.validate_structure
 
   - name: validate_content
-    dependencies: validate_structure  # Input source
+    dependencies: [validate_structure]  # Input source
     schema: \{\{ schema_name \}\}_content
     prompt: $prompts.validate_content
 \{%- endmacro \%\}

@@ -46,7 +46,7 @@ The workflow executor validates dependencies at runtime:
 # ERROR: Circular dependency
 actions:
   - name: action_a
-    dependencies: action_b  # Input source
+    dependencies: [action_b]  # Input source
   - name: action_b
     dependencies: [action_a]  # Circular!
 ```

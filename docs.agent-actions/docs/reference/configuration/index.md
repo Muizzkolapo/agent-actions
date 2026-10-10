@@ -98,7 +98,7 @@ Each action can override any default. Consider what happens when you need one ac
 actions:
   - name: extract_facts
     intent: "Extract key facts from content"
-    dependencies: prior_action  # Input source
+    dependencies: [prior_action]  # Input source
 
     # Model
     model_vendor: openai

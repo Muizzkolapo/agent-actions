@@ -105,7 +105,7 @@ actions:
 
 ```yaml
 - name: generate_summary
-  dependencies: flatten_clusters
+  dependencies: [flatten_clusters]
   prompt: |
     Grouped Facts: {{ flatten_clusters.grouped_facts }}
     Page Content: {{ source.page_content }}
@@ -115,7 +115,7 @@ actions:
 
 ```yaml
 - name: canonicalize_facts
-  dependencies: fact_extractor
+  dependencies: [fact_extractor]
   guard:
     condition: "fact_extractor.candidate_facts_list != []"
     on_false: filter
@@ -136,7 +136,7 @@ Explicit `dependencies` are required for correct execution ordering:
 
 ```yaml
 - name: validate
-  dependencies: extract  # Required
+  dependencies: [extract]  # Required
   prompt: |
     Validate: {{ extract.data }}
 ```

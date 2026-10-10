@@ -215,8 +215,10 @@ actions:
     # Uses record from defaults
 
   - name: aggregate_results
+    kind: tool          # file granularity is for tool and HITL actions
+    impl: aggregate_results
     granularity: file  # Override for aggregation
-    dependencies: per_item_process  # Input source
+    dependencies: [per_item_process]  # Input source
 ```
 
 ## Tool Actions and Defaults

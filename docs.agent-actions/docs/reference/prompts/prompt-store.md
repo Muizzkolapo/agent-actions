@@ -100,7 +100,7 @@ actions:
     schema: candidate_facts_list
 
   - name: canonicalize_facts
-    dependencies: fact_extractor
+    dependencies: [fact_extractor]
     prompt: $my_workflow.Canonicalize_Facts
     schema: candidate_facts_list
 ```

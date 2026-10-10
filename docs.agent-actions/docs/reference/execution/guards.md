@@ -103,7 +103,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ```yaml
 - name: canonicalize_facts
-  dependencies: fact_extractor
+  dependencies: [fact_extractor]
   guard:
     condition: 'fact_extractor.candidate_facts_list != []'
     on_false: "filter"
@@ -177,7 +177,7 @@ actions:
       on_false: "skip"       # Inactive records pass through with original content
 
   - name: generate_summary
-    dependencies: extract_facts
+    dependencies: [extract_facts]
     # Receives ALL records from extract_facts, including skipped ones
     # Can define its own guard or process everything
 ```

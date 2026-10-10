@@ -423,7 +423,7 @@ To act on the verdict inside the workflow, read it from a downstream [guard](../
 
 ```yaml
 - name: publish_summary
-  dependencies: summarize_article
+  dependencies: [summarize_article]
   guard:
     condition: 'summarize_article.expect.overall_pass == true'
     on_false: filter

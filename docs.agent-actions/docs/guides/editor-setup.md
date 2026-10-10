@@ -50,7 +50,7 @@ The LSP understands agent-actions references and resolves them to file locations
 | **Prompt** | `prompt: $quiz_gen.Extract_Raw_QA` | `prompt_store/quiz_gen.md` → `{prompt Extract_Raw_QA}` |
 | **Tool** | `impl: flatten_questions` | `tools/**/flatten_questions.py` → `@udf_tool def` |
 | **Schema** | `schema: question_schema` | `schema/question_schema.yml` (or `.yaml`/`.json`) |
-| **Action** | `dependencies: extract_qa` or `dependencies: [a, b]` | Same file → `- name: extract_qa` |
+| **Action** | `dependencies: [extract_qa]` | Same file → `- name: extract_qa` |
 | **Workflow** | `workflow: other_workflow` | `agent_workflow/other_workflow/agent_config/*.yml` |
 | **Seed File** | `$file:exam_syllabus.json` | `seed_data/exam_syllabus.json` |
 

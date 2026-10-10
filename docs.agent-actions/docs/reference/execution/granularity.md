@@ -115,13 +115,13 @@ actions:
     granularity: record
 
   - name: deduplicate
-    dependencies: extract_facts
+    dependencies: [extract_facts]
     granularity: file
     kind: tool
     impl: deduplicate
 
   - name: enrich_facts
-    dependencies: deduplicate
+    dependencies: [deduplicate]
     granularity: record
 ```
 
