@@ -142,6 +142,16 @@ CAPTURE = "{% set kind %}{{ source.page_content }}{% endset %}"
             [URGENT],
             id="raw-block-of-several-lines",
         ),
+        pytest.param(
+            "Fill {{ '{{' }} source.page_id {{ '}}' }} in: {{ source.page_content }}",
+            [URGENT],
+            id="escaped-tag-delimiters",
+        ),
+        pytest.param(
+            'and {{ "{{" }} literal {{ source.page_id }}',
+            [URGENT],
+            id="escaped-opening-delimiter-alone",
+        ),
     ],
 )
 def test_the_inline_prompt_sends_what_the_store_prompt_sends(tmp_path, prompt, records):
