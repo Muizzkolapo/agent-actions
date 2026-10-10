@@ -462,9 +462,13 @@ class LoadRender:
         try:
             parsed = yaml.safe_load(document)
         except yaml.YAMLError as e:
+            how = (
+                "once its load-time tags render it is no longer valid YAML"
+                if any(kind == "rendered" for kind, _ in pieces)
+                else "with its tags kept for the record it is not valid YAML"
+            )
             raise TemplateRenderingError(
-                f"{where}, and once its load-time tags render it is no longer valid YAML: "
-                f"{getattr(e, 'problem', None) or e}",
+                f"{where}, and {how}: {getattr(e, 'problem', None) or e}",
             ) from None
         value = parsed.get("k") if isinstance(parsed, dict) and list(parsed) == ["k"] else None
         if not isinstance(value, str):
@@ -755,17 +759,19 @@ def _value_ends(
 
 
 def _indent_tag_lines(body: str) -> str:
-    """*body* with each line holding only kept tags indented as its first line of text.
+    """*body* with each line holding only kept tags indented at least as its text is.
 
     A tag on a line of its own may sit left of the block it is in, since the load renders
-    it to nothing; kept for the record, it has to stay inside the value.
+    it to nothing; kept for the record, it has to stay inside the value. The value's own
+    indentation is that of its least indented text, not of its first: the body of an
+    `{% if %}` may sit deeper than the tags around it.
     """
     lines = body.split("\n")
     tag_only = [not _HELD.sub("", line).strip() and bool(_HELD.search(line)) for line in lines]
     text = [i for i, line in enumerate(lines) if i and line.strip() and not tag_only[i]]
     if not text:
         return body
-    indent = len(lines[text[0]]) - len(lines[text[0]].lstrip(" "))
+    indent = min(len(lines[i]) - len(lines[i].lstrip(" ")) for i in text)
     for i, line in enumerate(lines):
         if i and tag_only[i] and len(line) - len(line.lstrip(" ")) < indent:
             lines[i] = " " * indent + line.lstrip(" ")
