@@ -14,5 +14,5 @@ body: >-
   action after the merge. The `# dependency anchor` comments, which applied the observe rule
   to actions that declared no dependency, are gone, and the skill's rules say that naming an
   action does not wire it in. A test loads every block of the skill as `agac run` does and
-  runs its pre-flight.
+  runs its pre-flight, and fails on a guard that names its own action.
 time: 2026-10-10T14:00:00Z

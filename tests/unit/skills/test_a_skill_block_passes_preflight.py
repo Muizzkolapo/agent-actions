@@ -37,13 +37,16 @@ def _blocks() -> list[Any]:
     return found
 
 
+def _guarded(action: dict[str, Any]) -> list[str]:
+    guard = action.get("guard")
+    condition = guard.get("condition", "") if isinstance(guard, dict) else str(guard or "")
+    return _GUARD_NAME.findall(condition)
+
+
 def _named(action: dict[str, Any]) -> list[str]:
     scope = action.get("context_scope") or {}
     refs = [ref for key in ("observe", "passthrough", "drop") for ref in scope.get(key) or []]
-    names = [str(ref).split(".", 1)[0] for ref in refs]
-    guard = action.get("guard")
-    condition = guard.get("condition", "") if isinstance(guard, dict) else str(guard or "")
-    return names + _GUARD_NAME.findall(condition)
+    return [str(ref).split(".", 1)[0] for ref in refs] + _guarded(action)
 
 
 def _stand_in(name: str, dependencies: list[str], observe: list[str]) -> dict[str, Any]:
@@ -114,3 +117,12 @@ def test_the_skill_shows_workflows():
 def test_preflight_accepts_the_block(block, tmp_path):
     _project(tmp_path, block)
     WorkflowInspector("snippet", project_root=tmp_path).validate()
+
+
+@pytest.mark.parametrize("block", _blocks())
+def test_no_guard_reads_its_own_action(block):
+    """A guard runs before its action, so the action's own fields are not there yet.
+
+    Pre-flight does not refuse it, and the run reports success with every record guarded out.
+    """
+    assert [action["name"] for action in block if action["name"] in _guarded(action)] == []
