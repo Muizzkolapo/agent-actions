@@ -319,6 +319,10 @@ class ProcessingContext:
     source_data: list[dict[str, Any]] = field(default_factory=list)
     file_path: str | None = None
     output_directory: str | None = None
+    # The name the caller stores this file's output under; the action's own reads of it
+    # use the same. Not derivable from the two above, which give the bare name for a file
+    # in a subdirectory and keep a staged file's own suffix.
+    target_relative_path: str | None = None
     version_context: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     record_index: int = 0

@@ -20,6 +20,7 @@ def _make_context(backend, action_name="action_a", file_path="output.json", outp
         storage_backend=backend,
         file_path=f"{output_dir}/{file_path}",
         output_directory=output_dir,
+        target_relative_path=file_path,
     )
 
 

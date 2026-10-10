@@ -18,8 +18,8 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
+from agent_actions.output.writer import target_relative_path
 from agent_actions.processing.disposition_gate import positions_named_by_repair
-from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -572,7 +572,7 @@ class ProcessingPipeline:
             )
             return
 
-        # Create processing context
+        output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
         context = ProcessingContext(
             agent_config=self.config.action_config,
             agent_name=self.config.action_name,
@@ -582,6 +582,7 @@ class ProcessingPipeline:
             parent_records=parent_records,  # Previous-stage output (lineage source)
             file_path=file_path,
             output_directory=output_directory,
+            target_relative_path=target_relative_path(output_file_path, output_directory),
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             version_context=version_context,
@@ -644,7 +645,7 @@ class ProcessingPipeline:
         # This file's only: another file's checkpoint rows are answers not stored yet.
         if self.config.storage_backend:
             self.config.storage_backend.clear_checkpoint_records(
-                self.config.action_name, derive_relative_path(file_path, output_directory)
+                self.config.action_name, context.target_relative_path
             )
 
     def _select_strategy(self) -> ProcessingStrategy:

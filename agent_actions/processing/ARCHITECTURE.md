@@ -340,6 +340,19 @@ checkpoint_output table:
     └──────────────┴──────────────┴──────────────┴────────────┘
 ```
 
+`relative_path` is the name the file's output is stored under:
+`ProcessingContext.target_relative_path`, set by the caller that writes the file
+(`pipeline.py` from what `save_main_output` writes, `initial_pipeline.py` from its
+`.json` output path). That is the file's path below the input root, so a file in a
+subdirectory is `sub/page.json` and a staged `page.csv` is `page.json`. Carry-forward,
+the carry of a repair, the checkpoint, `answered_since_stored` and the clear after a
+write all use it. A resume reads the stored file, answers again a record checkpointed
+beside it, and falls back to the checkpoint by that one name only where nothing is
+stored; a repair that cannot find the stored file has nothing to carry and rewrites it
+with only the records it named. Writing a file clears that name's checkpoint rows and no
+other's, so a resume that saves one file still carries the checkpoint of a file it
+reaches after it.
+
 ### Cleanup paths
 
 Every path that resets action state also clears checkpoint records:
@@ -873,7 +886,7 @@ HITLStrategy attributes each reviewer decision to the wrong record.
 | `guard_context.py` | Build field context for guard evaluation |
 | `task_preparer.py` | `TaskPreparer.prepare()` — normalize, guard, prompt |
 | `prepared_task.py` | `PreparedTask`, `GuardStatus`, `PreparationContext` |
-| `record_helpers.py` | Tombstone builders, `derive_relative_path` |
+| `record_helpers.py` | Tombstone builders |
 | `exhausted_builder.py` | Build exhausted retry tombstones |
 | `source_resolution.py` | Identity resolution for non-first-stage content — own guid, then parent_source_guid, then the `source` namespace the record carries (which must be a dict), then None |
 | `batch_context_adapter.py` | Bridge batch state into `ProcessingContext` |

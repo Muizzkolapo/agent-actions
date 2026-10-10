@@ -42,7 +42,6 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
-    derive_relative_path,
 )
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -357,7 +356,9 @@ class OnlineLLMStrategy:
 
         try:
             if result.data:
-                relative_path = derive_relative_path(context.file_path, context.output_directory)
+                # Under the file's stored name: a resume reads the checkpoint only where
+                # it finds no stored file, and it looks for both by that one name.
+                relative_path = context.target_relative_path
                 if relative_path:
                     # Copy records to avoid mutating result.data in-place —
                     # downstream consumers (enrichment, collectors) hold

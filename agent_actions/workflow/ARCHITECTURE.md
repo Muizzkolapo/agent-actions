@@ -366,6 +366,7 @@ run_mode == BATCH and not tool/HITL?
     │       └── Write placeholder JSON + registry
     │
     NO → Build ProcessingContext
+         ├── target_relative_path = the name save_main_output stores the file under
          ├── _select_strategy()
          │     ├── FILE + tool → FileToolStrategy
          │     ├── FILE + HITL → HITLStrategy
@@ -385,7 +386,7 @@ run_mode == BATCH and not tool/HITL?
     stats.raise_if_terminal_failure()
     output_handler.save_main_output()
     write_dispositions(context.kept_dispositions)   ← only after the file
-    clear_checkpoint_records()
+    clear_checkpoint_records(action, target_relative_path)
 ```
 
 ---

@@ -17,7 +17,6 @@ from unittest.mock import patch
 import pytest
 
 from agent_actions.processing.disposition_gate import DispositionGate
-from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
@@ -93,6 +92,7 @@ class _Run:
         context.storage_backend = self.backend
         context.file_path = str(self.tmp_path / "in" / "f.json")
         context.output_directory = str(self.tmp_path / "out")
+        context.target_relative_path = "f.json"
 
         def _tool(*_args, **kwargs):
             given = [item["id"] for item in kwargs.get("context", [])]
@@ -106,7 +106,7 @@ class _Run:
                 disposition_gate=DispositionGate(self.backend)
             ).process(list(records), context, FileToolStrategy(), raw_records=list(records))
 
-        relative = derive_relative_path(context.file_path, context.output_directory)
+        relative = context.target_relative_path
         self.backend.write_target(
             ACTION,
             relative,

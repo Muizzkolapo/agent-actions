@@ -18,7 +18,6 @@ import pytest
 
 from agent_actions.errors.processing import ProcessingError
 from agent_actions.processing.disposition_gate import DispositionGate, positions_named_by_repair
-from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
@@ -45,9 +44,7 @@ class _Run:
         self.backend.initialize()
         self.seen: list[list[str]] = []
 
-    @property
-    def _relative(self) -> str:
-        return derive_relative_path(str(self.root / "in" / "f.json"), str(self.root / "out"))
+    _relative = "f.json"
 
     def __call__(self, records: list[dict], repairing: set[str] = frozenset()) -> list[dict]:
         kept = positions_named_by_repair(records, repairing)
@@ -58,6 +55,7 @@ class _Run:
         context.storage_backend = self.backend
         context.file_path = str(self.root / "in" / "f.json")
         context.output_directory = str(self.root / "out")
+        context.target_relative_path = self._relative
 
         def _tool(*_args, **kwargs):
             given = kwargs.get("context", [])

@@ -12,9 +12,8 @@ from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
-from agent_actions.output.writer import FileWriter
+from agent_actions.output.writer import FileWriter, target_relative_path
 from agent_actions.processing.disposition_gate import positions_named_by_repair
-from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -786,6 +785,7 @@ def _process_online_mode_with_record_processor(
         is_first_stage=True,
         file_path=str(file_path),
         output_directory=str(output_directory),
+        target_relative_path=target_relative_path(output_file_path, str(output_directory)),
         workflow_metadata={**(ctx.workflow_metadata or {}), "source_file": str(file_path)},
         storage_backend=ctx.storage_backend,
         defer_kept_dispositions=True,
@@ -830,7 +830,7 @@ def _process_online_mode_with_record_processor(
     write_dispositions(ctx.storage_backend, processing_context.kept_dispositions, ctx.agent_name)
     # Kept past the write, they would read as answers given after it.
     ctx.storage_backend.clear_checkpoint_records(
-        ctx.agent_name, derive_relative_path(str(file_path), str(output_directory))
+        ctx.agent_name, processing_context.target_relative_path
     )
 
     return str(output_file_path)
