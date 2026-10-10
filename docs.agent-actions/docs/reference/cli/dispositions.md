@@ -42,8 +42,9 @@ One row per action, with a count per disposition:
 | **Filtered** | The action removed the record from the stream |
 
 In a `run_mode: batch` action a guard skip counts as **Unprocessed** (reason
-`guard_skip`), not **Passthrough**: batch checks dispositions before it runs the guard,
-so a skipped record has to stay open for the guard to judge it again on the next run.
+`guard_skip`), not **Passthrough**: unprocessed keeps the record open, so once the guard
+passes it again it is sent to the model, where a terminal disposition would carry the
+tombstone for good.
 
 ### Why Total and Records can differ
 
