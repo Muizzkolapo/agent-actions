@@ -591,6 +591,35 @@ def test_file_mode_error_includes_context():
     assert exc_info.value.context["record_count"] == 2
 
 
+def test_a_tool_that_raises_fails_every_record_it_was_handed():
+    """The file's one result names no record, so a raise is answered per input record:
+    each fails with the error, and carries its record from before the scope for its
+    tombstone, as the record loop fails a record whose tool raised."""
+    context = _make_context()
+    scoped = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+    ]
+    originals = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}, "source": {"page": "a"}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}, "source": {"page": "b"}}},
+    ]
+    context.source_data = originals
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        side_effect=AgentActionsError("Error executing UDF 'roll': the roll-up broke"),
+    ):
+        results = FileToolStrategy().invoke(scoped, context)
+
+    assert [(r.status, r.source_guid) for r in results] == [
+        (ProcessingStatus.FAILED, "sg-1"),
+        (ProcessingStatus.FAILED, "sg-2"),
+    ]
+    assert {r.error for r in results} == {"Error executing UDF 'roll': the roll-up broke"}
+    assert [r.input_record for r in results] == originals
+
+
 # --- _strip_internal_fields list handling ---
 
 
