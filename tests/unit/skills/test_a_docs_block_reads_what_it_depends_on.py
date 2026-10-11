@@ -1,8 +1,8 @@
-"""A workflow the docs site shows reads only what it depends on, and its HITL actions load.
+"""A workflow the docs or an example's pages show reads only what it depends on, and loads.
 
-Each block is loaded as `agac run` loads it and put to two refusals of its pre-flight:
-naming an action that is not upstream through `dependencies`, and reading at FILE
-granularity with no `dependencies`. They are called on their own because a fragment
+Each block is loaded as `agac run` loads it and put to three refusals of its pre-flight:
+naming an action that is not upstream through `dependencies`, in a guard, a prompt or
+any part of its context scope, and reading at FILE granularity with no `dependencies`. They are called on their own because a fragment
 leaves out the `context_scope` and schema fields the rest of pre-flight asks for. An
 intent, a prompt, a tool's impl and a schema are filled in, and an action a block names
 without showing stands in. A block the loader refuses for another reason is named in
@@ -28,22 +28,31 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 from tests.unit.skills.test_a_skill_block_passes_preflight import _project, _upstream
 
 _REPO = Path(__file__).resolve().parents[3]
-_DOCS = _REPO / "docs.agent-actions" / "docs"
+_PAGES = sorted(
+    [
+        *(_REPO / "docs.agent-actions" / "docs").rglob("*.md*"),
+        *(_REPO / "examples").rglob("*.md"),
+    ]
+)
 _FENCE = re.compile(r"^[ \t]*```yaml\n(.*?)^[ \t]*```", re.S | re.M)
 _PROMPT_NAME = re.compile(r"{[{%][^}]*?\b([A-Za-z_]\w*)\.[A-Za-z_]")
 _NOT_ACTIONS = {"source", "seed", "version", "workflow", "loop"}
 _FIRST_FILE = "reads at FILE granularity but declares no 'dependencies'"
+_NOT_REACHABLE = "is not reachable from action"
 
 # Blocks the loader refuses for a reason other than the two this test is about,
 # by page and the actions shown.
 _NOT_LOADED = {
-    "guides/troubleshooting.md::generate_report+generate_report": "shows the wrong form beside the right one",
-    "reference/validation/index.md::action_a+action_b": "shows a circular dependency",
-    "reference/cli/expect.md::Check output quality": "a CI step, not a workflow",
-    "reference/data-io/data-lineage.md::prepare+gpt4_answer+claude_answer+gemini_answer+best_answer": "model_vendor: google is not a vendor",
-    "reference/configuration/index.md::extract_facts": "data_source on an action is refused",
-    "reference/data-io/index.md::extract_facts": "data_source on an action is refused",
-    "reference/prompts/dispatch.md::generate_question": "add_dispatch on an action is refused",
+    "docs.agent-actions/docs/guides/troubleshooting.md::generate_report+generate_report": "shows the wrong form beside the right one",
+    "docs.agent-actions/docs/reference/validation/index.md::action_a+action_b": "shows a circular dependency",
+    "docs.agent-actions/docs/reference/cli/expect.md::Check output quality": "a CI step, not a workflow",
+}
+# Pages with a block that lists actions and is not YAML until its template is rendered.
+_TEMPLATED = {
+    "docs.agent-actions/docs/reference/configuration/templates.md",
+    "docs.agent-actions/docs/reference/execution/guards.md",
+    "docs.agent-actions/docs/reference/validation/expectations.md",
+    "docs.agent-actions/docs/reference/validation/output-validation.md",
 }
 
 
@@ -61,9 +70,9 @@ _AsWritten.add_representer(str, _text)
 
 def _blocks() -> list[Any]:
     found = []
-    for page in sorted(_DOCS.rglob("*.md*")):
+    for page in _PAGES:
         text = page.read_text(encoding="utf-8")
-        name = str(page.relative_to(_DOCS))
+        name = str(page.relative_to(_REPO))
         for match in _FENCE.finditer(text):
             try:
                 block = yaml.safe_load(textwrap.dedent(match.group(1)))
@@ -134,11 +143,24 @@ def _loaded(root: Path, shown_as: Any) -> dict[str, dict[str, Any]]:
         raise
 
 
-def _first_file_refusals(root: Path, actions: dict[str, dict[str, Any]]) -> list[str]:
+def _refusals(root: Path, actions: dict[str, dict[str, Any]], saying: str) -> list[str]:
     service = WorkflowSchemaService.from_action_configs(
         "snippet", actions, project_root=root, with_udf_registry=True
     )
-    return [e.message for e in service.validate().errors if _FIRST_FILE in e.message]
+    return [e.message for e in service.validate().errors if saying in e.message]
+
+
+def _unparsed() -> set[str]:
+    """Pages with a block that lists actions and does not parse."""
+    found = set()
+    for page in _PAGES:
+        for match in _FENCE.finditer(page.read_text(encoding="utf-8")):
+            try:
+                yaml.safe_load(textwrap.dedent(match.group(1)))
+            except yaml.YAMLError:
+                if "- name:" in match.group(1):
+                    found.add(str(page.relative_to(_REPO)))
+    return found
 
 
 def test_the_docs_show_workflows():
@@ -148,7 +170,7 @@ def test_the_docs_show_workflows():
 def test_preflight_refuses_a_first_action_that_reads_a_file(tmp_path):
     block = [{"name": "merge", "kind": "tool", "granularity": "file"}]
     actions = _loaded(tmp_path, (block, {}, "here"))
-    (refusal,) = _first_file_refusals(tmp_path, actions)
+    (refusal,) = _refusals(tmp_path, actions, _FIRST_FILE)
     assert "'merge'" in refusal
 
 
@@ -164,7 +186,25 @@ def test_no_block_names_an_action_it_does_not_depend_on(shown_as, tmp_path):
 
 @pytest.mark.parametrize("shown_as", _blocks())
 def test_no_block_reads_a_file_with_no_dependencies(shown_as, tmp_path):
-    assert _first_file_refusals(tmp_path, _loaded(tmp_path, shown_as)) == []
+    assert _refusals(tmp_path, _loaded(tmp_path, shown_as), _FIRST_FILE) == []
+
+
+def test_preflight_refuses_a_drop_of_an_action_that_is_not_upstream(tmp_path):
+    block = [
+        {"name": "a", "context_scope": {"observe": ["source.*"]}},
+        {"name": "b", "context_scope": {"observe": ["source.*"], "drop": ["a.out"]}},
+    ]
+    (refusal,) = _refusals(tmp_path, _loaded(tmp_path, (block, {}, "here")), _NOT_REACHABLE)
+    assert "'a'" in refusal and "'b'" in refusal
+
+
+@pytest.mark.parametrize("shown_as", _blocks())
+def test_no_block_scopes_an_action_it_cannot_reach(shown_as, tmp_path):
+    assert _refusals(tmp_path, _loaded(tmp_path, shown_as), _NOT_REACHABLE) == []
+
+
+def test_every_block_that_does_not_parse_is_a_template():
+    assert _unparsed() == _TEMPLATED
 
 
 @pytest.mark.parametrize("shown_as", _blocks())

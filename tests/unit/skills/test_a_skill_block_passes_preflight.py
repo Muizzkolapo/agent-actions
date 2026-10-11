@@ -153,3 +153,20 @@ def test_no_guard_reads_its_own_action(block, earlier):
     Pre-flight does not refuse it, and the run reports success with every record guarded out.
     """
     assert [action["name"] for action in block if action["name"] in _guarded(action)] == []
+
+
+def test_the_skill_guards_on_a_field_it_does_not_observe():
+    """A guard reads the record as stored, so a block need not observe what it guards on.
+
+    Each such block is among those pre-flight accepts above.
+    """
+    unobserved = []
+    for param in _blocks():
+        for action in param.values[0]:
+            guard = action.get("guard")
+            condition = guard.get("condition", "") if isinstance(guard, dict) else ""
+            observed = (action.get("context_scope") or {}).get("observe") or []
+            for name, field in re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)", condition):
+                if f"{name}.{field}" not in observed and f"{name}.*" not in observed:
+                    unobserved.append(f"{param.id}: {name}.{field}")
+    assert unobserved != []
