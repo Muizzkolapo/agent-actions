@@ -47,6 +47,11 @@ guard:
 | `>`, `>=`, `<`, `<=` | Comparison |
 | `and`, `or`, `not` | Logical |
 
+`not` binds looser than every comparison operator and tighter than `and`/`or`: `not x == 1`
+negates the comparison, reading as `not (x == 1)`, and `not x == 1 and y == 2` reads as
+`(not (x == 1)) and (y == 2)`. Written on a field alone, `not x`, it negates the field's
+truthiness instead.
+
 ### Advanced Operators
 
 | Operator | Example |

@@ -221,9 +221,9 @@ class WhereClauseParser:
         where_expr = infix_notation(
             operand,
             [
-                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
                 (postfix_ops, 1, OpAssoc.LEFT, self._parse_postfix),
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
+                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
             ],
