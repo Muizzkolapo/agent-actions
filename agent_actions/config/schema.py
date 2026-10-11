@@ -146,7 +146,7 @@ def _refuse_retired_version_keys(data: Any) -> Any:
     return data
 
 
-def _refuse_blank_output_field(data: Any, surface: str) -> Any:
+def refuse_blank_output_field(data: Any, surface: str) -> Any:
     """Refuse `output_field:` written with no value.
 
     A blank key counts as set and is dumped as None, which beats the default
@@ -511,7 +511,7 @@ class ActionConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
-        return _refuse_blank_output_field(
+        return refuse_blank_output_field(
             refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action"),
             "action",
         )
@@ -667,7 +667,7 @@ class DefaultsConfig(_RetryValidators):
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return _refuse_undeclared_keys(
-            _refuse_blank_output_field(
+            refuse_blank_output_field(
                 refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
                 "defaults",
             ),

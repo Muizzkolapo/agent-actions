@@ -20,6 +20,7 @@ from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
     ChunkConfig,
     WorkflowConfig,
+    refuse_blank_output_field,
     refuse_context_scope_siblings,
     refuse_retired_keys,
 )
@@ -107,6 +108,14 @@ def _validate_project_expect_block(project_defaults: dict[str, Any]) -> dict[str
             context={"operation": "load_project_defaults"},
         ) from e
     return {**project_defaults, "expect": validated}
+
+
+def _refuse_blank_project_output_field(project_defaults: dict[str, Any]) -> None:
+    """`DefaultAgentConfig` is extra="allow", so a blank `output_field:` here reached expansion."""
+    try:
+        refuse_blank_output_field(project_defaults, "default_agent_config")
+    except ValueError as e:
+        raise ConfigurationError(str(e), context={"operation": "load_project_defaults"}) from e
 
 
 def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
@@ -304,6 +313,7 @@ class ConfigManager:
                 _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
                 project_defaults = _flatten_project_chunk_block(project_defaults)
                 project_defaults = _validate_project_expect_block(project_defaults)
+                _refuse_blank_project_output_field(project_defaults)
             except (FileNotFoundError, ProjectRootNotFoundError):
                 project_defaults = {}
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:
