@@ -228,6 +228,8 @@ class LoadRender:
 
         def place(value: _Value) -> None:
             nonlocal pos
+            if value.start < pos:
+                return
             region = self._region(source, tags, value, origin)
             if region is None:
                 for inner in value.inner:
@@ -799,7 +801,8 @@ def _values(source: str, tags: list[_Tag]) -> Iterable[_Value]:
         flow = _flow(source, value, by_start)
         inner = tuple(flow[0]) if flow is not None else ()
         yield _Value(key.group(3).strip("\"'"), keycol, key.end(), ends, inner=inner)
-        pos = ends[0]
+        # A flow value may go on at its key's column, past where a block value would end.
+        pos = max(ends[0], _past_line(source, flow[1]) if flow is not None else 0)
 
 
 def _value_ends(
