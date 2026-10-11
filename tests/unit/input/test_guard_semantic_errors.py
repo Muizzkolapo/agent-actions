@@ -19,6 +19,7 @@ from agent_actions.input.preprocessing.parsing.ast_nodes import (
     MissingFieldError,
     evaluate_node,
 )
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 
 # ---------------------------------------------------------------------------
 # GuardSemanticError — raised for RHS bare identifier
@@ -83,6 +84,20 @@ class TestGuardSemanticError:
         msg = str(exc_info.value)
         assert 'hitl_status == "approved"' in msg
 
+    def test_raised_for_an_unregistered_function(self):
+        """An unregistered name is a structural problem, not a data problem: every
+        record would fail the same way, so a plain ValueError (which respects
+        passthrough_on_error and would silently disable the guard) is wrong here."""
+        with pytest.raises(GuardSemanticError, match="not registered"):
+            WhereClauseParser().parse("COUNT(x) > 0").ast.evaluate({"x": "1"})
+
+    def test_raised_for_the_wrong_argument_count(self):
+        with pytest.raises(GuardSemanticError, match="exactly 1 argument"):
+            WhereClauseParser().parse("TRIM(x, y) > 0").ast.evaluate({"x": "1", "y": "2"})
+
+    def test_a_correct_function_call_still_evaluates_normally(self):
+        assert WhereClauseParser().parse("LENGTH(x) > 1").ast.evaluate({"x": "ab"}) is True
+
 
 # ---------------------------------------------------------------------------
 # ErrorCategory on FilterResult
@@ -130,6 +145,18 @@ class TestCircuitBreaker:
 
         summary = gf.get_error_summary()
         assert summary[condition] == 2
+        gf.shutdown()
+
+    def test_an_unregistered_function_call_is_classified_semantic_not_data(self):
+        """Through the real GuardFilter path, not a hand-built FilterResult: a DATA
+        classification here would respect passthrough_on_error and silently pass
+        every record through a guard that was supposed to filter them."""
+        gf = GuardFilter()
+        result = gf.filter_item(
+            FilterItemRequest(data={"x": "1"}, condition="COUNT(x) > 0")
+        )
+        assert result.success is False
+        assert result.error_category == ErrorCategory.SEMANTIC
         gf.shutdown()
 
     def test_logs_once_not_n_times(self):

@@ -107,6 +107,38 @@ class TestItRefusesWhatProvablyResolvesNowhere:
 
         assert len(errors) == 1 and "'n'" in errors[0], errors
 
+    def test_an_unnamespaced_field_right_of_a_comparison_is_seen(self):
+        """The field sits on the right of `>`, not the left -- a walk that only
+        descends `operand.left` would miss it and still pass every other test here."""
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "a1.score > n"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
+    def test_an_unnamespaced_field_right_of_and_is_seen(self):
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "a1.ok AND n"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
+    def test_an_unnamespaced_field_right_of_or_is_seen(self):
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "a1.ok OR n"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
 
 class TestItStaysSilentWhereTheNameResolves:
     def test_a_dotted_reference_is_never_refused(self):
