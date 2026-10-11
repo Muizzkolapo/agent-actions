@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from agent_actions.errors import AgentActionsError
 from agent_actions.output.writer import FileWriter
 from agent_actions.utils.path_utils import ensure_directory_exists
+from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -75,7 +76,7 @@ class OutputHandler:
             file_writer.write_target(data)
         except OSError as e:
             raise AgentActionsError(
-                "IOError saving main output",
+                f"IOError saving main output: {safe_format_error(e)}",
                 context={
                     "output_file_path": str(output_file_path) if output_file_path else "unknown",
                     "file_path": file_path,
@@ -85,7 +86,7 @@ class OutputHandler:
             ) from e
         except Exception as e:
             raise AgentActionsError(
-                "Error saving main output",
+                f"Error saving main output: {safe_format_error(e)}",
                 context={
                     "output_file_path": str(output_file_path) if output_file_path else "unknown",
                     "file_path": file_path,
