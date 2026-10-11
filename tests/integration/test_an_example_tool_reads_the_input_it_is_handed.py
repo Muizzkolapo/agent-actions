@@ -367,17 +367,24 @@ def test_the_marketplace_listing_carries_the_normalized_product_identity():
             },
             "write_marketing_copy": {
                 "listing_title": "Great Desk",
-                "listing_description": "d",
-                "bullet_points": [],
-                "search_keywords": [],
-                "value_proposition": "v",
+                "listing_description": "A sturdy desk.",
+                "bullet_points": ["Adjustable height"],
+                "search_keywords": ["desk"],
+                "value_proposition": "Work better.",
             },
-            "optimize_seo": {},
+            "optimize_seo": {
+                "optimized_title": "Best Standing Desk",
+                "optimized_bullets": ["Fully adjustable height"],
+                "primary_keywords": ["standing desk"],
+                "long_tail_keywords": ["adjustable standing desk for home office"],
+                "backend_keywords": ["desk ergonomic"],
+                "seo_score_estimate": "high",
+            },
             "validate_compliance": {"compliance_passed": True, "violations": []},
             "fetch_competitor_prices": {
-                "competitor_prices": [],
+                "competitor_prices": [{"competitor_name": "A", "price": 350}],
                 "price_position": "average",
-                "average_competitor_price": 0,
+                "average_competitor_price": 350,
             },
             "generate_description": {},
         }
@@ -387,6 +394,24 @@ def test_the_marketplace_listing_carries_the_normalized_product_identity():
     assert result["brand"] == "DeskCo"
     assert result["price"] == 399.99
     assert result["category"] == "home_office"
+    assert result["listing"] == {
+        "title": "Best Standing Desk",
+        "description": "A sturdy desk.",
+        "bullet_points": ["Fully adjustable height"],
+        "value_proposition": "Work better.",
+    }
+    assert result["seo"] == {
+        "primary_keywords": ["standing desk"],
+        "long_tail_keywords": ["adjustable standing desk for home office"],
+        "backend_keywords": ["desk ergonomic"],
+        "seo_score": "high",
+    }
+    assert result["competitive_intel"] == {
+        "price_position": "average",
+        "average_competitor_price": 350,
+        "competitor_count": 1,
+    }
+    assert result["compliance"] == {"passed": True, "violations": []}
 
 
 def test_the_brand_name_in_title_check_reads_the_real_brand():
