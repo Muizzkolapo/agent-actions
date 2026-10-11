@@ -60,3 +60,30 @@ def test_every_right_strip_spelling_is_respected(tmp_path, tag):
     ][0]["prompt"]
 
     assert not prompt.endswith("\n")
+
+
+def _render(tmp_path: Path, text: str) -> dict:
+    folder = tmp_path / "templates"
+    folder.mkdir(exist_ok=True)
+    path = tmp_path / "wf.yml"
+    path.write_text(text)
+    return yaml.safe_load(render_pipeline_with_templates(path, folder, compile_schemas=False))
+
+
+class TestWhatDoesNotStripIsNotTreatedAsStripping:
+    def test_a_strip_that_takes_several_trailing_newlines_takes_them_all(self, tmp_path):
+        """One restored newline would put back a line break the tag removed."""
+        text = HEAD.replace("CLOSE", "-") + "\n\n"
+
+        assert _render(tmp_path, text)["actions"][0]["prompt"] == "Hello extra"
+
+    def test_a_strip_tag_earlier_in_the_file_does_not_reach_the_end(self, tmp_path):
+        """The check is on the last tag: an earlier `-%}` is no reason to drop the
+        prompt's own final newline."""
+        text = "{% set unused = 1 -%}\n" + HEAD.replace("CLOSE", "")
+
+        assert _render(tmp_path, text)["actions"][0]["prompt"] == "Hello extra\n"
+
+    def test_a_keep_marker_is_not_a_strip(self, tmp_path):
+        """`+%}` asks for the whitespace to stay, so the newline is restored."""
+        assert _prompt(tmp_path, "+") == "Hello extra\n"
