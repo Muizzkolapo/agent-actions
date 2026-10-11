@@ -1,8 +1,8 @@
 """A command a docs code block shows must be one `agac` has.
 
 Code blocks only: a block is what a reader types, while prose may name a
-command to say it is gone. Only the command path is read, not the options and
-arguments the command itself takes.
+command to say it is gone. The command path is read, then the options and
+arguments the command itself takes, by its own parser with no callback run.
 """
 
 from __future__ import annotations
@@ -25,13 +25,6 @@ _PROMPT = re.compile(r"^\s*\$\s+")
 _CI_RUN_KEY = re.compile(r"^\s*(-\s+)?run:\s+")
 _SHELL_SEPARATOR = re.compile(r"\|\|?|&&|;")
 _ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=\S*")
-
-# Commands the docs show that the CLI does not have. The list may shrink, never
-# grow: an entry here is a documentation gap, not an exemption.
-_UNREGISTERED_BACKLOG = {
-    ("reference/inspect.md", "inspect field-flow"),
-    ("reference/inspect.md", "inspect conflicts"),
-}
 
 
 def _shown_commands(page: Path) -> list[tuple[int, list[str]]]:
@@ -73,7 +66,9 @@ def _walk(words: list[str]) -> tuple[list[str], str | None]:
     """Read the words as `agac` does, down to the command they run.
 
     Returns the command names read and None or, where `agac` refuses a word,
-    the names up to and including that word and why `agac` refuses it.
+    the names up to and including that word and why `agac` refuses it. A word
+    the command's own parser refuses, an option it lacks or an argument it
+    takes no more of, is named after the command.
     """
     command: click.Command = _agac()
     ctx = click.Context(command, info_name="agac")
@@ -96,6 +91,15 @@ def _walk(words: list[str]) -> tuple[list[str], str | None]:
         path.append(name)
         command = sub
         ctx = click.Context(command, info_name=name, parent=ctx)
+    if not isinstance(command, click.Group):
+        # A synopsis's `[options]` stands for options, not for an argument.
+        shown = [w for w in words if not w.startswith("[")]
+        try:
+            _, extra, _ = command.make_parser(ctx).parse_args(shown)
+        except (click.NoSuchOption, click.BadOptionUsage) as error:
+            return [*path, error.option_name], error.format_message()
+        if extra and not ctx.allow_extra_args:
+            return [*path, extra[0]], f"Got unexpected extra argument ({extra[0]})"
     return path, None
 
 
@@ -134,6 +138,20 @@ def test_the_scan_still_finds_the_documented_commands():
 def test_the_walk_reads_a_command_as_agac_does(words, path):
     """Guards the walk: an option's value is not a subcommand, and `init` routes a name to `new`."""
     assert _walk(words) == (path, None)
+
+
+@pytest.mark.parametrize(
+    "words, refused",
+    [
+        (["run", "-a", "wf", "--debug"], (["run", "--debug"], "No such option: --debug")),
+        (["run", "wf.yaml"], (["run", "wf.yaml"], "Got unexpected extra argument (wf.yaml)")),
+        (["schema", "--validate"], (["schema", "--validate"], "No such option: --validate")),
+    ],
+)
+def test_the_walk_refuses_what_the_command_itself_does_not_take(words, refused):
+    """Guards the walk: one that stops at the command name would pass a refused option."""
+    path, refusal = _walk(words)
+    assert (path, refusal and refusal.split(" Did you")[0]) == refused
 
 
 def test_the_walk_refuses_a_command_agac_does_not_have():
@@ -192,18 +210,7 @@ def test_a_command_a_code_block_shows_is_one_agac_has(page):
     refused = [
         f"line {number}: `agac {command}` -> {refusal}"
         for number, command, refusal in _unregistered(page)
-        if (_relative(page), command) not in _UNREGISTERED_BACKLOG
     ]
     assert not refused, f"{_relative(page)} shows commands agac does not have:\n" + "\n".join(
         refused
-    )
-
-
-def test_the_backlog_holds_nothing_that_is_already_fixed():
-    """A backlog that outlives its gaps stops reporting the next one."""
-    still_shown = {
-        (_relative(page), command) for page in _pages() for _, command, _ in _unregistered(page)
-    }
-    assert _UNREGISTERED_BACKLOG <= still_shown, (
-        f"{sorted(_UNREGISTERED_BACKLOG - still_shown)} no longer appear — drop them"
     )

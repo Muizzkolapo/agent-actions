@@ -54,7 +54,7 @@ guard:
 | `IN` | `triage.status IN ["active", "pending"]` |
 | `NOT IN` | `classify.category NOT IN ["spam"]` |
 | `CONTAINS` | `extract.tags CONTAINS "important"` |
-| `LIKE` | `lookup.name LIKE "prod_*"` |
+| `LIKE` | `lookup.name LIKE "prod%"` |
 | `BETWEEN` | `score_review.score BETWEEN 50 AND 100` |
 | `NOT BETWEEN` | `score_review.score NOT BETWEEN 50 AND 100` |
 | `IS NULL` | `summarize.description IS NULL` |
@@ -69,6 +69,11 @@ clause. A clause that gives one end only (`BETWEEN 50`), gives `NULL` or a boole
 or names a field for an end (`BETWEEN limits.low AND limits.high`), is refused before the
 run starts. To keep what is outside a range, write `NOT BETWEEN`, or put the range in
 parentheses: `NOT (score_review.score BETWEEN 50 AND 100)`.
+
+`LIKE` and `NOT LIKE` take SQL wildcards, not a glob: `%` is any run of characters and `_` is
+exactly one character. Everything else, `*` included, is literal. The pattern must match the whole
+value, case is ignored, and there is no escape for a literal `%` or `_`. The example keeps
+`prod_east` and `PROD_WEST`; `"prod_*"` would keep only a six-character name ending in a literal `*`.
 
 ### Functions
 

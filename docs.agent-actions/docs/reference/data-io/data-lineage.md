@@ -163,17 +163,21 @@ actions:
     dependencies: [classify]
     guard:
       condition: "classify.complexity == 'low'"
+      on_false: skip
 
   - name: slow_path
     dependencies: [classify]
     guard:
       condition: "classify.complexity == 'high'"
+      on_false: skip
 
   - name: combine
     dependencies: [fast_path, slow_path]
 ```
 
-**Handling missing branches:** The merge action receives `null` for skipped branches. Your template should handle this gracefully:
+Both guards set `on_false: skip`. Under `filter`, the default for a condition guard, a record that either branch filters never reaches `combine`: each record passes one branch and is filtered by the other, so the merge receives no record at all. See [Filtered records leave only what is below the filter](../execution/guards.md#filtered-records-leave-only-what-is-below-the-filter).
+
+**Handling skipped branches:** Under `skip`, the merge action still receives the record, and the branch that skipped it holds no output for that record, so `{% if fast_path %}` is false for it. Your template should handle this gracefully:
 
 > **Important:** On root records (records with no parent), `parent_target_id` is **absent** from the JSON object — not `null`. Always use a presence check (`"parent_target_id" in record`) rather than a null check (`record["parent_target_id"] is None`). A null check will raise `KeyError` on root records.
 
