@@ -2,8 +2,9 @@
 
 Authors copy these blocks. Each is loaded as `agac run` loads it and put through
 the pre-flight it runs. Only what a block leaves to its author is filled in: an
-intent, a prompt, a tool's impl, a HITL's instructions, and a schema whose fields
-nothing in the block reads. A block that names an action it does not show continues
+intent, a prompt, a tool's impl, and a schema whose fields nothing in the block
+reads. A HITL action is loaded as shown, so it shows the `hitl:` settings the loader
+requires. A block that names an action it does not show continues
 a workflow: an action an earlier block of the same page shows is that action, wired
 as shown, and any other stands in with no schema, so any field of it may be read. A
 stand-in the block only reads sits upstream of one it depends on.
@@ -96,9 +97,9 @@ def _authored(action: dict[str, Any]) -> dict[str, Any]:
     kind = action.get("kind", "llm")
     if kind == "tool":
         action.setdefault("impl", action["name"])
-    elif kind == "hitl":
-        action["hitl"] = {"instructions": "Review.", **(action.get("hitl") or {})}
-    elif not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$"):
+    elif kind != "hitl" and (
+        not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$")
+    ):
         action["prompt"] = "Answer."
     if kind != "hitl" and not isinstance(action.get("schema"), dict):
         action["schema"] = {"out": "string"}
