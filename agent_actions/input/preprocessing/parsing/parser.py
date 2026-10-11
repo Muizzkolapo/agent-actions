@@ -66,6 +66,7 @@ for _key in _OPERATOR_LOOKUP:
         _MULTI_WORD_STARTS.add(_key.split()[0].upper())
 
 _RANGE_OPERATORS = (ComparisonOperator.BETWEEN, ComparisonOperator.NOT_BETWEEN)
+_UNARY_OPERATORS = (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL)
 _RANGE_REFUSAL = (
     "BETWEEN takes a range of two numbers or two strings: "
     "write `x BETWEEN a AND b` or `x BETWEEN [a, b]`"
@@ -367,15 +368,16 @@ class WhereClauseParser:
             operator_enum = _OPERATOR_LOOKUP[operator_key]
             i += consumed
 
-            if i < len(items):
+            if operator_enum in _UNARY_OPERATORS:
+                result = ComparisonNode(result, operator_enum)
+            elif i < len(items):
                 right_operand = items[i]
                 if operator_enum in _RANGE_OPERATORS and _is_not_a_range(right_operand):
                     raise ParseFatalException(_RANGE_REFUSAL)
                 result = ComparisonNode(result, operator_enum, right_operand)
                 i += 1
             else:
-                # Unary operator (IS NULL, IS NOT NULL)
-                result = ComparisonNode(result, operator_enum)
+                raise ParseFatalException(f"Operator '{operator_enum.value}' needs a right operand")
 
         return result
 

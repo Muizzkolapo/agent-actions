@@ -5,7 +5,8 @@ body: >-
   a list that is not two values, with `NULL` or a boolean for an end, with ends of two types,
   or as a parenthesised clause (`x BETWEEN 50`, `x BETWEEN [1, 2, 3]`, `x BETWEEN [50, NULL]`,
   `x BETWEEN ["a", 5]`, `x BETWEEN (50 AND 100)`) used to be accepted in a guard and in an
-  `expression` expectation, and was false for every record. In an `expression` expectation,
+  `expression` expectation, and never tested a range: it gave every record the same answer,
+  or an answer decided by the types of its ends. In an `expression` expectation,
   an `a AND b` range whose ends are fields (`score BETWEEN low AND high`) was accepted and
   false for every record as well; it is now refused, and is written
   `score >= low AND score <= high`. A guard already refused a field on the right of a
