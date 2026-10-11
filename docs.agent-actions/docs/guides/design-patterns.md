@@ -609,7 +609,7 @@ actions:
     intent: "Translate using different strategies for comparison"
     versions:
       param: strategy
-      range: ["literal", "idiomatic", "domain_adapted"]
+      range: [1, 3]            # 1 literal, 2 idiomatic, 3 domain-adapted; a merge collects numbered versions
     schema:
       translated_text: string
       strategy_used: string
@@ -632,9 +632,7 @@ actions:
       pattern: merge
     context_scope:
       observe:
-        - translate_literal.*
-        - translate_idiomatic.*
-        - translate_domain_adapted.*
+        - translate.*
 
   - name: back_translate
     dependencies: [select_best_translation]

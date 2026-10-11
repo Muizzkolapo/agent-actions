@@ -179,6 +179,7 @@ actions:
 
 ```yaml
 - name: combine
+  dependencies: [fast_path, slow_path]
   prompt: |
     {% if fast_path %}Fast result: {{ fast_path.result }}{% endif %}
     {% if slow_path %}Slow result: {{ slow_path.result }}{% endif %}
