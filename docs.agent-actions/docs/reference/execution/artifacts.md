@@ -435,8 +435,8 @@ The catalog contains: workflow definitions, action metadata, prompt templates, s
 # Set log level via environment variable
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
-# Or use the --debug flag
-agac run -a my_workflow --debug
+# Or use the --debug flag, which goes before the command
+agac --debug run -a my_workflow
 ```
 
 Log file location: `{project_root}/logs/agent_actions.log`

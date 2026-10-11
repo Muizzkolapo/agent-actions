@@ -420,8 +420,8 @@ agac run
 # Verbose: DEBUG level, all categories
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run
 
-# Quiet: WARN level and above (coming in next release)
-agac run --quiet
+# Quiet: warnings and errors only
+agac --quiet run -a my_workflow
 ```
 
 ### File Handler

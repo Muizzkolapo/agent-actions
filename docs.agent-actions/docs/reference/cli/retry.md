@@ -319,8 +319,8 @@ of the one it just submitted.
 That is also why a retry is refused while a batch is still out at the provider:
 
 ```
-1 batch job(s) in flight (batch_abc123 (summarize)). Their results would be lost
-to this repair's own submission. Collect them first — run the workflow again —
+1 batch job(s) not collected yet (batch_abc123 (summarize, in flight)). Their results
+would be lost to this repair's own submission. Collect them first — run the workflow again —
 then retry. If the provider no longer has them, pass --abandon-in-flight.
 ```
 
@@ -344,8 +344,8 @@ good and every remedy above needs an answer that is not coming.
 `--abandon-in-flight` proceeds anyway, and says what it costs:
 
 ```
-Abandoning 1 batch job(s) still in flight: batch_abc123 (summarize). Whatever
-they return will not be collected. 3 record(s) waiting on them are marked failed
+Abandoning 1 batch job(s) not collected yet: batch_abc123 (summarize, in flight).
+Whatever they return will not be collected. 3 record(s) waiting on them are marked failed
 so a later retry can still reach them.
 ```
 
