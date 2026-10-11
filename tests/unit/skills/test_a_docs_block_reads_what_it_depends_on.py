@@ -12,6 +12,7 @@ without showing stands in. A block the loader refuses for another reason is name
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -28,18 +29,18 @@ from tests.unit.skills.test_a_skill_block_passes_preflight import _project, _ups
 
 _REPO = Path(__file__).resolve().parents[3]
 _DOCS = _REPO / "docs.agent-actions" / "docs"
-_FENCE = re.compile(r"^```yaml\n(.*?)^```", re.S | re.M)
+_FENCE = re.compile(r"^[ \t]*```yaml\n(.*?)^[ \t]*```", re.S | re.M)
 _PROMPT_NAME = re.compile(r"{[{%][^}]*?\b([A-Za-z_]\w*)\.[A-Za-z_]")
 _NOT_ACTIONS = {"source", "seed", "version", "workflow", "loop"}
 _FIRST_FILE = "reads at FILE granularity but declares no 'dependencies'"
 
 # Blocks the loader refuses for a reason other than the two this test is about,
-# by page and first action shown.
+# by page and the actions shown.
 _NOT_LOADED = {
-    "guides/troubleshooting.md::generate_report": "shows the wrong form beside the right one",
-    "reference/validation/index.md::action_a": "shows a circular dependency",
+    "guides/troubleshooting.md::generate_report+generate_report": "shows the wrong form beside the right one",
+    "reference/validation/index.md::action_a+action_b": "shows a circular dependency",
     "reference/cli/expect.md::Check output quality": "a CI step, not a workflow",
-    "reference/data-io/data-lineage.md::prepare": "model_vendor: google is not a vendor",
+    "reference/data-io/data-lineage.md::prepare+gpt4_answer+claude_answer+gemini_answer+best_answer": "model_vendor: google is not a vendor",
     "reference/configuration/index.md::extract_facts": "data_source on an action is refused",
     "reference/data-io/index.md::extract_facts": "data_source on an action is refused",
     "reference/prompts/dispatch.md::generate_question": "add_dispatch on an action is refused",
@@ -65,7 +66,7 @@ def _blocks() -> list[Any]:
         name = str(page.relative_to(_DOCS))
         for match in _FENCE.finditer(text):
             try:
-                block = yaml.safe_load(match.group(1))
+                block = yaml.safe_load(textwrap.dedent(match.group(1)))
             except yaml.YAMLError:
                 continue
             defaults: dict[str, Any] = {}
@@ -79,7 +80,7 @@ def _blocks() -> list[Any]:
                 and all(isinstance(a, dict) and "name" in a for a in block)
             ):
                 line = text.count("\n", 0, match.start()) + 1
-                shown_as = (block, defaults, f"{name}::{block[0]['name']}")
+                shown_as = (block, defaults, f"{name}::{'+'.join(a['name'] for a in block)}")
                 found.append(pytest.param(shown_as, id=f"{name}:{line}"))
     return found
 
