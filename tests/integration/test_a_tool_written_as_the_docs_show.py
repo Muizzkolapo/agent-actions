@@ -1,13 +1,10 @@
 """A tool written as the skill and the docs show reads the input the run hands it (1355).
 
-Authors copy the tool code beside each workflow block. Here that code is taken from
-the page as written and run by `agac run`: a record tool reading several actions, a
-record tool merging the versions of one, and a FILE tool. Each reads what a tool
-above it stored, so a line that reaches for a shape the run does not deliver raises
-on every record and the run fails.
-
-Only what the pages leave out is added: the imports, the actions above each tool,
-and for the version merge a tool around the three lines the skill shows.
+The tool code beside each workflow block is taken from the page as written and run by
+`agac run`: a record tool reading several actions, a record tool merging the versions
+of one, and two FILE tools. A line that reaches for a shape the run does not deliver
+raises on every record and the run fails. Only what the pages leave out is added: the
+imports, the actions above each tool, and a tool around the skill's three merge lines.
 """
 
 from __future__ import annotations
