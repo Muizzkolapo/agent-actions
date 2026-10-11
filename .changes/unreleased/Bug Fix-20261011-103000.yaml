@@ -7,7 +7,9 @@ body: >-
   anywhere else, online and under batch, and adding an action below it gave the newline
   back. The prompt is part of the action's config hash, so that read as an edit: agac
   reset an action nobody had touched and sent every record to the model again. The prompt
-  is now what it is wherever it sits in the file. A completed action whose block prompt
+  is now what it is wherever it sits in the file, including a prompt that reads a field
+  of the record or of an upstream action, which is rendered for each record from the text
+  the load kept. A completed action whose block prompt
   ends its workflow file is re-run once on the first run after upgrading, because its
   stored hash was taken over the prompt without the newline. An include of a `templates/`
   file joins what follows it as before.

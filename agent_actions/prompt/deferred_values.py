@@ -832,7 +832,7 @@ def _value_ends(
         first = rest.lstrip(" \t")
     if first[0] in "\"'":
         close = _closing_quote(source, line_end - len(first), first[0], by_start)
-        return [] if close is None else _own_newline(source, [_past_line(source, close)])
+        return [] if close is None else [_past_line(source, close)]
     if first[0] in "|>" and not _BLOCK_HEADER.match(rest):
         return []
 
@@ -863,7 +863,7 @@ def _value_ends(
         # Kept (`|+`), the blank lines after the last one are the value's too.
         ends[-1] = blank_after
     # Longest first, then a block left open closed by the tag lines after it, then shorter.
-    return _own_newline(source, [ends[-1], *after, *reversed(ends[:-1])])
+    return [ends[-1], *after, *reversed(ends[:-1])]
 
 
 def _first_value_line(
@@ -974,12 +974,6 @@ def _indent_tag_lines(body: str) -> str:
         if i and tag_only[i] and len(line) - len(line.lstrip(" ")) < indent:
             lines[i] = " " * indent + line.lstrip(" ")
     return "\n".join(lines)
-
-
-def _own_newline(source: str, ends: list[int]) -> list[int]:
-    """*ends* short of the file's last newline, which Jinja drops as it always has."""
-    last = len(source) - 1 if source.endswith("\n") else len(source)
-    return [min(end, last) for end in ends]
 
 
 def _line_kind(
