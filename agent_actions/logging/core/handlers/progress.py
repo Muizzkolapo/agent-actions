@@ -55,18 +55,6 @@ class ProgressRenderer(ConsoleEventHandler):
     def _style(self, text: str, style: str) -> str:
         return f"[{style}]{text}[/{style}]" if self._use_rich else text
 
-    def _escape(self, text: str) -> str:
-        """Neutralize brackets so record content cannot be read as markup.
-
-        Only when markup is actually rendered: the escape inserts backslashes,
-        and a plain stream would show them.
-        """
-        if not self._use_rich:
-            return str(text)
-        from rich.markup import escape
-
-        return escape(str(text))
-
     def _icon(self, rich_icon: str, plain: str, style: str) -> str:
         return self._style(rich_icon, style) if self._use_rich else plain
 
