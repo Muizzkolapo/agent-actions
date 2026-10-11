@@ -152,9 +152,7 @@ class TestCircuitBreaker:
         classification here would respect passthrough_on_error and silently pass
         every record through a guard that was supposed to filter them."""
         gf = GuardFilter()
-        result = gf.filter_item(
-            FilterItemRequest(data={"x": "1"}, condition="COUNT(x) > 0")
-        )
+        result = gf.filter_item(FilterItemRequest(data={"x": "1"}, condition="COUNT(x) > 0"))
         assert result.success is False
         assert result.error_category == ErrorCategory.SEMANTIC
         gf.shutdown()
