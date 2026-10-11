@@ -209,17 +209,36 @@ class TestARecordTheGuardCouldNotBeShown:
         assert "g-stored" in str(raised.value)
         assert raised.value.context["source_guid"] == "g-stored"
 
-    def test_the_pre_filter_leaves_every_other_error_as_it_is(self):
-        """A guard naming a function that does not exist is a configuration error, and
-        stays one: relabelled, it would read as a problem with the record."""
-        with pytest.raises(Exception) as raised:
-            prefilter_by_guard(
-                [{"source_guid": "g1", "content": {"a1": {"tier": "keep"}}}],
-                {"conditional_clause": "shape_probe_that_was_never_registered"},
-                "decide",
-            )
+    def test_an_unregistered_udf_name_fails_the_record_not_the_whole_pass(self):
+        """A guard naming a function that does not exist is a configuration error for
+        the record it was evaluated against, not a reason no record in the action can
+        be judged -- unlike a view that cannot be built, this is not fatal (1247)."""
+        passing, _skipped, _originals, _filtered, failed = prefilter_by_guard(
+            [{"source_guid": "g1", "content": {"a1": {"tier": "keep"}}}],
+            {"conditional_clause": "shape_probe_that_was_never_registered"},
+            "decide",
+        )
 
-        assert type(raised.value).__name__ == "ConfigurationError"
+        assert passing == []
+        ((record, error),) = failed
+        assert record["source_guid"] == "g1"
+        assert type(error).__name__ == "ConfigurationError"
+
+    def test_an_unregistered_udf_name_fails_every_record_as_its_own_outcome(self):
+        """Before this fix, the first record's error crashed the whole pass and no
+        outcome was ever recorded for anything after it. Now each record gets its own
+        failed outcome, not just the first one reached (1247)."""
+        passing, _skipped, _originals, _filtered, failed = prefilter_by_guard(
+            [
+                {"source_guid": "g-1", "content": {"a1": {"tier": "keep"}}},
+                {"source_guid": "g-2", "content": {"a1": {"tier": "keep"}}},
+            ],
+            {"conditional_clause": "shape_probe_that_was_never_registered"},
+            "decide",
+        )
+
+        assert passing == []
+        assert [record["source_guid"] for record, _error in failed] == ["g-1", "g-2"]
 
     def test_a_value_that_only_claims_to_be_a_dict_stops_the_guard_by_name(self):
         """A proxy to a dict has no storage to read. Handed over raw it would let a write

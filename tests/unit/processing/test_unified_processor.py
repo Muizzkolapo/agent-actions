@@ -164,7 +164,7 @@ class TestUnifiedProcessorNoGuard:
         # Guard will filter all records — 4th value is the filtered records
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [], [], [_make_record("sg-1")]),
+            return_value=([], [], [], [_make_record("sg-1")], []),
         ):
             processor.process(records, context, tracking)
 
@@ -188,7 +188,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [skipped_record], [], []),
+            return_value=([], [skipped_record], [], [], []),
         ):
             output, stats = processor.process([skipped_record], context, strategy)
 
@@ -210,7 +210,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [record], [], []),
+            return_value=([], [record], [], [], []),
         ):
             output, stats = processor.process([record], context, strategy)
 
@@ -227,7 +227,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([], [], [], [record]),
+            return_value=([], [], [], [record], []),
         ):
             output, stats = processor.process([record], context, strategy)
 
@@ -248,7 +248,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=([passing], [skipped], [passing], [filtered_rec]),
+            return_value=([passing], [skipped], [passing], [filtered_rec], []),
         ):
             output, stats = processor.process(all_records, context, strategy)
 
@@ -278,7 +278,7 @@ class TestUnifiedProcessorGuardFilter:
 
         with patch(
             "agent_actions.processing.unified.prefilter_by_guard",
-            return_value=(failing, [skipped], failing, []),
+            return_value=(failing, [skipped], failing, [], []),
         ):
             output, stats = processor.process(records, context, FailingStrategy())
 

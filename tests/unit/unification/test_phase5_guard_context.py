@@ -89,7 +89,7 @@ class TestGuardContextParity:
         }
         agent_config = {"name": "test_action", "guard": guard_config}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",
@@ -117,7 +117,7 @@ class TestGuardContextParity:
         }
         agent_config = {"name": "test_action", "guard": guard_config}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",
@@ -156,7 +156,7 @@ class TestGuardContextParity:
         }
         dependency_configs = {"assess": {"output_field": "severity"}}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",
@@ -185,7 +185,7 @@ class TestGuardContextParity:
         agent_config = {"name": "test_action", "guard": guard_config}
 
         # Online path: prefilter_by_guard with pipeline context
-        passing, _skipped, _, _filtered = prefilter_by_guard(
+        passing, _skipped, _, _filtered, _ = prefilter_by_guard(
             [record],
             agent_config,
             "test_action",
@@ -231,7 +231,7 @@ class TestCodeCenteredQuizGuard:
         }
         dependency_configs = {"code_quiz": {"output_field": "has_failures"}}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",
@@ -269,7 +269,7 @@ class TestCodeCenteredQuizGuard:
         }
         dependency_configs = {"code_quiz": {"output_field": "has_failures"}}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",
@@ -303,7 +303,7 @@ class TestPrefilterByGuardContextAlignment:
         }
         agent_config = {"name": "test_action", "guard": guard_config}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",
@@ -341,7 +341,7 @@ class TestPrefilterByGuardContextAlignment:
         }
         dependency_configs = {"assess": {"output_field": "severity"}}
 
-        passing, skipped, _, _filtered = prefilter_by_guard(
+        passing, skipped, _, _filtered, _ = prefilter_by_guard(
             records,
             agent_config,
             "test_action",

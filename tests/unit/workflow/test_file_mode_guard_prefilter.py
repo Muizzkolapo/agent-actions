@@ -37,7 +37,7 @@ class TestPrefilterByGuard:
     def test_no_guard_returns_all(self):
         """No guard config -> all records pass, no skipped."""
         data = [{"content": {"x": 1}}, {"content": {"x": 2}}]
-        passing, skipped, original_passing, filtered = prefilter_by_guard(data, {}, "test")
+        passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, {}, "test")
         assert passing == data
         assert skipped == []
         assert original_passing == data
@@ -46,7 +46,7 @@ class TestPrefilterByGuard:
         """No guard config with original_data -> original_passing is original_data."""
         data = [{"content": {"x": 1}}]
         raw = [{"content": {"x": 1}, "extra_field": "preserved"}]
-        passing, skipped, original_passing, filtered = prefilter_by_guard(
+        passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
             data, {}, "test", original_data=raw
         )
         assert passing == data
@@ -66,7 +66,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 2
         assert passing[0]["content"]["score"] == 90
@@ -90,7 +90,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 2
         assert len(skipped) == 1
@@ -106,7 +106,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 2
         assert skipped == []
@@ -121,7 +121,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert passing == []
         assert skipped == []
@@ -138,7 +138,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert passing == []
         assert len(skipped) == 2
@@ -175,7 +175,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 1
         assert skipped == []
@@ -202,7 +202,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filt = prefilter_by_guard(
+            passing, skipped, original_passing, filt, _ = prefilter_by_guard(
                 filtered, config, "test", original_data=raw
             )
 
@@ -234,7 +234,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filt = prefilter_by_guard(
+            passing, skipped, original_passing, filt, _ = prefilter_by_guard(
                 filtered, config, "test", original_data=raw
             )
 
@@ -254,7 +254,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard([], config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard([], config, "test")
 
         assert passing == []
         assert skipped == []
@@ -270,7 +270,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 0
 
@@ -284,7 +284,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 0
 
@@ -339,7 +339,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 1
         assert passing[0]["content"]["val"] == "good"
@@ -359,7 +359,7 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert len(passing) == 1
         assert skipped == []
