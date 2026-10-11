@@ -164,10 +164,8 @@ def test_catalog_search_uses_the_genres_the_search_criteria_named(monkeypatch):
 
 def test_the_catalog_entry_is_formatted_from_what_each_action_produced():
     module = _tool("book_catalog_enrichment", "format_catalog_entry")
-    # One key per observed action; format_entry observes each producer directly
-    # rather than through score_quality's passthrough (1391). isbn/title/authors/
-    # publisher/publish_year/page_count come from source, not write_description --
-    # write_description's own output never carries them (1391 review finding).
+    # isbn/title/authors/publisher/publish_year/page_count come from source, not
+    # write_description -- write_description's own output never carries them.
     result = module.format_catalog_entry(
         {
             "source": {
