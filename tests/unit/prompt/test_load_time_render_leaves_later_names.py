@@ -717,6 +717,11 @@ actions:
             "Summarize {{ source.text }}",
             id="flow-sequence-of-actions",
         ),
+        pytest.param(
+            'actions: [{name: a,\nprompt: "Summarize {{ source.text }}"}]\n',
+            "Summarize {{ source.text }}",
+            id="flow-sequence-going-on-at-the-keys-column",
+        ),
     ],
 )
 def test_a_per_record_prompt_written_in_any_yaml_form_is_kept_for_the_record(
