@@ -10,9 +10,12 @@ try:
     from pyparsing import (
         CaselessKeyword,
         Forward,
+        Group,
         Literal,
         OpAssoc,
+        ParseBaseException,
         ParseException,
+        ParseFatalException,
         ParserElement,
         QuotedString,
         Regex,
@@ -60,6 +63,18 @@ _MULTI_WORD_STARTS: set[str] = set()
 for _key in _OPERATOR_LOOKUP:
     if " " in _key:
         _MULTI_WORD_STARTS.add(_key.split()[0].upper())
+
+_RANGE_OPERATORS = (ComparisonOperator.BETWEEN, ComparisonOperator.NOT_BETWEEN)
+_RANGE_REFUSAL = (
+    "BETWEEN takes a range of two literal values: write `x BETWEEN a AND b` or `x BETWEEN [a, b]`"
+)
+
+
+def _is_not_a_range(operand: ASTNode) -> bool:
+    """Whether a literal can never be a range. A field may hold one, so it is left to the record."""
+    return isinstance(operand, LiteralNode) and not (
+        isinstance(operand.value, list) and len(operand.value) == 2
+    )
 
 
 @dataclass
@@ -174,11 +189,24 @@ class WhereClauseParser:
             else []
         )
 
+        # `x BETWEEN a AND b` is read whole, as a suffix of `x`, above the AND
+        # level. A bound is any operand but an array, so `x BETWEEN [a, b] AND y`
+        # still reads as the list form beside a second condition.
+        range_bound = function_call | boolean | null | string_literal | number | field_name
+        range_suffix = Group(
+            PyOptional(CaselessKeyword("NOT"))
+            + CaselessKeyword("BETWEEN")
+            + range_bound
+            + Suppress(CaselessKeyword("AND"))
+            + range_bound
+        )
+
         where_expr = infix_notation(
             operand,
             [
                 (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
                 *unary_level,
+                (range_suffix, 1, OpAssoc.LEFT, self._parse_between_range),
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
@@ -276,6 +304,17 @@ class WhereClauseParser:
         operand = tokens[0][1]  # Skip the NOT keyword
         return LogicalNode(LogicalOperator.NOT, operand)
 
+    def _parse_between_range(self, tokens):
+        """Build `x [NOT] BETWEEN a AND b` as the comparison the list form builds."""
+        result = tokens[0][0]
+        for suffix in tokens[0][1:]:
+            *negation, _between, low, high = suffix
+            if not (isinstance(low, LiteralNode) and isinstance(high, LiteralNode)):
+                raise ParseFatalException(_RANGE_REFUSAL)
+            operator = ComparisonOperator.NOT_BETWEEN if negation else ComparisonOperator.BETWEEN
+            result = ComparisonNode(result, operator, LiteralNode([low.value, high.value]))
+        return result
+
     def _parse_comparison(self, tokens):
         """Parse comparison operations with unified operator lookup."""
         result = tokens[0][0]
@@ -314,6 +353,8 @@ class WhereClauseParser:
 
             if i < len(items):
                 right_operand = items[i]
+                if operator_enum in _RANGE_OPERATORS and _is_not_a_range(right_operand):
+                    raise ParseFatalException(_RANGE_REFUSAL)
                 result = ComparisonNode(result, operator_enum, right_operand)
                 i += 1
             else:
@@ -400,7 +441,7 @@ class WhereClauseParser:
         try:
             return self._parse_and_build_ast(where_clause)
 
-        except ParseException as e:
+        except ParseBaseException as e:
             return ParseResult(
                 success=False,
                 error=ParseError(f"Parse error: {e.msg}", e.lineno, e.column, "ParseException"),

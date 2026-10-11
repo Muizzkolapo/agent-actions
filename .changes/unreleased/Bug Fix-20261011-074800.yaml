@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A guard written `x BETWEEN a AND b`, as the guards page shows it, now tests the range. The
+  clause was read as `(x BETWEEN a) AND b`, and `BETWEEN` with one value for its range is
+  false for every value: under `on_false: filter` the guard filtered every record, the
+  guarded action and every action below it were skipped, and the run exited 0, while
+  `NOT (x BETWEEN a AND b)` kept every record, including the ones it was written to keep
+  out. `x BETWEEN a AND b` and `x NOT BETWEEN a AND b` are now read whole and mean what
+  `x BETWEEN [a, b]` and `x NOT BETWEEN [a, b]` mean, both ends included, alone or beside
+  `AND`, `OR` and `NOT`, online and in batch, and in an `expression` expectation's condition,
+  which shares the grammar. The guards page now shows `NOT BETWEEN` and the list form.
+time: 2026-10-11T07:48:00Z
