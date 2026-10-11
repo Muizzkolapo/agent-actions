@@ -153,11 +153,13 @@ def _shown(page: Path, naming: str) -> str:
 
 
 def _stored(root: Path, action: str) -> list[dict]:
+    """What *action* answered; a record a FILE tool did not return is kept with no answer."""
     workflow = root / "agent_workflow" / WORKFLOW
     backend = get_storage_backend(str(workflow), WORKFLOW)
     backend.initialize()
     try:
-        return [record["content"][action] for record in backend.read_target(action, "items.json")]
+        answers = [r["content"][action] for r in backend.read_target(action, "items.json")]
+        return [answer for answer in answers if answer is not None]
     finally:
         backend.close()
 
