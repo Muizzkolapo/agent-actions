@@ -43,8 +43,13 @@ def _load_template_globals(env, templates_folder):
     for template_file in template_files:
         try:
             template = env.get_template(template_file)
-            module = template.module
-            new_names = vars(module)
+            # vars() on a TemplateModule carries __name__ and _body_stream besides the
+            # file's exports, and Jinja exports no underscore name: the public ones are it.
+            new_names = {
+                name: value
+                for name, value in vars(template.module).items()
+                if not name.startswith("_")
+            }
             collisions = set(new_names) & set(env.globals)
             if collisions:
                 logger.warning(
