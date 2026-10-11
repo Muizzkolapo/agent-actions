@@ -340,7 +340,7 @@ class UnifiedProcessor:
         so the next run puts the record to the guard again rather than carrying it.
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, _original_passing, filtered = prefilter_by_guard(
+        passing, skipped, _original_passing, filtered, failed = prefilter_by_guard(
             records,
             config,
             context.agent_name,
@@ -353,6 +353,15 @@ class UnifiedProcessor:
         )
 
         guard_results: list[ProcessingResult] = []
+
+        for record, error in failed:
+            guard_results.append(
+                ProcessingResult.failed(
+                    error=f"Guard evaluation failed: {error}",
+                    source_guid=record.get("source_guid") if isinstance(record, dict) else None,
+                    source_snapshot=record if isinstance(record, dict) else None,
+                )
+            )
 
         for item in skipped:
             source_guid = item.get("source_guid")
@@ -392,7 +401,7 @@ class UnifiedProcessor:
         for the enricher.
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, original_passing, filtered = prefilter_by_guard(
+        passing, skipped, original_passing, filtered, failed = prefilter_by_guard(
             records,
             config,
             context.agent_name,
@@ -407,6 +416,15 @@ class UnifiedProcessor:
 
         guard_results: list[ProcessingResult] = []
         action_name = context.action_name
+
+        for record, error in failed:
+            guard_results.append(
+                ProcessingResult.failed(
+                    error=f"Guard evaluation failed: {error}",
+                    source_guid=record.get("source_guid") if isinstance(record, dict) else None,
+                    source_snapshot=record if isinstance(record, dict) else None,
+                )
+            )
 
         for item in skipped:
             if action_name and isinstance(item, dict):

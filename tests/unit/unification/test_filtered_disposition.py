@@ -85,7 +85,9 @@ class TestPrefilterReturnsFilteredRecords:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
+                data, config, "test"
+            )
 
         assert len(passing) == 1
         assert len(filtered) == 2
