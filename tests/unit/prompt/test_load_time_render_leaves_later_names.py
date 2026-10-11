@@ -798,3 +798,33 @@ def test_a_guarded_name_in_a_prompt_of_load_time_names_still_renders_at_load(tmp
     )
 
     assert _actions(data)["a"]["prompt"] == "Be plain."
+
+
+def test_a_version_value_in_a_load_loop_reads_the_loop_as_it_was_there(tmp_path):
+    """Rendered once the loop has moved on, it would read the last pass for every one."""
+    data = _load(
+        tmp_path,
+        "{% set ns = namespace(n=0) %}\nactions:\n{% for s in ['a', 'b'] %}"
+        "{% set ns.n = ns.n + 1 %}\n  - name: act_{{ s }}\n    versions: {range: [1, 2]}\n"
+        '    intent: "{{ ns.n }}-{{ i }} of {{ loop.length }} idx {{ loop.index }}"\n'
+        '    prompt: "x"\n{% endfor %}\n',
+    )
+
+    intents = {name: action["intent"] for name, action in _actions(data).items()}
+    assert intents == {
+        "act_a_1": "1-1 of 2 idx 1",
+        "act_a_2": "1-2 of 2 idx 1",
+        "act_b_1": "2-1 of 2 idx 2",
+        "act_b_2": "2-2 of 2 idx 2",
+    }
+
+
+def test_a_prompt_reading_a_versioned_actions_output_is_decided_per_record(tmp_path):
+    prompt = "{% if act_1 is defined %}After {{ act_1.x }}{% else %}alone{% endif %}"
+    data = _load(
+        tmp_path,
+        'actions:\n  - name: act\n    versions: {range: [1, 2]}\n    prompt: "v {{ i }}"\n'
+        f'  - name: after\n    dependencies: [act_1]\n    prompt: "{prompt}"\n',
+    )
+
+    assert _actions(data)["after"]["prompt"] == prompt
