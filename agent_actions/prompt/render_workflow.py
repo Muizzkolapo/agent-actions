@@ -3,17 +3,19 @@
 import functools
 import logging
 import textwrap
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
 import jinja2
 import yaml
-from jinja2 import Environment, FileSystemLoader
 
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+from agent_actions.prompt.deferred_values import LoadRender
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.utils.schema_utils import is_compiled_schema
@@ -381,7 +383,15 @@ def _apply_version_template(
     return value
 
 
-def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
+# Renders the values of an expanded version that the load left for it.
+VersionRenderer = Callable[
+    [dict[str, Any], Mapping[str, Any], Callable[[str], str], str], dict[str, Any]
+]
+
+
+def _expand_versioned_action(
+    action: dict[str, Any], render_version: VersionRenderer | None = None
+) -> list[dict[str, Any]]:
     """
     Expand a versioned action into multiple actions.
 
@@ -441,12 +451,31 @@ def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
         if param_name != "i":
             expanded["_version_context"][param_name] = i
 
+        if render_version is not None:
+            version = expanded["_version_context"]
+            names = {"version": version}
+            names.update({k: version[k] for k in VersionNamespaceBuilder.promoted_names(version)})
+            expanded = render_version(
+                expanded,
+                names,
+                functools.partial(
+                    _apply_version_template,
+                    param_name=param_name,
+                    current_val=i,
+                    idx=idx,
+                    values=range_values,
+                ),
+                f"actions[{expanded['name']}]",
+            )
+
         expanded_actions.append(expanded)
 
     return expanded_actions
 
 
-def _expand_workflow_versions(data: dict[str, Any]) -> None:
+def _expand_workflow_versions(
+    data: dict[str, Any], render_version: VersionRenderer | None = None
+) -> None:
     """
     Expand all versioned actions in a workflow.
 
@@ -472,7 +501,7 @@ def _expand_workflow_versions(data: dict[str, Any]) -> None:
             )
         if action.get("versions"):
             # Expand versioned action into multiple
-            expanded = _expand_versioned_action(action)
+            expanded = _expand_versioned_action(action, render_version)
             expanded_actions.extend(expanded)
             logger.debug(
                 "Expanded versioned action '%s' into %d actions",
@@ -535,7 +564,8 @@ def render_pipeline_with_templates(
 
     This is the single compilation step for workflows.
     After this function, the YAML is fully self-contained with:
-    - All Jinja2 templates resolved
+    - All Jinja2 templates resolved, except an action's prompt that reads what only a
+      record supplies, which is left whole for the per-record render
     - All prompt references ($prompt_name) resolved
     - All named schemas (schema_name: foo) inlined from schema/ directory
     - All inline schemas expanded to unified format
@@ -557,24 +587,28 @@ def render_pipeline_with_templates(
         ConfigurationError: If YAML parsing or configuration fails, or if strict=True
                            and any schema fails to load
     """
-    env = Environment(loader=FileSystemLoader(str(templates_folder)))
+    yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
+
+    load = LoadRender(Path(templates_folder), yaml_content)
+    env = load.env
     env.globals["load_prompt"] = functools.partial(
         PromptLoader.load_prompt, project_root=project_root
     )
     env.filters["dedent"] = textwrap.dedent
     _load_template_globals(env, str(templates_folder))
 
-    yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
-
-    # Step 1: Jinja2 template rendering
+    # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
+    # and a value that reads a version variable, are left for the stage that has them.
     try:
-        rendered_yaml_content = env.from_string(yaml_content).render()
+        rendered_yaml_content = load.render(yaml_content, Path(yaml_path).name)
     except jinja2.TemplateError as e:
+        hint = load.explain(e)
+        # The CLI reports the root cause, so a hint must not sit under Jinja's own message.
         raise TemplateRenderingError(
-            f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}",
+            f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}{hint}",
             context={"yaml_path": str(yaml_path), "templates_folder": str(templates_folder)},
-            cause=e,
-        ) from e
+            cause=None if hint else e,
+        ) from (None if hint else e)
 
     rendered_yaml_content = textwrap.dedent(rendered_yaml_content)
 
@@ -583,6 +617,7 @@ def render_pipeline_with_templates(
         data = yaml.safe_load(rendered_yaml_content)
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
+        rendered_yaml_content = load.readable(rendered_yaml_content)
         try:
             saved_file_msg = _save_failed_render(
                 rendered_yaml_content, Path(yaml_path).stem, project_root=project_root
@@ -604,11 +639,21 @@ def render_pipeline_with_templates(
         ) from e
 
     # Step 3: Resolve prompt references
+    data = load.fill_prompts(data)
     _resolve_prompt_fields(data, project_root=project_root)
 
     # Step 4: Expand versioned actions
     if data:
-        _expand_workflow_versions(data)
+        _expand_workflow_versions(data, load.render_version)
+    data = load.fill_values(data)
+    try:
+        load.check(data)
+    except jinja2.UndefinedError as e:
+        raise TemplateRenderingError(
+            f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}",
+            context={"yaml_path": str(yaml_path), "templates_folder": str(templates_folder)},
+            cause=e,
+        ) from e
 
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
