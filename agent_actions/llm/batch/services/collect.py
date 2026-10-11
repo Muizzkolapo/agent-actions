@@ -133,6 +133,7 @@ def collect_batch_rows(
     batch_results: list[BatchResult],
     *,
     output_directory: str | None,
+    file_name: str | None = None,
     exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     result_processor: BatchResultStrategy | None = None,
     unified_processor: UnifiedProcessor | None = None,
@@ -143,6 +144,9 @@ def collect_batch_rows(
     so no results at all collects a run that sent nothing. The halt
     `on_exhausted: raise` or `on_empty: error` decided, or online's breaker, is
     returned, not raised: the caller raises it once the file is written.
+
+    *file_name* names the input this batch answers, so the metrics events this
+    fires can be told apart from another file's (1367).
     """
     config = {**(agent_config or {}), "action_name": action_name}
     results = (result_processor or BatchResultStrategy()).process(
@@ -157,6 +161,7 @@ def collect_batch_rows(
         agent_name=action_name,
         mode=RunMode.BATCH,
         storage_backend=storage_backend,
+        target_relative_path=file_name or "",
     )
     ctx.defer_exhaustion = True
     processor = unified_processor or UnifiedProcessor(enrichment_pipeline=EnrichmentPipeline())
