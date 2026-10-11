@@ -6,7 +6,8 @@ body: >-
   repair, so every row of the file's other records counted as unplaceable and the repair
   warned that regenerating the named record "duplicates any it regenerates". It
   duplicated nothing: the failed record had made no other row, the retry replaced its
-  failed row, and the file ended the same size. The warning now counts only the named
-  records that could have made rows it cannot place, and where it still applies it no
-  longer points at an issue that was closed. The rows are carried exactly as before.
+  failed row, and the file ended the same size. A stored row lists the inputs that made
+  it, so the warning now reports only the rows a record the retry names may have made,
+  or that name no producer, and where it still applies it no longer points at an issue
+  that was closed. The rows are carried exactly as before.
 time: 2026-10-11T13:00:00Z

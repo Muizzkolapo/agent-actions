@@ -111,8 +111,9 @@ so which of the two produced it cannot be told apart.
 In both, repairing one of that action's records leaves its previous rows in the
 file beside the new ones. The run reports how many rows it could not place. It
 carries them rather than guessing, because guessing wrong here deletes a row
-that nothing will write again. A record whose only stored row is its own failed
-or skipped one has no previous rows to leave, so repairing it reports nothing.
+that nothing will write again. It reports only the rows a record it is repairing
+may have made; rows that other records made are carried the same way and are not
+reported.
 
 Dispositions are cleared by the ids the retry was given, at every action it
 re-runs, and the re-run decides them again wherever it reaches the record. An id
