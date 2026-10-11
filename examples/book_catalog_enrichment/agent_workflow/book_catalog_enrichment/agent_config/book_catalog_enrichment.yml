@@ -284,6 +284,32 @@ actions:
     context_scope:
       observe:
         - score_quality.*
+        # score_quality only produces overall_score/dimension_scores/improvement_suggestions/
+        # ready_for_publication; these fields reached it only via context_scope.passthrough
+        # from an action score_quality does not itself passthrough as source, so they never
+        # land in score_quality's own output. Read straight from where each is produced.
+        - write_description.isbn
+        - write_description.title
+        - write_description.authors
+        - write_description.publisher
+        - write_description.publish_year
+        - write_description.page_count
+        - write_description.marketing_description
+        - write_description.hook_sentence
+        - write_description.key_benefits
+        - write_description.target_audience
+        - validate_bisac.bisac_codes
+        - validate_bisac.bisac_names
+        - generate_seo.primary_keywords
+        - generate_seo.long_tail_keywords
+        - generate_seo.meta_title
+        - generate_seo.meta_description
+        - generate_recommendations.similar_books
+        - generate_recommendations.reading_path
+        - assess_reading_level.reading_level
+        - assess_reading_level.years_experience_needed
+        - assess_reading_level.prerequisites
+        - assess_reading_level.estimated_reading_time
 
   # ============================================================================
   # STEP 10: FILTER BY QUALITY

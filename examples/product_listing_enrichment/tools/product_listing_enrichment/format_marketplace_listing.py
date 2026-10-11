@@ -22,21 +22,24 @@ def format_marketplace_listing(data: dict[str, Any]) -> dict[str, Any]:
     Combines outputs from all upstream actions into a single structured
     listing ready for marketplace upload.
     """
-    # Source metadata (via passthrough)
-    product_id = data.get("product_id", "")
-    product_name = data.get("product_name", "")
-    brand = data.get("brand", "")
-    current_price = data.get("current_price", 0)
-    category = data.get("product_category", "")
+    # Source metadata (observed directly from normalize_product -- a passthrough
+    # declared on an action that does not itself observe the source field never
+    # reaches that action's own output, so this reads normalize_product, not
+    # a passthrough chain through generate_description)
+    normalize_product = data.get("normalize_product", {})
+    product_id = normalize_product.get("product_id", "")
+    product_name = normalize_product.get("product_name", "")
+    brand = normalize_product.get("brand", "")
+    current_price = normalize_product.get("current_price", 0)
+    category = normalize_product.get("product_category", "")
 
-    # Helper: the framework flattens observed fields into data directly.
-    # data["listing_title"] not data["write_marketing_copy"]["listing_title"].
-    # Try nested (action namespace) first, fall back to flat (direct fields).
+    # A record tool is handed one key per observed action: data["write_marketing_copy"]
+    # not data["listing_title"].
     def _ns(action_name: str, field: str, default=None):
         nested = data.get(action_name, {})
         if isinstance(nested, dict) and field in nested:
             return nested[field]
-        return data.get(field, default)
+        return default
 
     # Marketing copy from write_marketing_copy
     listing_title = _ns("write_marketing_copy", "listing_title", "")
