@@ -1,14 +1,11 @@
 """A guard written `x BETWEEN a AND b` keeps the records inside the range (1365).
 
-The guards page shows `BETWEEN` as `score_review.score BETWEEN 50 AND 100`. The clause
-parsed as `(x BETWEEN 50) AND 100`, and `BETWEEN` with one number for its range is false
-for every value. Under `on_false: filter` every record was filtered, the guarded action
-and every action below it read `skipped`, and the run exited 0. Under `NOT (...)` every
-record passed, including the ones the guard was written to keep out.
+The clause parsed as `(x BETWEEN a) AND b`, false for every record: under
+`on_false: filter` everything below the guard was skipped and the run exited 0, and under
+`NOT (...)` every record passed.
 
-Three actions: `summarize`, then `publish` behind the guard, then `archive`. Each of the
-two staged files holds a page 1 and a page 2. Every command is a real `agac run` in its
-own process against the `agac-provider` stand-in model.
+`summarize`, then `publish` behind the guard, then `archive`; each of the two staged files
+holds a page 1 and a page 2. Every command is a real `agac run` in its own process.
 """
 
 from __future__ import annotations
