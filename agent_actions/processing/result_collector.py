@@ -60,14 +60,15 @@ def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason:
     Records arrive ACTIVE (after downstream reset) or CASCADE_BLOCKING.
     ACTIVE → any settled is legal. CASCADE_BLOCKING → CASCADE_SKIPPED
     is legal (cascade propagation). A record whose latest entry is this action's
-    move to *state* already says so: preparation stamps a failure before the record
-    is collected. It gets the state, which a tombstone built from a context-map
-    entry does not carry, and no second history entry.
+    failure already says so: preparation stamps it before the record is collected.
+    It gets the state, which a tombstone built from a context-map entry does not
+    carry, and no second history entry.
     """
     history = record.get("_state_history")
     last = history[-1] if isinstance(history, list) and history else None
     if (
-        isinstance(last, dict)
+        state == RecordState.FAILED
+        and isinstance(last, dict)
         and last.get("action") == action_name
         and last.get("to") == state.value
     ):
