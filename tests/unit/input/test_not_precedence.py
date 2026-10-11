@@ -31,18 +31,20 @@ def test_not_eq_negates_the_comparison_not_the_field(clause):
 
 
 @pytest.mark.parametrize(
-    "clause, truthy_result, falsy_result",
+    "clause, expected",
     [
-        ("NOT s.x != 1", False, True),
-        ("NOT s.x < 1", True, False),
-        ("NOT s.x <= 1", True, False),
-        ("NOT s.x > 1", False, True),
-        ("NOT s.x >= 1", False, True),
+        # x = -5: under the bug, `(NOT x) OP 1` collapses to `False OP 1` for any
+        # nonzero x (NOT of a truthy number is always False), so a negative x is
+        # the value that tells `NOT (x OP 1)` apart from the buggy reading.
+        ("NOT s.x < 1", False),  # -5 < 1 is True, NOT -> False
+        ("NOT s.x <= 1", False),  # -5 <= 1 is True, NOT -> False
+        ("NOT s.x > 1", True),  # -5 > 1 is False, NOT -> True
+        ("NOT s.x >= 1", True),  # -5 >= 1 is False, NOT -> True
+        ("NOT s.x != 1", False),  # -5 != 1 is True, NOT -> False
     ],
 )
-def test_not_binds_looser_than_every_comparison_operator(clause, truthy_result, falsy_result):
-    assert _holds(clause, s={"x": 5}) is truthy_result
-    assert _holds(clause, s={"x": 1}) is falsy_result
+def test_not_binds_looser_than_every_comparison_operator(clause, expected):
+    assert _holds(clause, s={"x": -5}) is expected
 
 
 def test_not_in_negates_the_membership_test():
