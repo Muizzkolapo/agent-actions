@@ -1,13 +1,9 @@
 """Pre-flight refuses valid clauses as "Invalid field names detected" (1383).
 
-Before the grammar runs, `_validate_field_names` splits the raw clause text on
-operator characters and on the words and/or/not/in/like/between/is/null/contains,
-and checks that every piece starting with a letter is a field name. It splits
-inside quoted strings and takes no account of parentheses, so it refuses: a string
-literal containing one of those words, a parenthesised clause whose last operand
-is a field, and every function call. The grammar that runs after this pre-check
-already restricts a field name to the same shape correctly, so the pre-check
-rejects nothing the grammar would wrongly accept.
+A raw-text pre-check split the clause on operator words, ignoring quotes and
+parens, and rejected anything whose pieces didn't individually look like a
+field name — a string literal containing "and", a paren ending in a field, a
+function call. The grammar after it already enforces the same shape correctly.
 """
 
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
