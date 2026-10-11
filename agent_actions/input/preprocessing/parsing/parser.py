@@ -66,7 +66,10 @@ for _key in _OPERATOR_LOOKUP:
         _MULTI_WORD_STARTS.add(_key.split()[0].upper())
 
 _RANGE_OPERATORS = (ComparisonOperator.BETWEEN, ComparisonOperator.NOT_BETWEEN)
-_UNARY_OPERATORS = (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL)
+_POSTFIX_REFUSAL = (
+    "only one of IS NULL, IS NOT NULL or BETWEEN a AND b can follow an operand: "
+    "put the first in parentheses to compare its result"
+)
 _RANGE_REFUSAL = (
     "BETWEEN takes a range of two numbers or two strings: "
     "write `x BETWEEN a AND b` or `x BETWEEN [a, b]`"
@@ -213,13 +216,13 @@ class WhereClauseParser:
             + Suppress(CaselessKeyword("AND"))
             + range_bound
         )
-        postfix_ops = unary_postfix_ops | range_suffix if unary_postfix_ops else range_suffix
+        postfix_ops = Group(unary_postfix_ops) | range_suffix if unary_postfix_ops else range_suffix
 
         where_expr = infix_notation(
             operand,
             [
                 (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
-                (postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison),
+                (postfix_ops, 1, OpAssoc.LEFT, self._parse_postfix),
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
@@ -328,6 +331,19 @@ class WhereClauseParser:
         operator = ComparisonOperator.NOT_BETWEEN if negation else ComparisonOperator.BETWEEN
         return ComparisonNode(left, operator, literal_range)
 
+    def _parse_postfix(self, tokens):
+        """Build the one IS NULL, IS NOT NULL or `BETWEEN a AND b` that follows an operand.
+
+        A second one would compare the first one's boolean, which is the same for every record.
+        """
+        left, *suffixes = tokens[0]
+        if len(suffixes) != 1:
+            raise ParseFatalException(_POSTFIX_REFUSAL)
+        suffix = suffixes[0]
+        if isinstance(suffix[-1], str):
+            return ComparisonNode(left, _OPERATOR_LOOKUP[" ".join(suffix).upper()])
+        return self._range_comparison(left, suffix)
+
     def _parse_comparison(self, tokens):
         """Parse comparison operations with unified operator lookup."""
         result = tokens[0][0]
@@ -336,10 +352,6 @@ class WhereClauseParser:
         i = 1
         while i < len(items):
             raw_token = items[i]
-            if isinstance(raw_token, ParseResults):
-                result = self._range_comparison(result, raw_token)
-                i += 1
-                continue
             operator_key = raw_token.upper() if isinstance(raw_token, str) else str(raw_token)
             consumed = 1
 
@@ -368,16 +380,15 @@ class WhereClauseParser:
             operator_enum = _OPERATOR_LOOKUP[operator_key]
             i += consumed
 
-            if operator_enum in _UNARY_OPERATORS:
-                result = ComparisonNode(result, operator_enum)
-            elif i < len(items):
+            if i < len(items):
                 right_operand = items[i]
                 if operator_enum in _RANGE_OPERATORS and _is_not_a_range(right_operand):
                     raise ParseFatalException(_RANGE_REFUSAL)
                 result = ComparisonNode(result, operator_enum, right_operand)
                 i += 1
             else:
-                raise ParseFatalException(f"Operator '{operator_enum.value}' needs a right operand")
+                # Unary operator (IS NULL, IS NOT NULL)
+                result = ComparisonNode(result, operator_enum)
 
         return result
 

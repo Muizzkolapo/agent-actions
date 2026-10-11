@@ -13,5 +13,7 @@ body: >-
   comparison. Because `x BETWEEN a AND b` is now read whole, an expression that follows a
   range held in a field with another condition, `score BETWEEN range AND y == 1`, is read as
   a range from `range` to `y` and refused: put the other condition first,
-  `y == 1 AND score BETWEEN range`.
+  `y == 1 AND score BETWEEN range`. A range written straight after `IS NULL` or `IS NOT NULL`,
+  `x IS NULL BETWEEN 0 AND 1`, is refused too, where its list form was accepted and false for
+  every record.
 time: 2026-10-11T07:48:01Z
