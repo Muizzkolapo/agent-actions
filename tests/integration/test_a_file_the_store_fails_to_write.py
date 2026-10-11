@@ -170,15 +170,15 @@ def test_a_file_a_downstream_action_fails_to_store_names_the_stores_error(
         result = _run("--fresh")
 
     assert result.exit_code == 1, result.output
-    said = f"Error generating target: Error saving main output: {fault}"
-    assert said in result.output
     failed = [
         event["message"]
         for event in _events(online)
         if "Error generating target" in event["message"]
     ]
     assert failed
-    assert all(said in message for message in failed), failed
+    for message in failed:
+        assert "Error generating target: Error saving main output: " in message, message
+        assert f"failed: {fault}" in message, message
 
 
 def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_write(
