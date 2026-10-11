@@ -82,6 +82,13 @@ _EXPECT_REPLACES_SCHEMA_MISMATCH = (
     "reject becomes expect: {max_iterations: 1, on_exhausted: raise}"
 )
 
+# Grouping is still reachable, so a reader told only to remove the key loses it.
+_FILE_GRANULARITY_REPLACES_REDUCE_KEY = (
+    "aggregation lives in File granularity: a kind: tool action with granularity: File is "
+    "handed every record of a file in one call, groups them by any field it likes, and "
+    "returns as many rows as the grouping produces"
+)
+
 # Keys whose runtime was deleted; a bare unknown-key error reads as a misspelling
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
@@ -90,6 +97,7 @@ _RETIRED_CONFIG_KEYS: dict[str, str] = {
     "idempotency_key": "",
     "interceptors": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
+    "reduce_key": _FILE_GRANULARITY_REPLACES_REDUCE_KEY,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
     "version_mode": _VERSION_ORDER_HINT,
 }
@@ -526,10 +534,6 @@ class ActionConfig(_RetryValidators):
     primary_dependency: str | None = Field(
         default=None,
         description="Primary dependency for fan-in pattern (determines execution count)",
-    )
-    reduce_key: str | None = Field(
-        default=None,
-        description="Key for aggregation pattern (groups merged outputs by this field)",
     )
     hitl: HitlConfig | None = Field(
         default=None,

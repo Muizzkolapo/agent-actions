@@ -196,62 +196,6 @@ class TestDependencyPatterns:
             "analyze_topics",
         }
 
-    def test_pattern_4_aggregation(self, agent_runner, temp_folder):
-        """
-        Pattern 4: Aggregation
-
-        Config:
-          - name: aggregate_validations
-            dependencies: [validator_grammar, validator_accuracy, validator_style]
-            reduce_key: content_id
-
-        Result: All outputs merged and grouped by reduce_key
-        """
-        for validator in ["validator_grammar", "validator_accuracy", "validator_style"]:
-            (temp_folder / "target" / validator).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["validator_grammar", "validator_accuracy", "validator_style"],
-            "aggregate_validations",
-        )
-
-        # All directories returned for merging (aggregation pattern)
-        assert len(result) == 3
-        assert {r.name for r in result} == {
-            "validator_grammar",
-            "validator_accuracy",
-            "validator_style",
-        }
-
-    def test_reduce_key_with_parallel_branches(self, agent_runner, temp_folder):
-        """
-        Edge case: reduce_key with parallel branches
-
-        Config:
-          - name: aggregate_classifications
-            dependencies: [classify_1, classify_2, classify_3]
-            reduce_key: content_id
-
-        Behavior: All outputs are merged (parallel branches merge by default,
-        reduce_key just adds grouping for downstream processing).
-
-        Note: This is valid but rarely used since parallel branches already
-        merge by default. The reduce_key adds grouping by content_id.
-        """
-        for i in range(1, 4):
-            (temp_folder / "target" / f"classify_{i}").mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["classify_1", "classify_2", "classify_3"],
-            "aggregate_classifications",
-        )
-
-        # All directories returned for merging (reduce_key applies grouping)
-        assert len(result) == 3
-        assert {r.name for r in result} == {"classify_1", "classify_2", "classify_3"}
-
     def test_fan_in_primary_dependency_ignored(self, agent_runner, temp_folder):
         """primary_dependency is ignored — all deps are input sources in bus model."""
         for action in ["action_a", "action_b"]:
@@ -378,21 +322,6 @@ class TestResolveDependencyDirectories:
         assert temp_agent_folder / "target" / "classify_2" in result
         assert temp_agent_folder / "target" / "classify_3" in result
 
-    def test_multiple_dependencies_with_reduce_key_returns_all(
-        self, agent_runner, temp_agent_folder
-    ):
-        """Test aggregation pattern: reduce_key set returns all dependencies."""
-        dependencies = ["action_A", "action_B", "action_C"]
-        result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, "test_action"
-        )
-
-        # Aggregation with reduce_key: all directories returned for merging
-        assert len(result) == 3
-        assert temp_agent_folder / "target" / "action_A" in result
-        assert temp_agent_folder / "target" / "action_B" in result
-        assert temp_agent_folder / "target" / "action_C" in result
-
     def test_missing_primary_dependency_raises_error(self, agent_runner, temp_agent_folder):
         """Test that missing PRIMARY dependency raises DependencyError."""
         # action_A is primary but doesn't exist, action_B exists
@@ -508,7 +437,7 @@ class TestResolveDependencyDirectoriesIntegration:
         """Test aggregate pattern: multiple input sources for merging.
 
         Pattern: dependencies: [validate_1, validate_2, validate_3]
-        All are input sources to be merged by reduce_key.
+        All are input sources, merged by their shared identity.
         """
         # Create validate directories
         for i in range(1, 4):

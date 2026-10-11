@@ -364,18 +364,6 @@ class TestMergeRecordsByKey:
         assert result[0]["answer_1"] == "A"
         assert result[0]["answer_2"] == "B"
 
-    def test_uses_explicit_reduce_key(self):
-        """Should use explicit reduce_key when provided."""
-        records = [
-            {"custom_id": "123", "source_guid": "diff1", "data": "a"},
-            {"custom_id": "123", "source_guid": "diff2", "data": "b"},
-        ]
-
-        result = merge_records_by_key(records, reduce_key="custom_id")
-
-        assert len(result) == 1
-        assert result[0]["custom_id"] == "123"
-
     def test_keeps_records_with_different_keys_separate(self):
         """Should not merge records with different correlation keys."""
         records = [
@@ -467,21 +455,6 @@ class TestMergeJsonFiles:
             result = merge_json_files([valid_file, missing_file])
 
             assert len(result) == 1
-
-    def test_uses_reduce_key(self):
-        """Should use reduce_key for correlation."""
-        with TemporaryDirectory() as tmpdir:
-            file1 = Path(tmpdir) / "file1.json"
-            file2 = Path(tmpdir) / "file2.json"
-
-            file1.write_text(json.dumps([{"custom_key": "x", "a": 1}]))
-            file2.write_text(json.dumps([{"custom_key": "x", "b": 2}]))
-
-            result = merge_json_files([file1, file2], reduce_key="custom_key")
-
-            assert len(result) == 1
-            assert result[0]["a"] == 1
-            assert result[0]["b"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -676,20 +649,6 @@ class TestFanInViaPrimitive:
         assert "_extra" not in content["upstream"]
         assert content["branch_a"]["a"] == 1
         assert content["branch_b"]["b"] == 2
-
-    def test_reduce_key_uses_deep_merge(self):
-        """reduce_key aggregation always uses deep_merge_record, not the primitive."""
-        records = [
-            {"custom_id": "123", "source_guid": "s1", "content": {"ns_a": {"v": 1}}},
-            {"custom_id": "123", "source_guid": "s2", "content": {"ns_b": {"v": 2}}},
-        ]
-
-        result = merge_records_by_key(records, reduce_key="custom_id")
-
-        assert len(result) == 1
-        content = result[0]["content"]
-        assert content["ns_a"]["v"] == 1
-        assert content["ns_b"]["v"] == 2
 
     def test_identical_schemas_fallback(self):
         """Records with identical content keys fall back to deep_merge_record."""

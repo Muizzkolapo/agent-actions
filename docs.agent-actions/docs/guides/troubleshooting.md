@@ -632,12 +632,13 @@ dependencies: [classify_1, classify_2, classify_3]
 dependencies: [extract, enrich, validate]
 # Different actions → first is primary, others via context
 # Execution count: N (from extract only)
-
-# Pattern 3: Aggregation (MERGE with reduce_key)
-dependencies: [validator_A, validator_B, validator_C]
-reduce_key: parent_id
-# reduce_key set → all outputs merged and grouped by key
 ```
+
+To aggregate several records into one — a roll-up, a deduplication, a count across
+the file — give the consuming action `granularity: File`. A `kind: tool` action at
+File granularity is handed every record of a file in one call, so it can group them
+by whichever field it likes and return as many rows as the grouping produces.
+`examples/map_reduce_fanin_check` shows the shape.
 
 ### Missing Context Data in Fan-in
 
@@ -668,5 +669,5 @@ reduce_key: parent_id
 1. Check if dependencies are parallel branches (same base name) or different actions
 2. For fan-in: first dependency determines execution count
 3. For parallel: merged outputs determine execution count
-4. For aggregation: `reduce_key` groups determine execution count
+4. For `granularity: File`: one execution per input file, whatever its record count
 

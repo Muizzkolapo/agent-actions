@@ -1,15 +1,5 @@
 """`reduce_key` validated, was echoed by the docs tooling, and never grouped anything.
 
-It was declared on `ActionConfig` and documented as the aggregation pattern, so a project
-writing it loaded clean. Two layers stopped it working. The expander copies only the
-fields it knows, and this was not one, so the key never reached the runtime config at
-all — a run behaved exactly as if it were absent. Delivered the one way that does reach
-the merge, under `default_agent_config:`, the lookup then searched the record top level
-and the top of `content`, where no stored record keeps a user field: every field sits a
-level lower, under `content["<action>"]`. Every record fell back to its own identity, so
-the action still ran once per record. Had a record been keyed, the group merge kept one
-member's value per namespace and dropped the rest.
-
 The four-surface refusal comes free from `_RETIRED_CONFIG_KEYS`, which
 `TestTheSharedTableCoversEverySurface` is parametrised over. What that cannot see is the
 declaration and the docs echo, which are what made the key look real.
@@ -60,11 +50,15 @@ class TestNothingStillAdvertisesIt:
 
     def test_no_runtime_module_still_reads_it(self):
         """The merge and the two fan-in readers took it from the action config, and the
-        scope inference branched on it — all of them for a key nothing could deliver."""
+        scope inference branched on it — all of them for a key nothing could deliver.
+
+        `config/schema.py` is where it is refused, so that one names it on purpose.
+        """
+        refuses_it = REPO / "agent_actions/config/schema.py"
         offenders = sorted(
             str(path.relative_to(REPO))
             for path in (REPO / "agent_actions").rglob("*.py")
-            if "reduce_key" in path.read_text()
+            if path != refuses_it and "reduce_key" in path.read_text()
         )
 
         assert offenders == [], offenders

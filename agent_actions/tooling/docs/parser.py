@@ -292,11 +292,6 @@ class WorkflowParser:
                     "version_consumption"
                 ]  # {source, pattern}
 
-            # Parallel merge configuration (MapReduce pattern)
-            # reduce_key specifies field to correlate records from parallel branches
-            if "reduce_key" in action_data:
-                action["reduce_key"] = action_data["reduce_key"]
-
             # Execution mode configuration
             if "run_mode" in action_data:
                 action["run_mode"] = action_data["run_mode"]  # batch or online
