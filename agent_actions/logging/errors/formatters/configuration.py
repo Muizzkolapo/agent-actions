@@ -73,7 +73,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             category="Configuration Error",
             title=f"Invalid configuration in agent '{agent}'",
             details=message,
-            fix="Check your agent configuration file for errors",
+            fix=self._hint_or(context, "Check your agent configuration file for errors"),
             context=context,
             docs_url="https://docs.runagac.com/config",
         )
