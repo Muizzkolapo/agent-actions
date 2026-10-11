@@ -43,9 +43,8 @@ def _load_template_globals(env, templates_folder):
     for template_file in template_files:
         try:
             template = env.get_template(template_file)
-            # A TemplateModule's vars() carry __name__ and _body_stream besides the
-            # file's exports. Jinja exports no name starting with an underscore, so
-            # the public names are exactly what the file defines.
+            # vars() on a TemplateModule carries __name__ and _body_stream besides the
+            # file's exports, and Jinja exports no underscore name: the public ones are it.
             new_names = {
                 name: value
                 for name, value in vars(template.module).items()

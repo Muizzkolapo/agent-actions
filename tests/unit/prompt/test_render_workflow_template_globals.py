@@ -112,9 +112,10 @@ def test_a_jinja_module_internal_is_not_a_workflow_global(
         )
 
 
-def test_two_files_defining_the_same_underscore_name_do_not_collide(
+def test_two_files_that_export_nothing_do_not_collide(
     tmp_path: Path, config: Path, templates: Path, caplog: pytest.LogCaptureFixture
 ):
+    """Jinja exports neither name, so each module carried the two internals and nothing else."""
     (templates / "a.j2").write_text(
         "{% set _hidden = 'from-a' %}{% macro _priv() %}a{% endmacro %}\n"
     )
