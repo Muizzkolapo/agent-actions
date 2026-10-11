@@ -444,6 +444,9 @@ def _collect_action_metrics(event: dict[str, Any], action_metrics: dict[str, Any
             "provider": None,
             "model": None,
             "cache_miss_count": 0,
+            # Per-file counts, keyed by the file each event names -- summed into
+            # the *_count fields and dropped once folding ends (extract_run_events).
+            "_by_file": {},
         }
 
     # Extract from ActionCompleteEvent
@@ -455,11 +458,17 @@ def _collect_action_metrics(event: dict[str, Any], action_metrics: dict[str, Any
 
     # Extract from ResultCollectionCompleteEvent
     elif event_type == "ResultCollectionCompleteEvent":
-        action_metrics[agent_name]["success_count"] = data.get("total_success", 0)
-        action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
-        action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
-        action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
-        action_metrics[agent_name]["exhausted_count"] = data.get("total_exhausted", 0)
+        file_key = data.get("target_relative_path") or ""
+        action_metrics[agent_name]["_by_file"][file_key] = {
+            "success_count": data.get("total_success", 0),
+            "failed_count": data.get("total_failed", 0),
+            "filtered_count": data.get("total_filtered", 0),
+            # A batch guard skip is collected as unprocessed, not skipped; count
+            # it as skipped either way, kept apart from any other unprocessed
+            # reason by its own field.
+            "skipped_count": data.get("total_skipped", 0) + data.get("total_guard_skipped", 0),
+            "exhausted_count": data.get("total_exhausted", 0),
+        }
 
     # Extract from LLMResponseEvent for token counts, latency, provider
     elif event_type == "LLMResponseEvent":
@@ -504,10 +513,16 @@ def extract_run_events(events_path: Path) -> RunEvents:
     except OSError as e:
         logger.debug("Could not read run events from %s: %s", events_path, e)
 
-    # Post-process: convert accumulated latency to average per LLM request.
+    # Post-process: convert accumulated latency to average per LLM request, and
+    # sum each action's per-file ResultCollectionCompleteEvent counts now that
+    # every event has been folded and the latest one for each file has won.
     for metrics in action_metrics.values():
         req_count = metrics.pop("llm_request_count", 0)
         if req_count > 0:
             metrics["latency_ms"] = round(metrics["latency_ms"] / req_count, 1)
+        by_file = metrics.pop("_by_file", {})
+        for file_counts in by_file.values():
+            for key, value in file_counts.items():
+                metrics[key] += value
 
     return RunEvents(action_metrics, runtime_warnings, _window(tail, problems), levels)
