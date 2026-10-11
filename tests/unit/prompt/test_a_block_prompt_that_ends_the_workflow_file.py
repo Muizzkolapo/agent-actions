@@ -10,6 +10,7 @@ nobody had touched.
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -48,6 +49,23 @@ def _render(tmp_path: Path, workflow: str, templates: dict[str, str] | None = No
 
 def _prompts(config: dict) -> dict[str, str]:
     return {action["name"]: action["prompt"] for action in config["actions"]}
+
+
+def _last_action(prompt: str, keep: str = "|") -> str:
+    """An action after `summarize` whose prompt is a block scalar, as the last key."""
+    body = "".join(f"      {line}\n" for line in prompt.split("\n"))
+    return (
+        "  - name: tag\n"
+        "    dependencies: [summarize]\n"
+        "    intent: i\n"
+        "    context_scope: { observe: [summarize.summary, source.page_content] }\n"
+        f"    prompt: {keep}\n{body}"
+    )
+
+
+def _middle_action(prompt: str, keep: str = "|") -> str:
+    """The same action, with a key after the prompt."""
+    return _last_action(prompt, keep) + "    expect: { repair: none }\n"
 
 
 class TestTheLastPromptOfTheFileKeepsItsNewline:
@@ -91,3 +109,66 @@ class TestWhatItMustNotChange:
         prompts = _prompts(_render(tmp_path, workflow, {"tone.j2": "Write formally.\n"}))
 
         assert prompts["summarize"] == "Write formally. Summarize the page."
+
+
+PER_RECORD_PROMPTS = {
+    "a field of the record": "Summarize {{ source.page_content }}.",
+    "an upstream action": "Use {{ summarize.summary }} please.",
+    "text and a field": "Be formal. Summarize {{ source.page_content }}.",
+}
+
+
+class TestAPromptLeftForTheRecordKeepsItsNewlineToo:
+    """A prompt that reads what only a record supplies is rendered for each record, from
+    the text the load left. It is the usual prompt, and the same position bug applied."""
+
+    @pytest.mark.parametrize("prompt", PER_RECORD_PROMPTS.values(), ids=PER_RECORD_PROMPTS)
+    def test_it_ends_with_its_newline_as_the_last_action(self, tmp_path, prompt):
+        rendered = _prompts(_render(tmp_path, HEAD + _last_action(prompt)))
+
+        assert rendered["tag"] == prompt + "\n"
+
+    @pytest.mark.parametrize("prompt", PER_RECORD_PROMPTS.values(), ids=PER_RECORD_PROMPTS)
+    def test_it_is_what_it_is_with_a_key_after_it(self, tmp_path, prompt):
+        """Config hashing reads this text, so a position that changes it resets an
+        action nobody edited."""
+        last = _prompts(_render(tmp_path, HEAD + _last_action(prompt)))["tag"]
+        (tmp_path / "other").mkdir()
+        middle = _prompts(_render(tmp_path / "other", HEAD + _middle_action(prompt)))["tag"]
+
+        assert last == middle
+
+    def test_kept_blank_lines_are_restored_exactly_once(self, tmp_path):
+        """`|+` keeps every trailing newline; none may be added or lost for the position."""
+        prompt = "Summarize {{ source.page_content }}.\n"
+        last = _prompts(_render(tmp_path, HEAD + _last_action(prompt, "|+")))["tag"]
+        (tmp_path / "other").mkdir()
+        middle = _prompts(_render(tmp_path / "other", HEAD + _middle_action(prompt, "|+")))["tag"]
+
+        assert last == middle
+
+
+class TestABlockValueThatIsNotAPromptKeepsItsNewlineToo:
+    def test_a_block_intent_that_ends_the_file_keeps_its_newline(self, tmp_path):
+        workflow = HEAD.replace(
+            "    intent: i\n    prompt: |\n      Summarize the page.\n",
+            "    prompt: Summarize the page.\n    intent: |\n      Summarise.\n",
+        )
+
+        config = _render(tmp_path, workflow)
+
+        assert config["actions"][0]["intent"] == "Summarise.\n"
+
+
+class TestAnIncludeIsStillJoinedToWhatFollowsIt:
+    def test_a_block_prompt_that_includes_a_templates_file_is_joined_as_before(self, tmp_path):
+        """The shape where the setting belongs to the environment would show: the
+        include's own final newline would come between it and the text after it."""
+        workflow = HEAD.replace(
+            "    prompt: |\n      Summarize the page.\n",
+            "    prompt: |\n      {% include 'tone.j2' %}Summarize the page.\n",
+        )
+
+        prompts = _prompts(_render(tmp_path, workflow, {"tone.j2": "Write formally.\n"}))
+
+        assert prompts["summarize"] == "Write formally.Summarize the page.\n"
