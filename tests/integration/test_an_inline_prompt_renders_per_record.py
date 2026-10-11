@@ -77,25 +77,19 @@ def _project(tmp_path: Path, mode: str, actions: str, pages: list[dict] = PAGES)
     return root
 
 
-def _run_to_the_end(project: Path) -> str:
-    """Run until nothing is left to collect; the whole run's output."""
+def _run_to_the_end(project: Path, *command: str) -> str:
+    """Run *command*, a fresh run by default, then `agac run` until nothing is left to
+    collect; the whole output."""
     outputs = []
-    args = ["--fresh"]
+    args = list(command) or ["run", "-a", WORKFLOW, "--fresh"]
     for _ in range(4):
-        result = run_agac(
-            project,
-            "run",
-            "-a",
-            WORKFLOW,
-            *args,
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
-        )
+        result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
         assert result.returncode == 0, "\n".join(outputs)
         if "run again" not in output:
             return "\n".join(outputs)
-        args = []
+        args = ["run", "-a", WORKFLOW]
     pytest.fail("the workflow never stopped asking to be run again:\n" + "\n".join(outputs))
 
 
@@ -359,3 +353,60 @@ def test_an_inline_prompt_sends_each_record_what_its_store_twin_sends(tmp_path, 
         inline = [prompt.strip() for prompt in _prompts(project, f"inline_{case}")]
         assert inline == [prompt.strip() for prompt in _prompts(project, f"store_{case}")], case
         assert inline == expected, case
+
+
+# Fails the page the project's `fail_page` names, standing in for any record-level fault.
+_FLAKY_TOOL = """\
+from pathlib import Path
+from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def facts_unless_marked(data: Any, *args) -> list[dict]:
+    page = data["source"]
+    marker = Path("fail_page")
+    if marker.exists() and page["page_id"] == marker.read_text().strip():
+        raise RuntimeError(f"tool fault on {page['page_id']}")
+    return [{"facts": f"facts of {page['page_id']}"}]
+"""
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_agac_retry_sends_an_inline_prompt_per_record_and_per_version(tmp_path, mode):
+    """The record a fault held back reaches the versioned prompt below it under retry."""
+    project = _project(
+        tmp_path,
+        mode,
+        """\
+  - name: extract_facts
+    kind: tool
+    intent: "Extract facts"
+    impl: facts_unless_marked
+    schema: {facts: string}
+    context_scope: { observe: [source.page_id] }
+  - name: ask
+    intent: "Ask"
+    dependencies: [extract_facts]
+    versions:
+      range: [1, 2]
+    prompt: |
+      {% if i == 1 %}First{% else %}Second{% endif %} strategy {{ i }}: {{ extract_facts.facts }}
+    schema: {answer: string}
+    context_scope: { observe: [extract_facts.facts] }
+""",
+    )
+    (project / "tools" / WORKFLOW / "flaky.py").write_text(_FLAKY_TOOL)
+    marker = project / "fail_page"
+    marker.write_text("p1")
+    _run_to_the_end(project)
+    assert _prompts(project, "ask_1") == ["First strategy 1: facts of p0\n"]
+    marker.unlink()
+
+    _run_to_the_end(project, "retry", "-a", WORKFLOW)
+
+    for i, word in ((1, "First"), (2, "Second")):
+        assert _prompts(project, f"ask_{i}") == [
+            f"{word} strategy {i}: facts of {page['page_id']}\n" for page in PAGES
+        ]
