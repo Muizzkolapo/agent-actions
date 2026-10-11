@@ -30,7 +30,14 @@ def _make_evaluator(pass_fn):
     """Create a mock evaluator whose evaluate delegates to pass_fn."""
     evaluator = MagicMock()
 
-    def side_effect(*, item, guard_config, context=None, conditional_clause=None):
+    def side_effect(
+        *,
+        item,
+        guard_config,
+        context=None,
+        conditional_clause=None,
+        conditional_clause_passthrough_on_error=True,
+    ):
         if pass_fn(item):
             return GuardResult.passed()
         return GuardResult.filtered()

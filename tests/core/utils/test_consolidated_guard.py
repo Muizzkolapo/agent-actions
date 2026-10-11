@@ -159,9 +159,8 @@ class TestConsolidatedGuardParser:
             )
         assert "passthrough_on_empty" in str(exc.value)
 
-    def test_passthrough_on_error_rejected_on_udf_guard(self):
-        """UDF guards cannot honor passthrough_on_error, so setting it must fail loud."""
-        from agent_actions.errors import ConfigurationError
+    def test_passthrough_on_error_honoured_on_udf_guard(self):
+        """A UDF guard can opt out of passthrough too, same as a SQL guard (1315)."""
         from agent_actions.output.response.expander_action_types import process_guard_config
 
         agent: dict = {}
@@ -173,8 +172,9 @@ class TestConsolidatedGuardParser:
                 "passthrough_on_error": False,
             },
         }
-        with pytest.raises(ConfigurationError):
-            process_guard_config(agent, action)
+        process_guard_config(agent, action)
+        assert agent["conditional_clause"] == "my_check"
+        assert agent["conditional_clause_passthrough_on_error"] is False
 
     def test_parse_rejects_non_string_keys_as_config_error(self):
         with pytest.raises(ConfigValidationError) as exc:

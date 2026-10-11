@@ -379,6 +379,9 @@ def prefilter_by_guard(
 
     guard_config = agent_config.get("guard")
     conditional_clause = agent_config.get("conditional_clause")
+    conditional_clause_passthrough_on_error = agent_config.get(
+        "conditional_clause_passthrough_on_error", True
+    )
     if not guard_config and not conditional_clause:
         return data, [], originals, []
 
@@ -438,6 +441,7 @@ def prefilter_by_guard(
                 guard_config=guard_config,
                 context=context,
                 conditional_clause=conditional_clause,
+                conditional_clause_passthrough_on_error=conditional_clause_passthrough_on_error,
             )
         except GuardNotAppliedError as e:
             # The evaluator is handed the record's content; the envelope naming it is here.

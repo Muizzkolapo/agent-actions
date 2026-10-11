@@ -69,10 +69,17 @@ class TaskPreparer:
 
         guard_config = context.agent_config.get("guard")
         conditional_clause = context.agent_config.get("conditional_clause")
+        conditional_clause_passthrough_on_error = context.agent_config.get(
+            "conditional_clause_passthrough_on_error", True
+        )
 
         if not skip_guard and (guard_config or conditional_clause):
             guard_result = self._evaluate_guard(
-                content, guard_config, conditional_clause, field_context
+                content,
+                guard_config,
+                conditional_clause,
+                field_context,
+                conditional_clause_passthrough_on_error,
             )
             if not guard_result.should_execute:
                 return PreparedTask(
@@ -144,7 +151,16 @@ class TaskPreparer:
             return GuardStatus.PASSED
         content, source_guid, _snapshot = self._normalize_input(item, context)
         field_context = self._field_context(item, content, source_guid, context)
-        result = self._evaluate_guard(content, guard_config, conditional_clause, field_context)
+        conditional_clause_passthrough_on_error = context.agent_config.get(
+            "conditional_clause_passthrough_on_error", True
+        )
+        result = self._evaluate_guard(
+            content,
+            guard_config,
+            conditional_clause,
+            field_context,
+            conditional_clause_passthrough_on_error,
+        )
         return GuardStatus.PASSED if result.should_execute else _turned_away_as(result.behavior)
 
     def _field_context(
@@ -264,6 +280,7 @@ class TaskPreparer:
         guard_config: dict[str, Any] | None,
         conditional_clause: str | None,
         field_context: dict[str, Any],
+        conditional_clause_passthrough_on_error: bool = True,
     ):
         """Evaluate guard with full context; wraps non-dict content as ``{"_raw": content}``."""
         from agent_actions.input.preprocessing.filtering.evaluator import (
@@ -279,6 +296,7 @@ class TaskPreparer:
             guard_config=guard_config,
             context=field_context,
             conditional_clause=conditional_clause,
+            conditional_clause_passthrough_on_error=conditional_clause_passthrough_on_error,
         )
 
     @staticmethod
