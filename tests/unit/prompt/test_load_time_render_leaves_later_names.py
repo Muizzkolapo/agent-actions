@@ -872,3 +872,17 @@ def test_a_load_time_tag_that_breaks_a_per_record_prompts_yaml_fails_the_load(tm
     message = str(raised.value)
     assert "reads 'source', so it renders for each record" in message
     assert "once its load-time tags render it is no longer valid YAML" in message
+
+
+def test_a_load_rendered_again_for_an_action_named_by_a_tag_keeps_what_templates_left(tmp_path):
+    """The templates/ folder loads once, before the workflow renders, however often it does."""
+    with pytest.raises(TemplateRenderingError, match="at its top level as it loaded"):
+        _load(
+            tmp_path,
+            "actions:\n{{ block }}\n{% for n in ['facts'] %}\n  - name: {{ n }}\n{% endfor %}\n"
+            '  - name: b\n    dependencies: [facts]\n    prompt: "Use {{ facts.x }}"\n',
+            templates={
+                "actions.j2": '{% set block %}\n  - name: a\n    prompt: "Hi {{ source.x }}"\n'
+                "{% endset %}\n"
+            },
+        )
