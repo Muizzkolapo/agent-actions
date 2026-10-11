@@ -217,7 +217,8 @@ def test_the_growth_it_cannot_prevent_is_two_rows_a_retry(diamond):
     two cannot be told apart. Not a regression: `main` grows by the same two for
     the same reason, and the run now says so out loud. The count is recorded
     rather than left open so a change that makes it worse cannot pass unnoticed.
-    Closing it needs the per-action provenance field in issue #1022.
+    Closing it needs each row to name the action that produced it, which
+    ``parent_source_guid`` does not.
     """
     selected = _record_ids(diamond, ACTION)[0]
     counts = [len(_rows(diamond, "combine"))]

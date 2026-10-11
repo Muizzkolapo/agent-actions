@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  `agac retry` no longer warns that it duplicates rows when it repairs a record whose only
+  stored row is its own failed one. Below two actions that each split a record into
+  several rows, a row names the first ancestor, which is no input of the action under
+  repair, so every row of the file's other records counted as unplaceable and the repair
+  warned that regenerating the named record "duplicates any it regenerates". It
+  duplicated nothing: the failed record had made no other row, the retry replaced its
+  failed row, and the file ended the same size. The warning now counts only the named
+  records that could have made rows it cannot place, and where it still applies it no
+  longer points at an issue that was closed. The rows are carried exactly as before.
+time: 2026-10-11T13:00:00Z

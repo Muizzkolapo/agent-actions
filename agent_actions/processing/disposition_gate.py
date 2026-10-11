@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
 
 _FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.value})
+# A stored row in one of these answers nothing, so the record it names made no other row.
+_NO_ANSWER_STATES = _FAILURE_STATES | {
+    RecordState.CASCADE_SKIPPED.value,
+    RecordState.GUARD_SKIPPED.value,
+}
 
 # The named records each action found in its input, and those of them in a file it then
 # processed to the end, per run. Keyed by the run's backend, as utils/limits.py keys what
@@ -79,7 +84,7 @@ class DispositionGate:
         row holds none carrying any input's, so rows are resolved to their input
         through ``parent_source_guid`` — read as a producer only where it names one
         of *inputs* (the action's input before narrowing), since that field is the
-        original pool ancestor once an input has itself been expanded (#1022).
+        original pool ancestor once an input has itself been expanded.
         """
         if not self._repairing:
             return set()
@@ -107,27 +112,37 @@ class DispositionGate:
 
         carried: set[str] = set()
         unresolved: set[str] = set()
+        has_own_row: set[str] = set()
+        has_answer: set[str] = set()
         for row in self._stored_rows(action_name, relative_path):
             guid = row.get("source_guid")
             if not guid:
                 continue
             producer = row.get("parent_source_guid")
-            if guid in named or producer in resolvable:
+            if guid in named:
+                has_own_row.add(guid)
+                if row.get("_state") not in _NO_ANSWER_STATES:
+                    has_answer.add(guid)
+                continue
+            if producer in resolvable:
                 continue
             if producer in blocked or (guid not in held and producer not in held):
                 unresolved.add(guid)
             carried.add(guid)
 
-        if unresolved and named:
+        # A named record whose only stored row answers nothing made no other row, so
+        # nothing it regenerates can duplicate one the repair could not place.
+        could_duplicate = named - (has_own_row - has_answer)
+        if unresolved and could_duplicate:
             logger.warning(
                 "Action '%s': %d stored row(s) cannot be attributed to an input of "
                 "this run, so repairing %d record(s) carries them as untouched and "
                 "duplicates any it regenerates. Either an identity minted below "
                 "another mint, or an input standing beside its own ancestor; "
-                "see issue #1022",
+                "the retry reference describes both",
                 action_name,
                 len(unresolved),
-                len(named),
+                len(could_duplicate),
             )
         return carried
 
