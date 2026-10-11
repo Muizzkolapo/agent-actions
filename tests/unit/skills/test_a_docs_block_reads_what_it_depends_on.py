@@ -46,12 +46,13 @@ _NOT_LOADED = {
     "docs.agent-actions/docs/guides/troubleshooting.md::generate_report+generate_report": "shows the wrong form beside the right one",
     "docs.agent-actions/docs/reference/validation/index.md::action_a+action_b": "shows a circular dependency",
     "docs.agent-actions/docs/reference/cli/expect.md::Check output quality": "a CI step, not a workflow",
+    "examples/incident_triage/docs/PATTERNS.md::validate_data+validate_data+use_validated": "shows the wrong form beside the right one",
+    "examples/incident_triage/docs/PATTERNS.md::inject_data+inject_data": "shows the wrong form beside the right one",
 }
 # Pages with a block that lists actions and is not YAML until its template is rendered.
 _TEMPLATED = {
     "docs.agent-actions/docs/reference/configuration/templates.md",
     "docs.agent-actions/docs/reference/execution/guards.md",
-    "docs.agent-actions/docs/reference/validation/expectations.md",
     "docs.agent-actions/docs/reference/validation/output-validation.md",
 }
 
@@ -105,8 +106,8 @@ def _authored(action: dict[str, Any]) -> dict[str, Any]:
     elif kind != "hitl":
         if not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$"):
             action["prompt"] = "Answer."
-        if not isinstance(action.get("schema"), dict):
-            action.pop("schema", None)
+    if kind != "tool" and not isinstance(action.get("schema"), dict):
+        action.pop("schema", None)
     return action
 
 
