@@ -33,3 +33,9 @@ class ErrorFormatter(ABC):
             return "cohere"
 
         return str(context.get("provider", "API"))
+
+    @staticmethod
+    def _hint_or(context: dict[str, Any], fallback: str) -> str:
+        """The remedy the error itself carries, else the formatter's catch-all *fallback*."""
+        hint = context.get("hint")
+        return hint if isinstance(hint, str) and hint.strip() else fallback

@@ -31,9 +31,12 @@ class GenericErrorFormatter(ErrorFormatter):
             category="Operation Failed",
             title=title,
             details=details,
-            fix="Check your configuration and try again. "
-            "Run with --verbose for the full traceback, "
-            "or check logs/events.json for details.",
+            fix=self._hint_or(
+                context,
+                "Check your configuration and try again. "
+                "Run with --verbose for the full traceback, "
+                "or check logs/events.json for details.",
+            ),
             context=context,
             docs_url="https://docs.runagac.com/troubleshooting",
         )
