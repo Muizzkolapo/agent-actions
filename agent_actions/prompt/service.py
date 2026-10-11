@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
+from jinja2 import StrictUndefined, TemplateSyntaxError
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -27,6 +27,7 @@ from agent_actions.prompt.context.static_loader import (
     StaticDataLoadError,
 )
 from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
@@ -302,7 +303,7 @@ class PromptPreparationService:
             return raw_prompt
 
         try:
-            jinja_env = Environment(
+            jinja_env = DictKeyFirstEnvironment(
                 undefined=StrictUndefined,
                 trim_blocks=True,
                 lstrip_blocks=True,

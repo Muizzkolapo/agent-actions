@@ -43,6 +43,7 @@ from jinja2.utils import Namespace, missing
 from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
 
 # Private-use characters, which no workflow text holds, mark what the render left.
 _LEFT_OPEN, _LEFT_CLOSE = "\ue000", "\ue001"
@@ -190,7 +191,7 @@ class LoadRender:
         # names are read with one that has none, and the load's filters and tests.
         self._names_env = Environment()
         self._names_env.globals.clear()
-        self.env = Environment(
+        self.env = DictKeyFirstEnvironment(
             loader=_Loader(str(templates_folder), self),
             undefined=_undefined_class(self),
             extensions=[_LeaveExtension],
