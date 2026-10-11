@@ -1,13 +1,7 @@
 """A guard comparing a field to a string containing and/or/not/in/etc. runs (1383).
 
-`WhereClauseParser._validate_field_names` ran a naive regex split over the raw clause
-text before the real grammar, splitting on operator characters and the words `and`,
-`or`, `not`, `in`, `like`, `between`, `is`, `null` and `contains` with no regard for
-quotes. `source.title == "rock and roll"` was refused before any run started, with a
-message naming no field, though the clause is valid and the field exists.
-
-`summarize`, then `publish` behind the guard, then `archive`. Every command is a real
-`agac run` in its own process.
+The old field-name pre-check split the raw clause on those words with no regard for
+quotes, refusing `source.title == "rock and roll"` though the clause is valid.
 """
 
 from __future__ import annotations
