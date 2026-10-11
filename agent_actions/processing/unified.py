@@ -355,11 +355,15 @@ class UnifiedProcessor:
         guard_results: list[ProcessingResult] = []
 
         for record, error in failed:
+            snapshot = record if isinstance(record, dict) else None
             guard_results.append(
                 ProcessingResult.failed(
                     error=f"Guard evaluation failed: {error}",
                     source_guid=record.get("source_guid") if isinstance(record, dict) else None,
-                    source_snapshot=record if isinstance(record, dict) else None,
+                    # Both carried, each standing in for the other -- the FAILED
+                    # tombstone builder reads only input_record, with no fallback.
+                    source_snapshot=snapshot,
+                    input_record=snapshot,
                 )
             )
 
@@ -418,11 +422,15 @@ class UnifiedProcessor:
         action_name = context.action_name
 
         for record, error in failed:
+            snapshot = record if isinstance(record, dict) else None
             guard_results.append(
                 ProcessingResult.failed(
                     error=f"Guard evaluation failed: {error}",
                     source_guid=record.get("source_guid") if isinstance(record, dict) else None,
-                    source_snapshot=record if isinstance(record, dict) else None,
+                    # Both carried, each standing in for the other -- the FAILED
+                    # tombstone builder reads only input_record, with no fallback.
+                    source_snapshot=snapshot,
+                    input_record=snapshot,
                 )
             )
 
