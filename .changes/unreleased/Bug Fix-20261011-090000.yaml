@@ -12,7 +12,7 @@ body: >-
   skill's rule that a guard field must be in `observe` is gone: a guard reads the record as
   stored, so observing a field only to guard on it sends it to the model for nothing. In
   the docs, fifteen blocks named an action in a guard, a prompt or `context_scope` without
-  depending on it, and four showed a FILE action with no `dependencies`; pre-flight refuses
+  depending on it, and five showed a FILE action with no `dependencies`; pre-flight refuses
   both, and each now declares what it reads through. The translation pattern merged versions
   named by strings, which a merge cannot collect, and now numbers them. The Context Scope page says that single-key
   examples leave `context_scope` out. Tests keep the pages from drifting: the skill's blocks

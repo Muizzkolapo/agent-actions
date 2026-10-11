@@ -114,6 +114,8 @@ actions:
     context_scope:
       observe:
         - analyze_clause.*
+        - split_into_clauses.clause_number
+        - split_into_clauses.clause_title
         - source.contract_id
         - source.title
         - source.parties

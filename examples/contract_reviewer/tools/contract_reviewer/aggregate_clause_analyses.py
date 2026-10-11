@@ -19,11 +19,11 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     """
     Combine clause-level risk analyses into a single contract risk report.
 
-    Input (list of records, each with analyze_clause fields):
-        - clause_number, clause_title (from passthrough)
-        - risk_level, risk_score, risk_indicators, obligations, deadlines
-        - recommended_action, reasoning
-        - contract_id, title, parties (from passthrough)
+    Input (one item per clause, holding the observed fields as flat keys):
+        - risk_level, risk_score, risk_indicators, obligations, deadlines,
+          recommended_action, reasoning (bare: the one wildcard, analyze_clause.*)
+        - split_into_clauses.clause_number, split_into_clauses.clause_title
+        - source.contract_id, source.title, source.parties
 
     Output (single record):
         - overall_risk_level, overall_risk_score, risk_distribution
@@ -51,11 +51,10 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
             ]
         )
 
-    # Extract contract metadata from the first record's source namespace
-    first_source = data[0].get("source", {})
-    contract_id = first_source.get("contract_id", "unknown")
-    contract_title = first_source.get("title", "unknown")
-    parties = first_source.get("parties", [])
+    # Every clause of a contract carries the same contract metadata
+    contract_id = data[0].get("source.contract_id", "unknown")
+    contract_title = data[0].get("source.title", "unknown")
+    parties = data[0].get("source.parties", [])
 
     # Collect analyses from all clause records
     risk_counts = {"high": 0, "medium": 0, "low": 0}
@@ -66,13 +65,10 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     negotiation_items: list[dict[str, Any]] = []
 
     for record in data:
-        analysis = record.get("analyze_clause", {})
-        clause_meta = record.get("split_into_clauses", {})
-
-        risk_level = analysis.get("risk_level", "low")
-        risk_score = analysis.get("risk_score", 0.0)
-        clause_number = clause_meta.get("clause_number", 0)
-        clause_title = clause_meta.get("clause_title", "Unknown")
+        risk_level = record.get("risk_level", "low")
+        risk_score = record.get("risk_score", 0.0)
+        clause_number = record.get("split_into_clauses.clause_number", 0)
+        clause_title = record.get("split_into_clauses.clause_title", "Unknown")
 
         # Count risk levels
         if risk_level in risk_counts:
@@ -86,14 +82,14 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
                     "clause_number": clause_number,
                     "clause_title": clause_title,
                     "risk_score": risk_score,
-                    "risk_indicators": analysis.get("risk_indicators", []),
-                    "recommended_action": analysis.get("recommended_action", "flag_for_legal"),
-                    "reasoning": analysis.get("reasoning", ""),
+                    "risk_indicators": record.get("risk_indicators", []),
+                    "recommended_action": record.get("recommended_action", "flag_for_legal"),
+                    "reasoning": record.get("reasoning", ""),
                 }
             )
 
         # Collect obligations with clause reference
-        for obligation in analysis.get("obligations", []):
+        for obligation in record.get("obligations", []):
             all_obligations.append(
                 {
                     "clause_number": clause_number,
@@ -103,7 +99,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
             )
 
         # Collect deadlines with clause reference
-        for deadline in analysis.get("deadlines", []):
+        for deadline in record.get("deadlines", []):
             all_deadlines.append(
                 {
                     "clause_number": clause_number,
@@ -113,7 +109,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
             )
 
         # Track items that need negotiation
-        action = analysis.get("recommended_action", "accept")
+        action = record.get("recommended_action", "accept")
         if action in ("negotiate", "reject", "flag_for_legal"):
             negotiation_items.append(
                 {

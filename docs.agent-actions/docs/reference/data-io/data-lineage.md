@@ -143,7 +143,7 @@ actions:
 
   - name: gemini_answer
     dependencies: [prepare]
-    model_vendor: google
+    model_vendor: gemini
 
   - name: best_answer
     dependencies: [gpt4_answer, claude_answer, gemini_answer]

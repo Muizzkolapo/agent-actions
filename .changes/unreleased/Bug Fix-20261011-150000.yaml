@@ -1,0 +1,17 @@
+kind: Bug Fix
+body: >-
+  Two example tools read input they were not handed, so every read fell to its default and
+  the run still reported success. The `contract_reviewer` FILE tool read each clause under
+  its action's name: its report named the contract "unknown", rated every clause low and
+  numbered every obligation clause 0. It now reads the flat keys a FILE tool is handed, and
+  the action observes the clause number and title it reports. The `incident_triage` record
+  tool read `final_severity`, `affected_services` and its seeds as bare keys, so every
+  incident was routed as SEV3 against an empty roster; it now reads each under its action,
+  and the seeds under `seed`. The examples' READMEs are corrected where a block named an
+  action it did not depend on, guarded on a field with no action name, or showed a FILE
+  tool returning a plain list of new rows. In the docs, `model_vendor: google` is now
+  `gemini`, `data_source` is shown under `defaults:`, the only place the loader takes it,
+  and the "Capturing Dispatch Results" section is removed: `add_dispatch` is not a key an
+  action or `defaults:` accepts. The docs-block test now reads the examples' pages too,
+  checks `drop` and `passthrough` names, and no longer excuses those docs blocks.
+time: 2026-10-11T15:00:00Z

@@ -253,6 +253,7 @@ Guards prevent expensive actions from running on records that don't meet a thres
 
 ```yaml
 - name: generate_response
+  dependencies: [aggregate_scores]
   guard:
     condition: 'aggregate_scores.consensus_score >= 6'
     on_false: "filter"
