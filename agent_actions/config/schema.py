@@ -97,6 +97,7 @@ _RETIRED_CONFIG_KEYS: dict[str, str] = {
     "idempotency_key": "",
     "interceptors": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
+    "policy": "",
     "reduce_key": _FILE_GRANULARITY_REPLACES_REDUCE_KEY,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
     "version_mode": _VERSION_ORDER_HINT,
@@ -533,7 +534,6 @@ class ActionConfig(_RetryValidators):
     guard: str | dict[str, Any] | None = Field(
         default=None, description="Condition for action execution"
     )
-    policy: str | None = Field(default=None, description="Execution policy")
     versions: VersionConfig | None = Field(default=None, description="Version configuration")
     version_consumption: VersionConsumptionConfig | None = Field(
         default=None, description="Version output consumption configuration"
