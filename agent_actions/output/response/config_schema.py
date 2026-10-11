@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from agent_actions.config.schema import ChunkConfig
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ValidationError
+from agent_actions.llm.config.vendor import canonical_vendor
 from agent_actions.utils.constants import DANGEROUS_PATTERNS, contains_dangerous_pattern
 
 
@@ -232,6 +233,11 @@ class AgentConfig(BaseModel):
         "(seed, observe, drop directives). Normalized in-place by config pipeline "
         "(version references expanded to field prefix patterns).",
     )
+
+    @field_validator("model_vendor", mode="before")
+    @classmethod
+    def _one_name_for_a_vendor(cls, value: Any) -> Any:
+        return canonical_vendor(value)
 
     model_config = ConfigDict(extra="allow")
 

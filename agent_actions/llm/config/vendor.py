@@ -16,9 +16,6 @@ class VendorType(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
-    # GOOGLE is an alias for GEMINI so users can write vendor_type="google"
-    # and resolve to the same Gemini provider. Both names share the "gemini" value.
-    GOOGLE = "gemini"
     GROQ = "groq"
     COHERE = "cohere"
 
@@ -27,6 +24,15 @@ class VendorType(str, Enum):
     TOOL = "tool"
     HITL = "hitl"
     AGAC_PROVIDER = "agac-provider"
+
+
+# Names the configuration reference gives a vendor that differ from its value.
+VENDOR_ALIASES: dict[str, str] = {"google": VendorType.GEMINI.value}
+
+
+def canonical_vendor(name: Any) -> Any:
+    """The vendor's one name; anything that is not an alias comes back as it was."""
+    return VENDOR_ALIASES.get(name, name) if isinstance(name, str) else name
 
 
 class ResponseFormat(str, Enum):
