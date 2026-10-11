@@ -59,27 +59,39 @@ def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str)
 
 
 def _collect_field_nodes(node: ASTNode) -> list[str]:
-    """Every field path the clause reads, from both sides of every comparison.
+    """Every field path the clause reads, anywhere in the tree.
 
-    A function argument is walked too (``LENGTH(name) > 2``) — otherwise a bare,
-    unnamespaced field hidden inside a function call bypasses this check the same
-    way an unwrapped one used to, and the record is filtered the same way.
+    Not scoped to comparison operands: a bare field or a bare function call is a
+    complete guard clause on its own (``clause: "name"``, ``clause: "LENGTH(name)"``),
+    with no comparison for a comparison-scoped walk to find. An unnamespaced field
+    there resolves against nothing and filters every record exactly as one beside
+    ``==`` does, so it needs the same check.
     """
-    from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode, FunctionNode
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        ComparisonNode,
+        FieldNode,
+        FunctionNode,
+        LogicalNode,
+    )
 
     paths: list[str] = []
 
-    def walk(operand: ASTNode) -> None:
+    def walk(operand: ASTNode | None) -> None:
+        if operand is None:
+            return
         if isinstance(operand, FieldNode):
             paths.append(operand.field_path)
         elif isinstance(operand, FunctionNode):
             for argument in operand.arguments:
                 walk(argument)
+        elif isinstance(operand, ComparisonNode):
+            walk(operand.left)
+            walk(operand.right)
+        elif isinstance(operand, LogicalNode):
+            walk(operand.left)
+            walk(operand.right)
 
-    for comparison in _find_comparison_nodes(node):
-        for side in (comparison.left, comparison.right):
-            if side is not None:
-                walk(side)
+    walk(node)
     return paths
 
 

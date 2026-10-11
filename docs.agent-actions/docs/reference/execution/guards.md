@@ -79,10 +79,11 @@ parentheses: `NOT (score_review.score BETWEEN 50 AND 100)`.
 | `LOWER` | `LOWER(classify.category) == "spam"` |
 | `TRIM` | `TRIM(summarize.title) != ""` |
 
-Each takes exactly one argument — a field, string, number, or another function call — and
-returns a plain value a comparison can use. `LENGTH` counts a string's characters or a list's
-items, or treats a non-string, non-list value as its string form; `NULL` counts as length `0`.
-A field used inside a function still needs its action prefix, exactly as it would outside one.
+Each takes exactly one argument — a field, string, number, boolean, or `NULL` — and returns a
+plain value a comparison can use. A function call is not itself a valid argument, so these do
+not nest: `LENGTH(TRIM(x))` is refused. `LENGTH` counts a string's characters or a list's items,
+or treats a non-string, non-list value as its string form; `NULL` counts as length `0`. A field
+used inside a function still needs its action prefix, exactly as it would outside one.
 
 Guard functions are not available in an `expression` [expectation](../validation/expectations.md#expressions)
 condition, which shares this grammar but evaluates against an action's own output, not a
