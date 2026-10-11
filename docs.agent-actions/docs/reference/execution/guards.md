@@ -56,10 +56,19 @@ guard:
 | `CONTAINS` | `extract.tags CONTAINS "important"` |
 | `LIKE` | `lookup.name LIKE "prod_*"` |
 | `BETWEEN` | `score_review.score BETWEEN 50 AND 100` |
+| `NOT BETWEEN` | `score_review.score NOT BETWEEN 50 AND 100` |
 | `IS NULL` | `summarize.description IS NULL` |
 
 Each field carries its action prefix, as every guard field must — see
 [Context Access](#context-access).
+
+`BETWEEN` includes both ends of its range, so the example keeps a score of 50 and a score of
+100. The range can also be written as a list, `score_review.score BETWEEN [50, 100]`, and the
+two forms mean the same. The ends are two numbers or two quoted strings, written in the
+clause. A clause that gives one end only (`BETWEEN 50`), gives `NULL` or a boolean for an end,
+or names a field for an end (`BETWEEN limits.low AND limits.high`), is refused before the
+run starts. To keep what is outside a range, write `NOT BETWEEN`, or put the range in
+parentheses: `NOT (score_review.score BETWEEN 50 AND 100)`.
 
 `IS NULL` is the one to watch. A name it cannot resolve — misspelled, or written without its
 prefix — is treated as null, so the clause is true and the record passes. Every other operator
