@@ -11,6 +11,7 @@ from pathlib import Path
 import jinja2
 import pytest
 
+from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
 _LOGGER_NAME = "agent_actions.prompt.render_workflow"
@@ -95,20 +96,20 @@ def test_one_collision_among_three_files_is_reported_alone(
     assert "std_action" not in warnings[0]
 
 
-def test_jinja_module_internals_do_not_become_workflow_globals(tmp_path: Path, templates: Path):
+@pytest.mark.parametrize("internal", ["__name__", "_body_stream"])
+def test_a_jinja_module_internal_is_not_a_workflow_global(
+    tmp_path: Path, templates: Path, internal: str
+):
+    """Registering them made the name resolve — to whichever file iterdir() yielded last."""
     (templates / "a.j2").write_text("{% set tone = 'formal' %}\n")
     (templates / "b.j2").write_text("{% macro m() %}x{% endmacro %}\n")
     config = tmp_path / "wf.yml"
-    config.write_text(
-        'name: wf\ndescription: "[{{ __name__ }}][{{ _body_stream }}]"\nactions: []\n'
-    )
+    config.write_text(f'name: wf\ndescription: "[{{{{ {internal} }}}}]"\nactions: []\n')
 
-    rendered = render_pipeline_with_templates(
-        config, templates, compile_schemas=False, project_root=tmp_path
-    )
-
-    assert "[][]" in rendered
-    assert ".j2" not in rendered
+    with pytest.raises(TemplateRenderingError, match=f"'{internal}' is undefined"):
+        render_pipeline_with_templates(
+            config, templates, compile_schemas=False, project_root=tmp_path
+        )
 
 
 def test_two_files_defining_the_same_underscore_name_do_not_collide(
