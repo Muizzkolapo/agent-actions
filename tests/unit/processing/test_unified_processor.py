@@ -234,6 +234,30 @@ class TestUnifiedProcessorGuardFilter:
         assert stats.filtered == 1
         assert stats.success == 0
 
+    def test_a_record_the_guard_could_not_be_evaluated_for_keeps_its_upstream_content(self):
+        """The FAILED tombstone must not lose the record's upstream content (1247).
+
+        _build_failed_tombstone reads only input_record, with no source_snapshot
+        fallback (unlike every other FAILED branch in result_collector.py) -- a
+        guard-evaluation failure must set both, the same way the enrichment-failure
+        handler beside it already does.
+        """
+        processor = UnifiedProcessor()
+        strategy = NoOpStrategy()
+        context = _make_context(guard={"clause": "item.flag == true", "behavior": "skip"})
+
+        failed_record = _make_record("sg-failed", upstream_action={"field": "keep-me"})
+
+        with patch(
+            "agent_actions.processing.unified.prefilter_by_guard",
+            return_value=([], [], [], [], [(failed_record, ValueError("boom"))]),
+        ):
+            output, stats = processor.process([failed_record], context, strategy)
+
+        assert stats.failed == 1
+        assert len(output) == 1
+        assert output[0]["content"].get("upstream_action") == {"field": "keep-me"}
+
     def test_mixed_guard_outcomes(self):
         """Some records pass, some skip, some filter."""
         processor = UnifiedProcessor()
