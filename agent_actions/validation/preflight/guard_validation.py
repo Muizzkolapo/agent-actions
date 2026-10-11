@@ -95,6 +95,55 @@ def _collect_field_nodes(node: ASTNode) -> list[str]:
     return paths
 
 
+def _check_function_calls(ast_root: ASTNode, clause: str, action_name: str) -> list[str]:
+    """Refuse a guard calling an unregistered function, or the wrong number of arguments.
+
+    Both are deterministic -- every record would fail evaluation identically -- so this
+    catches them before any record is read, instead of at the first one `evaluate_node`
+    raises on. A wrong arity is detected by calling the real function with placeholder
+    values of the written argument count: every builtin validates count before it looks
+    at a value, so this needs no per-function arity table to drift out of sync.
+    """
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        ComparisonNode,
+        FunctionNode,
+        LogicalNode,
+    )
+    from agent_actions.input.preprocessing.parsing.operators import FUNCTIONS
+
+    errors: list[str] = []
+
+    def walk(node: ASTNode | None) -> None:
+        if node is None:
+            return
+        if isinstance(node, FunctionNode):
+            if node.function_name not in FUNCTIONS:
+                errors.append(
+                    f"Action '{action_name}': guard condition '{clause}' calls "
+                    f"'{node.function_name}', which is not a registered function. "
+                    f"Available: {', '.join(sorted(FUNCTIONS))}."
+                )
+            else:
+                try:
+                    FUNCTIONS[node.function_name](["x"] * len(node.arguments))
+                except ValueError as e:
+                    errors.append(
+                        f"Action '{action_name}': guard condition '{clause}' calls "
+                        f"'{node.function_name}' with {len(node.arguments)} argument(s): {e}"
+                    )
+            for argument in node.arguments:
+                walk(argument)
+        elif isinstance(node, ComparisonNode):
+            walk(node.left)
+            walk(node.right)
+        elif isinstance(node, LogicalNode):
+            walk(node.left)
+            walk(node.right)
+
+    walk(ast_root)
+    return errors
+
+
 def _version_params(config: dict) -> list[str]:
     """The version names a guard clause may use bare, read from the expanded config.
 
@@ -183,6 +232,7 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
 
         if parse_result.ast is not None:
             errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
+            errors.extend(_check_function_calls(parse_result.ast.root, clause, action_name))
             errors.extend(
                 _check_bare_field_references(
                     parse_result.ast.root, clause, action_name, config, action_configs
