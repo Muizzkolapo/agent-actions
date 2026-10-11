@@ -22,6 +22,7 @@ from agent_actions.errors import AgentActionsError
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.strategies.online_llm import _build_prep_failed_result
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.prompt.service import PromptPreparationService
 from agent_actions.record.envelope import RecordEnvelope, RecordState
 from tests._support.agac_cli import run_agac
@@ -246,7 +247,7 @@ actions:
 HITL = "hitl_granularity"
 
 
-def _hitl_config(granularity_line: str) -> str:
+def _hitl_config(granularity_line: str, kind_line: str = "    kind: hitl\n") -> str:
     return f"""\
 name: {HITL}
 description: "A HITL action with no granularity"
@@ -265,8 +266,7 @@ actions:
     schema: {{ summary: string }}
     context_scope: {{ observe: [source.text] }}
   - name: review_data
-    kind: hitl
-    dependencies: [extract_data]
+{kind_line}    dependencies: [extract_data]
     intent: "Human reviews extracted data before processing"
 {granularity_line}    hitl:
       instructions: "Review the extracted data for accuracy"
@@ -276,8 +276,8 @@ actions:
 """
 
 
-def _hitl_run(base: Path, granularity_line: str = ""):
-    root = _scratch_project(base, HITL, _hitl_config(granularity_line), ROWS)
+def _hitl_run(base: Path, granularity_line: str = "", kind_line: str = "    kind: hitl\n"):
+    root = _scratch_project(base, HITL, _hitl_config(granularity_line, kind_line), ROWS)
     return _agac_run(root, HITL, AGAC_HITL_AUTO_APPROVE="true")
 
 
@@ -289,6 +289,22 @@ def test_a_hitl_action_with_no_granularity_runs(tmp_path):
     assert "HITL actions require FILE granularity" not in output
     # The LLM action beside it, with no granularity, still runs once per record.
     assert re.search(r"extract_data\s+2 records", output), output
+
+
+@pytest.mark.parametrize(
+    "action, granularity",
+    [
+        ({"name": "x", "kind": "hitl"}, "file"),
+        ({"name": "x", "kind": "hitl", "granularity": "record"}, "record"),
+        ({"name": "x", "kind": "llm"}, "record"),
+        ({"name": "x", "kind": "tool"}, "record"),
+        ({"name": "x"}, "record"),
+    ],
+)
+def test_only_a_hitl_action_is_built_at_file_when_it_sets_no_granularity(action, granularity):
+    entry = ConfigRenderingService()._build_agent_entry_from_action(action)
+
+    assert str(entry["granularity"]).lower() == granularity
 
 
 def test_an_explicit_record_granularity_is_still_refused(tmp_path):
