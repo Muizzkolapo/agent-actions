@@ -7,5 +7,7 @@ body: >-
   one, which an error quoting record content or a provider reply can hold, replaced the
   line with a traceback of about twenty lines and lost the error and its record detail.
   Text an event carries is now printed as text; the formatter's own colour is unchanged.
-  The log files already kept the full message and are unaffected.
+  `agac dispositions --quarantined` had the same flaw in its reason column, where a
+  failure reason holding a closing tag raised instead of printing the table, and prints
+  it as text too. The log files already kept the full message and are unaffected.
 time: 2026-10-11T14:00:00Z
