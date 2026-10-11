@@ -70,6 +70,24 @@ or names a field for an end (`BETWEEN limits.low AND limits.high`), is refused b
 run starts. To keep what is outside a range, write `NOT BETWEEN`, or put the range in
 parentheses: `NOT (score_review.score BETWEEN 50 AND 100)`.
 
+### Functions
+
+| Function | Example |
+|----------|---------|
+| `LENGTH` | `LENGTH(extract.items) > 2` |
+| `UPPER` | `UPPER(classify.category) == "SPAM"` |
+| `LOWER` | `LOWER(classify.category) == "spam"` |
+| `TRIM` | `TRIM(summarize.title) != ""` |
+
+Each takes exactly one argument — a field, string, number, or another function call — and
+returns a plain value a comparison can use. `LENGTH` counts a string's characters or a list's
+items, or treats a non-string, non-list value as its string form; `NULL` counts as length `0`.
+A field used inside a function still needs its action prefix, exactly as it would outside one.
+
+Guard functions are not available in an `expression` [expectation](../validation/expectations.md#expressions)
+condition, which shares this grammar but evaluates against an action's own output, not a
+stored record.
+
 `IS NULL` is the one to watch. A name it cannot resolve — misspelled, or written without its
 prefix — is treated as null, so the clause is true and the record passes. Every other operator
 reports a missing field and filters; `IS NULL` alone lets it through, and logs nothing while

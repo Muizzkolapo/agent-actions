@@ -59,14 +59,27 @@ def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str)
 
 
 def _collect_field_nodes(node: ASTNode) -> list[str]:
-    """Every field path the clause reads, from both sides of every comparison."""
-    from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode
+    """Every field path the clause reads, from both sides of every comparison.
+
+    A function argument is walked too (``LENGTH(name) > 2``) — otherwise a bare,
+    unnamespaced field hidden inside a function call bypasses this check the same
+    way an unwrapped one used to, and the record is filtered the same way.
+    """
+    from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode, FunctionNode
 
     paths: list[str] = []
+
+    def walk(operand: ASTNode) -> None:
+        if isinstance(operand, FieldNode):
+            paths.append(operand.field_path)
+        elif isinstance(operand, FunctionNode):
+            for argument in operand.arguments:
+                walk(argument)
+
     for comparison in _find_comparison_nodes(node):
         for side in (comparison.left, comparison.right):
-            if isinstance(side, FieldNode):
-                paths.append(side.field_path)
+            if side is not None:
+                walk(side)
     return paths
 
 
