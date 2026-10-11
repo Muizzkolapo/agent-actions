@@ -158,6 +158,29 @@ def test_a_file_a_downstream_action_fails_to_store_is_reported_as_a_failed_write
     _reported_as_a_failed_write(online, result, READER, fault)
 
 
+@FAULTS
+def test_a_file_a_downstream_action_fails_to_store_names_the_stores_error(
+    online,  # noqa: F811
+    fault,
+):
+    """The reader's failure line and its events said only 'Error saving main output';
+    the store's error was in the write line above them alone."""
+    _with_a_reader(online)
+    with _the_store_fails_to_write(READER, NOT_STORED, fault):
+        result = _run("--fresh")
+
+    assert result.exit_code == 1, result.output
+    failed = [
+        event["message"]
+        for event in _events(online)
+        if "Error generating target" in event["message"]
+    ]
+    assert failed
+    for message in failed:
+        assert "Error generating target: Error saving main output: " in message, message
+        assert f"failed: {fault}" in message, message
+
+
 def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_write(
     project,  # noqa: F811
 ):
