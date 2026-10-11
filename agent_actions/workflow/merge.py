@@ -124,7 +124,12 @@ def merge_branch_records(
 
 
 def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
-    """Return the first truthy correlation value from top-level or content, or None."""
+    """Return the first truthy correlation value from top-level or content, or None.
+
+    Truthy, not merely present: these ids are framework-assigned, so an empty one means
+    unassigned rather than a group named "". Presence-gating it merges every unassigned
+    record into one and loses the rest.
+    """
     for key_name in key_candidates:
         correlation_value = record.get(key_name)
         if not correlation_value:
@@ -175,7 +180,7 @@ def _identify_branch_mapping(
 
 
 def _merge_group_deep(group: list[dict[str, Any]]) -> dict[str, Any]:
-    """Merge a group of records using deep_merge_record (legacy/aggregation path)."""
+    """Merge a group whose branches cannot be told apart, namespace by namespace."""
     merged: dict[str, Any] = {}
     for record in group:
         deep_merge_record(merged, record)

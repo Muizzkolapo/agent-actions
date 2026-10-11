@@ -5,6 +5,7 @@ The four-surface refusal comes free from `_RETIRED_CONFIG_KEYS`, which
 declaration and the docs echo, which are what made the key look real.
 """
 
+import subprocess
 from pathlib import Path
 
 from agent_actions.config.schema import _RETIRED_CONFIG_KEYS, ActionConfig
@@ -13,6 +14,22 @@ REPO = Path(__file__).resolve().parents[3]
 
 # What a reader who wrote the key was actually asking for, and where it still lives.
 REPLACEMENT = "granularity: File"
+
+
+def _tracked_configs() -> list[str]:
+    """Every tracked YAML path, from git rather than a glob.
+
+    A glob has to name each directory and suffix, and missed `.yaml` and
+    `tests/fixtures/workflows/` — both of which hold loadable workflow configs.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "*.yml", "*.yaml"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in out.stdout.splitlines() if line]
 
 
 class TestTheKeyIsRetiredRatherThanDeclared:
@@ -68,12 +85,17 @@ class TestNoProjectInThisRepoStillWritesIt:
     """Retiring it breaks any config that writes it, so none may be left behind."""
 
     def test_no_shipped_project_fixture_or_example_declares_it(self):
-        files = sorted((REPO / "examples").rglob("*.yml"))
-        files += sorted((REPO / "tests/integration/fixtures").rglob("*.yml"))
+        """Every tracked config, both suffixes: a workflow fixture writing a refused key
+        fails at load, and `.yaml` and `tests/fixtures/` both hold such configs."""
+        files = [
+            REPO / path for path in _tracked_configs() if path.startswith(("examples/", "tests/"))
+        ]
         assert files, "no project files found"
 
         offenders = [
-            str(path.relative_to(REPO)) for path in files if "reduce_key" in path.read_text()
+            str(path.relative_to(REPO))
+            for path in files
+            if path.exists() and "reduce_key" in path.read_text()
         ]
 
         assert offenders == [], offenders

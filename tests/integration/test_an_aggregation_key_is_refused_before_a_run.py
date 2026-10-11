@@ -187,4 +187,8 @@ def test_the_same_workflow_without_the_key_still_runs(tmp_path):
 
     assert code == 0, output
     assert f"✓ {JOINED}" in output, output
-    assert "3 records" in output, f"the fan-in no longer runs once per input row: {output}"
+    # Named, not a bare "3 records": the branches report that too, so an unnamed count
+    # passes while the joining action regressed to one execution — the bug's own shape.
+    assert f"✓ {JOINED} 3 records" in output, (
+        f"the fan-in no longer runs once per input row: {output}"
+    )

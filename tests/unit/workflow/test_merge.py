@@ -386,6 +386,22 @@ class TestMergeRecordsByKey:
 
         assert len(result) == 2
 
+    def test_empty_identity_key_does_not_collapse_records(self):
+        """Identity keys stay truthiness-gated: an unset source_guid is not a group.
+
+        These ids are framework-assigned, so an empty one means unassigned rather than a
+        group named "". Presence-gating the lookup instead merges every unassigned record
+        into one and loses the rest, silently.
+        """
+        records = [
+            {"source_guid": "", "content": {"a": {"value": "a"}}},
+            {"source_guid": "", "content": {"b": {"value": "b"}}},
+        ]
+
+        result = merge_records_by_key(records)
+
+        assert len(result) == 2
+
     def test_handles_non_dict_records(self):
         """Should include non-dict records as-is."""
         records = [
