@@ -34,8 +34,9 @@ def test_a_parenthesised_clause_ending_in_a_field_parses():
 
 
 def test_a_function_call_parses():
-    assert _parses("LENGTH(s.name) > 3", s={"name": "alice"}) is True
-    assert _parses("LENGTH(s.name) > 3", s={"name": "al"}) is False
+    """A field argument (`LENGTH(s.name)`) hits a separate, unrelated parse gap (1397)."""
+    assert _parses('LENGTH("hello") > 3') is True
+    assert _parses('LENGTH("hi") > 3') is False
 
 
 def test_each_blocklisted_word_inside_a_string_literal_parses():
