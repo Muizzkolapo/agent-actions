@@ -27,7 +27,7 @@ agac --version
 Enable debug mode with verbose logging and source file/line references.
 
 ```bash
-agac run -a my_workflow --debug
+agac --debug run -a my_workflow
 ```
 
 ### `-v` / `--verbose`
@@ -35,7 +35,7 @@ agac run -a my_workflow --debug
 Enable verbose output.
 
 ```bash
-agac run -a my_workflow --verbose
+agac --verbose run -a my_workflow
 ```
 
 ### `-q` / `--quiet`
@@ -43,7 +43,7 @@ agac run -a my_workflow --verbose
 Suppress non-essential output. Useful for scripts and CI/CD pipelines where you only want to see errors.
 
 ```bash
-agac run -a my_workflow --quiet
+agac --quiet run -a my_workflow
 ```
 
 ### `--help`
@@ -77,17 +77,17 @@ my-project/
 
 # From project root
 cd my-project
-agac run my-workflow.yaml
+agac run -a my_workflow
 # 📁 Project root: .
 
 # From subdirectory
 cd my-project/src/utils
-agac run my-workflow.yaml
+agac run -a my_workflow
 # 📁 Project root: ../..
 
 # From any depth
 cd my-project/src/agents/helpers
-agac run my-workflow.yaml
+agac run -a my_workflow
 # 📁 Project root: ../../../
 ```
 
@@ -97,7 +97,7 @@ If you're outside a project directory, you'll get a helpful error:
 
 ```bash
 $ cd /tmp
-$ agac run my-workflow.yaml
+$ agac run -a my_workflow
 
 Error: Not in an Agent Actions project
 

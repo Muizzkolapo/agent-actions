@@ -553,7 +553,7 @@ This is important: guards prevent downstream work. Place guards as early as poss
 ### Check Schema Validation Errors
 
 ```bash
-agac run -a workflow --log-level DEBUG
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
 Look for:
@@ -565,7 +565,7 @@ SchemaValidationError: Value 'invalid' not in enum
 ### Check Guard Evaluation
 
 ```bash
-agac run -a workflow --log-level DEBUG
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
 Look for:
