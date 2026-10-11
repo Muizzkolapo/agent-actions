@@ -13,8 +13,6 @@ from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
 
-_MISSING = object()
-
 
 def deep_merge_record(existing: dict[str, Any], new_record: dict[str, Any]) -> None:
     """Merge new_record into existing in place: content dicts merge, lineage deduplicates, other fields first-wins."""
@@ -126,7 +124,12 @@ def merge_branch_records(
 
 
 def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
-    """Return the first truthy correlation value from top-level or content, or None."""
+    """Return the first truthy correlation value from top-level or content, or None.
+
+    Truthy, not merely present: these ids are framework-assigned, so an empty one means
+    unassigned rather than a group named "". Presence-gating it merges every unassigned
+    record into one and loses the rest.
+    """
     for key_name in key_candidates:
         correlation_value = record.get(key_name)
         if not correlation_value:
@@ -136,24 +139,6 @@ def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> 
         if correlation_value:
             return str(correlation_value)
     return None
-
-
-def get_reduce_key_value(record: dict[str, Any], reduce_key: str) -> str | None:
-    """Return the record's *reduce_key* value as a group label, or None when absent.
-
-    A reduce_key names a field of the user's own data, so ``0``, ``""`` and
-    ``False`` are valid labels and presence — not truthiness — decides whether
-    the record is keyed.  Automatic identity candidates stay truthiness-gated:
-    those ids are framework-assigned, and an empty one means unassigned rather
-    than a group named "".
-    """
-    value = record.get(reduce_key, _MISSING)
-    if value is _MISSING or value is None:
-        content = record.get("content")
-        value = content.get(reduce_key, _MISSING) if isinstance(content, dict) else _MISSING
-    if value is _MISSING or value is None:
-        return None
-    return str(value)
 
 
 def _identify_branch_mapping(
@@ -195,7 +180,7 @@ def _identify_branch_mapping(
 
 
 def _merge_group_deep(group: list[dict[str, Any]]) -> dict[str, Any]:
-    """Merge a group of records using deep_merge_record (legacy/aggregation path)."""
+    """Merge a group whose branches cannot be told apart, namespace by namespace."""
     merged: dict[str, Any] = {}
     for record in group:
         deep_merge_record(merged, record)
@@ -236,16 +221,15 @@ def _select_universal_key(records: list[dict[str, Any]]) -> str | None:
     return None
 
 
-def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> list[Any]:
+def merge_records_by_key(records: list[Any]) -> list[Any]:
     """Merge records sharing the same correlation key.
 
     The grouping key is chosen once for the whole pool (first universal
     candidate, identity keys before lineage keys) so branches carrying
-    different key sets still group by their shared identity; an explicit
-    ``reduce_key`` takes precedence per record.  Same-source fan-in merges
-    via ``merge_branch_records`` with ``group[0]`` as the canonical
-    upstream (its shared namespaces survive); ``reduce_key`` aggregation
-    deep-merges groups instead.
+    different key sets still group by their shared identity.  Same-source
+    fan-in merges via ``merge_branch_records`` with ``group[0]`` as the
+    canonical upstream (its shared namespaces survive); a group whose
+    branches cannot be told apart deep-merges instead.
     """
     groups_by_key: dict[str, list[dict[str, Any]]] = {}
     records_without_key: list[Any] = []
@@ -258,9 +242,7 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
             records_without_key.append(record)
             continue
 
-        correlation_value = get_reduce_key_value(record, reduce_key) if reduce_key else None
-        if correlation_value is None:
-            correlation_value = get_correlation_value(record, auto_candidates)
+        correlation_value = get_correlation_value(record, auto_candidates)
 
         if correlation_value is not None:
             groups_by_key.setdefault(correlation_value, []).append(record)
@@ -273,12 +255,6 @@ def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> l
             # Single-branch passthrough — not a fan-in, so no cascade
             # propagation needed.  The record keeps its original _state.
             merged_results.append(group[0])
-            continue
-
-        if reduce_key:
-            result = _merge_group_deep(group)
-            _propagate_cascade_blocking(result, group)
-            merged_results.append(result)
             continue
 
         branch_mapping = _identify_branch_mapping(group)
@@ -327,10 +303,9 @@ def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, An
 
 def merge_json_files(
     file_paths: list[Path],
-    reduce_key: str | None = None,
     unreadable: list[Path] | None = None,
 ) -> list[Any]:
-    """Load and merge JSON records from multiple files by correlation key (MapReduce pattern).
+    """Load and merge JSON records from multiple files by correlation key.
 
     Reading fails open: one corrupt file must not abort the merge. That leaves
     the caller a short result and no exception, so ``unreadable`` collects the
@@ -354,14 +329,13 @@ def merge_json_files(
                 e,
             )
 
-    merged = merge_records_by_key(all_records, reduce_key)
+    merged = merge_records_by_key(all_records)
 
     logger.debug(
-        "Merged %d records from %d files into %d correlated records (key=%s)",
+        "Merged %d records from %d files into %d correlated records",
         len(all_records),
         len(file_paths),
         len(merged),
-        reduce_key or "auto",
     )
 
     return merged

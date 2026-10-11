@@ -230,16 +230,13 @@ def infer_dependencies(
     # For fan-in, only the primary dependency is an input source
     # The rest become context sources (loaded from record namespaces via additive content model)
     #
-    # Exception: If reduce_key is set, it's an aggregation pattern - all are input sources
-    #
     # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
     # that matches version branches (research_1, research_2), ALL matching branches
     # become input sources.
     fan_in_context_sources: list[str] = []
-    has_reduce_key = action_config.get("reduce_key") is not None
     is_parallel = _is_parallel_branches(all_deps)
 
-    if len(all_deps) > 1 and not is_parallel and not has_reduce_key:
+    if len(all_deps) > 1 and not is_parallel:
         # Fan-in detected - use shared helper
         primary_dep = action_config.get("primary_dependency")
         try:
@@ -263,7 +260,7 @@ def infer_dependencies(
             fan_in_context_sources,
         )
     else:
-        # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources
+        # Single dependency or parallel branches - all are input sources
         input_sources = all_deps
 
     # 2. Parse context_scope to find all referenced actions. Coerced here rather than at
