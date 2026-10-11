@@ -146,6 +146,20 @@ def _refuse_retired_version_keys(data: Any) -> Any:
     return data
 
 
+def refuse_blank_output_field(data: Any, surface: str) -> Any:
+    """Refuse `output_field:` written with no value.
+
+    A blank key counts as set and is dumped as None, which beats the default
+    `raw_response` and reaches pre-flight as a name that cannot be sorted.
+    """
+    if isinstance(data, dict) and "output_field" in data and data["output_field"] is None:
+        raise ValueError(
+            f"{surface} key 'output_field' is present with no value — omit it to take "
+            f"the default 'raw_response', or give it a field name"
+        )
+    return data
+
+
 def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
     """Name every undeclared key, what each resembles, and the keys *surface* takes.
 
@@ -497,7 +511,10 @@ class ActionConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
-        return refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action")
+        return refuse_blank_output_field(
+            refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action"),
+            "action",
+        )
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -650,7 +667,10 @@ class DefaultsConfig(_RetryValidators):
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return _refuse_undeclared_keys(
-            refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
+            refuse_blank_output_field(
+                refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
+                "defaults",
+            ),
             cls,
             "defaults",
         )
