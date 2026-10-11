@@ -6,65 +6,77 @@ from agent_actions import udf_tool
 @udf_tool()
 def format_catalog_entry(data: dict) -> dict:
     """Consolidate all enriched data into a clean catalog entry."""
+    # A record tool is handed one key per observed action.
+    write_description = data.get("write_description", {})
+    validate_bisac = data.get("validate_bisac", {})
+    generate_seo = data.get("generate_seo", {})
+    generate_recommendations = data.get("generate_recommendations", {})
+    assess_reading_level = data.get("assess_reading_level", {})
+    score_quality = data.get("score_quality", {})
+    # write_description's own output never carries these -- its prompt only asks for
+    # marketing_description/hook_sentence/key_benefits/target_audience -- so they are
+    # read from source, which always has them.
+    source = data.get("source", {})
+
     enriched_fields = []
 
     entry = {
-        "isbn": data.get("isbn", ""),
-        "catalog_id": f"CAT-{data.get('isbn', 'UNKNOWN')[-6:]}",
-        "title": data.get("title", ""),
-        "authors": data.get("authors", []),
-        "publisher": data.get("publisher", ""),
-        "publish_year": data.get("publish_year", 0),
-        "page_count": data.get("page_count", 0),
+        "isbn": source.get("isbn", ""),
+        "catalog_id": f"CAT-{source.get('isbn', 'UNKNOWN')[-6:]}",
+        "title": source.get("title", ""),
+        "authors": source.get("authors", []),
+        "publisher": source.get("publisher", ""),
+        "publish_year": source.get("publish_year", 0),
+        "page_count": source.get("page_count", 0),
     }
 
     # Classification
-    bisac_names = data.get("bisac_names", [])
+    bisac_names = validate_bisac.get("bisac_names", [])
     entry["primary_category"] = bisac_names[0] if bisac_names else "Uncategorized"
     entry["categories"] = bisac_names
-    entry["bisac_codes"] = data.get("bisac_codes", [])
+    entry["bisac_codes"] = validate_bisac.get("bisac_codes", [])
     if bisac_names:
         enriched_fields.append("classification")
 
     # Marketing content
-    hook = data.get("hook_sentence", "")
-    full_desc = data.get("marketing_description", "")
+    hook = write_description.get("hook_sentence", "")
+    full_desc = write_description.get("marketing_description", "")
     entry["short_description"] = (
         hook if hook else full_desc[:200] + "..." if len(full_desc) > 200 else full_desc
     )
     entry["full_description"] = full_desc
-    entry["key_selling_points"] = data.get("key_benefits", [])
-    entry["target_audience"] = data.get("target_audience", "")
+    entry["key_selling_points"] = write_description.get("key_benefits", [])
+    entry["target_audience"] = write_description.get("target_audience", "")
     if full_desc:
         enriched_fields.append("marketing_description")
 
     # SEO
-    primary_kw = data.get("primary_keywords", [])
-    long_tail_kw = data.get("long_tail_keywords", [])
+    primary_kw = generate_seo.get("primary_keywords", [])
+    long_tail_kw = generate_seo.get("long_tail_keywords", [])
     entry["seo_keywords"] = primary_kw + long_tail_kw
-    entry["meta_title"] = data.get("meta_title", data.get("title", ""))
-    entry["meta_description"] = data.get("meta_description", "")
+    entry["meta_title"] = generate_seo.get("meta_title", source.get("title", ""))
+    entry["meta_description"] = generate_seo.get("meta_description", "")
     if primary_kw:
         enriched_fields.append("seo_keywords")
 
     # Recommendations
-    similar = data.get("similar_books", [])
+    similar = generate_recommendations.get("similar_books", [])
     entry["similar_titles"] = similar[:5] if similar else []
-    entry["reading_path"] = data.get("reading_path", "")
+    entry["reading_path"] = generate_recommendations.get("reading_path", "")
     if similar:
         enriched_fields.append("recommendations")
 
     # Reading info
-    entry["difficulty_level"] = data.get("reading_level", "Intermediate")
-    entry["experience_required"] = data.get("years_experience_needed", "")
-    entry["prerequisites"] = data.get("prerequisites", [])
-    entry["reading_time_hours"] = data.get("estimated_reading_time", "")
-    if data.get("reading_level"):
+    entry["difficulty_level"] = assess_reading_level.get("reading_level", "Intermediate")
+    entry["experience_required"] = assess_reading_level.get("years_experience_needed", "")
+    entry["prerequisites"] = assess_reading_level.get("prerequisites", [])
+    entry["reading_time_hours"] = assess_reading_level.get("estimated_reading_time", "")
+    if assess_reading_level.get("reading_level"):
         enriched_fields.append("reading_level")
 
     # Quality
-    entry["quality_score"] = float(data.get("overall_score", 0))
-    entry["publication_ready"] = data.get("ready_for_publication", False)
+    entry["quality_score"] = float(score_quality.get("overall_score", 0))
+    entry["publication_ready"] = score_quality.get("ready_for_publication", False)
 
     # Metadata
     entry["enrichment_version"] = "1.0.0"

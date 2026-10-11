@@ -19,32 +19,15 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     Reads write_marketing_copy output and seed_data.marketplace_rules.
     Returns per-field results and overall compliance status.
     """
-    # Extract marketing copy fields
-    # Fields from observe: write_marketing_copy.* are flattened into data
-    # Try nested first (action namespace), then flat (direct fields)
+    # A record tool is handed one key per observed action.
     write_marketing_copy = data.get("write_marketing_copy", {})
-    if isinstance(write_marketing_copy, dict) and write_marketing_copy:
-        listing_title = write_marketing_copy.get("listing_title", "")
-        listing_description = write_marketing_copy.get("listing_description", "")
-        bullet_points = write_marketing_copy.get("bullet_points", [])
-        search_keywords = write_marketing_copy.get("search_keywords", [])
-    else:
-        listing_title = data.get("listing_title", "")
-        listing_description = data.get("listing_description", "")
-        bullet_points = data.get("bullet_points", [])
-        search_keywords = data.get("search_keywords", [])
+    listing_title = write_marketing_copy.get("listing_title", "")
+    listing_description = write_marketing_copy.get("listing_description", "")
+    bullet_points = write_marketing_copy.get("bullet_points", [])
+    search_keywords = write_marketing_copy.get("search_keywords", [])
 
-    # Extract marketplace rules (seed data arrives under "seed" namespace)
-    seed = data.get("seed", {})
-    if isinstance(seed, dict):
-        marketplace_rules = seed.get("marketplace_rules", {})
-    else:
-        marketplace_rules = {}
-    # Fallback: try top-level for backwards compatibility
-    if not marketplace_rules:
-        marketplace_rules = data.get("marketplace_rules", {})
-    if not isinstance(marketplace_rules, dict):
-        marketplace_rules = {}
+    # Seed data arrives under the "seed" namespace.
+    marketplace_rules = data.get("seed", {}).get("marketplace_rules", {})
 
     title_rules = marketplace_rules.get("title", {})
     desc_rules = marketplace_rules.get("description", {})
@@ -240,7 +223,7 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
                 break  # one violation per category is enough
 
     # --- Brand name in title check ---
-    brand = data.get("brand", "") or write_marketing_copy.get("brand", "")
+    brand = data.get("normalize_product", {}).get("brand", "")
     if brand and brand.lower() not in listing_title.lower():
         all_passed = False
         violations.append(f"Title must include brand name '{brand}'")

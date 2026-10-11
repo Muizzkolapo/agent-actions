@@ -71,9 +71,11 @@ def validate_bisac_codes(data: dict[str, Any]) -> dict[str, Any]:
     """
     _load_bisac_codes()
 
-    primary_code = data.get("primary_bisac_code", "")
-    primary_name = data.get("primary_bisac_name", "")
-    secondary_codes = data.get("secondary_bisac_codes", [])
+    # A record tool is handed one key per observed action.
+    review_classification = data.get("review_classification", {})
+    primary_code = review_classification.get("primary_bisac_code", "")
+    primary_name = review_classification.get("primary_bisac_name", "")
+    secondary_codes = review_classification.get("secondary_bisac_codes", [])
 
     validation_notes = []
     all_codes = []

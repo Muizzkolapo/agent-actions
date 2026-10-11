@@ -99,23 +99,21 @@ LLM generates search criteria → Tool retrieves REAL books → LLM ranks from c
 
 The ranking prompt contains an explicit rule: *"DO NOT invent or hallucinate book titles — use exact titles from candidates."* Every recommendation traces back to a real entry in `seed_data/book_catalog.json`.
 
-### Passthrough for Data Lineage
+### Reading the Original Record Deep in the Pipeline
 
-Source fields travel forward through the pipeline so deep actions can still read the original `isbn`, `title`, etc.:
+`context_scope.passthrough` re-exposes a namespace an action already observes to whatever
+observes *that* action next; it does not copy a field into the declaring action's own output,
+so `write_description`'s `passthrough: - source.isbn` (etc.) never makes `isbn` readable as
+`write_description.isbn`. A deep action that needs the original `isbn`, `title`, `authors`,
+`publisher`, `publish_year`, or `page_count` observes `source.*` directly instead — every
+action can reach `source`, regardless of how many steps separate it from the first one:
 
 ```yaml
 context_scope:
-  passthrough:
+  observe:
     - source.isbn
     - source.title
-    - source.authors
-    - source.publisher
-    - source.publish_year
-    - source.page_count
-    - source.description
 ```
-
-Downstream actions access these as `write_description.isbn`, `write_description.title`, etc.
 
 ### Quality Gate
 

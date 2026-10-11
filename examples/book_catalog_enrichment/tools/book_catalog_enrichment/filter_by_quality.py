@@ -9,9 +9,11 @@ MINIMUM_ENRICHED_FIELDS = 3
 @udf_tool()
 def filter_by_quality(data: dict) -> dict:
     """Filter catalog entries that don't meet quality thresholds."""
-    quality_score = data.get("quality_score", 0)
-    publication_ready = data.get("publication_ready", False)
-    enriched_fields = data.get("enriched_fields", [])
+    # A record tool is handed one key per observed action.
+    format_entry = data.get("format_entry", {})
+    quality_score = format_entry.get("quality_score", 0)
+    publication_ready = format_entry.get("publication_ready", False)
+    enriched_fields = format_entry.get("enriched_fields", [])
 
     reasons = []
 

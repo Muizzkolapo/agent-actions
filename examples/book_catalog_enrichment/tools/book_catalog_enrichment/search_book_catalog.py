@@ -111,10 +111,12 @@ def search_book_catalog(data: dict[str, Any]) -> dict[str, Any]:
     Queries by subject (from BISAC codes) and keywords. Every result is a
     real book with a real ISBN. No hallucination possible.
     """
-    genres = data.get("genres", [])
-    keywords = data.get("keywords", [])
-    query_text = data.get("query_text", "")
-    exclude_isbn = data.get("exclude_isbn", "") or data.get("isbn", "")
+    # A record tool is handed one key per observed action.
+    criteria = data.get("generate_search_criteria", {})
+    genres = criteria.get("genres", [])
+    keywords = criteria.get("keywords", [])
+    query_text = criteria.get("query_text", "")
+    exclude_isbn = criteria.get("exclude_isbn", "")
 
     subjects = _bisac_to_subjects(genres)
 
