@@ -54,12 +54,14 @@ def assign_team_based_on_impact(data: dict[str, Any]) -> dict[str, Any]:
     Returns: Dict with ONLY new fields (passthrough handles the rest)
     """
     # Extract context
-    severity = data.get("final_severity", "SEV3")
-    affected_services = data.get("affected_services", [])
+    # A record tool reads each observed action, and its seeds, under their names
+    severity = data.get("aggregate_severity", {}).get("final_severity", "SEV3")
+    affected_services = data.get("assess_system_impact", {}).get("affected_services", [])
 
     # Get seed data for enrichment
-    team_roster = data.get("team_roster", {}).get("oncall_teams", {})
-    service_catalog = data.get("service_catalog", {}).get("services", {})
+    seed = data.get("seed", {})
+    team_roster = seed.get("team_roster", {}).get("oncall_teams", {})
+    service_catalog = seed.get("service_catalog", {}).get("services", {})
 
     # Initialize variables with defaults to avoid unbound errors
     primary_team = None

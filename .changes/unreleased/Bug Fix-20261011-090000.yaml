@@ -1,0 +1,22 @@
+kind: Bug Fix
+body: >-
+  Examples in the bundled skill and the docs site that were refused, or failed, when copied
+  now run. A tool written as the skill showed raised `KeyError` on every record: the skill
+  said a version merge tool reads `data["evaluate_1"]["evaluate_1"]["verdict"]`, and showed a
+  FILE tool reading `item["enrich_records"]["canonical_id"]`, and three docs pages showed a
+  FILE tool reading `record["content"]`. A record tool, version merge included, reads one
+  level, `data["evaluate_1"]["verdict"]`; a FILE tool is handed one item per record holding
+  the observed fields as flat keys, `item["canonical_id"]`, or `item["action.field"]` where
+  two observed names could collide. The skill's HITL examples and the docs' "Custom Ports"
+  example left out `hitl.instructions`, or the `hitl:` block, which the loader requires. The
+  skill's rule that a guard field must be in `observe` is gone: a guard reads the record as
+  stored, so observing a field only to guard on it sends it to the model for nothing. In
+  the docs, fifteen blocks named an action in a guard, a prompt or `context_scope` without
+  depending on it, and five showed a FILE action with no `dependencies`; pre-flight refuses
+  both, and each now declares what it reads through. The translation pattern merged versions
+  named by strings, which a merge cannot collect, and now numbers them. The Context Scope page says that single-key
+  examples leave `context_scope` out. Tests keep the pages from drifting: the skill's blocks
+  load a HITL action as shown, every docs block is put to the not-upstream and first-FILE
+  refusals, the documented tool code is run by `agac run`, and no tool code on either
+  reads a version under its name twice or a record's `content`.
+time: 2026-10-11T09:00:00Z

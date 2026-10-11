@@ -143,7 +143,7 @@ actions:
 
   - name: gemini_answer
     dependencies: [prepare]
-    model_vendor: google
+    model_vendor: gemini
 
   - name: best_answer
     dependencies: [gpt4_answer, claude_answer, gemini_answer]
@@ -179,6 +179,7 @@ actions:
 
 ```yaml
 - name: combine
+  dependencies: [fast_path, slow_path]
   prompt: |
     {% if fast_path %}Fast result: {{ fast_path.result }}{% endif %}
     {% if slow_path %}Slow result: {{ slow_path.result }}{% endif %}
@@ -191,7 +192,7 @@ FILE-mode tools receive all records at once. The framework tracks each record's 
 **How it works:**
 
 1. Each input record carries its identity from the previous action
-2. The tool receives full records and returns them
+2. The tool receives one item per record, holding its observed fields, and returns them
 3. The framework matches each output to its input by `source_index`
 4. Matched outputs extend the parent's lineage chain
 5. Outputs declaring `source_index: None` (aggregation results) get fresh lineage

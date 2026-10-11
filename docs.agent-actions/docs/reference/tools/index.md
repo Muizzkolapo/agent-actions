@@ -73,7 +73,7 @@ def filter_questions_by_score(data: dict, **kwargs) -> dict:
 
 ### File Granularity
 
-Use when your logic needs cross-record context. FILE tools receive **full records** with framework metadata (`node_id`, `source_guid`, `lineage`) and a `content` dict containing business data.
+Use when your logic needs cross-record context. FILE tools receive a list with one item per record, each holding the fields the action observes as flat keys.
 
 ```python
 from agent_actions import udf_tool
@@ -81,15 +81,14 @@ from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def run_dedup(data: list[dict], **kwargs) -> list[dict]:
-    """Dedup — return full records to preserve lineage."""
+    """Dedup — return the items received to preserve lineage."""
     seen = set()
     unique = []
     for record in data:
-        content = record["content"]
-        fact = content["extract_facts"]["fact"]
+        fact = record["fact"]
         if fact not in seen:
             seen.add(fact)
-            unique.append(record)  # return the full record
+            unique.append(record)  # return the item as received
     return unique
 ```
 
@@ -99,9 +98,9 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 
 ### File Granularity Constraints
 
-- **Input is an array of full records** — each record has `content`, `node_id`, `source_guid`, `lineage`
-- **Read business data from `record["content"]["action_name"]["field"]`** — not `record["field"]`
-- **Return the original record for passthrough** (filter, dedup, sort, transform) — preserves `node_id` and lineage
+- **Input is an array with one item per record** — each item holds the fields the action observes as flat keys
+- **Read business data from `record["field"]`** — or `record["action_name.field"]` where two observed names could collide, as when the tool observes several actions by wildcard or merges versions. There is no `content` and no action name around the fields
+- **Return the item you received for passthrough** (filter, dedup, sort, transform) — preserves its identity and lineage
 - **Return `FileUDFResult` with `source_index: None` for aggregation** — says no single input produced the row; the framework mints it an identity and fresh lineage. A plain new dict in a list is rejected
 - **A position is a non-negative built-in `int`** — `source_index` takes one position, a list of them for a many-to-one output, or `None`. A negative, a bool, or a `None` inside the list is refused, and a numpy or pandas index is not an `int` — cast it with `int(idx)`. Use `None` to mean no single input produced the row, never an empty list
 - **The parent position has to resolve** — an index past the end is accepted where the tool declares it, since a tool cannot always know how many records the guard left it, but only a *contributor* is dropped that way. The scalar, or the list's first element, is the row's parent: one that names no input fails every record of its file rather than inventing a parent for the row. The action ends `completed_with_failures`, or `failed` when no record succeeds, and `agac retry` hands the tool their file again, whole (see [When a FILE Tool Fails](../execution/granularity.md#when-a-file-tool-fails))
@@ -123,18 +122,17 @@ def dedup_tool(data: list[dict], **kwargs) -> list[dict]:
     outputs = []
 
     for record in data:
-        content = record["content"]
-        fact = content["extract_facts"]["fact"]
+        fact = record["fact"]
         if fact not in seen:
             seen[fact] = True
-            outputs.append(record)  # full record → lineage extended
+            outputs.append(record)  # item as received → lineage extended
 
     return outputs
 
 
 @udf_tool(granularity=Granularity.FILE)
 def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
-    total = sum(r["content"]["score_action"]["score"] for r in data)
+    total = sum(r["score"] for r in data)
     # source_index: None — no single input produced this row → fresh lineage
     return FileUDFResult(outputs=[
         {"source_index": None, "data": {"summary": f"Total: {total}", "count": len(data)}}
@@ -143,7 +141,7 @@ def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
 
 | What you return | Framework behavior |
 |---|---|
-| Original record dict (has `node_id`) | Extends parent lineage — downstream `observe` can load ancestor data |
+| An item you received | Extends parent lineage — downstream `observe` can load ancestor data |
 | `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. |
 
 ## Tool Discovery

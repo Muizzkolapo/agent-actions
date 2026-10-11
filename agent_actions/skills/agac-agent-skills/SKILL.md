@@ -13,8 +13,8 @@ description: Build, run, inspect, and debug agent-actions workflows. Triggers on
 2. **Every action named in observe, a prompt or a guard must be upstream through `dependencies`.** Naming it does not wire it in; preflight refuses it otherwise. An action with no `dependencies` reads only the staged input, and a version merge depends on its base name.
 3. **Every `{{ namespace.field }}` in a prompt needs a matching observe.** Every observe entry feeds the prompt. If the prompt doesn't use it, remove it — you're paying tokens for nothing.
 4. **Only observe what the action needs.** Never pass large upstream fields to downstream actions when a distilled version already exists. Context bloat causes LLMs to drift off-topic.
-5. **Guard fields must be in observe.** Write `upstream.field == value`, not `field == value`.
-6. **Tools receive namespaced data.** Access as `data["action_name"]["field"]`, never `data["field"]`.
+5. **Guard fields carry their action's name.** Write `upstream.field == value`, not `field == value`. A guard reads the record as stored, so the field does not have to be in observe; observing it only to guard on it sends it to the model for nothing.
+6. **A record tool reads by action name; a FILE tool reads flat keys.** A record tool gets `data["action_name"]["field"]`, one level, version merges included. A FILE tool gets a list of items holding the observed fields as flat keys: `item["field"]`, or `item["action_name.field"]` where two observed names could collide.
 7. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
 
 ## Workflow Structure
@@ -99,7 +99,7 @@ Detailed guidance — loaded on demand:
       - source.raw_content
 ```
 
-The guard depends on `extract_data`, and `extract_data.structured_output` is in observe — that satisfies the dependency anchor rule.
+The guard reads `extract_data.is_valid` without observing it: a guard reads any field of an upstream action. `extract_data.structured_output` is in observe, which satisfies the dependency anchor rule.
 
 ### Tool Action (record mode)
 
@@ -132,7 +132,7 @@ def combine_results(data: dict[str, Any]) -> dict[str, Any]:
 
 ### Tool Action (file mode)
 
-File-mode tools receive all records as a list. Use for dedup, batching, aggregation:
+File-mode tools receive all records as a list. Each item holds the observed fields as flat keys, with no action name around them. Use for dedup, batching, aggregation:
 
 ```yaml
 - name: deduplicate
@@ -150,12 +150,14 @@ File-mode tools receive all records as a list. Use for dedup, batching, aggregat
 def deduplicate_records(data: list[dict]) -> list[dict]:
     seen, result = set(), []
     for item in data:
-        key = item["enrich_records"]["canonical_id"]
+        key = item["canonical_id"]
         if key not in seen:
             seen.add(key)
             result.append(item)
     return result
 ```
+
+A key is the bare field name when nothing else observed could carry the same name. Where it could, as when the tool observes several actions by wildcard or merges versions, the key is `action_name.field`: `item["evaluate_1.verdict"]`.
 
 Return rules:
 - Returning input items (filter/enrich): `list[dict]` — TrackedItem provenance automatic
@@ -196,11 +198,11 @@ Return rules:
       - prepare_input.expected_answer
 ```
 
-Version merge tools receive double-nested data:
+A version merge tool reads each version under its own name, one level deep like any record tool:
 ```python
-v1 = data["evaluate_1"]["evaluate_1"]["verdict"]
-v2 = data["evaluate_2"]["evaluate_2"]["verdict"]
-v3 = data["evaluate_3"]["evaluate_3"]["verdict"]
+v1 = data["evaluate_1"]["verdict"]
+v2 = data["evaluate_2"]["verdict"]
+v3 = data["evaluate_3"]["verdict"]
 ```
 
 In prompts, use `{{ version.i }}`, `{{ version.length }}`, `{{ version.first }}`, `{{ version.last }}` — bare `{{ i }}` crashes with `'i' is undefined`.
@@ -233,6 +235,7 @@ Only rewrite if checks failed:
   granularity: file
   intent: "Human reviews output before final processing"
   hitl:
+    instructions: "Check each output and approve or reject it"
     port: 3001
     timeout: 3600
   context_scope:
@@ -348,8 +351,8 @@ expect:                  # in defaults — applies to LLM actions only
 **When output is wrong but pipeline didn't crash:**
 1. Namespace names match exactly? Typos cause empty data, not errors.
 2. Guard references an existing field? Missing field evaluates to None — may silently filter all records.
-3. Tool accessing `data["namespace"]["field"]` not `data["field"]`?
-4. Version merge tool unwrapping double nesting? `data["action_1"]["action_1"]["field"]`
+3. Record tool accessing `data["namespace"]["field"]`? FILE tool accessing the flat `item["field"]` (or `item["namespace.field"]`)?
+4. Version merge tool reading each version by its own name? `data["action_1"]["field"]`, one level.
 5. Schema fields match what the LLM/tool returns? Extra fields are silently dropped.
 6. Is a large upstream field (e.g. full page content) polluting a downstream action? Check if a distilled field already carries what you need.
 

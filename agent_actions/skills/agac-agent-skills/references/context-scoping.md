@@ -100,12 +100,13 @@ The fields remain on the bus after this action completes. Downstream actions can
 
 ## Common mistakes
 
-**Guard field not in observe:** The framework can't resolve a guard condition against a field that isn't anchored. Always include the guard field in observe:
+**Observing a field only to guard on it:** A guard reads the record as stored, so it can name any field of an upstream action, observed or not. Observe a guard field only when the prompt uses it too; otherwise it goes to the model for nothing. The dependency still needs its one anchor field:
 ```yaml
+dependencies: [checker]
 guard: { condition: 'checker.passed == true', on_false: "filter" }
 context_scope:
   observe:
-    - checker.passed    # required — guard uses this field
+    - checker.summary   # the anchor, and what the prompt reads; checker.passed is not needed here
 ```
 
 **Observing a large field in downstream actions:** If `source.raw_content` is in the observe list of an action that only needs a quote or summary, the full content goes into every LLM call. Extract it to a distilled field first.

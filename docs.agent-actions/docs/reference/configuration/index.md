@@ -130,7 +130,6 @@ actions:
 | `prompt` | string | Inline prompt or `$store.template` reference |
 | `schema` | string | Output validation schema |
 | `context_scope` | object | Control data visibility: `observe`, `drop`, `passthrough`, `seed` — see [Context Scope](../context/context-scope.md) |
-| `data_source` | object/string | Optional input source configuration for start-node actions (defaults to `staging/`) |
 
 ### Model Fields
 
@@ -175,15 +174,14 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 
 ### Input Source
 
-Start-node actions can override the default `staging/` input with a local folder and optional file-type filter:
+A workflow can replace the default `staging/` input with a local folder and optional file-type filter. `data_source` is set under `defaults:`, where the workflow's first actions read it; the loader refuses it on an action:
 
 ```yaml
-actions:
-  - name: extract_facts
-    data_source:
-      type: local
-      folder: ./data
-      file_type: json
+defaults:
+  data_source:
+    type: local
+    folder: ./data
+    file_type: [json]
 ```
 
 ### Validation Fields

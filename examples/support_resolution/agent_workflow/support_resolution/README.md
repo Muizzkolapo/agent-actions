@@ -182,6 +182,7 @@ The `assign_team` action observes `seed.routing_rules` in its context scope:
 
 ```yaml
 - name: assign_team
+  dependencies: [assess_severity, identify_area]
   context_scope:
     observe:
       - classify_issue.issue_type

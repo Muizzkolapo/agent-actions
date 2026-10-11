@@ -87,6 +87,7 @@ Control data visibility with `context_scope`:
 ```yaml
 actions:
   - name: my_action
+    dependencies: [prev_action]
     context_scope:
       observe:
         - source.page_content

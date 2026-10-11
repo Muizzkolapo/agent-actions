@@ -9,6 +9,8 @@ Context Scope controls data visibility and flow between actions—selecting whic
 
 :::warning Required
 `context_scope` is **required** on every action. Omitting it raises a `ConfigurationError`. Every action must declare its data dependencies explicitly via `observe`, `passthrough`, or `drop`.
+
+Many examples in these docs show a single key and leave `context_scope` out to stay short. They are fragments, not whole actions: add a `context_scope` when you copy one into a workflow.
 :::
 
 ## Directives
@@ -40,7 +42,7 @@ The `observe` directive selects which upstream namespaces and fields are visible
 
 ```yaml
 - name: Cluster_Validation_Agent
-  dependencies: [group_by_similarity, cluster_list]
+  dependencies: [canonicalize_facts, group_by_similarity, cluster_list]
   context_scope:
     observe:
       - canonicalize_facts.candidate_facts_list
@@ -67,6 +69,7 @@ The `passthrough` directive forwards fields directly to the action output **with
 
 ```yaml
 - name: Cluster_Validation_Agent
+  dependencies: [canonicalize_facts, group_by_similarity]
   context_scope:
     observe:
       - canonicalize_facts.candidate_facts_list
@@ -179,13 +182,14 @@ Passthrough fields never enter the LLM context—they join the output after proc
 
 ```yaml
 - name: generate_explanation
+  dependencies: [generate_summary]
   context_scope:
     observe:
       - generate_summary.summary    # LLM needs this
     passthrough:
       - source.url                  # Preserve for downstream
     drop:
-      - upstream.debug_info         # Internal, not needed
+      - generate_summary.debug_info # Internal, not needed
 ```
 
 ## Debugging Context
