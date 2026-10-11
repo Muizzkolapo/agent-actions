@@ -425,12 +425,18 @@ def evaluate_node(
         args = [evaluate_node(arg, data, functions) for arg in node.arguments]
         all_funcs = {**FUNCTIONS, **(functions or {})}
         if node.function_name not in all_funcs:
-            raise ValueError(f"Function '{node.function_name}' is not registered")
+            # Deterministic for every record, same as the bare-identifier-RHS case below:
+            # GuardSemanticError bypasses passthrough_on_error, where a plain ValueError
+            # would let every record through as if the guard had never been written.
+            raise GuardSemanticError(f"Function '{node.function_name}' is not registered")
         func = all_funcs[node.function_name]
-        # Built-in functions expect a list arg; custom functions expect *args
-        if func is FUNCTIONS.get(node.function_name):
-            return func(args)
-        return func(*args)
+        try:
+            # Built-in functions expect a list arg; custom functions expect *args
+            if func is FUNCTIONS.get(node.function_name):
+                return func(args)
+            return func(*args)
+        except ValueError as e:
+            raise GuardSemanticError(str(e)) from e
 
     raise ValueError(f"Unknown node type: {type(node)}")
 

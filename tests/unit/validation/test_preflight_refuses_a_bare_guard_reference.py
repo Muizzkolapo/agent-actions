@@ -61,11 +61,95 @@ class TestItRefusesWhatProvablyResolvesNowhere:
 
         assert len(errors) == 1, errors
 
+    def test_a_bare_field_with_no_comparison_at_all_is_seen(self):
+        """`clause: "n"` is a complete, valid guard clause on its own -- a comparison-scoped
+        walk never reaches it, so this was missed the same way the pre-check's bug (1383)
+        would have been, had it not already refused the clause for an unrelated reason."""
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "n"}},
+            }
+        )
+
+        assert len(errors) == 1, errors
+
+    def test_a_bare_field_under_not_with_no_comparison_is_seen(self):
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "NOT n"}},
+            }
+        )
+
+        assert len(errors) == 1, errors
+
+    def test_an_unnamespaced_field_inside_a_function_call_is_seen(self):
+        """`LENGTH(n) > 2` -- the function argument, not the comparison operand
+        directly, is where the unnamespaced field lives."""
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "LENGTH(n) > 2"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
+    def test_an_unnamespaced_field_inside_a_bare_function_call_is_seen(self):
+        """`clause: "LENGTH(n)"` -- no comparison at all, and the field is inside the call."""
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "LENGTH(n)"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
+    def test_an_unnamespaced_field_right_of_a_comparison_is_seen(self):
+        """The field sits on the right of `>`, not the left -- a walk that only
+        descends `operand.left` would miss it and still pass every other test here."""
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "a1.score > n"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
+    def test_an_unnamespaced_field_right_of_and_is_seen(self):
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "a1.ok AND n"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
+    def test_an_unnamespaced_field_right_of_or_is_seen(self):
+        errors = _errors(
+            {
+                "a1": {},
+                "b": {"dependencies": ["a1"], "guard": {"clause": "a1.ok OR n"}},
+            }
+        )
+
+        assert len(errors) == 1 and "'n'" in errors[0], errors
+
 
 class TestItStaysSilentWhereTheNameResolves:
     def test_a_dotted_reference_is_never_refused(self):
         assert (
             _errors({"a1": {}, "b": {"dependencies": ["a1"], "guard": {"clause": "a1.n > 1"}}})
+            == []
+        )
+
+    def test_a_namespaced_field_inside_a_bare_function_call_is_silent(self):
+        assert (
+            _errors({"a1": {}, "b": {"dependencies": ["a1"], "guard": {"clause": "LENGTH(a1.n)"}}})
             == []
         )
 

@@ -59,15 +59,89 @@ def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str)
 
 
 def _collect_field_nodes(node: ASTNode) -> list[str]:
-    """Every field path the clause reads, from both sides of every comparison."""
-    from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode
+    """Every field path the clause reads, anywhere in the tree.
+
+    Not scoped to comparison operands: a bare field or a bare function call is a
+    complete guard clause on its own (``clause: "name"``, ``clause: "LENGTH(name)"``),
+    with no comparison for a comparison-scoped walk to find. An unnamespaced field
+    there resolves against nothing and filters every record exactly as one beside
+    ``==`` does, so it needs the same check.
+    """
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        ComparisonNode,
+        FieldNode,
+        FunctionNode,
+        LogicalNode,
+    )
 
     paths: list[str] = []
-    for comparison in _find_comparison_nodes(node):
-        for side in (comparison.left, comparison.right):
-            if isinstance(side, FieldNode):
-                paths.append(side.field_path)
+
+    def walk(operand: ASTNode | None) -> None:
+        if operand is None:
+            return
+        if isinstance(operand, FieldNode):
+            paths.append(operand.field_path)
+        elif isinstance(operand, FunctionNode):
+            for argument in operand.arguments:
+                walk(argument)
+        elif isinstance(operand, ComparisonNode):
+            walk(operand.left)
+            walk(operand.right)
+        elif isinstance(operand, LogicalNode):
+            walk(operand.left)
+            walk(operand.right)
+
+    walk(node)
     return paths
+
+
+def _check_function_calls(ast_root: ASTNode, clause: str, action_name: str) -> list[str]:
+    """Refuse a guard calling an unregistered function, or the wrong number of arguments.
+
+    Both are deterministic -- every record would fail evaluation identically -- so this
+    catches them before any record is read, instead of at the first one `evaluate_node`
+    raises on. A wrong arity is detected by calling the real function with placeholder
+    values of the written argument count: every builtin validates count before it looks
+    at a value, so this needs no per-function arity table to drift out of sync.
+    """
+    from agent_actions.input.preprocessing.parsing.ast_nodes import (
+        ComparisonNode,
+        FunctionNode,
+        LogicalNode,
+    )
+    from agent_actions.input.preprocessing.parsing.operators import FUNCTIONS
+
+    errors: list[str] = []
+
+    def walk(node: ASTNode | None) -> None:
+        if node is None:
+            return
+        if isinstance(node, FunctionNode):
+            if node.function_name not in FUNCTIONS:
+                errors.append(
+                    f"Action '{action_name}': guard condition '{clause}' calls "
+                    f"'{node.function_name}', which is not a registered function. "
+                    f"Available: {', '.join(sorted(FUNCTIONS))}."
+                )
+            else:
+                try:
+                    FUNCTIONS[node.function_name](["x"] * len(node.arguments))
+                except ValueError as e:
+                    errors.append(
+                        f"Action '{action_name}': guard condition '{clause}' calls "
+                        f"'{node.function_name}' with {len(node.arguments)} argument(s): {e}"
+                    )
+            for argument in node.arguments:
+                walk(argument)
+        elif isinstance(node, ComparisonNode):
+            walk(node.left)
+            walk(node.right)
+        elif isinstance(node, LogicalNode):
+            walk(node.left)
+            walk(node.right)
+
+    walk(ast_root)
+    return errors
 
 
 def _version_params(config: dict) -> list[str]:
@@ -158,6 +232,7 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
 
         if parse_result.ast is not None:
             errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
+            errors.extend(_check_function_calls(parse_result.ast.root, clause, action_name))
             errors.extend(
                 _check_bare_field_references(
                     parse_result.ast.root, clause, action_name, config, action_configs

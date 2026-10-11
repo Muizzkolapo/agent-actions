@@ -30,8 +30,6 @@ def test_parse_condition_rejects_udf_prefix_pointing_at_the_decorator():
 
 
 def test_parse_condition_rejects_dangerous_patterns():
-    # match pins the GuardParser blocklist path specifically; the grammar's own
-    # field-name pre-validation would also reject this input with a different message.
     with pytest.raises(ExpressionParseError, match="dangerous pattern"):
         parse_condition("__import__('os').system('true') == 0")
 
@@ -52,10 +50,15 @@ def test_parse_condition_rejects_unparseable_syntax():
 
 
 def test_parse_condition_rejects_function_call_syntax():
-    # The grammar's pre-validation rejects call syntax outright, so a function
-    # vocabulary is unreachable through parse; expressions inherit that.
-    with pytest.raises(ExpressionParseError, match="does not parse"):
+    # The grammar parses LENGTH(...) fine (guards use it) — expressions reject it
+    # explicitly afterward, per the documented expectations-page restriction.
+    with pytest.raises(ExpressionParseError, match="function calls are not available"):
         parse_condition("LENGTH(tags) > 0")
+
+
+def test_parse_condition_rejects_a_nested_function_call():
+    with pytest.raises(ExpressionParseError, match="function calls are not available"):
+        parse_condition('verdict == "ok" and LENGTH(tags) > 0')
 
 
 def test_referenced_field_paths_walks_nested_logic_and_comparisons():
@@ -64,8 +67,9 @@ def test_referenced_field_paths_walks_nested_logic_and_comparisons():
 
 
 def test_referenced_field_paths_covers_function_nodes():
-    # Unreachable via parse today, but the AST type exists; the walker must
-    # not silently skip it if the grammar ever admits calls.
+    # parse_condition rejects function calls for expressions, but the walker is
+    # shared with dep_observe_validator, which runs it on guard conditions —
+    # where a function call is real, parsed syntax. It must not skip the node.
     from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode, FunctionNode
 
     node = FunctionNode("LENGTH", [FieldNode("tags")])

@@ -1,7 +1,6 @@
 """WHERE clause parser using pyparsing with AST construction and LRU caching."""
 
 import logging
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -187,11 +186,15 @@ class WhereClauseParser:
         )
         array_literal.add_parse_action(self._parse_array)
 
+        # Same operand set as a BETWEEN bound (`range_bound` below) -- a field or a
+        # literal, never an array, which none of LENGTH/UPPER/LOWER/TRIM take.
+        function_arg = string_literal | number | boolean | null | field_name
+
         function_name = Word(alphas.upper(), alphanums + "_")
         function_args = Forward()
         function_args <<= (
             tokens["lpar"]
-            + PyOptional(array_element + ZeroOrMore(tokens["comma"] + array_element))
+            + PyOptional(function_arg + ZeroOrMore(tokens["comma"] + function_arg))
             + tokens["rpar"]
         )
 
@@ -436,12 +439,6 @@ class WhereClauseParser:
                 error=ParseError("WHERE clause too long (max 10000 characters)", 1, 1, "TooLong"),
             )
 
-        if not self._validate_field_names(where_clause):
-            return ParseResult(
-                success=False,
-                error=ParseError("Invalid field names detected", 1, 1, "InvalidFields"),
-            )
-
         return None  # Valid
 
     def _parse_and_build_ast(self, where_clause: str) -> ParseResult:
@@ -481,26 +478,6 @@ class WhereClauseParser:
                 success=False,
                 error=ParseError(f"Unexpected error: {str(e)}", 1, 1, "UnexpectedError"),
             )
-
-    _FIELD_PATTERN = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-    _OPERATOR_SPLIT_PATTERN = re.compile(
-        r"[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b",
-        flags=re.IGNORECASE,
-    )
-
-    def _is_valid_field_token(self, token: str) -> bool:
-        """Check if a token is a valid field name."""
-        token = token.strip()
-        if not token or token.startswith('"') or token.startswith("'"):
-            return True  # Skip empty, string literals
-        if not re.match(r"^[a-zA-Z_]", token):
-            return True  # Not a field name, skip
-        return bool(self._FIELD_PATTERN.fullmatch(token.split()[0]))
-
-    def _validate_field_names(self, where_clause: str) -> bool:
-        """Validate field names against injection patterns."""
-        tokens = self._OPERATOR_SPLIT_PATTERN.split(where_clause)
-        return all(self._is_valid_field_token(token) for token in tokens)
 
     def clear_cache(self):
         """Clear the parsing cache."""
