@@ -22,6 +22,20 @@ Let's explore what templates provide:
 Templates are rendered before your agentic workflow runs. This means template errors are caught early, during configuration loading rather than at runtime.
 :::
 
+## What Renders When
+
+Loading a workflow renders the file through Jinja before it is parsed as YAML. Each action's `prompt:`, however the YAML writes it (on the key's line or the lines below, as a block scalar, or in a flow mapping such as `- {name: a, prompt: "..."}`), is decided where the load reaches it, with exactly the names bound there: names the file binds with `{% set %}`, `{% for %}`, `{% import %}` or a macro's parameters, the macros and variables of `templates/`, `load_prompt`, and Jinja's own globals such as `range`.
+
+- A prompt whose names are all bound renders at load, as it always has.
+- A prompt that reads a name a record or a version supplies (`source`, `seed`, an action of the workflow, `version`, `i`, `idx` or a version `param`) is kept whole and renders per record, exactly as the same prompt in the prompt store does, `{% if %}`, `is defined`, captures, macros and `{% raw %}` blocks of its own included. An action named by a tag, such as `name: {{ n }}` in a loop or a macro, counts once the file is parsed; if no action has the name, the load fails as for any undefined name. Its own `{{ }}` tags outside its `{% %}` blocks that read load-time names and nothing else render into it at load: with `{% for n in [1, 2] %}`, `Stage {{ n }} of {{ source.text }}` becomes `Stage 2 of {{ source.text }}`. Load-time data its other tags read, such as a list a `{% for %}` walks or a flag an `{% if %}` tests, is set at its top (`{% set fields = ["title", "body"] +%}`).
+- A versioned action's other values (`model_vendor`, `model_name`, `intent`, …) that read a version variable render once per version, as if the version's variables were set when the file loads. On an action without `versions:` such a value fails the load, unless the variable is guarded with `is defined` or `default(...)`.
+
+Only data reaches the per-record render. A prompt that renders per record can use a macro, `load_prompt` or an imported template only in a `{{ }}` tag of its own outside its `{% %}` blocks, and cannot `{% include %}` anything; otherwise the load fails naming it. Define the macro inside the prompt instead.
+
+Everything else renders at load. A name nothing defines fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, unless it is guarded with `is defined` or `default(...)`, and so does a field a loaded name lacks. A name a record or a version supplies, read anywhere the load renders, also fails the load, so a record never sees a branch decided once for all of them: in a value other than a prompt, in a `{% set %}` block, macro body or `caller()` body that a prompt outputs, or tested with `is defined`. To hand a per-record tag to a prompt through a macro or a captured block, wrap it in `{% raw %}...{% endraw %}`; the prompt receives the tag as text and renders it per record.
+
+The top level of each `templates/` file runs once as the folder loads, to collect its macros and variables, with nothing bound; there, as before, an undefined name renders as nothing.
+
 ## Template Location
 
 Templates are stored in the `templates/` directory:
@@ -129,11 +143,7 @@ diff agent_workflow/my_workflow/agent_config/my_workflow.yml \
 
 ### Built-in Variables
 
-| Variable | Description |
-|----------|-------------|
-| `workflow_name` | Current workflow name |
-| `env` | Environment variables dict |
-| `now` | Current timestamp |
+The load supplies no variables of its own: only `load_prompt`, the macros and variables of `templates/`, and Jinja's globals (`range`, `dict`, `namespace`, …). Anything else a tag names comes from the file itself.
 
 ### Custom Variables
 
@@ -150,9 +160,11 @@ defaults:
 
 ## Conditional Actions
 
-Include actions conditionally:
+Include actions conditionally on a variable the file sets:
 
 ```jinja2
+\{% set enable_validation = true \%\}
+
 \{% if enable_validation \%\}
   - name: validate_output
     kind: llm
@@ -281,20 +293,6 @@ name: my_workflow
 actions:
   - name: my_action
     # Uses base defaults
-```
-
-### Environment-Specific Configuration
-
-Consider what happens when you need different settings for development vs production. Templates let you branch based on environment variables:
-
-```jinja2
-\{% if env.AGENT_ACTIONS_ENV == 'production' \%\}
-  model_name: gpt-4o
-  run_mode: batch
-\{% else \%\}
-  model_name: gpt-4o-mini
-  run_mode: online
-\{% endif \%\}
 ```
 
 ### Feature Flags

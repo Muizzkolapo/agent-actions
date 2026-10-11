@@ -54,7 +54,7 @@ Analyze: {{ source.page_content }}
 
 **Use `{{ source.field }}` in both batch and online prompts.** The framework injects each record's input under the `source` namespace before rendering, so `{{ source.field }}` resolves to the per-record value identically in both modes.
 
-**Do not** use bare `{{ field }}`. `base` is empty before rendering, so `field` is undefined and the template either fails (Jinja `StrictUndefined`) or renders empty — in either mode.
+**Do not** use bare `{{ field }}`. `base` is empty before rendering, so `field` is undefined and rendering the template fails (Jinja `StrictUndefined`) — in either mode.
 
 :::warning Common pitfall
 Earlier revisions of this guide described batch mode as accepting unwrapped variables — for example, `{{ page_content }}` instead of `{{ source.page_content }}`. That was wrong. If you have prompts of the form `{{ passage }}`, migrate them to `{{ source.passage }}`; the change is safe in both modes and is the only pattern that has ever worked end-to-end.
