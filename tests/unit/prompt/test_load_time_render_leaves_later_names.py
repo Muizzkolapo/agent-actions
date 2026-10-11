@@ -446,6 +446,7 @@ def test_a_per_record_prompt_using_a_load_time_function_in_a_block_fails_the_loa
     message = str(raised.value)
     assert f"'{name}'" in message
     assert "renders for each record" in message
+    assert "only data reaches the per-record render" in message
 
 
 def test_a_per_record_prompt_cannot_include_a_template(tmp_path):
@@ -828,3 +829,41 @@ def test_a_prompt_reading_a_versioned_actions_output_is_decided_per_record(tmp_p
     )
 
     assert _actions(data)["after"]["prompt"] == prompt
+
+
+def test_a_per_record_value_a_templates_file_computes_at_its_top_level_fails_the_load(tmp_path):
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(
+            tmp_path,
+            "actions:\n{{ block }}\n",
+            templates={
+                "actions.j2": '{% set block %}\n  - name: a\n    prompt: "Hi {{ source.x }}"\n'
+                "{% endset %}\n"
+            },
+        )
+
+    message = str(raised.value)
+    assert "at its top level as it loaded" in message
+    assert "Write it in a macro that the workflow calls" in message
+
+
+def test_a_per_record_value_inside_text_the_file_builds_fails_the_load(tmp_path):
+    with pytest.raises(TemplateRenderingError, match="must stand alone as a value"):
+        _load(
+            tmp_path,
+            '{% set p %}\nprompt: "Hi {{ source.x }}"\n{% endset %}\nactions:\n  - name: a\n'
+            '    description: "{{ p | trim }} and more"\n    prompt: "x"\n',
+        )
+
+
+def test_a_load_time_tag_that_breaks_a_per_record_prompts_yaml_fails_the_load(tmp_path):
+    with pytest.raises(TemplateRenderingError) as raised:
+        _load(
+            tmp_path,
+            '{% set intro = "Line one\\nLine two" %}\nactions:\n  - name: a\n    prompt: |\n'
+            "      {{ intro }}\n      {{ source.x }}\n    intent: x\n",
+        )
+
+    message = str(raised.value)
+    assert "reads 'source', so it renders for each record" in message
+    assert "once its load-time tags render it is no longer valid YAML" in message
