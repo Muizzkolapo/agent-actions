@@ -235,6 +235,7 @@ class GuardEvaluator:
         guard_config: dict[str, Any] | None,
         context: dict[str, Any] | None = None,
         conditional_clause: str | None = None,
+        conditional_clause_passthrough_on_error: bool = True,
     ) -> GuardResult:
         """Evaluate guard conditions, optionally with full context.
 
@@ -248,14 +249,18 @@ class GuardEvaluator:
             eval_data = item
 
         if conditional_clause:
-            result = self._evaluate_conditional_clause(eval_data, conditional_clause)
+            result = self._evaluate_conditional_clause(
+                eval_data,
+                conditional_clause,
+                passthrough_on_error=conditional_clause_passthrough_on_error,
+            )
             if result is not None:
                 return result
 
         return self._evaluate_guard(eval_data, guard_config)
 
     def _evaluate_conditional_clause(
-        self, context: Any, conditional_clause: str
+        self, context: Any, conditional_clause: str, passthrough_on_error: bool = True
     ) -> GuardResult | None:
         """Evaluate legacy UDF conditional clause; returns None if passed, GuardResult.skipped() if failed."""
         clause = (conditional_clause or "").lower()
@@ -320,6 +325,15 @@ class GuardEvaluator:
                         cause=e,
                     )
                 ) from e
+            if not passthrough_on_error:
+                logger.warning(
+                    "Guard: conditional_clause '%s' raised %s: %s — skipping record "
+                    "(passthrough_on_error=False)",
+                    clause,
+                    type(e).__name__,
+                    e,
+                )
+                return GuardResult.skipped(error=str(e))
             logger.warning(
                 "Guard: conditional_clause '%s' raised %s: %s — passing record "
                 "(legacy conditional_clause uses passthrough-on-error semantics)",

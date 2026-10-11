@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError, MissingSourceGuidError
+from agent_actions.errors import ConfigurationError, MissingSourceGuidError, is_action_fatal
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
@@ -145,6 +145,10 @@ class BatchTaskPreparator:
                     stats.included_items += 1
 
             except Exception as e:
+                if is_action_fatal(e):
+                    # Preflight only samples up to the first row the guard admits; a
+                    # later fatal row lands here unmarked. Nothing has been sent yet.
+                    raise
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
                 self._mark_prep_failed(

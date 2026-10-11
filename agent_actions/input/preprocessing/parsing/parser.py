@@ -221,6 +221,7 @@ class WhereClauseParser:
         )
         postfix_ops = Group(unary_postfix_ops) | range_suffix if unary_postfix_ops else range_suffix
 
+        # NOT sits below comparisons so `NOT x == 1` negates the comparison, not `x`.
         where_expr = infix_notation(
             operand,
             [

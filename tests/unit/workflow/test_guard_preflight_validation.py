@@ -120,3 +120,22 @@ class TestValidateGuardConditions:
         errors = validate_guard_conditions(configs)
         assert len(errors) == 1
         assert "invalid guard condition" in errors[0].lower() or "parse" in errors[0].lower()
+
+    def test_a_bare_field_under_not_is_still_caught(self):
+        """An unparenthesised NOT must not hide its operand from the bare-field check (1382).
+
+        Before the NOT-precedence fix, `NOT x == 1` parsed with the comparison's own
+        left operand as a LogicalNode rather than x's FieldNode, so this check never
+        saw `x` at all.
+        """
+        configs = {
+            "producer": {},
+            "consumer": {
+                "dependencies": ["producer"],
+                "guard": {"clause": "NOT totally_made_up_field == 1"},
+            },
+        }
+        errors = validate_guard_conditions(configs)
+        assert len(errors) == 1
+        assert "totally_made_up_field" in errors[0]
+        assert "without an action prefix" in errors[0]

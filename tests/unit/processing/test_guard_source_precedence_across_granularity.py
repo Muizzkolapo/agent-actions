@@ -74,7 +74,7 @@ def file_mode(record, clause, *, pool=POOL, scope=SCOPE):
         records, _skipped = apply_context_scope_for_records(
             records, scope, action_name="a2", source_data=pool
         )
-    passing, _skipped, _originals, _filtered = prefilter_by_guard(
+    passing, _skipped, _originals, _filtered, _ = prefilter_by_guard(
         records,
         config,
         "a2",
@@ -246,7 +246,7 @@ class TestAFirstStageGuardReadsTheResolvedNamespaceToo:
         record = {"source_guid": "S1", "content": {"source": {"page_content": "real"}}}
         config = {"guard": guard("source.page_content == 'real'")}
 
-        passing, _skipped, _originals, _filtered = prefilter_by_guard(
+        passing, _skipped, _originals, _filtered, _ = prefilter_by_guard(
             [record], config, "flatten", agent_indices={"flatten": 0}, is_first_stage=True
         )
 
@@ -256,7 +256,7 @@ class TestAFirstStageGuardReadsTheResolvedNamespaceToo:
         record = {"source_guid": "S1", "content": {"source": {"page_content": "real"}}}
         config = {"guard": guard("source.page_content == 'other'")}
 
-        passing, _skipped, _originals, filtered = prefilter_by_guard(
+        passing, _skipped, _originals, filtered, _ = prefilter_by_guard(
             [record], config, "flatten", agent_indices={"flatten": 0}, is_first_stage=True
         )
 
@@ -316,7 +316,7 @@ class TestWhatADropDoesNotHideFromAGuard:
         enriched, _ = apply_context_scope_for_records(
             [deepcopy(record)], scope, action_name="a2", source_data=self.POOL
         )
-        passing, _skipped, _originals, _filtered = prefilter_by_guard(
+        passing, _skipped, _originals, _filtered, _ = prefilter_by_guard(
             enriched,
             {"granularity": "file", "context_scope": scope, "guard": guard(clause)},
             "a2",
@@ -500,7 +500,7 @@ class TestAFieldTheResolvedDocumentLacksBecomesUnreadable:
             "guard": guard("source.extra == 'E'"),
         }
 
-        passing, _s, _o, _f = prefilter_by_guard(
+        passing, _s, _o, _f, _ = prefilter_by_guard(
             [record],
             config,
             "a2",
@@ -520,7 +520,7 @@ class TestAFieldTheResolvedDocumentLacksBecomesUnreadable:
         }
         config = {"granularity": "file", "context_scope": SCOPE, "guard": guard("source.u == 1")}
 
-        passing, _s, _o, _f = prefilter_by_guard(
+        passing, _s, _o, _f, _ = prefilter_by_guard(
             [record],
             config,
             "a2",
@@ -560,7 +560,7 @@ class TestAVersionedActionDoesNotDisplaceAToolsOwnField:
             "context_scope": {"observe": ["gen_1.n"]},
             "guard": guard(f"version == {field!r}"),
         }
-        passing, _s, _o, _f = prefilter_by_guard(
+        passing, _s, _o, _f, _ = prefilter_by_guard(
             [{"source_guid": "G0", "content": deepcopy(content)}],
             config,
             "a2",

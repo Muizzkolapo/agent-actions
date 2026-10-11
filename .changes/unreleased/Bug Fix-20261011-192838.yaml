@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: Online now carries a guard-skipped record's content and target_id into the failed row enrichment refuses it with when the record has no source_guid, the same as batch already did. The guard-skip tombstone carried neither before, so the stored row kept nothing of what the record arrived with.
+time: 2026-10-11T19:28:38.36649+01:00

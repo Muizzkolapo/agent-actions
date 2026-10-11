@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from agent_actions.errors import is_action_fatal
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.retry_polling import wait_for_batch_completion
@@ -145,6 +146,10 @@ def submit_retry_batch(
     except RetrySubmissionImpossible:
         raise
     except Exception as e:
+        if is_action_fatal(e):
+            # Not transient: the next pass would hit the identical fatal error,
+            # on the same records, every time.
+            raise
         # Transient: the next pass re-enters and can send the same records again.
         logger.warning("Failed to submit retry batch: %s", e, exc_info=True)
         return None
@@ -217,6 +222,10 @@ def resubmit_missing_records(
         return provider.retrieve_results(retry_batch_id, output_directory)
 
     except Exception as e:
+        if is_action_fatal(e):
+            # Not transient: the next pass would hit the identical fatal error,
+            # on the same records, every time.
+            raise
         logger.warning("Failed to resubmit missing records: %s", e, exc_info=True)
         return []
 

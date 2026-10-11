@@ -518,6 +518,7 @@ def collect_results_from_processing_results(
     causes: list[str] = []
     pending_dispositions: list[DispositionRow] = []
     echoed: set[str] = set()
+    guard_skipped_count = 0
 
     for idx, result in enumerate(results):
         status = result.status
@@ -856,6 +857,8 @@ def collect_results_from_processing_results(
                     if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
                     else RecordState.CASCADE_SKIPPED
                 )
+                if state == RecordState.GUARD_SKIPPED:
+                    guard_skipped_count += len(data)
                 for d in data:
                     _stamp(d, state, action_name, reason)
                 output.extend(data)  # Preserve in output for lineage
@@ -956,9 +959,11 @@ def collect_results_from_processing_results(
             total_failed=stats["failed"],
             total_exhausted=stats["exhausted"],
             total_unprocessed=stats["unprocessed"],
+            total_guard_skipped=guard_skipped_count,
             total_deferred=stats["deferred"],
             guard_condition=guard_condition,
             guard_on_false=guard_on_false,
+            target_relative_path=(context.target_relative_path or "") if context else "",
         )
     )
 

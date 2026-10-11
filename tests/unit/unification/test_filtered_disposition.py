@@ -30,7 +30,14 @@ def _make_evaluator(pass_fn):
     """Create a mock evaluator whose evaluate delegates to pass_fn."""
     evaluator = MagicMock()
 
-    def side_effect(*, item, guard_config, context=None, conditional_clause=None):
+    def side_effect(
+        *,
+        item,
+        guard_config,
+        context=None,
+        conditional_clause=None,
+        conditional_clause_passthrough_on_error=True,
+    ):
         if pass_fn(item):
             return GuardResult.passed()
         return GuardResult.filtered()
@@ -78,7 +85,9 @@ class TestPrefilterReturnsFilteredRecords:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered = prefilter_by_guard(data, config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
+                data, config, "test"
+            )
 
         assert len(passing) == 1
         assert len(filtered) == 2
@@ -88,7 +97,7 @@ class TestPrefilterReturnsFilteredRecords:
     def test_no_guard_returns_empty_filtered(self):
         """No guard config -> filtered list is empty."""
         data = [{"content": {"x": 1}}]
-        _, _, _, filtered = prefilter_by_guard(data, {}, "test")
+        _, _, _, filtered, _ = prefilter_by_guard(data, {}, "test")
         assert filtered == []
 
     def test_all_pass_returns_empty_filtered(self):
@@ -101,7 +110,7 @@ class TestPrefilterReturnsFilteredRecords:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            _, _, _, filtered = prefilter_by_guard(data, config, "test")
+            _, _, _, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert filtered == []
 
@@ -118,7 +127,7 @@ class TestPrefilterReturnsFilteredRecords:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, _, _, filtered = prefilter_by_guard(data, config, "test")
+            passing, _, _, filtered, _ = prefilter_by_guard(data, config, "test")
 
         assert passing == []
         assert len(filtered) == 2
@@ -134,7 +143,7 @@ class TestPrefilterReturnsFilteredRecords:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            _, _, _, filtered = prefilter_by_guard(data, config, "test", original_data=raw)
+            _, _, _, filtered, _ = prefilter_by_guard(data, config, "test", original_data=raw)
 
         assert len(filtered) == 1
         assert filtered[0]["source_guid"] == "sg-2"

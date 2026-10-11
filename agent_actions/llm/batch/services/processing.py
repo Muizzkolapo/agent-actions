@@ -955,6 +955,7 @@ class BatchProcessingService:
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
         action_name: str | None = None,
+        file_name: str | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats, Exception | None]:
         """Collect the file's rows and dispositions through ``collect_batch_rows``.
 
@@ -968,6 +969,7 @@ class BatchProcessingService:
             context_map,
             batch_results,
             output_directory=output_directory,
+            file_name=file_name,
             exhausted_recovery=exhausted_recovery,
             result_processor=self._result_processor,
             unified_processor=self._unified_processor,

@@ -299,11 +299,6 @@ def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_wi
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="online's guard skip carries no input record, so the row its refusal at "
-    "enrichment leaves keeps neither the target_id nor the content the record arrived with",
-)
 def test_a_record_with_no_source_guid_the_guard_skips_is_stored_alike_in_both_modes(tmp_path):
     """Both refuse it at enrichment, and batch's row keeps what it arrived with."""
     (tmp_path / "online").mkdir()

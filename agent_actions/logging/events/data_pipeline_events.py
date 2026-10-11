@@ -391,9 +391,14 @@ class ResultCollectionCompleteEvent(BaseEvent):
     total_failed: int = 0
     total_exhausted: int = 0
     total_unprocessed: int = 0
+    total_guard_skipped: int = 0
     total_deferred: int = 0
     guard_condition: str = ""
     guard_on_false: str = ""
+    # Which input file this event's counts are for, so a reader folding every
+    # event in events.json can key on (action_name, file) instead of overwriting
+    # one file's counts with the next file's -- or summing a file counted twice.
+    target_relative_path: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -417,9 +422,11 @@ class ResultCollectionCompleteEvent(BaseEvent):
             "total_failed": self.total_failed,
             "total_exhausted": self.total_exhausted,
             "total_unprocessed": self.total_unprocessed,
+            "total_guard_skipped": self.total_guard_skipped,
             "total_deferred": self.total_deferred,
             "guard_condition": self.guard_condition,
             "guard_on_false": self.guard_on_false,
+            "target_relative_path": self.target_relative_path,
         }
 
     @property

@@ -418,6 +418,7 @@ class BatchSubmissionService:
             context_map,
             [],
             output_directory=output_directory,
+            file_name=batch_name,
         )
         write_batch_file(
             self._storage_backend,

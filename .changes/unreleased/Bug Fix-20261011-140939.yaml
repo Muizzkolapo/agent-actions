@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A guard UDF that raises for its own reason now honours passthrough_on_error. passthrough_on_error: false on a udf: condition used to be refused at load; it is now accepted and, on a raise, skips the record instead of silently passing it through. The default is unchanged: true, passing on raise.'
+time: 2026-10-11T14:09:39.794885+01:00

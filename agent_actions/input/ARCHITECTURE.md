@@ -317,9 +317,9 @@ Built with pyparsing's `infix_notation` for operator precedence:
 
 | Precedence | Operators |
 |-----------|-----------|
-| Highest | NOT (unary prefix) |
-| | IS NULL, IS NOT NULL, BETWEEN a AND b, NOT BETWEEN a AND b (postfix; the range builds the same node as BETWEEN [a, b]) |
+| Highest | IS NULL, IS NOT NULL, BETWEEN a AND b, NOT BETWEEN a AND b (postfix; the range builds the same node as BETWEEN [a, b]) |
 | | ==, !=, <, <=, >, >=, IN, NOT IN, LIKE, BETWEEN, CONTAINS |
+| | NOT (unary prefix; wraps a full comparison, so `NOT x == 1` negates the comparison, not `x`) |
 | | AND |
 | Lowest | OR |
 

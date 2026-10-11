@@ -25,6 +25,7 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
         guard_expr = GuardParser.parse(guard_data)
         if guard_expr.type.value == "udf":
             agent["conditional_clause"] = guard_expr.expression
+            agent["conditional_clause_passthrough_on_error"] = True
         else:
             agent["guard"] = {"clause": guard_expr.expression, "scope": "item"}
     else:
@@ -41,17 +42,8 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
                         "operation": "expand_actions_to_agents",
                     },
                 )
-            if guard_config.passthrough_on_error is not True:
-                raise ConfigurationError(
-                    "passthrough_on_error is only supported for SQL-style guards; "
-                    "UDF conditions pass a record through when the function raises, "
-                    "except a write to its read-only input, which stops the action.",
-                    context={
-                        "action_name": action.get("name", "unknown"),
-                        "operation": "expand_actions_to_agents",
-                    },
-                )
             agent["conditional_clause"] = guard_config.get_condition_expression()
+            agent["conditional_clause_passthrough_on_error"] = guard_config.passthrough_on_error
         else:
             agent["guard"] = {
                 "clause": guard_config.get_condition_expression(),

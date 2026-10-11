@@ -97,3 +97,41 @@ def test_every_row_and_disposition_is_recorded_under_the_action_name_it_is_hande
         (row["record_id"], row["disposition"]) for row in backend.get_disposition(ACTION)
     ) == [("f1", "filtered"), ("k1", "unprocessed"), ("p1", "failed")]
     assert backend.get_disposition("other") + backend.get_disposition("batch") == []
+
+
+def test_each_files_metrics_event_names_its_own_file(backend, tmp_path):
+    """Two files for the same action must fire events a reader can tell apart by
+    file, not two events that look alike (1367) -- collect_batch_rows must thread
+    file_name all the way to the event, not just accept the parameter."""
+    from agent_actions.processing import result_collector
+
+    fired: list[str] = []
+    real_fire_event = result_collector.fire_event
+
+    def spy(event):
+        if type(event).__name__ == "ResultCollectionCompleteEvent":
+            fired.append(event.data["target_relative_path"])
+        real_fire_event(event)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(result_collector, "fire_event", spy)
+        collect_batch_rows(
+            backend,
+            ACTION,
+            {"action_name": ACTION},
+            {"t-a1": _entry("a1", "included")},
+            [BatchResult(custom_id="t-a1", content={"answer": "ok"}, success=True)],
+            output_directory=str(tmp_path),
+            file_name="pages1.json",
+        )
+        collect_batch_rows(
+            backend,
+            ACTION,
+            {"action_name": ACTION},
+            {"t-a2": _entry("a2", "included")},
+            [BatchResult(custom_id="t-a2", content={"answer": "ok"}, success=True)],
+            output_directory=str(tmp_path),
+            file_name="pages2.json",
+        )
+
+    assert fired == ["pages1.json", "pages2.json"]

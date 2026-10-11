@@ -434,6 +434,50 @@ class TestFinalizeBatchOutput:
         assert collected["action_name"] == "fallback_action"
 
 
+class TestFinalizeBatchOutputNamesItsFile:
+    """finalize_batch_output must thread identity.file_name all the way to the
+    fired metrics event (1367), not just to a mock standing in for the collect
+    step -- every other test in this module mocks
+    _convert_batch_results_to_workflow_format itself, so none of them can see
+    whether the real collect step the mock replaces still receives it."""
+
+    def test_the_fired_event_carries_the_batch_identitys_file_name(self):
+        service = _mock_service()
+        service._convert_batch_results_to_workflow_format = (
+            BatchProcessingService._convert_batch_results_to_workflow_format.__get__(service)
+        )
+        service._storage_backend = None
+        service._result_processor = None
+        service._unified_processor = None
+        manager = MagicMock()
+        context_map = {
+            "t-a1": {
+                "source_guid": "a1",
+                "target_id": "t-a1",
+                "content": {"source": {"item": "a1"}},
+                "_batch_filter_status": "included",
+            }
+        }
+        ctx, ident = _make_context_and_identity(
+            service=service, manager=manager, file_name="pages1.json"
+        )
+
+        fired: list = []
+        with patch(
+            "agent_actions.processing.result_collector.fire_event", side_effect=fired.append
+        ):
+            finalize_batch_output(
+                ctx,
+                ident,
+                batch_results=[_make_result("t-a1", content={"answer": "ok"})],
+                context_map=context_map,
+            )
+
+        events = [e for e in fired if type(e).__name__ == "ResultCollectionCompleteEvent"]
+        assert len(events) == 1
+        assert events[0].data["target_relative_path"] == "pages1.json"
+
+
 # ---------------------------------------------------------------------------
 # TestRecoveryStatePersistence
 # ---------------------------------------------------------------------------

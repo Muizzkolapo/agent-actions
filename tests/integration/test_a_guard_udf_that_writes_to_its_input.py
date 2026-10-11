@@ -16,7 +16,7 @@ from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.workflow.managers.state import ActionStatus
 from tests.integration.test_retry_ignores_record_cap import SOURCE, TAG_TOOL, WORKFLOW
-from tests.integration.test_retry_selection_under_batch import _agac, _cycle, _project, _unwrapped
+from tests.integration.test_retry_selection_under_batch import _agac, _project, _unwrapped
 
 GUARD = "keep_unless_rejected"
 GUARDED = "enrich"
@@ -195,22 +195,15 @@ def test_a_batch_action_whose_guard_writes_submits_nothing_and_fails(tmp_path):
     assert f"Guard UDF '{GUARD}' wrote to its input" in output
 
 
-def test_a_batch_row_past_that_check_whose_guard_writes_fails_alone(tmp_path):
-    """Preparing the rows to submit fails a row on its own, whatever stops it, so this
-    one record is failed, naming the guard, and the rest are submitted and answered."""
+def test_a_batch_row_past_that_check_whose_guard_writes_also_fails_the_action(tmp_path):
+    """The preflight check only covers the leading rows up to the first one the guard
+    admits — here, just the first ("keep", already tidy, needs no write). A later row's
+    write (" Reject ", untidy) must fail the action the same way, not just that row."""
     root = _batch_project(tmp_path, TIDIES_WHEN_UNTIDY)
 
-    _cycle(root, "run", "-a", BATCH_WORKFLOW, "--fresh")
+    code, output = _agac(root, "run", "-a", BATCH_WORKFLOW, "--fresh")
+    output = _unwrapped(output)
 
-    backend = _store(root, BATCH_WORKFLOW)
-    try:
-        dispositions = {row["record_id"]: row for row in backend.get_disposition("summarize")}
-        rows = _rows(backend, "summarize")
-    finally:
-        backend.close()
-    outcome = {
-        row["content"]["source"]["page_content"]: dispositions[row["source_guid"]] for row in rows
-    }
-    assert outcome["keep"]["disposition"] == "success"
-    assert outcome[" Reject "]["disposition"] == "failed"
-    assert f"Guard UDF '{GUARD}' wrote to its input" in outcome[" Reject "]["reason"]
+    assert code != 0, output
+    assert "run again" not in output, "a batch went to the provider past a guard with no answer"
+    assert f"Guard UDF '{GUARD}' wrote to its input" in output
