@@ -8,6 +8,7 @@ collide with the previous one on names no file defines.
 import logging
 from pathlib import Path
 
+import jinja2
 import pytest
 
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -110,8 +111,8 @@ def test_jinja_module_internals_do_not_become_workflow_globals(tmp_path: Path, t
     assert ".j2" not in rendered
 
 
-def test_underscore_names_are_not_registered_because_jinja_does_not_export_them(
-    tmp_path: Path, templates: Path, caplog: pytest.LogCaptureFixture
+def test_two_files_defining_the_same_underscore_name_do_not_collide(
+    tmp_path: Path, config: Path, templates: Path, caplog: pytest.LogCaptureFixture
 ):
     (templates / "a.j2").write_text(
         "{% set _hidden = 'from-a' %}{% macro _priv() %}a{% endmacro %}\n"
@@ -119,18 +120,33 @@ def test_underscore_names_are_not_registered_because_jinja_does_not_export_them(
     (templates / "b.j2").write_text(
         "{% set _hidden = 'from-b' %}{% macro _priv() %}b{% endmacro %}\n"
     )
-    config = tmp_path / "wf.yml"
-    config.write_text('name: wf\ndescription: "[{{ _hidden }}]"\nactions: []\n')
 
     with caplog.at_level(logging.WARNING):
-        rendered = render_pipeline_with_templates(
+        render_pipeline_with_templates(
             config, templates, compile_schemas=False, project_root=tmp_path
         )
 
-    assert "[]" in rendered
-    assert "from-a" not in rendered
-    assert "from-b" not in rendered
     assert _redefinition_warnings(caplog) == []
+
+
+def test_the_public_names_of_a_module_are_exactly_what_jinja_exports():
+    """The premise of the filter: were Jinja to export an underscore name, it would be dropped."""
+    env = jinja2.Environment(
+        loader=jinja2.DictLoader(
+            {
+                "t.j2": "{% set tone = 'formal' %}{% set _hidden = 'x' %}"
+                "{% macro pub() %}p{% endmacro %}{% macro _priv() %}q{% endmacro %}"
+            }
+        )
+    )
+    template = env.get_template("t.j2")
+    context = template.new_context()
+    list(template.root_render_func(context))
+
+    public = {name for name in vars(template.module) if not name.startswith("_")}
+
+    assert public == set(context.exported_vars)
+    assert public == {"tone", "pub"}
 
 
 def test_exported_names_still_reach_the_workflow(tmp_path: Path, templates: Path):
