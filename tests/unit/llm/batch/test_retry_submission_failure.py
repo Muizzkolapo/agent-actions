@@ -11,8 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.errors import ConfigurationError, mark_action_fatal
 from agent_actions.llm.batch.services.retry_ops import (
     RetrySubmissionImpossible,
+    resubmit_missing_records,
     submit_retry_batch,
 )
 
@@ -92,6 +94,35 @@ class TestRetrySubmissionFailure:
 
         assert result is None
 
+    def test_an_action_fatal_prepare_error_propagates_instead_of_returning_none(
+        self, mock_provider, context_map
+    ):
+        """A write-to-input refusal must fail the retry round, not be treated as
+        transient — a later pass would hit the identical write again (1314)."""
+        mock_cls = MagicMock()
+        mock_cls.return_value.prepare_tasks.side_effect = mark_action_fatal(
+            ConfigurationError("guard UDF wrote to its input")
+        )
+
+        with (
+            patch(
+                "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
+                mock_cls,
+            ),
+            pytest.raises(ConfigurationError),
+        ):
+            submit_retry_batch(
+                storage_backend=MagicMock(),
+                provider=mock_provider,
+                missing_ids={"rec_1"},
+                context_map=context_map,
+                output_directory="/tmp/output",
+                file_name="batch_005",
+                agent_config=None,
+                action_indices={},
+                dependency_configs={},
+            )
+
     def test_no_matching_records_is_permanent_not_transient(self, mock_provider):
         """Ids absent from the context map cannot be rebuilt on any later pass."""
         context_map = {"other_id": {"target_id": "other_id"}}
@@ -152,3 +183,59 @@ class TestRetrySubmissionFailure:
             )
 
         assert result == ("retry_batch_999", 2)
+
+
+class TestResubmitMissingRecordsFailure:
+    """resubmit_missing_records has the same transient-vs-fatal split (1314)."""
+
+    def test_prepare_tasks_exception_returns_empty_list(self, mock_provider, context_map):
+        """An ordinary exception is transient: the next pass can try again."""
+        mock_cls = MagicMock()
+        mock_cls.return_value.prepare_tasks.side_effect = ValueError("Invalid config")
+
+        with patch(
+            "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
+            mock_cls,
+        ):
+            result = resubmit_missing_records(
+                storage_backend=MagicMock(),
+                provider=mock_provider,
+                missing_ids={"rec_1"},
+                context_map=context_map,
+                output_directory="/tmp/output",
+                file_name="batch_006",
+                agent_config=None,
+                action_indices={},
+                dependency_configs={},
+            )
+
+        assert result == []
+
+    def test_an_action_fatal_prepare_error_propagates_instead_of_returning_empty(
+        self, mock_provider, context_map
+    ):
+        """A write-to-input refusal must fail the retry round, not be silently
+        dropped as though the records could simply be tried again (1314)."""
+        mock_cls = MagicMock()
+        mock_cls.return_value.prepare_tasks.side_effect = mark_action_fatal(
+            ConfigurationError("guard UDF wrote to its input")
+        )
+
+        with (
+            patch(
+                "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator",
+                mock_cls,
+            ),
+            pytest.raises(ConfigurationError),
+        ):
+            resubmit_missing_records(
+                storage_backend=MagicMock(),
+                provider=mock_provider,
+                missing_ids={"rec_1"},
+                context_map=context_map,
+                output_directory="/tmp/output",
+                file_name="batch_007",
+                agent_config=None,
+                action_indices={},
+                dependency_configs={},
+            )
