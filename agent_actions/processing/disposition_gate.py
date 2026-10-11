@@ -106,7 +106,6 @@ class DispositionGate:
         blocked = named - resolvable
 
         carried: set[str] = set()
-        unresolved: set[str] = set()
         # The unplaced rows a named record may have made: one that lists it among its
         # producers, or that lists none. A row made by other inputs is carried without
         # risk, whatever the named record's own row says.
@@ -119,7 +118,6 @@ class DispositionGate:
             if guid in named or producer in resolvable:
                 continue
             if producer in blocked or (guid not in held and producer not in held):
-                unresolved.add(guid)
                 made_by = row.get("producer_source_guids")
                 if not made_by or named.intersection(made_by):
                     at_risk.add(guid)
