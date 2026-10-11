@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import DuplicateFunctionError, UDFLoadError
+from agent_actions.errors import DuplicateFunctionError, UDFLoadError, ValidationError
+from agent_actions.guards.guard_parser import GuardParser, GuardType
 from agent_actions.utils.file_utils import read_python_source
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
@@ -168,28 +169,52 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     return UDF_REGISTRY
 
 
+def guard_udf_name(guard: Any) -> str | None:
+    """The UDF a guard names, or None for a SQL guard, no guard, or a malformed one.
+
+    Classification is ``GuardParser``'s rather than a second copy of it, which also
+    settles what a malformed name means here: it is the structural check's to report,
+    and naming it as a missing function would answer the wrong question — a dotted name
+    would be met with "did you forget the decorator?" instead of "drop the module
+    prefix" (#1191). Both spellings a raw config can hold are covered, since the parser
+    reads the condition either way.
+    """
+    condition = guard.get("condition") if isinstance(guard, dict) else guard
+    try:
+        parsed = GuardParser.parse(condition)
+    except ValidationError:
+        return None
+    return parsed.expression if parsed.type is GuardType.UDF else None
+
+
 def validate_udf_references(config: dict[str, Any]) -> None:
-    """Validate that all 'impl' references in config exist in the UDF registry.
+    """Validate that every UDF a config references exists in the registry.
+
+    Covers ``impl:`` and a guard's ``udf:`` condition. A guard UDF is caught at run time
+    too, but only when the action runs — which is what this command exists to avoid
+    (#1191).
 
     Raises:
         FunctionNotFoundError: If a referenced function is not in the registry.
     """
-    impl_references: list[str] = []
+    references: list[str] = []
 
-    def extract_impl_refs(obj: Any, path: str = "") -> None:
-        """Recursively extract all 'impl' field values."""
+    def extract_refs(obj: Any, path: str = "") -> None:
+        """Recursively extract every 'impl' value and every guard's UDF name."""
         if isinstance(obj, dict):
             for key, value in obj.items():
                 current_path = f"{path}.{key}" if path else key
                 if key == "impl" and isinstance(value, str):
-                    impl_references.append(value)
+                    references.append(value)
+                elif key == "guard" and (name := guard_udf_name(value)):
+                    references.append(name)
                 else:
-                    extract_impl_refs(value, current_path)
+                    extract_refs(value, current_path)
         elif isinstance(obj, list):
             for idx, item in enumerate(obj):
                 current_path = f"{path}[{idx}]"
-                extract_impl_refs(item, current_path)
+                extract_refs(item, current_path)
 
-    extract_impl_refs(config)
-    for impl_ref in impl_references:
-        get_udf(impl_ref)
+    extract_refs(config)
+    for reference in references:
+        get_udf(reference)

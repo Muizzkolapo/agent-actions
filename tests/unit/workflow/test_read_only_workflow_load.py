@@ -49,6 +49,7 @@ def _failed_workflow(tmp_path, backend, state_manager, *, fresh: bool = False) -
     workflow = object.__new__(AgentWorkflow)
     workflow.config = SimpleNamespace(fresh=fresh)
     workflow.storage_backend = backend
+    workflow.metadata = SimpleNamespace(action_configs={ACTION: {"kind": "llm"}})
     workflow.services = SimpleNamespace(core=SimpleNamespace(state_manager=state_manager))
     return workflow
 

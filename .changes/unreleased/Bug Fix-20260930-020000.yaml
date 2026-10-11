@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A workflow's execution order no longer varies between runs. `topological_sort` collected its
+  nodes into a set, so the initial queue — and therefore the tie-break between actions at the
+  same dependency level — came from Python's per-process string hash randomisation. Six
+  independent actions produced five different orders across five hash seeds, and the sample
+  project's `ql_code_debug` produced two distinct orders across eight. `determine_execution_order`
+  hands this graph straight to the executor, so the order actions ran in could differ run to
+  run with no config or code change. Nodes are now collected in the order the caller declared
+  them, which is what an ordered mapping already carried; dependencies still decide the order
+  wherever they constrain it, and the tie-break is all that changes.
+time: 2026-09-30T02:00:00Z

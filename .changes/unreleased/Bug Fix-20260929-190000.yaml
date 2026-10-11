@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  An action's inferred dependency list no longer depends on the hash seed. `context_sources`
+  was built by iterating `potential_context_sources`, a set, so Python's per-process string
+  hash randomisation leaked into the order — and through `tooling/docs/parser.py`, which
+  builds each action's `dependencies` as `input_sources + context_sources`, into
+  `catalog.json`. Generating the catalog twice from identical code produced a different
+  order for 42 of 515 actions, with `dependencies` the only key that differed. The edge set
+  was always right, so the rendered DAG was never wrong, but any diff of two catalogs was
+  noisy and anything content-addressing one saw churn. The auto-inferred tail is now sorted;
+  declaration order is not recoverable at that seam, because the names arrive from a set
+  several calls earlier. The explicit `dependencies:` half is untouched — it is a list, keeps
+  declaration order, and still comes first.
+time: 2026-09-29T19:00:00Z

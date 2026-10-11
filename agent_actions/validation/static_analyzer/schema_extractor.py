@@ -258,7 +258,9 @@ class SchemaExtractor:
         input_schema: InputSchema,
     ) -> None:
         """Infer input schema from context_scope declarations."""
-        context_scope = config.get("context_scope", {})
+        context_scope = config.get("context_scope")
+        if not isinstance(context_scope, dict):
+            context_scope = {}
         observe = context_scope.get("observe", [])
         passthrough = context_scope.get("passthrough", [])
 
@@ -410,7 +412,9 @@ class SchemaExtractor:
 
     def _apply_context_scope(self, config: dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema."""
-        context_scope = config.get("context_scope", {})
+        context_scope = config.get("context_scope")
+        if not isinstance(context_scope, dict):
+            context_scope = {}
 
         # A ref the runtime's parser rejects is skipped at runtime, so modelling it as
         # forwarded leaves a field the run never delivers, undroppable by the drop the
@@ -427,7 +431,14 @@ class SchemaExtractor:
 
         for ref in context_scope.get("observe", []):
             parsed = self._parse_scope_ref(ref)
-            if parsed and parsed[1] != "*":
+            if not parsed:
+                continue
+            namespace, field_name = parsed
+            if field_name == "*":
+                # Expanded once the graph is built and the upstream's fields are known.
+                if namespace:
+                    output.observe_wildcard_sources.add(namespace)
+            else:
                 output.observe_refs.add(parsed)
 
         for ref in context_scope.get("drop") or []:  # `or []` guards `drop: null`

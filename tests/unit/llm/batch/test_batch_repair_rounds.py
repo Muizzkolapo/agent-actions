@@ -22,6 +22,7 @@ from .recording_provider import RecordingProvider
 
 ACTION = "author"
 CUSTOM_ID = "t-001"
+NAMELESS = "t-n1"
 ORIGINAL_PROMPT = "Write the options."
 
 EXPECTATIONS = [
@@ -231,7 +232,7 @@ class TestOnlyWhatWasSentCountsAsInFlight:
     false.
     """
 
-    def _submit(self, failed_ids: list[str]):
+    def _submit(self, failed_ids: list[str], context_map: dict[str, Any] | None = None):
         strategy = build_repair_strategy(_agent_config(repair="auto"))
         failed = [
             BatchResult(custom_id=cid, content=dict(FAILING), success=True) for cid in failed_ids
@@ -253,7 +254,7 @@ class TestOnlyWhatWasSentCountsAsInFlight:
                 provider=provider,
                 failed_results=failed,
                 strategy=strategy,
-                context_map=_context_map(),
+                context_map=context_map or _context_map(),
                 output_directory="/tmp/test",
                 file_name="f.json",
                 agent_config=_agent_config(repair="auto"),
@@ -267,6 +268,18 @@ class TestOnlyWhatWasSentCountsAsInFlight:
             f"{submission.sent_ids} claims a record was submitted that the preparator skipped; "
             "next round reconstructs it as a provider drop over its real content"
         )
+
+    def test_a_record_with_no_source_guid_is_not_sent(self):
+        """Preparation refuses it. Reported as sent, it would read on the next round as
+        one the provider dropped; alone, the round would go out empty. Only a batch an
+        earlier release sent can hold it."""
+        context_map = {**_context_map(), NAMELESS: {"target_id": NAMELESS, "content": {}}}
+
+        submission = self._submit([CUSTOM_ID, NAMELESS], context_map)
+
+        assert submission is not None
+        assert (submission.sent_ids, submission.record_count) == ([CUSTOM_ID], 1)
+        assert self._submit([NAMELESS], context_map) is None
 
     def test_the_batch_id_and_count_still_come_back(self):
         submission = self._submit([CUSTOM_ID])

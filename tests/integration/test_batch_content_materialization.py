@@ -427,8 +427,11 @@ class TestProviderParseChain:
         data = sqlite_backend.read_target("verify_answer", "ollama.json")
         assert data[0]["content"]["verify_answer"]["verified_answer"] == "C"
 
-    def test_empty_json_response_produces_hollow_namespace(self, action_config, context_map):
-        """Empty dict from LLM produces content.{action_name}: {} — hollow but valid."""
+    def test_empty_json_response_is_an_empty_answer(self, action_config, context_map):
+        """An empty dict is no answer. Stored as a hollow namespace it read as a success;
+        under the default `on_empty: warn` it is a failed record, as online fails it."""
+        from agent_actions.processing.types import ProcessingStatus
+
         result = BatchResult(custom_id="tid_001", content={}, success=True, error=None)
         strategy = BatchResultStrategy()
         results = strategy.process(
@@ -437,4 +440,6 @@ class TestProviderParseChain:
             output_directory="/tmp/test",
             agent_config=action_config,
         )
-        assert results[0].data[0]["content"]["verify_answer"] == {}
+        assert results[0].status == ProcessingStatus.FAILED
+        assert results[0].error.startswith("Empty LLM response for record")
+        assert "content" not in results[0].data[0]

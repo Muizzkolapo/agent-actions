@@ -1,0 +1,20 @@
+kind: Bug Fix
+body: >-
+  A batch the provider refuses for one file now fails the action, as it already did when
+  that file was the only one. When another file of the action had a batch out, the refusal
+  was logged and the run paused as if the file had been sent; once the other batches were
+  collected the action read completed, was not run again, and the refused file's records
+  were never answered. A record sent again after a failure kept its failed row under a
+  completed action, and a file sent for the first time was never written at all. The run
+  now fails. The next run sends the refused file's unanswered records again, and the run
+  after collects every file; a batch still out for another file is kept and collected, not
+  sent again, and while the action's config is unchanged, records it had already answered,
+  in any file, are kept rather than paid for again. While the provider refuses a file, the
+  run names the files whose batches are out and wait to be collected. A refused batch also
+  no longer replaces the file's record of what its last batch was sent: that record now
+  changes only for a batch the provider has taken. If it cannot be stored, the error now
+  names the batch the provider took, which nothing else names; the next run sends its
+  records again. A project an earlier version left with a refused file's failed row under a
+  completed action is not repaired by `agac run` or `agac retry`, which find nothing to do;
+  `agac run --fresh` sends every record of the workflow again.
+time: 2026-10-04T18:00:00Z

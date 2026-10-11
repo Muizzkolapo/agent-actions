@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  A batch action whose `retry` with `on_exhausted: raise` gives up on a record now halts
+  once that record's file is written, as an online action does. The collect pass took the
+  halt for that file's own failure: it logged the error and went on, recorded the action
+  complete and exited 0 with the record unanswered, as `on_exhausted: return_last` would,
+  and no later run asked for it again. The run now ends `failed` with exit 1, and later
+  runs leave the action to `agac retry` or `agac run --fresh`.
+time: 2026-10-04T19:48:24Z

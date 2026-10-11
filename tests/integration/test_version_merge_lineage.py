@@ -23,9 +23,9 @@ def _write_version_outputs_to_backend(backend, version_agents: dict):
         backend._write_target_raw(agent_name, "data.json", enriched)
 
 
-def _merged(backend, action: str, filename: str = "data.json") -> list[dict]:
+def _merged(correlated: dict, filename: str = "data.json") -> list[dict]:
     """The merged records a consuming action receives as previous-stage output."""
-    return backend.read_target(action, filename)
+    return correlated[filename]
 
 
 # ---------------------------------------------------------------------------
@@ -90,14 +90,13 @@ class TestVersionMergeLineage:
             },
         )
 
-        result_dir = correlator.prepare_correlated_input(
+        correlated = correlator.prepare_correlated_input(
             "aggregate_votes",
             ["score_quality_1", "score_quality_2", "score_quality_3"],
             4,
         )
-        assert result_dir is not None
 
-        merged_records = backend.read_target("aggregate_votes", "data.json")
+        merged_records = _merged(correlated)
         assert len(merged_records) == 1
         rec = merged_records[0]
         assert rec["source_guid"] == "sg-001"
@@ -134,9 +133,9 @@ class TestVersionMergeLineage:
             },
         )
 
-        correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
-
-        merged = _merged(backend, "consumer")
+        merged = _merged(
+            correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
+        )
         assert len(merged) == 1
         assert "lineage" in merged[0], "Merged record must include lineage"
 
@@ -180,9 +179,7 @@ class TestVersionMergeLineage:
             },
         )
 
-        result_dir = correlator.prepare_correlated_input("consumer", ["v1"], 2)
-        assert result_dir is not None
-        records = backend.read_target("consumer", "data.json")
+        records = _merged(correlator.prepare_correlated_input("consumer", ["v1"], 2))
         assert records[0]["source_guid"] == "sg-abc"
 
     def test_partial_merge_preserves_lineage(self, correlator, backend, agent_folder):
@@ -222,9 +219,7 @@ class TestVersionMergeLineage:
             },
         )
 
-        result_dir = correlator.prepare_correlated_input("consumer", ["v1", "v2"], 3)
-        assert result_dir is not None
-        records = backend.read_target("consumer", "data.json")
+        records = _merged(correlator.prepare_correlated_input("consumer", ["v1", "v2"], 3))
         assert len(records) == 2
 
         # Record with both versions: full merged lineage
@@ -281,8 +276,7 @@ class TestVersionMergeLineage:
             },
         )
 
-        correlator.prepare_correlated_input("consumer", ["gen_1", "gen_2"], 3)
-        merged = _merged(backend, "consumer")
+        merged = _merged(correlator.prepare_correlated_input("consumer", ["gen_1", "gen_2"], 3))
         assert len(merged) == 2
 
         # Enrich each record — per-item parent lookup via source_guid matching

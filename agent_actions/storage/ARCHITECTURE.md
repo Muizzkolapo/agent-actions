@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS target_data (
 
 No additional indexes — the UNIQUE constraint provides one.
 
-The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries.
+The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` reads it rather than the blob, and has to read it carefully: a store that gained the column by migration holds it as `TEXT`, where `'0' > 0` is true, and a row written before the column existed has it `NULL`. So it casts the count and falls back to `json_array_length(data)`. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
 
 ### 3. record_disposition — per-record processing status
 
@@ -141,11 +141,9 @@ action produced on this run. Known divergences, not an exhaustive list:
 - **Carried-forward records.** Cascade- and guard-skipped records are kept in
   an action's output for lineage, so they are counted even though the action
   did not produce them.
-- **Version fan-in.** The merged input is written under the *consumer's* name
-  before it runs (`VersionOutputCorrelator.prepare_correlated_input`), so a
-  consumer that then failed or was skipped shows that input. Its own write
-  replaces the row when it lands under the same `relative_path`, the normal
-  case.
+- **Version fan-in.** The merged input is handed to the consumer's walk
+  (`VersionOutputCorrelator.prepare_correlated_input`), never stored, so the
+  consumer's rows are only its own answers, which a re-run carries records from.
 
 ### 4. prompt_trace — LLM call telemetry
 
@@ -213,7 +211,7 @@ CREATE TABLE IF NOT EXISTS checkpoint_output (
     action_name TEXT NOT NULL,
     relative_path TEXT NOT NULL,
     source_guid TEXT,
-    record_data TEXT NOT NULL,         -- JSON blob: one record
+    record_data TEXT NOT NULL,         -- JSON list: every row the record was answered with
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path, source_guid)
 )
@@ -236,8 +234,8 @@ EXHAUSTED          Retried max times, provider never returned valid output
 FILTERED           Guard evaluation said "don't process this record"
 SKIPPED            Upstream action didn't produce output for this record
 DEFERRED           Batch submitted but not yet completed (temporary)
-PASSTHROUGH        Record passed through without LLM processing
-UNPROCESSED        Cascade casualty — upstream failure prevented processing
+PASSTHROUGH        Answered with nothing, kept as a tombstone (on_empty: skip)
+UNPROCESSED        Not answered — upstream failure prevented processing, or a guard skip
 ```
 
 ### Disposition sets (behavioral groupings)
@@ -250,13 +248,17 @@ TERMINAL_DISPOSITIONS (not reprocessed on re-run):
 
   These records are "done" from the disposition gate's perspective.
   The gate carries them forward without reprocessing.
+  get_terminal_record_ids() leaves out a PASSTHROUGH whose reason is
+  guard_skip: earlier versions recorded an online guard skip that way, and
+  a skip answers nothing (1348).
 
-RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an interrupted action):
+RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an action stopped partway):
   FAILED, EXHAUSTED, DEFERRED
 
-  When a RUNNING action resumes, these dispositions are deleted so the
-  records flow through again. SUCCESS, PASSTHROUGH, FILTERED, SKIPPED
-  are preserved so checkpointed progress survives.
+  When an action stopped partway resumes under the config its run started
+  with, these dispositions are deleted so the records flow through again.
+  SUCCESS, PASSTHROUGH, FILTERED, SKIPPED are preserved so checkpointed
+  progress survives.
 
 FAILURE_DISPOSITIONS (eligible for retry):
   FAILED, EXHAUSTED
@@ -313,11 +315,11 @@ On resume:
 
 The flow:
 
-1. **During processing**: `save_checkpoint_records()` upserts each batch of processed records using `INSERT OR REPLACE` keyed on `(action_name, relative_path, source_guid)`.
-2. **On resume**: `read_checkpoint_records()` retrieves all checkpointed records for the action/path, ordered by insertion ID.
-3. **After completion**: `clear_checkpoint_records()` deletes all checkpoint rows for the action. Checkpoint data is transient — it exists only between start and successful finish.
+1. **During processing**: `save_checkpoint_records()` upserts each processed record using `INSERT OR REPLACE` keyed on `(action_name, relative_path, source_guid)`, storing every row the record was answered with as one list. The rows of an expansion share their input's `source_guid` until enrichment mints one for each, so they are kept together under it: stored a row apiece, each would replace the one before.
+2. **On resume**: `read_checkpoint_records()` retrieves every checkpointed row for the action/path, its records ordered by insertion ID. A row an earlier version stored holds one record rather than a list, and is read as that record, but it may be only the last row of an expansion: that version kept one row per `source_guid`. `checkpointed_without_row_count()` names those records. The carry answers a record checkpointed with several rows again rather than carry them under the identity they share, and one an earlier version checkpointed rather than carry what may be one row of several (see `processing/ARCHITECTURE.md`).
+3. **After a file is written**: `clear_checkpoint_records(action, path)` deletes that file's checkpoint rows. Checkpoint data is transient — it exists only between a record's answer and its file's write. A row left beside a stored file is therefore newer than the stored one, and the online path answers that record again (`answered_since_stored`) rather than carry either: the checkpoint row is not enriched.
 
-Unlike target_data (which stores all records as one JSON blob), checkpoint_output stores **one row per record** with `source_guid` as the dedup key. This allows incremental appending without rewriting the entire blob on each checkpoint.
+Unlike target_data (which stores all records as one JSON blob), checkpoint_output stores **one row per record** with `source_guid` as the dedup key, holding what that record was answered with. This allows incremental appending without rewriting the entire blob on each checkpoint.
 
 ---
 
@@ -419,6 +421,8 @@ Blocked:
 
 This is defense-in-depth. All SQL uses parameterized queries, so injection is not possible through values. The validation catches malformed identifiers early with clear error messages rather than letting them propagate to confusing SQL errors.
 
+It also rewrites a path: surrounding whitespace is stripped and a backslash becomes `/`, so ` lead.json` is stored and listed as `lead.json`. A caller that compares its own names with `list_target_files()` passes them through `stored_path()` first, which applies the same rewrite.
+
 ---
 
 ## File Index
@@ -439,7 +443,7 @@ This is defense-in-depth. All SQL uses parameterized queries, so injection is no
 
 3. **DELETE-then-INSERT is not atomic at the SQL level.** If the process crashes between the DELETE and INSERT in `set_disposition()`, the disposition row is lost. This is acceptable because a missing disposition means the record will be reprocessed on the next run, which is the safe default.
 
-4. **delete_target vs clear_disposition are independent.** `delete_target()` removes rows from `target_data` but does NOT touch `record_disposition`. `clear_disposition()` removes rows from `record_disposition` but does NOT touch `target_data`. Callers must call both if they want a clean reset. The `--fresh` flag in the workflow layer coordinates this.
+4. **delete_target vs clear_disposition are independent.** `delete_target()` removes rows from `target_data` but does NOT touch `record_disposition`. `clear_disposition()` removes rows from `record_disposition` but does NOT touch `target_data`. Callers must call both if they want a clean reset. The `--fresh` flag in the workflow layer coordinates this. `delete_target_files()`, which deletes some of an action's files, is likewise independent: the walk that deletes the file of an input that is gone leaves its records' dispositions and checkpoint rows. They name records whose input is gone, so they are read again only if it comes back, and the reset it then takes to be answered again clears them.
 
 5. **Schema migration only adds columns.** If a column is renamed or removed in a future version, `_enforce_schema()` will not handle it. The table will have both old and new columns. There is no `DROP COLUMN` or `ALTER COLUMN` path.
 

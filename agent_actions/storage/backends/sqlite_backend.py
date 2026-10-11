@@ -13,15 +13,18 @@ from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.errors.validation import DataValidationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
+    DISPOSITION_PASSTHROUGH,
     DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
     VALID_DISPOSITIONS,
     Disposition,
     DispositionRow,
     StorageBackend,
+    batch_file_names_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -264,6 +267,13 @@ class SQLiteBackend(StorageBackend):
             invalid = set(name) - self._VALID_IDENTIFIER_CHARS
             raise ValueError(f"Invalid characters in {field}: {invalid}")
         return name
+
+    def stored_path(self, relative_path: str) -> str:
+        try:
+            return self._validate_identifier(relative_path, "relative_path")
+        except ValueError:
+            # Refused on write too, so it is listed under no name at all.
+            return relative_path
 
     @property
     def backend_type(self) -> str:
@@ -620,6 +630,30 @@ class SQLiteBackend(StorageBackend):
                 (action_name,),
             )
             return [row["relative_path"] for row in cursor.fetchall()]
+
+    def has_target_rows(self, action_name: str) -> bool:
+        """One indexed probe; a row stored before record_count existed is measured from its data."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        with self._lock:
+            cursor = self.connection.cursor()
+            # CAST: a store migrated to record_count holds it as TEXT, where '0' > 0.
+            cursor.execute(
+                "SELECT EXISTS (SELECT 1 FROM target_data WHERE action_name = ? "
+                "AND COALESCE(CAST(record_count AS INTEGER), json_array_length(data)) > 0)",
+                (action_name,),
+            )
+            return bool(cursor.fetchone()[0])
+
+    def has_target_file(self, action_name: str, relative_path: str) -> bool:
+        action_name = self._validate_identifier(action_name, "action_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT 1 FROM target_data WHERE action_name = ? AND relative_path = ? LIMIT 1",
+                (action_name, relative_path),
+            )
+            return cursor.fetchone() is not None
 
     def list_source_files(self) -> list[str]:
         """List all source file paths."""
@@ -984,7 +1018,11 @@ class SQLiteBackend(StorageBackend):
             return cursor.fetchone() is not None
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
-        """Return record_ids with any gate-terminal disposition for an action."""
+        """Return record_ids with any gate-terminal disposition for an action.
+
+        A guard skip is no answer. Earlier versions recorded one online as
+        ``passthrough``, and a store they wrote still holds those rows.
+        """
         from agent_actions.storage.backend import TERMINAL_DISPOSITIONS
 
         action_name = self._validate_identifier(action_name, "action_name")
@@ -993,11 +1031,21 @@ class SQLiteBackend(StorageBackend):
         sql = (
             f"SELECT DISTINCT record_id FROM record_disposition "
             f"WHERE action_name = ? AND disposition IN ({placeholders}) "
-            f"AND record_id != ?"
+            f"AND record_id != ? "
+            f"AND NOT (disposition = ? AND COALESCE(reason, '') = ?)"
         )
         with self._lock:
             cursor = self.connection.cursor()
-            cursor.execute(sql, (action_name, *terminal, NODE_LEVEL_RECORD_ID))
+            cursor.execute(
+                sql,
+                (
+                    action_name,
+                    *terminal,
+                    NODE_LEVEL_RECORD_ID,
+                    DISPOSITION_PASSTHROUGH,
+                    GUARD_SKIP,
+                ),
+            )
             return {row["record_id"] for row in cursor.fetchall()}
 
     def source_files_for_records(self, record_ids: Iterable[str]) -> set[str]:
@@ -1043,6 +1091,49 @@ class SQLiteBackend(StorageBackend):
                 if cursor.fetchone() is not None:
                     return True
         return False
+
+    def clear_dispositions_batch(self, action_name: str, record_ids: Iterable[str]) -> int:
+        """Delete every disposition *action_name* holds under any of *record_ids*, at once.
+
+        Returns count deleted. One transaction: no partial clear on failure.
+        """
+        action_name = self._validate_identifier(action_name, "action_name")
+        ids = [
+            self._validate_identifier(record_id, "record_id")
+            for record_id in dict.fromkeys(record_ids)
+        ]
+        if not ids:
+            return 0
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                deleted = 0
+                for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                    chunk = ids[start : start + _SQL_MAX_PARAMS]
+                    placeholders = ",".join("?" * len(chunk))
+                    cursor.execute(
+                        f"DELETE FROM record_disposition WHERE action_name = ? "
+                        f"AND record_id IN ({placeholders})",
+                        (action_name, *chunk),
+                    )
+                    deleted += cursor.rowcount
+                self.connection.commit()
+            except sqlite3.Error as e:
+                self.connection.rollback()
+                logger.error(
+                    "Failed to batch clear dispositions: %s (count=%d)",
+                    e,
+                    len(ids),
+                    extra={"action_name": action_name, "workflow_name": self.workflow_name},
+                )
+                raise
+        logger.debug(
+            "Batch cleared %d dispositions: action=%s",
+            deleted,
+            action_name,
+            extra={"workflow_name": self.workflow_name},
+        )
+        return deleted
 
     def clear_disposition(
         self,
@@ -1111,7 +1202,11 @@ class SQLiteBackend(StorageBackend):
         relative_path: str,
         records: list[dict[str, Any]],
     ) -> None:
-        """Append records to the checkpoint output table."""
+        """Store each record's rows as its answer, replacing any answer it held.
+
+        One table row per ``source_guid``, holding every row given under it: an expansion's
+        rows share their input's ``source_guid`` until enrichment mints one for each.
+        """
         if not records:
             return
         action_name = self._validate_identifier(action_name, "action_name")
@@ -1122,7 +1217,7 @@ class SQLiteBackend(StorageBackend):
         records = self._gate_schema_echo_records(action_name, records)
 
         # Fail loud on blank source_guid: UNIQUE + INSERT OR REPLACE would silently overwrite.
-        rows: list[tuple[str, str, str, str]] = []
+        answers: dict[str, list[dict[str, Any]]] = {}
         for index, r in enumerate(records):
             source_guid = r.get("source_guid")
             if not source_guid:
@@ -1135,14 +1230,11 @@ class SQLiteBackend(StorageBackend):
                         "record_index": index,
                     },
                 )
-            rows.append(
-                (
-                    action_name,
-                    relative_path,
-                    source_guid,
-                    json.dumps(r, ensure_ascii=False),
-                )
-            )
+            answers.setdefault(source_guid, []).append(r)
+        rows = [
+            (action_name, relative_path, source_guid, json.dumps(answer, ensure_ascii=False))
+            for source_guid, answer in answers.items()
+        ]
         with self._lock:
             cursor = self.connection.cursor()
             try:
@@ -1174,7 +1266,7 @@ class SQLiteBackend(StorageBackend):
         action_name: str,
         relative_path: str,
     ) -> list[dict[str, Any]]:
-        """Read all checkpointed records for an action/path."""
+        """Every row checkpointed for an action/path, in the order their records were saved."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -1185,7 +1277,26 @@ class SQLiteBackend(StorageBackend):
                 "WHERE action_name = ? AND relative_path = ? ORDER BY id",
                 (action_name, relative_path),
             )
-            return [json.loads(row["record_data"]) for row in cursor.fetchall()]
+            rows: list[dict[str, Any]] = []
+            for stored in cursor.fetchall():
+                answer = json.loads(stored["record_data"])
+                # An earlier version stored one row, not a list, per record.
+                rows.extend(answer if isinstance(answer, list) else [answer])
+            return rows
+
+    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
+        """Records of an action/path an earlier version checkpointed: one row, not a list."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT source_guid FROM checkpoint_output "
+                "WHERE action_name = ? AND relative_path = ? AND substr(record_data, 1, 1) <> '['",
+                (action_name, relative_path),
+            )
+            return {row["source_guid"] for row in cursor.fetchall()}
 
     def clear_checkpoint_records(self, action_name: str, relative_path: str | None = None) -> None:
         """Delete checkpoint records for an action (optionally scoped to one path)."""
@@ -1559,8 +1670,12 @@ class SQLiteBackend(StorageBackend):
                     "DELETE FROM target_data WHERE action_name = ?",
                     (action_name,),
                 )
-                self.connection.commit()
                 deleted = cursor.rowcount
+                cursor.execute(
+                    "DELETE FROM workflow_metadata WHERE key = ?",
+                    (batch_file_names_key(action_name),),
+                )
+                self.connection.commit()
                 logger.debug(
                     "Deleted %d target records for %s",
                     deleted,
@@ -1577,6 +1692,28 @@ class SQLiteBackend(StorageBackend):
                     extra={"workflow_name": self.workflow_name},
                 )
                 raise
+
+    def delete_target_files(self, action_name: str, relative_paths: Iterable[str]) -> int:
+        """Delete the files at *relative_paths* an action stores, in one transaction."""
+        action_name = self._validate_identifier(action_name, "action_name")
+        paths = [self._validate_identifier(path, "relative_path") for path in relative_paths]
+        if not paths:
+            return 0
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.executemany(
+                    "DELETE FROM target_data WHERE action_name = ? AND relative_path = ?",
+                    [(action_name, path) for path in paths],
+                )
+                deleted = cursor.rowcount
+                self.connection.commit()
+            except sqlite3.Error:
+                self.connection.rollback()
+                raise
+        # A read of a deleted file would otherwise be served from the cache.
+        self._reconstruction_cache.clear()
+        return deleted
 
     def clear_source_data(self) -> None:
         """Delete all rows from source_data table."""

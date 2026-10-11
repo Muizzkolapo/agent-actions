@@ -110,8 +110,8 @@ class TestTheRowsSurviveBeingStored:
         assert [r.get("producer_source_guids") for r in rows] == [["G0"], ["G0"], None]
 
     def test_a_checkpoint_round_trip_returns_every_row(self):
-        """The checkpoint table is unique per identity, so two rows sharing one
-        overwrite each other on the way in rather than on the way out."""
+        """Each split row carries an identity of its own, so each is checkpointed as a
+        record of its own."""
         rows, _ = reconcile_outputs(outputs(*SPLIT), "split_tool", records("G0", "G1", "G2"))
         with tempfile.TemporaryDirectory() as directory:
             backend = SQLiteBackend(str(pathlib.Path(directory) / "s.db"), "wf")

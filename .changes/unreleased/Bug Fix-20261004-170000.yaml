@@ -1,0 +1,21 @@
+kind: Bug Fix
+body: >-
+  A guard written as a Python function (`guard: "udf:name"`) is now applied to every
+  record. The function is handed a read-only view of the record, and building that view
+  failed for a record nested a few hundred levels deep, which JSON allows, and for one that
+  refers back to itself. The failure was taken for the function's own error, and a guard
+  whose function raises passes its record, so such a record went to the action with the
+  guard never run. The view is now built without recursion: depth, cycles and a value held
+  in two places no longer matter, and an ordinary record's view costs about half what it
+  did. If a view cannot be built at all, the record is never passed unjudged, as it was
+  before: an online action fails with an error naming the guard and the record, and a batch
+  marks that one record failed, or fails the action if the record is among the rows it
+  checks before submitting. Four things a guard function can
+  observe have changed. A copy taken with `.copy()` has the record's shape, so a value the
+  record holds in two places is one value in the copy, as `copy.deepcopy` gives. A dict or
+  list subclass inside a record is read from what it stores and in the order it stores it,
+  not through methods it overrides. A named tuple that holds no dict, list or set keeps its
+  type, where it used to become a plain tuple. And a value that only claims to be a dict or
+  a list (a weak-reference proxy, a test mock) cannot be viewed, so its guard stops with an
+  error where it used to run.
+time: 2026-10-04T17:00:00Z

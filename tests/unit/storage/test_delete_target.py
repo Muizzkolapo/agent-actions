@@ -58,3 +58,41 @@ class TestDeleteTarget:
             assert len(files) == 0
         finally:
             backend.close()
+
+
+class TestDeleteTargetFiles:
+    """An action re-run without one of its inputs deletes what it stored for that one."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_only_the_files_named_go(self, backend):
+        backend.write_target("action_a", "gone.json", [{"id": 1}])
+        backend.write_target("action_a", "kept.json", [{"id": 2}])
+        backend.write_target("action_b", "gone.json", [{"id": 3}])
+
+        deleted = backend.delete_target_files("action_a", ["gone.json"])
+
+        assert deleted == 1
+        assert backend.list_target_files("action_a") == ["kept.json"]
+        assert backend.list_target_files("action_b") == ["gone.json"]
+
+    def test_a_file_read_before_the_delete_is_not_served_after_it(self, backend):
+        """Reads are cached per file, and nothing else would clear the entry."""
+        backend.write_target("action_a", "gone.json", [{"id": 1, "_state": "processed"}])
+        assert backend.read_target("action_a", "gone.json")
+
+        backend.delete_target_files("action_a", ["gone.json"])
+
+        with pytest.raises(FileNotFoundError):
+            backend.read_target("action_a", "gone.json")
+
+    def test_naming_nothing_deletes_nothing(self, backend):
+        backend.write_target("action_a", "kept.json", [{"id": 1}])
+
+        assert backend.delete_target_files("action_a", []) == 0
+        assert backend.list_target_files("action_a") == ["kept.json"]

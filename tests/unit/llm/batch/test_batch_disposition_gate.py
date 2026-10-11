@@ -5,6 +5,7 @@ Tests cover: parent spec items 5, 17.
 
 from __future__ import annotations
 
+import logging
 import sys
 import tempfile
 from typing import Any
@@ -27,6 +28,8 @@ def _make_service(
 ) -> BatchSubmissionService:
     """Create a BatchSubmissionService with mocked dependencies."""
     preparator = MagicMock()
+    # An action with no guard, which turns nothing carried away.
+    preparator.turned_away.return_value = set()
     client_resolver = MagicMock()
     context_manager = MagicMock()
     registry_manager_factory = MagicMock()
@@ -63,9 +66,44 @@ def _make_record(guid: str) -> dict:
 
 
 def _mock_backend(terminal_ids: set[str]) -> MagicMock:
+    """A store where every record called done also has its stored row, as a real one does.
+
+    One with a disposition and no row is re-queued, which is pinned against a real store in
+    ``tests/integration/test_batch_rerun_matches_online.py``.
+    """
     backend = MagicMock()
     backend.get_terminal_record_ids.return_value = terminal_ids
+    backend.read_target_for_rewrite.return_value = [
+        {"source_guid": guid, "content": {}} for guid in sorted(terminal_ids)
+    ]
     return backend
+
+
+def _dispositions(*, filtered: set[str]):
+    def _get(action_name: str, record_id: str | None = None, disposition: str | None = None):
+        if disposition != "filtered":
+            return []
+        return [{"record_id": guid} for guid in sorted(filtered)]
+
+    return _get
+
+
+def _sent(backend: MagicMock, inputs: list[str]) -> list[str]:
+    """The inputs a submission over *inputs* hands on to preparation, in order."""
+    service = _make_service(
+        disposition_gate=DispositionGate(storage_backend=backend),
+        storage_backend=backend,
+        tasks=[{"custom_id": "t", "body": {}}],
+        context_map={"t": {"source_guid": "t"}},
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        service.submit_batch_job(
+            agent_config={"agent_type": "test_action", "action_name": "test_action"},
+            batch_name="data.json",
+            data=[_make_record(guid) for guid in inputs],
+            output_directory=tmpdir,
+        )
+    return [record["source_guid"] for record in service.prepare_batch_tasks.call_args[0][1]]
 
 
 class TestBatchDispositionGate:
@@ -110,6 +148,132 @@ class TestBatchDispositionGate:
         assert result.batch_id is None
         service.prepare_batch_tasks.assert_not_called()
         service._submit_to_provider.assert_not_called()
+
+    def test_a_done_input_is_looked_up_under_the_name_its_output_is_stored_under(self):
+        """Finalize stores `data.json` whatever the input file is called. Looked up under
+        the input's own name, every done record reads as having no row and is re-sent."""
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        rows = backend.read_target_for_rewrite.return_value
+
+        def _read(action_name: str, relative_path: str) -> list[dict]:
+            if relative_path != "data.json":
+                raise FileNotFoundError(relative_path)
+            return rows
+
+        backend.read_target_for_rewrite.side_effect = _read
+        backend.read_checkpoint_records.return_value = []
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend),
+            storage_backend=backend,
+            tasks=[{"custom_id": "r2", "body": {}}],
+            context_map={"r2": {"source_guid": "r2"}},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="data.jsonl",
+                data=[_make_record(f"r{i}") for i in range(3)],
+                output_directory=tmpdir,
+            )
+
+        sent = service.prepare_batch_tasks.call_args[0][1]
+        assert [record["source_guid"] for record in sent] == ["r2"]
+
+    def test_a_done_input_with_no_stored_row_is_sent_again(self):
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r0", "content": {}}]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend),
+            storage_backend=backend,
+            tasks=[{"custom_id": "r1", "body": {}}],
+            context_map={"r1": {"source_guid": "r1"}},
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="data.json",
+                data=[_make_record("r0"), _make_record("r1")],
+                output_directory=tmpdir,
+            )
+
+        sent = service.prepare_batch_tasks.call_args[0][1]
+        assert [record["source_guid"] for record in sent] == ["r1"]
+
+    def test_a_done_input_whose_answers_carry_minted_identities_is_not_sent_again(self):
+        """No stored row carries the input's own identity; each names it as its producer."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [
+            {"source_guid": "m1", "producer_source_guids": ["r0"], "content": {}},
+            {"source_guid": "m2", "producer_source_guids": ["r0"], "content": {}},
+        ]
+
+        assert _sent(backend, ["r0", "r1"]) == ["r1"]
+
+    def test_a_done_input_whose_row_this_run_writes_over_is_sent_again(self):
+        """Its only row sits under an identity the run is processing, so that row is
+        replaced and the input would be left with no answer."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [
+            {"source_guid": "r1", "producer_source_guids": ["r0"], "content": {}},
+        ]
+
+        assert _sent(backend, ["r0", "r1"]) == ["r0", "r1"]
+
+    def test_an_input_the_guard_filtered_goes_to_the_guard_again(self):
+        """Online judges it afresh every run; called done here, it would never be."""
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r0", "content": {}}]
+        backend.get_disposition.side_effect = _dispositions(filtered={"r1"})
+
+        assert _sent(backend, ["r0", "r1", "r2"]) == ["r1", "r2"]
+
+    def test_a_filtered_input_is_not_reported_as_a_row_gone_missing(self, caplog):
+        """It holds no row by design, so a healthy run has nothing to warn about."""
+        backend = _mock_backend(terminal_ids={"r0", "r1"})
+        backend.read_target_for_rewrite.return_value = [{"source_guid": "r0", "content": {}}]
+        backend.get_disposition.side_effect = _dispositions(filtered={"r1"})
+
+        with caplog.at_level(logging.WARNING):
+            _sent(backend, ["r0", "r1"])
+
+        assert "not found in prior output" not in caplog.text
+
+    def test_the_write_made_when_nothing_is_sent_carries_the_file_its_batch_is_named_for(self):
+        """And no other: the top-level file of the same name holds another file's rows."""
+        written = self._nothing_left_to_send(batch_name="sub/data.json")
+
+        assert written == ("sub/data.json", ["x1"])
+
+    def test_a_top_level_file_carries_its_own_rows_when_nothing_is_sent(self):
+        written = self._nothing_left_to_send(batch_name="data.json")
+
+        assert written == ("data.json", ["r0"])
+
+    @staticmethod
+    def _nothing_left_to_send(*, batch_name: str) -> tuple[str, list[str]]:
+        """Where the run with nothing to send stored its file, and whose rows it holds."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        files = {
+            "data.json": [{"source_guid": "r0", "content": {}}],
+            "sub/data.json": [{"source_guid": "x1", "content": {}}],
+        }
+        backend.read_target_for_rewrite.side_effect = lambda action, path: files[path]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend),
+            storage_backend=backend,
+            tasks=[],
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name=batch_name,
+                data=[_make_record("r0"), _make_record("r1")],
+                output_directory=tmpdir,
+            )
+        _action, stored_name, rows = backend.write_target.call_args.args
+        return stored_name, [row["source_guid"] for row in rows]
 
     def test_terminal_records_filtered_before_prepare(self):
         """9 with success + 1 cleared → 1 task prepared."""
@@ -195,6 +359,41 @@ class TestBatchAllCarryForward:
 
             assert result.batch_id is None
             assert result.passthrough == {"carry_forward_only": True}
+
+    def test_a_run_with_no_store_has_no_file_to_write_when_nothing_is_left_to_send(self):
+        """A first stage may run without a store, and the write reads the stored file."""
+        service = _make_service()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = service.submit_batch_job(
+                agent_config={"agent_type": "test_action", "action_name": "test_action"},
+                batch_name="test.json",
+                data=[],
+                output_directory=tmpdir,
+                run_inputs=[],
+            )
+
+        assert result.passthrough == {"carry_forward_only": True}
+
+    def test_a_run_given_no_output_folder_writes_nothing_when_nothing_is_left_to_send(self):
+        """The file's path is built from the folder, so without one there is nowhere to
+        store it, even with a row of a record that left to drop."""
+        backend = _mock_backend(terminal_ids={"r0"})
+        backend.read_target_for_rewrite.return_value = [_make_record("r0"), _make_record("r1")]
+        service = _make_service(
+            disposition_gate=DispositionGate(storage_backend=backend), storage_backend=backend
+        )
+
+        result = service.submit_batch_job(
+            agent_config={"agent_type": "test_action", "action_name": "test_action"},
+            batch_name="test.json",
+            data=[_make_record("r0")],
+            output_directory=None,
+            run_inputs=[_make_record("r0")],
+        )
+
+        assert result.passthrough == {"carry_forward_only": True}
+        backend.write_target.assert_not_called()
 
 
 class TestCarryForwardDispositionDerived:

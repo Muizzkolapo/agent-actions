@@ -258,11 +258,11 @@ class TestTheStagingWalkReportsTheLoss:
 class TestAWalkThatLosesEverything:
     """The case the report is actually about, and the one the first fix missed.
 
-    ``process_files`` raises only when ``files_found > 0``; with nothing found it
-    warns instead, and ``warn_no_files_found`` stays quiet because the directory
-    does have content. So a lost file has to count as found, exactly as a file that
-    fails while being read does — otherwise a walk whose every entry was unreadable
-    completes green with no output, which is the silence under repair.
+    ``process_files`` fails the action only when ``files_found > 0``; with nothing
+    found it skips the action as having no input and deletes its stored rows. So a
+    lost file has to count as found, exactly as a file that fails while being read
+    does — otherwise a walk whose every entry was unreadable reads as input that is
+    gone, and under a repair completes green with no output.
     """
 
     def _run(self, tmp_path, backend, *, names=(), dangling=("gone.json",)):

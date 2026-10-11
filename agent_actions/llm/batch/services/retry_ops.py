@@ -2,7 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
@@ -11,6 +11,8 @@ from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
 if TYPE_CHECKING:
+    from agent_actions.config.types import ActionConfigDict
+    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,31 @@ def _collect_missing_records(
     return records
 
 
+def _retry_preparator(
+    storage_backend: "StorageBackend | None",
+    agent_config: dict[str, Any] | None,
+    action_indices: dict[str, int],
+    dependency_configs: dict[str, dict],
+) -> "BatchTaskPreparator":
+    """The preparator a retry rebuilds its prompts with, built as the first submission's was.
+
+    A versioned action's prompt and guard read `version.*`, which only the
+    pipeline context carries.
+    """
+    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+    from agent_actions.workflow.pipeline import ProcessingPipeline
+
+    _, _, version_context = ProcessingPipeline._build_pipeline_context(
+        cast("ActionConfigDict", agent_config or {}), dependency_configs
+    )
+    return BatchTaskPreparator(
+        action_indices=action_indices,
+        dependency_configs=dependency_configs,
+        storage_backend=storage_backend,
+        version_context=version_context,
+    )
+
+
 class RetrySubmissionImpossible(RuntimeError):
     """A retry batch cannot be built for these records, this pass or any later one.
 
@@ -48,6 +75,9 @@ def submit_retry_batch(
     output_directory: str,
     file_name: str | None,
     agent_config: dict[str, Any] | None,
+    *,
+    action_indices: dict[str, int],
+    dependency_configs: dict[str, dict],
 ) -> tuple[str, int] | None:
     """Submit a retry batch for missing records without blocking.
 
@@ -62,14 +92,13 @@ def submit_retry_batch(
         output_directory: Output directory path
         file_name: Original file name
         agent_config: Agent configuration
+        action_indices: The workflow's action positions, which rebuilding the
+            prompt of an action with dependencies needs
+        dependency_configs: The workflow's action configs, for the same rebuild
 
     Returns:
         Tuple of (batch_id, record_count) if submitted, None if nothing to submit
     """
-    from agent_actions.llm.batch.processing.preparator import (
-        BatchTaskPreparator,
-    )
-
     missing_records = _collect_missing_records(missing_ids, context_map)
     if not missing_records:
         logger.warning(
@@ -86,7 +115,9 @@ def submit_retry_batch(
         # No attempt bump: a retry re-issues the identical prompt for a record
         # the provider never returned, so it rewrites its own attempt-0 trace
         # rather than opening a new round the way a repair does.
-        preparator = BatchTaskPreparator(storage_backend=storage_backend)
+        preparator = _retry_preparator(
+            storage_backend, agent_config, action_indices, dependency_configs
+        )
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
             data=missing_records,
@@ -127,10 +158,11 @@ def resubmit_missing_records(
     output_directory: str,
     file_name: str | None,
     agent_config: dict[str, Any] | None,
+    *,
+    action_indices: dict[str, int],
+    dependency_configs: dict[str, dict],
 ) -> list[BatchResult]:
     """Resubmit missing records as a new batch and wait for completion."""
-    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-
     missing_records = _collect_missing_records(missing_ids, context_map)
     if not missing_records:
         logger.warning(
@@ -145,7 +177,9 @@ def resubmit_missing_records(
         # No attempt bump: a retry re-issues the identical prompt for a record
         # the provider never returned, so it rewrites its own attempt-0 trace
         # rather than opening a new round the way a repair does.
-        preparator = BatchTaskPreparator(storage_backend=storage_backend)
+        preparator = _retry_preparator(
+            storage_backend, agent_config, action_indices, dependency_configs
+        )
         prepared = preparator.prepare_tasks(
             agent_config=agent_config or {},
             data=missing_records,

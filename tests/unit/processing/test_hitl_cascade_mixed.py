@@ -244,7 +244,7 @@ class TestGateCascadeInteraction:
         gate = DispositionGate(storage_backend=mock_backend)
         context = _make_context()
         context.storage_backend = mock_backend
-        context.file_path = "test.json"
+        context.target_relative_path = "test.json"
 
         spy = _SpyStrategy()
         processor = UnifiedProcessor(disposition_gate=gate)
@@ -287,7 +287,7 @@ class TestHITLCarryForwardAlignment:
         context = _make_context()
         context.source_data = [r1, r2, r3]
         context.storage_backend = mock_backend
-        context.file_path = "test.json"
+        context.target_relative_path = "test.json"
 
         hitl_response = {
             "hitl_status": "approved",
@@ -342,7 +342,7 @@ class TestHITLCarryForwardAlignment:
         context = _make_context()
         context.source_data = [r1, r2, r3, r4]
         context.storage_backend = mock_backend
-        context.file_path = "test.json"
+        context.target_relative_path = "test.json"
 
         captured: dict[str, list] = {}
 

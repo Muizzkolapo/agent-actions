@@ -1,0 +1,17 @@
+kind: Bug Fix
+body: >-
+  An online action whose guard filters every record of one input file is no longer skipped
+  while another of its files holds rows. The file whose records were all filtered marked
+  the whole action skipped, so the run reported it "skipped — All records guard-filtered —
+  no output produced" over the rows its other files had just written, every later run ran
+  it again, and its readers were skipped and kept the rows they built before, those from
+  the filtered records included. Batch completed in the same project. Such an action now
+  completes, as in batch, and its readers run on what it holds. A project left this way is
+  put right by its next run. An action left holding no record because its guard filtered
+  them all is still skipped, and so are its readers. Records it keeps from a file the run
+  did not read, such as one beyond `--file-limit`, count as held in either run mode, and
+  so do records stored by a version of agent-actions too old to note how many a file
+  holds, which batch had read as none. The warning for a file whose records are all
+  filtered now says none of them reaches downstream actions, rather than that downstream
+  actions receive no input.
+time: 2026-10-04T21:06:00Z

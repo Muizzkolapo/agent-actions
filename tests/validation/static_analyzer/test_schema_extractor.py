@@ -454,3 +454,32 @@ class TestNullContextScopeNormalization:
         # Should report missing context_scope as an error
         errors = [e for e in result.errors if "no context_scope" in e.message]
         assert len(errors) == 1
+
+
+class TestAPresentButNullContextScope:
+    """The sibling of the reference extractor's crash (#1193). `AgentConfig` permits
+    `context_scope: None`, and both of these read it with a `{}` default, which does not
+    help when the key is present and the value is null — `.get` on None then raises.
+    """
+
+    def setup_method(self):
+        self.extractor = SchemaExtractor()
+
+    def test_applying_directives_to_an_output_schema_does_not_crash(self):
+        from agent_actions.validation.static_analyzer.data_flow_graph import OutputSchema
+
+        output = OutputSchema()
+        self.extractor._apply_context_scope({"name": "a", "context_scope": None}, output)
+
+        assert output.passthrough_fields == set()
+
+    def test_a_populated_block_still_applies(self):
+        """The fix must not quietly stop reading a real block."""
+        from agent_actions.validation.static_analyzer.data_flow_graph import OutputSchema
+
+        output = OutputSchema()
+        self.extractor._apply_context_scope(
+            {"name": "a", "context_scope": {"passthrough": ["up.field"]}}, output
+        )
+
+        assert output.passthrough_fields != set()

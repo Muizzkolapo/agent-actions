@@ -322,7 +322,6 @@ get_existing_content(record, is_first_stage=False)
 |------|------|
 | `transformation/passthrough.py` | `PassthroughTransformer` — strategy dispatch orchestrator |
 | `transformation/strategies/` | Six strategies: Precomputed/ContextScope x Structured/Unstructured + NoOp + Default |
-| `passthrough_builder.py` | `PassthroughItemBuilder` — builds normalized passthrough records with metadata |
 
 ### Error handling
 | File | Role |

@@ -120,9 +120,10 @@ def test_resolve_propagates_all_versions_filtered():
         mgr.resolve_correlated_input(2)
 
 
-def test_resolve_returns_correlated_directory():
-    mgr = _delegating_manager(["v1", "v2"], return_value="/tmp/correlated/consumer")
-    assert mgr.resolve_correlated_input(2) == ["/tmp/correlated/consumer"]
+def test_resolve_returns_the_merged_input():
+    merged = {"data.json": [{"source_guid": "g1"}]}
+    mgr = _delegating_manager(["v1", "v2"], return_value=merged)
+    assert mgr.resolve_correlated_input(2) == merged
 
 
 def _make_executor(version_sources: list[str]):

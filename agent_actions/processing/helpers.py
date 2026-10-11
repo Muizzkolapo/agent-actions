@@ -138,6 +138,18 @@ def _content_keys(record: Any) -> int:
     return len(record) - (1 if is_verdict else 0)
 
 
+def _empty_warn_reason(action_config: Any, agent_name: str, source_guid: str | None) -> str:
+    """Reason text for the on_empty=warn branch; tool-aware for tool actions.
+
+    A tool action is identified by either `kind` or `model_vendor` being
+    ``"tool"`` (the same signal that routed and executed it as a tool), so the
+    reason names the empty tool output rather than blaming the LLM.
+    """
+    if action_config.get("kind") == "tool" or action_config.get("model_vendor") == "tool":
+        return f"Tool '{agent_name}' returned an empty list of records for input {source_guid}"
+    return f"Empty LLM response for record '{source_guid}'"
+
+
 def _is_empty_output(response: Any) -> bool:
     """Check if a tool/LLM response is effectively empty."""
     if response is None:

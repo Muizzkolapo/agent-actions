@@ -19,6 +19,11 @@ PARENT = "pages.json"
 MISSING = "rec-missing"
 
 
+def _context_map():
+    """The record as the context map holds it: with the identity a retry needs to resend it."""
+    return {MISSING: {"source_guid": "sg-missing"}}
+
+
 def _state(attempt: int = 1, max_attempts: int = 3):
     state = MagicMock()
     state.retry_attempt = attempt
@@ -77,7 +82,7 @@ def test_a_transient_submit_failure_does_not_stamp_exhaustion():
             side_effect=_capture,
         ),
     ):
-        handle_retry_recovery(_context(), identity, _state(), [], [], {MISSING: {}})
+        handle_retry_recovery(_context(), identity, _state(), [], [], _context_map())
 
     # The value the rest of the run reads. Marking the record exhausted here tells
     # the on_exhausted policy the budget is gone while two attempts remain.
@@ -115,7 +120,7 @@ def test_the_records_are_not_carried_forward_as_exhausted():
             return_value=False,
         ),
     ):
-        handle_retry_recovery(_context(), identity, state, [], [], {MISSING: {}})
+        handle_retry_recovery(_context(), identity, state, [], [], _context_map())
 
     assert state.missing_ids == [], (
         "the retry state still names records the guard declined to exhaust; the "
@@ -163,7 +168,7 @@ def test_a_permanent_submission_failure_does_stamp_exhaustion():
             side_effect=_capture,
         ),
     ):
-        handle_retry_recovery(context, identity, _state(), [], [], {MISSING: {}})
+        handle_retry_recovery(context, identity, _state(), [], [], _context_map())
 
     context.service._retry_service.build_exhausted_recovery.assert_called_once()
     assert seen["exhausted_recovery"] is not None
@@ -206,7 +211,7 @@ def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
             side_effect=_capture,
         ),
     ):
-        handle_retry_recovery(context, identity, state, [], [], {MISSING: {}})
+        handle_retry_recovery(context, identity, state, [], [], _context_map())
 
     context.service._retry_service.build_exhausted_recovery.assert_not_called()
     assert seen["exhausted_recovery"] is None
@@ -254,7 +259,7 @@ def test_the_exhausted_branch_keeps_the_id_set_it_stamped():
             side_effect=_capture,
         ),
     ):
-        handle_retry_recovery(context, identity, state, [], [], {MISSING: {}})
+        handle_retry_recovery(context, identity, state, [], [], _context_map())
 
     assert seen["exhausted_recovery"], "the budget was spent but nothing was stamped exhausted"
     assert state.missing_ids == [MISSING], (

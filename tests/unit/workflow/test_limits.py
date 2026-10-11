@@ -174,7 +174,6 @@ class TestFileLimitDirectoryFiles:
         # read as a repair in progress and narrow the walk. State the empty set a
         # runner that is not repairing actually carries.
         runner.retried_records = frozenset()
-        runner._should_skip_item.return_value = False
 
         params = MagicMock()
         params.action_config = {"file_limit": 2}
@@ -198,7 +197,6 @@ class TestFileLimitDirectoryFiles:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._should_skip_item.return_value = False
 
         params = MagicMock()
         params.action_config = {}
@@ -221,7 +219,6 @@ class TestFileLimitDirectoryFiles:
 
         runner = MagicMock()
         runner.retried_records = frozenset()
-        runner._should_skip_item.return_value = False
 
         params = MagicMock()
         params.action_config = {"file_limit": 100}
@@ -362,6 +359,7 @@ class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
         runner.storage_backend = backend
         params = MagicMock()
         params.upstream_data_dirs = [str(tmp_path / "target" / "upstream")]
+        params.correlated_input = None
         params.output_directory = str(tmp_path / "out")
         params.action_config = {"file_limit": limit}
         params.action_name = "act"
@@ -510,6 +508,7 @@ class TestFileLimitBackendEntries:
         runner.storage_backend = backend
         params = MagicMock()
         params.upstream_data_dirs = [str(tmp_path / "target" / "upstream")]
+        params.correlated_input = None
         params.output_directory = str(tmp_path / "out")
         params.action_config = {"file_limit": 1}
         params.action_name = "act"
@@ -819,8 +818,7 @@ class TestLimitStatusInvalidation:
         )
 
         # Should have reset to pending, then run the action
-        update_calls = mock_deps.state_manager.update_status.call_args_list
-        assert update_calls[0] == (("act_a", ActionStatus.PENDING),)
+        mock_deps.state_manager.reopen.assert_called_once_with(["act_a"])
 
     def test_same_limits_skips_action(self, executor, mock_deps):
         """Action completed with same limits should be skipped."""

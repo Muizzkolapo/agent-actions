@@ -15,7 +15,6 @@ import pytest
 
 from agent_actions.processing.disposition_gate import DispositionGate, build_carry_forward
 from agent_actions.processing.enrichment import LineageEnricher
-from agent_actions.processing.record_helpers import derive_relative_path
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.processing.unified import UnifiedProcessor
@@ -72,6 +71,7 @@ class _Run:
         context.storage_backend = self.backend
         context.file_path = str(self.tmp_path / "in" / "f.json")
         context.output_directory = str(self.tmp_path / "out")
+        context.target_relative_path = "f.json"
 
         def _tool(*_args, **kwargs):
             given = [list(item.values())[0] for item in kwargs.get("context", [])]
@@ -91,7 +91,7 @@ class _Run:
         # Through the real writer, not _write_target_raw: delta extraction and
         # lifecycle validation are on this path, and the reconstruction cache has to be
         # dropped between runs or a later run reads the first run's rows back.
-        relative = derive_relative_path(context.file_path, context.output_directory)
+        relative = context.target_relative_path
         self.backend.write_target(
             ACTION,
             relative,
@@ -627,10 +627,7 @@ class TestTheFileModeValueForAnInventedRow:
 
     def test_carry_forward_does_not_hand_an_input_the_invented_row(self, run, backend):
         output = run(_records("r0", "r1", "r2"), self.MAPPED_PLUS_INVENTED)
-        relative = derive_relative_path(
-            str(run.tmp_path / "in" / "f.json"), str(run.tmp_path / "out")
-        )
-        found, missing = build_carry_forward({"r0"}, ACTION, relative, backend, produced_by={"r0"})
+        found, missing = build_carry_forward({"r0"}, ACTION, "f.json", backend, produced_by={"r0"})
 
         assert [r["source_guid"] for r in found] == ["r0"]
         assert missing == set()

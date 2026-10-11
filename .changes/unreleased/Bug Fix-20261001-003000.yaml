@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  Two framework fields — `_delta_mode` and `version_correlation_id` — no longer render to a
+  human as business data. `RECORD_FRAMEWORK_FIELDS` counts both as envelope metadata and the
+  data card's own `METADATA_KEYS` did not list them, so anything reading that list treated
+  them as the record's content. The HITL approval screen reads it: `hitl/server.py`
+  serialises `METADATA_KEYS` into `approval.html`, which filters those keys out of what a
+  reviewer is shown. A test now pins the card's list against `RECORD_FRAMEWORK_FIELDS`, so a
+  field added to the envelope cannot quietly start rendering as content — three hand-kept
+  lists answer this one question and nothing compared them before.
+time: 2026-10-01T00:30:00Z

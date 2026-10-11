@@ -14,6 +14,7 @@ from agent_actions.cli.retry import (
     _read_manifest,
     _write_manifest,
 )
+from agent_actions.workflow.managers.state import REPAIRED_BY, ActionStatus
 from tests.unit.cli.conftest import make_mock_backend
 
 
@@ -290,6 +291,22 @@ class TestManifestSurvivesInterruption:
         assert manifest_file.exists()
 
 
+def _left_by(created_at: str, **statuses: ActionStatus) -> MagicMock:
+    """A state manager holding what the retry stamped *created_at* left behind.
+
+    An action given ``None`` was reset since, which removes the stamp.
+    """
+    details = {
+        action: {"status": status or ActionStatus.PENDING}
+        | ({REPAIRED_BY: created_at} if status else {})
+        for action, status in statuses.items()
+    }
+    state_mgr = MagicMock()
+    state_mgr.get_status_details.side_effect = lambda action: details[action]
+    state_mgr.get_status.side_effect = lambda action: details[action]["status"]
+    return state_mgr
+
+
 class TestManifestRestoreOnNextInvocation:
     """Next retry detects manifest and restores dispositions."""
 
@@ -299,7 +316,7 @@ class TestManifestRestoreOnNextInvocation:
 
         # Write a manifest as if a prior retry was interrupted
         manifest_file = _manifest_path(store_dir)
-        _write_manifest(
+        created_at = _write_manifest(
             manifest_file,
             from_action="classify",
             record_ids=["r1"],
@@ -355,6 +372,9 @@ class TestManifestRestoreOnNextInvocation:
 
             mock_wf = MagicMock()
             mock_wf.execution_order = ["classify", "enrich"]
+            mock_wf.services.core.state_manager = _left_by(
+                created_at, classify=ActionStatus.INTERRUPTED, enrich=ActionStatus.PENDING
+            )
             mock_load_wf.return_value = mock_wf
 
             args = RetryCommandArgs(agent="test_wf")
@@ -379,6 +399,108 @@ class TestManifestRestoreOnNextInvocation:
 
         # Manifest deleted after restore
         assert not manifest_file.exists()
+
+    def test_a_restored_row_keeps_its_relative_path(self, tmp_path: Path):
+        """The put-back writes each row's relative_path; restoring it must not drop it."""
+        manifest_file = _manifest_path(tmp_path / "agent_io" / "store" / "test_wf")
+        created_at = _write_manifest(
+            manifest_file,
+            from_action="classify",
+            record_ids=["r1"],
+            downstream_actions=["classify"],
+            dispositions=[
+                {
+                    "action_name": "classify",
+                    "record_id": "r1",
+                    "disposition": "failed",
+                    "reason": "API error",
+                    "relative_path": "pages/batch_1.json",
+                },
+            ],
+        )
+        backend = make_mock_backend()
+
+        with (
+            patch("agent_actions.cli.retry.get_storage_backend", return_value=backend),
+            patch("agent_actions.cli.retry.ProjectPathsFactory") as mock_paths_factory,
+            patch("agent_actions.cli.retry.load_workflow") as mock_load_wf,
+        ):
+            mock_paths_factory.create_project_paths.return_value.io_dir = tmp_path / "agent_io"
+            mock_wf = MagicMock()
+            mock_wf.execution_order = ["classify"]
+            mock_wf.services.core.state_manager = _left_by(
+                created_at, classify=ActionStatus.INTERRUPTED
+            )
+            mock_load_wf.return_value = mock_wf
+
+            cmd = RetryCommand(RetryCommandArgs(agent="test_wf"))
+            cmd.console = MagicMock()
+            cmd.execute()
+
+        (restore,) = backend.set_disposition.call_args_list
+        assert restore.args[:3] == ("classify", "r1", "failed")
+        assert restore.kwargs.get("relative_path") == "pages/batch_1.json"
+
+    def test_puts_nothing_back_on_an_action_reset_since(self, tmp_path: Path):
+        """A reset clears what the action holds and runs it again, so the snapshot taken
+        before it is older than anything the action has said since."""
+        manifest_file = _manifest_path(tmp_path / "agent_io" / "store" / "test_wf")
+        created_at = _write_manifest(
+            manifest_file,
+            from_action="classify",
+            record_ids=["r1"],
+            downstream_actions=["classify", "enrich"],
+            dispositions=[
+                {"action_name": "classify", "record_id": "r1", "disposition": "failed"},
+                {"action_name": "enrich", "record_id": "r1", "disposition": "exhausted"},
+            ],
+        )
+        backend = make_mock_backend()
+
+        with (
+            patch("agent_actions.cli.retry.get_storage_backend", return_value=backend),
+            patch("agent_actions.cli.retry.ProjectPathsFactory") as mock_paths_factory,
+            patch("agent_actions.cli.retry.load_workflow") as mock_load_wf,
+        ):
+            mock_paths_factory.create_project_paths.return_value.io_dir = tmp_path / "agent_io"
+            mock_wf = MagicMock()
+            mock_wf.execution_order = ["classify", "enrich"]
+            mock_wf.services.core.state_manager = _left_by(
+                created_at, classify=ActionStatus.INTERRUPTED, enrich=None
+            )
+            mock_load_wf.return_value = mock_wf
+
+            cmd = RetryCommand(RetryCommandArgs(agent="test_wf"))
+            cmd.console = MagicMock()
+            cmd.execute()
+
+        restored = [c.args[:3] for c in backend.set_disposition.call_args_list]
+        assert restored == [("classify", "r1", "failed")]
+
+
+class TestADryRunPlansOverTheSnapshot:
+    """A dry run restores nothing, so it reads the snapshot's rows as if it had."""
+
+    def test_a_row_it_would_restore_replaces_what_the_action_holds(self):
+        backend = make_mock_backend(
+            {
+                "classify": [
+                    {"action_name": "classify", "record_id": "r1", "disposition": "success"},
+                    {"action_name": "classify", "record_id": "r2", "disposition": "failed"},
+                ],
+            }
+        )
+        unwritten = [
+            {"action_name": "classify", "record_id": "r1", "disposition": "failed"},
+            {"action_name": "classify", "record_id": "r2", "disposition": "exhausted"},
+        ]
+
+        failures = RetryCommand._find_failures(backend, ["classify"], unwritten)
+
+        assert [(r["record_id"], r["disposition"]) for r in failures["classify"]] == [
+            ("r1", "failed"),
+            ("r2", "exhausted"),
+        ]
 
 
 class TestManifestWriteFailureAborts:

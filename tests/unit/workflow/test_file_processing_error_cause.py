@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import DependencyError
+from agent_actions.errors import DependencyError, ExternalServiceError, mark_action_fatal
 from agent_actions.errors.configuration import FunctionNotFoundError
 from agent_actions.storage.backend import DISPOSITION_FAILED, NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -151,6 +151,21 @@ class TestTheCauseIsWhereTheReaderLooks:
             process_files(runner, params)
 
         assert CAUSE in str(exc_info.value)[:SUMMARY_PANEL_WIDTH]
+
+    def test_the_other_causes_follow_an_action_fatal_one(self, tmp_path):
+        """The fatal cause leads; alone, a provider refusing every file reads as one refusal."""
+        source = tmp_path / "input"
+        _write(source / "a.json")
+        _write(source / "b.json")
+        refused = mark_action_fatal(ExternalServiceError("Failed to submit batch job: refused"))
+        params = _params(_failing_strategy(refused), [str(source)], tmp_path / "out")
+
+        with pytest.raises(DependencyError) as exc_info:
+            process_files(ActionRunner(use_tools=True), params)
+
+        message = str(exc_info.value)
+        assert "a.json: Failed to submit batch job" in message
+        assert "b.json: Failed to submit batch job" in message
 
     @pytest.mark.parametrize("failing_files", [5, _MAX_TRACKED_ERRORS + 2])
     def test_only_the_first_few_causes_are_shown_and_the_total_is_exact(

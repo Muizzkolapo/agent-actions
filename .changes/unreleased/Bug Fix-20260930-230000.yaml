@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A field observed through a wildcard is now enumerated, so `Outputs` reports it and a
+  `drop` aimed at it can be named. `context_scope.observe: [upstream.*]` recorded only the
+  source name — the fields it forwards never reached the action's output schema, so they
+  were missing from `available_outputs`, and a `drop` naming one had no entry to mark and
+  came back empty while the run withheld the field. Spelling the same observe out
+  explicitly made both work, which is the asymmetry this closes. The wildcard is expanded
+  once the graph is built and the upstream's fields are known, mirroring the
+  `passthrough_wildcard_sources` set that already existed for the passthrough case. An
+  upstream whose fields are unknowable — schemaless or template-based — expands to nothing
+  and keeps its source name recorded, so a reader can still tell "brings in nothing" from
+  "brings in something unlistable". Measured on the sample project:
+  `qana_quiz.generate_answer_from_source` went from 5 reported outputs to 9, and its two
+  drops (`filter`, `vote_summary`) are named where they were previously invisible.
+time: 2026-09-30T23:00:00Z

@@ -22,9 +22,12 @@ def topological_sort(dependencies: dict[T, list[T]]) -> list[T]:
             f"Invalid type for dependencies: expected dictionary, got {type(dependencies).__name__}"
         )
         raise DataValidationError(message, context={"operation": "topological_sort"})
-    all_nodes = set(dependencies.keys())
+    # A dict, not a set: the queue below is seeded from this in order, so a set would make
+    # the tie-break between same-level nodes depend on the hash seed. Declaration order is
+    # what the caller handed us and says more to a reader than an alphabetical one.
+    all_nodes: dict[T, None] = dict.fromkeys(dependencies)
     for dependent_nodes in dependencies.values():
-        all_nodes.update(dependent_nodes)
+        all_nodes.update(dict.fromkeys(dependent_nodes))
     in_degree: dict[T, int] = {node: 0 for node in all_nodes}
     for _node, dependent_nodes in dependencies.items():
         for dep_node in dependent_nodes:
@@ -42,7 +45,7 @@ def topological_sort(dependencies: dict[T, list[T]]) -> list[T]:
     if len(sorted_nodes) != len(all_nodes):
         from agent_actions.errors import WorkflowError
 
-        cycle_nodes: set[T] = all_nodes - set(sorted_nodes)
+        cycle_nodes: set[T] = set(all_nodes) - set(sorted_nodes)
         message = "Cyclic dependency detected in the workflow"
         raise WorkflowError(
             message,

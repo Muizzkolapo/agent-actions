@@ -47,6 +47,7 @@ class ActionMetadata:
     prompt_ref: str | None = None
     impl_ref: str | None = None
     schema_ref: str | None = None
+    output_field: str | None = None
     dependencies: list[str] = field(default_factory=list)
     context_observe: list[str] = field(default_factory=list)
     context_drop: list[str] = field(default_factory=list)
@@ -57,6 +58,12 @@ class ActionMetadata:
     versions_line: int | None = None
     versions_summary: str | None = None
     versions_params: list[str] = field(default_factory=list)
+    # The namespaces a versions block actually produces. A versioned action is stored under
+    # `base_1`, `base_2`, ... and never under its declared name, so the base is not one.
+    version_variants: list[str] = field(default_factory=list)
+    # A FILE-granularity version-merge tool spreads its output flat over record content
+    # instead of namespacing it, so its fields resolve bare and its own name does not.
+    spreads_output_flat: bool = False
 
 
 @dataclass

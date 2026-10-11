@@ -5,6 +5,12 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.errors import (
+    ConfigurationError,
+    FunctionNotFoundError,
+    GuardNotAppliedError,
+    mark_action_fatal,
+)
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.guards.consolidated_guard import (
     _UNSUPPORTED_GUARD_BEHAVIORS as _UNSUPPORTED_BEHAVIORS,
@@ -20,6 +26,8 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     get_global_guard_filter,
 )
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
+from agent_actions.utils.readonly import ReadOnlyError
+from agent_actions.utils.safe_format import get_error_chain, safe_format_error
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
@@ -192,6 +200,28 @@ def reclassify_missing_field_error(filter_result: FilterResult, clause: str) -> 
     )
 
 
+def _readonly_bus(context: Any) -> Any:
+    """A read-only view of the guard context, still a Bus so the UDF keeps require()."""
+    from agent_actions.utils.udf_management.bus import ReadOnlyBus
+
+    return ReadOnlyBus(context) if isinstance(context, dict) else context
+
+
+def _refused_write(error: Exception) -> ReadOnlyError | None:
+    """The view's refusal, if the UDF let it escape or raised while handling it."""
+    return next((link for link in get_error_chain(error) if isinstance(link, ReadOnlyError)), None)
+
+
+def _raised_after(error: Exception, refusal: ReadOnlyError) -> str:
+    """What the UDF raised in the refusal's place, so a bug of its own there is not hidden."""
+    raised = error.__cause__ or error
+    if raised is refusal:
+        return ""
+    return (
+        f" After the refused write it raised {type(raised).__name__}: {safe_format_error(raised)}."
+    )
+
+
 class GuardEvaluator:
     """Unified guard evaluation for batch and online modes."""
 
@@ -232,11 +262,64 @@ class GuardEvaluator:
         if not clause:
             return None
 
+        # Read-only, since `context` holds the record's own namespaces by reference. Built
+        # outside the handler below: that passes a record whose UDF raised, and a record
+        # the UDF could not be shown has not been judged by it at all. Fatal to the action
+        # unless a caller can fail the one record: taken as one file's failure, the file's
+        # records go missing while the action completes.
         try:
-            if not execute_user_defined_function(clause, context):
+            view = _readonly_bus(context)
+        except Exception as e:
+            raise mark_action_fatal(
+                GuardNotAppliedError(
+                    f"Guard UDF '{clause}' was not run: its input could not be made read-only "
+                    f"({type(e).__name__}: {e}). A record the guard has not judged is not "
+                    "passed to the action.",
+                    context={
+                        "udf_name": clause,
+                        "operation": "evaluate_conditional_clause",
+                        "failed_field": "guard",
+                    },
+                    cause=e,
+                )
+            ) from e
+
+        try:
+            if not execute_user_defined_function(clause, view):
                 logger.debug("Guard: conditional_clause '%s' evaluated to False, skipping", clause)
                 return GuardResult.skipped()
+        except FunctionNotFoundError as e:
+            # Not an execution error, so passthrough does not apply: the guard named a
+            # function that does not exist, and admitting every record on a name the
+            # config got wrong is the silent no-op #1188 would otherwise have opened.
+            raise ConfigurationError(
+                f"Guard UDF '{clause}' is not registered. Name the function as it is "
+                "registered, with no module prefix; `agac list-udfs` prints the names.",
+                context={
+                    "udf_name": clause,
+                    "operation": "evaluate_conditional_clause",
+                    "failed_field": "guard",
+                },
+            ) from e
         except Exception as e:
+            refusal = _refused_write(e)
+            if refusal is not None:
+                # Not passed through: the UDF gave no answer, so passing would apply no
+                # guard to any record the write recurs on. Fatal, because one file's
+                # failure is taken alone and its records go missing from a completed action.
+                raise mark_action_fatal(
+                    ConfigurationError(
+                        f"Guard UDF '{clause}' wrote to its input, so it gave no answer and "
+                        f"no record is passed to the action unjudged."
+                        f"{_raised_after(e, refusal)} {refusal}",
+                        context={
+                            "udf_name": clause,
+                            "operation": "evaluate_conditional_clause",
+                            "failed_field": "guard",
+                        },
+                        cause=e,
+                    )
+                ) from e
             logger.warning(
                 "Guard: conditional_clause '%s' raised %s: %s — passing record "
                 "(legacy conditional_clause uses passthrough-on-error semantics)",

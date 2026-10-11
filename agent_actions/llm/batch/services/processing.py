@@ -1,16 +1,16 @@
 """Batch processing service for converting batch results to workflow output."""
 
-import json
 import logging
 import time
 from collections.abc import Callable, Collection
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.config.types import ActionConfigDict, RunMode
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import ProcessingError, is_action_fatal
+from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
@@ -24,6 +24,7 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
 )
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
+    batch_output_name,
 )
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
@@ -36,6 +37,11 @@ from agent_actions.llm.batch.processing.batch_result_strategy import (
     BatchResultStrategy,
 )
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.batch.services.collect import (
+    collect_batch_rows,
+    halt_survives_failure,
+    write_batch_file,
+)
 from agent_actions.llm.batch.services.processing_recovery import (
     check_and_submit_repair as _check_and_submit_repair_impl,
 )
@@ -44,9 +50,6 @@ from agent_actions.llm.batch.services.processing_recovery import (
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     finalize_batch_output as _finalize_batch_output_impl,
-)
-from agent_actions.llm.batch.services.processing_recovery import (
-    halt_survives_failure as _halt_survives_failure_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
@@ -63,13 +66,12 @@ from agent_actions.llm.batch.services.retry_serialization import (
 )
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.output.writer import FileWriter, target_relative_path
+from agent_actions.output.writer import target_relative_path
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import CollectionStats, _safe_set_disposition
-from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
+from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
-from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
 
@@ -92,12 +94,13 @@ def _is_dead_retry(entry: BatchJobEntry) -> bool:
 def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
     """Registry keys that are no longer the live job for their parent.
 
-    COMPLETED (readable now) and in-flight (readable later) recoveries
-    supersede outright. A terminally failed retry recovery also supersedes —
-    its next step is counting the spent attempt, then resubmission or
-    exhaustion — but only when the parent has no readable recovery: a dead
-    attempt must not outrank a usable sibling's actual results. Anything else
-    (a dead recovery batch, an unrecognised status) supersedes nothing, because
+    COMPLETED (readable now) and in-flight (readable later, a status outside
+    BatchStatus included, since the provider is asked about it again)
+    recoveries supersede outright. A terminally failed retry recovery also
+    supersedes — its next step is counting the spent attempt, then
+    resubmission or exhaustion — but only when the parent has no readable
+    recovery: a dead attempt must not outrank a usable sibling's actual
+    results. Anything else (a dead repair batch) supersedes nothing, because
     nothing would process it and a parent skipped for a recovery that never
     produces wedges the action.
 
@@ -130,6 +133,19 @@ def _superseded_entries(jobs: dict[str, BatchJobEntry]) -> set[str]:
         if entry.parent_file_name in live and name != live[entry.parent_file_name][2]
     )
     return superseded
+
+
+@dataclass
+class CollectPass:
+    """The files a collect pass wrote, and the finished ones it could not read.
+
+    A file left unread still owes its results, or the failures of its records, so the
+    action waits for it as for a batch still out: completed, the action is not run again
+    and nothing reads that batch.
+    """
+
+    written: list[str] = field(default_factory=list)
+    unread: list[str] = field(default_factory=list)
 
 
 class BatchProcessingService:
@@ -277,12 +293,18 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
-    ) -> list[str]:
-        """Process all completed batch jobs in the registry.
+    ) -> CollectPass:
+        """Process the completed batch jobs whose results are still owed.
 
         Recovery entries are processed in their own right; the parent they
-        superseded is skipped instead. Tolerates empty processed_files when
-        recovery batches are pending (in_progress).
+        superseded is skipped instead, and so is an entry already collected.
+        A finished entry the provider cannot be asked about, or reports running again,
+        is left unread, as is the parent a recovery dropped in the pass hands back; one
+        it reports ended any other way, or does not know, has its records marked failed.
+        So has a batch the provider failed or cancelled before it finished, which is then
+        stamped collected: nothing is owed for it. Either is left unread if its records
+        could not be reached. Tolerates writing nothing when recovery batches are pending
+        (in_progress), a collected entry was skipped, or an entry was left unread.
 
         Args:
             output_directory: Output directory path
@@ -290,10 +312,11 @@ class BatchProcessingService:
             action_name: Override action_name for storage backend writes (uses self._workflow_name if not provided)
 
         Returns:
-            List of output file paths
+            The output file paths written, and the files left unread
 
         Raises:
-            ProcessingError: If no registry found or no files processed (and no recovery pending)
+            ProcessingError: If no registry found, or no files processed while none
+                was skipped as collected or left unread and no recovery is pending
         """
         effective_action_name = self._resolve_action_name(action_name)
         manager = self._registry_manager_factory(effective_action_name)
@@ -304,6 +327,7 @@ class BatchProcessingService:
             )
 
         processed_files = []
+        unread: list[str] = []
         # Spent entries stay COMPLETED, so nothing else stops the loop re-reading
         # one: that restarts recovery at attempt 1, or finalizes on stale results
         # and deletes the live attempt. Stores written before this can hold them.
@@ -312,6 +336,7 @@ class BatchProcessingService:
         # the registry would then call that parent live again and re-run the
         # original batch. Superseded once, skipped for the whole pass.
         superseded = _superseded_entries(all_jobs)
+        collected_before = False
         for file_name in all_jobs:
             if file_name in superseded:
                 logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
@@ -329,12 +354,62 @@ class BatchProcessingService:
             if not batch_id:
                 continue
 
+            # Its results are already written, and a later run may have written over
+            # them: read again, a spent batch puts back rows for records that have left.
+            # Before the poll, so a spent batch costs no provider call and cannot fail
+            # the pass. An entry from before the stamp existed reads as uncollected.
+            if entry.collected_at is not None:
+                collected_before = True
+                logger.info("Skipping %s: collected at %s", file_name, entry.collected_at)
+                continue
+
+            # Ended before it finished, as the poll before this pass recorded: nothing
+            # will come back, and no later pass can read it. Stamped once its records
+            # are failed, it holds the action no longer; until then it is owed, so a
+            # pass that could not reach them leaves it for the next. A recovery round
+            # is left to the paths below: a retry's failure path continues it, and the
+            # pass over a repair's file puts its records back in play.
+            if entry.recovery_type is None and entry.status in (
+                BatchStatus.FAILED,
+                BatchStatus.CANCELLED,
+            ):
+                if self._fail_unreadable_batch(
+                    file_name, entry, entry.status, output_directory, effective_action_name
+                ):
+                    manager.mark_collected(file_name)
+                else:
+                    unread.append(file_name)
+                continue
+
             # A dead retry recovery is processed without a readiness poll: its
             # provider status is terminal, and the failure path needs no results.
-            if not _is_dead_retry(entry) and not self._is_batch_ready_for_processing(
-                batch_id, output_directory, agent_config, action_name=effective_action_name
-            ):
-                continue
+            if not _is_dead_retry(entry):
+                status = self._provider_status(
+                    batch_id, output_directory, agent_config, action_name=effective_action_name
+                )
+                if status != BatchStatus.COMPLETED:
+                    if entry.status != BatchStatus.COMPLETED:
+                        continue
+                    # Its last poll said finished, so its results are owed all the same.
+                    if status is None or status in BatchStatus.in_flight_states():
+                        logger.warning(
+                            "Could not read %s (batch %s) in this pass: %s. The action "
+                            "waits for it",
+                            file_name,
+                            batch_id,
+                            "the provider could not be asked about it"
+                            if status is None
+                            else f"the provider reports it {status}",
+                        )
+                        unread.append(file_name)
+                        continue
+                    # Ended without results, or unknown to the provider: no later pass
+                    # can read it, so waiting would hold the action for good.
+                    if not self._fail_unreadable_batch(
+                        file_name, entry, status, output_directory, effective_action_name
+                    ):
+                        unread.append(file_name)
+                    continue
 
             try:
                 output_file = self._process_single_batch_file(
@@ -348,15 +423,22 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except (RuntimeError, ExpectationConfigurationError):
+            except (RuntimeError, ExpectationConfigurationError, EmptyOutputError):
                 # An unresolvable `expect:` block is not this file's problem:
                 # every remaining file carries the same action config and fails
                 # the same way, so continuing would finish the run reporting
                 # success with each of them missing from the output. A plain
                 # ConfigurationError is per record — a malformed lifecycle state
-                # — and stays below, costing only its own file.
+                # — and stays below, costing only its own file. The halt `on_empty:
+                # error` asks for is raised once its file is written: taken as that
+                # file's failure, its records are marked failed over what they hold.
                 raise
             except Exception as e:
+                # Declared where it was raised: a store that failed to write the file,
+                # or the halt `on_exhausted: raise` asks for. Taken as this file's
+                # failure, the action completes over what the file held before.
+                if is_action_fatal(e):
+                    raise
                 logger.exception(
                     "Failed to process batch %s (%s): %s",
                     batch_id,
@@ -379,46 +461,49 @@ class BatchProcessingService:
                 )
                 continue
 
-        if not processed_files:
+        # A recovery dropped in this pass hands back the parent it superseded, which
+        # the loop has already skipped. One that finalized stamped its parent collected.
+        for name in sorted(superseded - _superseded_entries(manager.get_all_jobs())):
+            parent = manager.get_batch_job(name)
+            if parent is not None and parent.awaits_collection:
+                logger.warning(
+                    "Could not read %s in this pass: it was skipped for a recovery since "
+                    "dropped. The action waits for it",
+                    name,
+                )
+                unread.append(name)
+
+        # A file already collected counts as one this pass did not fail, as a replay of
+        # it that succeeded did. One left unread is waited for, not failed.
+        if not processed_files and not collected_before and not unread:
             # Check if recovery batches are pending — not an error
             stats = manager.get_registry_stats()
             if stats.in_progress > 0:
-                return processed_files
+                return CollectPass()
             raise ProcessingError(
                 "No batch results were successfully processed",
                 context={"output_directory": output_directory},
             )
-        return processed_files
+        return CollectPass(written=processed_files, unread=unread)
 
-    def _is_batch_ready_for_processing(
+    def _provider_status(
         self,
         batch_id: str,
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
-    ) -> bool:
-        """Check if batch is ready for processing (completed status).
-
-        Args:
-            batch_id: The batch job ID to check
-            output_directory: Directory containing batch registry
-            agent_config: Optional agent config for API key resolution
-            action_name: Per-action name for registry lookup
-
-        Returns:
-            True if batch status is COMPLETED, False otherwise
-        """
+    ) -> str | None:
+        """The batch's status at the provider, or None when the provider cannot be asked."""
         resolved = self._resolve_action_name(action_name)
         try:
             manager = self._registry_manager_factory(resolved)
             provider = self._client_resolver.get_for_batch_id(
                 batch_id, manager, output_directory, agent_config=agent_config
             )
-            status = provider.check_status(batch_id)
-            return status == BatchStatus.COMPLETED
+            return provider.check_status(batch_id)
         except (OSError, ConnectionError) as e:
             logger.warning("Transient error checking batch status for %s: %s", batch_id, e)
-            return False
+            return None
 
     def _determine_output_path(
         self, output_directory: str, file_name: str | None, batch_id: str
@@ -434,7 +519,7 @@ class BatchProcessingService:
             Path object for the output file
         """
         if file_name:
-            return Path(output_directory) / f"{Path(file_name).stem}.json"
+            return Path(output_directory) / batch_output_name(file_name)
         return Path(output_directory) / f"{batch_id}_processed_output.json"
 
     def _write_batch_output(
@@ -445,24 +530,18 @@ class BatchProcessingService:
         action_name: str | None = None,
         *,
         batch_inputs: Collection[str] = (),
+        filtered: Collection[str] = (),
     ) -> None:
-        """Write batch output file, merging any carry-forward records first."""
-        effective_action = self._resolve_action_name(action_name)
-        main_output = self._merge_carry_forward(
-            effective_action,
+        """Write the batch output file through ``write_batch_file``."""
+        write_batch_file(
+            self._storage_backend,
+            self._resolve_action_name(action_name),
             main_output,
-            target_relative_path(output_file, output_directory),
+            output_root=output_directory,
+            stored_name=target_relative_path(output_file, output_directory),
             batch_inputs=batch_inputs,
+            filtered=filtered,
         )
-
-        if self._storage_backend is None:
-            ensure_directory_exists(output_file, is_file=True)
-        FileWriter(
-            str(output_file),
-            storage_backend=self._storage_backend,
-            action_name=effective_action,
-            output_directory=output_directory,
-        ).write_target(main_output)
 
     def _merge_carry_forward(
         self,
@@ -473,11 +552,6 @@ class BatchProcessingService:
         batch_inputs: Collection[str] = (),
     ) -> list[dict[str, Any]]:
         """Hand back every stored row this batch did not answer for.
-
-        *relative_path* is the file being written and the only file read: the rows
-        go straight to the write, so gathering them across the action's other files
-        puts those files' records into this one. A store this cannot read raises
-        rather than returning the batch's answers alone, which replace the file.
 
         A *stored* row's disposition does not decide whether it comes back: `failed`
         is not terminal, and a batch narrowed to one record would drop the rest. What
@@ -490,40 +564,15 @@ class BatchProcessingService:
         if not self._storage_backend or not action_name:
             return batch_output
 
-        try:
-            stored = self._storage_backend.read_target_for_rewrite(action_name, relative_path)
-        except FileNotFoundError:
-            # Nothing stored for this file yet, so nothing to carry.
-            return batch_output
+        from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
-        from agent_actions.processing.disposition_gate import stored_rows_not_reproduced
-
-        carry_guids = stored_rows_not_reproduced(stored, batch_output, batch_inputs=batch_inputs)
-        if not carry_guids:
-            return batch_output
-
-        from agent_actions.processing.disposition_gate import build_carry_forward
-
-        # Re-reads the same file, which the reconstruction cache answers, and in
-        # exchange keeps the one-row-per-identity rule in the place that owns it.
-        # Not its checkpoint fallback: a file with no stored rows has returned
-        # above, so that branch is unreachable from here.
-        carry_records, _missing = build_carry_forward(
-            carry_guids, action_name, relative_path, self._storage_backend
+        return with_stored_rows_not_reproduced(
+            batch_output,
+            action_name,
+            relative_path,
+            self._storage_backend,
+            batch_inputs=batch_inputs,
         )
-
-        if carry_records:
-            logger.info(
-                "Merging %d carry-forward records into batch output for %s",
-                len(carry_records),
-                action_name,
-            )
-
-        # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored
-        # whole and leaves the rest for `write_target` to re-derive, so a row
-        # round-trips into the mode it had. Stamping "full" re-stores every
-        # carried row whole — rewriting rows this run never reprocessed.
-        return batch_output + carry_records
 
     def _process_single_batch_file(
         self,
@@ -625,7 +674,9 @@ class BatchProcessingService:
         retry_enabled = retry_config and retry_config.get("enabled", True)
 
         if retry_enabled:
-            missing_ids = BatchResultReconciler.find_missing_ids(context_map, batch_results)
+            missing_ids = BatchResultReconciler.resendable_ids(
+                BatchResultReconciler.find_missing_ids(context_map, batch_results), context_map
+            )
 
             if missing_ids:
                 max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
@@ -693,7 +744,7 @@ class BatchProcessingService:
         # Stale files are cleaned up in _finalize_batch_output.
         # Same wrapper the recovery handlers get: a halt parked below must not be
         # lost to an unrelated failure on the way to the finaliser.
-        with _halt_survives_failure_impl(context):
+        with halt_survives_failure(context):
             if not _check_and_submit_repair_impl(
                 context=context,
                 identity=identity,
@@ -772,124 +823,41 @@ class BatchProcessingService:
         _raise_pending_exhaustion_impl(context)
         return output_path
 
-    def _clear_deferred_dispositions(
-        self, items: list[dict[str, Any]], action_name: str | None = None
-    ) -> None:
-        """Clear DEFERRED dispositions for batch records entering output.
-
-        Batch records receive DEFERRED dispositions at submit time under
-        the per-action name.  After retrieve, the shared collector writes
-        final dispositions (SUCCESS, FAILED, etc.), but DEFERRED entries
-        remain unless explicitly cleared.
-
-        Args:
-            action_name: Per-action name used when DEFERRED was written.
-                Falls back to self._workflow_name (workflow name) if not given.
-        """
-        effective_name = action_name or self._workflow_name
-        if not self._storage_backend or not effective_name:
-            return
-        for item in items:
-            source_guid = item.get("source_guid")
-            if source_guid:
-                self._try_clear_deferred(effective_name, source_guid)
-
-    def _write_filtered_dispositions(self, context_map: dict[str, Any], action_name: str) -> None:
-        """Write FILTERED dispositions for records excluded from output.
-
-        FILTERED records are removed from the output stream by the reconciler
-        (they never reach write_record_dispositions). This method ensures they
-        still receive DISPOSITION_FILTERED to match online ResultCollector parity.
-        """
-        if not self._storage_backend or not context_map:
-            return
-        from agent_actions.llm.batch.core.batch_constants import FilterStatus
-        from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-        from agent_actions.record.reasons import GUARD_FILTER
-        from agent_actions.storage.backend import DISPOSITION_FILTERED
-
-        for _custom_id, entry in context_map.items():
-            if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
-                continue
-            source_guid = entry.get("source_guid")
-            if not source_guid:
-                continue
-            reason = BatchContextMetadata.get_skip_reason(entry) or GUARD_FILTER
-            self._try_clear_deferred(action_name, source_guid)
-            try:
-                self._storage_backend.set_disposition(
-                    action_name, source_guid, DISPOSITION_FILTERED, reason=reason
-                )
-            except Exception:
-                logger.warning(
-                    "Failed to write FILTERED disposition for %s — "
-                    "record may be reprocessed on next run",
-                    source_guid,
-                    exc_info=True,
-                )
-
-    def _try_clear_deferred(self, action_name: str, record_id: str) -> None:
-        """Clear a DEFERRED disposition for one record. Swallows errors."""
-        if not self._storage_backend:
-            return
-        from agent_actions.storage.backend import DISPOSITION_DEFERRED
-
-        try:
-            self._storage_backend.clear_disposition(
-                action_name,
-                disposition=DISPOSITION_DEFERRED,
-                record_id=record_id,
-            )
-        except Exception:
-            logger.debug(
-                "Could not clear DEFERRED disposition for %s (may not exist)",
-                record_id,
-                exc_info=True,
-            )
-
-    def _update_prompt_trace_responses(self, items: list[dict[str, Any]], action_name: str) -> None:
-        """Update prompt traces with batch responses for SUCCESS records only.
-
-        Only records with _state=processed represent actual LLM responses.
-        Tombstones (exhausted, failed, skipped) must not pollute prompt traces.
-        """
-        if not self._storage_backend:
-            return
-        from agent_actions.record.state import RecordState
-
-        try:
-            for item in items:
-                if item.get("_state") != RecordState.PROCESSED.value:
-                    continue
-                # An expansion child's target_id was re-minted after its prompt
-                # ran, so it reaches the trace by parent_target_id.
-                target_id = item.get("target_id")
-                if not target_id:
-                    continue
-                content = item.get("content")
-                if content is None:
-                    continue
-                # Extract only the action's output namespace — matches online prompt trace shape
-                action_output = (
-                    content.get(action_name, content) if isinstance(content, dict) else content
-                )
-                response_text = json.dumps(action_output, ensure_ascii=False, default=str)
-                self._storage_backend.update_prompt_trace_response(
-                    action_name=action_name,
-                    record_id=target_id,
-                    response_text=response_text,
-                    parent_record_id=item.get("parent_target_id"),
-                )
-        except Exception:
-            logger.warning(
-                "Failed to update prompt trace responses for batch action=%s",
-                action_name,
-                exc_info=True,
-            )
-
     # =========================================================================
     # HELPERS (kept in this module)
     # =========================================================================
+
+    def _fail_unreadable_batch(
+        self,
+        file_name: str,
+        entry: BatchJobEntry,
+        status: str,
+        output_directory: str,
+        action_name: str,
+    ) -> bool:
+        """Fail the records of a batch no pass can read, which the provider reports *status*.
+
+        Returns whether they were reached; a pass that could not reach them owes them still.
+        """
+        marked = self._fail_abandoned_records(
+            # A recovery round is sent from its parent's context map.
+            file_name=entry.parent_file_name or file_name,
+            output_directory=output_directory,
+            action_name=action_name,
+            error=ProcessingError(
+                f"batch {entry.batch_id} is {status} at the provider, not completed"
+            ),
+        )
+        logger.warning(
+            "Could not read %s (batch %s): the provider reports it %s, not completed. %s",
+            file_name,
+            entry.batch_id,
+            status,
+            "Its records are marked failed for `agac retry`"
+            if marked
+            else "Its records could not be marked failed in this pass. The action waits for it",
+        )
+        return marked
 
     def _fail_abandoned_records(
         self,
@@ -897,14 +865,15 @@ class BatchProcessingService:
         output_directory: str,
         action_name: str | None,
         error: Exception,
-    ) -> None:
+    ) -> bool:
         """Write FAILED dispositions for INCLUDED records in a batch file that threw an exception.
 
         Without this, records remain stuck with stale DEFERRED dispositions —
         the retry command won't find them and subsequent reruns won't know they failed.
+        Returns whether the file's context map was read, which is where its records are found.
         """
         if not self._storage_backend or not action_name:
-            return
+            return False
 
         try:
             context_map = self._context_manager.load_batch_context_map(
@@ -920,7 +889,7 @@ class BatchProcessingService:
                 action_name,
                 exc_info=True,
             )
-            return
+            return False
 
         reason = f"batch_processing_exception: {str(error)[:500]}"
         failed_count = 0
@@ -961,6 +930,7 @@ class BatchProcessingService:
                 action_name,
                 str(error)[:200],
             )
+        return True
 
     @staticmethod
     def _cleanup_recovery_entries(manager: BatchRegistryManager, parent_file_name: str) -> None:
@@ -984,47 +954,24 @@ class BatchProcessingService:
         output_directory: str | None = None,
         agent_config: dict[str, Any] | None = None,
         exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
+        action_name: str | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats, Exception | None]:
-        """Convert batch results to workflow format via UnifiedProcessor.
+        """Collect the file's rows and dispositions through ``collect_batch_rows``.
 
-        Routes batch results through the shared enrich → collect pipeline
-        (same path online uses), eliminating the duplicate inline loop.
-
-        Args:
-            batch_results: Raw batch results
-            context_map: Context map for processing
-            output_directory: Output directory path
-            agent_config: Agent configuration
-            exhausted_recovery: Per-record recovery metadata for exhausted records
-
-        Returns:
-            Tuple of (output_records, CollectionStats, pending halt). The halt is
-            what `retry: on_exhausted: raise` decided; it is returned rather than
-            thrown because the caller has not written the output file yet.
+        Returns (rows, stats, halt); the halt is raised by the caller once the file is
+        written. *action_name* defaults to the config's.
         """
-        results = self._result_processor.process(
-            batch_results=batch_results,
-            context_map=context_map,
+        return collect_batch_rows(
+            self._storage_backend,
+            action_name or self._resolve_action_name((agent_config or {}).get("action_name")),
+            agent_config,
+            context_map,
+            batch_results,
             output_directory=output_directory,
-            agent_config=agent_config,
             exhausted_recovery=exhausted_recovery,
+            result_processor=self._result_processor,
+            unified_processor=self._unified_processor,
         )
-
-        effective_config = agent_config or {}
-        ctx = ProcessingContext(
-            agent_config=cast(ActionConfigDict, effective_config),
-            agent_name=effective_config.get("action_name", "batch"),
-            mode=RunMode.BATCH,
-            storage_backend=self._storage_backend,
-        )
-
-        ctx.defer_exhaustion = True
-        # Collection parks the halt partway through and keeps working. A failure
-        # after that point would return no third element at all, so the halt has
-        # to survive the failure here as it does on the recovery contexts.
-        with _halt_survives_failure_impl(ctx):
-            output_records, stats = self._unified_processor.enrich_and_collect(results, ctx)
-        return output_records, stats, ctx.pending_exhaustion
 
     @staticmethod
     def _apply_workflow_session_id(

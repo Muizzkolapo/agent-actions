@@ -70,6 +70,7 @@ from agent_actions.logging.events.io_events import (
     ContextNamespaceLoadedEvent,
     ContextScopeAppliedEvent,
     FileWriteCompleteEvent,
+    FileWriteFailedEvent,
     FileWriteStartedEvent,
     SchemaConstructionCompleteEvent,
     SchemaConstructionStartedEvent,
@@ -191,6 +192,7 @@ __all__ = [
     "SchemaLoadedEvent",
     "FileWriteStartedEvent",
     "FileWriteCompleteEvent",
+    "FileWriteFailedEvent",
     # Schema Operations
     "SchemaConstructionStartedEvent",
     "SchemaConstructionCompleteEvent",

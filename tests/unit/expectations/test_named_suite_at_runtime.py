@@ -230,7 +230,6 @@ def _pipeline_project(tmp_path, *, expect_block: bool):
         "  api_key: OPENAI_API_KEY\n"
         "  model_name: gpt-4o-mini\n"
         "  model_vendor: openai\n"
-        "  ephemeral: false\n"
         "schema_path: schema\n"
     )
     (root / "schema" / "quality.yml").write_text(

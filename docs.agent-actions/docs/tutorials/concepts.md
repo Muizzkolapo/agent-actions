@@ -138,7 +138,7 @@ See the [Human-in-the-Loop guide](../guides/human-in-the-loop.md) for more detai
 
 Agent Actions distinguishes between two types of dependencies:
 
-- **Execution dependencies**: Declared explicitly via `dependencies: action_name`. These control execution order—ensuring upstream actions complete before downstream actions start.
+- **Execution dependencies**: Declared explicitly via `dependencies: [action_name]`. These control execution order—ensuring upstream actions complete before downstream actions start.
 - **Context dependencies**: Auto-inferred from field references like `{{ action.field }}` in your prompts or `context_scope` declarations. The referenced field must be defined in that action's output schema—this is how Agent Actions knows the field exists and can pass it to downstream actions.
 
 **Example: Execution dependency**
@@ -179,7 +179,7 @@ flowchart TB
     context --> |"Agent Actions infers"| E[Data Flow]
 ```
 
-You only need to declare execution dependencies explicitly. Context dependencies are handled automatically based on your prompt template or context_scope references.
+You only need to declare execution dependencies explicitly. Context dependencies are handled automatically based on your prompt template or context_scope references, as long as the action named is upstream through `dependencies`: only the actions a record passed through are sure to be on it, and preflight refuses any other name.
 
 ## Field References
 

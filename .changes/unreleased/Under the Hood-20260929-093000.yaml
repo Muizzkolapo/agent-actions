@@ -1,0 +1,16 @@
+kind: Under the Hood
+body: >-
+  Three corrections to the guard documentation, each verified against the implementation.
+  A guard gates the action before it receives anything, so it reads the record as stored:
+  `context_scope` describes what the action is handed once the guard has let the record
+  through, and does not decide the verdict — a field the action drops still answers a clause,
+  and the guard field need not appear in `observe`. `guards.md` had presented "Context scope
+  observed" as a category of thing a guard reaches. Second, `expectations.md`,
+  `expectations/expression.py` and `expectations/_MANIFEST.md` each claimed a condition string
+  is portable between a `guard:` block and an `expect:` entry unchanged; the grammar is
+  shared, field resolution is not, and an `expect:` entry reads its action's own output by
+  bare name. Third, `execution/granularity.md` listed guards as "(record only)", which its own
+  earlier paragraph contradicts. Eight example READMEs showed a guard condition written
+  without its action prefix where the config beside them uses the dotted form; each now
+  matches its config, checked pair by pair. Documentation and docstrings only.
+time: 2026-09-29T09:30:00Z

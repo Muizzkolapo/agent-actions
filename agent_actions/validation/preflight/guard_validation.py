@@ -7,7 +7,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from agent_actions.guards.bare_reference import (
+    bare_reference_is_unresolvable,
+    spreads_output_flat,
+)
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 
 if TYPE_CHECKING:
     from agent_actions.input.preprocessing.parsing.ast_nodes import (
@@ -53,6 +58,82 @@ def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str)
     return errors
 
 
+def _collect_field_nodes(node: ASTNode) -> list[str]:
+    """Every field path the clause reads, from both sides of every comparison."""
+    from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode
+
+    paths: list[str] = []
+    for comparison in _find_comparison_nodes(node):
+        for side in (comparison.left, comparison.right):
+            if isinstance(side, FieldNode):
+                paths.append(side.field_path)
+    return paths
+
+
+def _version_params(config: dict) -> list[str]:
+    """The version names a guard clause may use bare, read from the expanded config.
+
+    This runs after expansion, which replaces `versions` with a per-variant
+    `_version_context` -- so reading `versions` found nothing and every guard naming a
+    version param was refused as unresolvable.
+    """
+    version_context = config.get("_version_context")
+    if not isinstance(version_context, dict):
+        return []
+    return sorted(VersionNamespaceBuilder.promoted_names(version_context))
+
+
+def _suggest_dotted(variable: str, upstreams: list[str]) -> str:
+    """Name the spelling that would resolve, the way the runtime's own error does."""
+    if len(upstreams) == 1:
+        return f" Did you mean '{upstreams[0]}.{variable}'?"
+    if upstreams:
+        options = ", ".join(f"'{name}.{variable}'" for name in sorted(upstreams)[:3])
+        return f" Did you mean one of {options}?"
+    return ""
+
+
+def _check_bare_field_references(
+    ast_root: ASTNode, clause: str, action_name: str, config: dict, action_configs: dict
+) -> list[str]:
+    """Refuse a clause naming a field without its namespace, which filters every record.
+
+    The runtime does detect this -- per record, at warning level, after the record is
+    already filtered -- so a run discards an entire input and still exits successfully.
+    Only a reference `bare_reference_is_unresolvable` can prove wrong is refused; a bare
+    name resolves through several promotions and refusing all of them would reject
+    configurations that work.
+    """
+    upstreams = [d for d in config.get("dependencies") or [] if isinstance(d, str)]
+    output_fields = {
+        name: (action_configs[name].get("output_field") if name in action_configs else None)
+        for name in upstreams
+    }
+    known = {name: name in action_configs for name in upstreams}
+    output_fields = {k: v for k, v in output_fields.items() if known[k]}
+    spreads_flat = any(
+        spreads_output_flat(action_configs[name]) for name in upstreams if name in action_configs
+    )
+
+    errors: list[str] = []
+    for variable in _collect_field_nodes(ast_root):
+        if not bare_reference_is_unresolvable(
+            variable,
+            upstreams=upstreams,
+            upstream_output_fields=output_fields,
+            version_params=_version_params(config),
+            any_upstream_spreads_flat=spreads_flat,
+        ):
+            continue
+        errors.append(
+            f"Action '{action_name}': guard condition '{clause}' references field "
+            f"'{variable}' without an action prefix. Content is namespaced, so this "
+            f"resolves against nothing and every record is filtered at runtime."
+            f"{_suggest_dotted(variable, upstreams)}"
+        )
+    return errors
+
+
 def validate_guard_conditions(action_configs: dict) -> list[str]:
     """Parse all guard clauses, returning one error message per invalid one.
 
@@ -77,6 +158,11 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
 
         if parse_result.ast is not None:
             errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
+            errors.extend(
+                _check_bare_field_references(
+                    parse_result.ast.root, clause, action_name, config, action_configs
+                )
+            )
 
     return errors
 

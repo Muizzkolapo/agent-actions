@@ -10,11 +10,12 @@ description: Build, run, inspect, and debug agent-actions workflows. Triggers on
 ## Rules
 
 1. **Every dependency needs at least one field in observe.** Preflight errors otherwise. Even guard-only dependencies need an anchor field.
-2. **Every `{{ namespace.field }}` in a prompt needs a matching observe.** Every observe entry feeds the prompt. If the prompt doesn't use it, remove it — you're paying tokens for nothing.
-3. **Only observe what the action needs.** Never pass large upstream fields to downstream actions when a distilled version already exists. Context bloat causes LLMs to drift off-topic.
-4. **Guard fields must be in observe.** Write `upstream.field == value`, not `field == value`.
-5. **Tools receive namespaced data.** Access as `data["action_name"]["field"]`, never `data["field"]`.
-6. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
+2. **Every action named in observe, a prompt or a guard must be upstream through `dependencies`.** Naming it does not wire it in; preflight refuses it otherwise. An action with no `dependencies` reads only the staged input, and a version merge depends on its base name.
+3. **Every `{{ namespace.field }}` in a prompt needs a matching observe.** Every observe entry feeds the prompt. If the prompt doesn't use it, remove it — you're paying tokens for nothing.
+4. **Only observe what the action needs.** Never pass large upstream fields to downstream actions when a distilled version already exists. Context bloat causes LLMs to drift off-topic.
+5. **Guard fields must be in observe.** Write `upstream.field == value`, not `field == value`.
+6. **Tools receive namespaced data.** Access as `data["action_name"]["field"]`, never `data["field"]`.
+7. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
 
 ## Workflow Structure
 

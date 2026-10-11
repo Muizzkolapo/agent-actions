@@ -121,7 +121,7 @@ Downstream actions access these as `write_description.isbn`, `write_description.
 
 ```yaml
 guard:
-  condition: 'passes_filter'
+  condition: 'filter_quality.passes_filter == true'
   on_false: filter
 ```
 

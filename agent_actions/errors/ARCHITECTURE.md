@@ -48,6 +48,7 @@ Exception
     │   ├── GenerationError
     │   ├── WorkflowError
     │   ├── SerializationError
+    │   ├── GuardNotAppliedError
     │   └── EmptyOutputError
     │
     ├── ResourceError                          resources.py

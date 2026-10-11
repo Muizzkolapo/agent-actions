@@ -18,6 +18,7 @@ from agent_actions.utils.constants import SPECIAL_NAMESPACES
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "expand_version_base_names",
     "infer_dependencies",
 ]
 
@@ -146,6 +147,33 @@ def _resolve_input_sources_for_fan_in(
     return input_sources, context_sources
 
 
+def expand_version_base_names(action_list: list[str], workflow_actions: list[str]) -> list[str]:
+    """Expand version base names to their actual variants in the workflow."""
+    expanded = []
+    for action in action_list:
+        if action in workflow_actions:
+            # Action exists as-is
+            expanded.append(action)
+        else:
+            # Check if this is a version base name
+            version_variants = [
+                wf_action
+                for wf_action in workflow_actions
+                if wf_action.startswith(f"{action}_") and wf_action[len(action) + 1 :].isdigit()
+            ]
+            if version_variants:
+                # Expand to all variants. For context sources with wildcards, we still
+                # expand to concrete version names so they can be loaded via agent_indices.
+                expanded.extend(version_variants)
+                logger.debug(
+                    f"[VERSION_EXPAND] Expanded version base name '{action}' to {version_variants}"
+                )
+            else:
+                # Not a version base name - keep as-is (will error in validation)
+                expanded.append(action)
+    return expanded
+
+
 def infer_dependencies(
     action_config: dict,
     workflow_actions: list[str],
@@ -238,8 +266,12 @@ def infer_dependencies(
         # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources
         input_sources = all_deps
 
-    # 2. Parse context_scope to find all referenced actions
-    context_scope = action_config.get("context_scope", {})
+    # 2. Parse context_scope to find all referenced actions. Coerced here rather than at
+    # each caller: seven of them pass an action config, and the docs parser and inspect
+    # read it straight from YAML, where `context_scope:` null or a scalar survives (#1193).
+    context_scope = action_config.get("context_scope")
+    if not isinstance(context_scope, dict):
+        context_scope = {}
     referenced_actions = extract_action_names_from_context_scope(context_scope)
 
     # 2a. Auto-infer from prompt template (if no context_scope configured)
@@ -293,42 +325,17 @@ def infer_dependencies(
         referenced_actions - set(input_sources) - set(fan_in_context_sources)
     )
     context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
-    for action in potential_context_sources:
-        context_sources.append(action)
+    # sorted(): this is a set, so iterating it leaks hash randomisation into catalog.json.
+    # Declaration order is available for the refs that came from context_scope, but not for
+    # the ones inferred from the prompt template, so one rule for the whole tail beats a
+    # hybrid. Nothing is lost either way: the order here was hash-random before.
+    context_sources.extend(sorted(potential_context_sources))
 
     # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
     # This handles version_consumption where context_scope references the base name
-    def expand_version_base_names(
-        action_list: list[str],
-    ) -> list[str]:
-        """Expand version base names to their actual variants in the workflow."""
-        expanded = []
-        for action in action_list:
-            if action in workflow_actions:
-                # Action exists as-is
-                expanded.append(action)
-            else:
-                # Check if this is a version base name
-                version_variants = [
-                    wf_action
-                    for wf_action in workflow_actions
-                    if wf_action.startswith(f"{action}_") and wf_action[len(action) + 1 :].isdigit()
-                ]
-                if version_variants:
-                    # Expand to all variants. For context sources with wildcards, we still
-                    # expand to concrete version names so they can be loaded via agent_indices.
-                    expanded.extend(version_variants)
-                    logger.debug(
-                        f"[VERSION_EXPAND] Expanded version base name '{action}' to {version_variants}"
-                    )
-                else:
-                    # Not a version base name - keep as-is (will error in validation)
-                    expanded.append(action)
-        return expanded
-
     # Expand both input_sources and context_sources
-    input_sources_expanded = expand_version_base_names(input_sources)
-    context_sources_expanded = expand_version_base_names(context_sources)
+    input_sources_expanded = expand_version_base_names(input_sources, workflow_actions)
+    context_sources_expanded = expand_version_base_names(context_sources, workflow_actions)
     # Avoid loading context sources already provided via input sources.
     if input_sources_expanded:
         input_sources_set = set(input_sources_expanded)

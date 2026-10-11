@@ -195,7 +195,7 @@ Guards validate semantic and business logic after schema passes:
   # Schema ensures score is number 0-100
 
 - name: generate_final
-  dependencies: score_quality  # Input source
+  dependencies: [score_quality]  # Input source
   guard:
     condition: 'score_quality.score >= 85'  # Semantic: only high quality
     on_false: filter
@@ -257,14 +257,14 @@ actions:
 
   # Step 2: Filter empty results (Layer 3)
   - name: validate_facts
-    dependencies: extract_facts  # Input source
+    dependencies: [extract_facts]  # Input source
     guard:
       condition: 'extract_facts.candidate_facts_list != []'
       on_false: filter
 
   # Step 3: Score quality with schema
   - name: score_quality
-    dependencies: validate_facts  # Input source
+    dependencies: [validate_facts]  # Input source
     schema: quality_score  # Ensures score is 0-100
     expect:
       repair: auto
@@ -273,7 +273,7 @@ actions:
 
   # Step 4: Filter low quality (Layer 3)
   - name: generate_output
-    dependencies: score_quality  # Input source
+    dependencies: [score_quality]  # Input source
     guard:
       condition: 'score_quality.score >= 85'
       on_false: filter
@@ -296,7 +296,7 @@ actions:
 
   # LLM validates the content
   - name: validate_content
-    dependencies: generate_content  # Input source
+    dependencies: [generate_content]  # Input source
     prompt: |
       Review this content and determine if it meets quality standards:
       {{ generate_content.content }}
@@ -308,7 +308,7 @@ actions:
 
   # Guard on validation result
   - name: publish_content
-    dependencies: validate_content  # Input source
+    dependencies: [validate_content]  # Input source
     guard:
       condition: 'validate_content.is_valid == true'
       on_false: filter
@@ -338,7 +338,7 @@ properties:
     on_exhausted: return_last
 
 - name: process_valid
-  dependencies: classify_content  # Input source
+  dependencies: [classify_content]  # Input source
   guard:
     condition: 'classify_content.category != "invalid"'  # Filter "invalid" category
     on_false: filter
@@ -373,7 +373,7 @@ properties:
 
 # Guard for business threshold
 - name: proceed_if_confident
-  dependencies: assess_confidence  # Input source
+  dependencies: [assess_confidence]  # Input source
   guard:
     condition: 'assess_confidence.confidence_score >= 70'
     on_false: filter
@@ -397,10 +397,10 @@ actions:
   - name: custom_validate
     kind: tool
     impl: validate_content
-    dependencies: generate_content  # Input source
+    dependencies: [generate_content]  # Input source
 
   - name: next_step
-    dependencies: custom_validate  # Input source
+    dependencies: [custom_validate]  # Input source
     guard:
       condition: 'custom_validate.validation_passed == true'
       on_false: filter
@@ -541,7 +541,7 @@ This is important: guards prevent downstream work. Place guards as early as poss
     condition: 'extract.facts != []'
     on_false: filter
 - name: expensive_llm_call  # Only runs on valid data
-  dependencies: validate  # Input source
+  dependencies: [validate]  # Input source
 ```
 
 ## Debugging Validation Failures

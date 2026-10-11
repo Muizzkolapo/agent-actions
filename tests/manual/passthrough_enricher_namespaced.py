@@ -159,50 +159,9 @@ def scenario_4_recovery_enricher_record_level():
         print("  RESULT: UNEXPECTED")
 
 
-def scenario_5_passthrough_builder():
-    """passthrough_builder content extraction with namespaced content."""
-    print("\n=== Scenario 5: PassthroughItemBuilder content extraction ===")
-
-    from agent_actions.utils.passthrough_builder import PassthroughItemBuilder
-
-    row = {
-        "content": {"action_a": {"field_a": "val_a"}, "action_b": {"field_b": "val_b"}},
-        "target_id": "tid-1",
-        "source_guid": "sg-1",
-    }
-    item = PassthroughItemBuilder.build_item(
-        row=row, reason="where_clause_not_matched", action_name="action_c"
-    )
-
-    content = item["content"]
-    print(f"  tombstone content: {content}")
-
-    # Content should be the namespaced dict, not the entire row
-    if "action_a" in content and "action_b" in content:
-        print("  RESULT: OK — namespaced content preserved in tombstone")
-    else:
-        print("  RESULT: UNEXPECTED")
-
-    # Also test the fallback case (no content key)
-    row_no_content = {"field1": "val1", "target_id": "tid-2"}
-    item2 = PassthroughItemBuilder.build_item(
-        row=row_no_content, reason="where_clause_not_matched", action_name="action_c"
-    )
-    content2 = item2["content"]
-    print(f"  tombstone content (no content key): {content2}")
-
-    if content2 is row_no_content:
-        print("  RESULT: BUG — falls back to entire row (includes target_id etc)")
-    elif content2 == {}:
-        print("  RESULT: FIXED — empty dict when no content key")
-    else:
-        print(f"  RESULT: UNEXPECTED — {content2}")
-
-
 if __name__ == "__main__":
     scenario_1_passthrough_enricher_namespaced()
     scenario_2_lineage_enricher_record_level()
     scenario_3_metadata_enricher_record_level()
     scenario_4_recovery_enricher_record_level()
-    scenario_5_passthrough_builder()
     print("\n=== Done ===")

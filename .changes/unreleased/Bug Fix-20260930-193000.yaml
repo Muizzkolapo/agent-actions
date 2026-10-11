@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A `conditional_clause` UDF now receives a read-only view of the guard's evaluation
+  context instead of the record's own namespaces. Guard evaluation assembles that context
+  by assigning namespaces from the record by reference, and when no context is supplied it
+  hands over the record itself, so a UDF that wrote to what it was given rewrote the record
+  mid-run — the action's input, the enricher and the skipped tombstones all saw the new
+  value, with nothing logged. The view wraps nested containers on the way out, so a write
+  lands on a copy and cannot reach the record at any depth, and it refuses mutation so a
+  UDF that writes fails loudly instead of silently changing a copy it believes is the
+  record. It stays a `dict`/`list` subclass, and a `Bus` on the guard-clause path, so
+  `isinstance`, `json.dumps`, `**kwargs` and `Bus.require()` keep working for the UDFs that
+  only read. The in-place operators are refused explicitly: measured, `|=` and `+=` are
+  implemented at C level and do not route through the `update`/`extend` overrides.
+time: 2026-09-30T19:30:00Z

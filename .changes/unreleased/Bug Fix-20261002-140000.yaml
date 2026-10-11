@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  `agac validate-udfs` no longer reports a guard UDF as fine when it reads a version name
+  the runtime does not supply. Deciding which names a versioned action's context promotes
+  was done twice — once by `VersionNamespaceBuilder.build`, which does the promoting, and
+  once by a copy inside the command — and the copy claimed `i` and `idx` wherever a
+  `_version_context` existed. `build` promotes them only when the context carries them, so
+  a UDF reading `data["i"]` on a context without it resolved to nothing and was reported
+  clean. The command now asks `VersionNamespaceBuilder.promoted_names`, so what the checker
+  believes cannot drift from what the runtime does.
+time: 2026-10-02T14:00:00Z

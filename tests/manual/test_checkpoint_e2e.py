@@ -61,6 +61,7 @@ def main():
             storage_backend=backend,
             file_path=FILE_PATH,
             output_directory=OUTPUT_DIR,
+            target_relative_path=RELATIVE_PATH,
             source_data=records,
         )
 

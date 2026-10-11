@@ -16,15 +16,14 @@ needs no credentials and no network.
 
 import glob
 import json
-import os
 import shutil
 import sqlite3
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
+from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -121,23 +120,17 @@ def run(tmp_path_factory):
                     )
                 )
             (project / ".env").write_text("OLLAMA_API_KEY=not-used\nOPENAI_API_KEY=sk-not-used\n")
-        result = subprocess.run(
-            [
-                str(Path(sys.executable).parent / "agac"),
-                "run",
-                "-a",
-                workflow,
-                "-u",
-                "tools",
-                *([] if again else ["--fresh"]),
-            ],
-            cwd=project,
-            capture_output=True,
-            text=True,
-            timeout=300,
+        result = run_agac(
+            project,
+            "run",
+            "-a",
+            workflow,
+            "-u",
+            "tools",
+            *([] if again else ["--fresh"]),
             # The fake batch provider completes after a delay by default; a
             # collect run that asked too early would look like a lost batch.
-            env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         run_result = Run(workflow, project, result.returncode, result.stdout + result.stderr)
         if not again:

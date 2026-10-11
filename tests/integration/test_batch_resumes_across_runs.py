@@ -10,11 +10,11 @@ import json
 import os
 import shutil
 import sqlite3
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -40,13 +40,15 @@ def _run_workflow(project, workflow, *args, env=None):
     whether it still knows about one. Set to zero so a paused run is a run that
     lost its batch, not one that asked too early.
     """
-    result = subprocess.run(
-        [str(Path(sys.executable).parent / "agac"), "run", "-a", workflow, "-u", "tools", *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        timeout=300,
-        env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", **(env or {})},
+    result = run_agac(
+        project,
+        "run",
+        "-a",
+        workflow,
+        "-u",
+        "tools",
+        *args,
+        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", **(env or {})},
     )
     return result.returncode, result.stdout + result.stderr
 
@@ -300,13 +302,7 @@ class TestTheRecordHasAnEndOfLife:
         assert _run(project, "--fresh")[0] == 0
         assert self._on_disk(project), "the submit recorded nothing"
 
-        cleaned = subprocess.run(
-            [str(Path(sys.executable).parent / "agac"), "clean", "-a", WORKFLOW, "--all", "-f"],
-            cwd=project,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
+        cleaned = run_agac(project, "clean", "-a", WORKFLOW, "--all", "-f")
         assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
 
         assert self._on_disk(project) == []
@@ -317,13 +313,7 @@ class TestTheRecordHasAnEndOfLife:
         store = project / "agent_workflow" / WORKFLOW / "agent_io" / "store"
         assert not store.exists(), "the fixture already has a store"
 
-        cleaned = subprocess.run(
-            [str(Path(sys.executable).parent / "agac"), "clean", "-a", WORKFLOW, "--all", "-f"],
-            cwd=project,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
+        cleaned = run_agac(project, "clean", "-a", WORKFLOW, "--all", "-f")
         assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
 
         assert not store.exists()

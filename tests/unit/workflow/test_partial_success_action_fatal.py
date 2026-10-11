@@ -126,6 +126,22 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
         assert "bad.json" in str(exc_info.value)
         assert sorted(calls) == ["bad.json", "good.json"]
 
+    def test_the_message_does_not_say_the_walk_stopped(self, tmp_path):
+        """It walks every file and then fails the action: the files after it were processed."""
+        source = tmp_path / "input"
+        _write(source / "bad.json")
+        _write(source / "good.json")
+        strategy, calls = _strategy_failing_on({"bad.json": _declared(ConfigurationError("x"))})
+
+        with pytest.raises(DependencyError) as exc_info:
+            process_files(
+                ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+            )
+
+        assert sorted(calls) == ["bad.json", "good.json"]
+        assert "Processed 1 of 2 files" in str(exc_info.value)
+        assert "stopped" not in str(exc_info.value)
+
     def test_the_storage_backend_path_raises_the_halt_too(self, tmp_path):
         backend = MagicMock()
         backend.list_target_files.return_value = ["good.json", "exhausted.json"]

@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  `agac retry` no longer completes an action halted by `on_exhausted: raise` without the
+  records past the halt. A retry with a record to re-run, one that failed at an action
+  before the halt or one the halted action itself failed before it halted, narrowed the
+  halted action to the records it named like any other, cleared the halt and completed it
+  there, so the records past the halt were never answered and the next `agac run` found
+  nothing to do. A retry that names records and would clear a halt now refuses, before it
+  clears anything, and names the retry that resumes it: `agac retry --from` the halted
+  action. A retry starting at a halt without `--record` names no record and runs the
+  halted action, and every action after it, on each record they hold no stored answer
+  for, and says so in its plan; a plain `retry` does this when the halt is the earliest
+  failure. What the halted action answered in the file it halted in was never stored, so
+  it is asked again, and the limits of a plain run apply. `--dry-run` reports the refusal
+  instead. A halt before the retry's starting point is left in place, as before.
+time: 2026-10-05T01:09:16Z

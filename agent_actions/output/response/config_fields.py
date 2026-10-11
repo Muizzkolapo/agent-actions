@@ -27,6 +27,7 @@ SIMPLE_CONFIG_FIELDS = {
     "run_mode": RunMode.ONLINE,  # Default: online mode
     "granularity": "record",  # Default: record-level processing. Use 'file' for batch processing (tool only).
     "is_operational": True,  # Default: enabled
+    "on_empty": "warn",  # Default: an empty answer fails its record; also 'error' or 'skip'
     # LLM configuration
     "json_mode": True,  # Default: True (JSON-based system)
     "prompt_debug": False,  # Default: False (no debug output)

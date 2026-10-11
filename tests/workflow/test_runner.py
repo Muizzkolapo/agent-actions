@@ -578,7 +578,7 @@ class TestProcessFromStorageBackend:
             action_config={"agent_type": "test"},
             action_name="test_agent",
             strategy=_make_strategy(),
-            upstream_data_dirs=[str(tmp_path / "staging" / "dep")],
+            upstream_data_dirs=[str(tmp_path / "agent_io" / "staging")],
             output_directory=str(tmp_path / "output"),
             idx=0,
         )
@@ -665,8 +665,9 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
-        # good.json was read and processed; bad.json failed to read → only 1 file in data_by_path
-        assert found == 1
+        # The lost entry is counted (#1103): it was an input this action was meant to
+        # process, and excluding it hid an all-lost walk behind a zero count.
+        assert found == 2
         assert processed == 1
 
     def test_list_target_files_exception_continues(self, runner_with_backend, tmp_path):
@@ -682,7 +683,10 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
-        assert found == 0
+        # Was (0, 0), which made an unreadable upstream indistinguishable from an
+        # empty one and let the action finish green (#1103). A lost listing counts
+        # as one -- how many files it held is unknowable once listing failed.
+        assert found == 1
         assert processed == 0
 
     def test_read_target_json_decode_error_skips_entry(self, runner_with_backend, tmp_path):
@@ -704,7 +708,9 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
-        assert found == 1
+        # The lost entry is counted (#1103): it was an input this action was meant to
+        # process, and excluding it hid an all-lost walk behind a zero count.
+        assert found == 2
         assert processed == 1
 
     def test_read_target_file_not_found_skips_entry(self, runner_with_backend, tmp_path):
@@ -726,7 +732,9 @@ class TestProcessFromStorageBackend:
             idx=0,
         )
         found, processed, _errors = process_from_storage_backend(runner_with_backend, params)
-        assert found == 1
+        # The lost entry is counted (#1103): it was an input this action was meant to
+        # process, and excluding it hid an all-lost walk behind a zero count.
+        assert found == 2
         assert processed == 1
 
     def test_configuration_error_propagates_from_read_target(self, runner_with_backend, tmp_path):
@@ -907,8 +915,9 @@ class TestProcessFiles:
         assert strategy.execute.call_count == 2
 
     @patch("agent_actions.workflow.runner_file_processing.logger")
-    def test_no_files_warns(self, mock_logger, runner, tmp_path):
-        """No files found → calls _warn_no_files_found."""
+    def test_no_files_under_a_repair_warns(self, mock_logger, runner, tmp_path):
+        """A repair touches only its records; finding no file is no reason to delete the rest."""
+        runner.retried_records = frozenset({"r1"})
         strategy = _make_strategy()
         empty = tmp_path / "empty"
         empty.mkdir()

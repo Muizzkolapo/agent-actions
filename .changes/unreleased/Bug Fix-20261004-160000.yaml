@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A record an online run answered after an edit to the action or to what it reads is no
+  longer served with its answer from before the edit when the run was stopped as that
+  answer was being checkpointed. The run marked the record answered before checkpointing
+  its answer, so a run interrupted between the two, or a checkpoint write that failed,
+  left the record marked answered with no checkpoint: the next run carried the answer
+  stored before the edit and recorded the action as complete. The answer is now
+  checkpointed first, and a record whose checkpoint write fails is not marked answered
+  then, so it is asked again when the run is stopped while still answering its file.
+time: 2026-10-04T16:00:00Z

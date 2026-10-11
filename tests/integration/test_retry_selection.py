@@ -5,7 +5,8 @@ import json
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
-from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
+from agent_actions.processing.result_collector import write_node_level_disposition
+from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     SECOND,
@@ -110,16 +111,28 @@ def test_retry_resolves_only_selected_file_past_file_limit(project):  # noqa: F8
         backend.close()
 
 
-def test_retry_writes_no_node_level_disposition_for_a_file_it_never_opens(project):  # noqa: F811
+def test_retry_writes_no_node_level_disposition_for_a_file_it_never_opens(
+    project,  # noqa: F811
+    monkeypatch,
+):
     """The node-level half of the same property, where it can actually fail.
 
     A file whose records are all guard-filtered produces no output and only guard
-    outcomes, so processing it writes a node-level `skipped` — the vacuous
-    `only_guard_outcomes` that cascade-skips everything downstream. The original
-    run writes one here; `agac retry` clears it, and a repair that never opens
-    that file must not put it back. Break both the file walk and the source-save
-    narrowing and it does.
+    outcomes, so processing it writes a node-level `skipped`. The action's other
+    file holds rows, so the classifier clears that row as the run completes, and
+    what is left after it cannot say whether a repair opened the file. So the
+    writes are watched: a repair that never opens the file writes none. Break both
+    the file walk and the source-save narrowing and it does.
     """
+    written = []
+
+    def watched(storage_backend, action_name, disposition, reason):
+        written.append(disposition)
+        write_node_level_disposition(storage_backend, action_name, disposition, reason)
+
+    monkeypatch.setattr(
+        "agent_actions.processing.result_collector.write_node_level_disposition", watched
+    )
     staging = project / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
     (staging / "pages.json").unlink()
     (staging / "a_pages.json").write_text(
@@ -140,13 +153,15 @@ def test_retry_writes_no_node_level_disposition_for_a_file_it_never_opens(projec
         selected = backend.read_target(ACTION, "a_pages.json")[0]["source_guid"]
     finally:
         backend.close()
-    assert _node_dispositions(project), "the fixture did not reach the state under test"
+    assert written == [DISPOSITION_SKIPPED], "the fixture did not reach the state under test"
+    written.clear()
     _fail(project, selected)
 
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
     assert result.exit_code == 0, result.output
     assert _disposition(project, selected) == "success"
+    assert written == []
     assert _node_dispositions(project) == []
 
 

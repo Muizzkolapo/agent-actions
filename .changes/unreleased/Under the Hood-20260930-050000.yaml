@@ -1,0 +1,15 @@
+kind: Under the Hood
+body: >-
+  A helper in the data-source loader claimed to mirror the runner's own skip rules and had not
+  since #1026 — the runner answers every deliberate exclusion before touching the filesystem
+  and lets `is_file()` raise, because a stat failure there is a lost record a run must report,
+  while this copy asked the filesystem first and answered "not staged" for an entry it could
+  not classify. The claim was the defect, not the rules. Its one caller filters cache entries
+  before rewriting them, precisely so a broken one does not fail a run over something that was
+  never going to be staged, and the runner's loss-reporting semantics would be wrong there;
+  `processed_paths` and `file_type_filter` are the runner's concerns and do not apply to a
+  cache directory. Renamed to say what it does and documented as deliberately not the runner's
+  rules. Separately, ten mocks in two test files set underscore-prefixed attributes on a
+  MagicMock runner that production never reads — it calls the module-level functions — so they
+  read as gating behaviour while gating nothing; removed, with the suites still passing.
+time: 2026-09-30T05:00:00Z

@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  A project that lives under a directory with `staging` in its name (such as `staging-env/`),
+  or under one named `batch`, now reads its input. Where a run read from was decided by
+  looking for those words anywhere in the path, so under `staging-env/` every action that
+  reads another action's output found nothing and reported `0 records`, and under `batch/`
+  no staged file was read at all. Only the directories inside the project decide it now.
+time: 2026-10-04T12:58:00Z

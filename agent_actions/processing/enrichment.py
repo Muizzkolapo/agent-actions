@@ -74,6 +74,11 @@ class LineageEnricher(Enricher):
 
         source_index = self._index_by_source_guid(context.source_data)
         parent_index = self._index_by_source_guid(context.parent_records)
+        # Separate from parent_index because the two readers ask different questions.
+        # _get_parent_item resolves by source_guid alone -- it has no item to correlate
+        # with -- while _with_parent_fallback holds the item and can match its
+        # correlation id, which is what actually distinguishes two branches.
+        parent_candidates = self._candidates_by_source_guid(context.parent_records)
 
         parent_item = None
         if not use_per_item_parent_lookup:
@@ -132,7 +137,7 @@ class LineageEnricher(Enricher):
                         if is_input_position(idx, source_data_len)
                     ]
                     source_items = [
-                        self._with_parent_fallback(s, parent_index) for s in source_items
+                        self._with_parent_fallback(s, parent_candidates) for s in source_items
                     ]
                     skipped = len(source_idx) - len(source_items)
                     if skipped:
@@ -159,7 +164,7 @@ class LineageEnricher(Enricher):
                     # One-to-one: single input record
                     if is_input_position(source_idx, source_data_len):
                         parent_item = self._with_parent_fallback(
-                            context.source_data[source_idx], parent_index
+                            context.source_data[source_idx], parent_candidates
                         )
                     else:
                         logger.warning(
@@ -204,13 +209,62 @@ class LineageEnricher(Enricher):
     def _index_by_source_guid(
         records: list[dict[str, Any]] | None,
     ) -> dict[str, dict] | None:
-        """Build a {source_guid: record} dict, or None when *records* is empty."""
+        """Build a {source_guid: record} dict, or None when *records* is empty.
+
+        First wins, matching DataTransformer.get_content_by_source_guid and
+        scope_application._build_source_index. It read LAST before, so on a repeated guid
+        a record's `source` namespace could come from one row while its lineage came from
+        another.
+        """
         if not records:
             return None
-        return {sg: r for r in records if (sg := r.get("source_guid")) is not None}
+        index: dict[str, dict] = {}
+        for record in records:
+            sg = record.get("source_guid")
+            if sg is not None and sg not in index:
+                index[sg] = record
+        return index
 
     @staticmethod
-    def _with_parent_fallback(item: dict, parent_index: dict[str, dict] | None) -> dict:
+    def _candidates_by_source_guid(
+        records: list[dict[str, Any]] | None,
+    ) -> dict[str, list[dict]] | None:
+        """Every record per source_guid, in order — the tie-break is the caller's to make.
+
+        A repeated guid is ordinary among parent records: correlation.py keys a versioned
+        1:1 id on (version_base_name, source_guid), so two versioned actions over one
+        source record produce two rows sharing a guid with different correlation ids, and
+        merge_records_by_key keeps both. Collapsing them here is what forced an arbitrary
+        choice of ancestor.
+        """
+        if not records:
+            return None
+        candidates: dict[str, list[dict]] = {}
+        for record in records:
+            sg = record.get("source_guid")
+            if sg is not None:
+                candidates.setdefault(sg, []).append(record)
+        return candidates
+
+    @staticmethod
+    def _matching_parent(item: dict, candidates: list[dict]) -> dict:
+        """The parent whose version_correlation_id matches the item's, else the first.
+
+        Position was wrong in both directions: measured, an item correlated to `assess:s1`
+        was given a `review:s1` parent's lineage because that one came last. The
+        correlation id is what distinguishes two branches over the same source record, so
+        it decides; with none on either side there is nothing to match on, and first-wins
+        agrees with the two source resolvers.
+        """
+        correlation = item.get("version_correlation_id")
+        if correlation is not None:
+            for candidate in candidates:
+                if candidate.get("version_correlation_id") == correlation:
+                    return candidate
+        return candidates[0]
+
+    @staticmethod
+    def _with_parent_fallback(item: dict, parent_index: dict[str, list[dict]] | None) -> dict:
         """If *item* lacks lineage, look up a richer match in parent_index by source_guid."""
         from agent_actions.utils.lineage import LineageBuilder
 
@@ -221,8 +275,10 @@ class LineageEnricher(Enricher):
         sg = item.get("source_guid")
         if sg is None:
             return item
-        richer = parent_index.get(sg)
-        return richer if richer is not None else item
+        candidates = parent_index.get(sg)
+        if not candidates:
+            return item
+        return LineageEnricher._matching_parent(item, candidates)
 
     def _get_parent_item(
         self,

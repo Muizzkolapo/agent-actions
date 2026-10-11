@@ -1,0 +1,27 @@
+kind: Bug Fix
+body: >-
+  A record whose guard skipped it no longer ends up with two stored rows under one
+  `source_guid`. The guard runs above the per-record disposition gate, so a skipped
+  record reaches no carry set at all while still writing a tombstone of its own. A
+  stored many-to-one row keyed on that record, naming a *carried* input as its
+  producer, satisfied carry-forward's producer test and came back beside the
+  tombstone. The checkpoint table is unique per identity, so the two overwrote each
+  other on the way in, and the duplicate survived into the next action.
+
+  Carry-forward is now told every identity the run writes a row under, not only the
+  records it reprocesses, and refuses any stored row standing under one of them. The
+  inputs such a row answered for come back as `missing`, which the caller re-queues —
+  dropping the row on its own would take a carried input's content with it, because
+  the run does not re-invoke the tool. A `behavior: filter` record writes no row and
+  is deliberately not counted, so a merge row keyed on one is still carried untouched.
+
+  One consequence is worth stating: a guard-skipped record's prior answer is replaced by
+  a fresh tombstone rather than carried, and that now holds for a merge row as well as
+  the 1:1 row where it already held. The inputs that row also answered for are re-queued
+  and rebuilt, so nothing is lost, but the skipped record's own stored output does not
+  survive the run that skips it.
+
+  Measured across four consecutive runs read back through `read_target_for_rewrite`:
+  the duplicate was stable from the first skipping run rather than accumulating, so a
+  single run's in-memory output could not distinguish the two states.
+time: 2026-09-30T12:00:00Z

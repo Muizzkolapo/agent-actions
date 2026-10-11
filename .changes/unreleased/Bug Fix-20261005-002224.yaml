@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  An action holding a failure recorded without a reason, as one set by hand can be, no
+  longer fails the run that reads it with `'NoneType' object is not subscriptable`. A run
+  logs the first failures of an action that completed with some, and read the missing
+  reason as text to cut short; it now logs it as `unknown`, as it did a missing one.
+  `agac retry` keeps such a failure when it cannot repair the record, so the run that
+  collects a retry's batch reached it too.
+time: 2026-10-05T00:22:24Z

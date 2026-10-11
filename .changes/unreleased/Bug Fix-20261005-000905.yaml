@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  Pre-flight now refuses a guard that names an action not upstream of its own action through
+  `dependencies`. A guard is evaluated on the records its action reads, and those carry only
+  the actions they passed through, so a guard on one that ran beside or after it found
+  nothing there: under `on_false: filter` it filtered every record, and the action was
+  skipped with exit 0. The message names the action and the one its guard names, and says to
+  add that one to its dependencies or to depend on an action downstream of it. A guard naming
+  an action upstream of it is evaluated as before, and none of the example workflows is
+  refused.
+time: 2026-10-05T00:09:05Z

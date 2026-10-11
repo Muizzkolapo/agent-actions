@@ -1,0 +1,19 @@
+kind: Bug Fix
+body: >-
+  A batch action no longer completes past a finished batch that its collect pass could not
+  ask the provider about. A collect pass checks each batch with the provider before reading
+  it, and when that call failed (a connection error, a provider out of reach) the file was
+  passed over. If another file was read in the same pass, or had been in an earlier one, the
+  action was recorded complete with that file's records still waiting: the next run found
+  the action complete and never read the batch. If no file could be read at all, the run
+  failed the action, and the run after that only paused, so collecting took a failure and
+  two more runs. Both now pause, as a run does while a batch is still out, and say which
+  file could not be read; the next run reads it, without sending anything again. A file a
+  retry round hands back during the pass, when the round is dropped for want of its saved
+  state, is waited for the same way. A finished batch the provider now reports failed or
+  expired was passed over too, though no later run can read it; its records are now marked
+  failed for `agac retry` to find, as are those of a file whose reading fails, which still
+  costs only its own records. An action an earlier version completed this way is not
+  repaired by `agac run` or `agac retry`, which find nothing to do; `agac run --fresh` sends
+  every record of the workflow again.
+time: 2026-10-04T19:30:00Z

@@ -53,8 +53,13 @@ class TestDropWildcard:
         debug_msgs = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
         assert any("matched zero fields" in m for m in debug_msgs)
 
-    def test_missing_field_logs_debug(self):
-        """drop: ['dep.missing'] when field absent logs debug, no crash."""
+    def test_missing_field_warns_because_nothing_was_withheld(self):
+        """Raised from debug (#1116): a drop that removed nothing is not a quiet event.
+
+        `drop` is how an author keeps a field out of a prompt. When it matches nothing the
+        field is sent to the provider anyway, so the author's intent and the run disagree
+        — and at debug they would never find out.
+        """
         field_context = {"dep": {"other": "value"}}
         with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
             apply_context_scope(
@@ -62,8 +67,9 @@ class TestDropWildcard:
                 context_scope={"drop": ["dep.missing"]},
                 action_name="test_action",
             )
-        debug_msgs = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
-        assert any("matched zero fields" in m for m in debug_msgs)
+        warn_msgs = [c[0][0] for c in mock_logger.warning.call_args_list if c[0]]
+        assert any("removed nothing" in m for m in warn_msgs), warn_msgs
+        assert any("NOT withheld" in m for m in warn_msgs), "the message must name the risk"
 
     def test_missing_namespace_logs_debug(self):
         """drop: ['ghost.*'] when namespace absent logs debug, no crash."""

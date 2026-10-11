@@ -39,6 +39,10 @@ class DataValidationError(ValidationError):
     pass
 
 
+class MissingSourceGuidError(DataValidationError):
+    """Raised when a record reaches an action below the first stage without a source_guid."""
+
+
 class SchemaValidationError(ValidationError):
     """Raised when schema validation fails."""
 

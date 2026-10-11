@@ -5,8 +5,6 @@ upstream cascade-quarantine — so it must count toward terminal-failure detecti
 When every record prep-fails, the action must not report success.
 """
 
-import pytest
-
 from agent_actions.processing.result_collector import CollectionStats
 from agent_actions.processing.strategies.online_llm import _build_prep_failed_result
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
@@ -43,8 +41,9 @@ def test_all_prep_failed_trips_terminal_failure_guard():
     # records all prep-fail has active_input_count > 0 and success == 0, so the
     # circuit-breaker raises instead of the run silently reporting success.
     stats = CollectionStats(success=0, failed=3, unprocessed=0)
-    with pytest.raises(RuntimeError, match="0 successful records"):
-        stats.raise_if_terminal_failure("vote_quality", data=[{}, {}, {}], output=[])
+    assert "0 successful records" in str(
+        stats.terminal_failure("vote_quality", data=[{}, {}, {}], output=[])
+    )
 
 
 def test_prep_failures_in_unprocessed_bucket_would_not_trip_guard():
@@ -52,4 +51,4 @@ def test_prep_failures_in_unprocessed_bucket_would_not_trip_guard():
     # counted as unprocessed, they would be subtracted from active_input_count and
     # the guard would not fire — the exact bug this fix closes.
     stats = CollectionStats(success=0, failed=0, unprocessed=3)
-    stats.raise_if_terminal_failure("vote_quality", data=[{}, {}, {}], output=[])  # no raise
+    assert stats.terminal_failure("vote_quality", data=[{}, {}, {}], output=[]) is None

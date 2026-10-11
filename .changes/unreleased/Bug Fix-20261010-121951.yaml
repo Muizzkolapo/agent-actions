@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A first action's prompt now reads `workflow.*`, and its `version.*` when versioned.
+  Online, a versioned first action's guard reads `version.*`, and an action below the
+  first that runs online (any action under `run_mode: online`, and a tool or HITL action
+  in either mode) reads the run's `workflow.name` and `workflow.run_id` in its prompt and
+  guard. Such an action below the first was prepared without the run's workflow metadata:
+  a prompt reading `workflow.*` failed every record, a guard reading it filtered every
+  record while the run exited 0 with the action skipped, and its traces were written with
+  no `run_id`. A first action whose prompt read `workflow.*`, or `version.*` when
+  versioned, failed its file before any record was sent, in either run mode, because the
+  template check ahead of preparation rendered without them; online, a versioned first
+  action's records were also prepared without the version, so a guard reading `version.i`
+  filtered every record. `agac retry` goes through the same paths and is fixed with them.
+  A batch retry or repair round is still prepared without the run's `workflow.*`.
+time: 2026-10-10T12:19:51Z

@@ -1,0 +1,19 @@
+kind: Bug Fix
+body: >-
+  Pre-flight now refuses a guard clause that names a field without its namespace, instead of
+  letting the run discard every record and exit successfully. `n > 1` where the record holds
+  `a1.n` resolves against nothing: the runtime filters or skips each record with a warning
+  and the workflow finishes green, so an entire input can be lost with no failure anywhere.
+  Nothing caught it before a run — the pre-flight guard check inspected only the right-hand
+  side of a comparison, the static analyser skipped any path without a dot, and the reference
+  extractor's pattern required one, so detection was editor-only. The refusal is deliberately
+  narrow: a bare name legitimately resolves through a dependency's `output_field`, a promoted
+  version key (`i`, `idx`, `base_name`, `param_name`) or a declared loop param, a record
+  field such as `source_guid`, a runtime namespace, or an upstream's own name — and a
+  first-stage action's staging columns, or the flat-spread output of a FILE-granularity
+  version-merge tool, are not knowable from config at all. Only a reference that can be
+  proved wrong is refused, and the message names the dotted spelling that would resolve. The
+  rule lives in `agent_actions/guards/bare_reference.py` so the editor diagnostic and the
+  pre-flight check cannot drift apart. Verified against every shipped workflow: 101 guards
+  across 30 files, zero refused.
+time: 2026-09-30T19:00:00Z

@@ -14,10 +14,16 @@ SQL queries across files within the same action.
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection, Iterable
+import sqlite3
+from collections import Counter
+from collections.abc import Callable, Collection, Iterable
+from collections.abc import Set as AbstractSet
 from typing import TYPE_CHECKING, Any
+from weakref import WeakKeyDictionary
 
+from agent_actions.errors import mark_action_fatal
 from agent_actions.record.state import RecordState
+from agent_actions.storage.backend import DISPOSITION_SUCCESS
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -25,6 +31,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CARRY_FORWARD_REASON = "disposition_gate:already_terminal"
+
+_FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.value})
+
+# The named records each action found in its input, and those of them in a file it then
+# processed to the end, per run. Keyed by the run's backend, as utils/limits.py keys what
+# each slice admitted: `agac retry` runs a workflow in the process that just finished one.
+_FOUND_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
+_ANSWERED_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
+# Per action, the files an action above it replaced whole in this run, keyed the same way.
+_REPLACED_ABOVE: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 
 
 class DispositionGate:
@@ -167,7 +183,13 @@ class DispositionGate:
         return to_process, carry_ids
 
 
-def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[int] | None:
+def positions_named_by_repair(
+    records: Any,
+    repairing: Collection[str],
+    *,
+    storage_backend: Any = None,
+    action_name: str | None = None,
+) -> list[int] | None:
     """Positions of the records a repair named, or None when nothing is being repaired.
 
     None rather than every position so a caller neither re-slices nor re-pairs the
@@ -177,14 +199,140 @@ def positions_named_by_repair(records: Any, repairing: Collection[str]) -> list[
     input — staged text beside staged records, pre-observe records beside scoped
     ones — and a repair has to take the same slice out of each. Lists that are not
     matched position-for-position are each asked separately.
+
+    Given the run's backend and the action, notes what it found for ``found_by_repair``.
     """
     if not repairing or not isinstance(records, list):
         return None
-    return [
+    kept = [
         index
         for index, record in enumerate(records)
         if isinstance(record, dict) and record.get("source_guid") in repairing
     ]
+    if storage_backend is not None and action_name:
+        _note(_FOUND_BY_REPAIR, storage_backend, action_name, (records[i] for i in kept))
+    return kept
+
+
+def note_answered_by_repair(
+    records: Any,
+    repairing: Collection[str],
+    *,
+    storage_backend: Any,
+    action_name: str,
+) -> None:
+    """Note the named records among *records* as answered: their file was processed to the end.
+
+    Called once the file returns, not where it is narrowed: a file that raises is caught
+    and the walk carries on, so a record found in it was cleared and never re-decided.
+    """
+    if storage_backend is None or not repairing or not isinstance(records, list):
+        return
+    named = (r for r in records if isinstance(r, dict) and r.get("source_guid") in repairing)
+    _note(_ANSWERED_BY_REPAIR, storage_backend, action_name, named)
+
+
+def found_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:
+    """The named records *action_name* found in its input during the run on this backend."""
+    return _noted(_FOUND_BY_REPAIR, storage_backend, action_name)
+
+
+def answered_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:
+    """The named records found in a file *action_name* processed to the end in this run.
+
+    A record a repair names and does not answer is one it cleared and did not re-decide.
+    """
+    return _noted(_ANSWERED_BY_REPAIR, storage_backend, action_name)
+
+
+def note_replaced_above(
+    storage_backend: Any, actions: Iterable[str], relative_path: str | None
+) -> None:
+    """Note that *relative_path* was replaced whole above each of *actions* in this run."""
+    if storage_backend is None or not relative_path:
+        return
+    held = _REPLACED_ABOVE.setdefault(storage_backend, {})
+    for action in actions:
+        held.setdefault(action, set()).add(relative_path)
+
+
+def replaced_above(storage_backend: Any, action_name: str, relative_path: str | None) -> bool:
+    """Whether an action above *action_name* replaced *relative_path* whole in this run.
+
+    A repair runs such a file as a plain run would: every row the action holds for it was
+    computed from rows that are gone, whichever records the repair names.
+    """
+    if storage_backend is None or not relative_path:
+        return False
+    return relative_path in _REPLACED_ABOVE.get(storage_backend, {}).get(action_name, ())
+
+
+def _note(
+    registry: WeakKeyDictionary[Any, dict[str, set[str]]],
+    storage_backend: Any,
+    action_name: str,
+    records: Iterable[dict[str, Any]],
+) -> None:
+    noted = registry.setdefault(storage_backend, {}).setdefault(action_name, set())
+    noted.update(record["source_guid"] for record in records)
+
+
+def _noted(
+    registry: WeakKeyDictionary[Any, dict[str, set[str]]],
+    storage_backend: Any,
+    action_name: str,
+) -> frozenset[str]:
+    if storage_backend is None:
+        return frozenset()
+    return frozenset(registry.get(storage_backend, {}).get(action_name, ()))
+
+
+def every_answer_vouched_for(stored: Iterable[dict[str, Any]], answered: AbstractSet[str]) -> bool:
+    """Whether each answer in *stored* is one its action still calls answered.
+
+    *answered* is the records the action holds ``success`` for. A row's disposition is
+    written under its own identity or under the input it names as producer, so either
+    vouches for it. A reset clears every disposition and leaves the stored rows for the
+    re-run to replace, so after one no stored answer is vouched for.
+    """
+    return all(
+        row.get("_state") != RecordState.PROCESSED.value
+        or row.get("source_guid") in answered
+        or not answered.isdisjoint(row.get("producer_source_guids") or ())
+        for row in stored
+    )
+
+
+def _answered_records(storage_backend: StorageBackend, action_name: str) -> set[str]:
+    """The records *action_name* holds ``success`` for."""
+    return {
+        row["record_id"]
+        for row in storage_backend.get_disposition(action_name, disposition=DISPOSITION_SUCCESS)
+    }
+
+
+def stored_answers_stand(
+    storage_backend: StorageBackend, action_name: str, relative_path: str
+) -> bool:
+    """Whether a run of *relative_path* that failed and answered nothing leaves it as stored.
+
+    It does while the action still calls every answer stored there answered: they stand
+    over a run that produced only failures. After a reset it calls none of them answered,
+    and left in place they would be served as answers to the config the reset replaced,
+    so the run writes the file as one that answered something would. True when nothing
+    is stored for it.
+    """
+    try:
+        stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+        answered = _answered_records(storage_backend, action_name)
+    except FileNotFoundError:
+        return True
+    except (OSError, sqlite3.Error) as e:
+        # The store failed, not this file: lost per file, it would stay unwritten over
+        # the answers a reset took back.
+        mark_action_fatal(e)
+        raise
+    return every_answer_vouched_for(stored, answered)
 
 
 def stored_rows_not_reproduced(
@@ -192,40 +340,34 @@ def stored_rows_not_reproduced(
     produced: Iterable[dict[str, Any]],
     *,
     batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
+    still_answered: Callable[[], AbstractSet[str]] | None = None,
 ) -> set[str]:
-    """Identities in *stored* that *produced* did not write again.
+    """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
-    Matching is by input: two runs of a minting action share no identity, and how many
-    rows an input yields is decided per run, so the same input mints several rows one
-    run and keeps its own identity the next — each direction a replacement.
-
-    Only a row settled as processed answers for an input, and what it answers for is
-    the producers it names, else the identity it carries. Both halves need that test: a
-    failed row is keyed on its input too, and a row can be stamped unsettled after
-    enrichment named its producers.
-
-    A stored row naming one input is inferred away; naming several, never. That reads
-    one producer as a mint, which holds where this is called from — a batch row naming
-    producers has been re-keyed — and not in general: the FILE writer records the inputs
-    a row consumed *minus* its own, so a two-input merge keeps one identity and names
-    one producer. Inferred away there, its own input's content goes with it, and a
-    caller reading those rows wants the stricter reading ``build_carry_forward`` has.
-
-    *batch_inputs* is the input before any narrowing, which settles what matching
-    cannot: below an expansion the upstream children are minted again every run, so a
-    producer named by no input is a generation that is gone rather than one this run did
-    not answer for. Inferred only on a run that settled every input it recorded, since
-    only then is the replacement in this write; left empty, or short of that, nothing is
-    inferred at all. A row naming no producer is never inferred away either — its
-    identity may be a gone generation's too, but an input that is merely absent is
-    indistinguishable from one the run never took, and that one keeps its rows.
+    A stored row is carried where the input it answered for is one of *batch_inputs* and
+    this run did not answer it; otherwise it is no part of this run's output, as online
+    leaves it. An input in *filtered*, which this run's guard filtered, holds no row, as
+    online writes none for it. Matching is by input, since a minting action's runs share
+    no identity: a processed row answers for the producer it names, else for the identity
+    it carries. With no inputs recorded every other unanswered row is carried. Where
+    something failed and nothing was answered online leaves the stored file as it is, so
+    every stored answer stands, over a row produced under its identity too, and a filtered
+    input keeps what it held -- unless a stored answer is one the action no longer calls
+    answered (``stored_answers_stand``). Then the file follows its inputs, and an input
+    the run wrote a row for keeps none of its stored rows, minted ones included, as online
+    writes only that row. *still_answered* gives the records it holds ``success`` for, and
+    is asked only then; without it every stored answer counts as one.
     """
+    stored = list(stored)
     answered: set[str] = set()
     rewritten: set[str] = set()
+    failed = False
     for row in produced:
         guid = row.get("source_guid")
         if guid:
             rewritten.add(guid)
+        failed = failed or row.get("_state") in _FAILURE_STATES
         if row.get("_state") != RecordState.PROCESSED.value:
             continue
         # Producers are named during enrichment, before collection settles the state,
@@ -236,54 +378,146 @@ def stored_rows_not_reproduced(
         elif guid:
             answered.add(guid)
 
-    inputs = frozenset(batch_inputs)
-    stored_rows = list(stored)
-    # Decided across all the mints at once, not per row: what replaces a generation is an
-    # upstream action re-minting its whole output, so one producer missing while others are
-    # still inputs is an individual record that went away, and its rows are its own.
-    stored_mints = {
-        producer
-        for row in stored_rows
-        if len(producer_set := frozenset(row.get("producer_source_guids") or ())) == 1
-        for producer in producer_set
-    }
-    # ...and only on a run that settled every input it recorded: a run that failed, or
-    # returned nothing, would read its own stored answers as replaced and delete them.
-    generation_replaced = (
-        bool(inputs)
-        and bool(stored_mints)
-        and inputs <= answered
-        and stored_mints.isdisjoint(inputs)
+    refused = (
+        failed
+        and not answered
+        and (still_answered is None or every_answer_vouched_for(stored, still_answered()))
     )
-
+    taken_back = failed and not answered and not refused
+    inputs = frozenset(batch_inputs)
+    excluded = frozenset(filtered)
     carry: set[str] = set()
-    for row in stored_rows:
+    left: set[str] = set()
+    filtered_out: set[str] = set()
+    for row in stored:
         guid = row.get("source_guid")
         if not guid:
             continue
-        producers = frozenset(row.get("producer_source_guids") or ())
+        stands = refused and row.get("_state") == RecordState.PROCESSED.value
         # A row the run rewrote under this identity replaces it whatever else it says,
         # or the carried copy is appended beside that one and the identity is written
-        # twice. A minted identity is never rewritten, so this decides nothing there.
-        if guid in rewritten:
+        # twice.
+        if guid in rewritten and not stands:
             continue
-        superseded = False
-        if len(producers) == 1:
-            # On this path one producer means a mint, because a batch row that names any
-            # is re-keyed. It does not mean that in general — see the docstring.
-            reproduced = producers <= answered
-            superseded = generation_replaced
-        elif producers:
-            # Several: the row holds what each input gave it, and its own identity is an
-            # input's rather than a mint's. Never inferred away.
-            reproduced = False
-        else:
-            # The identity is the input's own, so a run that did not take it simply
-            # narrowed past it. Absence from the input is no evidence here.
-            reproduced = guid in answered
-        if not reproduced and not superseded:
+        producers = frozenset(row.get("producer_source_guids") or ())
+        if len(producers) > 1:
+            # Holds what each of several inputs gave it, so no one input accounts for it.
             carry.add(guid)
+            continue
+        answers_for = next(iter(producers), guid)
+        if answers_for in answered:
+            continue
+        # Online writes only this run's row for an input whose answers were taken back.
+        if taken_back and answers_for in rewritten:
+            continue
+        if answers_for in excluded and not refused:
+            filtered_out.add(guid)
+        elif inputs and answers_for not in inputs and not stands:
+            left.add(guid)
+        else:
+            carry.add(guid)
+    # An identity still carried through another of its rows has lost nothing.
+    left -= carry
+    filtered_out -= carry
+
+    if left:
+        logger.info(
+            "%d stored row(s) not carried forward: the inputs they answered for are not "
+            "among the %d this run took, so they are not part of this run's output. An "
+            "input that returns is answered again.",
+            len(left),
+            len(inputs),
+        )
+    if filtered_out:
+        logger.info(
+            "%d stored row(s) not carried forward: the inputs they answered for are among "
+            "the %d this run's guard filtered, and a filtered input holds no row.",
+            len(filtered_out),
+            len(excluded),
+        )
     return carry
+
+
+def with_stored_rows_not_reproduced(
+    produced: list[dict[str, Any]],
+    action_name: str,
+    relative_path: str,
+    storage_backend: StorageBackend,
+    *,
+    batch_inputs: Collection[str] = (),
+    filtered: Collection[str] = (),
+) -> list[dict[str, Any]]:
+    """*produced* followed by every stored row it does not replace: the file to write.
+
+    *relative_path* is the file being written and the only file read: the rows go
+    straight to the write, so gathering them across the action's other files puts those
+    files' records into this one. A store this cannot read raises rather than returning
+    *produced* alone, which would replace the file.
+    """
+    try:
+        stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+    except FileNotFoundError:
+        # Nothing stored for this file yet, so nothing to carry.
+        return produced
+
+    carry_guids = stored_rows_not_reproduced(
+        stored,
+        produced,
+        batch_inputs=batch_inputs,
+        filtered=filtered,
+        still_answered=lambda: _answered_records(storage_backend, action_name),
+    )
+    if not carry_guids:
+        return produced
+
+    # Re-reads the same file, which the reconstruction cache answers, to keep the
+    # one-row-per-identity rule in the place that owns it. Its checkpoint fallback is
+    # unreachable: a file with no stored rows has returned above.
+    carry_records, _missing = build_carry_forward(
+        carry_guids, action_name, relative_path, storage_backend
+    )
+    if carry_records:
+        logger.info(
+            "Merging %d carry-forward records into batch output for %s",
+            len(carry_records),
+            action_name,
+        )
+
+    # A carried row replaces what the run produced under its identity: a stored answer
+    # standing over the row of a run that failed and answered nothing.
+    carried = {row["source_guid"] for row in carry_records}
+    kept = [row for row in produced if row.get("source_guid") not in carried]
+
+    # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored whole, so
+    # a row round-trips into the mode it had. Stamping "full" would re-store every
+    # carried row whole, rewriting rows this run never reprocessed.
+    return kept + carry_records
+
+
+def answered_since_stored(
+    storage_backend: StorageBackend, action_name: str, relative_path: str
+) -> set[str]:
+    """Records of *relative_path* answered after its stored file was last written.
+
+    Writing a file clears its checkpoint rows, so one beside a stored file is a later
+    answer than the row stored for that record: the run that gave it stopped before
+    writing the file again, after an edit or an upstream change reset the action. Neither
+    row is fit to carry. The stored one is not the answer the record's disposition
+    describes, and the checkpoint one lacks what enrichment adds, lineage among it.
+    """
+    checkpointed = {
+        guid
+        for row in storage_backend.read_checkpoint_records(action_name, relative_path)
+        if (guid := row.get("source_guid"))
+    }
+    if not checkpointed:
+        return set()
+    try:
+        storage_backend.read_target_for_rewrite(action_name, relative_path)
+    except FileNotFoundError:
+        # Nothing stored to be older than them: the checkpoint rows are what is carried.
+        return set()
+    return checkpointed
 
 
 def build_carry_forward(
@@ -293,7 +527,7 @@ def build_carry_forward(
     storage_backend: StorageBackend,
     *,
     produced_by: Collection[str] = (),
-    reprocessing: Collection[str] = (),
+    rewriting: Collection[str] = (),
 ) -> tuple[list[dict[str, Any]], set[str]]:
     """Read prior output for carry-forward records, returning (found, missing_ids).
 
@@ -302,21 +536,22 @@ def build_carry_forward(
 
     *produced_by* names this run's INPUTS — the only ids resolvable through a row's
     ``producer_source_guids``, since ``carry_ids`` also holds stored-row ids where a
-    repair named rows. *reprocessing* names what this run rebuilds.
+    repair named rows. *rewriting* names every identity this run writes a row under,
+    wider than what it reprocesses; a row under one is reported as *missing* instead.
+
+    A record checkpointed with several rows is reported *missing* too: an expansion's rows
+    share their input's identity until enrichment mints one for each, and a checkpoint row
+    is saved before that. Carried, they would keep that one identity, of which the carry
+    keeps a single row. So is a record an earlier version checkpointed: it kept the last row.
     """
+    answered_again: set[str] = set()
     try:
         prior_output = storage_backend.read_target_for_rewrite(action_name, relative_path)
     except FileNotFoundError:
         # No final output yet — check for checkpointed records from an
         # interrupted run.
         prior_output = storage_backend.read_checkpoint_records(action_name, relative_path)
-        if prior_output:
-            logger.info(
-                "Action '%s': using %d checkpointed records for carry-forward",
-                action_name,
-                len(prior_output),
-            )
-        else:
+        if not prior_output:
             logger.warning(
                 "Prior output missing for %s/%s — all %d carry-forward records will be reprocessed",
                 action_name,
@@ -324,6 +559,24 @@ def build_carry_forward(
                 len(carry_ids),
             )
             return [], carry_ids
+        rows_per_record = Counter(row.get("source_guid") for row in prior_output)
+        answered_again = {guid for guid, count in rows_per_record.items() if guid and count > 1}
+        answered_again.update(
+            storage_backend.checkpointed_without_row_count(action_name, relative_path)
+        )
+        prior_output = [row for row in prior_output if row.get("source_guid") not in answered_again]
+        logger.info(
+            "Action '%s': using %d checkpointed records for carry-forward",
+            action_name,
+            len(prior_output),
+        )
+        if asked := answered_again & carry_ids:
+            logger.info(
+                "Action '%s': %d checkpointed record(s) will be answered again: answered with "
+                "several rows, or checkpointed by an earlier version that kept only the last",
+                action_name,
+                len(asked),
+            )
 
     # Walked in stored order rather than over `carry_ids`, which is a set: these
     # rows are written straight back into the file they came from, so iterating the
@@ -339,7 +592,7 @@ def build_carry_forward(
         for index, record in enumerate(prior_output)
         if (rid := record.get("source_guid"))
     ]
-    rebuilding = frozenset(reprocessing)
+    rewritten = frozenset(rewriting)
     # A row naming a carried input and anything else — reprocessed, gone, or re-identified
     # — can be neither carried nor rebuilt. Read off every stored row, guid-less included.
     straddles = any(
@@ -353,11 +606,14 @@ def build_carry_forward(
     produced_indices: set[int] = set()
     producers_found: set[str] = set()
     for index, rid, producers in rows:
-        if rid in carry_ids:
+        # Both routes refuse a row the run is writing under, or the carried copy lands
+        # beside the run's own and the identity is stored twice (#1082). The rule is the
+        # row's, not the route's: nothing reaches it here today, and something may.
+        if rid in carry_ids and rid not in rewritten:
             chosen[rid] = index
         # An action minting an identity per row holds none carrying its input's, so the
         # rows it produced are the only place that input is named.
-        if producers and not straddles and producers <= inputs_carried and rid not in rebuilding:
+        if producers and not straddles and producers <= inputs_carried and rid not in rewritten:
             produced_indices.add(index)
             producers_found |= producers
     # Indices, so a row matched both ways is written once and keeps its place. Then one
@@ -368,11 +624,11 @@ def build_carry_forward(
         last_for_guid[prior_output[index]["source_guid"]] = index
     found: list[dict[str, Any]] = [prior_output[index] for index in sorted(last_for_guid.values())]
     missing: set[str] = carry_ids - set(chosen) - producers_found
-    if missing:
+    if not_found := missing - answered_again:
         logger.warning(
             "Action '%s': %d carry-forward records not found in prior output — will reprocess",
             action_name,
-            len(missing),
+            len(not_found),
         )
 
     return found, missing

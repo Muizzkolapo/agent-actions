@@ -25,4 +25,4 @@ metadata.
 | `builder.py` | Module | Constructs the online workflow builder that wires agents, guards, and prompts. | `workflow`, `preprocessing` |
 | `cleaner.py` | Module | Removes a workflow's working directories during `agac clean`. With `--all` it reads the batch registry out of the store it is about to wipe and reclaims what a provider recorded locally about those batches, which nothing could find afterwards. | `cli`, `file_io`, `llm.batch`, `storage` |
 | `handlers.py` | Module | Response/stream handlers for processing online outputs and streaming events. `AgentManager.get_agent_paths` accepts `project_root: Path \| None`. Delegates root discovery to `utils.project_root`. | `logging`, `output` |
-| `output.py` | Module | Emits online outputs, handling side outputs, metadata, and retry loops. | `output`, `processing` |
+| `output.py` | Module | Emits online outputs, handling side outputs, metadata, and retry loops. `OutputHandler.output_path` is where `save_main_output` writes a file's output, and `pipeline.py` names the file's stored rows from the same path, so the action's reads and its write cannot drift apart. | `output`, `processing` |

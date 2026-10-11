@@ -75,13 +75,13 @@ actions:
     dependencies: []
 
   - name: generate_seo
-    dependencies: validate
+    dependencies: [validate]
 
   - name: generate_recommendations
-    dependencies: validate
+    dependencies: [validate]
 
   - name: assess_reading_level
-    dependencies: validate
+    dependencies: [validate]
 
   - name: score_quality
     dependencies: [generate_seo, generate_recommendations, assess_reading_level]
@@ -115,10 +115,10 @@ actions:
     impl: chunk_document
 
   - name: process_chunk
-    dependencies: chunk_document
+    dependencies: [chunk_document]
 
   - name: aggregate_results
-    dependencies: process_chunk
+    dependencies: [process_chunk]
     kind: tool
     impl: aggregate_results
 ```
@@ -134,15 +134,15 @@ actions:
   - name: prepare
 
   - name: gpt4_answer
-    dependencies: prepare
+    dependencies: [prepare]
     model_vendor: openai
 
   - name: claude_answer
-    dependencies: prepare
+    dependencies: [prepare]
     model_vendor: anthropic
 
   - name: gemini_answer
-    dependencies: prepare
+    dependencies: [prepare]
     model_vendor: google
 
   - name: best_answer
@@ -160,12 +160,12 @@ actions:
   - name: classify
 
   - name: fast_path
-    dependencies: classify
+    dependencies: [classify]
     guard:
       condition: "classify.complexity == 'low'"
 
   - name: slow_path
-    dependencies: classify
+    dependencies: [classify]
     guard:
       condition: "classify.complexity == 'high'"
 
@@ -215,13 +215,9 @@ Input records:                        Tool output:                     After enr
 
 Downstream actions can use `context_scope.observe` to load data from any ancestor in the lineage chain — because each record traces back to the correct parent, not a shared fallback.
 
-## Matching Priority
+## What a Record Carries
 
-When loading historical data, Agent Actions uses this priority:
-
-1. **Lineage match** — Dependency's node_id is in current record's lineage (sequential chain)
-2. **Parent match** — Records share the same `parent_target_id` (parallel siblings)
-3. **Root match** — Records share the same `root_target_id` (Map-Reduce descendants)
+A record carries the namespace of every action upstream of it through `dependencies`, so an action names, in its `context_scope`, prompt or guard, only those. Preflight refuses any other name: an action that runs beside or after it, or one on a parallel branch, is not sure to be on the records it reads. To read one, add it to `dependencies` (the fan-in pattern) or depend on an action downstream of it.
 
 ## Debugging Lineage
 

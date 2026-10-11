@@ -175,11 +175,11 @@ class ActionOutputManager:
                 )
         return outputs, list(target_files)
 
-    def resolve_correlated_input(self, idx: int) -> list[str] | None:
-        """Return correlated input directories for version consumers, or None.
+    def resolve_correlated_input(self, idx: int) -> dict[str, list[dict[str, Any]]] | None:
+        """Return a version consumer's merged input by file path, or None for any other action.
 
-        Safe for parallel execution — the caller passes the returned
-        directories to ``run_action`` as an override parameter.
+        Safe for parallel execution — the caller passes the returned input to
+        ``run_action``, which walks it in place of a stored upstream.
         """
         current_agent = self.execution_order[idx]
 
@@ -199,11 +199,11 @@ class ActionOutputManager:
         version_sources = consumption_config["version_agents"]
         pattern = consumption_config["pattern"]
 
-        # prepare_correlated_input returns the correlated directory, or raises
+        # prepare_correlated_input returns the merged input, or raises
         # AllVersionsFilteredError (every source empty → executor cascade-skips)
         # or ConfigurationError (correlation/storage fault).
-        correlated_dir = self.version_correlator.prepare_correlated_input(
-            current_agent, version_sources, idx
+        correlated: dict[str, list[dict[str, Any]]] = (
+            self.version_correlator.prepare_correlated_input(current_agent, version_sources, idx)
         )
         logger.debug(
             "Correlated input for %s from %d version sources (pattern: %s)",
@@ -211,7 +211,7 @@ class ActionOutputManager:
             len(version_sources),
             getattr(pattern, "value", pattern),
         )
-        return [str(correlated_dir)]
+        return correlated
 
 
 # Backward-compatible alias

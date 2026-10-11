@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from agent_actions.errors.validation import DataValidationError
+from agent_actions.errors.validation import DataValidationError, MissingSourceGuidError
 from agent_actions.guards import GuardBehavior
 from agent_actions.processing.prepared_task import (
     GuardStatus,
@@ -65,19 +65,7 @@ class TaskPreparer:
 
         content, source_guid, source_snapshot = self._normalize_input(item, context)
         target_id = existing_target_id or self._generate_target_id()
-
-        if context.is_first_stage:
-            source_content = resolve_first_stage_source(item)
-        else:
-            source_content = resolve_source_content(
-                item if isinstance(item, dict) else {},
-                source_guid,
-                context.source_data,
-                action_name=context.agent_name,
-            )
-
-        current_item = item if isinstance(item, dict) else context.current_item
-        field_context = self._load_full_context(content, source_content, context, current_item)
+        field_context = self._field_context(item, content, source_guid, context)
 
         guard_config = context.agent_config.get("guard")
         conditional_clause = context.agent_config.get("conditional_clause")
@@ -95,9 +83,7 @@ class TaskPreparer:
                     passthrough_fields={},
                     original_content=content,
                     source_snapshot=source_snapshot,
-                    guard_status=GuardStatus.SKIPPED
-                    if guard_result.behavior == GuardBehavior.SKIP
-                    else GuardStatus.FILTERED,
+                    guard_status=_turned_away_as(guard_result.behavior),
                     guard_behavior=guard_result.behavior,
                 )
             if guard_result.behavior == GuardBehavior.WARN:
@@ -111,6 +97,8 @@ class TaskPreparer:
                     context.agent_name,
                     guard_clause,
                 )
+
+        self._require_identity(item, source_guid, context)
 
         prep_result = self._render_prompt(content, context, field_context)
 
@@ -141,6 +129,39 @@ class TaskPreparer:
             )
 
         return prepared
+
+    def judge(self, item: Any, context: PreparationContext) -> GuardStatus:
+        """The guard's verdict on *item* as ``prepare`` reaches it; no prompt is rendered.
+
+        With no guard it is PASSED and the source is not resolved, so a pool row that
+        ``prepare`` would refuse fails nothing here. Nothing is stored.
+        """
+        if isinstance(item, dict) and item.get("_state") in CASCADE_BLOCKING_VALUES:
+            return GuardStatus.UPSTREAM_UNPROCESSED
+        guard_config = context.agent_config.get("guard")
+        conditional_clause = context.agent_config.get("conditional_clause")
+        if not (guard_config or conditional_clause):
+            return GuardStatus.PASSED
+        content, source_guid, _snapshot = self._normalize_input(item, context)
+        field_context = self._field_context(item, content, source_guid, context)
+        result = self._evaluate_guard(content, guard_config, conditional_clause, field_context)
+        return GuardStatus.PASSED if result.should_execute else _turned_away_as(result.behavior)
+
+    def _field_context(
+        self, item: Any, content: Any, source_guid: str | None, context: PreparationContext
+    ) -> dict[str, Any]:
+        """What the guard and the prompt both read, from one resolution of the source."""
+        if context.is_first_stage:
+            source_content = resolve_first_stage_source(item)
+        else:
+            source_content = resolve_source_content(
+                item if isinstance(item, dict) else {},
+                source_guid,
+                context.source_data,
+                action_name=context.agent_name,
+            )
+        current_item = item if isinstance(item, dict) else context.current_item
+        return self._load_full_context(content, source_content, context, current_item)
 
     def _normalize_input(
         self, item: Any, context: PreparationContext
@@ -178,10 +199,28 @@ class TaskPreparer:
                     return item, source_guid, snapshot
                 source_guid = item.get("source_guid")
                 if source_guid == "":
-                    source_guid = None  # Preserve None for fallback lineage/recovery
+                    source_guid = None  # Left to the guard, then refused by _require_identity
                 return content, source_guid, item
             else:
                 return item, None, None
+
+    @staticmethod
+    def _require_identity(item: Any, source_guid: str | None, context: PreparationContext) -> None:
+        """Refuse a record below the first stage that arrived without a source_guid.
+
+        Nothing that carries, selects or repairs a record could name it, and enrichment
+        would refuse its answer. Called after the guard, so a record it filters or skips
+        is decided as online's guard above the strategy decides it, and before anything
+        is rendered, traced or sent.
+        """
+        if context.is_first_stage or source_guid:
+            return
+        target_id = item.get("target_id") if isinstance(item, dict) else None
+        raise MissingSourceGuidError(
+            f"Record {target_id or '(no target_id)'} reached '{context.agent_name}' without "
+            "a source_guid and was not sent; it must be stamped at its source or producer",
+            context={"action": context.agent_name, "target_id": target_id},
+        )
 
     @staticmethod
     def _prepare_source_snapshot(item: Any) -> Any:
@@ -263,6 +302,10 @@ class TaskPreparer:
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""
         return IDGenerator.generate_target_id()
+
+
+def _turned_away_as(behavior: GuardBehavior | None) -> GuardStatus:
+    return GuardStatus.SKIPPED if behavior == GuardBehavior.SKIP else GuardStatus.FILTERED
 
 
 # Per-process singleton; assumes one workflow per process.

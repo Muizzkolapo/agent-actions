@@ -119,7 +119,7 @@ The `draft_response` action uses a guard to skip execution for low-severity tick
   dependencies: [summarize_issue, assign_team]
   output_field: suggested_response
   guard:
-    condition: 'severity != "low"'
+    condition: 'assess_severity.severity != "low"'
     on_false: "skip"
 ```
 

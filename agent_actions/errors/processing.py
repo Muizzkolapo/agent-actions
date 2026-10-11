@@ -33,6 +33,12 @@ class SerializationError(ProcessingError):
     pass
 
 
+class GuardNotAppliedError(ProcessingError):
+    """Raised when a guard could not be put to a record, so the record has no verdict."""
+
+    pass
+
+
 class EmptyOutputError(ProcessingError):
     """Raised when an action produces empty output and on_empty=error."""
 

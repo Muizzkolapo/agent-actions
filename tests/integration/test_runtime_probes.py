@@ -10,12 +10,12 @@ together.
 import json
 import shutil
 import sqlite3
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
+from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "runtime_probes"
@@ -59,13 +59,7 @@ def run(tmp_path):
         project = tmp_path / workflow
         shutil.copytree(FIXTURE, project)
         (project / ".env").write_text("OPENAI_API_KEY=sk-not-used\nOLLAMA_API_KEY=not-used\n")
-        result = subprocess.run(
-            [str(Path(sys.executable).parent / "agac"), "run", "-a", workflow, "--fresh"],
-            cwd=project,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
+        result = run_agac(project, "run", "-a", workflow, "--fresh")
         return Run(workflow, project, result.returncode, result.stdout + result.stderr)
 
     return _run

@@ -94,6 +94,9 @@ def _coordinator(backend, state_manager, *, fresh: bool = False) -> AgentWorkflo
     workflow = object.__new__(AgentWorkflow)
     workflow.config = SimpleNamespace(fresh=fresh)
     workflow.storage_backend = backend
+    workflow.metadata = SimpleNamespace(
+        action_configs={HALTED: {"kind": "llm"}, ORDINARY: {"kind": "llm"}}
+    )
     workflow.services = SimpleNamespace(core=SimpleNamespace(state_manager=state_manager))
     return workflow
 

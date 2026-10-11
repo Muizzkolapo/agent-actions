@@ -1,0 +1,13 @@
+kind: Under the Hood
+body: >-
+  A test now resolves every symbol named in a module manifest's `## Project Surface` table
+  against the package it describes, by AST: a `Class.method` row requires the class to exist
+  and to define that method, or to inherit it up a real base chain. Nothing compared the
+  manifests to the code before, and the drift runs one way — a symbol is renamed, the table
+  keeps the old name, and the row still reads as current. It found seven stale entries:
+  `RenderCommand` and two of its surface rows, for a CLI command that no longer exists;
+  `GuardFilter.evaluate`, `BatchSubmissionService.submit`, `BatchRetrievalService.retrieve`,
+  `ActionExpander.expand` and `ResultCollector.collect`, all renamed; and
+  `ResponseBuilder.build`, which never existed on a class that writes no files. Two rows
+  claiming an `agent_io/staging/` read that their module never performs went with them.
+time: 2026-10-02T17:00:00Z

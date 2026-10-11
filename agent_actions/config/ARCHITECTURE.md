@@ -170,6 +170,8 @@ Layer 5: Runtime injection (by ConfigManager and ActionExpander)
 
 The merge in `merge_agent_configs()` is a flat dict merge (`{**defaults, **agent}`) with one exception: `chunk_config` gets a shallow deep-merge (`{**default_chunk, **agent_chunk}`).
 
+Layers 2 to 4 resolve in the expander, which copies onto the agent only what it is told to: the fields of `SIMPLE_CONFIG_FIELDS`, and the ones it handles by name. An action key it does not copy never reaches the agent config its readers take it from, and a project default for that key arrives through this merge, over the action's own.
+
 ---
 
 ## Path Resolution
@@ -342,6 +344,12 @@ Not an oversight: modelling it is a separate decision, because "declared" has to
 something different for a file with no model and several independent readers, and
 because the merge at `manager.py` mixes it with a block that is already strict. It is
 the last remaining instance of this class inside `config/`.
+
+A key already *known* to have no reader does not wait for that decision.
+`warn_unread_project_keys` names such a key at load, once per workflow, from the same
+place the project defaults are checked. It reports a fixed list of keys rather than
+anything undeclared, so a typo is still dropped in silence — which of the two a stray
+key is cannot be answered without the decision above.
 
 ### 5. AgentConfig uses `extra="allow"`
 

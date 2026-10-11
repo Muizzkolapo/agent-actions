@@ -139,8 +139,6 @@ class TestBatchPreparatorVersionContext:
 
         ctx = preparator._build_preparation_context(
             agent_config={"agent_type": "test"},
-            output_directory="/tmp/output",
-            batch_name="test_batch",
             source_data=None,
             workflow_metadata=None,
             tools_path=None,
@@ -156,8 +154,6 @@ class TestBatchPreparatorVersionContext:
 
         ctx = preparator._build_preparation_context(
             agent_config={"agent_type": "test"},
-            output_directory="/tmp/output",
-            batch_name="test_batch",
             source_data=None,
             workflow_metadata=None,
             tools_path=None,

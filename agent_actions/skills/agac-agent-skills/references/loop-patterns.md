@@ -19,28 +19,42 @@ flowchart LR
 ```
 
 ```yaml
+- name: original_output
+  schema: { output: string }
+  context_scope:
+    observe: [source.*]
+
 - name: verify
+  dependencies: [original_output]
   versions: { param: verifier_id, range: [1, 2, 3]}
   schema:
     selected_answer: string
     reasoning: string
+  context_scope:
+    observe: [original_output.output]
 
 - name: aggregate_verification
   kind: tool
+  dependencies: [verify]          # a version merge depends on the base name
   version_consumption: { source: verify, pattern: merge }
   schema:
     answer_matches: boolean
     has_failures: boolean
     failure_summary: string
+  context_scope:
+    observe: [verify.*]
 
 - name: rewrite
+  dependencies: [aggregate_verification]
   guard: { condition: 'aggregate_verification.has_failures == true', on_false: "skip" }
   context_scope:
     observe:
       - aggregate_verification.failure_summary
-      - aggregate_verification.has_failures   # dependency anchor
+      - aggregate_verification.has_failures
       - original_output.*
 ```
+
+`rewrite` can observe `original_output` because `original_output` is upstream of it, through `aggregate_verification` and `verify`. An action reads only what is upstream of it through `dependencies`: naming another action in `observe` or in a guard does not wire it in, and pre-flight refuses a name that is not upstream.
 
 The rewrite action observes `failure_summary` so the LLM knows exactly what to fix. After rewriting, a downstream action that needs the final output should observe both the original output and the rewrite, using `{% if %}` to pick whichever is non-null:
 
@@ -87,6 +101,8 @@ flowchart LR
 ```yaml
 - name: step_a
   schema: { output_a: string }
+  context_scope:
+    observe: [source.*]
 
 - name: step_b
   dependencies: [step_a]
@@ -119,20 +135,29 @@ flowchart LR
 ```
 
 ```yaml
+- name: assembled_output
+  schema: { output: string }
+  context_scope:
+    observe: [source.*]
+
 - name: quality_contract
+  dependencies: [assembled_output]
   schema:
     dimension_a_pass: boolean
     dimension_b_pass: boolean
     overall_pass: boolean
     total_score: integer
     failure_notes: string
+  context_scope:
+    observe: [assembled_output.*]
 
 - name: rewrite_output
+  dependencies: [quality_contract]
   guard: { condition: 'quality_contract.overall_pass == false', on_false: "skip" }
   context_scope:
     observe:
       - quality_contract.failure_notes
-      - quality_contract.overall_pass   # anchor
+      - quality_contract.overall_pass
       - assembled_output.*
 ```
 

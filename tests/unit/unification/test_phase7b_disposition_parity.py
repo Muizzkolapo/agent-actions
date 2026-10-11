@@ -14,6 +14,10 @@ from unittest.mock import MagicMock
 
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm.batch.services.collect import (
+    update_prompt_trace_responses,
+    write_filtered_dispositions,
+)
 from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import (
@@ -105,11 +109,8 @@ class TestFilteredDisposition:
         """
         backend = _make_storage_backend()
 
-        # Simulate the processing service calling write_filtered_dispositions
-        # (FILTERED records are excluded from workflow output items, so they
-        # must be handled separately from write_record_dispositions).
-        service = _build_processing_service(storage_backend=backend)
-
+        # FILTERED records are excluded from workflow output items, so they
+        # must be handled separately from write_record_dispositions.
         context_map: dict[str, Any] = {}
         filtered_entry = {"source_guid": "sg-filtered", "content": {"text": "data"}}
         BatchContextMetadata.set_filter_status(filtered_entry, FilterStatus.FILTERED)
@@ -120,7 +121,7 @@ class TestFilteredDisposition:
         BatchContextMetadata.set_filter_status(included_entry, FilterStatus.INCLUDED)
         context_map["t-included"] = included_entry
 
-        service._write_filtered_dispositions(context_map, "test_action")
+        write_filtered_dispositions(backend, "test_action", context_map)
 
         # Only the FILTERED record should get DISPOSITION_FILTERED
         filtered_calls = [
@@ -138,15 +139,13 @@ class TestFilteredDisposition:
         """FILTERED disposition must include the skip_reason matching online."""
         backend = _make_storage_backend()
 
-        service = _build_processing_service(storage_backend=backend)
-
         context_map: dict[str, Any] = {}
         entry = {"source_guid": "sg-001", "content": {"text": "data"}}
         BatchContextMetadata.set_filter_status(entry, FilterStatus.FILTERED)
         BatchContextMetadata.set_skip_reason(entry, "guard_filter")
         context_map["t-001"] = entry
 
-        service._write_filtered_dispositions(context_map, "test_action")
+        write_filtered_dispositions(backend, "test_action", context_map)
 
         filtered_calls = [
             c
@@ -258,8 +257,6 @@ class TestPromptTraceOnlyForSuccess:
         backend = _make_storage_backend()
         backend.update_prompt_trace_response = MagicMock()
 
-        service = _build_processing_service(storage_backend=backend)
-
         items = [
             {
                 "target_id": "t-success",
@@ -285,7 +282,7 @@ class TestPromptTraceOnlyForSuccess:
             },
         ]
 
-        service._update_prompt_trace_responses(items, "test_action")
+        update_prompt_trace_responses(backend, "test_action", items)
 
         # Only the SUCCESS record should have prompt trace updated.
         trace_calls = backend.update_prompt_trace_response.call_args_list
@@ -301,26 +298,6 @@ class TestPromptTraceOnlyForSuccess:
 # =============================================================================
 # Helpers
 # =============================================================================
-
-
-def _build_processing_service(*, storage_backend: Any = None) -> Any:
-    """Build a BatchProcessingService with minimal mocks for disposition tests."""
-    from unittest.mock import MagicMock
-
-    from agent_actions.llm.batch.services.processing import BatchProcessingService
-
-    return BatchProcessingService(
-        client_resolver=MagicMock(),
-        context_manager=MagicMock(),
-        result_processor=MagicMock(),
-        registry_manager_factory=MagicMock(),
-        action_indices={},
-        dependency_configs={},
-        storage_backend=storage_backend,
-        workflow_name="test_action",
-    )
-
-
 def _get_disposition_arg(call_obj) -> str | None:
     """Extract the disposition argument from a mock call."""
     if call_obj.kwargs.get("disposition"):

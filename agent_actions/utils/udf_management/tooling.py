@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from agent_actions.errors import AgentActionsError, ConfigurationError
+from agent_actions.errors import AgentActionsError, ConfigurationError, SchemaValidationError
 from agent_actions.utils.module_loader import load_module_from_path
 from agent_actions.utils.safe_format import safe_format_error
 
@@ -96,18 +96,35 @@ def execute_user_defined_function(
 
 def _validate_udf_output(udf_name: str, result: Any, json_output_schema: dict[str, Any]) -> None:
     """Validate UDF output against a per-item JSON Schema."""
+    errors = output_schema_errors(udf_name, result, json_output_schema)
+    if errors:
+        raise errors[0][1]
+
+
+def output_schema_errors(
+    udf_name: str, result: Any, json_output_schema: dict[str, Any]
+) -> list[tuple[int | None, SchemaValidationError]]:
+    """Each item of a UDF's output its per-item schema refuses, by position in the output.
+
+    A ``FileUDFResult`` item is its output's ``data``. A result that is not a list is
+    checked as one item, at position ``None``.
+    """
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
-    # FileUDFResult outputs carry source_index + data; validate data only.
     items = [out["data"] for out in result.outputs] if isinstance(result, FileUDFResult) else result
+    positioned: list[tuple[int | None, Any]] = (
+        list(enumerate(items)) if isinstance(items, list) else [(None, items)]
+    )
 
-    if isinstance(items, list):
-        for idx, item in enumerate(items):
+    errors: list[tuple[int | None, SchemaValidationError]] = []
+    for idx, item in positioned:
+        try:
             _validate_against_schema(
                 item, json_output_schema, udf_name, item_index=idx, validation_type="output"
             )
-    else:
-        _validate_against_schema(items, json_output_schema, udf_name, validation_type="output")
+        except SchemaValidationError as e:
+            errors.append((idx, e))
+    return errors
 
 
 def _validate_against_schema(

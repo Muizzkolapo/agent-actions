@@ -19,7 +19,7 @@ serving schema/guard metadata to downstream tooling.
 |------|------|-------------|---------|
 | `file_handler.py` | Module | Backward-compatibility shim — re-exports `FileHandler` from `utils.file_handler`. | `utils.file_handler` |
 | `saver.py` | Module | Persistent saver for workflow outputs and guard results. | `workflow`, `logging` |
-| `writer.py` | Module | FileWriter for staging/target/source outputs with optional storage backend and relative-path preservation. | `output.response`, `logging` |
+| `writer.py` | Module | FileWriter for staging/target/source outputs with optional storage backend and relative-path preservation. A target write the store fails (`OSError`, `sqlite3.Error`) is marked action-fatal, so the file walk fails the action rather than completing it over the rows an earlier run stored for that file; anything else the backend raises stays that file's failure. A write that fails fires `FileWriteFailedEvent`, not the loaders' `DataLoadingErrorEvent`. | `output.response`, `logging`, `errors` |
 
 ## FileWriter Interface
 
@@ -64,9 +64,8 @@ This prevents file collisions when multiple files share the same name but live i
 | `UnifiedSourceDataSaver.save_source_items()` | `agent_io/store/` | Writes | — |
 | `SchemaLoader.load_schema()` | `schema/{workflow}/{action}.yml` | Reads | `schema_path` |
 | `SchemaLoader.discover_schema_files()` | `schema/{workflow}/{action}.yml` | Reads | `schema_path` |
-| `ActionExpander.expand()` | `agent_config/{workflow}.yml` | Transforms | `actions`, `defaults`, `versions` |
+| `ActionExpander.expand_actions_to_agents()` | `agent_config/{workflow}.yml` | Transforms | `actions`, `defaults`, `versions` |
 | `ResponseSchemaCompiler.compile()` | `schema/{workflow}/{action}.yml` | Reads | `schema`, `schema_name` |
-| `ResponseBuilder.build()` | `agent_io/target/{action}/` | Writes | — |
 
 **Internal only**: `compile_unified_schema`, `_convert_json_schema_to_unified`, `compile_field`, `_inject_functions_into_schema`, `_resolve_dispatch_in_schema`, `_prepare_context_data_str`, `config_fields`, `config_schema`, `expander_validation`, `expander_schema`, `expander_action_types`, `expander_merge`, `expander_guard_validation`, `schema_conversion`, `vendor_compilation`, `dispatch_injection`, `context_data` -- no direct project surface.
 

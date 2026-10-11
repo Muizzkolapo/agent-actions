@@ -39,10 +39,6 @@ schema_path: schema
 tool_path: ["tools"]
 seed_data_path: seed_data
 required_by_default: false
-
-output_storage:
-  backend: sqlite
-  db_path: ./agent_io/outputs.db
 ```
 
 | Field | Description |
@@ -52,7 +48,6 @@ output_storage:
 | `tool_path` | Directories to scan for custom tools |
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required unless marked `optional: true`; when `false` (default) they are optional unless marked `required: true`. Applies project-wide; a schema declaring its own `required_by_default` overrides it. |
-| `output_storage` | Storage backend config: `backend` (`sqlite`), `db_path` (database file location) |
 
 ## Agentic Workflow Configuration
 
@@ -103,7 +98,7 @@ Each action can override any default. Consider what happens when you need one ac
 actions:
   - name: extract_facts
     intent: "Extract key facts from content"
-    dependencies: prior_action  # Input source
+    dependencies: [prior_action]  # Input source
 
     # Model
     model_vendor: openai
@@ -166,8 +161,8 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 | `granularity` | string | `record` or `file` — see [Granularity](../execution/granularity.md) |
 | `guard` | object | Conditional execution — see [Guards](../execution/guards.md) |
 | `is_operational` | boolean | Enable/disable action (default: true) |
+| `on_empty` | string | What an empty answer does: `warn` (default) fails the record and the run goes on, `error` fails the action, `skip` passes the record through as a tombstone |
 | `policy` | string | Execution policy |
-| `idempotency_key` | string | Template for idempotency key |
 | `retry` | object | Retry configuration for transport-layer failures |
 
 :::note Granularity Constraints

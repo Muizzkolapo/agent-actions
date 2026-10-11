@@ -1,4 +1,4 @@
-"""Tests for batch resubmission prevention when completed batch exists."""
+"""Tests for batch resubmission prevention when a completed batch is still to collect."""
 
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +9,7 @@ from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
 
-def _make_service(force_batch: bool = False) -> BatchSubmissionService:
+def _make_service(force_batch: bool = False, storage_backend=None) -> BatchSubmissionService:
     """Create a BatchSubmissionService with mocked dependencies."""
     return BatchSubmissionService(
         task_preparator=MagicMock(),
@@ -17,6 +17,7 @@ def _make_service(force_batch: bool = False) -> BatchSubmissionService:
         context_manager=MagicMock(),
         registry_manager_factory=MagicMock(),
         force_batch=force_batch,
+        storage_backend=storage_backend,
     )
 
 
@@ -46,7 +47,7 @@ def _stub_submission_path(svc: BatchSubmissionService, batch_id: str = "batch-ne
 
 
 class TestCompletedBatchSkipsResubmission:
-    """Completed batch in registry must block new submission."""
+    """A completed batch whose results are not collected yet must block new submission."""
 
     def test_completed_batch_returns_existing_batch_id(self, tmp_path):
         """When a completed batch exists, submit_batch_job returns its ID without resubmitting."""
@@ -83,6 +84,31 @@ class TestCompletedBatchSkipsResubmission:
         svc._task_preparator.prepare_tasks.assert_not_called()
 
 
+class TestACollectedBatchNoLongerBlocks:
+    """Its results are written, so it is no reason to skip an action that has to run."""
+
+    def test_a_collected_batch_allows_new_submission(self, tmp_path):
+        svc = _make_service()
+        entry = _make_entry(BatchStatus.COMPLETED, batch_id="batch-spent")
+        entry.collected_at = "2026-04-19T01:00:00+00:00"
+        svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
+        _stub_submission_path(svc, batch_id="batch-new")
+
+        with (
+            patch("agent_actions.llm.batch.services.submission.fire_event"),
+            patch("agent_actions.llm.batch.services.submission.get_manager"),
+        ):
+            result = svc.submit_batch_job(
+                agent_config={"model_vendor": "openai"},
+                batch_name="my_action",
+                data=[{"id": 1}],
+                output_directory=str(tmp_path),
+            )
+
+        assert result.batch_id == "batch-new"
+        svc._task_preparator.prepare_tasks.assert_called_once()
+
+
 class TestInFlightBatchStillBlocks:
     """Existing in-flight guard must continue to work."""
 
@@ -104,6 +130,31 @@ class TestInFlightBatchStillBlocks:
 
         assert result.batch_id == "batch-inflight"
         svc._task_preparator.prepare_tasks.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            *sorted(BatchStatus.in_flight_states(), key=lambda s: s.value),
+            BatchStatus.COMPLETED,
+        ],
+    )
+    def test_a_job_still_owed_blocks_when_the_input_is_now_empty(self, tmp_path, status):
+        """Its results are owed for this file. Stored empty and reported written
+        instead, the file would read done while its job is still out."""
+        svc = _make_service(storage_backend=MagicMock())
+        entry = _make_entry(status, batch_id="batch-owed")
+        svc._registry_manager_factory.return_value.get_batch_job.return_value = entry
+
+        result = svc.submit_batch_job(
+            agent_config={"model_vendor": "openai"},
+            batch_name="my_action",
+            data=[],
+            output_directory=str(tmp_path),
+            run_inputs=[],
+        )
+
+        assert result.batch_id == "batch-owed"
+        assert result.passthrough is None
 
 
 class TestFailedCancelledBatchAllowsResubmission:

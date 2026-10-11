@@ -192,10 +192,17 @@ context_map = {
 
 ```
 1. Idempotency check  → already submitted? Return existing batch_id
-2. Save context_map   → persisted to StorageBackend metadata
-3. Provider submit    → sends JSONL file to provider API
+2. Provider submit    → sends JSONL file to provider API
+3. Save context_map   → with the recorded inputs, persisted to StorageBackend
+                        metadata, only once the provider has taken the batch
 4. Register batch     → saved to StorageBackend metadata (batch_registry:{action})
 5. Stamp dispositions → records marked DEFERRED in storage
+
+A refusal at step 2 stores nothing and raises an error fatal to the action,
+so the walk fails the action once every file is walked, and declared refused,
+so the run names the batches of other files it leaves waiting. The next reset
+keeps what the action had answered while its config is unchanged. A failure
+at step 3 or 4 leaves a batch the provider holds that only the error names.
 ```
 
 ### Phase 3-4: Poll + Process
@@ -213,6 +220,8 @@ Reconciliation (reconciler.py):
     └── Unanswered  → trigger retry (Phase 5); when the attempts run out,
                       an error record if a row came back at all, a tombstone
                       if the provider returned no row for it
+                      Retry off (no retry: block), or its batch not sent:
+                      a row-less record is failed, batch_not_returned
 ```
 
 ### Phase 5-6: Recovery State Machine

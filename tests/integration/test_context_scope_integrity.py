@@ -763,19 +763,22 @@ class TestDropSecurity:
         assert passthrough["dep"]["url"] == "https://api.com"
 
     def test_drop_missing_field_warns_not_crashes(self):
-        """Dropping a nonexistent field logs debug, doesn't raise."""
+        """Dropping a nonexistent field warns and does not raise.
+
+        The name always said "warns"; the assertion checked debug. Raised to warning in
+        #1116 because a drop that removed nothing leaves the field in the prompt — this
+        class is TestDropSecurity, and that is the security-relevant outcome.
+        """
         field_context = {
             "dep": {"existing": "value", "other": "data", "more": "info"},
         }
         context_scope = {"drop": ["dep.nonexistent"]}
 
         with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
-            prompt_context, llm_context, _ = apply_context_scope(
-                field_context, context_scope, action_name="test"
-            )
+            apply_context_scope(field_context, context_scope, action_name="test")
 
-        debug_messages = [c[0][0] for c in mock_logger.debug.call_args_list if c[0]]
-        assert any("matched zero fields" in m for m in debug_messages)
+        warn_messages = [c[0][0] for c in mock_logger.warning.call_args_list if c[0]]
+        assert any("removed nothing" in m for m in warn_messages), warn_messages
 
     def test_drop_missing_namespace_warns_not_crashes(self):
         """Dropping from nonexistent namespace logs debug, doesn't raise."""

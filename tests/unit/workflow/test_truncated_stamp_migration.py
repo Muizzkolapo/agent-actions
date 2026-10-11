@@ -99,7 +99,7 @@ class TestTheMarkerOutlivesTheReadThatReportsIt:
             patch.object(state, "_save_status", side_effect=OSError("disk full")),
             pytest.raises(OSError),
         ):
-            state.update_status("act", ActionStatus.PENDING)
+            state.reopen(["act"])
 
         reloaded = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
         assert reloaded.adopt_truncation_marker("act") is True
@@ -108,7 +108,7 @@ class TestTheMarkerOutlivesTheReadThatReportsIt:
         state = manager(tmp_path, record_limit=8, max_records=2)
         state.adopt_truncation_marker("act")
 
-        state.update_status("act", ActionStatus.PENDING)
+        state.reopen(["act"])
 
         assert "max_records" not in written(tmp_path)
 
@@ -117,7 +117,7 @@ class TestTheMarkerOutlivesTheReadThatReportsIt:
         later run."""
         state = manager(tmp_path, record_limit=8, max_records=2)
         first = state.adopt_truncation_marker("act")
-        state.update_status("act", ActionStatus.PENDING)
+        state.reopen(["act"])
 
         reloaded = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
 
@@ -127,7 +127,7 @@ class TestTheMarkerOutlivesTheReadThatReportsIt:
         state = manager(tmp_path, record_limit=8, max_records=2, config_hash="abc", file_limit=3)
         state.adopt_truncation_marker("act")
 
-        state.update_status("act", ActionStatus.PENDING)
+        state.reopen(["act"])
 
         assert written(tmp_path) == {
             "status": "pending",

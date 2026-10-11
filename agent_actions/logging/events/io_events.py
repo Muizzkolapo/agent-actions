@@ -12,6 +12,7 @@ __all__ = [
     "SchemaLoadedEvent",
     "FileWriteStartedEvent",
     "FileWriteCompleteEvent",
+    "FileWriteFailedEvent",
     "SchemaConstructionStartedEvent",
     "SchemaConstructionCompleteEvent",
     "ContextNamespaceLoadedEvent",
@@ -152,6 +153,29 @@ class FileWriteCompleteEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "FIO006"
+
+
+@dataclass
+class FileWriteFailedEvent(BaseEvent):
+    """Fired when file write operation fails."""
+
+    file_path: str = ""
+    file_type: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.FILE_IO
+        self.message = f"Failed to write {self.file_path}: {self.error}"
+        self.data = {
+            "file_path": self.file_path,
+            "file_type": self.file_type,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "FIO007"
 
 
 @dataclass

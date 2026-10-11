@@ -1,0 +1,14 @@
+kind: Under the Hood
+body: >-
+  `mypy tests/` runs to completion. It aborted on `Duplicate module named "conftest"` before
+  checking a single file, so the test tree was not out of scope for the type checker but
+  unreachable by it — and the layout question had to be answered before anyone could say how
+  much was there. 34 of 203 test directories carry an `__init__.py` and the rest do not, so
+  several `conftest.py` files resolved to one module name. Setting `explicit_package_bases`
+  fixes it without touching the layout, which is why it was chosen over adding the three
+  missing `__init__.py` files: pytest's rootdir and import mode are unchanged and collection is
+  identical at 11334 tests before and after. CI is unaffected — it type-checks `agent_actions`,
+  which still reports no issues across 439 files. The number the abort was hiding: 1704 errors
+  in 291 files across 768 checked. That is a cleanup programme rather than a gate, so the
+  check is not extended to `tests/` here; the figure is now available for that decision.
+time: 2026-09-30T05:30:00Z

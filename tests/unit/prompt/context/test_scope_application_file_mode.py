@@ -6,6 +6,16 @@ source resolution, empty observe, None namespace, and directive interactions.
 
 from copy import deepcopy
 
+
+def _without_detail(skipped: list[dict]) -> list[dict]:
+    """The skip minus its `detail`, so an exact-shape assertion stays readable.
+
+    `detail` names the field or the pool size and is pinned by
+    test_a_scope_skip_says_which_field.py; here the point is the shape (#1140).
+    """
+    return [{k: v for k, v in s.items() if k != "detail"} for s in skipped]
+
+
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope_for_records,
 )
@@ -215,7 +225,10 @@ class TestSourceResolution:
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert enriched == []
-        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved", "position": 0}]
+        assert _without_detail(skipped) == [
+            {"source_guid": "unknown", "reason": "source_unresolved", "position": 0}
+        ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
     def test_source_pool_without_guids_skips_all_records(self):
         """Multi-record pool with no source_guid keys → empty index, every record skipped."""
@@ -242,7 +255,10 @@ class TestSourceResolution:
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert [r["content"]["url"] for r in enriched] == ["http://2.com"]
-        assert skipped == [{"source_guid": "ghost", "reason": "source_unresolved", "position": 1}]
+        assert _without_detail(skipped) == [
+            {"source_guid": "ghost", "reason": "source_unresolved", "position": 1}
+        ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
     def test_single_source_pool_guid_miss_skips_record(self):
         """Even a one-record pool never substitutes — resolution is by guid match only."""
@@ -252,7 +268,10 @@ class TestSourceResolution:
             records, {"observe": ["source.url", "dep.f"]}, action_name="test", source_data=pool
         )
         assert enriched == []
-        assert skipped == [{"source_guid": "unknown", "reason": "source_unresolved", "position": 0}]
+        assert _without_detail(skipped) == [
+            {"source_guid": "unknown", "reason": "source_unresolved", "position": 0}
+        ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
     def test_unresolved_guid_resolves_via_parent_source_guid(self):
         """Expansion children resolve through their carried attribution, each to its own parent."""
@@ -305,9 +324,10 @@ class TestSourceResolution:
             records, scope, action_name="test", source_data=SOURCE_DATA
         )
         assert enriched == []
-        assert skipped == [
+        assert _without_detail(skipped) == [
             {"source_guid": "minted-1", "reason": "source_unresolved", "position": 0}
         ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
     def test_no_source_data_with_source_refs_skips_record(self):
         """Explicit source ref without source_data → record skipped (source namespace absent)."""

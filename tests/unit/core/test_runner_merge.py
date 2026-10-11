@@ -152,6 +152,7 @@ class TestStorageBackendMerge:
         # Create params
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
+        params.correlated_input = None
         params.output_directory = "/output"
         params.action_config = {}
         params.action_name = "test_agent"
@@ -194,6 +195,7 @@ class TestStorageBackendMerge:
 
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1", "/target/node_2"]
+        params.correlated_input = None
         params.output_directory = "/output"
         params.action_config = {}
         params.action_name = "test_agent"
@@ -228,6 +230,7 @@ class TestStorageBackendMerge:
 
         params = MagicMock()
         params.upstream_data_dirs = ["/target/node_1"]
+        params.correlated_input = None
         params.output_directory = "/output"
         params.action_config = {}
         params.action_name = "test_agent"

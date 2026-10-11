@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, mark_action_fatal
 from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.strategies.hitl import HITLStrategy
@@ -327,8 +327,14 @@ def test_file_udf_result_accepts_none_source_index():
 # --- Plain dict rejection ---
 
 
+def _only_failure(results) -> str:
+    """The error of the one input record, which the tool's output failed."""
+    assert [(r.status, r.source_guid) for r in results] == [(ProcessingStatus.FAILED, "sg-1")]
+    return results[0].error
+
+
 def test_file_tool_plain_dict_rejected():
-    """FILE tool returning plain dicts (not TrackedItem) raises ValueError."""
+    """FILE tool returning plain dicts (not TrackedItem) fails the records it was handed."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -339,12 +345,13 @@ def test_file_tool_plain_dict_rejected():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=([{"score": 0.9}], True),
     ):
-        with pytest.raises(AgentActionsError, match="plain dict"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "plain dict" in _only_failure(results)
 
 
 def test_file_tool_non_dict_rejected():
-    """FILE tool returning non-dict items raises ValueError."""
+    """FILE tool returning non-dict items fails the records it was handed."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -355,12 +362,13 @@ def test_file_tool_non_dict_rejected():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=(["just a string"], True),
     ):
-        with pytest.raises(AgentActionsError, match="expected TrackedItem"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "expected TrackedItem" in _only_failure(results)
 
 
 def test_file_tool_non_list_non_fileudfresult_rejected():
-    """FILE tool returning non-list, non-FileUDFResult raises ValueError."""
+    """FILE tool returning non-list, non-FileUDFResult fails the records it was handed."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -371,8 +379,9 @@ def test_file_tool_non_list_non_fileudfresult_rejected():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         return_value=({"single": "dict"}, True),
     ):
-        with pytest.raises(AgentActionsError, match="must return list or FileUDFResult"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "must return list or FileUDFResult" in _only_failure(results)
 
 
 # --- Empty tool output detection ---
@@ -554,7 +563,7 @@ def test_file_tool_empty_response_snapshot_per_record():
 
 
 def test_file_mode_error_surfaces():
-    """FILE tool raising exception should propagate, not produce empty output."""
+    """FILE tool raising exception fails its records, not produce empty output."""
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -565,17 +574,18 @@ def test_file_mode_error_surfaces():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=RuntimeError("connection refused"),
     ):
-        with pytest.raises(AgentActionsError, match="connection refused"):
-            FileToolStrategy().invoke(input_data, context)
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert "connection refused" in _only_failure(results)
 
 
-def test_file_mode_error_includes_context():
-    """The surfaced error should include agent_name and record_count."""
+def test_file_mode_error_names_the_tool():
+    """An error raised outside the UDF, which names nothing, is put to the tool."""
     context = _make_context()
 
     input_data = [
-        {"content": {"prev": {"a": 1}}},
-        {"content": {"prev": {"b": 2}}},
+        {"source_guid": "sg-1", "content": {"prev": {"a": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"b": 2}}},
     ]
 
     context.source_data = input_data
@@ -584,11 +594,263 @@ def test_file_mode_error_includes_context():
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
         side_effect=ValueError("bad data"),
     ):
-        with pytest.raises(AgentActionsError) as exc_info:
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert [r.error for r in results] == ["FILE mode tool 'my_file_tool' failed: bad data"] * 2
+
+
+def test_a_tool_that_raises_fails_every_record_it_was_handed():
+    """The file's one result names no record, so a raise is answered per input record:
+    each fails with the error, and carries its record from before the scope for its
+    tombstone, as the record loop fails a record whose tool raised."""
+    context = _make_context()
+    scoped = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+    ]
+    originals = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}, "source": {"page": "a"}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}, "source": {"page": "b"}}},
+    ]
+    context.source_data = originals
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        side_effect=AgentActionsError("Error executing UDF 'roll': the roll-up broke"),
+    ):
+        results = FileToolStrategy().invoke(scoped, context)
+
+    assert [(r.status, r.source_guid) for r in results] == [
+        (ProcessingStatus.FAILED, "sg-1"),
+        (ProcessingStatus.FAILED, "sg-2"),
+    ]
+    assert {r.error for r in results} == {"Error executing UDF 'roll': the roll-up broke"}
+    assert [r.input_record for r in results] == originals
+
+
+def test_an_error_already_declared_fatal_to_the_action_is_raised():
+    """Some layer below knew it ends the action, so it is not one file's failure."""
+    context = _make_context()
+    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
+    context.source_data = input_data
+    fatal = mark_action_fatal(AgentActionsError("the store is gone"))
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        side_effect=fatal,
+    ):
+        with pytest.raises(AgentActionsError) as raised:
             FileToolStrategy().invoke(input_data, context)
 
-    assert exc_info.value.context["agent_name"] == "my_file_tool"
-    assert exc_info.value.context["record_count"] == 2
+    assert raised.value is fatal
+
+
+def test_a_row_whose_parent_names_no_input_fails_every_record_of_its_file():
+    """Matching the row to a parent the tool never named would invent its lineage, so
+    the file's records fail with the error instead."""
+    context = _make_context()
+    input_data = [
+        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
+        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
+    ]
+    context.source_data = input_data
+    raw = FileUDFResult(
+        outputs=[
+            {"source_index": 2, "data": {"score": 1}},
+            {"source_index": 1, "data": {"score": 2}},
+        ]
+    )
+
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=(raw, True),
+    ):
+        results = FileToolStrategy().invoke(input_data, context)
+
+    assert [(r.status, r.source_guid) for r in results] == [
+        (ProcessingStatus.FAILED, "sg-1"),
+        (ProcessingStatus.FAILED, "sg-2"),
+    ]
+    assert {r.error for r in results} == {
+        "FILE mode tool 'my_file_tool' failed: "
+        "source_index 2 does not name one of the 2 input records"
+    }
+
+
+# --- Output the action's schema refuses ---
+
+_SCORE_SCHEMA = {
+    "type": "object",
+    "properties": {"score": {"type": "number"}},
+    "required": ["score"],
+}
+
+
+def _three_records():
+    """A context whose schema wants a numeric score, and three records for it."""
+    context = _make_context()
+    context.agent_config["json_output_schema"] = _SCORE_SCHEMA
+    records = [
+        {"source_guid": f"sg-{n}", "content": {"prev": {"id": n}, "source": {"n": n}}}
+        for n in (1, 2, 3)
+    ]
+    context.source_data = records
+    return context, records
+
+
+def _answer(context, records, raw_response):
+    with patch(
+        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
+        return_value=(raw_response, True),
+    ):
+        return FileToolStrategy().invoke(records, context)
+
+
+def _failed(results) -> dict[str, str]:
+    return {r.source_guid: r.error or "" for r in results if r.status == ProcessingStatus.FAILED}
+
+
+def _stored(results) -> list[tuple[str, object]]:
+    """Each row the file's result holds, as (its guid, its score)."""
+    return [
+        (row["source_guid"], row["content"]["my_file_tool"]["score"])
+        for r in results
+        if r.status == ProcessingStatus.SUCCESS
+        for row in r.data
+    ]
+
+
+@pytest.mark.parametrize("shape", ["tracked_items", "file_udf_result"])
+def test_an_answer_its_schema_refuses_fails_only_the_record_it_answers(shape):
+    """Checked one output row at a time, a refusal names the row, and the row names its
+    record: that record fails and the rest of the file is stored."""
+    context, records = _three_records()
+    scores = [1, "high", 3]
+    if shape == "tracked_items":
+        raw = [TrackedItem({"score": s}, source_index=i) for i, s in enumerate(scores)]
+    else:
+        raw = FileUDFResult(
+            outputs=[{"source_index": i, "data": {"score": s}} for i, s in enumerate(scores)]
+        )
+
+    results = _answer(context, records, raw)
+
+    failed = _failed(results)
+    assert list(failed) == ["sg-2"]
+    assert "(item 1)" in failed["sg-2"]
+    assert "'high' is not of type 'number'" in failed["sg-2"]
+    assert next(r for r in results if r.source_guid == "sg-2").input_record == records[1]
+    assert _stored(results) == [("sg-1", 1), ("sg-3", 3)]
+    assert all(r.status != ProcessingStatus.UNPROCESSED for r in results)
+
+
+def test_every_answer_of_a_record_goes_with_the_one_its_schema_refuses():
+    """A record answered with several rows is failed whole when one is refused."""
+    context, records = _three_records()
+    raw = FileUDFResult(
+        outputs=[
+            {"source_index": 0, "data": {"score": 1}},
+            {"source_index": 1, "data": {"score": 2}},
+            {"source_index": 1, "data": {"score": "high"}},
+            {"source_index": 2, "data": {"score": 3}},
+        ]
+    )
+
+    results = _answer(context, records, raw)
+
+    assert list(_failed(results)) == ["sg-2"]
+    assert [score for _, score in _stored(results)] == [1, 3]
+    assert all(r.status != ProcessingStatus.UNPROCESSED for r in results)
+
+
+@pytest.mark.parametrize(
+    "outputs",
+    [
+        pytest.param(
+            [
+                {"source_index": [0, 1], "data": {"score": "high"}},
+                {"source_index": 2, "data": {"score": 3}},
+            ],
+            id="a refused row naming several records",
+        ),
+        pytest.param(
+            [
+                {"source_index": None, "data": {"score": "high"}},
+                {"source_index": 0, "data": {"score": 1}},
+            ],
+            id="a refused row naming none",
+        ),
+        pytest.param(
+            [
+                {"source_index": 0, "data": {"score": "high"}},
+                {"source_index": [0, 1], "data": {"score": 2}},
+                {"source_index": 2, "data": {"score": 3}},
+            ],
+            id="a refused record another record's row was answered with",
+        ),
+    ],
+)
+def test_a_refusal_no_one_record_answers_for_fails_every_record_of_the_file(outputs):
+    context, records = _three_records()
+
+    results = _answer(context, records, FileUDFResult(outputs=outputs))
+
+    failed = _failed(results)
+    assert list(failed) == ["sg-1", "sg-2", "sg-3"]
+    assert all("'high' is not of type 'number'" in error for error in failed.values())
+    assert _stored(results) == []
+    assert [r.input_record for r in results] == records
+
+
+def test_a_file_whose_every_record_is_refused_keeps_no_row_invented_beside_them():
+    """A row naming no input is not an answer to any record, so with every record
+    refused the file answered nothing and stores nothing."""
+    context, records = _three_records()
+    raw = FileUDFResult(
+        outputs=[
+            *({"source_index": i, "data": {"score": "high"}} for i in range(3)),
+            {"source_index": None, "data": {"score": 3}},
+        ]
+    )
+
+    results = _answer(context, records, raw)
+
+    assert list(_failed(results)) == ["sg-1", "sg-2", "sg-3"]
+    assert _stored(results) == []
+
+
+def test_a_refused_record_leaves_the_collapse_beside_it_crediting_its_contributors():
+    """The refused record is named by its failure, so it does not stop the collapse of
+    the two others from crediting the one whose guid the row does not carry."""
+    context, records = _three_records()
+    raw = FileUDFResult(
+        outputs=[
+            {"source_index": 0, "data": {"score": "high"}},
+            {"source_index": [1, 2], "data": {"score": 2}},
+        ]
+    )
+
+    results = _answer(context, records, raw)
+
+    assert list(_failed(results)) == ["sg-1"]
+    assert _stored(results) == [("sg-2", 2)]
+    (answer,) = [r for r in results if r.status == ProcessingStatus.SUCCESS]
+    assert answer.collapse_contributor_guids == ["sg-3"]
+
+
+def test_a_refused_record_beside_dropped_ones_returns_no_empty_answer():
+    """With the refused record's row withheld the tool answered nothing, so the file
+    has no result to collect, only the failure and the records the tool dropped."""
+    context, records = _three_records()
+    raw = FileUDFResult(outputs=[{"source_index": 0, "data": {"score": "high"}}])
+
+    results = _answer(context, records, raw)
+
+    assert [(r.status, r.source_guid) for r in results] == [
+        (ProcessingStatus.UNPROCESSED, "sg-2"),
+        (ProcessingStatus.UNPROCESSED, "sg-3"),
+        (ProcessingStatus.FAILED, "sg-1"),
+    ]
 
 
 # --- _strip_internal_fields list handling ---
@@ -848,11 +1110,12 @@ def test_record_tool_list_return_produces_multiple_output_items():
     assert output[2]["content"]["flatten_tool"]["question"] == "Q3"
 
 
-# --- SchemaValidationError re-raise in invoke ---
+# --- A record tool's SchemaValidationError fails its record in invoke ---
 
 
-def test_invoke_reraises_schema_validation_error():
-    """SchemaValidationError from process_record() should propagate through invoke()."""
+def test_invoke_fails_the_record_whose_output_fails_its_schema():
+    """A record tool's output is checked one record at a time, so a SchemaValidationError
+    from process_record() fails that record and invoke() returns, as for a tool that raises."""
     from agent_actions.errors import SchemaValidationError
     from agent_actions.processing.invocation.result import InvocationResult
     from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
@@ -882,8 +1145,11 @@ def test_invoke_reraises_schema_validation_error():
         "process_record",
         side_effect=SchemaValidationError("output doesn't match schema"),
     ):
-        with pytest.raises(SchemaValidationError, match="output doesn't match schema"):
-            strategy.invoke(items, context)
+        results = strategy.invoke(items, context)
+
+    assert [r.status for r in results] == [ProcessingStatus.FAILED]
+    assert results[0].source_guid == "sg-1"
+    assert "output doesn't match schema" in (results[0].error or "")
 
 
 # --- ResultCollector failure handling ---

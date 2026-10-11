@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A batch the provider fails or cancels before it finishes no longer strands its file's
+  records. Each input file is sent as its own batch, and a collect pass passed over one the
+  provider had ended that way while another file's batch was collected: a failed one paused
+  every run after it, saying nothing about the batch, and a cancelled one let the action
+  complete. Either way that file's records stayed deferred, and `agac retry` found nothing
+  to retry. The run now names the file and its batch, marks that file's records failed and
+  completes the action with those failures, so `agac retry` sends them again; a run that
+  cannot read the store to mark them pauses, and the next run marks them. When every
+  file's batch ended that way, the run still fails the action and the next run sends every
+  file again. An action an earlier version left paused this way completes on the next run;
+  one it completed past a cancelled batch is not repaired, and `agac run --fresh` sends every
+  record of the workflow again.
+time: 2026-10-10T12:18:17Z

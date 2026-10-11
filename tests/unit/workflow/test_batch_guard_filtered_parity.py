@@ -47,7 +47,7 @@ def executor(deps):
 
 
 def _all_records_guard_filtered(deps, filtered: bool = True):
-    """Node-level SKIPPED disposition is the guard-filtered-all signal.
+    """Node-level SKIPPED disposition, with no row held, is the guard-filtered-all signal.
 
     Answers only for that exact query, so an implementation reading a
     different disposition or a record-level row does not read as filtered.
@@ -57,6 +57,7 @@ def _all_records_guard_filtered(deps, filtered: bool = True):
         return filtered and disposition == DISPOSITION_SKIPPED and record_id == NODE_LEVEL_RECORD_ID
 
     deps.action_runner.storage_backend.has_disposition.side_effect = has_disposition
+    deps.action_runner.storage_backend.has_target_rows.return_value = not filtered
     deps.action_runner.storage_backend.get_failed_items.return_value = []
 
 

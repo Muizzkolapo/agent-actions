@@ -232,6 +232,19 @@ class VersionNamespaceBuilder:
     _RESERVED_KEYS = frozenset({"i", "idx", "length", "first", "last"})
 
     @staticmethod
+    def promoted_names(version_context: dict | None) -> set[str]:
+        """The top-level names `build` promotes out of a version context.
+
+        Split out so a caller needing the names without building the namespace -- preflight
+        deciding whether a bare guard reference resolves -- cannot drift from `build`, which
+        is the behaviour those names describe.
+        """
+        if not version_context:
+            return set()
+        reserved_promotions = {k for k in ("i", "idx") if k in version_context}
+        return reserved_promotions | (set(version_context) - VersionNamespaceBuilder._RESERVED_KEYS)
+
+    @staticmethod
     def build(version_context: dict | None, agent_name: str) -> dict | None:
         """Return dict with 'version' namespace and promoted top-level keys, or None.
 
@@ -246,16 +259,9 @@ class VersionNamespaceBuilder:
 
         result: dict = {"version": version_context}
 
-        # Promote i/idx to top level for Jinja2 convenience
-        if "i" in version_context:
-            result["i"] = version_context["i"]
-        if "idx" in version_context:
-            result["idx"] = version_context["idx"]
-
-        # Promote custom param names (e.g., {{ classifier_id }})
-        for key, value in version_context.items():
-            if key not in VersionNamespaceBuilder._RESERVED_KEYS:
-                result[key] = value
+        # i/idx for Jinja2 convenience, plus custom params (e.g. {{ classifier_id }})
+        for key in VersionNamespaceBuilder.promoted_names(version_context):
+            result[key] = version_context[key]
 
         logger.debug("Added 'version' namespace with version context")
         fire_event(

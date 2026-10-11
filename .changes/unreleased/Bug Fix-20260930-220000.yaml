@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  An `expect:` block written in `default_agent_config:` is now validated against
+  `ExpectConfig`, as the identical block already is on an action. `DefaultAgentConfig` is
+  `extra="allow"`, so the block reached `ExpectationService` unchecked: `max_iterations: 99`
+  ran 99 generate-validate-repair iterations per record against a declared bound of 1-10,
+  `repair: none` silently dropped the iteration keys it cannot use, and a scalar
+  `expect: "auto"` was coerced to `None`. That matters more since #1066, whose refusal
+  message sends a migrating author to this very block — landing them back in the silence
+  the refusal exists to end. Validated beside `chunk_config:`, which the same function
+  already checks, and dumped with `exclude_unset` so the merge still sees only what the
+  author wrote. No shipped project declares a block this refuses.
+time: 2026-09-30T22:00:00Z

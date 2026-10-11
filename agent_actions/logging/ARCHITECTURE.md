@@ -211,11 +211,11 @@ Event types are spread across 8 source files in `events/`:
 | `llm_events.py` | LLM requests, responses, errors | 6 |
 | `validation_events.py` | Validation, recovery, guard | 12 |
 | `initialization_events.py` | CLI, config, project, UDF | 13 |
-| `io_events.py` | File I/O, schema, context | 13 |
+| `io_events.py` | File I/O, schema, context | 14 |
 | `data_pipeline_events.py` | Record processing, enrichment, results | 17 |
 | `cache_events.py` | Cache hit/miss/invalidation | 5 |
 
-All 85 event types are re-exported from `events/__init__.py`.
+All 84 event types are re-exported from `events/__init__.py`.
 
 ---
 
@@ -371,7 +371,7 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 ### events/
 | File | Role |
 |------|------|
-| `events/__init__.py` | Re-exports all 85 event types + AgentActionsFormatter |
+| `events/__init__.py` | Re-exports all 84 event types + EventCategories + AgentActionsFormatter |
 | `events/types.py` | EventCategories constants + `_safe_value_repr()` |
 | `events/formatters.py` | AgentActionsFormatter -- dispatch table for console display |
 | `events/workflow_events.py` | W/A prefix events (workflow + action lifecycle) |

@@ -655,3 +655,28 @@ class TestInferDependenciesFourPatterns:
         # reduce_key overrides: all are inputs regardless of pattern
         assert set(input_sources) == {"classify_1", "classify_2", "classify_3"}
         assert context_sources == []
+
+
+class TestAContextScopeThatIsNotAMapping:
+    """`context_scope:` written with nothing under it, or as a scalar or list, reaches
+    here as raw YAML from two of the seven callers — the docs parser (`parser.py:153`)
+    and `agac inspect` (`inspect_base.py:134`, whose own guard sits after this call).
+    Neither goes through the config pipeline that would have normalized it (#1193).
+    """
+
+    @pytest.mark.parametrize("scope", [None, [], "", 0, False, "observe", ["observe"], 5])
+    def test_it_is_read_as_no_directives_rather_than_raising(self, scope):
+        config = {"name": "a", "prompt": "p", "context_scope": scope}
+
+        input_sources, context_sources = infer_dependencies(config, ["a", "up"], "a")
+
+        assert input_sources == []
+        assert context_sources == []
+
+    def test_a_declared_scope_is_still_read(self):
+        """The coercion must not swallow a real block."""
+        config = {"name": "a", "prompt": "p", "context_scope": {"observe": ["up.field"]}}
+
+        input_sources, context_sources = infer_dependencies(config, ["a", "up"], "a")
+
+        assert "up" in set(input_sources) | set(context_sources)

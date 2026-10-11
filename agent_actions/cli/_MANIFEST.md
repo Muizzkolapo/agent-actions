@@ -21,7 +21,6 @@
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `compile.py` | Module | Render command for the Agent Actions CLI. | `cli`, `errors`, `prompt_generation`, `validation` |
-| `RenderCommand` | Class | Implementation of the render command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
 | `compile` | Function | Alias for render — compile workflow configuration. | - |
@@ -75,7 +74,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
 | `run` | Function | Run agents with a specified agent configuration. | - |
-| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose and no file limit stops the walk before it reaches one. Classifies the finished workflow the way `run.py` does and exits 1 on a failed action. | `cli`, `storage`, `validation` |
+| `retry.py` | Module | Retry failed/exhausted records from a specific action forward. Names the records it is re-running on the run, so a record limit admits them rather than cutting them loose and no file limit stops the walk before it reaches one. Classifies the finished workflow the way `run.py` does and exits 1 on a failed action. Refuses, before it clears anything, while an action in its range holds a batch nobody has collected: one still out, or one that finished and still holds a record nothing has answered (the repair clears the registry entry, which is all that names it). That is asked of the batch's records, read from its context map: one whose disposition is `deferred`, or which has none. `--abandon-in-flight` goes ahead and marks those records failed, so a later retry can still reach them. A record the batch holds without a `source_guid` is neither waited on nor marked: under its custom_id it would be a failure a later retry clears and cannot select. Refuses too, before the batch refusal, to narrow any action in the workflow (the run executes whatever is not complete, before its starting point as well) that holds no answer for some record — pending, running, interrupted, stopped while collecting, completed with its output gone, or failed by anything but reaching all of its input — since a plain run finishes it. A failure that reached all of its input (`EVERY_INPUT_FAILED`, or a batch action whose batches hold an answer or a failure for every record sent with a `source_guid`) is still refused while the action holds a row for a record that run did not reach (`target_row_identities` against its dispositions). Not refused: an action an interrupted retry put back to pending, which had finished before it — read from the `REPAIRED_BY` stamp that retry wrote beside the status, matched to its manifest's `created_at`, which a reset removes; an action holding an uncollected batch, and its readers, which the batch refusal decides; and a halt by `on_exhausted: raise` the retry does not clear, which stays halted. A halt it would clear is refused even then, naming a retry from the halted action: one starting at a halt without `--record` names no record and runs that action, and every one after it, in full (halts read from the failures it plans over, `_halted_among`). An interrupted retry's snapshot goes back only on the actions it stamped, and only while one of them has not completed or its manifest is a finished re-run's `put_back`; its starting action's record failures go back even where it completed, since the next retry starts from them, but a node-level failure never goes back on a completed action, which a plain run would run again over its readers. `--dry-run` restores nothing and keeps the manifest, planning over the snapshot as if restored. After the re-run, a record the starting action never answered (`answered_by_repair`: found in a file processed to the end) and wrote nothing for gets back what was cleared for it at each action that did not decide it again, those actions are read again, and the record is named with a remedy that depends on whether it was in the input (`found_by_repair`) and whether the action finished. | `cli`, `storage`, `validation`, `llm`, `processing` |
 | `RetryCommand` | Class | Implementation of the retry command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the retry command. | - |
 | `retry` | Function | Retry failed/exhausted records from a specific action. | - |
@@ -118,15 +117,13 @@
 | `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
 | `RunCommand.execute()` | `.agac/batch_state/` | Deletes | `--fresh` |
 | `RunCommand.execute()` | `tools/{workflow}/*.py` | Reads | `user_code` |
-| `RenderCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
-| `RenderCommand.execute()` | `prompt_store/{workflow}.md` | Reads | — |
 | `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
 | `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `SchemaCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema_name` |
 | `StatusCommand.execute()` | `agent_io/staging/` | Reads | — |
 | `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
 | `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
-| `BaseInspectCommand._load_workflow()` | `agent_config/{workflow}.yml` | Reads | — |
+| `BaseInspectCommand._load_inspector()` | `agent_config/{workflow}.yml` | Reads | — |
 | `clean_cli()` | `agent_io/source/` | Writes | — |
 | `clean_cli()` | `agent_io/staging/` | Writes | — |
 | `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
@@ -146,3 +143,4 @@
 | `storage` | outbound | Reads the SQLite backend for the preview, dispositions and expect report commands |
 | `llm` | outbound | Invokes Cleaner for clean command and batch CLI |
 | `tooling` | outbound | Generates docs and tracks run results |
+| `processing` | outbound | `retry` asks `answered_by_repair` and `found_by_repair` what its re-run reached; `expect` reads `bypasses_expectations` |

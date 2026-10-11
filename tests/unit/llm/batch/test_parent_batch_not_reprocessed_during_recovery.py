@@ -94,8 +94,8 @@ def _service(manager: BatchRegistryManager) -> BatchProcessingService:
     def resolve(batch_id, registry_manager, *_a, **_kw):
         """The real resolver's contract: an unregistered id has no client.
 
-        The provider reports the entry's own status, so a FAILED job is skipped
-        by ``_is_batch_ready_for_processing`` here exactly as it is in production.
+        The provider reports the entry's own status, so the collect pass skips a
+        FAILED job here exactly as it does in production.
         """
         entry = registry_manager.get_batch_job_by_id(batch_id)
         if entry is None:
@@ -541,11 +541,11 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
 
         assert _run(_service(manager)) == ["batch_parent"]
 
-    def test_an_unrecognised_status_leaves_the_parent_processable(self):
-        """``BatchJobEntry`` warns on an unknown status but keeps it.
-
-        Nothing would process such an entry, so letting it supersede wedges
-        the pass with no in-flight job to wait on; the parent runs instead.
+    def test_an_unrecognised_status_holds_the_parent_until_the_provider_is_asked(self):
+        """A status outside BatchStatus, as a registry an earlier version wrote can
+        hold, is in flight: the registry reads ``in_progress``, so the run polls it
+        and stores one the client maps. Read from scratch instead, the parent would
+        restart recovery at attempt 1.
         """
         manager = _registry(
             {
@@ -554,7 +554,8 @@ class TestADeadRecoveryIsContinuedNotAbandoned:
             }
         )
 
-        assert _run(_service(manager)) == ["batch_parent"]
+        assert _run(_service(manager)) == []
+        assert manager.get_overall_status() == "in_progress"
 
     def test_a_usable_sibling_still_supersedes_the_parent(self):
         """One dead attempt does not un-supersede a parent that has a live one."""

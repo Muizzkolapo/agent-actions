@@ -75,13 +75,34 @@ def raised_by_exhaustion_policy(error: BaseException) -> bool:
     The chain is searched because file processing wraps the original in a
     DependencyError before it reaches the executor.
     """
+    return _chain_carries(error, "on_exhausted", "raise")
+
+
+def terminal_failure(message: str) -> RuntimeError:
+    """Build the error raised when none of an action's records succeeded.
+
+    Tagged so a batch check, which leaves a polling failure for the next run to
+    retry, can tell this one apart: it is raised once the file is written, and
+    fails the action.
+    """
+    error = RuntimeError(message)
+    enrich_exception_context(error, terminal_failure=True)
+    return error
+
+
+def raised_by_terminal_failure(error: BaseException) -> bool:
+    """True if *error*, or anything it chains to, is one ``terminal_failure`` built."""
+    return _chain_carries(error, "terminal_failure", True)
+
+
+def _chain_carries(error: BaseException, key: str, value: Any) -> bool:
     from agent_actions.utils.safe_format import get_error_chain
 
     if not isinstance(error, Exception):
         return False
     for link in get_error_chain(error):
         context = getattr(link, "context", None)
-        if isinstance(context, dict) and context.get("on_exhausted") == "raise":
+        if isinstance(context, dict) and context.get(key) == value:
             return True
     return False
 

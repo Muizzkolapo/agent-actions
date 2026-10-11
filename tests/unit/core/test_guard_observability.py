@@ -327,11 +327,8 @@ class TestTaskPreparerWarnLogging:
         context.dependency_configs = None
         context.workflow_metadata = None
         context.version_context = None
-        context.file_path = None
-        context.output_directory = None
         context.storage_backend = None
         context.current_item = None
-        context.record_index = 0
 
         item = {"content": {"quality_score": 0.1}, "source_guid": "sg-1"}
 

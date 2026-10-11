@@ -8,6 +8,16 @@ The only cross-record reference is ``source.*`` (resolved from source_data).
 
 import pytest
 
+
+def _without_detail(skipped: list[dict]) -> list[dict]:
+    """The skip minus its `detail`, so an exact-shape assertion stays readable.
+
+    `detail` names the field or the pool size and is pinned by
+    test_a_scope_skip_says_which_field.py; here the point is the shape (#1140).
+    """
+    return [{k: v for k, v in s.items() if k != "detail"} for s in skipped]
+
+
 from agent_actions.errors import DataValidationError
 from agent_actions.prompt.context.scope_application import (
     _resolve_observe_refs_for_flat_keys,
@@ -213,9 +223,10 @@ class TestApplyContextScopeForRecords:
             source_data=source_data,
         )
         assert enriched == []
-        assert skipped == [
+        assert _without_detail(skipped) == [
             {"source_guid": "sg-unknown", "reason": "source_unresolved", "position": 0}
         ]
+        assert "pooled records" in skipped[0]["detail"], skipped
 
     def test_source_data_in_flat_format_is_refused(self):
         """A pool row with no content wrapper is refused rather than read (#1130).

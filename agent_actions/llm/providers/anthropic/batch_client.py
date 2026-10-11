@@ -55,6 +55,7 @@ class AnthropicBatchClient(BaseBatchClient):
             import anthropic
 
             self.anthropic = anthropic
+            self._transient_errors = (anthropic.APIConnectionError, anthropic.InternalServerError)
             if api_key:
                 self.client = anthropic.Anthropic(api_key=api_key)
             else:
@@ -327,8 +328,11 @@ class AnthropicBatchClient(BaseBatchClient):
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Anthropic status to standard format."""
+        # A batch being canceled has not ended yet; once ended, every request has a
+        # result, a canceled one included.
         status_mapping = {
             "in_progress": "in_progress",
+            "canceling": "in_progress",
             "ended": "completed",
             "failed": "failed",
             "cancelled": "cancelled",

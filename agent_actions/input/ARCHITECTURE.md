@@ -151,9 +151,9 @@ discover_udfs(user_code_path)
 
 validate_udf_references(config)
   |
-  Walks config tree recursively, collects all "impl" string values,
-  verifies each exists in UDF_REGISTRY via get_udf().
-  Raises FunctionNotFoundError on miss.
+  Walks config tree recursively, collects every "impl" string value and every
+  guard's "udf:" condition name (both guard spellings), verifies each exists in
+  UDF_REGISTRY via get_udf(). Raises FunctionNotFoundError on miss.
 ```
 
 The `@udf_tool` decorator (from `utils/udf_management/registry.py`) registers functions at import time. `discover_udfs` triggers the imports; after that, any action config with `impl: my_function` resolves through the global registry.
@@ -169,7 +169,8 @@ process_initial_stage(InitialStageContext)
   |
   1. FileReader.read() -- raw content + file_type
   2. validate_staging_field_names() -- reject reserved names
-  3. _validate_staged_data() -- prompt template compatibility
+  3. _validate_staged_data() -- prompt template compatibility, rendered with the
+     version and workflow metadata the records are prepared with
   4. Branch on run_mode:
   |
   +-- BATCH: _prepare_batch_data()

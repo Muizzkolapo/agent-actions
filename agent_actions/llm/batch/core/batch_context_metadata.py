@@ -72,6 +72,16 @@ class BatchContextMetadata:
         """Get the skip reason from a record, or None if unset."""
         return record.get(ContextMetaKeys.SKIP_REASON)  # type: ignore[return-value]
 
+    @staticmethod
+    def set_prep_error(record: dict[str, Any], error: str) -> None:
+        """Store the error that failed a record's preparation."""
+        record[ContextMetaKeys.PREP_ERROR] = error
+
+    @staticmethod
+    def get_prep_error(record: dict[str, Any]) -> str | None:
+        """Get the preparation error from a record, or None if unset."""
+        return record.get(ContextMetaKeys.PREP_ERROR)  # type: ignore[return-value]
+
     # =========================================================================
     # Utility Methods
     # =========================================================================

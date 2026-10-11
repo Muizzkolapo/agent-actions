@@ -173,3 +173,35 @@ class TestBaseClassDefault:
         assert len(rows) == 2
         disps = {r["record_id"]: r["disposition"] for r in rows}
         assert disps == {"rec_1": "success", "rec_2": "failed"}
+
+
+class TestClearDispositionsBatch:
+    """Every disposition of the named records goes, at that action and no other."""
+
+    def test_clears_only_the_named_records_at_the_named_action(self, backend: SQLiteBackend):
+        backend.set_dispositions_batch(
+            [("action_A", f"rec_{i}", "success", None, None, None, None) for i in range(3)]
+            + [("action_B", "rec_0", "success", None, None, None, None)]
+        )
+
+        deleted = backend.clear_dispositions_batch("action_A", ["rec_0", "rec_2", "rec_9"])
+
+        assert deleted == 2
+        assert {r["record_id"] for r in backend.get_disposition("action_A")} == {"rec_1"}
+        assert {r["record_id"] for r in backend.get_disposition("action_B")} == {"rec_0"}
+
+    def test_more_records_than_one_statement_takes(self, backend: SQLiteBackend):
+        backend.set_dispositions_batch(
+            [("action_A", f"rec_{i}", "success", None, None, None, None) for i in range(2000)]
+        )
+
+        deleted = backend.clear_dispositions_batch("action_A", [f"rec_{i}" for i in range(1999)])
+
+        assert deleted == 1999
+        assert [r["record_id"] for r in backend.get_disposition("action_A")] == ["rec_1999"]
+
+    def test_no_records_is_a_noop(self, backend: SQLiteBackend):
+        backend.set_disposition("action_A", "rec_0", "success")
+
+        assert backend.clear_dispositions_batch("action_A", []) == 0
+        assert len(backend.get_disposition("action_A")) == 1

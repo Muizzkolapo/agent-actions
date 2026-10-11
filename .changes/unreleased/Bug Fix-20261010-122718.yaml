@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A version merge (`version_consumption: {pattern: merge}`) that runs again now keeps the
+  answers it stored for the records it does not ask again. Its merged input was written to
+  the merge's own output before every run, and a record carried from the run before was
+  read back from there: after `agac retry` of another record, or a run resumed after the
+  merge stopped in a later file, the record's row held the merged input instead of the
+  merge's answer, its lineage ended at a version, and what read the merge lost the
+  decision, while every disposition said `success` and the run exited 0. A file every
+  version came to hold empty was not merged at all, so the merge took its own answers from
+  the run before as input and stored them again, as did its readers; it and its readers now
+  hold nothing for that file. Both hold online and under `run_mode: batch`. The merged
+  input is now handed to the merge's run and never stored, so while a merge is out as a
+  batch its output no longer shows its input either. A row already stored this way stays
+  until the merge answers its record again, for example under `--fresh`.
+time: 2026-10-10T12:27:18Z

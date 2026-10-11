@@ -11,11 +11,10 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from agent_actions.config.types import ActionConfigDict, RunMode
+from agent_actions.config.types import RunMode
 from agent_actions.errors import (
     ConfigurationError,
     RecordContextError,
-    SchemaValidationError,
     mark_action_fatal,
     raised_by_exhaustion_policy,
 )
@@ -35,14 +34,13 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.helpers import _is_empty_output
+from agent_actions.processing.helpers import _empty_warn_reason, _is_empty_output
 from agent_actions.processing.invocation import InvocationStrategy, InvocationStrategyFactory
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
-    derive_relative_path,
 )
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -69,20 +67,6 @@ from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
 logger = logging.getLogger(__name__)
-
-
-def _empty_warn_reason(
-    action_config: ActionConfigDict, agent_name: str, source_guid: str | None
-) -> str:
-    """Reason text for the on_empty=warn branch; tool-aware for tool actions.
-
-    A tool action is identified by either `kind` or `model_vendor` being
-    ``"tool"`` (the same signal that routed and executed it as a tool), so the
-    reason names the empty tool output rather than blaming the LLM.
-    """
-    if action_config.get("kind") == "tool" or action_config.get("model_vendor") == "tool":
-        return f"Tool '{agent_name}' returned an empty list of records for input {source_guid}"
-    return f"Empty LLM response for record '{source_guid}'"
 
 
 def _create_item_context(
@@ -294,11 +278,6 @@ class OnlineLLMStrategy:
             except (ConfigurationError, EmptyOutputError) as e:
                 mark_action_fatal(e)
                 raise
-            except SchemaValidationError:
-                # UDF output validation runs per item and is ungated, so this
-                # can indict one value rather than the action. Re-raised, as
-                # the loop cannot tombstone it, but not declared fatal.
-                raise
             except ExpectationsExhaustedError:
                 # on_exhausted: raise means halt the run, not fail the record.
                 raise
@@ -308,6 +287,8 @@ class OnlineLLMStrategy:
                 # result discards the policy with the exception.
                 if raised_by_exhaustion_policy(e):
                     raise
+                # A tool's output that fails its schema is failed here too: it is
+                # checked one record at a time, so it indicts this record alone.
                 # The result collector reports this record to the user, for
                 # online and batch alike. This copy carries the traceback for
                 # the log file, and the item index the collector cannot know.
@@ -350,12 +331,17 @@ class OnlineLLMStrategy:
 
     @staticmethod
     def _checkpoint_record(result: ProcessingResult, context: ProcessingContext) -> None:
-        """Write a single record's disposition and output to SQLite immediately.
+        """Write a single record's output, then its disposition, to SQLite immediately.
 
         Called after each record's LLM call completes so that interrupted
-        runs can resume via the DispositionGate carry-forward path.
+        runs can resume via the DispositionGate carry-forward path. The row goes
+        first because the disposition is what the gate carries, and the row is what
+        tells the carry that a file stored earlier is older than this answer. A schema
+        echo is failed here as well, since the failure the store records as it saves
+        the row would be replaced by the disposition written after it.
         """
         backend = context.storage_backend
+        result = _reject_schema_echo_result(result, context.action_name)
         if not backend or not result.source_guid:
             return
 
@@ -365,14 +351,10 @@ class OnlineLLMStrategy:
         reason = result.error if result.status == ProcessingStatus.FAILED else None
 
         try:
-            backend.set_disposition(
-                context.action_name,
-                result.source_guid,
-                disposition,
-                reason=reason,
-            )
             if result.data:
-                relative_path = derive_relative_path(context.file_path, context.output_directory)
+                # Under the file's stored name: a resume reads the checkpoint only where
+                # it finds no stored file, and it looks for both by that one name.
+                relative_path = context.target_relative_path
                 if relative_path:
                     # Copy records to avoid mutating result.data in-place —
                     # downstream consumers (enrichment, collectors) hold
@@ -386,6 +368,12 @@ class OnlineLLMStrategy:
                     backend.save_checkpoint_records(
                         context.action_name, relative_path, checkpoint_records
                     )
+            backend.set_disposition(
+                context.action_name,
+                result.source_guid,
+                disposition,
+                reason=reason,
+            )
             logger.info(
                 "[%s] Checkpointed record %s (%s)",
                 context.action_name,
@@ -476,12 +464,13 @@ class OnlineLLMStrategy:
             tombstone = build_tombstone(
                 context.action_name,
                 input_record,
-                f"guard_{prepared.guard_behavior}",
+                GUARD_SKIP,
                 source_guid=source_guid,
             )
-            return ProcessingResult.skipped(
-                passthrough_data=tombstone,
-                reason=f"guard_{prepared.guard_behavior}",
+            # Unprocessed, as the prefilter records it: a skip answers nothing.
+            return ProcessingResult.unprocessed(
+                data=[tombstone],
+                reason=GUARD_SKIP,
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
@@ -586,8 +575,8 @@ class OnlineLLMStrategy:
                     GUARD_SKIP,
                     source_guid=source_guid,
                 )
-                return ProcessingResult.skipped(
-                    passthrough_data=tombstone,
+                return ProcessingResult.unprocessed(
+                    data=[tombstone],
                     reason=GUARD_SKIP,
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,

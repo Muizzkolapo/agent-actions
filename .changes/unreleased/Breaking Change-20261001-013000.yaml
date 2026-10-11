@@ -1,0 +1,14 @@
+kind: Breaking Change
+body: >-
+  `ephemeral` is refused rather than silently accepted. `8bf148d59` removed its declaration
+  from `ActionConfig` and `AgentConfig` as "never acted upon at runtime", but both models
+  that carry agent settings are `extra="allow"` — so removing a declaration refuses nothing
+  there. The key kept loading, kept riding onto every agent, and kept doing nothing:
+  measured, it reached all 33 agents of a sample workflow as `False`. It joins
+  `_RETIRED_CONFIG_KEYS` with no replacement hint, since nothing replaced it, which refuses
+  it by name on all four blocks that carry agent settings instead of leaving the strict
+  surfaces to say only that the key is unknown. Every config this repository controls is
+  migrated in the same change — both integration fixtures, two inline test configs, and the
+  shared `sample-project/`. A clone whose copy of the sample project predates this needs
+  `bin/setup-smoke-projects.sh` before its smoke ring will load.
+time: 2026-10-01T01:30:00Z

@@ -10,7 +10,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
+    import httpx
     from google import genai
+    from google.genai import errors as genai_errors
     from google.genai import types
 
     GEMINI_AVAILABLE = True
@@ -21,6 +23,25 @@ except ImportError:
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
+
+# Every state of the SDK's JobState. Paused, updating or being cancelled, a job has
+# not ended, and only a later poll can say how it does.
+_STATUS_MAPPING = {
+    "JOB_STATE_UNSPECIFIED": "in_progress",
+    "JOB_STATE_QUEUED": "in_progress",
+    "JOB_STATE_PENDING": "in_progress",
+    "JOB_STATE_RUNNING": "in_progress",
+    "JOB_STATE_PAUSED": "in_progress",
+    "JOB_STATE_UPDATING": "in_progress",
+    "JOB_STATE_CANCELLING": "in_progress",
+    "JOB_STATE_SUCCEEDED": "completed",
+    # Its output holds the requests that succeeded; the rest are found missing.
+    "JOB_STATE_PARTIALLY_SUCCEEDED": "completed",
+    "JOB_STATE_FAILED": "failed",
+    "JOB_STATE_EXPIRED": "failed",
+    "JOB_STATE_CANCELLED": "cancelled",
+}
+_STATES_WITH_RESULTS = frozenset({"JOB_STATE_SUCCEEDED", "JOB_STATE_PARTIALLY_SUCCEEDED"})
 
 
 class GeminiBatchClient(BaseBatchClient):
@@ -46,6 +67,8 @@ class GeminiBatchClient(BaseBatchClient):
                 },
             )
         self.client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
+        # The SDK lets its transport's errors through unwrapped.
+        self._transient_errors = (httpx.TransportError, genai_errors.ServerError)
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
@@ -191,14 +214,7 @@ class GeminiBatchClient(BaseBatchClient):
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Gemini status to standard format."""
-        status_mapping = {
-            "JOB_STATE_PENDING": "in_progress",
-            "JOB_STATE_RUNNING": "in_progress",
-            "JOB_STATE_SUCCEEDED": "completed",
-            "JOB_STATE_FAILED": "failed",
-            "JOB_STATE_CANCELLED": "cancelled",
-        }
-        return status_mapping.get(raw_status, raw_status.lower())
+        return _STATUS_MAPPING.get(raw_status, raw_status)
 
     def _get_result_file_name(self, batch_id: str) -> str:
         """Get result filename for Gemini."""
@@ -207,7 +223,7 @@ class GeminiBatchClient(BaseBatchClient):
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         """Fetch raw results from Gemini API."""
         batch_job = self.client.batches.get(name=batch_id)
-        if batch_job.state.name != "JOB_STATE_SUCCEEDED":  # type: ignore[union-attr]
+        if batch_job.state.name not in _STATES_WITH_RESULTS:  # type: ignore[union-attr]
             from agent_actions.errors import ValidationError
 
             raise ValidationError(

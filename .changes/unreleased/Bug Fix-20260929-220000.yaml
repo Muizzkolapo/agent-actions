@@ -1,0 +1,21 @@
+kind: Bug Fix
+body: >-
+  The documentation catalog now reports the `context_scope` the runtime applies, and expands a
+  version range the way the runtime does. `WorkflowParser` copied each action's own
+  `context_scope` block and nothing else, so two directives a run honours were invisible: a
+  `defaults.context_scope`, which `deep_merge_context_scope` union-merges into every action —
+  an action declaring no scope of its own reported no drop while the runtime dropped a field
+  on it — and a reference naming a version base, which `normalize_context_scope` rewrites into
+  one ref per variant. Both now go through the same two functions the runtime uses, in the
+  runtime's order: normalisation precedes dependency inference, as `config/manager.py` states,
+  so the dependency graph and the scope panel no longer disagree about which upstreams an
+  action names. The version map is built from a rendered workflow's `_version_context` as well
+  as a source workflow's `versions:` block, because the scanner prefers the rendered file once
+  a project has run and the renderer strips that key — a map built from `versions:` alone is
+  empty for every project that has ever run. A directive the normaliser does not know, such as
+  a retired spelling, is passed through per directive rather than abandoning normalisation for
+  the whole block, which had cost version expansion in every workflow carrying one. Separately,
+  the parser's own version expansion read a two-element `range` literally where the runtime
+  reads it as an inclusive start and end: `range: [2, 5]` documented two actions for a run of
+  four. All four sites that derive a variant name now agree on one definition, pinned by test.
+time: 2026-09-29T22:00:00Z

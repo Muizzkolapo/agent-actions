@@ -33,6 +33,15 @@ class OutputHandler:
         self.storage_backend = storage_backend
         self.action_name = action_name
 
+    @staticmethod
+    def output_path(file_path: str, base_directory: str, output_directory: str) -> Path:
+        """Where `save_main_output` writes the output of *file_path*.
+
+        The action reads its stored rows back by the name this path is stored under,
+        so the read and the write take it from here rather than each deriving it.
+        """
+        return Path(output_directory) / Path(file_path).relative_to(base_directory)
+
     def save_main_output(
         self,
         data: list[dict[str, Any]],
@@ -53,8 +62,7 @@ class OutputHandler:
         """
         output_file_path: Path | None = None
         try:
-            relative_path = Path(file_path).relative_to(base_directory)
-            output_file_path = Path(output_directory) / relative_path
+            output_file_path = self.output_path(file_path, base_directory, output_directory)
             # Only create directory if not using storage backend
             if self.storage_backend is None:
                 ensure_directory_exists(output_file_path, is_file=True)

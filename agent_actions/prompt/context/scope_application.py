@@ -14,6 +14,7 @@ from agent_actions.logging.events.io_events import (
     ContextScopeAppliedEvent,
 )
 from agent_actions.prompt.context.null_namespace import is_null_namespace
+from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_fields,
@@ -23,6 +24,7 @@ from agent_actions.prompt.context.scope_parsing import (
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content, require_content_envelope
+from agent_actions.utils.dict import pop_nested_value
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +137,7 @@ def apply_context_scope(
     context_scope: dict,
     static_data: dict | None = None,
     action_name: str = "unknown",
+    report_inert_drops: bool = True,
 ) -> tuple[dict, dict, dict]:
     """
     Apply context_scope rules, returning (prompt_context, llm_context, passthrough_fields).
@@ -255,21 +258,44 @@ def apply_context_scope(
                 if ns_name in passthrough_fields:
                     del passthrough_fields[ns_name]
             else:
-                # Exact field: warn if absent
-                if field_name not in prompt_context[ns_name]:
-                    logger.debug(
-                        "Drop directive '%s' in action '%s' matched zero fields — "
-                        "field '%s' not found in namespace '%s'.",
+                # Literal key, then the dotted path. `parse_field_reference` splits on the
+                # first dot only, so a documented nested ref like `upstream.body.text`
+                # arrives here as the field part `body.text`: a flat pop alone matched
+                # nothing and sent the withheld field to the provider, and traversal alone
+                # misses the literal dotted key the framework itself stores. Both, in
+                # extract_field_value's order, so observe and drop agree.
+                removed = pop_nested_value(prompt_context[ns_name], field_name)
+                if ns_name in passthrough_fields:
+                    # The same reference must act on both, or a field is withheld from the
+                    # prompt and still written to the output. Two shapes live here: an
+                    # explicitly passed-through nested ref is stored under its LITERAL
+                    # dotted key (line 208), while a wildcard copies the nested dict, so
+                    # traversal alone would miss the first and a flat pop the second.
+                    pop_nested_value(passthrough_fields[ns_name], field_name)
+                    if not passthrough_fields[ns_name]:
+                        del passthrough_fields[ns_name]
+                if not removed and report_inert_drops:
+                    # Above debug on purpose: a drop that removed nothing is a field the
+                    # author believes is withheld and is not. An inner wildcard
+                    # (`a.*.c`) lands here too -- there is no path to walk, and saying
+                    # nothing would imply it worked.
+                    logger.warning(
+                        "Drop directive '%s' in action '%s' removed nothing — no field "
+                        "'%s' in namespace '%s'. The field is NOT withheld from the "
+                        "prompt; review context_scope.drop.",
                         field_ref,
                         action_name,
                         field_name,
                         ns_name,
                     )
-                prompt_context[ns_name].pop(field_name, None)
-                if ns_name in passthrough_fields:
-                    passthrough_fields[ns_name].pop(field_name, None)
-                    if not passthrough_fields[ns_name]:
-                        del passthrough_fields[ns_name]
+                    fire_event(
+                        ContextFieldSkippedEvent(
+                            action_name=action_name,
+                            field_ref=field_ref,
+                            reason=f"no field '{field_name}' in namespace '{ns_name}'",
+                            directive="drop",
+                        )
+                    )
 
         except ValueError as e:
             logger.warning(
@@ -343,9 +369,15 @@ def apply_context_scope(
             if isinstance(current, set):
                 current.add(field_name)
 
+    # `{{ i }}`, `{{ idx }}` and a custom version param are the version namespace too,
+    # promoted to the top level; gating them like user data left them undefined.
+    version = prompt_context.get("version")
+    version_names = (
+        VersionNamespaceBuilder.promoted_names(version) if isinstance(version, dict) else set()
+    )
     filtered: dict = {}
     for ns, data in prompt_context.items():
-        if ns in FRAMEWORK_NAMESPACES:
+        if ns in FRAMEWORK_NAMESPACES or ns in version_names:
             filtered[ns] = data
         elif ns in allowed:
             if allowed[ns] == "*" or not isinstance(data, dict):
@@ -509,10 +541,16 @@ def _resolve_observe_refs_for_flat_keys(
     return resolved, len(wildcard_ns) > 1
 
 
-def _apply_drops_to_content(content: dict, drop_refs: list[str]) -> None:
+def _apply_drops_to_content(
+    content: dict, drop_refs: list[str], already_warned: set[str] | None = None
+) -> None:
     """Apply drop directives to content dict in-place.
 
-    Silently skips unparseable refs or missing namespaces.
+    Skips unparseable refs or missing namespaces. The nested path is traversed for the
+    same reason as the RECORD-mode path: `parse_field_reference` splits on the first dot,
+    so `upstream.body.text` arrives as the field part `body.text`, and a flat pop matched
+    no key and left the field in the prompt. FILE mode must not disagree with RECORD mode
+    about what a drop removes.
     """
     for ref in drop_refs:
         try:
@@ -523,8 +561,18 @@ def _apply_drops_to_content(content: dict, drop_refs: list[str]) -> None:
             continue
         if field == "*":
             content[ns].clear()
-        else:
-            content[ns].pop(field, None)
+        elif not pop_nested_value(content[ns], field) and (
+            already_warned is None or ref not in already_warned
+        ):
+            if already_warned is not None:
+                already_warned.add(ref)
+            logger.warning(
+                "Drop directive '%s' removed nothing — no field '%s' in namespace '%s'. "
+                "The field is NOT withheld from the prompt; review context_scope.drop.",
+                ref,
+                field,
+                ns,
+            )
 
 
 def _expand_observed_fields(
@@ -649,13 +697,15 @@ def apply_context_scope_for_records(
     enriched record: downstream guards need full namespace visibility.
 
     Returns (enriched_records, skipped_records); skipped entries carry
-    ``{"source_guid": ..., "reason": ..., "position": ...}``. *position* indexes
+    ``{"source_guid": ..., "reason": ..., "position": ..., "detail": ...}``. *position* indexes
     *records* — how a caller pairs a second list matched to the input, which
     ``source_guid`` cannot do when it is absent or repeated.
     """
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
     drop_refs = context_scope.get("drop", [])
+    # One report per inert ref for the whole file, not one per record.
+    inert_drops_reported: set[str] = set()
 
     if not observe_refs and not passthrough_refs and not drop_refs:
         return records, []
@@ -665,6 +715,15 @@ def apply_context_scope_for_records(
         any(ref.startswith("source.") for ref in observe_refs)
         or any(ref.startswith("source.") for ref in passthrough_refs)
         or any(ref.startswith("source.") for ref in drop_refs)
+    )
+    # Resolving and REQUIRING are different questions. `drop` names a field to withhold,
+    # so an unresolvable source means there is nothing to withhold and the record is
+    # complete without it; only observe and passthrough need the content to exist. Gating
+    # the skip on has_source_refs discarded a record whose action merely declared
+    # `drop: [source.secret]` -- a record that carries no source cannot leak one, and
+    # RECORD mode proceeds with it.
+    needs_source_content = any(
+        ref.startswith("source.") for ref in (*observe_refs, *passthrough_refs)
     )
 
     source_index = _build_source_index(source_data) if has_source_refs else {}
@@ -699,7 +758,14 @@ def apply_context_scope_for_records(
                 # identity, and this answer is the record's own content.
                 carried = content.get("source")
                 source_content = carried if isinstance(carried, dict) else None
-            if source_content is None:
+            if source_content is None and not needs_source_content:
+                logger.debug(
+                    "[%s] Record %s has no resolvable source, but the action only names "
+                    "it in `drop` — nothing to withhold, so the record is kept",
+                    action_name,
+                    sguid,
+                )
+            elif source_content is None:
                 logger.debug(
                     "[%s] Skipping record %s — source_guid matches no record in the "
                     "%d-record source pool and the record carries no source namespace",
@@ -708,7 +774,15 @@ def apply_context_scope_for_records(
                     len(source_data or []),
                 )
                 skipped.append(
-                    {"source_guid": sguid, "reason": SOURCE_UNRESOLVED, "position": position}
+                    {
+                        "source_guid": sguid,
+                        "reason": SOURCE_UNRESOLVED,
+                        "position": position,
+                        "detail": (
+                            f"source_guid matched none of the {len(source_data or [])} pooled "
+                            "records, and the record has no usable source namespace of its own"
+                        ),
+                    }
                 )
                 continue
             if source_content:
@@ -718,7 +792,12 @@ def apply_context_scope_for_records(
         # RecordContextError means a required namespace or field is missing —
         # skip this record rather than enriching it with None values.
         try:
-            apply_context_scope(field_context, context_scope, action_name=action_name)
+            # report_inert_drops=False: this pass exists to validate and its result is
+            # discarded, so _apply_drops_to_content below is the one that reports. Left on,
+            # every record logged the same inert drop twice and fired a WARN event per row.
+            apply_context_scope(
+                field_context, context_scope, action_name=action_name, report_inert_drops=False
+            )
         except RecordContextError as e:
             logger.debug(
                 "[%s] Skipping record %s — observe field missing (upstream incomplete): %s",
@@ -726,8 +805,28 @@ def apply_context_scope_for_records(
                 sguid,
                 e,
             )
+            # The reason says a field was missing, never which. The debug line above does
+            # reach logs/events.json on a normal run, but a log is not joined to the record:
+            # the disposition row is where "why did this row vanish" is queryable (#1140).
+            # Built from the error's structured context rather than from str(e), which
+            # bounds what can reach a durable column to config-derived names: a sibling
+            # RecordContextError in this package appends "Available: {list(data.keys())}",
+            # the record's own keys, and a disposition row outlives the run.
+            context = getattr(e, "context", None) or {}
+            field_ref = context.get("field_ref")
+            directive = context.get("directive")
+            detail = (
+                f"context_scope.{directive} field '{field_ref}' not found in this record"
+                if field_ref and directive
+                else "a context_scope field named by this action was not found in this record"
+            )
             skipped.append(
-                {"source_guid": sguid, "reason": OBSERVE_FIELD_MISSING, "position": position}
+                {
+                    "source_guid": sguid,
+                    "reason": OBSERVE_FIELD_MISSING,
+                    "position": position,
+                    "detail": detail,
+                }
             )
             continue
 
@@ -736,7 +835,7 @@ def apply_context_scope_for_records(
         enriched_content = deepcopy(content)
         if source_content:
             enriched_content["source"] = deepcopy(source_content)
-        _apply_drops_to_content(enriched_content, drop_refs)
+        _apply_drops_to_content(enriched_content, drop_refs, inert_drops_reported)
         prepared.append((record, enriched_content))
 
     # Namespace presence can differ per record; reserving the batch union rather

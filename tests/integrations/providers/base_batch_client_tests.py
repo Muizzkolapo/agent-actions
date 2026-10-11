@@ -41,6 +41,7 @@ from typing import Any
 
 import pytest
 
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
     BatchResult,
@@ -290,20 +291,13 @@ class BaseBatchClientTests(ABC):
 
         Validates:
         - Returns a string
-        - String is one of valid batch states
+        - String is one the batch registry knows: it stores what a check returns, and
+          an entry holding anything else is neither in flight nor finished
         - Doesn't crash with arbitrary batch_id
         """
         status = provider.check_status("test-batch-id")
         assert isinstance(status, str), "Status must be a string"
-        valid_states = [
-            "validating",
-            "in_progress",
-            "completed",
-            "failed",
-            "expired",
-            "cancelling",
-            "cancelled",
-        ]
+        valid_states = {state.value for state in BatchStatus}
         assert status in valid_states, f"Status '{status}' must be valid batch state"
 
     def test_submit_and_retrieve_workflow(

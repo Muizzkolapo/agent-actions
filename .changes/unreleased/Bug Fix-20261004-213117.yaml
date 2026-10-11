@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  A batch run that cannot reach OpenAI, Anthropic, Groq or Gemini while checking on its
+  batches now pauses, and the next run asks again. Each SDK raises its own error for a
+  connection that fails, a request that times out or a server error, and none of them was
+  taken for a provider out of reach: the run failed the action, whether it was waiting on a
+  batch still out or collecting finished ones, when the files after it in that pass were not
+  read either. A provider that answers it does not know the batch still fails the action.
+time: 2026-10-04T21:31:17Z

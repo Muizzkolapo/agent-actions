@@ -30,7 +30,7 @@ Guard configuration in `agent_config/{workflow}.yml` supports two formats:
 ```yaml
 # Legacy string format
 guard: "status == 'active'"            # SQL — defaults to on_false: filter
-guard: "udf:tools.check_eligibility"   # UDF — defaults to on_false: skip
+guard: "udf:check_eligibility"         # UDF — defaults to on_false: skip
 
 # Current dict format
 guard:
@@ -57,22 +57,79 @@ Validated at parse time against `DANGEROUS_PATTERNS` (blocks `exec`, `eval`, `__
 
 ### UDF Guards
 
-User-defined Python functions referenced by module path. The function receives the record data and returns a boolean.
+User-defined Python functions referenced by name. The function receives the guard context and returns a boolean.
 
 ```yaml
 guard:
-  condition: "udf:tools.guards.check_eligibility"
+  condition: "udf:check_eligibility"
   on_false: skip
 ```
 
-Validated at parse time: must match `module.function` dotted path format, checked against `DANGEROUS_PATTERNS_UDF`. UDF guards **cannot use FILTER behavior** — this is enforced during config expansion in `expander_action_types.py`, which raises `ConfigurationError` if a UDF guard specifies `on_false: filter`.
+The name is the registered function's own, with no module prefix — the same form `impl:` uses, because both resolve through `UDF_REGISTRY`, which is keyed on `f.__name__.lower()`. A dotted path is refused: it matches no registry key, and the preflight static checker reads the dot as an action reference (#1188). `agac list-udfs` prints the registered names.
+
+Validated at parse time: must be a Python identifier, checked against `DANGEROUS_PATTERNS_UDF`. UDF guards **cannot use FILTER behavior** — this is enforced during config expansion in `expander_action_types.py`, which raises `ConfigurationError` if a UDF guard specifies `on_false: filter`.
+
+### The read-only view
+
+Guard evaluation assembles its context by assigning the record's namespaces by reference, so
+what a UDF is handed would otherwise be the record's own content, and a UDF that wrote to it
+would rewrite the record mid-run with nothing logged. It is handed a view instead
+(`agent_actions/utils/readonly.py`, through `ReadOnlyBus`).
+
+What the view guarantees:
+
+- **Its storage holds wrappers, never the record's own containers.** `dict(view)`, `{**view}`,
+  `f(**view)`, `view | {}`, `xs + []`, `reversed(xs)` and the unbound `dict` and `list` methods
+  read stored values below any Python override, so the whole record is wrapped on the way in,
+  before the UDF sees any of it. That is why the view cannot be lazy.
+- **A write is refused**, with a message saying what to do instead, so an author never believes
+  a write took effect. The refusal is a `ReadOnlyError`, a `TypeError`, and a guard UDF that
+  does not swallow it stops its action (Caveats, 11).
+- **Taking a copy works.** `copy()`, `copy.copy` and `copy.deepcopy` return a plain, writable
+  structure that shares no dict, list or set with the record or the view. It has the record's shape: a container the record holds in two places is one
+  container in the copy, and a cycle is the same cycle.
+- **It stays a dict.** These are dict/list/set subclasses, so `isinstance(x, dict)`,
+  `json.dumps(x)` and `**x` work for a UDF that only reads.
+
+How it is built: one loop over a worklist, with a memo of what replaced each container. Nothing
+recurses, so nesting depth costs no interpreter frames. A container is replaced once however
+many places hold it, so a cycle in the record is the same cycle in the view and a shared
+container is walked once. The walk reads each container's own storage, never a subclass's
+accessors. It still hashes dict keys and looks at each value's type, and that is the only
+user code it can reach (a key's `__hash__` and `__eq__`, a `__class__` property, a metaclass).
+
+What to know:
+
+- The view is a snapshot of the record's structure when it was built. A namespace the record
+  gains afterwards is not in it. Nothing changes a record while its guard is evaluated.
+- A slice of a list view is a read-only list of the same items, and its `copy()` is the deep
+  one. `list(view)` and `xs + []` give plain lists of read-only items, and `reversed(xs)`
+  iterates them.
+- Only dict, list, tuple and set are replaced. A dict or list subclass becomes a plain
+  read-only dict or list, read from what it stores and in the order it stores it (an
+  `OrderedDict` reordered with `move_to_end` is seen in insertion order). A tuple that holds
+  a container becomes a plain tuple; one that holds none is handed over as it is. Any other
+  value (an object with attributes, a `MappingProxyType`, a `deque`, a `bytearray`) is handed
+  over as it is, in the view and in a copy of it.
+- A value that only claims to be a dict or a list (a `weakref.proxy` to one, a mock with
+  `spec=dict`) has no storage to read, so the view cannot be built.
+- The cost is one pass over the record per view, on this path only. Expression guards never
+  build one.
+- A dict key whose `__hash__` adds containers to the record each time it is called makes the
+  walk run without end. Only hostile code does that.
+- A view that cannot be built raises `GuardNotAppliedError`, naming the guard. The record is
+  not passed: it has not been judged. The error is fatal to the action wherever one record
+  cannot be failed on its own: the pre-filter, which every online action goes through and
+  which adds the record to the message, the rows a batch rehearses before submitting, and
+  the records a batch carries as done and judges again. Batch preparation of the remaining
+  rows fails that record alone.
 
 ### Safety Validation
 
 Both types run through safety checks at parse time:
 
 - SQL expressions: blocked patterns include `exec(`, `eval(`, `__import__`, `system(`, `subprocess`
-- UDF expressions: same checks plus format validation (must be `module.function` or `module.submodule.function`)
+- UDF expressions: same checks plus format validation (must be a Python identifier — the registered function's own name, no module prefix)
 - Built-in Python names (`file`, `input`, `vars`, `dir`) are treated as column references in SQL guards, not as Python builtins
 
 ---
@@ -111,7 +168,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │         ▼                                                    │
 │    parse_guard_config()  →  GuardConfig                      │
 │      validates expression safety (dangerous patterns)        │
-│      validates UDF format (module.function)                  │
+│      validates UDF format (bare function name)               │
 │      validates behavior (skip/filter/warn)                   │
 └──────────────────────────┬───────────────────────────────────┘
                            │
@@ -122,7 +179,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │                                                              │
 │    Converts GuardConfig into agent dict keys:                │
 │      SQL  → agent["guard"] = {clause, scope, behavior}       │
-│      UDF  → agent["conditional_clause"] = "module.func"      │
+│      UDF  → agent["conditional_clause"] = "func_name"        │
 │                                                              │
 │    Enforces: UDF cannot use FILTER behavior                  │
 └──────────────────────────┬───────────────────────────────────┘
@@ -232,9 +289,19 @@ BATCH:
   Filtered/skipped records are marked in context_map.
   They never appear in the JSONL file sent to the provider.
   Dispositions are written during finalization.
+  A record the disposition gate carries as done is judged too, with no
+  prompt rendered, as online's guard above its gate judges it; one the
+  action above blocked is not, as neither preparation nor online's
+  guard judges one.
+  A file whose batch is out, or finished and not collected, is not sent
+  again, so nothing of it is judged: its collect writes the answers to
+  what the guard passed when the batch was sent.
 
 ONLINE:
-  Guards run per-record in task_preparer, BEFORE the LLM call.
+  Guards run per-record in prefilter_by_guard, from UnifiedProcessor,
+  above the disposition gate and BEFORE the LLM call. A record the action
+  above blocked is not judged: it goes on to the gate and then the cascade
+  filter, which quarantines it, as batch's gate and preparation decide it.
   Filtered/skipped records get immediate disposition writes.
   No context_map involved — state is in-memory only.
 ```
@@ -350,4 +417,6 @@ Two consequences worth stating:
 
 9. **GuardFilter uses a ThreadPoolExecutor for timeout protection.** Each evaluation runs in a thread with a configurable timeout (default 5 seconds). This prevents runaway AST evaluation from blocking the pipeline. The executor has 4 worker threads and is cleaned up via `atexit`.
 
-10. **Legacy UDF path (conditional_clause) is separate from the guard dict path.** When a UDF guard is expanded, it sets `agent["conditional_clause"]` instead of `agent["guard"]`. The evaluator handles this in `_evaluate_conditional_clause()`, which swallows exceptions and proceeds (never skips on UDF error). The SQL guard path goes through `_evaluate_guard()` with full error classification.
+10. **Legacy UDF path (conditional_clause) is separate from the guard dict path.** When a UDF guard is expanded, it sets `agent["conditional_clause"]` instead of `agent["guard"]`. The evaluator handles this in `_evaluate_conditional_clause()`, which swallows the UDF's exceptions and proceeds (never skips on UDF error), except a write the read-only view refused (11). The read-only view the UDF is handed is built before that handler, and a failure to build it is not a UDF error: it raises `GuardNotAppliedError`, because a record the UDF was never shown has not been judged and is not passed. The SQL guard path goes through `_evaluate_guard()` with full error classification.
+
+11. **A guard UDF that writes to its input stops the action.** The UDF is handed a read-only view of the record (`utils/readonly.py`, through `ReadOnlyBus`), and the view refuses a write by raising `ReadOnlyError`, a `TypeError`. Passed through like the UDF's own errors, the refusal applied no guard: the UDF gave no answer, and every record its write recurs on went to the action, with only a warning in the log. So a refusal the UDF does not swallow, one it lets escape or one it was handling when it raised (the chain is walked by `__cause__`, else `__context__`), becomes a `ConfigurationError` naming the UDF and whatever it raised in the refusal's place, marked fatal to the action. An unchained raise inside the handler counts: a handler that catches `TypeError` for its own reasons and then raises is the same guard with no answer. Fatal because the pre-filter, which every online action goes through, cannot fail one record, and a file's failure is otherwise taken alone: that file's records went missing while the action completed. Batch evaluates the guard while preparing what it submits. The check it runs first, on the leading rows up to the first one the guard admits (five at most), fails the action the same way, and so does judging the records the gate carries as done (`BatchTaskPreparator.turned_away`), which has no per-row handler, wherever the record sits in the file; any other later row whose guard writes is failed on its own, as preparation fails a row for any error. A UDF that catches the refusal and carries on decides as usual, and any other error the UDF raises still passes the record.

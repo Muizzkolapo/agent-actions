@@ -87,7 +87,6 @@ class TestPreparationContext:
         assert prep_ctx.agent_name == "test_agent"
         assert prep_ctx.is_first_stage is True
         assert prep_ctx.source_data == [{"a": 1}]
-        assert prep_ctx.file_path == "/tmp/test.json"
         assert prep_ctx.version_context == {"i": 0}
 
 
@@ -416,7 +415,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "source_guid": "sg-1"}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
@@ -448,7 +447,7 @@ class TestModeSelection:
         )
 
         preparer = TaskPreparer()
-        preparer.prepare({"content": "test"}, context)
+        preparer.prepare({"content": "test", "source_guid": "sg-1"}, context)
 
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]

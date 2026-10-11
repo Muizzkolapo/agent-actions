@@ -882,16 +882,15 @@ class TestTheCatalogNamesWhatAnActionDrops:
 
         assert bare.get("drops") == ["redact.body"], bare.get("drops")
 
-    def test_a_nested_ref_is_not_reported_because_the_pop_is_flat(self, tmp_path):
-        """`redact.body.text` parses, so parsing alone is not the test of a real drop.
+    def test_a_nested_ref_is_reported_because_the_runtime_traverses(self, tmp_path):
+        """Was excluded while the pop was flat; #1116 made the runtime traverse the path.
 
-        The runtime pops `prompt_context[ns][field]` by exact key, with no traversal,
-        so a dotted field part matches nothing and the field survives into the LLM
-        context. Reporting it would claim a drop that never happens.
+        The panel and the runtime have to agree: reporting it while it did nothing was the
+        old mismatch, and not reporting it now would be the mirror of the same bug.
         """
         nested = self._actions(tmp_path)["drop_flow.nested_ref"]
 
-        assert "drops" not in nested, nested.get("drops")
+        assert nested.get("drops") == ["redact.body.text"], nested.get("drops")
         assert self._actions(tmp_path)["drop_flow.redact"].get("drops"), "key is reachable"
 
     def test_a_whole_namespace_drop_is_reported(self, tmp_path):
@@ -927,9 +926,13 @@ class TestTheCatalogNamesWhatAnActionDrops:
 
         `drops` answers "what did this action declare", with the namespace. The resolved
         set answers "which of this action's own output names is withheld", in bare names.
-        #1114 narrowed the second — `redact` declares two drops and withholds neither,
-        because `body` is its own field and `secret` it never forwarded. The two keys must
-        stay distinct: a namespaced ref must never appear in the resolved set.
+        The two keys must stay distinct: a namespaced ref must never appear in the
+        resolved set.
+
+        #1114 narrowed the second, and #1106 narrowed it again in the other direction.
+        `redact` observes `upstream.*`, which now enumerates the fields that brings in —
+        so `secret` IS forwarded and dropping it withholds something real. `body` stays
+        available because `upstream.body` and redact's own `body` are different claims.
         """
         from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -941,8 +944,9 @@ class TestTheCatalogNamesWhatAnActionDrops:
         reported = self._actions(tmp_path)["drop_flow.redact"]["drops"]
         assert reported == ["upstream.body", "upstream.secret"], reported
         assert all("." in ref for ref in reported), reported
-        # `redact` declares both drops and withholds neither of its own outputs.
-        assert redact_schema.dropped_outputs == [], redact_schema.dropped_outputs
+        # `secret` reaches redact only through the wildcard, so dropping it is a real
+        # withholding; before #1106 the wildcard enumerated nothing and this read [].
+        assert redact_schema.dropped_outputs == ["secret"], redact_schema.dropped_outputs
         assert "body" in redact_schema.available_outputs, redact_schema.available_outputs
 
         # A non-empty resolved set, so the "no namespace in there" claim can fail:

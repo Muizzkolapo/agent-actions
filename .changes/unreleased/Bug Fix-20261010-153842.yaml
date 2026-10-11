@@ -1,0 +1,21 @@
+kind: Bug Fix
+body: >-
+  A batch the provider reports in a status of its own is asked about until it ends, instead
+  of failing the action unasked. agac stored a batch's status as the provider's SDK gave it,
+  and an entry holding one agac does not know rolled the action up to an error: the run
+  after it failed the action without asking the provider, and the run after that sent every
+  file again. Every Gemini batch got there through the state name stored when it was sent,
+  so a Gemini batch action alternated between failing and sending everything again and never
+  wrote anything. An OpenAI batch that expired or was being cancelled got there too, as did
+  a Groq one being cancelled and an Anthropic one being canceled. Each provider's statuses
+  now map onto agac's own, when a batch is sent and when it is checked: a batch being
+  cancelled, or queued, paused or updating at Gemini, is waited for; one that expired has
+  failed, so the run collects the files beside it and marks its file's records failed for
+  `agac retry`, naming the file and its batch; the answers an expired batch had finished
+  are not read, and `agac retry` sends them again. A batch the agac provider has no record
+  of is now taken as failed, so its file's records go to `agac retry` instead of failing the
+  action. A status no mapping knows is taken as still running, named with its batch, and
+  asked about again on the next run. An action an earlier
+  version left waiting on such a batch, or failed over one, collects its batches within the
+  next two runs without sending them again.
+time: 2026-10-10T15:38:42Z

@@ -359,7 +359,10 @@ def prefilter_by_guard(
     """Evaluate the guard per record, as ``(passing, skipped, original_passing, filtered)``.
 
     A ``filter`` record appears in none of the first three; a ``skip`` record appears in
-    *skipped* with its original content, for the caller to merge back into output.
+    *skipped* with its original content, for the caller to merge back into output. A
+    record an action above failed or cascade-skipped is not judged: it is passed on for
+    the cascade filter to quarantine, as ``TaskPreparer.prepare`` returns it before the
+    guard.
 
     *original_data* holds the pre-scope records and is what the guard reads, so
     ``context_scope`` shapes what the action receives without deciding how it is judged;
@@ -379,11 +382,13 @@ def prefilter_by_guard(
     if not guard_config and not conditional_clause:
         return data, [], originals, []
 
+    from agent_actions.errors import GuardNotAppliedError, mark_action_fatal
     from agent_actions.guards import GuardBehavior
     from agent_actions.input.preprocessing.filtering.evaluator import (
         get_guard_evaluator,
     )
     from agent_actions.processing.guard_context import build_guard_context
+    from agent_actions.record.state import CASCADE_BLOCKING_VALUES
     from agent_actions.utils.content import get_existing_content
 
     evaluator = get_guard_evaluator()
@@ -399,11 +404,20 @@ def prefilter_by_guard(
     skipped: list[dict] = []
     original_passing: list[dict] = []
     filtered: list[dict] = []
+    blocked = 0
     for idx, item in enumerate(data):
         # The guard reads the record as stored. *data* is the scope pass's prompt-shaped
         # view -- drops applied, observed fields flattened -- and gating on that answered
         # the same clause differently per granularity.
         stored_record = originals[idx]
+        # Read off *item*, as the cascade filter reads it. Judged, a clause on the fields
+        # the failed action left null turned the record away as if it were live: a skip
+        # blocks nothing below, and a filter removes it with nothing saying it failed.
+        if isinstance(item, dict) and item.get("_state") in CASCADE_BLOCKING_VALUES:
+            passing.append(item)
+            original_passing.append(stored_record)
+            blocked += 1
+            continue
         eval_item = get_existing_content(stored_record)
 
         context = build_guard_context(
@@ -418,12 +432,24 @@ def prefilter_by_guard(
             dependency_configs=dependency_configs,
         )
 
-        result = evaluator.evaluate(
-            item=eval_item,
-            guard_config=guard_config,
-            context=context,
-            conditional_clause=conditional_clause,
-        )
+        try:
+            result = evaluator.evaluate(
+                item=eval_item,
+                guard_config=guard_config,
+                context=context,
+                conditional_clause=conditional_clause,
+            )
+        except GuardNotAppliedError as e:
+            # The evaluator is handed the record's content; the envelope naming it is here.
+            # Still fatal to the action: this pass has no way to fail one record.
+            source_guid = stored_record.get("source_guid")
+            raise mark_action_fatal(
+                GuardNotAppliedError(
+                    f"{e} Record {idx + 1} of {len(data)}, source_guid {source_guid}.",
+                    context={**e.context, "source_guid": source_guid, "record_index": idx},
+                    cause=e,
+                )
+            ) from e
 
         if result.should_execute:
             passing.append(item)
@@ -436,11 +462,13 @@ def prefilter_by_guard(
             filtered.append(originals[idx])
 
     logger.info(
-        "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered of %d total",
+        "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered, "
+        "%d left unjudged for the cascade filter, of %d total",
         agent_name,
-        len(passing),
+        len(passing) - blocked,
         len(skipped),
         len(filtered),
+        blocked,
         len(data),
     )
 

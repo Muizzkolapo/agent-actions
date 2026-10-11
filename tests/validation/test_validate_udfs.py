@@ -149,6 +149,7 @@ class TestValidate:
         assert result["valid"] is True
         assert result["registry"] == {"func_a": {}, "func_b": {}}
         assert result["impl_refs"] == {"func_a"}
+        assert result["guard_udf_refs"] == set()
         mock_clear.assert_called_once()
 
     @patch(_CLEAR_REGISTRY)
@@ -268,6 +269,8 @@ class TestExecute:
                 "valid": True,
                 "registry": {"fn": {}},
                 "impl_refs": {"fn"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": set(),
             }
         )
@@ -456,6 +459,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"aggregate"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -485,6 +490,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"aggregate"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -522,6 +529,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"used_tool"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -560,6 +569,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"used_tool"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -589,6 +600,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"aggregate"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -614,6 +627,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"aggregate"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -638,6 +653,8 @@ class TestBusNamespaceWarnings:
                 "valid": True,
                 "registry": registry,
                 "impl_refs": {"aggregate"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": {"real_action"},
             }
         )
@@ -678,6 +695,8 @@ class TestFileUdfContractWarnings:
                 "valid": True,
                 "registry": dict(UDF_REGISTRY),
                 "impl_refs": {"dedup_scores"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": set(),
             }
         )
@@ -705,6 +724,8 @@ class TestFileUdfContractWarnings:
                 "valid": True,
                 "registry": dict(UDF_REGISTRY),
                 "impl_refs": {"unrelated"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": set(),
             }
         )
@@ -736,6 +757,8 @@ class TestFileUdfContractWarnings:
                 "valid": True,
                 "registry": dict(UDF_REGISTRY),
                 "impl_refs": {"merge_scores"},
+                "guard_udf_refs": set(),
+                "loop_params": set(),
                 "action_names": set(),
             }
         )

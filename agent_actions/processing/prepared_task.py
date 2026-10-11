@@ -70,12 +70,9 @@ class PreparationContext:
     dependency_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     version_context: dict[str, Any] | None = None
-    file_path: str | None = None
-    output_directory: str | None = None
     tools_path: str | None = None
     storage_backend: Optional["StorageBackend"] = None
     current_item: dict[str, Any] | None = None
-    record_index: int = 0
 
     @classmethod
     def from_processing_context(cls, context: "ProcessingContext") -> "PreparationContext":
@@ -92,10 +89,7 @@ class PreparationContext:
             dependency_configs=context.dependency_configs,
             workflow_metadata=context.workflow_metadata,
             version_context=context.version_context,
-            file_path=context.file_path,
-            output_directory=context.output_directory,
             tools_path=resolve_tools_path(cast(dict[str, Any], context.agent_config)),
             storage_backend=context.storage_backend,
             current_item=context.current_item,
-            record_index=context.record_index,
         )

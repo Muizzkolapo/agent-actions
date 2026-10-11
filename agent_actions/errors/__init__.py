@@ -7,10 +7,21 @@ from agent_actions.errors.base import (
     exhaustion_halt,
     get_error_detail,
     raised_by_exhaustion_policy,
+    raised_by_terminal_failure,
+    terminal_failure,
 )
 
 # Classification
-from agent_actions.errors.classification import is_action_fatal, mark_action_fatal
+from agent_actions.errors.classification import (
+    every_file_failed,
+    every_record_failed,
+    is_action_fatal,
+    is_submission_refused,
+    mark_action_fatal,
+    mark_every_file_failed,
+    mark_every_record_failed,
+    mark_submission_refused,
+)
 
 # Common errors
 from agent_actions.errors.common import InvalidParameterError
@@ -65,6 +76,7 @@ from agent_actions.errors.preflight import (
 from agent_actions.errors.processing import (
     EmptyOutputError,
     GenerationError,
+    GuardNotAppliedError,
     ProcessingError,
     SerializationError,
     TransformationError,
@@ -81,6 +93,7 @@ from agent_actions.errors.resources import (
 from agent_actions.errors.validation import (
     AmbiguousAgentName,
     DataValidationError,
+    MissingSourceGuidError,
     PromptValidationError,
     SchemaValidationError,
     ValidationError,
@@ -93,9 +106,17 @@ __all__ = [
     "exhaustion_halt",
     "get_error_detail",
     "raised_by_exhaustion_policy",
+    "raised_by_terminal_failure",
+    "terminal_failure",
     # Classification
+    "every_file_failed",
+    "every_record_failed",
     "is_action_fatal",
+    "is_submission_refused",
     "mark_action_fatal",
+    "mark_every_file_failed",
+    "mark_every_record_failed",
+    "mark_submission_refused",
     # Common
     "InvalidParameterError",
     # Configuration
@@ -111,12 +132,14 @@ __all__ = [
     "ValidationError",
     "PromptValidationError",
     "DataValidationError",
+    "MissingSourceGuidError",
     "SchemaValidationError",
     "AmbiguousAgentName",
     # Processing
     "ProcessingError",
     "TransformationError",
     "GenerationError",
+    "GuardNotAppliedError",
     "WorkflowError",
     "SerializationError",
     "EmptyOutputError",

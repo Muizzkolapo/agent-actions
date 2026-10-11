@@ -24,6 +24,7 @@ def _params(upstream_dirs, output_dir, action_name="dedup_by_concept"):
     params.action_name = action_name
     params.strategy = MagicMock()
     params.idx = 0
+    params.correlated_input = None
     return params
 
 
@@ -127,6 +128,33 @@ def test_filtered_record_dropped_from_single_source_file(tmp_path):
 
     guids = _captured_guids(runner)
     assert guids == ["sg-1"], f"filtered sg-2 survived single-source path: {guids}"
+
+
+def test_a_file_whose_every_record_was_filtered_upstream_still_reaches_the_action(tmp_path):
+    """Empty, so the action stores it empty in either run mode. Passed over here, the
+    file would keep the rows the action built from those records before."""
+    tag_dir = tmp_path / "tag_code_concept"
+    dedup_dir = tmp_path / "dedup_code_blocks"
+    output = tmp_path / "out"
+    for d in (tag_dir, dedup_dir, output):
+        d.mkdir()
+    dedup_records = [
+        {"source_guid": "sg-1", "content": {"dedup_code_blocks": {"code_block": "a"}}},
+        {"source_guid": "sg-2", "content": {"dedup_code_blocks": {"code_block": "b"}}},
+    ]
+    storage = _storage(
+        {"tag_code_concept": [], "dedup_code_blocks": dedup_records},
+        {"tag_code_concept": ["sg-1", "sg-2"]},
+    )
+    runner = MagicMock()
+    runner.storage_backend = storage
+
+    found, processed, _errors = process_from_storage_backend(
+        runner, _params([str(tag_dir), str(dedup_dir)], output)
+    )
+
+    assert _captured_guids(runner) == []
+    assert (found, processed) == (1, 1)
 
 
 def test_transitive_ancestor_filter_is_authoritative(tmp_path):

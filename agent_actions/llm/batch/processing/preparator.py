@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, MissingSourceGuidError
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
@@ -107,8 +107,6 @@ class BatchTaskPreparator:
         self._run_preflight_validation(
             agent_config,
             data,
-            output_directory,
-            batch_name,
             source_data,
             workflow_metadata,
         )
@@ -123,8 +121,6 @@ class BatchTaskPreparator:
         # Build PreparationContext for TaskPreparer
         prep_context = self._build_preparation_context(
             agent_config=agent_config,
-            output_directory=output_directory,
-            batch_name=batch_name,
             source_data=source_data,
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
@@ -177,6 +173,31 @@ class BatchTaskPreparator:
             stats=stats,
             config=agent_config,
         )
+
+    def turned_away(
+        self,
+        agent_config: dict[str, Any],
+        data: list[dict[str, Any]],
+        source_data: list[Any] | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
+    ) -> set[str]:
+        """The ``source_guid`` of each record of *data* the guard filters or skips.
+
+        Judged as ``prepare_tasks`` judges a record, stopping at the guard: no prompt is
+        rendered and nothing is stored or marked.
+        """
+        prep_context = self._build_preparation_context(
+            agent_config=agent_config,
+            source_data=source_data,
+            workflow_metadata=workflow_metadata,
+            tools_path=None,
+        )
+        task_preparer = get_task_preparer()
+        return {
+            row["source_guid"]
+            for row in data
+            if task_preparer.judge(row, prep_context) in (GuardStatus.FILTERED, GuardStatus.SKIPPED)
+        }
 
     def _process_single_item(
         self,
@@ -279,6 +300,9 @@ class BatchTaskPreparator:
         entry = context_map_builder[custom_id]
         BatchContextMetadata.set_filter_status(entry, FilterStatus.FAILED)
         error_str = str(error)
+        # Collection reads it here, maybe in a later process. Not off the history,
+        # which holds 200 characters, and nothing where the transition is refused.
+        BatchContextMetadata.set_prep_error(entry, error_str[:500])
         if RecordEnvelope.can_transition(entry, RecordState.FAILED):
             RecordEnvelope.transition(entry, RecordState.FAILED, agent_name, error_str[:200])
         else:
@@ -317,7 +341,6 @@ class BatchTaskPreparator:
 
     def _prepare_schema(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
         """Prepare and compile schema for provider."""
-        from pathlib import Path
 
         from agent_actions.output.response.schema import ResponseSchemaCompiler
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
@@ -337,8 +360,6 @@ class BatchTaskPreparator:
     def _build_preparation_context(
         self,
         agent_config: dict[str, Any],
-        output_directory: str | None,
-        batch_name: str | None,
         source_data: list[Any] | None,
         workflow_metadata: dict[str, Any] | None,
         tools_path: str | None,
@@ -346,9 +367,6 @@ class BatchTaskPreparator:
     ) -> PreparationContext:
         """Build PreparationContext with common settings."""
         agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
-        file_path = (
-            str(Path(output_directory) / batch_name) if output_directory and batch_name else None
-        )
 
         return PreparationContext(
             agent_config=agent_config,
@@ -360,8 +378,6 @@ class BatchTaskPreparator:
             dependency_configs=self.dependency_configs,
             workflow_metadata=workflow_metadata,
             version_context=self.version_context,
-            file_path=file_path,
-            output_directory=output_directory,
             tools_path=tools_path,
             storage_backend=self.storage_backend,
             current_item=current_item,
@@ -371,8 +387,6 @@ class BatchTaskPreparator:
         self,
         agent_config: dict[str, Any],
         data: list[dict[str, Any]],
-        output_directory: str | None = None,
-        batch_name: str | None = None,
         source_data: list[Any] | None = None,
         workflow_metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -389,8 +403,6 @@ class BatchTaskPreparator:
         tools_path = resolve_tools_path(agent_config)
         prep_context = self._build_preparation_context(
             agent_config=agent_config,
-            output_directory=output_directory,
-            batch_name=batch_name,
             source_data=source_data,
             workflow_metadata=workflow_metadata,
             tools_path=tools_path,
@@ -403,7 +415,10 @@ class BatchTaskPreparator:
         for row in data[:sample_size]:
             prep_context.current_item = row
 
-            prepared = task_preparer.prepare(row, prep_context, skip_guard=False)
+            try:
+                prepared = task_preparer.prepare(row, prep_context, skip_guard=False)
+            except MissingSourceGuidError:
+                continue  # Refused before its template renders; the run refuses it alone
 
             if prepared.guard_status in (
                 GuardStatus.SKIPPED,
@@ -414,9 +429,9 @@ class BatchTaskPreparator:
 
             return  # Template rendered successfully — preflight passed
 
-        # All sampled rows guard-skipped/filtered — nothing to validate
+        # All sampled rows guard-skipped/filtered or refused — nothing to validate
         logger.info(
-            "Preflight skipped: all %d sampled rows filtered by guard for '%s'",
+            "Preflight skipped: no prompt rendered for the %d sampled rows of '%s'",
             sample_size,
             agent_config.get("name"),
         )

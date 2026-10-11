@@ -45,8 +45,8 @@ def backend(tmp_path):
 def _batch_filtered_every_record(backend, records=()):
     """Reproduce what workflow/pipeline.py leaves behind for a tombstoned action.
 
-    ``write_target`` derives record_count from the list, so an empty tombstone
-    is what makes the action's record count zero — the fix's discriminator.
+    An empty tombstone is a file holding no row, so the action holds none — the
+    fix's discriminator.
     """
     backend.write_target(ACTION, CHUNK, list(records))
     write_node_level_disposition(backend, ACTION, DISPOSITION_PASSTHROUGH, "All records tombstoned")
@@ -136,17 +136,28 @@ class TestTheRealBatchSignalReachesTheUser:
         assert result.status == ActionStatus.COMPLETED
         assert [e for e in events if isinstance(e, ActionSkipEvent)] == []
 
-
-class TestTheDiscriminatorIsTheRealRecordCount:
-    """M-2: prove write_target([]) really is what makes the count zero."""
-
-    def test_an_empty_tombstone_leaves_a_zero_record_count(self, backend):
+    def test_rows_stored_before_their_count_was_kept_still_complete_it(self, resume, backend):
+        """A store older than record_count leaves it NULL on rows that hold records,
+        so a summed count reads them as none."""
+        backend.write_target(ACTION, "older.json", [{"id": 1}])
+        backend.connection.execute("UPDATE target_data SET record_count = NULL")
+        backend.connection.commit()
         _batch_filtered_every_record(backend)
-        assert _executor(backend)._count_records_for_action(ACTION) == 0
+        ex = _executor(backend)
+        result, _ = _drive(ex, ex.deps, resume)
+        assert result.status == ActionStatus.COMPLETED
 
-    def test_a_populated_tombstone_does_not(self, backend):
+
+class TestTheDiscriminatorIsWhetherTheActionHoldsARow:
+    """M-2: prove write_target([]) really is what leaves the action holding no row."""
+
+    def test_an_empty_tombstone_holds_no_row(self, backend):
+        _batch_filtered_every_record(backend)
+        assert backend.has_target_rows(ACTION) is False
+
+    def test_a_populated_tombstone_does(self, backend):
         _batch_filtered_every_record(backend, records=[{"id": 1}, {"id": 2}])
-        assert _executor(backend)._count_records_for_action(ACTION) == 2
+        assert backend.has_target_rows(ACTION) is True
 
 
 class TestNothingElseBecomesASkip:

@@ -50,11 +50,11 @@ class GuardParser:
                     "guard_type": str(type(guard)),
                     "operation": "parse_guard",
                     "failed_field": "guard",
-                    "expected": 'Non-empty string (e.g., "udf:module.function" or SQL expression)',
+                    "expected": 'Non-empty string (e.g., "udf:check_eligibility" or SQL expression)',
                     "actual_value": guard,
                     "suggestion": (
                         "Provide a valid guard expression as a non-empty string. "
-                        'Use "udf:module.function" for UDF guards or SQL-like expressions '
+                        'Use "udf:function_name" for UDF guards or SQL-like expressions '
                         "for SQL guards."
                     ),
                 },
@@ -81,12 +81,12 @@ class GuardParser:
                         "failed_field": "udf_expression",
                         "expected": (
                             'Non-empty UDF expression after "udf:" prefix '
-                            '(e.g., "udf:module.function")'
+                            '(e.g., "udf:check_eligibility")'
                         ),
                         "actual_value": udf_expression,
                         "suggestion": (
-                            "Provide a valid UDF expression in the format "
-                            '"udf:module.function" or "udf:module.submodule.function".'
+                            "Provide the registered function's own name, as "
+                            '"udf:check_eligibility".'
                         ),
                     },
                 )
@@ -99,30 +99,30 @@ class GuardParser:
 
     @classmethod
     def _validate_udf_expression(cls, expression: str) -> None:
-        """Validate UDF expression format (e.g., 'module.function').
+        """Validate that a UDF expression is a registered function's name.
+
+        A bare identifier, because that is what ``UDF_REGISTRY`` is keyed on — a dotted
+        name matches no key, so requiring one made every UDF guard unloadable (#1188).
 
         Raises:
             ValidationError: If expression format is invalid or contains dangerous patterns
         """
-        pattern = "^[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+$"
+        pattern = r"\A[a-zA-Z_][a-zA-Z0-9_]*\Z"
         if not re.match(pattern, expression):
             raise ValidationError(
                 f"Invalid UDF expression format: '{expression}'. "
-                "Expected format: 'module.function' or 'module.submodule.function'",
+                "Expected the registered function's own name, with no module prefix "
+                "(e.g. 'check_eligibility')",
                 context={
                     "expression": expression,
                     "expected_pattern": pattern,
                     "operation": "validate_udf_expression",
                     "failed_field": "udf_expression",
-                    "expected": (
-                        "Valid Python module path "
-                        '(e.g., "module.function" or "module.submodule.function")'
-                    ),
+                    "expected": "A registered UDF's own name, e.g. check_eligibility",
                     "actual_value": expression,
                     "suggestion": (
-                        "Ensure the UDF expression follows Python module naming conventions: "
-                        "starts with letter/underscore, contains only alphanumeric characters "
-                        "and underscores, separated by dots."
+                        "Name the UDF exactly as it is registered: a Python identifier, with no "
+                        "module prefix. `agac list-udfs` prints the registered names."
                     ),
                 },
             )

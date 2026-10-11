@@ -25,6 +25,8 @@ flowchart LR
     candidate_a: string
     candidate_b: string
     candidate_c: string
+  context_scope:
+    observe: [source.*]
 
 - name: generate_pool_2
   dependencies: [generate_pool_1]
@@ -87,6 +89,8 @@ flowchart LR
   kind: tool
   version_consumption: { source: generate_alternative, pattern: merge }
   schema: merge_alternatives   # suffixes fields: alternative_code_1, alternative_code_2, ...
+  context_scope:
+    observe: [generate_alternative.*]
 ```
 
 The merge tool receives double-nested data:
@@ -101,6 +105,7 @@ The selector observes all pools and the original context needed to judge them. I
 
 ```yaml
 - name: select_best
+  dependencies: [generate_pool_3, source_context]
   context_scope:
     observe:
       - generate_pool_1.*

@@ -1,4 +1,4 @@
-"""A version merge writes its correlated target and leaves nothing else behind."""
+"""A version merge hands back its merged input and leaves nothing behind."""
 
 import pytest
 
@@ -72,11 +72,10 @@ class TestAVersionMergeLeavesNoSourceArtefact:
 
         assert not (agent_folder / "source").exists()
 
-    def test_the_merged_target_still_reaches_the_store(self, correlator, backend, agent_folder):
+    def test_the_merged_input_is_handed_back(self, correlator, backend, agent_folder):
         _write_versions(backend, VERSIONS)
 
-        correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
+        merged = correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
 
-        merged = backend.read_target("consumer", "data.json")
-        assert [r["source_guid"] for r in merged] == ["sg-001"]
-        assert {"scorer_1_aaa", "scorer_2_bbb"} <= set(merged[0]["lineage"])
+        assert [r["source_guid"] for r in merged["data.json"]] == ["sg-001"]
+        assert {"scorer_1_aaa", "scorer_2_bbb"} <= set(merged["data.json"][0]["lineage"])

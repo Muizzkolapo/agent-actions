@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A record's ancestry no longer depends on which duplicate came last in the list. Three
+  places index records by `source_guid`; two take the first on a repeat, while the lineage
+  index took the last, so a record's `source` namespace could come from one row and its
+  lineage from another. It now takes the first, matching the other two. That alone is not
+  enough among parent records, where a repeated guid is ordinary — `correlation.py` keys a
+  versioned 1:1 id on `(version_base_name, source_guid)`, so two versioned actions over one
+  source record produce two rows sharing a guid with different correlation ids, and either
+  end of the list is the wrong ancestor for one of them. The parent lookup now keeps every
+  candidate and picks the one whose `version_correlation_id` matches the item's, which is
+  what distinguishes the branches; with no correlation on either side it falls back to the
+  first, agreeing with the source resolvers. Measured before the fix, an item correlated to
+  one branch was given the other branch's root and parent target ids.
+time: 2026-09-30T21:00:00Z

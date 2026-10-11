@@ -86,6 +86,8 @@ _EXPECT_REPLACES_SCHEMA_MISMATCH = (
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "ephemeral": "",
+    "idempotency_key": "",
     "interceptors": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
@@ -238,6 +240,22 @@ class VersionConfig(BaseModel):
                     f"no versions and removes the action; got {value!r}"
                 )
         return value
+
+
+def version_variant_names(action_name: str, version_config: Any) -> list[str]:
+    """The agent names a versions block expands to, in order.
+
+    Shared so the expander and any reader of raw YAML agree on the rule. A two-element range
+    is a start and an end, inclusive; any other length is a literal list.
+    """
+    validated = validate_version_block(version_config, action_name)
+    values: list[int | str]
+    if len(validated.range) == 2:
+        start, end = int(validated.range[0]), int(validated.range[1])
+        values = list(range(start, end + 1))
+    else:
+        values = list(validated.range)
+    return [f"{action_name}_{value}" for value in values]
 
 
 def validate_version_block(version_config: Any, action_name: str) -> VersionConfig:
@@ -501,7 +519,6 @@ class ActionConfig(_RetryValidators):
     retry: RetryConfig | None = Field(
         default=None, description="Retry configuration for transport-layer failures"
     )
-    idempotency_key: str | None = Field(default=None, description="Idempotency key template")
     prompt: str | None = Field(default=None, description="Prompt template or reference")
     dependencies: list[str] = Field(
         default_factory=list, description="List of upstream dependencies"
@@ -655,6 +672,12 @@ class DefaultsConfig(_RetryValidators):
     base_url: str | None = Field(default=None, description="Default base URL")
     kind: ActionKind | None = Field(default=None, description="Default action kind")
     is_operational: bool | None = Field(default=None, description="Default operational flag")
+    # Not nullable like its siblings: a blank `on_empty:` is refused here rather than
+    # reaching the agent as None. Left unset, the "warn" is not dumped, so a project
+    # default still applies.
+    on_empty: Literal["warn", "error", "skip"] = Field(
+        default="warn", description="Default behavior when an action produces empty output"
+    )
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
     temperature: float | None = Field(

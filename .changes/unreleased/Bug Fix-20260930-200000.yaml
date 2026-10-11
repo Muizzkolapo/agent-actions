@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  A backend walk that loses every record now fails the action instead of completing as
+  though the input had never existed. `process_from_storage_backend` computed its
+  found-count from what it managed to read, so an entry lost to a failed `list_target_files`
+  or `read_target` was absent from that count and from the collected errors both. With
+  nothing found, the `files_found > 0` gate in `process_files` never fired: the walk
+  returned `(0, 0)`, fell through to a filesystem holding nothing real, and the run reported
+  success having produced nothing — a caller reading the exit status could not tell "there
+  was no input" from "none of the input could be read". Lost entries are now counted towards
+  `files_found` and recorded, so the existing gate raises and the message names every entry
+  that went missing. A failed listing counts as one loss, since how many files it held is
+  unknowable once the listing itself failed. This is the third walker of the three; #1026
+  fixed the same defect for the two filesystem walks, which count per entry rather than from
+  what survived.
+time: 2026-09-30T20:00:00Z

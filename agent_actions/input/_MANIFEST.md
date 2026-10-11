@@ -24,11 +24,11 @@ and chunking/lineage support).
 | `SourceDataLoader.load_source_data()` | `agent_io/target/{action}/` | Reads | — |
 | `resolve_start_node_data_source()` | `agent_io/staging/` | Reads | `data_source` |
 | `discover_udfs()` | `tools/{workflow}/*.py` | Reads | — |
-| `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl` |
+| `validate_udf_references()` | `tools/{workflow}/*.py` | Validates | `impl`, `guard` (`udf:` conditions) |
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
-| `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config` |
-| `GuardFilter.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
+| `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config`, `data_source` (`file_type`) |
+| `GuardFilter.filter_item()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
 
 **Internal only**: `ReferenceParser`, `FieldReferenceResolver`, `ReferenceValidator`, `SchemaFieldValidator`, `EvaluationContextProvider`, `Tokenizer` -- no direct project surface.
@@ -43,4 +43,5 @@ and chunking/lineage support).
 | `processing` | outbound | Delegates record processing to UnifiedProcessor |
 | `prompt` | outbound | Validates staged data against prompt templates |
 | `workflow` | inbound | Workflow executor calls process_initial_stage and context normalization |
+| `workflow` | outbound | The first stage builds its batch context with `ProcessingPipeline`, and names a batch file by the top-level files the walk processes (`should_skip_item`) |
 | `validation` | inbound | Uses guard evaluation and field resolution for preflight checks |

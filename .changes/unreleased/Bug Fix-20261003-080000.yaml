@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  Batch runs now honour `on_empty`. When the model returned an empty answer for a record,
+  a batch run counted the record as done and stored nothing for it, whatever `on_empty`
+  said: no failed row, no tombstone, no halt, and nothing to show the answer had been
+  empty. Online runs applied `on_empty` all along. A batch now does the same: `warn` (the
+  default) stores the record as failed with the reason, so `agac retry` can reach it,
+  `skip` stores a tombstone, and `error` stores the record as failed and fails the action.
+  Under `error` a batch fails after writing its file, because a batch writes once and the
+  other records' answers are in that write; an online run stops at the record. If your batch workflows had records that silently
+  came back empty, they will now show as failed records on the next run.
+time: 2026-10-03T08:00:00Z

@@ -14,6 +14,7 @@ from agent_actions.config.path_config import (
     find_project_root_dir,
     load_project_config,
     resolve_project_root,
+    warn_unread_project_keys,
 )
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
@@ -75,6 +76,37 @@ def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, 
             cause=e,
         ) from e
     return {**{k: v for k, v in project_defaults.items() if k != "chunk_config"}, **validated}
+
+
+def _validate_project_expect_block(project_defaults: dict[str, Any]) -> dict[str, Any]:
+    """Validate an `expect:` block written in `default_agent_config:`.
+
+    `DefaultAgentConfig` is extra="allow", so the block reached ExpectationService
+    unchecked while the identical block is refused on an action. Measured: a
+    `max_iterations: 99` ran 99 generations per record against a declared bound of 1-10,
+    `repair: none` silently dropped the iteration keys it cannot use, and a scalar
+    `expect: "auto"` was coerced to None.
+
+    That matters more since #1066, whose refusal message sends a migrating author to this
+    very block -- landing them back in the silence the refusal exists to end.
+
+    Validated the way chunk_config already is above, and dumped with exclude_unset so the
+    merge below still sees only what the author wrote.
+    """
+    from agent_actions.config.schema import ExpectConfig
+
+    block = project_defaults.get("expect")
+    if block is None:
+        return project_defaults
+    try:
+        validated = ExpectConfig.model_validate(block).model_dump(exclude_unset=True)
+    except ValidationError as e:
+        detail = "; ".join(err["msg"] for err in e.errors()) or str(e)
+        raise ConfigurationError(
+            f"default_agent_config.expect: {detail}",
+            context={"operation": "load_project_defaults"},
+        ) from e
+    return {**project_defaults, "expect": validated}
 
 
 def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
@@ -267,9 +299,11 @@ class ConfigManager:
                 path_manager = PathManager(project_root=self.project_root)
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
+                warn_unread_project_keys(project_config)
                 project_defaults = project_config.get("default_agent_config", {})
                 _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
                 project_defaults = _flatten_project_chunk_block(project_defaults)
+                project_defaults = _validate_project_expect_block(project_defaults)
             except (FileNotFoundError, ProjectRootNotFoundError):
                 project_defaults = {}
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:

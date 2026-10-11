@@ -18,10 +18,8 @@ class TestGuardConfig:
 
     def test_guard_config_with_skip_behavior(self):
         """Test GuardConfig with skip behavior (passthrough)."""
-        config = GuardConfig(
-            condition="udf:validators.should_extract_facts", on_false=GuardBehavior.SKIP
-        )
-        assert config.condition == "udf:validators.should_extract_facts"
+        config = GuardConfig(condition="udf:should_extract_facts", on_false=GuardBehavior.SKIP)
+        assert config.condition == "udf:should_extract_facts"
         assert config.on_false == GuardBehavior.SKIP
         assert config.is_udf_condition() is True
         assert config.is_sql_condition() is False
@@ -36,15 +34,15 @@ class TestGuardConfig:
 
     def test_guard_config_from_dict(self):
         """Test creating GuardConfig from dictionary (YAML format)."""
-        config_dict = {"condition": "udf:topic_quiz.validate_answer", "on_false": "skip"}
+        config_dict = {"condition": "udf:validate_answer", "on_false": "skip"}
         config = GuardConfig.from_dict(config_dict)
-        assert config.condition == "udf:topic_quiz.validate_answer"
+        assert config.condition == "udf:validate_answer"
         assert config.on_false == GuardBehavior.SKIP
 
     def test_guard_config_from_string_legacy(self):
         """Test creating GuardConfig from legacy string format."""
-        config = GuardConfig.from_string("udf:validators.check_quality")
-        assert config.condition == "udf:validators.check_quality"
+        config = GuardConfig.from_string("udf:check_quality")
+        assert config.condition == "udf:check_quality"
         assert config.on_false == GuardBehavior.SKIP
         config = GuardConfig.from_string('status == "active"')
         assert config.condition == 'status == "active"'
@@ -53,12 +51,12 @@ class TestGuardConfig:
     def test_guard_config_validation_invalid_condition(self):
         """Test that invalid conditions raise validation errors."""
         with pytest.raises(ValidationError, match="Invalid UDF expression format"):
-            GuardConfig(condition="udf:invalid_format", on_false=GuardBehavior.SKIP)
+            GuardConfig(condition="udf:not an identifier", on_false=GuardBehavior.SKIP)
 
     def test_guard_config_validation_dangerous_patterns(self):
         """Test that dangerous patterns are rejected."""
         with pytest.raises(ValidationError, match="potentially dangerous pattern"):
-            GuardConfig(condition="udf:module.__import__", on_false=GuardBehavior.SKIP)
+            GuardConfig(condition="udf:__import__", on_false=GuardBehavior.SKIP)
 
     def test_guard_behavior_enum_values(self):
         """Test GuardBehavior enum has expected values."""
@@ -104,15 +102,15 @@ class TestConsolidatedGuardParser:
 
     def test_parse_object_guard_config(self):
         """Test parsing object-style guard configuration."""
-        guard_data = {"condition": "udf:validators.should_process", "on_false": "skip"}
+        guard_data = {"condition": "udf:should_process", "on_false": "skip"}
         config = parse_guard_config(guard_data)
         assert isinstance(config, GuardConfig)
-        assert config.condition == "udf:validators.should_process"
+        assert config.condition == "udf:should_process"
         assert config.on_false == GuardBehavior.SKIP
 
     def test_parse_string_guard_legacy(self):
         """Test parsing legacy string guard format."""
-        config = parse_guard_config("udf:validators.check")
+        config = parse_guard_config("udf:check")
         assert config.on_false == GuardBehavior.SKIP
         config = parse_guard_config('field == "value"')
         assert config.on_false == GuardBehavior.FILTER
@@ -170,7 +168,7 @@ class TestConsolidatedGuardParser:
         action = {
             "name": "a",
             "guard": {
-                "condition": "udf:validators.my_check",
+                "condition": "udf:my_check",
                 "on_false": "skip",
                 "passthrough_on_error": False,
             },
@@ -195,7 +193,7 @@ class TestFormatConverterIntegration:
         action = {
             "name": "test_action",
             "intent": "Test action with skip guard",
-            "guard": {"condition": "udf:validators.should_process", "on_false": "skip"},
+            "guard": {"condition": "udf:should_process", "on_false": "skip"},
             "model_vendor": "openai",
             "model_name": "gpt-4o-mini",
             "api_key": "TEST_API_KEY",
@@ -206,7 +204,7 @@ class TestFormatConverterIntegration:
         result = ActionExpander._create_agent_from_action(
             action, defaults, agent, template_replacer
         )
-        assert result.get("conditional_clause") == "validators.should_process"
+        assert result.get("conditional_clause") == "should_process"
         assert result.get("guard") is None
 
     def test_convert_filter_behavior_to_guard(self):
@@ -268,10 +266,10 @@ class TestSchemaValidation:
         action_data = {
             "name": "test_action",
             "intent": "Test action",
-            "guard": {"condition": "udf:validators.check_quality", "on_false": "skip"},
+            "guard": {"condition": "udf:check_quality", "on_false": "skip"},
         }
         action = ActionConfig(**action_data)
-        assert action.guard["condition"] == "udf:validators.check_quality"
+        assert action.guard["condition"] == "udf:check_quality"
         assert action.guard["on_false"] == "skip"
 
     def test_action_config_validates_legacy_guard_string(self):
@@ -281,10 +279,10 @@ class TestSchemaValidation:
         action_data = {
             "name": "test_action",
             "intent": "Test action",
-            "guard": "udf:validators.check_quality",
+            "guard": "udf:check_quality",
         }
         action = ActionConfig(**action_data)
-        assert action.guard == "udf:validators.check_quality"
+        assert action.guard == "udf:check_quality"
 
     def test_action_config_rejects_invalid_guard(self):
         """Test ActionConfig rejects invalid guard configurations."""
@@ -294,7 +292,7 @@ class TestSchemaValidation:
             ActionConfig(
                 name="test_action",
                 intent="Test action",
-                guard={"condition": "udf:invalid_format", "on_false": "skip"},
+                guard={"condition": "udf:not an identifier", "on_false": "skip"},
             )
 
 
