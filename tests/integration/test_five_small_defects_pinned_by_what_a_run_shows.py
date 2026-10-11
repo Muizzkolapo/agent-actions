@@ -93,6 +93,7 @@ def test_an_online_prep_failure_is_recorded_once():
     record = _collected(result)
 
     assert _failures(record) == [(None, "failed")]
+    assert record["_state"] == "failed"
 
 
 def test_a_batch_prep_failure_is_recorded_once():
@@ -107,6 +108,7 @@ def test_a_batch_prep_failure_is_recorded_once():
     record = _collected(result)
 
     assert _failures(record) == [("active", "failed")]
+    assert record["_state"] == "failed"
 
 
 def test_a_failure_of_another_action_is_not_taken_for_this_ones():
