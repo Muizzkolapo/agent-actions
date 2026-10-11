@@ -118,7 +118,8 @@ After this action, the workflow has N records (one per clause) where before it h
   context_scope:
     observe:
       - analyze_clause.*
-      - flag_high_risk.*
+      - split_into_clauses.clause_number
+      - split_into_clauses.clause_title
       - source.contract_id
       - source.title
       - source.parties
@@ -130,17 +131,20 @@ By default, every action uses `granularity: Record` -- one record at a time. Set
 
 This matters whenever your logic needs a cross-record view: computing averages, counting distributions, sorting by priority, producing one output from many inputs. Without it, the aggregation tool would see one clause at a time and could never build a contract-level summary.
 
-A FILE granularity tool in Python receives a `list[dict]` and returns a `list[dict]`:
+A FILE granularity tool in Python receives a `list[dict]`, one item per record, holding the observed fields as flat keys. The one wildcard's fields are bare (`risk_level`); the fields named one by one beside it carry their action's name (`split_into_clauses.clause_title`, `source.contract_id`). A tool that builds a new row returns a `FileUDFResult`:
 
 ```python
-from agent_actions import udf_tool
+from agent_actions import FileUDFResult, udf_tool
 from agent_actions.config.types import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
-def aggregate_clause_analyses(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     # data contains ALL clause records at once
+    contract_id = data[0].get("source.contract_id", "unknown")
+    high = [r for r in data if r.get("risk_level") == "high"]
     # ... aggregate logic ...
-    return [single_summary_dict]
+    # source_index: None — no single input produced this row
+    return FileUDFResult(outputs=[{"source_index": None, "data": single_summary_dict}])
 ```
 
 The framework handles all metadata propagation (`source_guid`, lineage) automatically — tools just return business data.
@@ -159,7 +163,7 @@ The `flag_high_risk` action uses a guard to skip clauses that aren't high-risk. 
   model_name: claude-sonnet-4-20250514
   api_key: ANTHROPIC_API_KEY
   guard:
-    condition: 'risk_level == "high"'
+    condition: 'analyze_clause.risk_level == "high"'
     on_false: "filter"
 ```
 

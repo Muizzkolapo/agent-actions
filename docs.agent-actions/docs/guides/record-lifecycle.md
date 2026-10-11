@@ -125,6 +125,7 @@ When a guard condition evaluates to false, the action doesn't run. The record tr
 
 ```yaml
 - name: rewrite_response
+  dependencies: [review_response]
   guard:
     condition: "review_response.pass == false"
     on_false: skip

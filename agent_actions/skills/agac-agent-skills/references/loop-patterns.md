@@ -72,7 +72,7 @@ The aggregate tool decides pass/fail. Three common threshold approaches:
 
 **Majority (2 of 3):** Pass if at least 2 verifiers agree.
 ```python
-votes = [data[f"verify_{i}"][f"verify_{i}"]["selected_answer"] for i in [1,2,3]]
+votes = [data[f"verify_{i}"]["selected_answer"] for i in [1,2,3]]
 majority = Counter(votes).most_common(1)[0]
 answer_matches = majority[1] >= 2
 ```
@@ -84,7 +84,7 @@ answer_matches = len(set(votes)) == 1
 
 **Any failure:** Fail if any verifier flagged an issue. Use when false negatives are costly.
 ```python
-has_failures = any(data[f"verify_{i}"][f"verify_{i}"]["passed"] == False for i in [1,2,3])
+has_failures = any(data[f"verify_{i}"]["passed"] == False for i in [1,2,3])
 ```
 
 ## Sequential enrichment loop

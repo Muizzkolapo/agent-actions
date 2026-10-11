@@ -111,6 +111,7 @@ For simple, one-off prompts, use inline YAML:
 
 ```yaml
 - name: simple_validate
+  dependencies: [extract_facts]
   prompt: |
     Validate these facts: {{ extract_facts.facts }}
     Return: {"valid": true/false, "reason": "..."}

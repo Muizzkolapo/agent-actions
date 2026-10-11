@@ -174,9 +174,8 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
    first action can expand the one record into many:
    ```yaml
    - name: extract_items
-    kind: tool
-    impl: extract_items_from_wrapper
-    granularity: file
+     kind: tool
+     impl: extract_items_from_wrapper   # returns a list: one row per item
    ```
 
 ---

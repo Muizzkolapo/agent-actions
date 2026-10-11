@@ -95,6 +95,7 @@ Guards evaluate upstream field values the same way regardless of JSON mode:
 
 ```yaml
   - name: draft_response
+    dependencies: [classify_issue]
     output_field: suggested_response
     guard:
       condition: 'classify_issue.severity != "low"'  # Skip for low-severity → save tokens
@@ -107,6 +108,7 @@ Progressive context narrowing applies identically. Later actions can observe spe
 
 ```yaml
   - name: draft_response
+    dependencies: [classify_issue, summarize_issue]
     context_scope:
       observe:
         - classify_issue.issue_type    # See the classified type

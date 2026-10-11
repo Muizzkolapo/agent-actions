@@ -93,10 +93,10 @@ flowchart LR
     observe: [generate_alternative.*]
 ```
 
-The merge tool receives double-nested data:
+The merge tool reads each version under its own name:
 ```python
-alt_1 = data["generate_alternative_1"]["generate_alternative_1"]["alternative_code"]
-alt_2 = data["generate_alternative_2"]["generate_alternative_2"]["alternative_code"]
+alt_1 = data["generate_alternative_1"]["alternative_code"]
+alt_2 = data["generate_alternative_2"]["alternative_code"]
 ```
 
 ## Selection action design

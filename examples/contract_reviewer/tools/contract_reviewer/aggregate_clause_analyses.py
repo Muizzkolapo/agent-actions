@@ -17,45 +17,39 @@ from agent_actions.config.types import Granularity
 @udf_tool(granularity=Granularity.FILE)
 def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     """
-    Combine clause-level risk analyses into a single contract risk report.
+    Combine clause-level risk analyses into one risk report per contract.
 
-    Input (list of records, each with analyze_clause fields):
-        - clause_number, clause_title (from passthrough)
-        - risk_level, risk_score, risk_indicators, obligations, deadlines
-        - recommended_action, reasoning
-        - contract_id, title, parties (from passthrough)
+    Input (one item per clause, holding the observed fields as flat keys):
+        - risk_level, risk_score, risk_indicators, obligations, deadlines,
+          recommended_action, reasoning (bare: the one wildcard, analyze_clause.*)
+        - split_into_clauses.clause_number, split_into_clauses.clause_title
+        - source.contract_id, source.title, source.parties
 
-    Output (single record):
+    Output (one record per contract in the file):
         - overall_risk_level, overall_risk_score, risk_distribution
         - high_risk_clauses, total_obligations, key_deadlines
         - negotiation_priority
     """
-    if not data:
-        return FileUDFResult(
-            outputs=[
-                {
-                    "source_index": None,
-                    "data": {
-                        "contract_id": "unknown",
-                        "contract_title": "unknown",
-                        "overall_risk_level": "low",
-                        "overall_risk_score": 0.0,
-                        "total_clauses_analyzed": 0,
-                        "risk_distribution": {"high": 0, "medium": 0, "low": 0},
-                        "high_risk_clauses": [],
-                        "total_obligations": [],
-                        "key_deadlines": [],
-                        "negotiation_priority": [],
-                    },
-                }
-            ]
-        )
+    # A file may hold several contracts: group each clause's position by its contract
+    by_contract: dict[str, list[int]] = {}
+    for position, record in enumerate(data):
+        by_contract.setdefault(record.get("source.contract_id", "unknown"), []).append(position)
 
-    # Extract contract metadata from the first record's source namespace
-    first_source = data[0].get("source", {})
-    contract_id = first_source.get("contract_id", "unknown")
-    contract_title = first_source.get("title", "unknown")
-    parties = first_source.get("parties", [])
+    # source_index lists the clauses a report was built from (many inputs, one output)
+    return FileUDFResult(
+        outputs=[
+            {"source_index": positions, "data": _risk_report([data[p] for p in positions])}
+            for positions in by_contract.values()
+        ]
+    )
+
+
+def _risk_report(data: list[dict[str, Any]]) -> dict[str, Any]:
+    """The risk report of one contract's clauses."""
+    # Every clause of a contract carries the same contract metadata
+    contract_id = data[0].get("source.contract_id", "unknown")
+    contract_title = data[0].get("source.title", "unknown")
+    parties = data[0].get("source.parties", [])
 
     # Collect analyses from all clause records
     risk_counts = {"high": 0, "medium": 0, "low": 0}
@@ -66,13 +60,10 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     negotiation_items: list[dict[str, Any]] = []
 
     for record in data:
-        analysis = record.get("analyze_clause", {})
-        clause_meta = record.get("split_into_clauses", {})
-
-        risk_level = analysis.get("risk_level", "low")
-        risk_score = analysis.get("risk_score", 0.0)
-        clause_number = clause_meta.get("clause_number", 0)
-        clause_title = clause_meta.get("clause_title", "Unknown")
+        risk_level = record.get("risk_level", "low")
+        risk_score = record.get("risk_score", 0.0)
+        clause_number = record.get("split_into_clauses.clause_number", 0)
+        clause_title = record.get("split_into_clauses.clause_title", "Unknown")
 
         # Count risk levels
         if risk_level in risk_counts:
@@ -86,14 +77,14 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
                     "clause_number": clause_number,
                     "clause_title": clause_title,
                     "risk_score": risk_score,
-                    "risk_indicators": analysis.get("risk_indicators", []),
-                    "recommended_action": analysis.get("recommended_action", "flag_for_legal"),
-                    "reasoning": analysis.get("reasoning", ""),
+                    "risk_indicators": record.get("risk_indicators", []),
+                    "recommended_action": record.get("recommended_action", "flag_for_legal"),
+                    "reasoning": record.get("reasoning", ""),
                 }
             )
 
         # Collect obligations with clause reference
-        for obligation in analysis.get("obligations", []):
+        for obligation in record.get("obligations", []):
             all_obligations.append(
                 {
                     "clause_number": clause_number,
@@ -103,7 +94,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
             )
 
         # Collect deadlines with clause reference
-        for deadline in analysis.get("deadlines", []):
+        for deadline in record.get("deadlines", []):
             all_deadlines.append(
                 {
                     "clause_number": clause_number,
@@ -113,7 +104,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
             )
 
         # Track items that need negotiation
-        action = analysis.get("recommended_action", "accept")
+        action = record.get("recommended_action", "accept")
         if action in ("negotiate", "reject", "flag_for_legal"):
             negotiation_items.append(
                 {
@@ -150,7 +141,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     # Sort high-risk clauses by risk score (highest first)
     high_risk_clauses.sort(key=lambda c: c.get("risk_score") or 0, reverse=True)
 
-    result = {
+    return {
         "contract_id": contract_id,
         "contract_title": contract_title,
         "parties": parties,
@@ -163,6 +154,3 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
         "key_deadlines": all_deadlines,
         "negotiation_priority": negotiation_priority,
     }
-
-    # source_index: None — synthetic aggregation record, not derived from a single input
-    return FileUDFResult(outputs=[{"source_index": None, "data": result}])
