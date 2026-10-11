@@ -322,6 +322,58 @@ class TestRunEventsMetricsEnrichment:
         assert m["filtered_count"] == 2
         assert m["skipped_count"] == 3
 
+    def _collection_event(self, action: str, file: str, **counts) -> dict:
+        return {
+            "event_type": "ResultCollectionCompleteEvent",
+            "meta": {"action_name": action},
+            "data": {"action_name": action, "target_relative_path": file, **counts},
+        }
+
+    def test_two_files_counts_are_summed_not_overwritten(self, tmp_path):
+        """Two input files for one action: the second event must add to the
+        first's counts, not replace them (1367)."""
+        events_path = tmp_path / "events.json"
+        self._write_events(
+            events_path,
+            [
+                self._collection_event("summarize", "pages1.json", total_success=1),
+                self._collection_event("summarize", "pages2.json", total_success=2),
+            ],
+        )
+        m = extract_run_events(events_path).action_metrics["summarize"]
+        assert m["success_count"] == 3
+
+    def test_a_batch_guard_skip_counts_as_skipped(self, tmp_path):
+        """A batch guard skip is collected as unprocessed, not skipped; it must
+        still read as skipped in the catalog (1367)."""
+        events_path = tmp_path / "events.json"
+        self._write_events(
+            events_path,
+            [
+                self._collection_event(
+                    "summarize", "pages1.json", total_success=1, total_guard_skipped=1
+                ),
+                self._collection_event("summarize", "pages2.json", total_success=2),
+            ],
+        )
+        m = extract_run_events(events_path).action_metrics["summarize"]
+        assert m["success_count"] == 3
+        assert m["skipped_count"] == 1
+
+    def test_the_same_file_collected_twice_is_not_double_counted(self, tmp_path):
+        """A later event for a file already counted replaces it, since a batch
+        collect run can re-fire for the same file (1367)."""
+        events_path = tmp_path / "events.json"
+        self._write_events(
+            events_path,
+            [
+                self._collection_event("summarize", "pages1.json", total_success=1),
+                self._collection_event("summarize", "pages1.json", total_success=1),
+            ],
+        )
+        m = extract_run_events(events_path).action_metrics["summarize"]
+        assert m["success_count"] == 1
+
     def test_cache_miss_events_counted(self, tmp_path):
         """CacheMissEvent increments cache_miss_count per action."""
         events_path = tmp_path / "events.json"
