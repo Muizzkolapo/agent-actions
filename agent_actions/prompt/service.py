@@ -377,12 +377,18 @@ class PromptPreparationService:
                         )
                     )
                 else:
+                    owners = [
+                        ns
+                        for ns, fields in namespace_context.items()
+                        if any(f.split(".", 1)[0] == var for f in fields)
+                    ]
                     fire_event(
                         ContextFieldNotFoundEvent(
                             action_name=agent_name or "",
                             field_ref=var,
                             namespace="",
                             available_fields=list(namespace_context.keys()),
+                            defined_in=owners,
                         )
                     )
 
