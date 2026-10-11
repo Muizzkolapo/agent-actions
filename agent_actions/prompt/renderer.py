@@ -217,6 +217,7 @@ class ConfigRenderingService:
 
     def _build_agent_entry_from_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Build agent entry dictionary from action configuration."""
+        is_hitl = str(action.get("kind", "")).lower() == "hitl"
         agent_entry = {
             "agent_type": action.get("name", "unknown"),
             "name": action.get("name"),
@@ -224,7 +225,10 @@ class ConfigRenderingService:
             "model_name": action.get("model_name", get_default("model_name")),
             "is_operational": get_default("is_operational"),
             "dependencies": [],
-            "granularity": action.get("granularity", get_default("granularity")),
+            # A HITL review sees the whole dataset in one step, so it defaults to FILE.
+            "granularity": action.get(
+                "granularity", "file" if is_hitl else get_default("granularity")
+            ),
             "run_mode": get_default("run_mode"),
             "json_mode": action.get("json_mode", get_default("json_mode")),
         }

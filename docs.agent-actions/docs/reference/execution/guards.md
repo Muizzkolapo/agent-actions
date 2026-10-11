@@ -148,7 +148,8 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 A guard gates the action before it receives anything, so it reads the record **as stored** —
 every namespace the record carries, addressed as `action_name.field`. A record carries the
 actions upstream of it through `dependencies`, so a clause names only those: preflight refuses
-a guard that names an action running beside or after its own, or one on a parallel branch.
+a guard that names an action running beside or after its own, one on a parallel branch, or its own
+action: the guard runs before the action, so the action's output is not yet on the record.
 
 | Source | Syntax |
 |--------|--------|

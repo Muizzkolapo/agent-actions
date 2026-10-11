@@ -346,6 +346,7 @@ class ContextFieldNotFoundEvent(BaseEvent):
     field_ref: str = ""
     namespace: str = ""
     available_fields: list[str] = field(default_factory=list)
+    defined_in: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
@@ -353,11 +354,19 @@ class ContextFieldNotFoundEvent(BaseEvent):
         available_str = ", ".join(self.available_fields[:5])
         if len(self.available_fields) > 5:
             available_str += f"... (+{len(self.available_fields) - 5} more)"
-        if not self.namespace:
+        if not self.namespace and self.defined_in:
+            written = " or ".join(f"'{ns}.{self.field_ref}'" for ns in self.defined_in)
             self.message = (
                 f"[{self.action_name}] Namespace '{self.field_ref}' not found in context. "
-                f"Available namespaces: {available_str}. "
-                f"Add to context_scope.observe."
+                f"It is a field of {', '.join(self.defined_in)}: write {written}."
+            )
+        elif not self.namespace:
+            self.message = (
+                f"[{self.action_name}] Namespace '{self.field_ref}' not found in context. "
+                f"Available namespaces: {available_str}. A prompt reads those namespaces "
+                f"and the names it sets itself; nothing supplies '{self.field_ref}'. "
+                f"To read an upstream action's output, add one of its fields "
+                f"(action.field) to context_scope.observe."
             )
         else:
             self.message = (
@@ -369,6 +378,7 @@ class ContextFieldNotFoundEvent(BaseEvent):
             "field_ref": self.field_ref,
             "namespace": self.namespace,
             "available_fields": self.available_fields,
+            "defined_in": self.defined_in,
         }
 
     @property
