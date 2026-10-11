@@ -205,10 +205,15 @@ class LoadRender:
     # ── the render ─────────────────────────────────────────────────────────
 
     def render(self, source: str, origin: str) -> str:
-        template = self.env.from_string(self.wrap(source, origin))
+        wrapped = self.wrap(source, origin)
+        template = self.env.from_string(wrapped)
+        # Jinja drops one final newline from a source; for a block scalar that ends the
+        # file it is the value's own line break. Restored here, not by the environment:
+        # that would change what every include of a templates/ file joins.
+        final_newline = "\n" if wrapped.endswith("\n") else ""
         while True:
             try:
-                return template.render()
+                return template.render() + final_newline
             except jinja2.UndefinedError as e:
                 name = self._read_by_a_prompt(e)
                 if name is None:
