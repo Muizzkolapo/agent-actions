@@ -6,11 +6,14 @@ but of a record: `source`, an upstream action and `i` do not exist at load.
 
 Every `prompt:` value of the file and of templates/, and every other value that names a
 version variable, is wrapped in a tag that sees exactly what Jinja has bound where the load
-reaches it. A value whose names are all bound renders at load as it always has. A prompt
-reading a name only a record supplies is left whole for the per-record render: its own
-top-level `{{ }}` tags that need only load-time names render into it, and the load-time
-data its other tags read is set at its top. A value reading a version variable renders once
-per version, when its action expands.
+reaches it, in block or flow style, on its key's line or below it. A value whose names are
+all bound renders at load as it always has. A prompt reading a name only a record supplies
+is left whole for the per-record render: its own top-level `{{ }}` tags that read load-time
+names and nothing else render into it, and the load-time data its other tags read is set at
+its top. A value reading a version variable renders once per version, when its action
+expands. A name a prompt reads that the load finds undefined may be an action the file
+names by a tag; the file is rendered again keeping that prompt for the record, and the load
+fails once the file is parsed if no action has that name.
 
 Every name the load looks up and does not find is recorded, and the load fails when a
 record or a version supplies it, so nothing they decide is decided at load.
