@@ -172,7 +172,7 @@ class AgentActionsFormatter:
 
     def _format_batch_submitted(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        batch_id = event.data.get("batch_id", "")[:8]  # Truncate ID
+        batch_id = event.data.get("batch_id", "")
         count = event.data.get("request_count", 0)
         provider = event.data.get("provider", "")
 
@@ -180,7 +180,7 @@ class AgentActionsFormatter:
 
     def _format_batch_complete(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        batch_id = event.data.get("batch_id", "")[:8]
+        batch_id = event.data.get("batch_id", "")
         elapsed = event.data.get("elapsed_time", 0.0)
         failed = event.data.get("failed", 0)
 
