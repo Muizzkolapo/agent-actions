@@ -1,8 +1,10 @@
 kind: Breaking Change
 body: >-
-  A `BETWEEN` or `NOT BETWEEN` that cannot test a range is now refused when the condition is
-  parsed, so pre-flight stops the run. A range written as one value, or as a list that is not
-  two values (`x BETWEEN 50`, `x BETWEEN [1, 2, 3]`), used to be accepted in a guard and in an
+  A `BETWEEN` or `NOT BETWEEN` whose range is not two numbers or two strings is now refused
+  when the condition is parsed, so pre-flight stops the run. A range written as one value, as
+  a list that is not two values, with `NULL` or a boolean for an end, with ends of two types,
+  or as a parenthesised clause (`x BETWEEN 50`, `x BETWEEN [1, 2, 3]`, `x BETWEEN [50, NULL]`,
+  `x BETWEEN ["a", 5]`, `x BETWEEN (50 AND 100)`) used to be accepted in a guard and in an
   `expression` expectation, and was false for every record. In an `expression` expectation,
   an `a AND b` range whose ends are fields (`score BETWEEN low AND high`) was accepted and
   false for every record as well; it is now refused, and is written

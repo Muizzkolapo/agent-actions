@@ -17,6 +17,7 @@ try:
         ParseException,
         ParseFatalException,
         ParserElement,
+        ParseResults,
         QuotedString,
         Regex,
         Suppress,
@@ -66,15 +67,32 @@ for _key in _OPERATOR_LOOKUP:
 
 _RANGE_OPERATORS = (ComparisonOperator.BETWEEN, ComparisonOperator.NOT_BETWEEN)
 _RANGE_REFUSAL = (
-    "BETWEEN takes a range of two literal values: write `x BETWEEN a AND b` or `x BETWEEN [a, b]`"
+    "BETWEEN takes a range of two numbers or two strings: "
+    "write `x BETWEEN a AND b` or `x BETWEEN [a, b]`"
 )
 
 
+def _bounds_a_value(end: Any) -> str | None:
+    """The family a range end orders values in; a boolean or NULL end orders nothing."""
+    if isinstance(end, bool):
+        return None
+    if isinstance(end, int | float):
+        return "number"
+    return "string" if isinstance(end, str) else None
+
+
 def _is_not_a_range(operand: ASTNode) -> bool:
-    """Whether a literal can never be a range. A field may hold one, so it is left to the record."""
-    return isinstance(operand, LiteralNode) and not (
-        isinstance(operand.value, list) and len(operand.value) == 2
-    )
+    """Whether an operand can never be a range. A field may hold one, so it is left to the record."""
+    if isinstance(operand, FieldNode):
+        return False
+    if not (
+        isinstance(operand, LiteralNode)
+        and isinstance(operand.value, list)
+        and len(operand.value) == 2
+    ):
+        return True
+    low, high = (_bounds_a_value(end) for end in operand.value)
+    return low is None or low != high
 
 
 @dataclass
@@ -183,12 +201,6 @@ class WhereClauseParser:
         comparison_ops = self._build_comparison_operators()
         unary_postfix_ops = self._build_unary_postfix_operators()
 
-        unary_level = (
-            [(unary_postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison)]
-            if unary_postfix_ops
-            else []
-        )
-
         # `x BETWEEN a AND b` is read whole, as a suffix of `x`, above the AND
         # level. A bound is any operand but an array, so `x BETWEEN [a, b] AND y`
         # still reads as the list form beside a second condition.
@@ -200,13 +212,13 @@ class WhereClauseParser:
             + Suppress(CaselessKeyword("AND"))
             + range_bound
         )
+        postfix_ops = unary_postfix_ops | range_suffix if unary_postfix_ops else range_suffix
 
         where_expr = infix_notation(
             operand,
             [
                 (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
-                *unary_level,
-                (range_suffix, 1, OpAssoc.LEFT, self._parse_between_range),
+                (postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison),
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
@@ -304,16 +316,16 @@ class WhereClauseParser:
         operand = tokens[0][1]  # Skip the NOT keyword
         return LogicalNode(LogicalOperator.NOT, operand)
 
-    def _parse_between_range(self, tokens):
+    def _range_comparison(self, left: ASTNode, suffix: ParseResults) -> ComparisonNode:
         """Build `x [NOT] BETWEEN a AND b` as the comparison the list form builds."""
-        result = tokens[0][0]
-        for suffix in tokens[0][1:]:
-            *negation, _between, low, high = suffix
-            if not (isinstance(low, LiteralNode) and isinstance(high, LiteralNode)):
-                raise ParseFatalException(_RANGE_REFUSAL)
-            operator = ComparisonOperator.NOT_BETWEEN if negation else ComparisonOperator.BETWEEN
-            result = ComparisonNode(result, operator, LiteralNode([low.value, high.value]))
-        return result
+        *negation, _between, low, high = suffix
+        if not (isinstance(low, LiteralNode) and isinstance(high, LiteralNode)):
+            raise ParseFatalException(_RANGE_REFUSAL)
+        literal_range = LiteralNode([low.value, high.value])
+        if _is_not_a_range(literal_range):
+            raise ParseFatalException(_RANGE_REFUSAL)
+        operator = ComparisonOperator.NOT_BETWEEN if negation else ComparisonOperator.BETWEEN
+        return ComparisonNode(left, operator, literal_range)
 
     def _parse_comparison(self, tokens):
         """Parse comparison operations with unified operator lookup."""
@@ -323,6 +335,10 @@ class WhereClauseParser:
         i = 1
         while i < len(items):
             raw_token = items[i]
+            if isinstance(raw_token, ParseResults):
+                result = self._range_comparison(result, raw_token)
+                i += 1
+                continue
             operator_key = raw_token.upper() if isinstance(raw_token, str) else str(raw_token)
             consumed = 1
 
