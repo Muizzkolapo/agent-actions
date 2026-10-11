@@ -285,31 +285,28 @@ actions:
       observe:
         - score_quality.*
         # score_quality only produces overall_score/dimension_scores/improvement_suggestions/
-        # ready_for_publication; these fields reached it only via context_scope.passthrough
-        # from an action score_quality does not itself passthrough as source, so they never
-        # land in score_quality's own output. Read straight from where each is produced.
-        - write_description.isbn
-        - write_description.title
-        - write_description.authors
-        - write_description.publisher
-        - write_description.publish_year
-        - write_description.page_count
-        - write_description.marketing_description
-        - write_description.hook_sentence
-        - write_description.key_benefits
-        - write_description.target_audience
-        - validate_bisac.bisac_codes
-        - validate_bisac.bisac_names
-        - generate_seo.primary_keywords
-        - generate_seo.long_tail_keywords
-        - generate_seo.meta_title
-        - generate_seo.meta_description
-        - generate_recommendations.similar_books
-        - generate_recommendations.reading_path
-        - assess_reading_level.reading_level
-        - assess_reading_level.years_experience_needed
-        - assess_reading_level.prerequisites
-        - assess_reading_level.estimated_reading_time
+        # ready_for_publication; the rest reached it only via context_scope.passthrough from
+        # an action score_quality does not itself passthrough as source, so they never land
+        # in score_quality's own output. Read straight from where each is produced instead --
+        # as a wildcard, not individually: a named-but-optional field a producer's schema does
+        # not guarantee (none of write_description/generate_seo/generate_recommendations/
+        # assess_reading_level mark these required) is refused at runtime if that one run's
+        # output happens to omit it; a wildcard observe has no such guarantee to enforce.
+        - write_description.*
+        - validate_bisac.*
+        - generate_seo.*
+        - generate_recommendations.*
+        - assess_reading_level.*
+        # isbn/title/authors/publisher/publish_year/page_count never land in
+        # write_description's own output either -- passthrough fills a sibling namespace,
+        # never the declaring action's own -- and its prompt never asks the LLM for them, so
+        # they come from source directly, which always has them.
+        - source.isbn
+        - source.title
+        - source.authors
+        - source.publisher
+        - source.publish_year
+        - source.page_count
 
   # ============================================================================
   # STEP 10: FILTER BY QUALITY

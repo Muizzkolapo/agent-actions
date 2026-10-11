@@ -166,6 +166,7 @@ actions:
     context_scope:
       observe:
         - write_marketing_copy.*
+        - normalize_product.brand
         - seed.marketplace_rules
 
   # ══════════════════════════════════════════════════════════════════════════

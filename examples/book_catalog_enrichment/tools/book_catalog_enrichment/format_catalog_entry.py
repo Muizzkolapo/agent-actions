@@ -13,17 +13,21 @@ def format_catalog_entry(data: dict) -> dict:
     generate_recommendations = data.get("generate_recommendations", {})
     assess_reading_level = data.get("assess_reading_level", {})
     score_quality = data.get("score_quality", {})
+    # write_description's own output never carries these -- its prompt only asks for
+    # marketing_description/hook_sentence/key_benefits/target_audience -- so they are
+    # read from source, which always has them.
+    source = data.get("source", {})
 
     enriched_fields = []
 
     entry = {
-        "isbn": write_description.get("isbn", ""),
-        "catalog_id": f"CAT-{write_description.get('isbn', 'UNKNOWN')[-6:]}",
-        "title": write_description.get("title", ""),
-        "authors": write_description.get("authors", []),
-        "publisher": write_description.get("publisher", ""),
-        "publish_year": write_description.get("publish_year", 0),
-        "page_count": write_description.get("page_count", 0),
+        "isbn": source.get("isbn", ""),
+        "catalog_id": f"CAT-{source.get('isbn', 'UNKNOWN')[-6:]}",
+        "title": source.get("title", ""),
+        "authors": source.get("authors", []),
+        "publisher": source.get("publisher", ""),
+        "publish_year": source.get("publish_year", 0),
+        "page_count": source.get("page_count", 0),
     }
 
     # Classification
@@ -50,7 +54,7 @@ def format_catalog_entry(data: dict) -> dict:
     primary_kw = generate_seo.get("primary_keywords", [])
     long_tail_kw = generate_seo.get("long_tail_keywords", [])
     entry["seo_keywords"] = primary_kw + long_tail_kw
-    entry["meta_title"] = generate_seo.get("meta_title", write_description.get("title", ""))
+    entry["meta_title"] = generate_seo.get("meta_title", source.get("title", ""))
     entry["meta_description"] = generate_seo.get("meta_description", "")
     if primary_kw:
         enriched_fields.append("seo_keywords")

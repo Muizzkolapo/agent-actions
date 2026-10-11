@@ -240,7 +240,7 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
                 break  # one violation per category is enough
 
     # --- Brand name in title check ---
-    brand = data.get("brand", "") or write_marketing_copy.get("brand", "")
+    brand = data.get("normalize_product", {}).get("brand", "")
     if brand and brand.lower() not in listing_title.lower():
         all_passed = False
         violations.append(f"Title must include brand name '{brand}'")
