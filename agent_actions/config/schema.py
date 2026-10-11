@@ -64,22 +64,22 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
 # Version fan-out puts each version in the dependency graph as its own action, so
 # what order they run in is the graph's answer and no key can change it.
 _VERSION_ORDER_HINT = (
-    "version fan-out is always parallel and there is no per-action ordering; to run a "
-    "whole workflow one action at a time use --execution-mode sequential, and to cap how "
-    "many run at once use --concurrency-limit"
+    "version fan-out runs in parallel and orders nothing per action; ordering is set for "
+    "the whole workflow: --execution-mode sequential runs one action at a time and "
+    "--concurrency-limit caps how many run at once"
 )
 
 # Both shapes the retired block took have a spelling under `expect:`, so a reader told
 # only to remove the key loses the behaviour they were asking for.
 _EXPECT_REPLACES_REPROMPT = (
-    "the expect: block does this now, and both shapes have a spelling there: one that "
-    "only checked the schema becomes expect: {repair: auto}, and one naming a "
-    "validation: function becomes a rule list, e.g. "
-    "expect: {expectations: [{type: no_null_fields}]}"
+    "schema checking and retry live in the expect: block: a check of the output against "
+    "the schema is written expect: {repair: auto}, and one naming a validation: function "
+    "is a rule list, e.g. expect: {expectations: [{type: no_null_fields}]}"
 )
 _EXPECT_REPLACES_SCHEMA_MISMATCH = (
-    "the expect: block does this now: reprompt becomes expect: {repair: auto}, and "
-    "reject becomes expect: {max_iterations: 1, on_exhausted: raise}"
+    "schema mismatch handling lives in the expect: block: expect: {repair: auto} "
+    "regenerates the output, and expect: {max_iterations: 1, on_exhausted: raise} halts "
+    "on the first mismatch"
 )
 
 # Grouping is still reachable, so a reader told only to remove the key loses it.
