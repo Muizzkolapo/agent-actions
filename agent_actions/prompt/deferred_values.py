@@ -215,8 +215,8 @@ class LoadRender:
                     raise
                 # An action named by a tag, `name: {{ n }}`, is known only once the file
                 # is parsed, so the prompts reading it are rendered again for the record.
+                # What was left is kept: the templates/ globals hold tokens naming it.
                 self._assumed[name] = e
-                self._left.clear()
                 self._missed.clear()
 
     def wrap(self, source: str, origin: str) -> str:
