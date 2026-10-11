@@ -65,7 +65,13 @@ class ErrorTranslator:
         for formatter in self.formatters:
             if formatter.can_handle(exc, root_cause, root_message):
                 logger.debug("Using formatter: %s", type(formatter).__name__)
-                return formatter.format(exc, root_cause, root_message, merged_context)
+                user_error = formatter.format(exc, root_cause, root_message, merged_context)
+                # The formatters write a fixed Fix line; an error that carries its own
+                # remedy has said more than they can.
+                hint = merged_context.get("hint")
+                if isinstance(hint, str) and hint.strip():
+                    user_error.fix = hint
+                return user_error
 
         # Unreachable: formatters is non-empty and GenericErrorFormatter always matches.
         raise AssertionError("No formatter matched — formatters chain is misconfigured")

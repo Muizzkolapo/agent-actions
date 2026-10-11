@@ -31,8 +31,7 @@ class GenericErrorFormatter(ErrorFormatter):
             category="Operation Failed",
             title=title,
             details=details,
-            fix=context.get("hint")
-            or "Check your configuration and try again. "
+            fix="Check your configuration and try again. "
             "Run with --verbose for the full traceback, "
             "or check logs/events.json for details.",
             context=context,
