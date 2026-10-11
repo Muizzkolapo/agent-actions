@@ -23,8 +23,8 @@ BASE_DEFAULTS = {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"
 GUIDANCE = (
     "is no longer read",
     "configures nothing",
-    "always parallel",
     "--execution-mode sequential",
+    "--concurrency-limit",
 )
 
 
