@@ -1,20 +1,10 @@
 """An example's tool reads the input the run hands it, not a default (1385, 1391).
 
-The contract_reviewer FILE tool read each record's fields under their action's name,
-and the incident_triage record tools read theirs bare. Neither shape is what a tool
-is handed, every `.get` fell to its default, and the run still reported success: one
-contract "unknown" with every clause low, and every incident SEV3, then "Unknown".
-
-1391 found the same defect in the remaining examples: book_catalog_enrichment's
-validate_bisac_codes, search_book_catalog, format_catalog_entry, filter_by_quality
-and select_for_users, and product_listing_enrichment's fetch_competitor_prices and
-format_marketplace_listing. format_catalog_entry and format_marketplace_listing also
-needed a config fix: both named a field in context_scope.passthrough from an action
-they did not themselves observe. A passthrough only re-exposes a namespace the
-declaring action already has in its own input; it never retroactively reaches into
-an action's output that was never put there, so the field was unreachable under any
-key, bare or namespaced. The fix observes the field directly from where it is
-produced.
+1391 is the same shape-mismatch defect 1385 fixed in contract_reviewer and
+incident_triage, now in the remaining example tools. Two of them also needed an
+observe fix, not just a read fix: context_scope.passthrough only re-exposes a
+namespace the declaring action already has in its own input, so a field declared
+there from an action never otherwise observed was unreachable under any key.
 """
 
 from __future__ import annotations
