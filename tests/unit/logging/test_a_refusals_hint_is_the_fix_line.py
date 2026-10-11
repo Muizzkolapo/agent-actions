@@ -1,12 +1,12 @@
-"""An error that carries a hint prints it as the Fix line, whichever formatter renders it (1295).
+"""A refusal that carries a hint prints it as the Fix line (1295).
 
-The formatters each wrote a fixed Fix line of their own and none read `context['hint']`,
-so a refusal's remedy was shown nowhere.
+The formatters' catch-all Fix lines are fixed text and none read `context['hint']`, so a
+refusal's remedy was shown nowhere. A formatter's own specific Fix still stands.
 """
 
 import pytest
 
-from agent_actions.errors import PreFlightValidationError, VendorConfigError
+from agent_actions.errors import ConfigurationError, PreFlightValidationError, VendorConfigError
 from agent_actions.logging.errors import format_user_error
 
 GENERIC = "Check your configuration and try again"
@@ -56,3 +56,15 @@ def test_the_title_does_not_repeat_the_cli_error_prefix():
     shown = format_user_error(PreFlightValidationError("late: reads 'final'"))
 
     assert not shown.startswith("Error:")
+
+
+def test_a_formatters_own_specific_fix_stands_over_a_hint():
+    """The missing-variable formatter says where to set it; its error's hint is a one-liner."""
+    error = ConfigurationError(
+        "Environment variable 'FOO_KEY' is not set",
+        context={"env_var": "FOO_KEY", "hint": "Set the environment variable: export FOO_KEY=x"},
+    )
+
+    fix = format_user_error(error)
+
+    assert ".env file" in fix
