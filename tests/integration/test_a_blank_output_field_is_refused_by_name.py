@@ -42,12 +42,16 @@ actions:
 """
 
 
-def _project(base: Path, defaults_line: str = "", action_line: str = "") -> Path:
+def _project(
+    base: Path, defaults_line: str = "", action_line: str = "", project_line: str = ""
+) -> Path:
     root = base / "project"
     workflow = root / "agent_workflow" / WORKFLOW
     (workflow / "agent_config").mkdir(parents=True)
     (workflow / "agent_io" / "staging").mkdir(parents=True)
-    (root / "agent_actions.yml").write_text("default_agent_config: {model_name: gpt-4o-mini}\n")
+    (root / "agent_actions.yml").write_text(
+        "default_agent_config:\n  model_name: gpt-4o-mini\n" + project_line
+    )
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(_config(defaults_line, action_line))
     (workflow / "agent_io" / "staging" / "rows.json").write_text(
         json.dumps([{"text": "one"}, {"text": "two"}])
@@ -60,16 +64,17 @@ def _run(root: Path):
 
 
 @pytest.mark.parametrize(
-    "where, defaults_line, action_line",
+    "defaults_line, action_line, project_line",
     [
-        ("defaults", "  output_field:", ""),
-        ("action", "", "    output_field:"),
+        pytest.param("  output_field:", "", "", id="defaults"),
+        pytest.param("", "    output_field:", "", id="action"),
+        pytest.param("", "", "  output_field:\n", id="project"),
     ],
 )
 def test_a_blank_output_field_is_refused_naming_the_key(
-    tmp_path, where, defaults_line, action_line
+    tmp_path, defaults_line, action_line, project_line
 ):
-    result = _run(_project(tmp_path, defaults_line, action_line))
+    result = _run(_project(tmp_path, defaults_line, action_line, project_line))
 
     output = result.stdout + result.stderr
     assert result.returncode != 0, output
