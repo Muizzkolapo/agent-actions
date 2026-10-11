@@ -9,8 +9,9 @@ body: >-
   reset an action nobody had touched and sent every record to the model again. The prompt
   is now what it is wherever it sits in the file, including a prompt that reads a field
   of the record or of an upstream action, which is rendered for each record from the text
-  the load kept. A completed action whose block prompt
-  ends its workflow file is re-run once on the first run after upgrading, because its
-  stored hash was taken over the prompt without the newline. An include of a `templates/`
-  file joins what follows it as before.
+  the load kept. A completed action whose block prompt ends its workflow file, or ends a
+  `templates/` file that the workflow includes, is re-run once on the first run after
+  upgrading, because its stored hash was taken over the prompt without the newline. A tag
+  at the end of the file that strips what follows it (`-%}`) still does, and an include
+  of a `templates/` file joins what follows it as before.
 time: 2026-10-11T10:30:00Z

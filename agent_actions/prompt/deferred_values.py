@@ -68,6 +68,9 @@ _FLOW_KEY = re.compile(
     r"([A-Za-z_][A-Za-z0-9_.-]*|\"[^\"\n]*\"|'[^'\n]*')[ \t]*:(?=[ \t\n,\[\]{}]|$)"
 )
 _BLOCK_HEADER = re.compile(r"[ \t]+[|>][-+1-9]*[ \t]*(#.*)?\Z")
+# A last tag whose whitespace control strips everything after it, the final newline too.
+_STRIPS_AFTER = re.compile(r"-(?:\}\}|%\}|#\})\s*\Z")
+
 _NAMED = re.compile(
     r"^[ \t]*(?:-[ \t]+)*(name|param)[ \t]*:[ \t]*[\"']?([A-Za-z_][\w-]*)[\"']?[ \t]*(?:#.*)?$",
     re.M,
@@ -207,10 +210,11 @@ class LoadRender:
     def render(self, source: str, origin: str) -> str:
         wrapped = self.wrap(source, origin)
         template = self.env.from_string(wrapped)
-        # Jinja drops one final newline from a source; for a block scalar that ends the
-        # file it is the value's own line break. Restored here, not by the environment:
-        # that would change what every include of a templates/ file joins.
-        final_newline = "\n" if wrapped.endswith("\n") else ""
+        # Jinja drops a source's final newline, which for a block scalar ending the file is
+        # its own line break. Restored here, not on the environment, which would change
+        # every include of a templates/ file; a last tag that strips (`-%}`) keeps that.
+        keeps = wrapped.endswith("\n") and not _STRIPS_AFTER.search(wrapped)
+        final_newline = "\n" if keeps else ""
         while True:
             try:
                 return template.render() + final_newline
