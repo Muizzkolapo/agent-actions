@@ -12,6 +12,7 @@ Every project-level case is a real `agac run` through the CLI and the mock provi
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -125,6 +126,22 @@ def test_a_failure_of_another_action_is_not_taken_for_this_ones():
     assert len(_failures(record, ACTION)) == 1
 
 
+def test_a_failure_after_a_reset_is_recorded_again():
+    """A failed record reset to active and failed again has two failures to show."""
+    history = [
+        {"timestamp": "t", "action": ACTION, "from": None, "to": "failed", "reason": "r"},
+        {"timestamp": "t", "action": ACTION, "from": "failed", "to": "active", "reason": "reset"},
+    ]
+    result = ProcessingResult.failed(error="again", source_guid="g1")
+    result.data = [
+        {"source_guid": "g1", "content": {}, "_state": "active", "_state_history": history}
+    ]
+
+    record = _collected(result)
+
+    assert _failures(record) == [(None, "failed"), ("active", "failed")]
+
+
 # 1354 -------------------------------------------------------------------
 
 SELF_GUARD = "self_guard"
@@ -185,6 +202,45 @@ def test_a_guard_on_an_upstream_field_still_runs(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_a_guard_on_an_action_whose_name_contains_its_own_still_runs(tmp_path):
+    """An exact match on the action's own name, not a prefix or a substring of it."""
+    config = _guard_config("screen.approved == true").replace("screen", "pre_decide")
+    root = _scratch_project(tmp_path, SELF_GUARD, config, ROWS)
+
+    result = _agac_run(root, SELF_GUARD)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_first_stage_guard_on_a_staging_column_named_like_its_action_still_runs(tmp_path):
+    """A first-stage record is the staging row, so `customer.tier` can resolve there."""
+    config = f"""\
+name: {SELF_GUARD}
+description: "A first-stage guard on a staging column"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  data_source: {{ type: local, folder: ./staging, file_type: [json] }}
+actions:
+  - name: customer
+    intent: "Customer"
+    prompt: "Answer."
+    schema: {{ ok: boolean }}
+    guard: {{ condition: "customer.tier == 'gold'", on_false: "filter" }}
+    context_scope: {{ observe: [source.customer] }}
+"""
+    root = _scratch_project(tmp_path, SELF_GUARD, config, [{"customer": {"tier": "gold"}}])
+
+    result = _agac_run(root, SELF_GUARD)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 # 1356 -------------------------------------------------------------------
 
 HITL = "hitl_granularity"
@@ -231,6 +287,8 @@ def test_a_hitl_action_with_no_granularity_runs(tmp_path):
     output = result.stdout + result.stderr
     assert result.returncode == 0, output
     assert "HITL actions require FILE granularity" not in output
+    # The LLM action beside it, with no granularity, still runs once per record.
+    assert re.search(r"extract_data\s+2 records", output), output
 
 
 def test_an_explicit_record_granularity_is_still_refused(tmp_path):
@@ -254,14 +312,14 @@ LATE = """\
 """
 
 
-def _with_late(project, observe):  # noqa: F811
-    config = project / "agent_workflow" / TOOL_WORKFLOW / "agent_config" / f"{TOOL_WORKFLOW}.yml"
-    config.write_text(
-        config.read_text().rstrip("\n")
-        + "\n"
-        + CHAIN
-        + LATE.replace("[flatten.summary]", f"[{observe}]")
+def _with_late(project, observe, *, dependencies="[flatten]", prompt=None):  # noqa: F811
+    late = LATE.replace("[flatten.summary]", f"[{observe}]").replace(
+        "dependencies: [flatten]", f"dependencies: {dependencies}"
     )
+    if prompt:
+        late = late.replace("Note {{ flatten.summary }} and {{ final.summary }}", prompt)
+    config = project / "agent_workflow" / TOOL_WORKFLOW / "agent_config" / f"{TOOL_WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + CHAIN + late)
 
 
 def test_the_static_checks_hint_names_the_dependency_as_well_as_the_observe(project):  # noqa: F811
@@ -272,8 +330,31 @@ def test_the_static_checks_hint_names_the_dependency_as_well_as_the_observe(proj
     assert result.exit_code == 1, result.output
     assert "namespace 'final'" in result.output
     (hint,) = [line for line in result.output.splitlines() if "Hint:" in line]
-    assert "context_scope.observe" in hint
-    assert "dependencies" in hint, hint
+    assert hint.strip() == (
+        "Hint: Add 'final.*' to context_scope.observe. 'final' is not upstream of 'late' "
+        "through its dependencies, so also add 'final', or an action downstream of it, "
+        "to 'dependencies'."
+    )
+
+
+def test_an_upstream_action_that_is_only_not_observed_keeps_the_plain_hint(project):  # noqa: F811
+    _with_late(project, "flatten.summary", dependencies="[flatten, final]")
+
+    result = _run("--fresh")
+
+    assert result.exit_code == 1, result.output
+    (hint,) = [line for line in result.output.splitlines() if "Hint:" in line]
+    assert hint.strip() == "Hint: Add 'final.*' to context_scope.observe."
+
+
+def test_a_name_that_is_no_action_keeps_the_plain_hint(project):  # noqa: F811
+    _with_late(project, "flatten.summary", prompt="Note {{ flatten.summary }} {{ nosuch.x }}")
+
+    result = _run("--fresh")
+
+    assert result.exit_code == 1, result.output
+    assert "Hint: Add 'nosuch.*' to context_scope.observe." in result.output
+    assert "to 'dependencies'" not in result.output
 
 
 # 1374 -------------------------------------------------------------------
@@ -297,6 +378,7 @@ def test_a_name_nothing_supplies_is_not_told_to_be_observed():
     assert "'verbose'" in message
     assert "Add to context_scope.observe" not in message
     assert "nothing supplies" in message
+    assert "source.verbose" not in message
 
 
 def test_a_field_of_a_namespace_in_scope_is_told_to_be_qualified():
@@ -304,3 +386,4 @@ def test_a_field_of_a_namespace_in_scope_is_told_to_be_qualified():
 
     assert "source.page_content" in message
     assert "Add to context_scope.observe" not in message
+    assert "nothing supplies" not in message
