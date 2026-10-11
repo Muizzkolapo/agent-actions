@@ -242,15 +242,18 @@ version_consumption:
 def format_incident_triage(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Format complete triage output"""
     # Build structured output
+    # Each observed action is under its own name
+    details = data.get('extract_incident_details') or {}
+    severity = data.get('aggregate_severity') or {}
+    team = data.get('assign_response_team') or {}
     result = {
-        "triage_id": data.get('source_guid'),
         "incident": {
-            "title": data.get('title'),
-            "severity": data.get('final_severity')
+            "title": details.get('title'),
+            "severity": severity.get('final_severity')
         },
         "teams": {
-            "assigned_teams": data.get('assigned_teams'),
-            "urgency_level": data.get('urgency_level')
+            "assigned_teams": team.get('assigned_teams'),
+            "urgency_level": team.get('urgency_level')
         }
     }
 
