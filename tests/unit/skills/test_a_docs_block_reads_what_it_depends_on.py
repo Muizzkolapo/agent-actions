@@ -1,16 +1,12 @@
 """A workflow the docs site shows reads only what it depends on, and its HITL actions load.
 
-Readers copy these blocks. Each is loaded as `agac run` loads it, and the loaded
-actions are put to two refusals of the pre-flight it runs: an action that names, in
-its context scope or guard, an action not upstream of it through `dependencies`, and
-an action that reads at FILE granularity with no `dependencies`. Only what a fragment
-leaves to its author is filled in: an intent, a prompt, a tool's impl and a schema.
-An action a block names without showing stands in, upstream of the ones that depend
-on it. The checks are called on their own because a fragment leaves out the
-`context_scope` and schema fields the rest of pre-flight asks for.
-
-A block the loader refuses for another reason is skipped: a page also shows
-configurations that are wrong on purpose, and YAML that is not a workflow.
+Each block is loaded as `agac run` loads it and put to two refusals of its pre-flight:
+naming an action that is not upstream through `dependencies`, and reading at FILE
+granularity with no `dependencies`. They are called on their own because a fragment
+leaves out the `context_scope` and schema fields the rest of pre-flight asks for. An
+intent, a prompt, a tool's impl and a schema are filled in, and an action a block names
+without showing stands in. A block the loader refuses for another reason is skipped:
+the pages also show configurations that are wrong on purpose, and YAML that is no workflow.
 """
 
 from __future__ import annotations
