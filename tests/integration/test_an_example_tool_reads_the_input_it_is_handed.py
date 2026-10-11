@@ -165,16 +165,20 @@ def test_catalog_search_uses_the_genres_the_search_criteria_named(monkeypatch):
 def test_the_catalog_entry_is_formatted_from_what_each_action_produced():
     module = _tool("book_catalog_enrichment", "format_catalog_entry")
     # One key per observed action; format_entry observes each producer directly
-    # rather than through score_quality's passthrough (1391).
+    # rather than through score_quality's passthrough (1391). isbn/title/authors/
+    # publisher/publish_year/page_count come from source, not write_description --
+    # write_description's own output never carries them (1391 review finding).
     result = module.format_catalog_entry(
         {
-            "write_description": {
+            "source": {
                 "isbn": "9781234567890",
                 "title": "The Great Book",
                 "authors": ["Jane Doe"],
                 "publisher": "Acme",
                 "publish_year": 2020,
                 "page_count": 300,
+            },
+            "write_description": {
                 "marketing_description": "x" * 120,
                 "hook_sentence": "A hook.",
                 "key_benefits": ["a", "b", "c"],
@@ -188,7 +192,7 @@ def test_the_catalog_entry_is_formatted_from_what_each_action_produced():
                 "primary_keywords": ["novel"],
                 "long_tail_keywords": ["great book"],
                 "meta_title": "The Great Book",
-                "meta_description": "meta",
+                "meta_description": "An unforgettable story.",
             },
             "generate_recommendations": {
                 "similar_books": [
@@ -206,11 +210,38 @@ def test_the_catalog_entry_is_formatted_from_what_each_action_produced():
         }
     )
     assert result["isbn"] == "9781234567890"
+    assert result["catalog_id"] == "CAT-567890"
     assert result["title"] == "The Great Book"
+    assert result["authors"] == ["Jane Doe"]
+    assert result["publisher"] == "Acme"
+    assert result["publish_year"] == 2020
+    assert result["page_count"] == 300
     assert result["primary_category"] == "Fiction / General"
+    assert result["bisac_codes"] == ["FIC000000"]
+    assert result["full_description"] == "x" * 120
+    assert result["short_description"] == "A hook."
+    assert result["key_selling_points"] == ["a", "b", "c"]
+    assert result["target_audience"] == "Readers"
+    assert result["seo_keywords"] == ["novel", "great book"]
+    assert result["meta_title"] == "The Great Book"
+    assert result["meta_description"] == "An unforgettable story."
+    assert result["similar_titles"] == [
+        {"isbn": "1", "title": "Other", "authors": ["X"], "relationship": "similar"}
+    ]
+    assert result["reading_path"] == "read this first"
+    assert result["difficulty_level"] == "Advanced"
+    assert result["experience_required"] == "5+"
+    assert result["prerequisites"] == ["basics"]
+    assert result["reading_time_hours"] == "6h"
     assert result["quality_score"] == 4.5
     assert result["publication_ready"] is True
-    assert "classification" in result["enriched_fields"]
+    assert set(result["enriched_fields"]) == {
+        "classification",
+        "marketing_description",
+        "seo_keywords",
+        "recommendations",
+        "reading_level",
+    }
 
 
 def test_quality_filter_reads_the_score_format_entry_computed():
@@ -250,36 +281,77 @@ def test_user_views_are_built_from_what_format_entry_produced():
                 "experience_required": "5+",
                 "prerequisites": ["basics"],
                 "reading_time_hours": "6h",
-                "similar_titles": [],
+                "similar_titles": [
+                    {"isbn": "1", "title": "Other", "authors": ["X"], "relationship": "similar"}
+                ],
                 "reading_path": "read this first",
                 "meta_title": "The Great Book",
-                "meta_description": "meta",
-                "seo_keywords": ["novel"],
-                "full_description": "desc",
-                "short_description": "hook",
-                "key_selling_points": ["a"],
+                "meta_description": "An unforgettable story.",
+                "seo_keywords": ["novel", "great book"],
+                "full_description": "A long description.",
+                "short_description": "A hook.",
+                "key_selling_points": ["a", "b", "c"],
             },
         }
     )
     assert result["isbn"] == "9781234567890"
-    assert result["seo_view"]["title"] == "The Great Book"
-    assert result["management_view"]["filter_reason"] == "Passed all quality checks"
-    assert result["developer_view"]["difficulty_level"] == "Advanced"
+    assert result["title"] == "The Great Book"
+    assert result["seo_view"] == {
+        "isbn": "9781234567890",
+        "title": "The Great Book",
+        "meta_title": "The Great Book",
+        "meta_description": "An unforgettable story.",
+        "seo_keywords": ["novel", "great book"],
+        "target_audience": "Readers",
+        "marketing_description": "A long description.",
+        "hook_sentence": "A hook.",
+        "key_selling_points": ["a", "b", "c"],
+    }
+    assert result["management_view"] == {
+        "isbn": "9781234567890",
+        "title": "The Great Book",
+        "catalog_id": "CAT-567890",
+        "quality_score": 4.2,
+        "publication_ready": True,
+        "primary_category": "Fiction / General",
+        "target_audience": "Readers",
+        "enriched_fields": ["classification"],
+        "enrichment_version": "1.0.0",
+        "filter_reason": "Passed all quality checks",
+    }
+    assert result["developer_view"] == {
+        "isbn": "9781234567890",
+        "title": "The Great Book",
+        "bisac_codes": ["FIC000000"],
+        "primary_category": "Fiction / General",
+        "difficulty_level": "Advanced",
+        "experience_required": "5+",
+        "prerequisites": ["basics"],
+        "reading_time_hours": "6h",
+        "similar_titles": [
+            {"isbn": "1", "title": "Other", "authors": ["X"], "relationship": "similar"}
+        ],
+        "reading_path": "read this first",
+    }
 
 
 def test_competitor_prices_are_seeded_from_the_real_current_price():
     module = _tool("product_listing_enrichment", "fetch_competitor_prices")
     # One key per observed action: generate_description.search_keywords and
     # normalize_product.{product_category,current_price}.
+    base = {"normalize_product": {"current_price": 500.0, "product_category": "home_office"}}
     result = module.fetch_competitor_prices(
-        {
-            "generate_description": {"search_keywords": ["standing desk"]},
-            "normalize_product": {"current_price": 500.0, "product_category": "home_office"},
-        }
+        {**base, "generate_description": {"search_keywords": ["standing desk"]}}
+    )
+    other_keywords = module.fetch_competitor_prices(
+        {**base, "generate_description": {"search_keywords": ["gaming chair"]}}
     )
     assert result["average_competitor_price"] != 100.0
     assert 300 < result["average_competitor_price"] < 700
     assert result["competitor_prices"][0]["product_name"].endswith("Adjustable Standing Desk")
+    # search_keywords seeds the deterministic pricing -- a different keyword set
+    # must select a different result, or the keyword was never read at all.
+    assert result["competitor_prices"] != other_keywords["competitor_prices"]
 
 
 def test_the_marketplace_listing_carries_the_normalized_product_identity():
@@ -319,6 +391,36 @@ def test_the_marketplace_listing_carries_the_normalized_product_identity():
     assert result["category"] == "home_office"
 
 
+def test_the_brand_name_in_title_check_reads_the_real_brand():
+    module = _tool("product_listing_enrichment", "validate_marketplace_compliance")
+    # One key per observed action: write_marketing_copy.* and normalize_product.brand
+    # (sibling instance of the 1391 defect, found in review of this fix).
+    base_copy = {
+        "listing_title": "Ergonomic Desk for Home Offices",
+        "listing_description": "A sturdy, adjustable desk built for long work days.",
+        "bullet_points": ["Adjustable height", "Sturdy steel frame"],
+        "search_keywords": ["desk", "office"],
+    }
+    missing_brand = module.validate_marketplace_compliance(
+        {
+            "write_marketing_copy": base_copy,
+            "normalize_product": {"brand": "DeskCo"},
+            "seed": {"marketplace_rules": {}},
+        }
+    )
+    assert missing_brand["compliance_passed"] is False
+    assert "Title must include brand name 'DeskCo'" in missing_brand["violations"]
+
+    with_brand = module.validate_marketplace_compliance(
+        {
+            "write_marketing_copy": {**base_copy, "listing_title": "DeskCo Ergonomic Desk"},
+            "normalize_product": {"brand": "DeskCo"},
+            "seed": {"marketplace_rules": {}},
+        }
+    )
+    assert not any("brand name" in v for v in with_brand["violations"])
+
+
 def test_the_marketplace_listing_gets_the_normalized_product_identity_end_to_end(tmp_path):
     """A real agac run, matching the contract_reviewer E2E test above: this is the
     one example in 1391 a test can drive past kickoff without a HITL in the way."""
@@ -343,10 +445,16 @@ def test_the_marketplace_listing_gets_the_normalized_product_identity_end_to_end
     finally:
         backend.close()
     listings = [r["content"]["format_listing"] for r in records]
-    assert listings
-    for listing in listings:
-        assert listing["product_id"]
-        assert listing["product_name"]
-        assert listing["brand"]
-        assert listing["price"] > 0
-        assert listing["category"]
+    assert len(listings) == 1
+    listing = listings[0]
+    # agent_io/staging/products.json's first record, run through normalize_product's
+    # deterministic transform -- exact values, not just truthy, so a wrong-but-non-empty
+    # placeholder default can't pass this the way it passed the unit test above.
+    assert listing["product_id"] == "PLE-AVpfAs_-ilAP"
+    assert (
+        listing["product_name"]
+        == "Alpha a7S II Mirrorless Digital Camera Body with Accessories Kit"
+    )
+    assert listing["brand"] == "Sony"
+    assert listing["price"] == 4010.5
+    assert listing["category"] == "electronics"
