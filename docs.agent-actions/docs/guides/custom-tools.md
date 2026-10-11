@@ -123,7 +123,7 @@ def calculate_order_totals(data: dict[str, Any]) -> dict[str, Any]:
 
 ## File-Level Tools
 
-For operations that need access to all records at once (deduplication, aggregation, cross-record analysis), use `Granularity.FILE`. FILE tools receive **full records** with framework metadata.
+For operations that need access to all records at once (deduplication, aggregation, cross-record analysis), use `Granularity.FILE`. FILE tools receive a list with one item per record, each holding the fields the action observes as flat keys.
 
 ```python
 from agent_actions import udf_tool
@@ -131,15 +131,14 @@ from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def deduplicate_questions(data: list[dict]) -> list[dict]:
-    """Dedup by question text — return full records to preserve lineage."""
+    """Dedup by question text — return the items received to preserve lineage."""
     seen = set()
     result = []
     for record in data:
-        content = record["content"]
-        question = content["extract_questions"]["question_text"]
+        question = record["question_text"]
         if question not in seen:
             seen.add(question)
-            result.append(record)  # pass through the full record
+            result.append(record)  # pass through the item as received
     return result
 ```
 
@@ -147,13 +146,13 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
 
 | | Record-level | File-level |
 |---|---|---|
-| Input | Single `dict` with namespaced upstream data | `list[dict]` — each record has `content`, `node_id`, `lineage` |
-| Read fields | `data["action_name"]["field"]` | `record["content"]["action_name"]["field"]` |
-| Passthrough | Return modified dict | Return the original record dict |
+| Input | Single `dict` with namespaced upstream data | `list[dict]` — each item holds the observed fields as flat keys |
+| Read fields | `data["action_name"]["field"]` | `record["field"]`, or `record["action_name.field"]` where two observed names could collide |
+| Passthrough | Return modified dict | Return the item you received |
 | New records | N/A | Return `FileUDFResult` with `source_index: None` |
 
 :::tip Lineage tracking
-Each record carries a `node_id` that the framework uses to track lineage. When you return the original record, lineage extends automatically. When you return a `FileUDFResult` output declaring `source_index: None` (aggregation), the framework creates fresh lineage. You never manage `node_id` directly.
+The framework tracks the identity of each item it hands the tool. When you return an item you received, lineage extends automatically. When you return a `FileUDFResult` output declaring `source_index: None` (aggregation), the framework creates fresh lineage. You never manage `node_id` directly.
 :::
 
 ## CLI Commands

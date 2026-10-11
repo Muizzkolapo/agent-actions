@@ -191,7 +191,7 @@ FILE-mode tools receive all records at once. The framework tracks each record's 
 **How it works:**
 
 1. Each input record carries its identity from the previous action
-2. The tool receives full records and returns them
+2. The tool receives one item per record, holding its observed fields, and returns them
 3. The framework matches each output to its input by `source_index`
 4. Matched outputs extend the parent's lineage chain
 5. Outputs declaring `source_index: None` (aggregation results) get fresh lineage

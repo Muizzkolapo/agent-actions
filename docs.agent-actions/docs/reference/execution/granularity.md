@@ -48,10 +48,13 @@ All records available at once for cross-record operations.
 
 ```yaml
 - name: deduplicate_facts
+  dependencies: [extract_facts]
   granularity: file
   kind: tool
   impl: deduplicate_by_similarity
 ```
+
+A File action needs an action before it: it reads the file of records that action wrote. The first action of a workflow reads the staged input one record at a time, so pre-flight refuses a File action with no `dependencies`.
 
 **When to use:**
 - Deduplication across records
@@ -83,7 +86,7 @@ def validate_email(data, **kwargs):
 
 ### File-Level Tool
 
-FILE tools receive full records with `content`, `node_id`, `source_guid`, and `lineage`. Read business data from `record["content"]`. Return the original record to preserve lineage.
+FILE tools receive a list with one item per record. Each item holds the fields the action observes as flat keys: the bare field name, or `action_name.field` where two observed names could collide (for example, when the tool observes several actions by wildcard). There is no action name around them and no `content`. Return the items you received to preserve lineage.
 
 ```python
 from agent_actions import udf_tool
@@ -91,20 +94,19 @@ from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def deduplicate_facts(records, **kwargs):
-    """Dedup — return full records to preserve lineage tracking."""
+    """Dedup — return the items received to preserve lineage tracking."""
     seen = set()
     unique = []
     for record in records:
-        content = record["content"]
-        key = content["extract_facts"]["fact_text"]
+        key = record["fact_text"]
         if key not in seen:
             seen.add(key)
-            unique.append(record)  # pass through full record
+            unique.append(record)  # pass through the item as received
     return unique
 ```
 
 :::tip Record Identity
-FILE tools receive records with a `node_id` that tracks each record's identity through the pipeline. When you return the original record dict, the framework automatically matches it to the correct input and extends the lineage chain. For aggregation (creating new data), return a `FileUDFResult` whose output declares `source_index: None` — the framework treats it as a new record. A plain new dict in a list is rejected.
+The framework tracks the identity of each item a FILE tool receives. When you return the item you were given, the framework automatically matches it to the correct input and extends the lineage chain. For aggregation (creating new data), return a `FileUDFResult` whose output declares `source_index: None` — the framework treats it as a new record. A plain new dict in a list is rejected.
 :::
 
 ## Mixing Granularities

@@ -113,6 +113,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ```yaml
 - name: enhance_summary
+  dependencies: [analyze_content]
   guard:
     condition: 'analyze_content.needs_enhancement == true'
     on_false: "skip"
@@ -122,6 +123,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ```yaml
 - name: generate_final_output
+  dependencies: [evaluate_quality]
   guard:
     condition: 'evaluate_quality.quality_score >= 85'
     on_false: "filter"
@@ -172,6 +174,7 @@ When Action A skips a record (`on_false: skip`), Action B still receives it and 
 ```yaml
 actions:
   - name: extract_facts
+    dependencies: [classify]
     guard:
       condition: 'classify.status == "active"'
       on_false: "skip"       # Inactive records pass through with original content
@@ -252,6 +255,7 @@ When a guard is configured on a File-granularity action (tool or HITL), the guar
 
 ```yaml
 - name: deduplicate_active
+  dependencies: [upstream_action]
   kind: tool
   granularity: file
   impl: deduplicate
