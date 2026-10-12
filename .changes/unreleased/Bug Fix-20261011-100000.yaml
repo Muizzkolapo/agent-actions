@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  `model_vendor: google` loads. The configuration reference gives `google` as the Gemini
+  vendor in its Model Fields row and its Vendor Support table, but a workflow that wrote it
+  failed at load with "Unknown vendor 'google'": the name was an enum alias of `gemini`
+  that shares its value, so the accepted list never held it. It is now read as `gemini`
+  wherever a vendor is set — an action, `defaults:`, `default_agent_config:` and an
+  `agents:` block — so pre-flight, key checks and the provider lookup see one name. The
+  Vendor Support table now lists `ollama_local` and `ollama_cloud`; a bare `ollama` was
+  never accepted.
+time: 2026-10-11T10:00:00Z

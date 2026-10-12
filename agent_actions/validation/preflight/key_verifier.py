@@ -157,7 +157,6 @@ _PROBE_REGISTRY: dict[str, Callable[[str], ProbeResult]] = {
     "anthropic": _probe_anthropic,
     "groq": _probe_groq,
     "gemini": _probe_gemini,
-    "google": _probe_gemini,
 }
 
 

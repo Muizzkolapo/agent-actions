@@ -17,6 +17,7 @@ from typing import Any
 
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.config.vendor import canonical_vendor
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_FILE_GRANULARITY_ERROR
 
 from .config_fields import get_default, inherit_simple_fields
@@ -195,6 +196,7 @@ class ActionExpander:
             agent["run_mode"] = get_default("run_mode")
 
         # Validate configuration
+        agent["model_vendor"] = canonical_vendor(agent["model_vendor"])
         validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
         if action_kind not in {"tool", "hitl"}:
             validate_required_fields(agent, action.get("name", "unknown"))

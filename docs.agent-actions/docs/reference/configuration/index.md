@@ -208,7 +208,8 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Google | `google` | ✅ | gemini-2.0-flash |
 | Groq | `groq` | ✅ | llama-3.3-70b-versatile |
 | Cohere | `cohere` | ❌ | command-r-plus |
-| Ollama | `ollama` | ✅ | llama3, mistral |
+| Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
+| Ollama (cloud) | `ollama_cloud` | ✅ | gpt-oss:120b-cloud |
 
 ## Environment Variables
 
