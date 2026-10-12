@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  The terminal keeps the action name at the start of a log line. Many lines name their
+  action in brackets, as in `[fragile] Error executing UDF ...`, and the console read
+  that bracket as Rich markup and printed the line without it, which for an LLM action's
+  error is often the only place the action is named. A closing tag that matched no open
+  one, which an error quoting record content or a provider reply can hold, replaced the
+  line with a traceback of about twenty lines and lost the error and its record detail.
+  Text an event carries is now printed as text; the formatter's own colour is unchanged.
+  `agac dispositions --quarantined` and the plan `agac retry` prints before repairing had
+  the same flaw in their reason column, where a failure reason holding a closing tag raised
+  instead of printing the table, and `agac retry` exited before any repair began; both
+  print it as text now. The log files already kept the full message and are unaffected.
+time: 2026-10-11T14:00:00Z
