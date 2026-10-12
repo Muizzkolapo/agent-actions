@@ -199,8 +199,8 @@ actions:
     temperature: 0.3
     stop: ["\n\n"]  # Stop at double newline for concise output
 
-  # ACTION 5: Use Perplexity for fact-checking with search
-  # Strength: Real-time web search, current information
+  # ACTION 5: Use Cohere for fact-checking against the sources
+  # Strength: Retrieval-oriented, grounded answers
   - name: fact_check
 
     reads:
@@ -221,7 +221,7 @@ actions:
       Check:
       1. Accuracy of dates and numbers
       2. Validity of entity relationships
-      3. Current relevance of information
+      3. Whether the information is supported by the sources
 
     schema:
       fact_check_results:
@@ -240,14 +240,14 @@ actions:
         type: array
         items: string
 
-    # Override to use Perplexity with search
-    model_vendor: perplexity
-    model_name: llama-3.1-sonar-small-128k-online
-    api_key: ${PERPLEXITY_API_KEY}
+    # Override to use Cohere
+    model_vendor: cohere
+    model_name: command-r-plus
+    api_key: ${COHERE_API_KEY}
     temperature: 0.4
 
-  # ACTION 6: Use DeepSeek for cost-effective refinement
-  # Strength: Very cost-effective, good for final polish
+  # ACTION 6: Use Ollama Cloud for the final polish
+  # Strength: Open-weight model, one key for several models
   - name: final_formatting
 
     reads:
@@ -291,10 +291,10 @@ actions:
           analysis: string
           verified: boolean
 
-    # Override to use DeepSeek for cost savings
-    model_vendor: deepseek
-    model_name: deepseek-chat
-    api_key: ${DEEPSEEK_API_KEY}
+    # Override to use Ollama Cloud
+    model_vendor: ollama_cloud
+    model_name: gpt-oss:120b-cloud
+    api_key: ${OLLAMA_API_KEY}
     temperature: 0.5
 
 # ============================================================================
@@ -324,14 +324,12 @@ actions:
 #    - Classification and categorization
 #    - High-throughput needs
 #
-# 5. PERPLEXITY:
-#    - Fact-checking with web search
-#    - Current information needed
+# 5. COHERE:
+#    - Retrieval-oriented, grounded answers
 #    - Research and verification
 #
-# 6. DEEPSEEK:
-#    - Cost-sensitive operations
-#    - High-volume processing
+# 6. OLLAMA CLOUD:
+#    - Open-weight models behind one key
 #    - Final formatting and polish
 
 # ============================================================================
@@ -344,8 +342,8 @@ actions:
 #   export ANTHROPIC_API_KEY=sk-ant-...
 #   export GEMINI_API_KEY=...
 #   export GROQ_API_KEY=...
-#   export PERPLEXITY_API_KEY=...
-#   export DEEPSEEK_API_KEY=...
+#   export COHERE_API_KEY=...
+#   export OLLAMA_API_KEY=...
 #
 # Then run:
 #   agac run multi-vendor-analysis --input articles.jsonl
@@ -358,18 +356,16 @@ actions:
 # Different vendors have different pricing:
 #
 # Approximate costs per 1M tokens (as of 2024):
-# - DeepSeek: ~$0.10-0.30 (cheapest)
 # - OpenAI GPT-4o-mini: ~$0.15-0.60
 # - Groq: ~$0.27-1.00 (but very fast)
 # - Gemini: ~$1.25-5.00
 # - OpenAI GPT-4o: ~$2.50-10.00
 # - Anthropic Claude: ~$3.00-15.00
-# - Perplexity: ~$1.00-5.00 (includes search)
 #
 # Strategy:
 # - Use cheaper models for simple tasks (extraction, formatting)
 # - Use expensive models for complex reasoning (analysis, synthesis)
-# - Use specialized models for specific features (search, speed)
+# - Use specialized models for specific features (retrieval, speed)
 
 # ============================================================================
 # BEST PRACTICES
