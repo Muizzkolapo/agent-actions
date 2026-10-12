@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.output.response.config_fields import get_default
@@ -19,10 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def _escape_markup(text: str) -> str:
-    """Escape `[` / `]` so a value embedded in a Rich f-string can't be
-    misread as a markup tag. `metrics[0]` inside `[dim](…)[/dim]` would
+    """Escape what Rich would read as a tag, so a value embedded in a Rich
+    f-string prints as written. `metrics[0]` inside `[dim](…)[/dim]` would
     otherwise raise MarkupError or silently drop output."""
-    return text.replace("[", "\\[").replace("]", "\\]")
+    from rich.markup import escape
+
+    return escape(text)
 
 
 class ActionCommand(BaseInspectCommand):
@@ -72,10 +75,12 @@ class ActionCommand(BaseInspectCommand):
         self, action_config: dict[str, Any], info: dict[str, Any], inspector=None
     ) -> None:
         kind = self._stringify(action_config.get("kind", DEFAULT_ACTION_KIND))
-        model = action_config.get("model_name") or "—"
+        model = _escape_markup(str(action_config.get("model_name") or "—"))
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
-        guard_label = guard.get("clause", "yes") if isinstance(guard, dict) else "none"
+        guard_label = (
+            _escape_markup(str(guard.get("clause", "yes"))) if isinstance(guard, dict) else "none"
+        )
         run_mode = self._stringify(action_config.get("run_mode")) or self._stringify(
             get_default("run_mode")
         )
@@ -143,7 +148,7 @@ class ActionCommand(BaseInspectCommand):
             "Prompt", subtitle="{{ jinja }} placeholders filled in per-record at run time"
         )
         for line in prompt.splitlines():
-            self.console.print(f"    {line}", soft_wrap=True, highlight=False)
+            self.console.print(Text(f"    {line}"), soft_wrap=True, highlight=False)
         self.console.print()
 
     def _print_schema_section(self, action_config: dict[str, Any]) -> None:
@@ -178,8 +183,6 @@ class ActionCommand(BaseInspectCommand):
         )
 
     def _print_section_rule(self, title: str, subtitle: str | None = None) -> None:
-        from rich.text import Text
-
         width = self.console.width or 100
         head = Text()
         head.append("── ", style="dim")
@@ -255,9 +258,9 @@ class ActionCommand(BaseInspectCommand):
         # Direct deps first — they move records; context readers second.
         lines: list[str] = []
         for name in dep_collapsed:
-            lines.append(f"{name}  [dim](depends on)[/dim]")
+            lines.append(f"{_escape_markup(name)}  [dim](depends on)[/dim]")
         for name in ctx_collapsed:
-            lines.append(f"{name}  [dim](reads as context)[/dim]")
+            lines.append(f"{_escape_markup(name)}  [dim](reads as context)[/dim]")
         return lines
 
     def _position_meta(self, inspector) -> str | None:
@@ -276,10 +279,10 @@ class ActionCommand(BaseInspectCommand):
         if not input_sources:
             return "source data  [dim](source action)[/dim]"
         if len(input_sources) == 1:
-            value = input_sources[0]
+            value = _escape_markup(input_sources[0])
             tag = "transform"
         else:
-            value = ", ".join(input_sources)
+            value = ", ".join(_escape_markup(source) for source in input_sources)
             tag = f"merge of {len(input_sources)}"
         if contexts:
             tag += f" + {len(contexts)} context"
@@ -316,10 +319,10 @@ class ActionCommand(BaseInspectCommand):
         for ns in sorted(grouped):
             fields = [f for f in grouped[ns] if f]
             if "*" in fields:
-                lines.append(f"{ns}: [dim]*[/dim]")
+                lines.append(f"{_escape_markup(ns)}: [dim]*[/dim]")
                 continue
             if not fields and ns in bare:
-                lines.append(f"{ns}: [red](bare namespace — no field)[/red]")
+                lines.append(f"{_escape_markup(ns)}: [red](bare namespace — no field)[/red]")
                 continue
             fields = sorted(set(fields))
             # Escape `[` in field names (e.g. `metrics[0]`) so Rich doesn't
@@ -520,9 +523,11 @@ class ContextCommand(BaseInspectCommand):
                 # `default=0` — every ref could be non-string (e.g. `observe: [null]`).
                 ns_width = max((len(n) for n in grouped), default=0) + 2
                 for ns, fields in grouped.items():
-                    field_str = ", ".join(fields) if fields else "[dim]*[/dim]"
+                    field_str = (
+                        ", ".join(_escape_markup(f) for f in fields) if fields else "[dim]*[/dim]"
+                    )
                     self.console.print(
-                        f"      [bright_white]{ns}[/bright_white]"
+                        f"      [bright_white]{_escape_markup(ns)}[/bright_white]"
                         + " " * (ns_width - len(ns))
                         + field_str,
                         soft_wrap=True,
@@ -543,9 +548,9 @@ class ContextCommand(BaseInspectCommand):
                 colour = "bright_blue" if is_framework else "green"
                 tag = "  [dim italic](framework)[/dim italic]" if is_framework else ""
                 self.console.print(
-                    f"  [{colour}]{ns}[/{colour}]"
+                    f"  [{colour}]{_escape_markup(ns)}[/{colour}]"
                     + " " * (ns_width - len(ns))
-                    + f"{', '.join(fields)}{tag}",
+                    + f"{', '.join(_escape_markup(f) for f in fields)}{tag}",
                     soft_wrap=True,
                 )
 
@@ -561,7 +566,7 @@ class ContextCommand(BaseInspectCommand):
             # as `{{ ns. }}` with an empty field.
             if first_field.startswith("(") or first_field.startswith("["):
                 continue
-            example = f"{{{{ {ns}.{first_field} }}}}"
+            example = _escape_markup(f"{{{{ {ns}.{first_field} }}}}")
             break
         if example is not None:
             self.console.print(f"\n  [dim]Use in prompts as[/dim]  [cyan]{example}[/cyan]")
