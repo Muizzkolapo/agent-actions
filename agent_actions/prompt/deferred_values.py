@@ -68,6 +68,9 @@ _FLOW_KEY = re.compile(
     r"([A-Za-z_][A-Za-z0-9_.-]*|\"[^\"\n]*\"|'[^'\n]*')[ \t]*:(?=[ \t\n,\[\]{}]|$)"
 )
 _BLOCK_HEADER = re.compile(r"[ \t]+[|>][-+1-9]*[ \t]*(#.*)?\Z")
+# A last tag whose whitespace control strips everything after it, the final newline too.
+_STRIPS_AFTER = re.compile(r"-(?:\}\}|%\}|#\})\s*\Z")
+
 _NAMED = re.compile(
     r"^[ \t]*(?:-[ \t]+)*(name|param)[ \t]*:[ \t]*[\"']?([A-Za-z_][\w-]*)[\"']?[ \t]*(?:#.*)?$",
     re.M,
@@ -205,10 +208,16 @@ class LoadRender:
     # ── the render ─────────────────────────────────────────────────────────
 
     def render(self, source: str, origin: str) -> str:
-        template = self.env.from_string(self.wrap(source, origin))
+        wrapped = self.wrap(source, origin)
+        template = self.env.from_string(wrapped)
+        # Jinja drops a source's final newline, which for a block scalar ending the file is
+        # its own line break. Restored here, not on the environment, which would change
+        # every include of a templates/ file; a last tag that strips (`-%}`) keeps that.
+        keeps = wrapped.endswith("\n") and not _STRIPS_AFTER.search(wrapped)
+        final_newline = "\n" if keeps else ""
         while True:
             try:
-                return template.render()
+                return template.render() + final_newline
             except jinja2.UndefinedError as e:
                 name = self._read_by_a_prompt(e)
                 if name is None:
@@ -827,7 +836,7 @@ def _value_ends(
         first = rest.lstrip(" \t")
     if first[0] in "\"'":
         close = _closing_quote(source, line_end - len(first), first[0], by_start)
-        return [] if close is None else _own_newline(source, [_past_line(source, close)])
+        return [] if close is None else [_past_line(source, close)]
     if first[0] in "|>" and not _BLOCK_HEADER.match(rest):
         return []
 
@@ -858,7 +867,7 @@ def _value_ends(
         # Kept (`|+`), the blank lines after the last one are the value's too.
         ends[-1] = blank_after
     # Longest first, then a block left open closed by the tag lines after it, then shorter.
-    return _own_newline(source, [ends[-1], *after, *reversed(ends[:-1])])
+    return [ends[-1], *after, *reversed(ends[:-1])]
 
 
 def _first_value_line(
@@ -969,12 +978,6 @@ def _indent_tag_lines(body: str) -> str:
         if i and tag_only[i] and len(line) - len(line.lstrip(" ")) < indent:
             lines[i] = " " * indent + line.lstrip(" ")
     return "\n".join(lines)
-
-
-def _own_newline(source: str, ends: list[int]) -> list[int]:
-    """*ends* short of the file's last newline, which Jinja drops as it always has."""
-    last = len(source) - 1 if source.endswith("\n") else len(source)
-    return [min(end, last) for end in ends]
 
 
 def _line_kind(
