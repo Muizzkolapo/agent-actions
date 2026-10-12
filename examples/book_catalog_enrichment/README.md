@@ -4,7 +4,7 @@
 
 An [agent-actions](https://github.com/Muizzkolapo/agent-actions) example that turns raw book metadata into production-ready catalog entries -- BISAC classification, marketing copy, SEO metadata, reading-level assessment, grounded recommendations, and per-user views.
 
-With **15 actions**, it's the most complex example in the repository and the **only one** demonstrating **Human-in-the-Loop (HITL) review** and **expectations** -- two patterns critical for production AI pipelines that need human oversight and automatic output correction.
+With **14 actions**, it's the most complex example in the repository and the **only one** demonstrating **Human-in-the-Loop (HITL) review** and **expectations** -- two patterns critical for production AI pipelines that need human oversight and automatic output correction.
 
 ---
 
@@ -13,7 +13,7 @@ With **15 actions**, it's the most complex example in the repository and the **o
 - **HITL (Human-in-the-Loop) review** -- how to insert a human approval step into an automated pipeline, and how to pair it with an AI pre-review so the human reviewer gets actionable context instead of raw output.
 - **Expectations** -- how to declare rules an LLM's output must satisfy, so the framework regenerates bad output with the rule's hint as feedback, up to N iterations, before accepting the best result.
 - **Grounded recommendations** -- how to prevent hallucinated suggestions by splitting the task into three steps: LLM generates search criteria, a tool retrieves real candidates from a catalog, and the LLM ranks only from those real results.
-- **4-way parallel fan-out** -- how to declare independent branches that run concurrently, then merge at a single downstream action.
+- **3-way parallel fan-out** -- how to declare independent branches that run concurrently, then merge at a single downstream action.
 - **Guard-based filtering** -- how to conditionally skip an action based on a field value from a prior step.
 - **Multi-stage validation** -- how to chain LLM output through deterministic tool validation before downstream actions consume it.
 
@@ -45,11 +45,10 @@ Manual enrichment at scale is slow and inconsistent. This workflow automates the
 | Step | Action | Type | What It Does |
 |------|--------|------|--------------|
 | 5 | `write_description` | LLM | Writes a marketing description with hook sentence, benefits, and target audience. Uses an **expectation** to regenerate if word count is below threshold. |
-| 6 | `validate_description` | Tool | Checks word count, benefit count, and scans for placeholder text. |
 
-### Phase 3: Parallel Enrichment (4-way fan-out from `write_description`)
+### Phase 3: Parallel Enrichment (3-way fan-out from `write_description`)
 
-These four branches run concurrently -- none depends on the others:
+These three branches run concurrently -- none depends on the others:
 
 | Branch | Action(s) | Type | What It Does |
 |--------|-----------|------|--------------|
@@ -58,7 +57,6 @@ These four branches run concurrently -- none depends on the others:
 | B | `retrieve_candidates` | Tool | Searches the seed catalog (`book_catalog.json`) for real matching books. |
 | B | `generate_recommendations` | LLM | Ranks and selects top recommendations from real candidates only. |
 | C | `assess_reading_level` | LLM | Assesses difficulty, prerequisites, and estimated reading time. |
-| D | `validate_description` | Tool | Validates marketing description quality (runs in parallel with A/B/C). |
 
 ### Phase 4: Quality Scoring, Filtering, and Output
 
@@ -234,16 +232,16 @@ Three separate actions, chained by dependencies:
 
 The ranking prompt explicitly forbids inventing titles. Every recommendation traces back to a real entry in `seed_data/book_catalog.json`. To swap the search backend (e.g., from JSON to a vector database), change the `impl` on `retrieve_candidates`. The rest of the pipeline stays the same.
 
-### 4-Way Parallel Fan-Out
+### 3-Way Parallel Fan-Out
 
-After `write_description` completes, four independent branches run concurrently:
+After `write_description` completes, three independent branches run concurrently:
 
 ```
                         write_description
                               |
-            +---------+-------+--------+-----------+
-            |         |                |            |
-       generate_seo   |       assess_reading_level  validate_description
+            +---------+-------+--------+
+            |         |                |
+       generate_seo   |       assess_reading_level
                       |
               generate_search_criteria
                       |
@@ -384,7 +382,6 @@ book_catalog_enrichment/
 │       ├── review_classification.yml
 │       ├── validate_bisac.yml
 │       ├── write_description.yml
-│       ├── validate_description.yml
 │       ├── generate_seo.yml
 │       ├── search_criteria.yml
 │       ├── search_book_catalog.yml
@@ -400,8 +397,7 @@ book_catalog_enrichment/
         ├── format_catalog_entry.py
         ├── search_book_catalog.py
         ├── select_for_users.py
-        ├── validate_bisac_codes.py
-        └── validate_description.py
+        └── validate_bisac_codes.py
 ```
 
 For the full design philosophy, detailed action table, and customization guide, see [`agent_workflow/book_catalog_enrichment/README.md`](agent_workflow/book_catalog_enrichment/README.md).
