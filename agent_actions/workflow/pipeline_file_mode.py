@@ -93,7 +93,7 @@ def _reattach_source_guid(
     stored whole and take a correlation id derived from the one they inherited —
     distinct per row, equal across version branches.
 
-    ``parent_source_guid`` is left as carried: #1046 freed the resolver, #1022 remains.
+    ``parent_source_guid`` is left as carried: it names the first ancestor, not the producer.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
