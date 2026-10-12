@@ -16,6 +16,7 @@ from typing import Any
 import click
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
@@ -972,7 +973,7 @@ class RetryCommand:
             table.add_row(
                 record.get("record_id", "?"),
                 record.get("disposition", "?"),
-                (record.get("reason") or "")[:60],
+                Text((record.get("reason") or "")[:60]),
             )
 
         self.console.print(table)
