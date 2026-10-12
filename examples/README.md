@@ -10,8 +10,8 @@ Six workflows demonstrating agent-actions patterns — from single-vendor local 
 | [incident_triage](./incident_triage) | 11 | Groq, Ollama, OpenAI | Parallel severity voting (3 classifiers), conditional escalation (SEV1/SEV2 guard), multi-seed data, parallel impact branches |
 | [product_listing_enrichment](./product_listing_enrichment) | 6 | Gemini, OpenAI | Strict LLM/Tool alternation, progressive context (drop raw_specs after distillation), guard-based skip, seed data |
 | [support_resolution](./support_resolution) | 7 | Ollama | `json_mode: false`, `output_field` (no schema needed), works with any model including local 3B, guard as cost control |
-| [contract_reviewer](./contract_reviewer) | 4 | OpenAI | Map-Reduce (split → per-clause analysis → FILE granularity aggregate), context scoping with drop |
-| [book_catalog_enrichment](./book_catalog_enrichment) | 15 | Ollama, Groq, OpenAI | HITL review, expectations, grounded recommendations (LLM → Tool search → LLM rank), 4-way parallel fan-out |
+| [contract_reviewer](./contract_reviewer) | 4 | Gemini | Map-Reduce (split → per-clause analysis → FILE granularity aggregate), context scoping with drop |
+| [book_catalog_enrichment](./book_catalog_enrichment) | 14 | Ollama, Groq, OpenAI | HITL review, expectations, grounded recommendations (LLM → Tool search → LLM rank), 3-way parallel fan-out |
 
 ## Quick Start
 

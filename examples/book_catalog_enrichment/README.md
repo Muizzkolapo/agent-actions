@@ -48,7 +48,7 @@ Manual enrichment at scale is slow and inconsistent. This workflow automates the
 
 ### Phase 3: Parallel Enrichment (3-way fan-out from `write_description`)
 
-These four branches run concurrently -- none depends on the others:
+These three branches run concurrently -- none depends on the others:
 
 | Branch | Action(s) | Type | What It Does |
 |--------|-----------|------|--------------|
