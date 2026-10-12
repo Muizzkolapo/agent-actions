@@ -9,8 +9,6 @@ This is the **only example** in the repository that demonstrates the **Map-Reduc
 - **Split one input record into many** (the "map" step) using a Tool action that returns a list.
 - **Process each fragment independently** with per-record LLM actions.
 - **Collect all fragments back into one** (the "reduce" step) using a Tool action with `granularity: File`, which receives every record from the file at once instead of one at a time.
-- **Filter records with a guard** so that an expensive LLM action only runs on records that match a condition.
-- **Mix model vendors in a single workflow** -- Anthropic for legal reasoning, OpenAI for executive summarization.
 
 ---
 
@@ -22,15 +20,14 @@ The Map-Reduce pattern solves this naturally:
 
 1. **Map** -- split the contract into individual clauses so each one is analyzed in isolation with full attention.
 2. **Process** -- run each clause through a risk-analysis prompt that scores it against seed-data criteria.
-3. **Filter** -- only send high-risk clauses to an expensive deep-analysis step.
-4. **Reduce** -- aggregate all clause-level results into a single contract-level risk report.
-5. **Summarize** -- generate a plain-language executive summary from the aggregated report.
+3. **Reduce** -- aggregate all clause-level results into a single contract-level risk report.
+4. **Summarize** -- generate a plain-language executive summary from the aggregated report.
 
 ---
 
 ## How It Works
 
-The workflow contains five actions executed in sequence. Here's what each one does and which YAML settings matter.
+The workflow contains four actions executed in sequence. Here's what each one does and which YAML settings matter.
 
 ### 1. `split_into_clauses` (Tool)
 
@@ -41,25 +38,16 @@ Parses the contract's `full_text` field and emits **one record per clause**. One
 - **Output fields**: `clause_number`, `clause_title`, `clause_text`
 - **Context scope**: observes only `source.full_text`, `source.contract_id`, and `source.title`; passes through metadata (`contract_id`, `title`, `parties`) so downstream actions can reference the contract.
 
-### 2. `analyze_clause` (LLM / Anthropic)
+### 2. `analyze_clause` (LLM / Gemini)
 
 Analyzes **each** clause against the risk criteria from seed data. The default granularity is `Record`, so the framework invokes this action once per clause.
 
-- **Model**: `claude-sonnet-4-20250514` via Anthropic -- chosen for strong legal reasoning.
+- **Model**: `gemini-flash-lite-latest` via Gemini (the workflow default); the config has a commented-out option to switch to `claude-sonnet-4-20250514` via Anthropic for stronger legal reasoning.
 - **Prompt**: classify risk as high/medium/low, extract obligations and deadlines, recommend an action (accept, negotiate, reject, or flag_for_legal).
 - **Seed data**: `risk_criteria.json` is injected through `context_scope.observe`, giving the model a rubric with concrete indicators for each risk level.
 - **Output fields**: `risk_level`, `risk_score`, `risk_indicators`, `obligations`, `deadlines`, `reasoning`, `recommended_action`
 
-### 3. `flag_high_risk` (LLM / Anthropic, guarded)
-
-Deep legal analysis **only on clauses classified as high-risk**. Clauses that don't match the guard are silently filtered out.
-
-- **Guard**: `risk_level == "high"` with `on_false: filter` -- non-matching records drop entirely.
-- **Model**: same Anthropic model as the previous step.
-- **Context**: observes the full `analyze_clause.*` output plus `source.full_text` (the entire original contract) for cross-referencing, and `seed.risk_criteria`.
-- **Output fields**: `severity`, `legal_exposure`, `financial_impact`, `cross_references`, `negotiation_points`, `precedent_concerns`, `mitigation_strategy`
-
-### 4. `aggregate_risk_summary` (Tool, FILE granularity)
+### 3. `aggregate_risk_summary` (Tool, FILE granularity)
 
 The reduce step. Collects **all** clause-level analyses into a single contract-level risk report. FILE granularity is essential here -- without it, the framework passes records one at a time and the tool can't compute cross-clause aggregates.
 
@@ -68,12 +56,12 @@ The reduce step. Collects **all** clause-level analyses into a single contract-l
 - **Impl**: `aggregate_clause_analyses` -- counts risk levels, computes average risk scores, collects obligations and deadlines, builds a prioritized negotiation list.
 - **Output fields**: `overall_risk_level`, `overall_risk_score`, `risk_distribution`, `high_risk_clauses`, `total_obligations`, `key_deadlines`, `negotiation_priority`
 
-### 5. `generate_executive_summary` (LLM / OpenAI)
+### 4. `generate_executive_summary` (LLM / Gemini)
 
 Plain-language summary for VP/C-level stakeholders. It deliberately **doesn't** see individual clause analyses -- only the aggregated report -- keeping context tight.
 
-- **Model**: `gpt-4o-mini` via OpenAI (the workflow default).
-- **Context scope**: observes only `aggregate_risk_summary.*`; explicitly drops `analyze_clause.*`, `flag_high_risk.*`, and `split_into_clauses.*`.
+- **Model**: `gemini-flash-lite-latest` via Gemini (the workflow default).
+- **Context scope**: observes only `aggregate_risk_summary.*`; explicitly drops `analyze_clause.*` and `split_into_clauses.*`.
 - **Output fields**: `executive_summary`, `risk_verdict`, `top_concerns`, `recommended_next_steps`, `approval_conditions`, `estimated_negotiation_effort`
 
 ---
@@ -149,56 +137,6 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
 
 The framework handles all metadata propagation (`source_guid`, lineage) automatically — tools just return business data.
 
-### Guard as Filter
-
-The `flag_high_risk` action uses a guard to skip clauses that aren't high-risk. The key setting is `on_false: filter` -- records that fail the condition are **dropped from the pipeline entirely** for this action. They aren't passed through unchanged; they simply don't reach it.
-
-```yaml
-- name: flag_high_risk
-  dependencies: [analyze_clause]
-  intent: "Perform deep legal analysis of high-risk clauses with full contract context"
-  schema: flag_high_risk
-  prompt: $contract_reviewer.Flag_High_Risk
-  model_vendor: anthropic
-  model_name: claude-sonnet-4-20250514
-  api_key: ANTHROPIC_API_KEY
-  guard:
-    condition: 'analyze_clause.risk_level == "high"'
-    on_false: "filter"
-```
-
-A cost and latency win. Eight clauses, two high-risk? The expensive deep-analysis LLM call runs twice, not eight times.
-
-### Multi-Vendor
-
-Two LLM providers in one workflow. The `defaults` block sets OpenAI as the baseline; individual actions override to Anthropic where legal reasoning quality matters more:
-
-```yaml
-defaults:
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
-
-actions:
-  - name: analyze_clause
-    model_vendor: anthropic
-    model_name: claude-sonnet-4-20250514
-    api_key: ANTHROPIC_API_KEY
-    # ...
-
-  - name: flag_high_risk
-    model_vendor: anthropic
-    model_name: claude-sonnet-4-20250514
-    api_key: ANTHROPIC_API_KEY
-    # ...
-
-  - name: generate_executive_summary
-    # inherits defaults: openai / gpt-4o-mini
-    # ...
-```
-
-Balance cost and quality stage by stage. Legal clause analysis benefits from a stronger model; the executive summary, operating on already-structured data, works fine with a lighter one.
-
 ### Retry and Expectations
 
 All LLM actions inherit retry from defaults -- transient API errors (rate limits, timeouts) are retried up to 2 times with backoff:
@@ -237,7 +175,7 @@ Copy the environment sample and fill in your API keys:
 
 ```bash
 cp .env.sample .env
-# Edit .env with your OPENAI_API_KEY and ANTHROPIC_API_KEY
+# Edit .env with your GEMINI_API_KEY
 ```
 
 Run the workflow:
@@ -248,7 +186,7 @@ agac run -a contract_reviewer
 
 By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.
 
-The sample input (`agent_io/staging/contracts.json`) includes three contracts of varying risk levels. After the run completes, check the output database for per-clause analyses, high-risk flags, aggregated risk summaries, and executive summaries.
+The sample input (`agent_io/staging/contracts.json`) includes three contracts of varying risk levels. After the run completes, check the output database for per-clause analyses, aggregated risk summaries, and executive summaries.
 
 ---
 
@@ -275,7 +213,6 @@ contract_reviewer/
 │   └── contract_reviewer/
 │       ├── split_into_clauses.yml
 │       ├── analyze_clause.yml
-│       ├── flag_high_risk.yml
 │       ├── aggregate_risk_summary.yml
 │       └── generate_executive_summary.yml
 └── tools/
