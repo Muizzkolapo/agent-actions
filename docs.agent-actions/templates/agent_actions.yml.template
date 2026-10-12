@@ -9,7 +9,7 @@
 # This is the base layer of the configuration hierarchy
 
 # Model vendor for all agents (can be overridden at workflow or action level)
-# Supported vendors: openai, anthropic, gemini, groq, deepseek, perplexity
+# Supported vendors: openai, anthropic, gemini, groq, cohere, ollama_cloud, ollama_local
 model_vendor: openai
 
 # Model name to use (vendor-specific)
@@ -65,15 +65,15 @@ api_key: ${OPENAI_API_KEY}
 # model_name: llama-3.1-70b-versatile
 # api_key: ${GROQ_API_KEY}
 
-# Example: Using DeepSeek
-# model_vendor: deepseek
-# model_name: deepseek-chat
-# api_key: ${DEEPSEEK_API_KEY}
+# Example: Using Cohere
+# model_vendor: cohere
+# model_name: command-r-plus
+# api_key: ${COHERE_API_KEY}
 
-# Example: Using Perplexity
-# model_vendor: perplexity
-# model_name: llama-3.1-sonar-small-128k-online
-# api_key: ${PERPLEXITY_API_KEY}
+# Example: Using Ollama Cloud
+# model_vendor: ollama_cloud
+# model_name: gpt-oss:120b-cloud
+# api_key: ${OLLAMA_API_KEY}
 
 # ============================================================================
 # WORKFLOWS
@@ -120,8 +120,8 @@ api_key: ${OPENAI_API_KEY}
 # export ANTHROPIC_API_KEY=sk-ant-...
 # export GEMINI_API_KEY=...
 # export GROQ_API_KEY=...
-# export DEEPSEEK_API_KEY=...
-# export PERPLEXITY_API_KEY=...
+# export COHERE_API_KEY=...
+# export OLLAMA_API_KEY=...
 #
 # Then reference in config using ${VAR_NAME} or VAR_NAME
 

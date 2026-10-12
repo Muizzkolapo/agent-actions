@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  The starter templates no longer name vendors that do not exist. `agent_actions.yml.template`
+  listed `deepseek` and `perplexity` as supported vendors with examples, and
+  `workflows/multi-vendor-workflow.yml` used both on live actions, but no provider exists for
+  either and the load refuses both names, so a project begun from that workflow failed to
+  load. They now use `cohere` and `ollama_cloud`, and a test loads every vendor the
+  templates name.
+time: 2026-10-12T12:00:00Z
