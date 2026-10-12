@@ -15,8 +15,8 @@ from agent_actions.output.response.expander_validation import validate_vendor_ex
 TEMPLATES = Path(__file__).resolve().parents[3] / "docs.agent-actions" / "templates"
 
 # `model_vendor: x`, commented or not, and the "Supported vendors: a, b, c" line.
-_WRITTEN = re.compile(r"^[ \t#-]*model_vendor:[ \t]*([A-Za-z0-9_-]+)", re.MULTILINE)
-_LISTED = re.compile(r"Supported vendors:[ \t]*([A-Za-z0-9_, -]+)")
+_WRITTEN = re.compile(r"""model_vendor:[ \t]*["']?([A-Za-z0-9_-]+)""")
+_LISTED = re.compile(r"supported vendors:[ \t]*([^\n]+)", re.IGNORECASE)
 
 
 def _names() -> list[tuple[str, str]]:
@@ -26,7 +26,9 @@ def _names() -> list[tuple[str, str]]:
         for name in _WRITTEN.findall(text):
             found.append((str(path.relative_to(TEMPLATES)), name))
         for line in _LISTED.findall(text):
-            found.extend((str(path.relative_to(TEMPLATES)), n.strip()) for n in line.split(","))
+            found.extend(
+                (str(path.relative_to(TEMPLATES)), n.strip().strip("\"'")) for n in line.split(",")
+            )
     return found
 
 
@@ -40,6 +42,25 @@ def names():
 def test_the_scan_finds_the_vendors_the_templates_name(names):
     """Control: the scan is not vacuous."""
     assert {"openai", "anthropic", "gemini", "groq"} <= {name for _, name in names}
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ('model_vendor: "deepseek"', ["deepseek"]),
+        ("{name: x, model_vendor: perplexity}", ["perplexity"]),
+        ("# Example: model_vendor: deepseek", ["deepseek"]),
+        ("# Supported Vendors: openai, 'deepseek'", ["openai", "deepseek"]),
+    ],
+)
+def test_the_scan_reads_the_spellings_a_template_could_use(text, expected, tmp_path):
+    """Each spelling a bad vendor could hide in must be found, or the test below passes
+    over it."""
+    found = _WRITTEN.findall(text)
+    for line in _LISTED.findall(text):
+        found.extend(n.strip().strip("\"'") for n in line.split(","))
+
+    assert found == expected
 
 
 def test_every_named_vendor_is_accepted(names):

@@ -221,7 +221,7 @@ actions:
       Check:
       1. Accuracy of dates and numbers
       2. Validity of entity relationships
-      3. Current relevance of information
+      3. Whether the information is supported by the sources
 
     schema:
       fact_check_results:
