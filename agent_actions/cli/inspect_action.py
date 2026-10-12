@@ -258,9 +258,9 @@ class ActionCommand(BaseInspectCommand):
         # Direct deps first — they move records; context readers second.
         lines: list[str] = []
         for name in dep_collapsed:
-            lines.append(f"{name}  [dim](depends on)[/dim]")
+            lines.append(f"{_escape_markup(name)}  [dim](depends on)[/dim]")
         for name in ctx_collapsed:
-            lines.append(f"{name}  [dim](reads as context)[/dim]")
+            lines.append(f"{_escape_markup(name)}  [dim](reads as context)[/dim]")
         return lines
 
     def _position_meta(self, inspector) -> str | None:
@@ -279,10 +279,10 @@ class ActionCommand(BaseInspectCommand):
         if not input_sources:
             return "source data  [dim](source action)[/dim]"
         if len(input_sources) == 1:
-            value = input_sources[0]
+            value = _escape_markup(input_sources[0])
             tag = "transform"
         else:
-            value = ", ".join(input_sources)
+            value = ", ".join(_escape_markup(source) for source in input_sources)
             tag = f"merge of {len(input_sources)}"
         if contexts:
             tag += f" + {len(contexts)} context"
@@ -319,10 +319,10 @@ class ActionCommand(BaseInspectCommand):
         for ns in sorted(grouped):
             fields = [f for f in grouped[ns] if f]
             if "*" in fields:
-                lines.append(f"{ns}: [dim]*[/dim]")
+                lines.append(f"{_escape_markup(ns)}: [dim]*[/dim]")
                 continue
             if not fields and ns in bare:
-                lines.append(f"{ns}: [red](bare namespace — no field)[/red]")
+                lines.append(f"{_escape_markup(ns)}: [red](bare namespace — no field)[/red]")
                 continue
             fields = sorted(set(fields))
             # Escape `[` in field names (e.g. `metrics[0]`) so Rich doesn't
@@ -523,9 +523,11 @@ class ContextCommand(BaseInspectCommand):
                 # `default=0` — every ref could be non-string (e.g. `observe: [null]`).
                 ns_width = max((len(n) for n in grouped), default=0) + 2
                 for ns, fields in grouped.items():
-                    field_str = ", ".join(fields) if fields else "[dim]*[/dim]"
+                    field_str = (
+                        ", ".join(_escape_markup(f) for f in fields) if fields else "[dim]*[/dim]"
+                    )
                     self.console.print(
-                        f"      [bright_white]{ns}[/bright_white]"
+                        f"      [bright_white]{_escape_markup(ns)}[/bright_white]"
                         + " " * (ns_width - len(ns))
                         + field_str,
                         soft_wrap=True,
@@ -546,9 +548,9 @@ class ContextCommand(BaseInspectCommand):
                 colour = "bright_blue" if is_framework else "green"
                 tag = "  [dim italic](framework)[/dim italic]" if is_framework else ""
                 self.console.print(
-                    f"  [{colour}]{ns}[/{colour}]"
+                    f"  [{colour}]{_escape_markup(ns)}[/{colour}]"
                     + " " * (ns_width - len(ns))
-                    + f"{', '.join(fields)}{tag}",
+                    + f"{', '.join(_escape_markup(f) for f in fields)}{tag}",
                     soft_wrap=True,
                 )
 
@@ -564,7 +566,7 @@ class ContextCommand(BaseInspectCommand):
             # as `{{ ns. }}` with an empty field.
             if first_field.startswith("(") or first_field.startswith("["):
                 continue
-            example = f"{{{{ {ns}.{first_field} }}}}"
+            example = _escape_markup(f"{{{{ {ns}.{first_field} }}}}")
             break
         if example is not None:
             self.console.print(f"\n  [dim]Use in prompts as[/dim]  [cyan]{example}[/cyan]")
