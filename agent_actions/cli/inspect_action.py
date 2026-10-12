@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import click
+from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.output.response.config_fields import get_default
@@ -19,10 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 def _escape_markup(text: str) -> str:
-    """Escape `[` / `]` so a value embedded in a Rich f-string can't be
-    misread as a markup tag. `metrics[0]` inside `[dim](…)[/dim]` would
+    """Escape what Rich would read as a tag, so a value embedded in a Rich
+    f-string prints as written. `metrics[0]` inside `[dim](…)[/dim]` would
     otherwise raise MarkupError or silently drop output."""
-    return text.replace("[", "\\[").replace("]", "\\]")
+    from rich.markup import escape
+
+    return escape(text)
 
 
 class ActionCommand(BaseInspectCommand):
@@ -72,10 +75,12 @@ class ActionCommand(BaseInspectCommand):
         self, action_config: dict[str, Any], info: dict[str, Any], inspector=None
     ) -> None:
         kind = self._stringify(action_config.get("kind", DEFAULT_ACTION_KIND))
-        model = action_config.get("model_name") or "—"
+        model = _escape_markup(str(action_config.get("model_name") or "—"))
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
-        guard_label = guard.get("clause", "yes") if isinstance(guard, dict) else "none"
+        guard_label = (
+            _escape_markup(str(guard.get("clause", "yes"))) if isinstance(guard, dict) else "none"
+        )
         run_mode = self._stringify(action_config.get("run_mode")) or self._stringify(
             get_default("run_mode")
         )
@@ -143,7 +148,7 @@ class ActionCommand(BaseInspectCommand):
             "Prompt", subtitle="{{ jinja }} placeholders filled in per-record at run time"
         )
         for line in prompt.splitlines():
-            self.console.print(f"    {line}", soft_wrap=True, highlight=False)
+            self.console.print(Text(f"    {line}"), soft_wrap=True, highlight=False)
         self.console.print()
 
     def _print_schema_section(self, action_config: dict[str, Any]) -> None:
@@ -178,8 +183,6 @@ class ActionCommand(BaseInspectCommand):
         )
 
     def _print_section_rule(self, title: str, subtitle: str | None = None) -> None:
-        from rich.text import Text
-
         width = self.console.width or 100
         head = Text()
         head.append("── ", style="dim")
