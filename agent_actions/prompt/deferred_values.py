@@ -34,6 +34,7 @@ from typing import Any
 import jinja2
 import yaml
 from jinja2 import Environment, FileSystemLoader, Undefined, meta, nodes
+from jinja2.compiler import CodeGenerator, Frame
 from jinja2.defaults import DEFAULT_NAMESPACE
 from jinja2.environment import TemplateModule
 from jinja2.ext import Extension
@@ -201,6 +202,7 @@ class LoadRender:
         )
         self.env.template_class = _ImportingTemplate
         self.env.context_class = _FolderContext
+        self.env.code_generator_class = _IncludeGenerator
         self._names_env.filters = self.env.filters
         self._names_env.tests = self.env.tests
         extension = self.env.extensions[_LeaveExtension.identifier]
@@ -714,6 +716,30 @@ class _ImportingTemplate(jinja2.Template):
             return super().make_module(vars, shared, locals)
         finally:
             load._importing -= 1
+
+
+class _IncludeGenerator(CodeGenerator):
+    """Writes an include without context so that its text reaches a macro or a set block."""
+
+    _collecting: Frame | None = None
+
+    def visit_Include(self, node: nodes.Include, frame: Frame) -> None:
+        self._collecting = frame if frame.buffer is not None else None
+        try:
+            super().visit_Include(node, frame)
+        finally:
+            self._collecting = None
+
+    def writeline(self, x: str, node: nodes.Node | None = None, extra: int = 0) -> None:
+        # Jinja writes `yield from <the file's text>`, which makes a generator of whatever
+        # collects its output into a buffer: a macro, a set block, a call or filter body.
+        if self._collecting is None or not x.startswith("yield from "):
+            super().writeline(x, node, extra)
+            return
+        super().writeline(f"for event in {x.removeprefix('yield from ')}:", node, extra)
+        self.indent()
+        self.simple_write("event", self._collecting)
+        self.outdent()
 
 
 class _FolderContext(Context):

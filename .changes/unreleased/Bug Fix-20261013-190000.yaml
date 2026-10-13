@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  `{% include 'p.j2' without context %}` now yields the file's text wherever it is written.
+  Inside a macro, calling the macro printed `<generator object root.<locals>.macro at 0x...>`
+  into the prompt, and inside a `{% set %}...{% endset %}` block, a `{% call %}` body or a
+  `{% filter %}` block the text was lost, with the load exiting 0 either way. This is how
+  Jinja compiles the tag; the load now compiles it so the text reaches whatever collects it.
+time: 2026-10-13T19:00:00Z
