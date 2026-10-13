@@ -200,6 +200,7 @@ class LoadRender:
             extensions=[_LeaveExtension],
         )
         self.env.template_class = _ImportingTemplate
+        self.env.context_class = _FolderContext
         self._names_env.filters = self.env.filters
         self._names_env.tests = self.env.tests
         extension = self.env.extensions[_LeaveExtension.identifier]
@@ -702,11 +703,9 @@ class _ImportingTemplate(jinja2.Template):
     ) -> Context:
         globals = self.environment.globals
         if shared and vars is not None:
-            # Jinja hands over a copy of the importer's names, which would keep from the
-            # file every name templates/ registers after.
-            given = {} if vars is globals else dict(vars)
-            given.update((k, v) for k, v in (locals or {}).items() if v is not missing)
-            vars, locals = (_OverGlobals(given, globals) if given else globals), None
+            # Jinja hands over the importer's names with a copy of the globals; kept, the
+            # copy would hide what another file sets a name to after this.
+            vars = {k: v for k, v in vars.items() if globals.get(k, missing) is not v}
         return super().new_context(vars, shared, locals)
 
     def make_module(
@@ -721,8 +720,8 @@ class _ImportingTemplate(jinja2.Template):
             return super().make_module(vars, shared, locals)
         if vars is None and self.name is not None:
             # Jinja would copy the globals, keeping from the file's macros every name
-            # templates/ registers after this run; shared, they read them as they stand.
-            vars, shared = self.environment.globals, True
+            # templates/ registers after this run.
+            vars, shared = {}, True
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
@@ -730,18 +729,15 @@ class _ImportingTemplate(jinja2.Template):
             load._importing -= 1
 
 
-class _OverGlobals(dict[str, Any]):
-    """The names an import or include with context hands a file, over the globals as they stand."""
+class _FolderContext(Context):
+    """Reads a name it was not handed from the globals as they stand, so a templates/
+    file finds what the folder registered after the file ran."""
 
-    def __init__(self, names: Mapping[str, Any], globals: Mapping[str, Any]) -> None:
-        super().__init__(names)
-        self._globals = globals
-
-    def __contains__(self, name: object) -> bool:
-        return super().__contains__(name) or name in self._globals
-
-    def __missing__(self, name: str) -> Any:
-        return self._globals[name]
+    def resolve_or_missing(self, key: str) -> Any:
+        value = super().resolve_or_missing(key)
+        if value is missing and key in self.environment.globals:
+            return self.environment.globals[key]
+        return value
 
 
 def _undefined_class(load: LoadRender) -> type[Undefined]:
