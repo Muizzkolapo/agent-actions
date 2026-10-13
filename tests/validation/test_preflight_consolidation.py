@@ -70,24 +70,6 @@ class TestDependencyValidation:
                 ],
             )
 
-    def test_primary_dependency_references_valid_action(self):
-        """primary_dependency referencing non-existent action is caught."""
-        with pytest.raises(ValueError, match="primary_dependency.*ghost|not defined"):
-            WorkflowConfig(
-                name="wf",
-                description="test",
-                actions=[
-                    ActionConfig(name="a", intent="do", kind="llm"),
-                    ActionConfig(
-                        name="b",
-                        intent="do",
-                        kind="llm",
-                        dependencies=["a"],
-                        primary_dependency="ghost",
-                    ),
-                ],
-            )
-
 
 # ── TestGuardValidation ──────────────────────────────────────────────
 

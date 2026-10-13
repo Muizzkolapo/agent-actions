@@ -182,9 +182,6 @@ class ActionConfigDict(TypedDict, total=False):
     _hitl_state_dir: str
     _hitl_file_stem: str
 
-    # Fan-in
-    primary_dependency: str
-
     # Batch
     batch_id: str
 

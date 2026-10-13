@@ -181,17 +181,6 @@ class TestWorkflowLevelValidation:
             mgr.get_user_agents()
         assert "Circular dependency" in str(exc_info.value.__cause__)
 
-    def test_invalid_primary_dependency_raises(self):
-        """Reference to non-existent action in primary_dependency is caught."""
-        mgr = _make_workflow_manager(
-            actions=[
-                {"name": "a", "intent": "do", "kind": "llm", "primary_dependency": "ghost"},
-            ]
-        )
-        with pytest.raises(ConfigurationError) as exc_info:
-            mgr.get_user_agents()
-        assert "primary_dependency" in str(exc_info.value.__cause__)
-
     def test_missing_description_raises(self):
         """Missing required workflow fields are caught."""
         from agent_actions.config.manager import ConfigManager

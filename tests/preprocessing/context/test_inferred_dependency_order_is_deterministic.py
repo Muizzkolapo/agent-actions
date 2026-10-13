@@ -113,13 +113,12 @@ class TestTheOrderBearingHalvesAreNotSorted:
     """
 
     def test_a_fan_in_tail_keeps_its_declared_order(self):
-        """Non-primary dependencies of a fan-in are context sources in YAML order."""
+        """The dependencies after a fan-in's first are context sources in YAML order."""
         probe = textwrap.dedent("""
             import json
             from agent_actions.prompt.context.scope_inference import infer_dependencies
             config = {
                 "dependencies": ["zebra", "alpha", "middle"],
-                "primary_dependency": "zebra",
                 "context_scope": {"observe": ["zebra.a", "alpha.b", "middle.c"]},
             }
             names = ["zebra", "alpha", "middle"]
@@ -140,7 +139,6 @@ class TestTheOrderBearingHalvesAreNotSorted:
             from agent_actions.prompt.context.scope_inference import infer_dependencies
             config = {
                 "dependencies": ["alpha", "zebra", "middle"],
-                "primary_dependency": "alpha",
                 "context_scope": {"observe": ["alpha.a", "zebra.b", "middle.c"]},
             }
             names = ["alpha", "zebra", "middle"]
