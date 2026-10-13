@@ -113,3 +113,55 @@ def test_a_malformed_object_form_is_refused_naming_the_schema(schema, fragment):
 
     assert "'s'" in str(raised.value)
     assert fragment in str(raised.value)
+
+
+def test_shorthand_with_fields_named_type_and_properties_is_still_shorthand():
+    shorthand = {"type": "string!", "properties": "array[string]"}
+
+    base, _ = _load_inline_schema(dict(shorthand), None, "{}", {"name": "act"}, {})
+    compiled = compile_unified_schema(base, "openai")["schema"]
+
+    assert set(compiled["properties"]) == {"type", "properties"}
+    assert compiled["required"] == ["type"]
+
+
+def test_a_nested_object_property_keeps_its_properties_and_required_list():
+    schema = {
+        "name": "s",
+        "type": "object",
+        "properties": {
+            "metadata": {
+                "type": "object",
+                "properties": {"created_at": {"type": "string"}, "version": {"type": "integer"}},
+                "required": ["created_at"],
+            }
+        },
+        "required": ["metadata"],
+    }
+
+    compiled = compile_unified_schema(schema, "openai")["schema"]
+
+    assert compiled["properties"]["metadata"] == {
+        "type": "object",
+        "properties": {"created_at": {"type": "string"}, "version": {"type": "integer"}},
+        "required": ["created_at"],
+    }
+    assert compiled["required"] == ["metadata"]
+
+
+def test_a_nested_object_listed_nowhere_is_optional_though_it_carries_a_required_list():
+    schema = {
+        "name": "s",
+        "type": "object",
+        "properties": {
+            "metadata": {
+                "type": "object",
+                "properties": {"created_at": {"type": "string"}},
+                "required": ["created_at"],
+            }
+        },
+    }
+
+    compiled = compile_unified_schema(schema, "openai")["schema"]
+
+    assert compiled["required"] == []

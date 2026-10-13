@@ -15,7 +15,7 @@ def is_compiled_schema(schema: dict[str, Any]) -> bool:
     if "fields" in schema and isinstance(schema.get("fields"), list):
         return True
 
-    if "type" in schema and "properties" in schema:
+    if schema.get("type") == "object" and isinstance(schema.get("properties"), dict):
         return True
 
     if schema.get("type") == "array" and "items" in schema:
