@@ -178,6 +178,7 @@ class LoadRender:
         self._missed: list[str] = []
         self._not_recorded: frozenset[str] = frozenset()
         self._importing = 0
+        self._modules: list[_ImportingTemplate] = []
         self._actions: set[str] = set()
         self._params: set[str] = set()
         self._action_prefixes: set[str] = set()
@@ -205,6 +206,21 @@ class LoadRender:
         extension = self.env.extensions[_LeaveExtension.identifier]
         assert isinstance(extension, _LeaveExtension)
         extension.load = self
+
+    def forget_modules(self) -> None:
+        """Drop each file's cached top-level run, so its next import or include runs it again."""
+        for template in self._modules:
+            template._module = None
+        self._modules.clear()
+
+    def show(self, template_file: str, names: Mapping[str, Any]) -> None:
+        """Make *names* what the file's top level and macros read beyond the file's own."""
+        template = self.env.get_template(template_file)
+        assert isinstance(template, _ImportingTemplate)
+        if template.folder_names is None:
+            template.folder_names = {}
+        template.folder_names.clear()
+        template.folder_names.update(names)
 
     # ── the render ─────────────────────────────────────────────────────────
 
@@ -666,8 +682,9 @@ class _Loader(FileSystemLoader):
 class _ImportingTemplate(jinja2.Template):
     """A file's top level runs as it is imported, leniently, as the load always ran it."""
 
-    # For a file of templates/: the globals and the folder's other files' names. Shared
-    # with its module, not copied, so its macros read names registered after it ran.
+    # For a file the folder's load registers: the globals and the other files' names. A
+    # file's module shares this, or the globals, uncopied, so its macros read names
+    # registered after it ran.
     folder_names: dict[str, Any] | None = None
 
     def make_module(
@@ -680,17 +697,15 @@ class _ImportingTemplate(jinja2.Template):
         load = extension.load if isinstance(extension, _LeaveExtension) else None
         if load is None:
             return super().make_module(vars, shared, locals)
-        if vars is None and self.folder_names is not None:
-            vars, shared = self.folder_names, True
+        if vars is None and self.name is not None:
+            names = self.environment.globals if self.folder_names is None else self.folder_names
+            vars, shared = names, True
+            load._modules.append(self)
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
         finally:
             load._importing -= 1
-
-    def forget_module(self) -> None:
-        """Drop the cached run of the top level, so the next import or include runs it again."""
-        self._module = None
 
 
 def _undefined_class(load: LoadRender) -> type[Undefined]:

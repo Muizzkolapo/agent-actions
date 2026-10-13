@@ -24,7 +24,7 @@ from agent_actions.utils.schema_utils import is_compiled_schema
 logger = logging.getLogger(__name__)
 
 
-def _load_template_globals(env, templates_folder):
+def _load_template_globals(load: LoadRender, templates_folder):
     """Register the macros and variables of every templates/ file as globals.
 
     A file reads the names of the whole folder, whatever the files are called. Where two
@@ -41,6 +41,7 @@ def _load_template_globals(env, templates_folder):
     template_files = sorted(
         p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")
     )
+    env = load.env
     own_globals = dict(env.globals)
     runs: dict[str, _TemplateRun] = {}
 
@@ -57,12 +58,16 @@ def _load_template_globals(env, templates_folder):
     for _ in range(len(template_files) + 1):
         previous, runs = (
             runs,
-            {name: _run_template(env, name, names_beside(name)) for name in template_files},
+            {name: _run_template(load, name, names_beside(name)) for name in template_files},
         )
         if all(runs[name].same_as(previous.get(name)) for name in template_files):
             break
-    for run in runs.values():
-        run.see(names_beside(run.template_file))
+    # What is imported or included from here on runs over the names as they ended.
+    load.forget_modules()
+    for template_file, run in runs.items():
+        if run.error is None:
+            load.show(template_file, names_beside(template_file))
+    env.globals.clear()
     env.globals.update(names_beside(None))
 
     known = set(own_globals)
@@ -104,46 +109,35 @@ def _load_template_globals(env, templates_folder):
 class _TemplateRun:
     """What one run of a templates/ file's top level gave: its names, or its failure."""
 
-    template_file: str
-    template: Any
     names: dict[str, Any]
-    text: str = ""
     error: Exception | None = None
 
     def same_as(self, other: "_TemplateRun | None") -> bool:
         # By repr: a macro is a new object on every run, and a name left undefined
         # cannot be compared.
-        return other is not None and (repr(self.names), self.text, repr(self.error)) == (
+        return other is not None and (repr(self.names), repr(self.error)) == (
             repr(other.names),
-            other.text,
             repr(other.error),
         )
 
-    def see(self, names: dict[str, Any]) -> None:
-        """Make *names* what the file's module and macros read beyond the file's own."""
-        if self.template is not None:
-            self.template.folder_names.clear()
-            self.template.folder_names.update(names)
 
-
-def _run_template(env, template_file: str, names: dict[str, Any]) -> _TemplateRun:
+def _run_template(load: LoadRender, template_file: str, names: dict[str, Any]) -> _TemplateRun:
     """Run the file's top level over *names*: the globals and the rest of the folder's."""
-    template = None
+    # A file below the folder's top level reads the globals, so what this file imports
+    # or includes from there runs again, over the names this file reads.
+    load.forget_modules()
+    load.env.globals.clear()
+    load.env.globals.update(names)
     try:
-        template = env.get_template(template_file)
-        if template.folder_names is None:
-            template.folder_names = {}
-        template.folder_names.clear()
-        template.folder_names.update(names)
-        template.forget_module()
-        module = template.module
+        load.show(template_file, names)
+        module = load.env.get_template(template_file).module
     except Exception as e:
         # A name a later pass supplies fails this one, so the last pass's error is the one raised.
-        return _TemplateRun(template_file, template, {}, error=e)
+        return _TemplateRun({}, error=e)
     # vars() on a TemplateModule carries __name__ and _body_stream besides the
     # file's exports, and Jinja exports no underscore name: the public ones are it.
     exported = {name: value for name, value in vars(module).items() if not name.startswith("_")}
-    return _TemplateRun(template_file, template, exported, str(module))
+    return _TemplateRun(exported)
 
 
 def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path | None = None):
@@ -666,7 +660,7 @@ def render_pipeline_with_templates(
         PromptLoader.load_prompt, project_root=project_root
     )
     env.filters["dedent"] = textwrap.dedent
-    _load_template_globals(env, str(templates_folder))
+    _load_template_globals(load, str(templates_folder))
 
     # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
     # and a value that reads a version variable, are left for the stage that has them.
