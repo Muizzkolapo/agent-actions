@@ -37,8 +37,9 @@ class _FolderNames(dict[str, Any]):
 def _load_template_globals(load: LoadRender, templates_folder):
     """Register the macros and variables of every templates/ file as globals.
 
-    Each file's top level runs once, after the files whose names it reads, and every file
-    reads the same globals. Where two files set a name, the later-named file's is the global.
+    Each file's top level runs once, in name order but after the files whose names it
+    reads, and every file reads the same globals. Where two files set a name, the one that
+    ran later is the global.
     """
     templates_path = Path(templates_folder)
     # A project with no templates/ is as valid as one with an empty templates/;
@@ -76,31 +77,7 @@ def _load_template_globals(load: LoadRender, templates_folder):
         exported[template_file] = {
             name: value for name, value in vars(module).items() if not name.startswith("_")
         }
-        names.clear()
-        names.update(own_globals)
-        for loaded in template_files:
-            names.update(exported.get(loaded, {}))
-
-    def run_setters(name: str) -> None:
-        for template_file in setters.get(name, ()):
-            run(template_file)
-
-    def run_all(context_names: dict[str, Any]) -> None:
-        for template_file in template_files:
-            run(template_file)
-        for name, value in names.items():
-            context_names.setdefault(name, value)
-
-    names.demand, load.complete = run_setters, run_all
-    try:
-        for template_file in template_files:
-            run(template_file)
-    finally:
-        names.demand = load.complete = None
-
-    known = set(own_globals)
-    for template_file in template_files:
-        collisions = set(exported.get(template_file, ())) & known
+        collisions = set(exported[template_file]) & set(names)
         if collisions:
             logger.warning(
                 "Template '%s' redefines global name(s) already set by a previous template: %s. "
@@ -108,7 +85,19 @@ def _load_template_globals(load: LoadRender, templates_folder):
                 template_file,
                 ", ".join(sorted(collisions)),
             )
-        known.update(exported.get(template_file, ()))
+        names.update(exported[template_file])
+
+    def run_setters(name: str) -> None:
+        for template_file in setters.get(name, ()):
+            run(template_file)
+
+    names.demand = run_setters
+    try:
+        for template_file in template_files:
+            run(template_file)
+    finally:
+        names.demand = None
+
     # In the order they failed: a file that read a failed file's name failed after it.
     for template_file, error in errors:
         try:
@@ -136,7 +125,7 @@ def _load_template_globals(load: LoadRender, templates_folder):
 
 def _names_set_by(load: LoadRender, path: Path) -> frozenset[str]:
     try:
-        return load.names_set_by(path.read_text(encoding="utf-8"))
+        return load.exports(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, jinja2.TemplateSyntaxError):
         # Running the file reports it.
         return frozenset()

@@ -7,6 +7,6 @@ body: >-
   and a file included or imported without context rendered another file's variable as
   nothing. Every file now reads the macros and variables of the whole folder: each file's top
   level runs once, after the files whose names it reads. Where two
-  files define the same name, the one from the file whose name sorts later is used
-  everywhere, as the warning says.
+  files define the same name, the one from the file that ran later is used everywhere, as the
+  warning says.
 time: 2026-10-13T09:00:00Z

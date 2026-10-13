@@ -178,9 +178,6 @@ class LoadRender:
         self._missed: list[str] = []
         self._not_recorded: frozenset[str] = frozenset()
         self._importing = 0
-        # Called with the names an import with context hands a templates/ file, while the
-        # folder loads, to add those of the files that had yet to run.
-        self.complete: Callable[[dict[str, Any]], None] | None = None
         self._actions: set[str] = set()
         self._params: set[str] = set()
         self._action_prefixes: set[str] = set()
@@ -209,9 +206,33 @@ class LoadRender:
         assert isinstance(extension, _LeaveExtension)
         extension.load = self
 
-    def names_set_by(self, text: str) -> frozenset[str]:
-        """Every name *text* could set: its variables, macros and imports."""
-        return _assigned(self._names_env.parse(text))
+    def exports(self, text: str) -> frozenset[str]:
+        """The names *text* gives a file that imports it: its top level's variables,
+        macros and imports."""
+        names: set[str] = set()
+
+        def read(node: nodes.Node) -> None:
+            for child in node.iter_child_nodes():
+                if isinstance(child, nodes.Macro):
+                    names.add(child.name)
+                elif isinstance(child, nodes.Assign | nodes.AssignBlock):
+                    target = child.target
+                    names.update(
+                        n.name
+                        for n in (target, *target.find_all(nodes.Name))
+                        if isinstance(n, nodes.Name)
+                    )
+                elif isinstance(child, nodes.Import):
+                    names.add(child.target)
+                elif isinstance(child, nodes.FromImport):
+                    names.update(n if isinstance(n, str) else n[1] for n in child.names)
+                elif not isinstance(
+                    child, nodes.For | nodes.CallBlock | nodes.With | nodes.FilterBlock
+                ):
+                    read(child)
+
+        read(self._names_env.parse(text))
+        return frozenset(name for name in names if not name.startswith("_"))
 
     # ── the render ─────────────────────────────────────────────────────────
 
@@ -673,6 +694,21 @@ class _Loader(FileSystemLoader):
 class _ImportingTemplate(jinja2.Template):
     """A file's top level runs as it is imported, leniently, as the load always ran it."""
 
+    def new_context(
+        self,
+        vars: dict[str, Any] | None = None,
+        shared: bool = False,
+        locals: Mapping[str, Any] | None = None,
+    ) -> Context:
+        globals = self.environment.globals
+        if shared and vars is not None:
+            # Jinja hands over a copy of the importer's names, which would keep from the
+            # file every name templates/ registers after.
+            given = {} if vars is globals else dict(vars)
+            given.update((k, v) for k, v in (locals or {}).items() if v is not missing)
+            vars, locals = (_OverGlobals(given, globals) if given else globals), None
+        return super().new_context(vars, shared, locals)
+
     def make_module(
         self,
         vars: dict[str, Any] | None = None,
@@ -687,13 +723,25 @@ class _ImportingTemplate(jinja2.Template):
             # Jinja would copy the globals, keeping from the file's macros every name
             # templates/ registers after this run; shared, they read them as they stand.
             vars, shared = self.environment.globals, True
-        elif vars is not None and load.complete is not None:
-            load.complete(vars)
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
         finally:
             load._importing -= 1
+
+
+class _OverGlobals(dict[str, Any]):
+    """The names an import or include with context hands a file, over the globals as they stand."""
+
+    def __init__(self, names: Mapping[str, Any], globals: Mapping[str, Any]) -> None:
+        super().__init__(names)
+        self._globals = globals
+
+    def __contains__(self, name: object) -> bool:
+        return super().__contains__(name) or name in self._globals
+
+    def __missing__(self, name: str) -> Any:
+        return self._globals[name]
 
 
 def _undefined_class(load: LoadRender) -> type[Undefined]:
