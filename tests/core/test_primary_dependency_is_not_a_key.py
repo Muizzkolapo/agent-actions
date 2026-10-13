@@ -72,3 +72,39 @@ def test_a_config_carrying_it_splits_its_dependencies_as_one_without_it(named):
 
     assert with_key == infer_dependencies(config, actions, "joined", validate=False)
     assert with_key == (["left"], ["right"])
+
+
+def test_inspect_reports_a_fan_in_under_its_sources_and_scope_alone():
+    from types import SimpleNamespace
+
+    from agent_actions.cli.inspect_base import BaseInspectCommand
+
+    inspector = SimpleNamespace(
+        action_configs={
+            "left": {},
+            "right": {},
+            "joined": {
+                "dependencies": ["left", "right"],
+                "context_scope": {"observe": ["left.*", "right.*"]},
+            },
+        }
+    )
+
+    info = BaseInspectCommand("wf", None, json_output=True)._analyze_dependencies(inspector)
+
+    assert info["joined"] == {
+        "explicit_dependencies": ["left", "right"],
+        "input_sources": ["left"],
+        "context_sources": ["right"],
+        "context_scope": {"observe": ["left.*", "right.*"], "passthrough": [], "drop": []},
+    }
+
+
+def test_written_under_the_project_defaults_it_changes_no_fan_in():
+    config = {"dependencies": ["left", "right"], "context_scope": {"observe": ["left.*"]}}
+    actions = ["left", "right", "joined"]
+    plain = infer_dependencies(config, actions, "joined")
+
+    for value in ("right", "ghost", ["x"]):
+        inherited = {**config, "primary_dependency": value}
+        assert infer_dependencies(inherited, actions, "joined") == plain
