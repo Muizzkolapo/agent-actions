@@ -666,6 +666,10 @@ class _Loader(FileSystemLoader):
 class _ImportingTemplate(jinja2.Template):
     """A file's top level runs as it is imported, leniently, as the load always ran it."""
 
+    # For a file of templates/: the globals and the folder's other files' names. Shared
+    # with its module, not copied, so its macros read names registered after it ran.
+    folder_names: dict[str, Any] | None = None
+
     def make_module(
         self,
         vars: dict[str, Any] | None = None,
@@ -676,11 +680,8 @@ class _ImportingTemplate(jinja2.Template):
         load = extension.load if isinstance(extension, _LeaveExtension) else None
         if load is None:
             return super().make_module(vars, shared, locals)
-        if vars is None:
-            # Jinja copies the globals as it builds a module, which would keep from the
-            # file's macros every templates/ name registered after this run. Shared, the
-            # module reads the environment's own.
-            vars, shared = self.environment.globals, True
+        if vars is None and self.folder_names is not None:
+            vars, shared = self.folder_names, True
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)

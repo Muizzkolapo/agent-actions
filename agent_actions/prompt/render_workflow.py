@@ -43,17 +43,27 @@ def _load_template_globals(env, templates_folder):
     )
     own_globals = dict(env.globals)
     runs: dict[str, _TemplateRun] = {}
-    # Each pass runs every file over the names the pass before it left, so a pass settles
-    # whatever read only settled names: one pass per file settles any folder without a
-    # cycle, and one more shows nothing moved.
+
+    def names_beside(reader: str | None) -> dict[str, Any]:
+        names = dict(own_globals)
+        for template_file, run in runs.items():
+            if template_file != reader:
+                names.update(run.names)
+        return names
+
+    # Each pass runs every file over the names the pass before it left the other files
+    # with, so a pass settles whatever read only settled names: one pass per file settles
+    # any folder without a cycle, and one more shows nothing moved.
     for _ in range(len(template_files) + 1):
-        previous, runs = runs, {name: _run_template(env, name) for name in template_files}
-        env.globals.clear()
-        env.globals.update(own_globals)
-        for run in runs.values():
-            env.globals.update(run.names)
+        previous, runs = (
+            runs,
+            {name: _run_template(env, name, names_beside(name)) for name in template_files},
+        )
         if all(runs[name].same_as(previous.get(name)) for name in template_files):
             break
+    for run in runs.values():
+        run.see(names_beside(run.template_file))
+    env.globals.update(names_beside(None))
 
     known = set(own_globals)
     for template_file, run in runs.items():
@@ -94,6 +104,8 @@ def _load_template_globals(env, templates_folder):
 class _TemplateRun:
     """What one run of a templates/ file's top level gave: its names, or its failure."""
 
+    template_file: str
+    template: Any
     names: dict[str, Any]
     text: str = ""
     error: Exception | None = None
@@ -107,19 +119,31 @@ class _TemplateRun:
             repr(other.error),
         )
 
+    def see(self, names: dict[str, Any]) -> None:
+        """Make *names* what the file's module and macros read beyond the file's own."""
+        if self.template is not None:
+            self.template.folder_names.clear()
+            self.template.folder_names.update(names)
 
-def _run_template(env, template_file: str) -> _TemplateRun:
+
+def _run_template(env, template_file: str, names: dict[str, Any]) -> _TemplateRun:
+    """Run the file's top level over *names*: the globals and the rest of the folder's."""
+    template = None
     try:
         template = env.get_template(template_file)
+        if template.folder_names is None:
+            template.folder_names = {}
+        template.folder_names.clear()
+        template.folder_names.update(names)
         template.forget_module()
         module = template.module
     except Exception as e:
         # A name a later pass supplies fails this one, so the last pass's error is the one raised.
-        return _TemplateRun({}, error=e)
+        return _TemplateRun(template_file, template, {}, error=e)
     # vars() on a TemplateModule carries __name__ and _body_stream besides the
     # file's exports, and Jinja exports no underscore name: the public ones are it.
-    names = {name: value for name, value in vars(module).items() if not name.startswith("_")}
-    return _TemplateRun(names, str(module))
+    exported = {name: value for name, value in vars(module).items() if not name.startswith("_")}
+    return _TemplateRun(template_file, template, exported, str(module))
 
 
 def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path | None = None):
