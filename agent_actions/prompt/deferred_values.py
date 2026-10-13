@@ -695,19 +695,6 @@ class _Loader(FileSystemLoader):
 class _ImportingTemplate(jinja2.Template):
     """A file's top level runs as it is imported, leniently, as the load always ran it."""
 
-    def new_context(
-        self,
-        vars: dict[str, Any] | None = None,
-        shared: bool = False,
-        locals: Mapping[str, Any] | None = None,
-    ) -> Context:
-        globals = self.environment.globals
-        if shared and vars is not None:
-            # Jinja hands over the importer's names with a copy of the globals; kept, the
-            # copy would hide what another file sets a name to after this.
-            vars = {k: v for k, v in vars.items() if globals.get(k, missing) is not v}
-        return super().new_context(vars, shared, locals)
-
     def make_module(
         self,
         vars: dict[str, Any] | None = None,

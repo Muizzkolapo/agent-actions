@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 class _FolderNames(dict[str, Any]):
-    """The globals while templates/ loads: looking up a name a file yet to run sets runs it."""
+    """The globals while templates/ loads: looking up a name runs the files yet to run that set it."""
 
     demand: Callable[[str], None] | None = None
 
     def __contains__(self, name: object) -> bool:
-        if self.demand is not None and isinstance(name, str) and not super().__contains__(name):
+        if self.demand is not None and isinstance(name, str):
             self.demand(name)
         return super().__contains__(name)
 
