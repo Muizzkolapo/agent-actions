@@ -20,8 +20,9 @@ def field_is_required(
     ``required:`` array; then ``optional`` opts in/out; otherwise the
     schema's ``required_by_default`` decides (default: optional).
     """
-    if isinstance(field.get("required"), bool):
-        return field["required"]
+    explicit = field.get("required")
+    if isinstance(explicit, bool):
+        return explicit
     field_id = field.get("id") or field.get("name")
     if field_id and field_id in top_level_required:
         return True
