@@ -23,13 +23,23 @@ from agent_actions.utils.schema_utils import is_compiled_schema
 logger = logging.getLogger(__name__)
 
 
-def _load_template_globals(env, templates_folder):
-    """
-    Load and register all Jinja2 templates and their globals.
+class _FolderNames(dict[str, Any]):
+    """The globals while templates/ loads: looking up a name runs the files yet to run that set it."""
 
-    Args:
-        env: Jinja2 Environment instance
-        templates_folder: Path to templates directory
+    demand: Callable[[str], None] | None = None
+
+    def __contains__(self, name: object) -> bool:
+        if self.demand is not None and isinstance(name, str):
+            self.demand(name)
+        return super().__contains__(name)
+
+
+def _load_template_globals(load: LoadRender, templates_folder):
+    """Register the macros and variables of every templates/ file as globals.
+
+    Each file's top level runs once, in name order but after the files whose names it
+    reads, and every file reads the same globals. Where two files set a name, the one that
+    ran later is the global.
     """
     templates_path = Path(templates_folder)
     # A project with no templates/ is as valid as one with an empty templates/;
@@ -39,26 +49,59 @@ def _load_template_globals(env, templates_folder):
             "No templates directory at %s, so there are no globals to load.", templates_path
         )
         return
-    template_files = [p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")]
+    template_files = sorted(
+        p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")
+    )
+    env = load.env
+    own_globals = dict(env.globals)
+    names = env.globals = _FolderNames(own_globals)
+    setters: dict[str, list[str]] = {}
     for template_file in template_files:
+        for name in _names_set_by(load, templates_path / template_file):
+            setters.setdefault(name, []).append(template_file)
+    started: set[str] = set()
+    exported: dict[str, dict[str, Any]] = {}
+    errors: list[tuple[str, Exception]] = []
+
+    def run(template_file: str) -> None:
+        if template_file in started:
+            return
+        started.add(template_file)
         try:
-            template = env.get_template(template_file)
-            # vars() on a TemplateModule carries __name__ and _body_stream besides the
-            # file's exports, and Jinja exports no underscore name: the public ones are it.
-            new_names = {
-                name: value
-                for name, value in vars(template.module).items()
-                if not name.startswith("_")
-            }
-            collisions = set(new_names) & set(env.globals)
-            if collisions:
-                logger.warning(
-                    "Template '%s' redefines global name(s) already set by a previous template: %s. "
-                    "The previous definition(s) will be overwritten.",
-                    template_file,
-                    ", ".join(sorted(collisions)),
-                )
-            env.globals.update(new_names)
+            module = env.get_template(template_file).module
+        except Exception as e:
+            errors.append((template_file, e))
+            return
+        # vars() on a TemplateModule carries __name__ and _body_stream besides the
+        # file's exports, and Jinja exports no underscore name: the public ones are it.
+        exported[template_file] = {
+            name: value for name, value in vars(module).items() if not name.startswith("_")
+        }
+        collisions = set(exported[template_file]) & set(names)
+        if collisions:
+            logger.warning(
+                "Template '%s' redefines global name(s) already set by a previous template: %s. "
+                "The previous definition(s) will be overwritten.",
+                template_file,
+                ", ".join(sorted(collisions)),
+            )
+        names.update(exported[template_file])
+
+    def run_setters(name: str) -> None:
+        for template_file in setters.get(name, ()):
+            run(template_file)
+
+    names.demand = run_setters
+    try:
+        for template_file in template_files:
+            run(template_file)
+    finally:
+        names.demand = None
+
+    # In the order they failed: a file that read a failed file's name failed after it.
+    for template_file, error in errors:
+        try:
+            raise error
         except jinja2.TemplateNotFound:
             logger.warning("Template file '%s' not found in %s.", template_file, templates_folder)
         except jinja2.TemplateSyntaxError as e:
@@ -78,6 +121,14 @@ def _load_template_globals(env, templates_folder):
                 context={"template_file": template_file, "templates_folder": templates_folder},
                 cause=e,
             ) from e
+
+
+def _names_set_by(load: LoadRender, path: Path) -> frozenset[str]:
+    try:
+        return load.exports(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, jinja2.TemplateSyntaxError):
+        # Running the file reports it.
+        return frozenset()
 
 
 def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path | None = None):
@@ -600,7 +651,7 @@ def render_pipeline_with_templates(
         PromptLoader.load_prompt, project_root=project_root
     )
     env.filters["dedent"] = textwrap.dedent
-    _load_template_globals(env, str(templates_folder))
+    _load_template_globals(load, str(templates_folder))
 
     # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
     # and a value that reads a version variable, are left for the stage that has them.

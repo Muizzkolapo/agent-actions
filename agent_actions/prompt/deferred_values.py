@@ -200,11 +200,40 @@ class LoadRender:
             extensions=[_LeaveExtension],
         )
         self.env.template_class = _ImportingTemplate
+        self.env.context_class = _FolderContext
         self._names_env.filters = self.env.filters
         self._names_env.tests = self.env.tests
         extension = self.env.extensions[_LeaveExtension.identifier]
         assert isinstance(extension, _LeaveExtension)
         extension.load = self
+
+    def exports(self, text: str) -> frozenset[str]:
+        """The names *text* gives a file that imports it: its top level's variables,
+        macros and imports."""
+        names: set[str] = set()
+
+        def read(node: nodes.Node) -> None:
+            for child in node.iter_child_nodes():
+                if isinstance(child, nodes.Macro):
+                    names.add(child.name)
+                elif isinstance(child, nodes.Assign | nodes.AssignBlock):
+                    target = child.target
+                    names.update(
+                        n.name
+                        for n in (target, *target.find_all(nodes.Name))
+                        if isinstance(n, nodes.Name)
+                    )
+                elif isinstance(child, nodes.Import):
+                    names.add(child.target)
+                elif isinstance(child, nodes.FromImport):
+                    names.update(n if isinstance(n, str) else n[1] for n in child.names)
+                elif not isinstance(
+                    child, nodes.For | nodes.CallBlock | nodes.With | nodes.FilterBlock
+                ):
+                    read(child)
+
+        read(self._names_env.parse(text))
+        return frozenset(name for name in names if not name.startswith("_"))
 
     # ── the render ─────────────────────────────────────────────────────────
 
@@ -676,11 +705,26 @@ class _ImportingTemplate(jinja2.Template):
         load = extension.load if isinstance(extension, _LeaveExtension) else None
         if load is None:
             return super().make_module(vars, shared, locals)
+        if vars is None and self.name is not None:
+            # Jinja would copy the globals, keeping from the file's macros every name
+            # templates/ registers after this run.
+            vars, shared = {}, True
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
         finally:
             load._importing -= 1
+
+
+class _FolderContext(Context):
+    """Reads a name it was not handed from the globals as they stand, so a templates/
+    file finds what the folder registered after the file ran."""
+
+    def resolve_or_missing(self, key: str) -> Any:
+        value = super().resolve_or_missing(key)
+        if value is missing and key in self.environment.globals:
+            return self.environment.globals[key]
+        return value
 
 
 def _undefined_class(load: LoadRender) -> type[Undefined]:
