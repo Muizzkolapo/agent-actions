@@ -676,11 +676,20 @@ class _ImportingTemplate(jinja2.Template):
         load = extension.load if isinstance(extension, _LeaveExtension) else None
         if load is None:
             return super().make_module(vars, shared, locals)
+        if vars is None:
+            # Jinja copies the globals as it builds a module, which would keep from the
+            # file's macros every templates/ name registered after this run. Shared, the
+            # module reads the environment's own.
+            vars, shared = self.environment.globals, True
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
         finally:
             load._importing -= 1
+
+    def forget_module(self) -> None:
+        """Drop the cached run of the top level, so the next import or include runs it again."""
+        self._module = None
 
 
 def _undefined_class(load: LoadRender) -> type[Undefined]:

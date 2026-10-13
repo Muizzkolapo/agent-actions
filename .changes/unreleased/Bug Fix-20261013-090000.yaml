@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  What a `templates/` file reads from another no longer depends on what the files are
+  called. The folder was loaded in the order the filesystem listed it, and each file saw
+  only the names of the files loaded before it, so a macro calling another file's macro
+  failed the load (`'house_length' is undefined`) or worked depending on the file names,
+  and a file included or imported without context rendered another file's variable as
+  nothing. Every file now reads the macros and variables of the whole folder. Where two
+  files define the same name, the one from the file whose name sorts later is used
+  everywhere, as the warning says.
+time: 2026-10-13T09:00:00Z

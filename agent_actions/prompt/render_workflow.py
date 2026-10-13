@@ -4,6 +4,7 @@ import functools
 import logging
 import textwrap
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 def _load_template_globals(env, templates_folder):
-    """
-    Load and register all Jinja2 templates and their globals.
+    """Register the macros and variables of every templates/ file as globals.
 
-    Args:
-        env: Jinja2 Environment instance
-        templates_folder: Path to templates directory
+    A file reads the names of the whole folder, whatever the files are called. Where two
+    files define a name, the one whose file name sorts later is the global.
     """
     templates_path = Path(templates_folder)
     # A project with no templates/ is as valid as one with an empty templates/;
@@ -39,18 +38,29 @@ def _load_template_globals(env, templates_folder):
             "No templates directory at %s, so there are no globals to load.", templates_path
         )
         return
-    template_files = [p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")]
-    for template_file in template_files:
+    template_files = sorted(
+        p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")
+    )
+    own_globals = dict(env.globals)
+    runs: dict[str, _TemplateRun] = {}
+    # Each pass runs every file over the names the pass before it left, so a pass settles
+    # whatever read only settled names: one pass per file settles any folder without a
+    # cycle, and one more shows nothing moved.
+    for _ in range(len(template_files) + 1):
+        previous, runs = runs, {name: _run_template(env, name) for name in template_files}
+        env.globals.clear()
+        env.globals.update(own_globals)
+        for run in runs.values():
+            env.globals.update(run.names)
+        if all(runs[name].same_as(previous.get(name)) for name in template_files):
+            break
+
+    known = set(own_globals)
+    for template_file, run in runs.items():
         try:
-            template = env.get_template(template_file)
-            # vars() on a TemplateModule carries __name__ and _body_stream besides the
-            # file's exports, and Jinja exports no underscore name: the public ones are it.
-            new_names = {
-                name: value
-                for name, value in vars(template.module).items()
-                if not name.startswith("_")
-            }
-            collisions = set(new_names) & set(env.globals)
+            if run.error is not None:
+                raise run.error
+            collisions = set(run.names) & known
             if collisions:
                 logger.warning(
                     "Template '%s' redefines global name(s) already set by a previous template: %s. "
@@ -58,7 +68,7 @@ def _load_template_globals(env, templates_folder):
                     template_file,
                     ", ".join(sorted(collisions)),
                 )
-            env.globals.update(new_names)
+            known.update(run.names)
         except jinja2.TemplateNotFound:
             logger.warning("Template file '%s' not found in %s.", template_file, templates_folder)
         except jinja2.TemplateSyntaxError as e:
@@ -78,6 +88,38 @@ def _load_template_globals(env, templates_folder):
                 context={"template_file": template_file, "templates_folder": templates_folder},
                 cause=e,
             ) from e
+
+
+@dataclass(frozen=True)
+class _TemplateRun:
+    """What one run of a templates/ file's top level gave: its names, or its failure."""
+
+    names: dict[str, Any]
+    text: str = ""
+    error: Exception | None = None
+
+    def same_as(self, other: "_TemplateRun | None") -> bool:
+        # By repr: a macro is a new object on every run, and a name left undefined
+        # cannot be compared.
+        return other is not None and (repr(self.names), self.text, repr(self.error)) == (
+            repr(other.names),
+            other.text,
+            repr(other.error),
+        )
+
+
+def _run_template(env, template_file: str) -> _TemplateRun:
+    try:
+        template = env.get_template(template_file)
+        template.forget_module()
+        module = template.module
+    except Exception as e:
+        # A name a later pass supplies fails this one, so the last pass's error is the one raised.
+        return _TemplateRun({}, error=e)
+    # vars() on a TemplateModule carries __name__ and _body_stream besides the
+    # file's exports, and Jinja exports no underscore name: the public ones are it.
+    names = {name: value for name, value in vars(module).items() if not name.startswith("_")}
+    return _TemplateRun(names, str(module))
 
 
 def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path | None = None):
