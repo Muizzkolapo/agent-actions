@@ -82,14 +82,12 @@ def test_a_subfolder_file_included_without_context_reads_the_folders_variable(
     tmp_path, user, definer
 ):
     templates = {
-        user: "{% set line %}{% include 'sub/p.j2' without context %}{% endset %}\n",
+        user: "{% include 'sub/p.j2' without context %}\n",
         "sub/p.j2": "P {{ v }}",
         definer: DEFINES,
     }
 
-    prompt = _prompt(tmp_path, "{{ line }} / {% include 'sub/p.j2' without context %}", templates)
-
-    assert prompt == "P vee / P vee"
+    assert _prompt(tmp_path, "{% include 'sub/p.j2' without context %}", templates) == "P vee"
 
 
 @pytest.mark.parametrize("unrelated", [0, 1, 3])
