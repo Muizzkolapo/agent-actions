@@ -59,19 +59,6 @@ def test_two_files_adding_to_another_files_namespace_each_add_once(tmp_path, nam
     assert _prompt(tmp_path, "{{ ns.count }}", templates) == "11"
 
 
-def test_a_subfolder_file_the_workflow_imports_reads_its_importers_names_too(tmp_path):
-    templates = {
-        "a.j2": "{% import 'sub/lib.j2' as lib %}{% set own = 'mine' %}\n",
-        "sub/lib.j2": "{% set tone = own | default('none') %}\n",
-    }
-
-    prompt = _prompt(
-        tmp_path, "{{ lib.tone }}", templates, head="{% import 'sub/lib.j2' as lib %}\n"
-    )
-
-    assert prompt == "mine"
-
-
 def test_a_macro_reads_a_name_only_a_later_named_file_sets_through_its_own_file(tmp_path):
     templates = {
         "a.j2": "{% macro show() %}{{ late }}/{{ mine }}{% endmacro %}{% set mine = 'a' %}\n",

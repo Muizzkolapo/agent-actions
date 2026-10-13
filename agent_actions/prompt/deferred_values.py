@@ -178,7 +178,9 @@ class LoadRender:
         self._missed: list[str] = []
         self._not_recorded: frozenset[str] = frozenset()
         self._importing = 0
-        self._modules: list[_ImportingTemplate] = []
+        # Called with the names an import with context hands a templates/ file, while the
+        # folder loads, to add those of the files that had yet to run.
+        self.complete: Callable[[dict[str, Any]], None] | None = None
         self._actions: set[str] = set()
         self._params: set[str] = set()
         self._action_prefixes: set[str] = set()
@@ -207,25 +209,9 @@ class LoadRender:
         assert isinstance(extension, _LeaveExtension)
         extension.load = self
 
-    def keep_module(self, template_file: str, module: TemplateModule) -> None:
-        """Make *module* the run of the file's top level that an import or include reuses."""
-        template = self.env.get_template(template_file)
-        template._module = module
-
-    def forget_modules(self) -> None:
-        """Drop each file's cached top-level run, so its next import or include runs it again."""
-        for template in self._modules:
-            template._module = None
-        self._modules.clear()
-
-    def show(self, template_file: str, names: Mapping[str, Any]) -> None:
-        """Make *names* what the file's top level and macros read beyond the file's own."""
-        template = self.env.get_template(template_file)
-        assert isinstance(template, _ImportingTemplate)
-        if template.folder_names is None:
-            template.folder_names = {}
-        template.folder_names.clear()
-        template.folder_names.update(names)
+    def names_set_by(self, text: str) -> frozenset[str]:
+        """Every name *text* could set: its variables, macros and imports."""
+        return _assigned(self._names_env.parse(text))
 
     # ── the render ─────────────────────────────────────────────────────────
 
@@ -687,11 +673,6 @@ class _Loader(FileSystemLoader):
 class _ImportingTemplate(jinja2.Template):
     """A file's top level runs as it is imported, leniently, as the load always ran it."""
 
-    # For a file the folder's load registers: the globals and the other files' names. A
-    # file's module shares this, or the globals, uncopied, so its macros read names
-    # registered after it ran.
-    folder_names: dict[str, Any] | None = None
-
     def make_module(
         self,
         vars: dict[str, Any] | None = None,
@@ -703,9 +684,11 @@ class _ImportingTemplate(jinja2.Template):
         if load is None:
             return super().make_module(vars, shared, locals)
         if vars is None and self.name is not None:
-            names = self.environment.globals if self.folder_names is None else self.folder_names
-            vars, shared = names, True
-            load._modules.append(self)
+            # Jinja would copy the globals, keeping from the file's macros every name
+            # templates/ registers after this run; shared, they read them as they stand.
+            vars, shared = self.environment.globals, True
+        elif vars is not None and load.complete is not None:
+            load.complete(vars)
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
