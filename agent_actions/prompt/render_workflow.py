@@ -4,7 +4,7 @@ import functools
 import logging
 import textwrap
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -61,12 +61,16 @@ def _load_template_globals(load: LoadRender, templates_folder):
             {name: _run_template(load, name, names_beside(name)) for name in template_files},
         )
         if all(runs[name].same_as(previous.get(name)) for name in template_files):
+            # The pass that changed nothing ran over the values of the one before, so
+            # those are the ones that hold what a file appended to another's list.
+            runs = previous
             break
-    # What is imported or included from here on runs over the names as they ended.
+    # What is imported or included from here on is the run that was registered, or for
+    # a file below the folder's top level a new one, over the names as they ended.
     load.forget_modules()
     for template_file, run in runs.items():
-        if run.error is None:
-            load.show(template_file, names_beside(template_file))
+        if run.module is not None:
+            load.keep_module(template_file, run.module)
     env.globals.clear()
     env.globals.update(names_beside(None))
 
@@ -110,15 +114,18 @@ class _TemplateRun:
     """What one run of a templates/ file's top level gave: its names, or its failure."""
 
     names: dict[str, Any]
+    module: Any = None
     error: Exception | None = None
+    # Read as the run ends, before a later run changes a value: by repr, since a macro
+    # is a new object on every run and a name left undefined cannot be compared.
+    read: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        text = "" if self.module is None else str(self.module)
+        object.__setattr__(self, "read", repr((self.names, text, self.error)))
 
     def same_as(self, other: "_TemplateRun | None") -> bool:
-        # By repr: a macro is a new object on every run, and a name left undefined
-        # cannot be compared.
-        return other is not None and (repr(self.names), repr(self.error)) == (
-            repr(other.names),
-            repr(other.error),
-        )
+        return other is not None and self.read == other.read
 
 
 def _run_template(load: LoadRender, template_file: str, names: dict[str, Any]) -> _TemplateRun:
@@ -137,7 +144,7 @@ def _run_template(load: LoadRender, template_file: str, names: dict[str, Any]) -
     # vars() on a TemplateModule carries __name__ and _body_stream besides the
     # file's exports, and Jinja exports no underscore name: the public ones are it.
     exported = {name: value for name, value in vars(module).items() if not name.startswith("_")}
-    return _TemplateRun(exported)
+    return _TemplateRun(exported, module)
 
 
 def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path | None = None):

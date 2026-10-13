@@ -207,6 +207,11 @@ class LoadRender:
         assert isinstance(extension, _LeaveExtension)
         extension.load = self
 
+    def keep_module(self, template_file: str, module: TemplateModule) -> None:
+        """Make *module* the run of the file's top level that an import or include reuses."""
+        template = self.env.get_template(template_file)
+        template._module = module
+
     def forget_modules(self) -> None:
         """Drop each file's cached top-level run, so its next import or include runs it again."""
         for template in self._modules:
