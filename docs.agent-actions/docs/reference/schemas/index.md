@@ -87,6 +87,23 @@ items:
     - technical_level
 ```
 
+A schema file may also be a JSON Schema object. Its properties are the record's
+fields, the same as `fields:` entries. A property is required only when it is
+listed under `required:`; the project's `required_by_default` does not apply.
+
+```yaml
+# schema/page_summary.yml
+name: page_summary
+type: object
+properties:
+  summary: {type: string}
+  tone: {type: string}
+required: [summary]
+```
+
+An array schema's top-level `required:` is a boolean for the array itself; list
+required item properties under `items.required`, as above.
+
 ### Fields Format
 
 Simplified syntax for straightforward schemas:

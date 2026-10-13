@@ -78,3 +78,38 @@ def test_array_form_is_not_parsed_as_inline_shorthand():
     base, _ = _load_inline_schema(dict(array_form), None, "{}", {"name": "act"}, {})
 
     assert base == array_form
+
+
+@pytest.mark.parametrize(
+    ("schema", "fragment"),
+    [
+        (
+            {
+                "name": "s",
+                "type": "object",
+                "properties": {"a": {"type": "string"}},
+                "required": "a",
+            },
+            "expected a list",
+        ),
+        (
+            {
+                "name": "s",
+                "type": "object",
+                "properties": {"a": {"type": "string"}},
+                "required": ["a", "missing"],
+            },
+            "'missing'",
+        ),
+        ({"name": "s", "type": "object", "properties": {"a": {"description": "x"}}}, "'a'"),
+    ],
+    ids=["required_not_a_list", "required_names_undeclared_property", "property_without_type"],
+)
+def test_a_malformed_object_form_is_refused_naming_the_schema(schema, fragment):
+    from agent_actions.errors import SchemaValidationError
+
+    with pytest.raises(SchemaValidationError) as raised:
+        compile_unified_schema(schema, "openai")
+
+    assert "'s'" in str(raised.value)
+    assert fragment in str(raised.value)
