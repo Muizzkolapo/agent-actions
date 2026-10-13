@@ -106,3 +106,14 @@ def test_at_a_top_level_and_with_context_as_before(tmp_path):
     )
 
     assert prompt == "[P loud] P"
+
+
+def test_in_a_macro_a_name_the_file_misses_renders_as_it_does_at_a_top_level(tmp_path):
+    templates = {
+        "a.j2": "{% macro framed() %}{% include 'p.j2' without context %}{% endmacro %}\n",
+        "p.j2": "P[{{ nope }}]",
+    }
+
+    prompt = _prompt(tmp_path, "{{ framed() }} {% include 'p.j2' without context %}", templates)
+
+    assert prompt == "P[] P[]"
