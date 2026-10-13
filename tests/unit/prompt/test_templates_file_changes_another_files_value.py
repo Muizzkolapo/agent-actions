@@ -79,3 +79,17 @@ def test_a_macro_reads_a_name_only_a_later_named_file_sets_through_its_own_file(
     }
 
     assert _prompt(tmp_path, "{{ show() }}", templates) == "z/a"
+
+
+@BEFORE_AND_AFTER
+def test_the_workflow_imports_the_list_another_file_appended_to(tmp_path, setter, changer):
+    templates = {setter: "{% set reg = [] %}\n", changer: "{% set _ = reg.append('b') %}\n"}
+
+    prompt = _prompt(
+        tmp_path,
+        "{{ imported | join(',') }}/{{ reg | join(',') }}",
+        templates,
+        head=f"{{% from '{setter}' import reg as imported %}}\n",
+    )
+
+    assert prompt == "b/b"
