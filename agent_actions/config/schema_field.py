@@ -15,12 +15,14 @@ def field_is_required(
 ) -> bool:
     """Whether a flat ``fields:`` entry is required.
 
-    Explicit ``required`` wins; then membership in the schema's top-level
-    ``required:`` array; then ``optional`` opts in/out; otherwise the
+    An explicit scalar ``required`` wins (a list there is a nested object's own
+    required properties, not this field's requiredness); then membership in the
+    schema's top-level ``required:`` array; then ``optional`` opts in/out; otherwise the
     schema's ``required_by_default`` decides (default: optional).
     """
-    if "required" in field:
-        return bool(field["required"])
+    explicit = field.get("required")
+    if "required" in field and not isinstance(explicit, list):
+        return bool(explicit)
     field_id = field.get("id") or field.get("name")
     if field_id and field_id in top_level_required:
         return True

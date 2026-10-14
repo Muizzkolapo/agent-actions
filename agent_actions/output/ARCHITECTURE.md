@@ -134,6 +134,15 @@ The pipeline accepts three input shapes:
 
    → auto-converted to unified by _convert_json_schema_to_unified()
 
+   JSON Schema object format (properties become fields; listed `required` only):
+   name: summary
+   type: object
+   properties:
+     title: {type: string}
+   required: [title]
+
+   → auto-converted to unified by _convert_json_schema_object_to_unified()
+
 3. Inline shorthand (dict):
    schema:
      title: string!          ← trailing ! = required
