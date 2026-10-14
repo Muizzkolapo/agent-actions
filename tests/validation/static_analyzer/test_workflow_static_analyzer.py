@@ -905,11 +905,10 @@ class TestContextScopeValidation:
         assert not errors, f"False positive on output_field: {errors}"
 
 
-class TestPrimaryDependencyValidation:
-    """Tests for primary_dependency validation."""
+class TestFanInValidation:
+    """A fan-in action and what its context scope may name."""
 
-    def test_valid_explicit_primary_dependency(self):
-        """Test valid explicit primary_dependency."""
+    def test_valid_fan_in_of_three(self):
         workflow_config = {
             "actions": [
                 {
@@ -931,9 +930,8 @@ class TestPrimaryDependencyValidation:
                     "schema": {"type": "object", "properties": {"field3": {"type": "string"}}},
                 },
                 {
-                    "name": "action_with_primary",
+                    "name": "fan_in_action",
                     "dependencies": ["dep_A", "dep_B", "dep_C"],
-                    "primary_dependency": "dep_B",
                     "context_scope": {"observe": ["dep_A.*", "dep_B.*", "dep_C.*"]},
                     "prompt": "Process: {{ action.dep_A.field1 }} {{ action.dep_B.field2 }} {{ action.dep_C.field3 }}",
                     "schema": {"type": "object", "properties": {"result": {"type": "string"}}},

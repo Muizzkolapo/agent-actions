@@ -84,20 +84,17 @@ class TestResolveInputSourcesForFanIn:
     Used by infer_dependencies() for prompt context classification.
     """
 
-    def test_base_name_primary_expands_to_all_versions(self):
-        """Base name as primary_dependency expands to all matching versions."""
-        deps = ["research_1", "research_2", "summarize"]
-        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps, "research")
-        assert set(input_sources) == {"research_1", "research_2"}
+    def test_a_versioned_first_dependency_brings_its_sibling_branches(self):
+        deps = ["research_1", "summarize", "research_2"]
+        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps)
+        assert input_sources == ["research_1", "research_2"]
         assert context_sources == ["summarize"]
 
-    def test_invalid_primary_raises_value_error(self):
-        """Invalid primary_dependency raises ValueError."""
-        deps = ["action_a", "action_b"]
-        with pytest.raises(ValueError) as exc_info:
-            _resolve_input_sources_for_fan_in(deps, "nonexistent")
-        assert "nonexistent" in str(exc_info.value)
-        assert "not found" in str(exc_info.value)
+    def test_an_unversioned_first_dependency_is_the_only_input(self):
+        deps = ["summarize", "research_1", "research_2"]
+        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps)
+        assert input_sources == ["summarize"]
+        assert context_sources == ["research_1", "research_2"]
 
 
 class TestDependencyPatterns:
@@ -196,8 +193,8 @@ class TestDependencyPatterns:
             "analyze_topics",
         }
 
-    def test_fan_in_primary_dependency_ignored(self, agent_runner, temp_folder):
-        """primary_dependency is ignored — all deps are input sources in bus model."""
+    def test_fan_in_of_two_returns_both_directories(self, agent_runner, temp_folder):
+        """All deps are input sources in bus model."""
         for action in ["action_a", "action_b"]:
             (temp_folder / "target" / action).mkdir()
 
@@ -207,7 +204,6 @@ class TestDependencyPatterns:
             "test_action",
         )
 
-        # All dependencies are input sources regardless of primary_dependency
         assert len(result) == 2
         assert {r.name for r in result} == {"action_a", "action_b"}
 
@@ -230,12 +226,8 @@ class TestDependencyPatterns:
         assert len(result) == 4
         assert {r.name for r in result} == {"research_1", "research_2", "research_3", "summarize"}
 
-    def test_versioned_primary_base_name_all_input(self, agent_runner, temp_folder):
-        """
-        All dependencies are input sources regardless of primary_dependency.
-
-        Bus model: primary_dependency is ignored at the runner level.
-        """
+    def test_versioned_and_unversioned_dependencies_are_all_input(self, agent_runner, temp_folder):
+        """Bus model: every dependency is an input source at the runner level."""
         for action in ["research_1", "research_2", "summarize"]:
             (temp_folder / "target" / action).mkdir()
 
@@ -322,9 +314,9 @@ class TestResolveDependencyDirectories:
         assert temp_agent_folder / "target" / "classify_2" in result
         assert temp_agent_folder / "target" / "classify_3" in result
 
-    def test_missing_primary_dependency_raises_error(self, agent_runner, temp_agent_folder):
-        """Test that missing PRIMARY dependency raises DependencyError."""
-        # action_A is primary but doesn't exist, action_B exists
+    def test_missing_first_dependency_directory_raises_error(self, agent_runner, temp_agent_folder):
+        """Test that a missing first dependency's directory raises DependencyError."""
+        # action_A is listed first but doesn't exist, action_B exists
         (temp_agent_folder / "target" / "action_B").mkdir(parents=True, exist_ok=True)
         # Remove action_A if it exists from fixture
         action_a_dir = temp_agent_folder / "target" / "action_A"
@@ -341,8 +333,8 @@ class TestResolveDependencyDirectories:
         assert "action_A" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 
-    def test_primary_dependency_ignored_all_input(self, agent_runner, temp_agent_folder):
-        """Test primary_dependency is ignored — all deps are input sources in bus model."""
+    def test_three_dependencies_are_all_input(self, agent_runner, temp_agent_folder):
+        """All deps are input sources in bus model."""
         dependencies = ["action_A", "action_B", "action_C"]
 
         result = agent_runner._resolve_dependency_directories(

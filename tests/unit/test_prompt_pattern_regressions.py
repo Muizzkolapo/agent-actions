@@ -118,45 +118,6 @@ class TestScanSqliteCoalesce:
 
 
 # ---------------------------------------------------------------------------
-# K-1: primary_dependency must reference an existing action name
-# ---------------------------------------------------------------------------
-class TestPrimaryDependencyValidation:
-    def _make_workflow(self, actions):
-        from agent_actions.config.schema import WorkflowConfig
-
-        return WorkflowConfig(
-            name="test",
-            description="test",
-            version="1",
-            actions=actions,
-        )
-
-    def _action(self, name, **kwargs):
-        from agent_actions.config.schema import ActionConfig
-
-        return ActionConfig(name=name, intent="test intent", **kwargs)
-
-    def test_valid_primary_dependency_passes(self):
-        """K-1: primary_dependency pointing to an existing action must pass."""
-        self._make_workflow(
-            [
-                self._action("a"),
-                self._action("b", dependencies=["a"], primary_dependency="a"),
-            ]
-        )
-
-    def test_invalid_primary_dependency_raises(self):
-        """K-1: primary_dependency pointing to non-existent action must raise at config load."""
-        with pytest.raises(Exception, match="primary_dependency"):
-            self._make_workflow(
-                [
-                    self._action("a"),
-                    self._action("b", primary_dependency="nonexistent"),
-                ]
-            )
-
-
-# ---------------------------------------------------------------------------
 # K-2: WRITE_TO / REPROCESS on_false must raise ConfigValidationError early
 # ---------------------------------------------------------------------------
 class TestUnsupportedGuardBehavior:

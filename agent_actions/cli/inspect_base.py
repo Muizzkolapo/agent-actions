@@ -146,7 +146,6 @@ class BaseInspectCommand:
             context_scope = action_config.get("context_scope") or {}
             if not isinstance(context_scope, dict):
                 context_scope = {}
-            has_primary_dep = "primary_dependency" in action_config
 
             result[action_name] = {
                 "explicit_dependencies": explicit_deps,
@@ -157,8 +156,6 @@ class BaseInspectCommand:
                     "passthrough": context_scope.get("passthrough", []),
                     "drop": context_scope.get("drop", []),
                 },
-                "has_primary_dependency": has_primary_dep,
-                "primary_dependency": action_config.get("primary_dependency"),
             }
 
         return result

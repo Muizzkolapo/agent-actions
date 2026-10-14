@@ -516,34 +516,6 @@ class TestInferDependenciesThreePatterns:
         assert input_sources == ["analyze_sentiment"]
         assert set(context_sources) == {"analyze_entities", "analyze_topics"}
 
-    def test_pattern_3_fan_in_with_primary_override(self):
-        """Pattern 3: Fan-in with primary_dependency override."""
-        action_config = {
-            "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-            "primary_dependency": "analyze_entities",  # Override: entities is primary
-            "context_scope": {
-                "observe": [
-                    "analyze_sentiment.*",
-                    "analyze_entities.*",
-                    "analyze_topics.*",
-                ]
-            },
-        }
-        workflow_actions = [
-            "analyze_sentiment",
-            "analyze_entities",
-            "analyze_topics",
-            "generate_report",
-        ]
-
-        input_sources, context_sources = infer_dependencies(
-            action_config, workflow_actions, "generate_report"
-        )
-
-        # Primary override: analyze_entities is input, rest are context
-        assert input_sources == ["analyze_entities"]
-        assert set(context_sources) == {"analyze_sentiment", "analyze_topics"}
-
     def test_versioned_primary_expands_to_all_branches(self):
         """Versioned primary: research_1, research_2, research_3 + summarize."""
         action_config = {
@@ -571,23 +543,6 @@ class TestInferDependenciesThreePatterns:
 
         # Versioned primary: all research branches become inputs, summarize is context
         assert set(input_sources) == {"research_1", "research_2", "research_3"}
-        assert context_sources == ["summarize"]
-
-    def test_versioned_primary_with_base_name_override(self):
-        """primary_dependency as base name expands to all version branches."""
-        action_config = {
-            "dependencies": ["research_1", "research_2", "summarize"],
-            "primary_dependency": "research",  # Base name, not in list directly
-            "context_scope": {"observe": ["research_1.*", "research_2.*", "summarize.*"]},
-        }
-        workflow_actions = ["research_1", "research_2", "summarize", "final_report"]
-
-        input_sources, context_sources = infer_dependencies(
-            action_config, workflow_actions, "final_report"
-        )
-
-        # Base name expands to all matching version branches
-        assert set(input_sources) == {"research_1", "research_2"}
         assert context_sources == ["summarize"]
 
     def test_different_base_names_with_same_suffix_is_fan_in(self):

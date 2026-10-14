@@ -121,7 +121,6 @@ Stage 1: WorkflowConfig (post-render, pre-agent-expansion)
   └── WorkflowConfig  → extra="forbid", plus model_validator checks:
       ├── Duplicate action names
       ├── Dangling dependency references
-      ├── Invalid primary_dependency references
       └── Circular dependencies (iterative DFS)
 
 Stage 2: AgentConfig (post-expansion)

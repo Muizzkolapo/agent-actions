@@ -55,16 +55,12 @@ def _make_dependency_info():
             "input_sources": [],
             "context_sources": [],
             "context_scope": {"observe": [], "passthrough": []},
-            "has_primary_dependency": False,
-            "primary_dependency": None,
         },
         "summarize": {
             "explicit_dependencies": ["extract"],
             "input_sources": ["extract"],
             "context_sources": [],
             "context_scope": {"observe": ["extract.fact"], "passthrough": []},
-            "has_primary_dependency": False,
-            "primary_dependency": None,
         },
     }
 
