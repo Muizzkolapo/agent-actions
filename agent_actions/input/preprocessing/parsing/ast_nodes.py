@@ -47,6 +47,20 @@ def _is_null_or_empty_namespace(ns_value: Any) -> bool:
     return is_null_namespace(ns_value) or (isinstance(ns_value, dict) and not ns_value)
 
 
+def _reads_through_null_namespace(node: Any, data: Any) -> bool:
+    """Whether *node* is a dotted field whose namespace is null or empty in *data*.
+
+    Such a field has no value, not a value of None: SQL's ``NULL != 'x'`` is not
+    true, so only IS NULL / IS NOT NULL may see it.
+    """
+    if not isinstance(node, FieldNode) or "." not in node.field_path:
+        return False
+    if not isinstance(data, dict):
+        return False
+    top_key = node.field_path.split(".", 1)[0]
+    return top_key in data and _is_null_or_empty_namespace(data[top_key])
+
+
 def value_type_family(value: Any) -> str | None:
     """Coarse type family used to detect never-comparable operand pairs."""
     if isinstance(value, bool):
@@ -380,6 +394,15 @@ def evaluate_node(
                         f'Use quotes: {left_repr} {node.operator.value} "{field_name}"'
                     ) from e
                 raise
+
+        if node.operator not in (
+            ComparisonOperator.IS_NULL,
+            ComparisonOperator.IS_NOT_NULL,
+        ) and (
+            _reads_through_null_namespace(node.left, data)
+            or _reads_through_null_namespace(node.right, data)
+        ):
+            return False
 
         _warn_comparison_type_mismatch(node, left_value, right_value)
         try:
