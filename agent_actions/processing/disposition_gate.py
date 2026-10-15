@@ -350,19 +350,13 @@ def stored_rows_not_reproduced(
 ) -> set[str]:
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
-    A stored row is carried where the input it answered for is one of *batch_inputs* and
-    this run did not answer it; otherwise it is no part of this run's output, as online
-    leaves it. An input in *filtered*, which this run's guard filtered, holds no row, as
-    online writes none for it. Matching is by input, since a minting action's runs share
-    no identity: a processed row answers for the producer it names, else for the identity
-    it carries. With no inputs recorded every other unanswered row is carried. Where
-    something failed and nothing was answered online leaves the stored file as it is, so
-    every stored answer stands, over a row produced under its identity too, and a filtered
-    input keeps what it held -- unless a stored answer is one the action no longer calls
-    answered (``stored_answers_stand``). Then the file follows its inputs, and an input
-    the run wrote a row for keeps none of its stored rows, minted ones included, as online
-    writes only that row. *still_answered* gives the records it holds ``success`` for, and
-    is asked only then; without it every stored answer counts as one.
+    A row carries only if its input is in *batch_inputs* and unanswered this run, matched by
+    producer -- minted rows share no identity across runs -- or by its own identity.
+    *filtered* inputs (guard-filtered or -skipped) hold no row beyond their tombstone, as
+    online writes. With no inputs recorded, everything unanswered carries. A failed run that
+    answered nothing leaves every stored answer standing, unless ``stored_answers_stand``
+    says otherwise (via *still_answered*) -- then the file follows its inputs, keeping none
+    of an answered input's stored rows, minted ones included.
     """
     stored = list(stored)
     answered: set[str] = set()
