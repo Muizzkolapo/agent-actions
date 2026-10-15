@@ -121,18 +121,20 @@ def test_the_retry_replaces_the_failed_row_with_its_two_rows_and_nothing_grows(t
     assert len(_rows(two_splits, "resplit")) == RECORDS * 2 * 2
 
 
-class TestWhereTheWarningIsTrue:
-    """The shape that does duplicate: an input standing beside its own descendant. The
-    warning stays, and it points at nothing a reader cannot open."""
+class TestAFanInOverARecordAndItsExpansion:
+    """An action reading a record and an expansion over it once held the two side by
+    side, so a row of the expansion's could not be told from the record's own and the
+    retry warned it duplicated them. The fan-in now pairs each row of the expansion with
+    the record (#1430): nothing stands beside its descendant, and nothing duplicates."""
 
-    def test_the_warning_still_fires_for_a_record_that_produced_rows(self, diamond):  # noqa: F811
+    def test_the_retry_warns_of_no_duplicates(self, diamond):  # noqa: F811
         selected = _record_ids(diamond, ACTION)[0]
         _fail(diamond, selected, ACTION)
 
         result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
         assert result.exit_code == 0, result.output
-        assert "cannot be attributed" in result.output
+        assert "cannot be attributed" not in result.output
 
     def test_it_cites_no_issue_number(self, diamond):  # noqa: F811
         selected = _record_ids(diamond, ACTION)[0]

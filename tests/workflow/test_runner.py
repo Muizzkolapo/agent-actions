@@ -606,7 +606,7 @@ class TestProcessFromStorageBackend:
         assert processed == 1
         strategy.execute.assert_called_once()
 
-    @patch("agent_actions.workflow.runner_file_processing.merge_records_by_key")
+    @patch("agent_actions.workflow.runner_file_processing.merge_fan_in")
     def test_multiple_sources_merges(self, mock_merge, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
         backend.list_target_files.side_effect = [["data.json"], ["data.json"]]
