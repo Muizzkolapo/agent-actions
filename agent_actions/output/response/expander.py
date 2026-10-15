@@ -12,6 +12,7 @@ Implementation details are split across focused submodules:
 - expander_guard_validation: guard reference validation
 """
 
+import copy
 import logging
 from typing import Any
 
@@ -262,6 +263,10 @@ class ActionExpander:
 
         # Initialize optional fields
         initialize_optional_fields(agent)
+
+        # Per-action only: the workflow's own ``defaults`` block is not a field default.
+        if action.get("defaults"):
+            agent["defaults"] = copy.deepcopy(action["defaults"])
 
         # Process version consumption
         version_consumption = action.get("version_consumption")

@@ -155,6 +155,7 @@ class ActionConfigDict(TypedDict, total=False):
     retry: dict[str, Any]
     max_execution_time: int
     on_empty: str  # "warn" | "error" | "skip"
+    defaults: dict[str, Any]  # output fields a tool UDF synthesizes; read by the dag-fit check
 
     # Anthropic-specific
     anthropic_version: str
