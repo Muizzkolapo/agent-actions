@@ -98,6 +98,10 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         # carry. Plural because a many-to-one output has several. Carried forward it
         # would name, at the next action, records that action never received.
         "producer_source_guids",
+        # The one input a row was split from, set only where the row is given a new
+        # identity. A row that kept an input's identity names its other inputs as
+        # producers too, so producers alone cannot say the row was split.
+        "split_from_source_guid",
     }
 )
 

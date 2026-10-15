@@ -36,6 +36,7 @@ Every record that flows through the pipeline is a plain dict with this shape:
     "source_guid": "abc-123-...",        ← stable identity (first-stage: UUID5 content hash)
     "parent_source_guid": "xyz-789-...", ← original pool identity, set wherever a minted row knows its producer
     "producer_source_guids": ["def-456"], ← inputs this row consumed but does not carry (per-stage)
+    "split_from_source_guid": "def-456", ← the one input a row given a new identity was split from (per-stage)
     "version_correlation_id": "def-...", ← links versions across re-runs
     "_state": "processed",               ← current lifecycle state
     "_state_history": [                  ← audit trail (capped at 64)
@@ -93,6 +94,11 @@ RECORD_STAGE_FIELDS (per-stage — rebuilt by enrichers, NOT carried)
 │                           resolves such an input through the rows it produced.
 │                           Not tracking: carried on, it would name records the
 │                           next action never received
+├── split_from_source_guid ← the one input a row was split from, set only where
+│                           the row is given a new identity. A fan-in pairs the
+│                           row with that input's other branches. Producers
+│                           cannot serve: a row that kept one input's identity
+│                           names its other inputs there too
 ├── target_id
 ├── node_id
 ├── lineage

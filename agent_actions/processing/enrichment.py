@@ -120,6 +120,10 @@ class LineageEnricher(Enricher):
                         item["producer_source_guids"] = producers
                     else:
                         item.pop("producer_source_guids", None)
+                    if len(producers) == 1:
+                        item["split_from_source_guid"] = producers[0]
+                    else:
+                        item.pop("split_from_source_guid", None)
                 # New GUIDs have no upstream deltas — store as full
                 item["_delta_mode"] = "full"
 

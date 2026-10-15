@@ -118,6 +118,7 @@ def _reattach_source_guid(
                 item["parent_source_guid"] = parent["parent_source_guid"]
             item["source_guid"] = parent_guid
             _record_producers(item, consumed)
+            item.pop("split_from_source_guid", None)
             continue
 
         # Hand on the parent's pool-resolvable identity, not the intermediate one:
@@ -129,6 +130,10 @@ def _reattach_source_guid(
                 item["parent_source_guid"] = inherited
         item["source_guid"] = IDGenerator.generate_source_guid()
         _record_producers(item, consumed)
+        if len(consumed) == 1:
+            item["split_from_source_guid"] = consumed[0]
+        else:
+            item.pop("split_from_source_guid", None)
         # A minted guid joins nothing upstream, so the row has to carry its whole
         # content rather than be stored as a delta against it.
         item["_delta_mode"] = "full"
