@@ -12,6 +12,7 @@ def _split(guid, producer, ancestor, **extra):
         "source_guid": guid,
         "parent_source_guid": ancestor,
         "producer_source_guids": [producer],
+        "split_from_source_guid": producer,
         "content": {"right": {"v": guid}},
         **extra,
     }
@@ -130,7 +131,7 @@ def test_a_group_whose_records_name_different_sources_joins_neither():
 def test_records_naming_only_each_other_in_one_group_are_neither_lost_nor_doubled():
     records = [
         _split("p", "q", "s", version_correlation_id="corr_pq"),
-        {**_left("q", version_correlation_id="corr_pq"), "producer_source_guids": ["p"]},
+        {**_left("q", version_correlation_id="corr_pq"), "split_from_source_guid": "p"},
     ]
 
     result = merge_records_by_key(records)
