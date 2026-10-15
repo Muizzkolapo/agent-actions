@@ -1182,6 +1182,18 @@ def test_an_input_the_guard_now_filters_holds_no_row_as_online(tmp_path, case):
         assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
+def test_a_skipped_input_that_gave_several_rows_holds_only_its_tombstone(tmp_path):
+    """#1256: FILTERED's fix (#1239) never reached SKIPPED, so an expansion the guard
+    now skips keeps its old minted rows beside the new guard_skipped tombstone, where a
+    single-row input would have hidden this under the tombstone's own identity."""
+    runs = [_PASSES, {"inputs": _NOW_FILTERED, "reset": True}]
+    shape = {"a2": 2}
+
+    for run in compare(tmp_path, runs, SKIP, shape):
+        assert run["batch"] == run["online"], f"run {run['run']}"
+        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
+
+
 _EVERY_ONE_REFUSED = [rec("a1", keep=False), rec("a2", keep=False)]
 
 CARRIED_AS_DONE_AND_TURNED_AWAY = {
