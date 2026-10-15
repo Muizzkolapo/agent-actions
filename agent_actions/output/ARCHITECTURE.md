@@ -284,6 +284,8 @@ Both delegate to `PromptUtils.process_dispatch_in_text()` with `preserve_type_on
 │       → add_dispatch, conditional_clause, guard              │
 │                                                              │
 │  17.  Process version_consumption                            │
+│       Carry the action's own `defaults:` (never the          │
+│       workflow block's) for the dag-fit preflight check      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
