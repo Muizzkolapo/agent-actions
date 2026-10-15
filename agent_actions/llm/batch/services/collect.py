@@ -190,8 +190,8 @@ def write_batch_file(
     *batch_inputs* is the file's input before narrowing: once the action above mints
     its own identities, the rows alone cannot say which producers still exist.
     *filtered* is ``filtered_inputs`` of the file's context map: a record the guard
-    filtered holds no row, so none stored for it is kept, unless the run failed and
-    answered nothing.
+    filtered or skipped holds no row, so none stored for it is kept, unless the run
+    failed and answered nothing.
     """
     if storage_backend is not None:
         from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
@@ -258,11 +258,17 @@ def clear_deferred_of_records_with_no_identity(
 
 
 def filtered_inputs(context_map: dict[str, Any]) -> set[str]:
-    """The inputs this run's guard filtered, by ``source_guid``."""
+    """The inputs this run's guard filtered or skipped, by ``source_guid``.
+
+    Both hold no row of their own beyond a tombstone, as online leaves none for
+    either: ``FilterStatus.FILTERED`` is ``on_false: drop``, ``FilterStatus.SKIPPED``
+    is ``on_false: skip`` and the upstream-unprocessed case, which shares its status.
+    """
     return {
         source_guid
         for entry in context_map.values()
-        if BatchContextMetadata.get_filter_status(entry) == FilterStatus.FILTERED
+        if BatchContextMetadata.get_filter_status(entry)
+        in (FilterStatus.FILTERED, FilterStatus.SKIPPED)
         and (source_guid := entry.get("source_guid"))
     }
 
