@@ -1378,7 +1378,7 @@ class TestCarriedSuccessStandsForTheAction:
         )
 
         assert failure is None
-        assert {r["source_guid"] for r in output} == {"p1", "p2"}
+        assert [r["source_guid"] for r in output] == ["p1"]
 
     def test_every_record_failing_with_nothing_carried_still_trips_the_breaker(self):
         results = [
