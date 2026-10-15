@@ -85,7 +85,13 @@ LOUD = """  - name: loud
 """
 
 
-def _config(dependencies: str, *, left_impl: str = "tag_left", after_split: bool = False) -> str:
+def _config(
+    dependencies: str,
+    *,
+    left_impl: str = "tag_left",
+    after_split: bool = False,
+    left_guard: str = "",
+) -> str:
     branch = "loud" if after_split else "right"
     field = "loud.loud_tag" if after_split else "right.right_tag"
     return (
@@ -101,6 +107,7 @@ def _config(dependencies: str, *, left_impl: str = "tag_left", after_split: bool
         "  data_source: { type: local, folder: ./staging, file_type: [json] }\n"
         "actions:\n"
         + LEFT.format(impl=left_impl)
+        + (f"    guard: {{ condition: '{left_guard}', on_false: filter }}\n" if left_guard else "")
         + RIGHT
         + (LOUD if after_split else "")
         + "  - name: join\n"
@@ -199,3 +206,12 @@ def test_two_branches_split_from_one_record_fail_the_fan_in(tmp_path):
     assert "join" in output
     assert "left" in output and "right" in output
     assert "None" not in " ".join(_joined(root))
+
+
+def test_a_source_filtered_out_of_one_branch_drops_the_other_branchs_split_records(tmp_path):
+    root = _project(tmp_path, _config("left, right", left_guard='source.item_id != "b"'))
+
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _joined(root) == [joined for joined in PAIRED if "-b" not in joined]
