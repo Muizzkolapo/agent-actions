@@ -112,8 +112,8 @@ class TestTheOrderBearingHalvesAreNotSorted:
     sorted them too passed the tests above while changing 68 of 518 catalog actions.
     """
 
-    def test_a_fan_in_tail_keeps_its_declared_order(self):
-        """The dependencies after a fan-in's first are context sources in YAML order."""
+    def test_a_fan_in_keeps_its_declared_order(self):
+        """A fan-in's dependencies are all inputs, in YAML order."""
         probe = textwrap.dedent("""
             import json
             from agent_actions.prompt.context.scope_inference import infer_dependencies
@@ -127,12 +127,10 @@ class TestTheOrderBearingHalvesAreNotSorted:
         """)
         result = _run_probe(probe, "0")
 
-        assert result["inputs"] == ["zebra"], result
-        # Declared zebra, alpha, middle -- so the fan-in tail is alpha, middle, NOT sorted
-        # into alpha, middle by luck. Reversing the config would catch a sort; see below.
-        assert result["context"] == ["alpha", "middle"], result
+        assert result["inputs"] == ["zebra", "alpha", "middle"], result
+        assert result["context"] == [], result
 
-    def test_a_fan_in_tail_is_not_alphabetised(self):
+    def test_a_fan_in_is_not_alphabetised(self):
         """The discriminating case: declared out of alphabetical order."""
         probe = textwrap.dedent("""
             import json
@@ -147,10 +145,10 @@ class TestTheOrderBearingHalvesAreNotSorted:
         """)
         result = _run_probe(probe, "0")
 
-        assert result["inputs"] == ["alpha"], result
-        assert result["context"] == ["zebra", "middle"], (
-            "the fan-in tail was alphabetised; it must keep declaration order"
+        assert result["inputs"] == ["alpha", "zebra", "middle"], (
+            "the fan-in was alphabetised; it must keep declaration order"
         )
+        assert result["context"] == [], result
 
     def test_version_variants_are_expanded_after_the_sort_not_before(self):
         """Sorting after expansion gives x_1, x_10, x_2 -- lexical, not numeric."""

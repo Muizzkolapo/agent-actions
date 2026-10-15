@@ -23,89 +23,6 @@ __all__ = [
 ]
 
 
-def _get_base_name(action_name: str) -> str:
-    """
-    Strip trailing _N suffix to get base action name.
-
-    Examples:
-        'classify_1' -> 'classify'
-        'research_10' -> 'research'
-        'extract_raw_qa_2' -> 'extract_raw_qa'
-        'validate' -> 'validate' (no suffix)
-    """
-    parts = action_name.rsplit("_", 1)
-    if len(parts) == 2 and parts[1].isdigit():
-        return parts[0]
-    return action_name
-
-
-def _is_parallel_branches(dependencies: list[str]) -> bool:
-    """
-    Detect if dependencies are parallel branches of the same action.
-
-    Parallel branches have the same base name with numeric suffixes:
-    - ['classify_1', 'classify_2', 'classify_3'] -> True (all 'classify')
-    - ['extract', 'enrich', 'validate'] -> False (different actions)
-    - ['classify'] -> True (single = trivially parallel)
-
-    Note: Different base names with same suffix are NOT parallel:
-    - ['classify_text_1', 'classify_image_1'] -> False (different base names)
-
-    Args:
-        dependencies: List of dependency action names
-
-    Returns:
-        True if all dependencies are branches of same action, False if fan-in
-    """
-    if len(dependencies) <= 1:
-        return True  # Single or empty is trivially "parallel"
-
-    base_names = {_get_base_name(dep) for dep in dependencies}
-    return len(base_names) == 1
-
-
-def _get_version_branches(base_name: str, dependencies: list[str]) -> list[str]:
-    """
-    Find all dependencies that are version branches of a base name.
-
-    Examples:
-        _get_version_branches('research', ['research_1', 'research_2', 'summarize'])
-        -> ['research_1', 'research_2']
-
-        _get_version_branches('classify', ['classify_text_1', 'classify_image_1'])
-        -> []  (these have different base names)
-
-    Args:
-        base_name: The base action name to match
-        dependencies: List of dependency action names
-
-    Returns:
-        List of dependencies that are versions of base_name
-    """
-    return [
-        d
-        for d in dependencies
-        if d.startswith(f"{base_name}_") and d[len(base_name) + 1 :].isdigit()
-    ]
-
-
-def _resolve_input_sources_for_fan_in(dependencies: list[str]) -> tuple[list[str], list[str]]:
-    """Split a fan-in's dependencies into (input_sources, context_sources).
-
-    The first dependency is the input source, with its sibling version branches when it
-    is one; the rest are context sources.
-    """
-    first_dep = dependencies[0]
-    sibling_branches = _get_version_branches(_get_base_name(first_dep), dependencies)
-    if sibling_branches and first_dep in sibling_branches:
-        input_sources = sibling_branches
-    else:
-        input_sources = [first_dep]
-
-    context_sources = [d for d in dependencies if d not in input_sources]
-    return input_sources, context_sources
-
-
 def expand_version_base_names(action_list: list[str], workflow_actions: list[str]) -> list[str]:
     """Expand version base names to their actual variants in the workflow."""
     expanded = []
@@ -143,9 +60,10 @@ def infer_dependencies(
     """
     Infer input sources and context sources from action configuration.
 
-    This method implements the simplified dependency model where:
-    - `dependencies` field = input sources (determines execution count)
-    - Actions in `context_scope` but NOT in `dependencies` = context sources (auto-inferred)
+    - every action in `dependencies` is an input source: a run reads each one's records
+      and merges them by source record, so their order changes nothing;
+    - an action named in `context_scope` or the prompt but not in `dependencies` is a
+      context source.
 
     Args:
         action_config: Action configuration dict containing dependencies and context_scope
@@ -176,36 +94,14 @@ def infer_dependencies(
         Returns:
             (["add_answer_text"], ["suggest_distractor_counts", "write_scenario_question"])
     """
-    # 1. Get explicit dependencies (input sources)
+    # 1. Explicit dependencies are the input sources
     deps = action_config.get("dependencies", [])
     if deps is None:
-        all_deps = []
+        input_sources = []
     elif isinstance(deps, str):
-        all_deps = [deps]
+        input_sources = [deps]
     else:
-        all_deps = list(deps)
-
-    # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
-    # For fan-in, only the first dependency is an input source
-    # The rest become context sources (loaded from record namespaces via additive content model)
-    fan_in_context_sources: list[str] = []
-    is_parallel = _is_parallel_branches(all_deps)
-
-    if len(all_deps) > 1 and not is_parallel:
-        input_sources, fan_in_context_sources = _resolve_input_sources_for_fan_in(all_deps)
-
-        logger.debug(
-            "Action '%s': Fan-in detected with dependencies %s. "
-            "Input sources: %s. "
-            "Context sources (lineage-matched): %s",
-            action_name,
-            all_deps,
-            input_sources,
-            fan_in_context_sources,
-        )
-    else:
-        # Single dependency or parallel branches - all are input sources
-        input_sources = all_deps
+        input_sources = list(deps)
 
     # 2. Parse context_scope to find all referenced actions. Coerced here rather than at
     # each caller: seven of them pass an action config, and the docs parser and inspect
@@ -261,16 +157,11 @@ def infer_dependencies(
             continue
 
     # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
-    # Also include fan-in context sources (the dependencies after the first, in the fan-in pattern)
-    potential_context_sources = (
-        referenced_actions - set(input_sources) - set(fan_in_context_sources)
-    )
-    context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
     # sorted(): this is a set, so iterating it leaks hash randomisation into catalog.json.
     # Declaration order is available for the refs that came from context_scope, but not for
     # the ones inferred from the prompt template, so one rule for the whole tail beats a
     # hybrid. Nothing is lost either way: the order here was hash-random before.
-    context_sources.extend(sorted(potential_context_sources))
+    context_sources = sorted(referenced_actions - set(input_sources))
 
     # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
     # This handles version_consumption where context_scope references the base name
