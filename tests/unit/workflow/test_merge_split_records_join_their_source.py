@@ -137,3 +137,18 @@ def test_records_naming_only_each_other_in_one_group_are_neither_lost_nor_double
 
     assert len(result) == 1
     assert set(result[0]["content"]) == {"left", "right"}
+
+
+def test_a_row_that_kept_its_identity_joins_nothing_when_its_other_branch_is_absent():
+    """`A` kept its identity and consumed `B`; the other branch holds no `A`, only `B`."""
+    records = [
+        {"source_guid": "A", "producer_source_guids": ["B"], "content": {"left": {"v": "A+B"}}},
+        {"source_guid": "B", "content": {"right": {"v": "B"}}},
+    ]
+
+    result = merge_records_by_key(records)
+
+    assert sorted((r["source_guid"], sorted(r["content"])) for r in result) == [
+        ("A", ["left"]),
+        ("B", ["right"]),
+    ]
