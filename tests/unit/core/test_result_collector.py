@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.errors import AgentActionsError
+from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.result_collector import (
     CollectionStats,
@@ -1342,3 +1343,63 @@ class TestOneReportPerFailedRecord:
 
         assert "3fe70b17" in reports[0].getMessage()
         assert "bf28-58f0" not in reports[0].getMessage(), "the full guid is noise on a console"
+
+
+# ---------------------------------------------------------------------------
+# A carried success stands for the action, as it does under batch
+# ---------------------------------------------------------------------------
+
+
+def _carried_success(guid: str) -> ProcessingResult:
+    return ProcessingResult(
+        status=ProcessingStatus.SUCCESS,
+        data=[{"source_guid": guid, "content": {"act": {"answer": guid}}, "_state": "processed"}],
+        source_guid=guid,
+        skip_reason=CARRY_FORWARD_REASON,
+    )
+
+
+class TestCarriedSuccessStandsForTheAction:
+    """A resumed run or a `--record` retry sends only the records still to answer.
+
+    The ones already answered arrive carried. The breaker must read the action as
+    the dispositions do: a stored success keeps the action out of terminal failure.
+    """
+
+    def test_carried_success_beside_a_failing_sent_record_does_not_trip_the_breaker(self):
+        results = [
+            _carried_success("p1"),
+            ProcessingResult.exhausted("p2 exhausted", source_guid="p2"),
+        ]
+        output, stats = collect_results_from_processing_results(results, "act")
+
+        failure = stats.terminal_failure(
+            "act", [{"source_guid": "p1"}, {"source_guid": "p2"}], output
+        )
+
+        assert failure is None
+        assert {r["source_guid"] for r in output} == {"p1", "p2"}
+
+    def test_every_record_failing_with_nothing_carried_still_trips_the_breaker(self):
+        results = [
+            ProcessingResult.failed("boom", source_guid="p1"),
+            ProcessingResult.failed("boom", source_guid="p2"),
+        ]
+        output, stats = collect_results_from_processing_results(results, "act")
+
+        failure = stats.terminal_failure("act", [{}, {}], output)
+
+        assert failure is not None
+        assert "all 2 active input item(s)" in str(failure)
+
+    def test_carried_failure_does_not_stand_for_the_action(self):
+        carried_failed = ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[{"source_guid": "p1", "content": {}, "_state": "exhausted"}],
+            source_guid="p1",
+            skip_reason=CARRY_FORWARD_REASON,
+        )
+        results = [carried_failed, ProcessingResult.failed("boom", source_guid="p2")]
+        output, stats = collect_results_from_processing_results(results, "act")
+
+        assert stats.terminal_failure("act", [{}, {}], output) is not None
