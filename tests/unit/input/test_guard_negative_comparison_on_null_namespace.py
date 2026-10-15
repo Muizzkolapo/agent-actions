@@ -81,3 +81,53 @@ def test_and_with_a_skipped_upstream_negative_comparison_is_false():
     )
     assert evaluate_node(node, NULL_NAMESPACE) is False
     assert evaluate_node(node, LIVE_NAMESPACE) is True
+
+
+# ── Through NOT, OR and a function wrapper ───────────────────────────
+
+
+def _parsed(condition: str):
+    from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+
+    result = WhereClauseParser().parse(condition)
+    assert result.success, result.error
+    return result.ast
+
+
+SKIPPED = {"challenge_decision": None, "source": {"text": "hello"}}
+LIVE_AGREE = {"challenge_decision": {"verdict": "agree"}, "source": {"text": "hello"}}
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        'NOT (challenge_decision.verdict != "agree")',
+        'NOT (challenge_decision.verdict == "agree")',
+        'NOT (source.text == "hello" AND challenge_decision.verdict == "agree")',
+        'LOWER(challenge_decision.verdict) != "agree"',
+        'UPPER(challenge_decision.verdict) != "AGREE"',
+    ],
+)
+def test_a_guard_that_cannot_be_decided_is_not_true_for_a_skipped_upstream(condition):
+    assert _parsed(condition).evaluate(SKIPPED) is False
+
+
+def test_not_over_a_comparison_still_inverts_for_a_live_namespace():
+    guard = _parsed('NOT (challenge_decision.verdict != "agree")')
+    assert guard.evaluate(LIVE_AGREE) is True
+    assert guard.evaluate({"challenge_decision": {"verdict": "reject"}}) is False
+
+
+def test_not_is_decided_when_the_other_operand_decides_it():
+    guard = _parsed('NOT (source.text == "nope" AND challenge_decision.verdict == "agree")')
+    assert guard.evaluate(SKIPPED) is True
+
+
+def test_or_with_a_true_operand_is_still_true_beside_a_skipped_upstream():
+    guard = _parsed('source.text == "hello" OR challenge_decision.verdict != "agree"')
+    assert guard.evaluate(SKIPPED) is True
+
+
+def test_not_is_null_on_a_skipped_upstream_still_inverts():
+    assert _parsed("NOT (challenge_decision.verdict IS NULL)").evaluate(SKIPPED) is False
+    assert _parsed("NOT (challenge_decision.verdict IS NOT NULL)").evaluate(SKIPPED) is True
