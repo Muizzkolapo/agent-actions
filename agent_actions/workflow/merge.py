@@ -222,7 +222,7 @@ def _select_universal_key(records: list[dict[str, Any]]) -> str | None:
 
 
 def _join_split_records_to_their_source(groups_by_key: dict[str, list[dict[str, Any]]]) -> None:
-    """Give every record split from a pooled record its own copy of that record's group.
+    """Give every group split from one pooled record its own copy of that record's group.
 
     A split record is re-keyed, so only ``producer_source_guids`` still names the input
     another branch answered for; ``parent_source_guid`` names the earliest ancestor,
@@ -237,14 +237,19 @@ def _join_split_records_to_their_source(groups_by_key: dict[str, list[dict[str, 
     }
     sources_by_child: dict[str, str] = {}
     for key, group in groups_by_key.items():
-        producers = {
-            key_of_guid[guid]
+        # Every record must name the source: a row that kept its own identity and
+        # merely consumed another input sits beside that identity's other branches.
+        sources = {
+            frozenset(
+                key_of_guid[guid]
+                for guid in (record.get("producer_source_guids") or ())
+                if guid in key_of_guid
+            )
+            - {key}
             for record in group
-            for guid in (record.get("producer_source_guids") or ())
-            if guid in key_of_guid
-        } - {key}
-        if len(producers) == 1:
-            sources_by_child[key] = producers.pop()
+        }
+        if len(sources) == 1 and len(named := next(iter(sources))) == 1:
+            sources_by_child[key] = next(iter(named))
 
     original = {key: list(group) for key, group in groups_by_key.items()}
     for child, source in sources_by_child.items():
