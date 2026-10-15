@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  A fan-in over a branch that returns several records per input now pairs each of those
+  records with the other branches' record for the input it was made from. It ran once per
+  record of every branch instead, each run seeing only its own branch with the other
+  branch's fields as `None`, and exited 0.
+time: 2026-10-15T21:00:00Z
