@@ -222,23 +222,35 @@ def _select_universal_key(records: list[dict[str, Any]]) -> str | None:
 
 
 def _join_split_records_to_their_source(groups_by_key: dict[str, list[dict[str, Any]]]) -> None:
-    """Give every record split from a pooled source its own copy of that source's group.
+    """Give every record split from a pooled record its own copy of that record's group.
 
-    A branch that returns several records per input gives each a new ``source_guid``;
-    only ``parent_source_guid`` still names the input the other branches answered for.
-    The split record leads its group so each merged record keeps its own identity.
+    A split record is re-keyed, so only ``producer_source_guids`` still names the input
+    another branch answered for; ``parent_source_guid`` names the earliest ancestor,
+    which no branch holds once something above them expanded. The split record leads
+    its group so each merged record keeps its own identity.
     """
-    children_by_source: dict[str, list[str]] = {}
+    key_of_guid = {
+        guid: key
+        for key, group in groups_by_key.items()
+        for record in group
+        if (guid := record.get("source_guid"))
+    }
+    sources_by_child: dict[str, str] = {}
     for key, group in groups_by_key.items():
-        parent = next((p for r in group if (p := r.get("parent_source_guid"))), None)
-        if parent and parent != key and parent in groups_by_key:
-            children_by_source.setdefault(parent, []).append(key)
+        producers = {
+            key_of_guid[guid]
+            for record in group
+            for guid in (record.get("producer_source_guids") or ())
+            if guid in key_of_guid
+        } - {key}
+        if len(producers) == 1:
+            sources_by_child[key] = producers.pop()
 
-    for source, child_keys in children_by_source.items():
-        for child_key in child_keys:
-            groups_by_key[child_key] = groups_by_key[child_key] + groups_by_key[source]
-    for source in children_by_source:
-        del groups_by_key[source]
+    original = {key: list(group) for key, group in groups_by_key.items()}
+    for child, source in sources_by_child.items():
+        groups_by_key[child] = original[child] + original[source]
+    for source in set(sources_by_child.values()):
+        groups_by_key.pop(source, None)
 
 
 def merge_records_by_key(records: list[Any]) -> list[Any]:
@@ -269,8 +281,7 @@ def merge_records_by_key(records: list[Any]) -> list[Any]:
         else:
             records_without_key.append(record)
 
-    if universal_key == "source_guid":
-        _join_split_records_to_their_source(groups_by_key)
+    _join_split_records_to_their_source(groups_by_key)
 
     merged_results: list[Any] = []
     for group in groups_by_key.values():
