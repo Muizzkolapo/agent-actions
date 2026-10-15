@@ -627,10 +627,10 @@ dependencies: [classify_1, classify_2, classify_3]
 # Same base name "classify" → outputs are merged
 # Execution count: N (from merged outputs)
 
-# Pattern 2: Fan-in (PRIMARY + CONTEXT)
+# Pattern 2: Fan-in (MERGE BY SOURCE RECORD)
 dependencies: [extract, enrich, validate]
-# Different actions → first is primary, others via context
-# Execution count: N (from extract only)
+# Different actions → every one is an input; outputs for the same source record are merged
+# Execution count: one per source record that reaches the action (order of the list changes nothing)
 ```
 
 To aggregate several records into one — a roll-up, a deduplication, a count across
@@ -639,25 +639,28 @@ File granularity is handed every record of a file in one call, so it can group t
 by whichever field it likes and return as many rows as the grouping produces.
 `examples/map_reduce_fanin_check` shows the shape.
 
-### Missing Context Data in Fan-in
+### Fan-in Dependency Not in context_scope
 
-**Symptom:** Action only sees data from first dependency, not others.
+**Symptom:** Preflight refuses the workflow with `dependency 'enrich' declared but not referenced in context_scope`.
 
-**Cause:** Fan-in pattern requires context sources to be in `context_scope`:
+**Cause:** Every dependency of a fan-in is an input, and each one needs at least one field declared in `context_scope`:
 
 ```yaml
-# WRONG - enrich and validate data not accessible
-- name: generate_report
-  dependencies: [extract, enrich, validate]
-
-# CORRECT - all dependencies in context_scope
+# REFUSED - enrich and validate are dependencies with no fields declared
 - name: generate_report
   dependencies: [extract, enrich, validate]
   context_scope:
     observe:
       - extract.*
-      - enrich.*     # Loaded from record namespaces
-      - validate.*   # Loaded from record namespaces
+
+# CORRECT - every dependency in context_scope
+- name: generate_report
+  dependencies: [extract, enrich, validate]
+  context_scope:
+    observe:
+      - extract.*
+      - enrich.*
+      - validate.*
 ```
 
 ### Unexpected Execution Count
@@ -666,7 +669,7 @@ by whichever field it likes and return as many rows as the grouping produces.
 
 **Debug:**
 1. Check if dependencies are parallel branches (same base name) or different actions
-2. For fan-in: first dependency determines execution count
+2. For fan-in: one execution per source record after the branches are merged. A record a guard filtered out in any branch is dropped; one a guard skipped arrives with that branch's fields null. A branch that returns several records per input runs once per record, each paired with the other branches' record for its source; two branches that both split one source fail the action
 3. For parallel: merged outputs determine execution count
 4. For `granularity: File`: one execution per input file, whatever its record count
 

@@ -24,7 +24,7 @@ from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECOR
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.file_handler import walk_files
 from agent_actions.utils.limits import forget_slice_observation, resolve_file_limit
-from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
+from agent_actions.workflow.merge import merge_fan_in, merge_json_files, split_from
 
 if TYPE_CHECKING:
     from agent_actions.workflow.runner import (
@@ -789,13 +789,23 @@ def _collect_upstream_filtered_guids(
 
 
 def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, int]:
-    """Drop records whose source_guid was guard-filtered upstream. Returns (kept, dropped)."""
+    """Drop records whose source_guid was guard-filtered upstream. Returns (kept, dropped).
+
+    A record split from a filtered record goes too: in a fan-in, the branch that split
+    it has no partner left for it.
+    """
     if not filtered_guids or not isinstance(data, list):
         return data, 0
     kept = [
         record
         for record in data
-        if not (isinstance(record, dict) and record.get("source_guid") in filtered_guids)
+        if not (
+            isinstance(record, dict)
+            and (
+                record.get("source_guid") in filtered_guids
+                or any(guid in filtered_guids for guid in split_from(record))
+            )
+        )
     ]
     return kept, len(data) - len(kept)
 
@@ -895,23 +905,23 @@ def process_from_storage_backend(
     for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):
         reached.paths.add(relative_path)
         try:
-            if len(data_sources) == 1:
-                _, data = data_sources[0]
+            # Before the merge, so a fan-in pairs only records still alive in every branch.
+            dropped = 0
+            live_sources: list[tuple[str, Any]] = []
+            for branch, source_data in data_sources:
+                kept, gone = _drop_filtered_records(source_data, filtered_guids)
+                live_sources.append((branch, kept))
+                dropped += gone
+            if len(live_sources) == 1:
+                _, data = live_sources[0]
             else:
                 logger.debug(
                     "Merging %d sources for %s from parallel branches",
-                    len(data_sources),
+                    len(live_sources),
                     relative_path,
                 )
-                all_data: list[Any] = []
-                for _, source_data in data_sources:
-                    if isinstance(source_data, list):
-                        all_data.extend(source_data)
-                    else:
-                        all_data.append(source_data)
-                data = merge_records_by_key(all_data)
+                data = merge_fan_in(live_sources)
 
-            data, dropped = _drop_filtered_records(data, filtered_guids)
             if dropped:
                 logger.info(
                     "%s: dropped %d record(s) filtered by an upstream guard "

@@ -455,7 +455,7 @@ class TestInferDependenciesThreePatterns:
     Patterns:
     1. Single - One dependency, output becomes input
     2. Parallel Branches - Same base name (classify_1, classify_2), all merged
-    3. Fan-in - Different actions, first is primary, others via context
+    3. Fan-in - Different actions, all inputs, merged by source record
     """
 
     def test_pattern_1_single_dependency(self):
@@ -489,8 +489,8 @@ class TestInferDependenciesThreePatterns:
         assert set(input_sources) == {"classify_1", "classify_2", "classify_3"}
         assert context_sources == []  # All are already inputs
 
-    def test_pattern_3_fan_in_first_is_primary(self):
-        """Pattern 3: Fan-in - first dependency is primary, rest become context."""
+    def test_pattern_3_fan_in_every_dependency_is_input(self):
+        """Pattern 3: Fan-in - every dependency is an input source, in declared order."""
         action_config = {
             "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
             "context_scope": {
@@ -512,12 +512,11 @@ class TestInferDependenciesThreePatterns:
             action_config, workflow_actions, "generate_report"
         )
 
-        # Fan-in: first dep is primary input, rest are context sources
-        assert input_sources == ["analyze_sentiment"]
-        assert set(context_sources) == {"analyze_entities", "analyze_topics"}
+        assert input_sources == ["analyze_sentiment", "analyze_entities", "analyze_topics"]
+        assert context_sources == []
 
-    def test_versioned_primary_expands_to_all_branches(self):
-        """Versioned primary: research_1, research_2, research_3 + summarize."""
+    def test_versioned_branches_and_another_action_are_all_inputs(self):
+        """research_1, research_2, research_3 + summarize: all four are inputs."""
         action_config = {
             "dependencies": ["research_1", "research_2", "research_3", "summarize"],
             "context_scope": {
@@ -541,12 +540,11 @@ class TestInferDependenciesThreePatterns:
             action_config, workflow_actions, "final_report"
         )
 
-        # Versioned primary: all research branches become inputs, summarize is context
-        assert set(input_sources) == {"research_1", "research_2", "research_3"}
-        assert context_sources == ["summarize"]
+        assert input_sources == ["research_1", "research_2", "research_3", "summarize"]
+        assert context_sources == []
 
-    def test_different_base_names_with_same_suffix_is_fan_in(self):
-        """Different base names with same numeric suffix → fan-in, not parallel."""
+    def test_different_base_names_with_same_suffix_are_both_inputs(self):
+        """Different base names with the same numeric suffix are both inputs."""
         action_config = {
             "dependencies": ["classify_text_1", "classify_image_1"],
             "context_scope": {"observe": ["classify_text_1.*", "classify_image_1.*"]},
@@ -557,9 +555,8 @@ class TestInferDependenciesThreePatterns:
             action_config, workflow_actions, "combine"
         )
 
-        # Fan-in: first is primary (classify_text_1), second is context
-        assert input_sources == ["classify_text_1"]
-        assert context_sources == ["classify_image_1"]
+        assert input_sources == ["classify_text_1", "classify_image_1"]
+        assert context_sources == []
 
 
 class TestAContextScopeThatIsNotAMapping:

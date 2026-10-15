@@ -71,7 +71,7 @@ def test_a_config_carrying_it_splits_its_dependencies_as_one_without_it(named):
     )
 
     assert with_key == infer_dependencies(config, actions, "joined", validate=False)
-    assert with_key == (["left"], ["right"])
+    assert with_key == (["left", "right"], [])
 
 
 def test_inspect_reports_a_fan_in_under_its_sources_and_scope_alone():
@@ -94,8 +94,8 @@ def test_inspect_reports_a_fan_in_under_its_sources_and_scope_alone():
 
     assert info["joined"] == {
         "explicit_dependencies": ["left", "right"],
-        "input_sources": ["left"],
-        "context_sources": ["right"],
+        "input_sources": ["left", "right"],
+        "context_sources": [],
         "context_scope": {"observe": ["left.*", "right.*"], "passthrough": [], "drop": []},
     }
 

@@ -3,10 +3,6 @@ Tests for _resolve_dependency_directories() in ActionRunner.
 
 With the additive content (bus) model, all dependencies become input sources.
 Records from different branches are merged by root_target_id downstream.
-
-Also tests:
-- _is_parallel_branches() detection logic (used by scope_inference)
-- _resolve_input_sources_for_fan_in() (used by scope_inference)
 """
 
 import shutil
@@ -17,84 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.errors import DependencyError
-from agent_actions.prompt.context.scope_inference import (
-    _get_version_branches,
-    _is_parallel_branches,
-    _resolve_input_sources_for_fan_in,
-)
 from agent_actions.workflow.runner import ActionRunner
-
-
-class TestIsParallelBranches:
-    """Test _is_parallel_branches() detection logic."""
-
-    @pytest.mark.parametrize(
-        "deps, expected",
-        [
-            # Parallel: same base name + numeric suffix
-            (["classify_1", "classify_2", "classify_3"], True),
-            (["research_1", "research_5", "research_10"], True),
-            (["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"], True),
-            # Fan-in: different base names
-            (["extract", "enrich", "validate"], False),
-            (["classify_1", "validate_1", "score_1"], False),
-            (["analyzer", "validator", "scorer"], False),
-            (["classify_text", "classify_image"], False),
-            # Edge: same numeric suffix but different bases
-            (["classify_text_1", "classify_image_1"], False),
-            # Edge: mixed versioned + non-versioned
-            (["research_1", "research_2", "research_3", "summarize"], False),
-        ],
-        ids=[
-            "same_base_numeric",
-            "same_base_varied_suffix",
-            "underscore_base_name",
-            "different_bases",
-            "mixed_bases_same_suffix",
-            "no_numeric_suffix",
-            "similar_different_bases",
-            "different_bases_same_suffix",
-            "mixed_versioned_non_versioned",
-        ],
-    )
-    def test_parallel_detection(self, deps, expected):
-        assert _is_parallel_branches(deps) is expected
-
-
-class TestGetVersionBranches:
-    """Test _get_version_branches() helper method."""
-
-    def test_finds_matching_version_branches(self):
-        """Finds all version branches matching a base name."""
-        deps = ["research_1", "research_2", "summarize", "validate"]
-        result = _get_version_branches("research", deps)
-        assert result == ["research_1", "research_2"]
-
-    def test_does_not_match_different_base_names(self):
-        """Does not match deps with different base names even if suffix is numeric."""
-        deps = ["classify_text_1", "classify_image_1"]
-        # Looking for 'classify' versions - neither matches because base names differ
-        result = _get_version_branches("classify", deps)
-        assert result == []
-
-
-class TestResolveInputSourcesForFanIn:
-    """Test _resolve_input_sources_for_fan_in() shared helper.
-
-    Used by infer_dependencies() for prompt context classification.
-    """
-
-    def test_a_versioned_first_dependency_brings_its_sibling_branches(self):
-        deps = ["research_1", "summarize", "research_2"]
-        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps)
-        assert input_sources == ["research_1", "research_2"]
-        assert context_sources == ["summarize"]
-
-    def test_an_unversioned_first_dependency_is_the_only_input(self):
-        deps = ["summarize", "research_1", "research_2"]
-        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps)
-        assert input_sources == ["summarize"]
-        assert context_sources == ["research_1", "research_2"]
 
 
 class TestDependencyPatterns:

@@ -98,17 +98,17 @@ of that action names the same record as its own parent. Every other row is
 carried. So repairing a record whose row was split in two replaces both halves
 rather than adding two more beside them.
 
-Two shapes fall outside that, and both are carried rather than rewritten (a
+One shape falls outside that, and is carried rather than rewritten (a
 file-granularity tool is not one of them: a retry rewrites a file it reaches
 whole, [below](#a-file-tool-runs-over-the-whole-file)). A row
 names the *original* staged record it descends from, not the record that
 produced it directly, so where one such action feeds another the rows of the
-second name a record that is no longer its input. And where an action reads
-both a record and an expansion over that same record — `dependencies` naming
-both — a row of the expansion names the record standing beside it in the input,
-so which of the two produced it cannot be told apart.
+second name a record that is no longer its input. An action that reads both a
+record and an expansion over that same record — `dependencies` naming both — is
+this shape too: the fan-in pairs each row of the expansion with the record, so the
+action's input is the expansion's rows.
 
-In both, repairing one of that action's records leaves its previous rows in the
+There, repairing one of that action's records leaves its previous rows in the
 file beside the new ones. The run reports how many rows it could not place. It
 carries them rather than guessing, because guessing wrong here deletes a row
 that nothing will write again. It reports a row it carried this way when a record

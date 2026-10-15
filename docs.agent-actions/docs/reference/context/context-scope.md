@@ -135,7 +135,7 @@ Actions referenced in `context_scope` or the prompt but **not** in `dependencies
   dependencies: [enrich_data]
 
 - name: generate_report
-  dependencies: [validate_data]  # Primary input source
+  dependencies: [validate_data]  # Input source
   context_scope:
     observe:
       - validate_data.*        # From input files
@@ -159,10 +159,12 @@ feed into one action:
   dependencies: [action_A, action_B, action_C]  # Fan-in pattern
   context_scope:
     observe:
-      - action_A.*   # Primary input (first in list)
+      - action_A.*   # Fan-in dependency
       - action_B.*   # Fan-in dependency
       - action_C.*   # Fan-in dependency
 ```
+
+Every dependency is an input: the outputs of `action_A`, `action_B` and `action_C` for the same source record are merged into one record, and `final_action` runs once per merged record. The order of the list changes nothing.
 
 ## Resolution Order
 
