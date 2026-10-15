@@ -75,6 +75,7 @@ def aggregate_severity_votes(data: Dict[str, Any]) -> Dict[str, Any]:
 **Implementation**:
 ```yaml
 - name: assign_response_team
+  dependencies: [assess_customer_impact, assess_system_impact]
   kind: tool
   impl: assign_team_based_on_impact
   context_scope:
@@ -94,8 +95,8 @@ def assign_team_based_on_impact(data: Dict) -> Dict:
     With passthrough: Return dict (not list) with ONLY new fields
     """
     # Extract what you need
-    severity = data.get('final_severity')
-    affected = data.get('affected_services')
+    severity = data['aggregate_severity']['final_severity']
+    affected = data['assess_system_impact']['affected_services']
 
     # Compute dynamic values
     teams = route_to_teams(severity, affected)
@@ -241,15 +242,18 @@ version_consumption:
 def format_incident_triage(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Format complete triage output"""
     # Build structured output
+    # Each observed action is under its own name
+    details = data.get('extract_incident_details') or {}
+    severity = data.get('aggregate_severity') or {}
+    team = data.get('assign_response_team') or {}
     result = {
-        "triage_id": data.get('source_guid'),
         "incident": {
-            "title": data.get('title'),
-            "severity": data.get('final_severity')
+            "title": details.get('title'),
+            "severity": severity.get('final_severity')
         },
         "teams": {
-            "assigned_teams": data.get('assigned_teams'),
-            "urgency_level": data.get('urgency_level')
+            "assigned_teams": team.get('assigned_teams'),
+            "urgency_level": team.get('urgency_level')
         }
     }
 
@@ -299,7 +303,7 @@ def format_incident_triage(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 - name: use_validated
   dependencies: [validate_data]
   guard:
-    condition: 'status == "valid"'  # Checks validate_data OUTPUT
+    condition: 'validate_data.status == "valid"'  # Checks validate_data OUTPUT
 ```
 
 ### ❌ 3. Missing Passthrough

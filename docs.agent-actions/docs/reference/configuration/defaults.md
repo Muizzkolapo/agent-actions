@@ -165,6 +165,7 @@ defaults:
 
 actions:
   - name: my_action
+    dependencies: [upstream]
     context_scope:
       observe:
         - upstream.field
@@ -238,6 +239,7 @@ actions:
     # run_mode doesn't apply to tools
 
   - name: aggregate_data
+    dependencies: [validate_data]  # A file action reads the output of an action before it
     kind: tool
     impl: aggregate_function
     granularity: file  # Override for this tool

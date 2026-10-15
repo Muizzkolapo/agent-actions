@@ -143,7 +143,7 @@ actions:
 
   - name: gemini_answer
     dependencies: [prepare]
-    model_vendor: google
+    model_vendor: gemini
 
   - name: best_answer
     dependencies: [gpt4_answer, claude_answer, gemini_answer]
@@ -163,22 +163,27 @@ actions:
     dependencies: [classify]
     guard:
       condition: "classify.complexity == 'low'"
+      on_false: skip
 
   - name: slow_path
     dependencies: [classify]
     guard:
       condition: "classify.complexity == 'high'"
+      on_false: skip
 
   - name: combine
     dependencies: [fast_path, slow_path]
 ```
 
-**Handling missing branches:** The merge action receives `null` for skipped branches. Your template should handle this gracefully:
+Both guards set `on_false: skip`. Under `filter`, the default for a condition guard, a record that either branch filters never reaches `combine`: each record passes one branch and is filtered by the other, so the merge receives no record at all. See [Filtered records leave only what is below the filter](../execution/guards.md#filtered-records-leave-only-what-is-below-the-filter).
+
+**Handling skipped branches:** Under `skip`, the merge action still receives the record, and the branch that skipped it holds no output for that record, so `{% if fast_path %}` is false for it. Your template should handle this gracefully:
 
 > **Important:** On root records (records with no parent), `parent_target_id` is **absent** from the JSON object — not `null`. Always use a presence check (`"parent_target_id" in record`) rather than a null check (`record["parent_target_id"] is None`). A null check will raise `KeyError` on root records.
 
 ```yaml
 - name: combine
+  dependencies: [fast_path, slow_path]
   prompt: |
     {% if fast_path %}Fast result: {{ fast_path.result }}{% endif %}
     {% if slow_path %}Slow result: {{ slow_path.result }}{% endif %}
@@ -191,7 +196,7 @@ FILE-mode tools receive all records at once. The framework tracks each record's 
 **How it works:**
 
 1. Each input record carries its identity from the previous action
-2. The tool receives full records and returns them
+2. The tool receives one item per record, holding its observed fields, and returns them
 3. The framework matches each output to its input by `source_index`
 4. Matched outputs extend the parent's lineage chain
 5. Outputs declaring `source_index: None` (aggregation results) get fresh lineage

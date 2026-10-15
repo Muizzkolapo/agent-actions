@@ -448,15 +448,14 @@ class TestInferDependenciesEdgeCases:
         assert context_sources == ["action_B"]  # Only one entry, not duplicated
 
 
-class TestInferDependenciesFourPatterns:
+class TestInferDependenciesThreePatterns:
     """
-    Test infer_dependencies() for all 4 dependency patterns.
+    Test infer_dependencies() for all 3 dependency patterns.
 
     Patterns:
     1. Single - One dependency, output becomes input
     2. Parallel Branches - Same base name (classify_1, classify_2), all merged
     3. Fan-in - Different actions, first is primary, others via context
-    4. Aggregation - Different actions with reduce_key, all merged
     """
 
     def test_pattern_1_single_dependency(self):
@@ -517,66 +516,6 @@ class TestInferDependenciesFourPatterns:
         assert input_sources == ["analyze_sentiment"]
         assert set(context_sources) == {"analyze_entities", "analyze_topics"}
 
-    def test_pattern_3_fan_in_with_primary_override(self):
-        """Pattern 3: Fan-in with primary_dependency override."""
-        action_config = {
-            "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-            "primary_dependency": "analyze_entities",  # Override: entities is primary
-            "context_scope": {
-                "observe": [
-                    "analyze_sentiment.*",
-                    "analyze_entities.*",
-                    "analyze_topics.*",
-                ]
-            },
-        }
-        workflow_actions = [
-            "analyze_sentiment",
-            "analyze_entities",
-            "analyze_topics",
-            "generate_report",
-        ]
-
-        input_sources, context_sources = infer_dependencies(
-            action_config, workflow_actions, "generate_report"
-        )
-
-        # Primary override: analyze_entities is input, rest are context
-        assert input_sources == ["analyze_entities"]
-        assert set(context_sources) == {"analyze_sentiment", "analyze_topics"}
-
-    def test_pattern_4_aggregation_all_inputs(self):
-        """Pattern 4: Aggregation with reduce_key - all become input sources."""
-        action_config = {
-            "dependencies": ["validator_grammar", "validator_accuracy", "validator_style"],
-            "reduce_key": "content_id",  # Aggregation pattern
-            "context_scope": {
-                "observe": [
-                    "validator_grammar.*",
-                    "validator_accuracy.*",
-                    "validator_style.*",
-                ]
-            },
-        }
-        workflow_actions = [
-            "validator_grammar",
-            "validator_accuracy",
-            "validator_style",
-            "aggregate_validations",
-        ]
-
-        input_sources, context_sources = infer_dependencies(
-            action_config, workflow_actions, "aggregate_validations"
-        )
-
-        # Aggregation: all dependencies are input sources (merged and grouped)
-        assert set(input_sources) == {
-            "validator_grammar",
-            "validator_accuracy",
-            "validator_style",
-        }
-        assert context_sources == []  # All are already inputs
-
     def test_versioned_primary_expands_to_all_branches(self):
         """Versioned primary: research_1, research_2, research_3 + summarize."""
         action_config = {
@@ -606,23 +545,6 @@ class TestInferDependenciesFourPatterns:
         assert set(input_sources) == {"research_1", "research_2", "research_3"}
         assert context_sources == ["summarize"]
 
-    def test_versioned_primary_with_base_name_override(self):
-        """primary_dependency as base name expands to all version branches."""
-        action_config = {
-            "dependencies": ["research_1", "research_2", "summarize"],
-            "primary_dependency": "research",  # Base name, not in list directly
-            "context_scope": {"observe": ["research_1.*", "research_2.*", "summarize.*"]},
-        }
-        workflow_actions = ["research_1", "research_2", "summarize", "final_report"]
-
-        input_sources, context_sources = infer_dependencies(
-            action_config, workflow_actions, "final_report"
-        )
-
-        # Base name expands to all matching version branches
-        assert set(input_sources) == {"research_1", "research_2"}
-        assert context_sources == ["summarize"]
-
     def test_different_base_names_with_same_suffix_is_fan_in(self):
         """Different base names with same numeric suffix → fan-in, not parallel."""
         action_config = {
@@ -638,23 +560,6 @@ class TestInferDependenciesFourPatterns:
         # Fan-in: first is primary (classify_text_1), second is context
         assert input_sources == ["classify_text_1"]
         assert context_sources == ["classify_image_1"]
-
-    def test_reduce_key_with_parallel_branches(self):
-        """reduce_key with parallel branches - all become inputs (merge + group)."""
-        action_config = {
-            "dependencies": ["classify_1", "classify_2", "classify_3"],
-            "reduce_key": "content_id",
-            "context_scope": {"observe": ["classify_1.*", "classify_2.*", "classify_3.*"]},
-        }
-        workflow_actions = ["classify_1", "classify_2", "classify_3", "aggregate"]
-
-        input_sources, context_sources = infer_dependencies(
-            action_config, workflow_actions, "aggregate"
-        )
-
-        # reduce_key overrides: all are inputs regardless of pattern
-        assert set(input_sources) == {"classify_1", "classify_2", "classify_3"}
-        assert context_sources == []
 
 
 class TestAContextScopeThatIsNotAMapping:

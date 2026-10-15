@@ -47,6 +47,11 @@ guard:
 | `>`, `>=`, `<`, `<=` | Comparison |
 | `and`, `or`, `not` | Logical |
 
+`not` binds looser than every comparison operator and tighter than `and`/`or`: `not x == 1`
+negates the comparison, reading as `not (x == 1)`, and `not x == 1 and y == 2` reads as
+`(not (x == 1)) and (y == 2)`. Written on a field alone, `not x`, it negates the field's
+truthiness instead.
+
 ### Advanced Operators
 
 | Operator | Example |
@@ -54,12 +59,45 @@ guard:
 | `IN` | `triage.status IN ["active", "pending"]` |
 | `NOT IN` | `classify.category NOT IN ["spam"]` |
 | `CONTAINS` | `extract.tags CONTAINS "important"` |
-| `LIKE` | `lookup.name LIKE "prod_*"` |
+| `LIKE` | `lookup.name LIKE "prod%"` |
 | `BETWEEN` | `score_review.score BETWEEN 50 AND 100` |
+| `NOT BETWEEN` | `score_review.score NOT BETWEEN 50 AND 100` |
 | `IS NULL` | `summarize.description IS NULL` |
 
 Each field carries its action prefix, as every guard field must — see
 [Context Access](#context-access).
+
+`BETWEEN` includes both ends of its range, so the example keeps a score of 50 and a score of
+100. The range can also be written as a list, `score_review.score BETWEEN [50, 100]`, and the
+two forms mean the same. The ends are two numbers or two quoted strings, written in the
+clause. A clause that gives one end only (`BETWEEN 50`), gives `NULL` or a boolean for an end,
+or names a field for an end (`BETWEEN limits.low AND limits.high`), is refused before the
+run starts. To keep what is outside a range, write `NOT BETWEEN`, or put the range in
+parentheses: `NOT (score_review.score BETWEEN 50 AND 100)`.
+
+`LIKE` and `NOT LIKE` take SQL wildcards, not a glob: `%` is any run of characters and `_` is
+exactly one character. Everything else, `*` included, is literal. The pattern must match the whole
+value, case is ignored, and there is no escape for a literal `%` or `_`. The example keeps
+`prod_east` and `PROD_WEST`; `"prod_*"` would keep only a six-character name ending in a literal `*`.
+
+### Functions
+
+| Function | Example |
+|----------|---------|
+| `LENGTH` | `LENGTH(extract.items) > 2` |
+| `UPPER` | `UPPER(classify.category) == "SPAM"` |
+| `LOWER` | `LOWER(classify.category) == "spam"` |
+| `TRIM` | `TRIM(summarize.title) != ""` |
+
+Each takes exactly one argument — a field, string, number, boolean, or `NULL` — and returns a
+plain value a comparison can use. A function call is not itself a valid argument, so these do
+not nest: `LENGTH(TRIM(x))` is refused. `LENGTH` counts a string's characters or a list's items,
+or treats a non-string, non-list value as its string form; `NULL` counts as length `0`. A field
+used inside a function still needs its action prefix, exactly as it would outside one.
+
+Guard functions are not available in an `expression` [expectation](../validation/expectations.md#expressions)
+condition, which shares this grammar but evaluates against an action's own output, not a
+stored record.
 
 `IS NULL` is the one to watch. A name it cannot resolve — misspelled, or written without its
 prefix — is treated as null, so the clause is true and the record passes. Every other operator
@@ -113,6 +151,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ```yaml
 - name: enhance_summary
+  dependencies: [analyze_content]
   guard:
     condition: 'analyze_content.needs_enhancement == true'
     on_false: "skip"
@@ -122,6 +161,7 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ```yaml
 - name: generate_final_output
+  dependencies: [evaluate_quality]
   guard:
     condition: 'evaluate_quality.quality_score >= 85'
     on_false: "filter"
@@ -132,7 +172,8 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 A guard gates the action before it receives anything, so it reads the record **as stored** —
 every namespace the record carries, addressed as `action_name.field`. A record carries the
 actions upstream of it through `dependencies`, so a clause names only those: preflight refuses
-a guard that names an action running beside or after its own, or one on a parallel branch.
+a guard that names an action running beside or after its own, one on a parallel branch, or its own
+action: the guard runs before the action, so the action's output is not yet on the record.
 
 | Source | Syntax |
 |--------|--------|
@@ -172,6 +213,7 @@ When Action A skips a record (`on_false: skip`), Action B still receives it and 
 ```yaml
 actions:
   - name: extract_facts
+    dependencies: [classify]
     guard:
       condition: 'classify.status == "active"'
       on_false: "skip"       # Inactive records pass through with original content
@@ -221,7 +263,7 @@ When a guard silently lets records through unexpectedly, check `target/errors.js
 
 ### UDF guards
 
-A UDF guard (`condition: "udf:name"`) passes its record when the function raises, with the one exception below; `passthrough_on_error` cannot be turned off on one. The function is handed a read-only view of the record, so the record cannot be changed from inside a guard. Assigning to it, or calling a method that writes to it, raises, and that one error is not passed through: the function gave no answer, so the action stops with an error naming the function, and no record reaches it unjudged. A function that catches the refusal and carries on still decides, but an error it raises while handling the refusal (inside the `except` that caught it) counts as the write, and the message names that error too. Under `run_mode: batch`, a write stops the action this way when it happens in the check run before submitting (the first rows, up to the first one the guard admits) or on any record the run carries as done from an earlier run, which the guard judges again before anything is sent; a write on another row fails that record alone. To work on a value, copy it before writing to it (`data["ns"].copy()` is deep and writable) and return the answer.
+A UDF guard (`condition: "udf:name"`) passes its record when the function raises, with the one exception below, the same as `passthrough_on_error: true` on a SQL guard; set `passthrough_on_error: false` to skip the record instead — a UDF condition only supports `on_false: skip`, so that is the behavior a raise applies. The function is handed a read-only view of the record, so the record cannot be changed from inside a guard. Assigning to it, or calling a method that writes to it, raises, and that one error is not passed through: the function gave no answer, so the action stops with an error naming the function, and no record reaches it unjudged. A function that catches the refusal and carries on still decides, but an error it raises while handling the refusal (inside the `except` that caught it) counts as the write, and the message names that error too. Under `run_mode: batch`, a write stops the action this way wherever it happens: in the check run before submitting (the first rows, up to the first one the guard admits), on a later row prepared for submission, on any record the run carries as done from an earlier run (the guard judges it again before anything is sent), or during a retry round's preparation. To work on a value, copy it before writing to it (`data["ns"].copy()` is deep and writable) and return the answer.
 
 ## Common Mistakes
 
@@ -252,6 +294,7 @@ When a guard is configured on a File-granularity action (tool or HITL), the guar
 
 ```yaml
 - name: deduplicate_active
+  dependencies: [upstream_action]
   kind: tool
   granularity: file
   impl: deduplicate

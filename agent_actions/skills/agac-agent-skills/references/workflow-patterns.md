@@ -265,6 +265,7 @@ flowchart LR
   granularity: file
   dependencies: [quality_screen]
   guard: { condition: 'quality_screen.needs_review == true', on_false: "skip" }
+  hitl: { instructions: "Approve or reject each flagged record" }
   context_scope:
     observe: [quality_screen.needs_review, quality_screen.reason]
 

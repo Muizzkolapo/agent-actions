@@ -57,7 +57,7 @@ def file_mode(records, clause, *, scope=DROP_DEP, behavior="filter", pool=POOL):
     pre_scope = [deepcopy(r) for at, r in enumerate(records) if at not in dropped]
 
     config = {"granularity": "file", "context_scope": scope, "guard": guard(clause, behavior)}
-    passing, skipped, originals, filtered = prefilter_by_guard(
+    passing, skipped, originals, filtered, _ = prefilter_by_guard(
         scoped,
         config,
         "a2",
@@ -327,7 +327,7 @@ class TestWithoutOriginalsTheRecordIsTheOnlyAnswer:
     passes were never scope-stripped. Nothing there changes."""
 
     def test_a_call_with_no_originals_reads_the_records_it_was_given(self):
-        passing, _skipped, originals, _filtered = prefilter_by_guard(
+        passing, _skipped, originals, _filtered, _ = prefilter_by_guard(
             [stored()],
             {"granularity": "record", "guard": guard("a1.tier == 'secret'")},
             "a2",

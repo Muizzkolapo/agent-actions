@@ -84,20 +84,17 @@ class TestResolveInputSourcesForFanIn:
     Used by infer_dependencies() for prompt context classification.
     """
 
-    def test_base_name_primary_expands_to_all_versions(self):
-        """Base name as primary_dependency expands to all matching versions."""
-        deps = ["research_1", "research_2", "summarize"]
-        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps, "research")
-        assert set(input_sources) == {"research_1", "research_2"}
+    def test_a_versioned_first_dependency_brings_its_sibling_branches(self):
+        deps = ["research_1", "summarize", "research_2"]
+        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps)
+        assert input_sources == ["research_1", "research_2"]
         assert context_sources == ["summarize"]
 
-    def test_invalid_primary_raises_value_error(self):
-        """Invalid primary_dependency raises ValueError."""
-        deps = ["action_a", "action_b"]
-        with pytest.raises(ValueError) as exc_info:
-            _resolve_input_sources_for_fan_in(deps, "nonexistent")
-        assert "nonexistent" in str(exc_info.value)
-        assert "not found" in str(exc_info.value)
+    def test_an_unversioned_first_dependency_is_the_only_input(self):
+        deps = ["summarize", "research_1", "research_2"]
+        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps)
+        assert input_sources == ["summarize"]
+        assert context_sources == ["research_1", "research_2"]
 
 
 class TestDependencyPatterns:
@@ -196,64 +193,8 @@ class TestDependencyPatterns:
             "analyze_topics",
         }
 
-    def test_pattern_4_aggregation(self, agent_runner, temp_folder):
-        """
-        Pattern 4: Aggregation
-
-        Config:
-          - name: aggregate_validations
-            dependencies: [validator_grammar, validator_accuracy, validator_style]
-            reduce_key: content_id
-
-        Result: All outputs merged and grouped by reduce_key
-        """
-        for validator in ["validator_grammar", "validator_accuracy", "validator_style"]:
-            (temp_folder / "target" / validator).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["validator_grammar", "validator_accuracy", "validator_style"],
-            "aggregate_validations",
-        )
-
-        # All directories returned for merging (aggregation pattern)
-        assert len(result) == 3
-        assert {r.name for r in result} == {
-            "validator_grammar",
-            "validator_accuracy",
-            "validator_style",
-        }
-
-    def test_reduce_key_with_parallel_branches(self, agent_runner, temp_folder):
-        """
-        Edge case: reduce_key with parallel branches
-
-        Config:
-          - name: aggregate_classifications
-            dependencies: [classify_1, classify_2, classify_3]
-            reduce_key: content_id
-
-        Behavior: All outputs are merged (parallel branches merge by default,
-        reduce_key just adds grouping for downstream processing).
-
-        Note: This is valid but rarely used since parallel branches already
-        merge by default. The reduce_key adds grouping by content_id.
-        """
-        for i in range(1, 4):
-            (temp_folder / "target" / f"classify_{i}").mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["classify_1", "classify_2", "classify_3"],
-            "aggregate_classifications",
-        )
-
-        # All directories returned for merging (reduce_key applies grouping)
-        assert len(result) == 3
-        assert {r.name for r in result} == {"classify_1", "classify_2", "classify_3"}
-
-    def test_fan_in_primary_dependency_ignored(self, agent_runner, temp_folder):
-        """primary_dependency is ignored — all deps are input sources in bus model."""
+    def test_fan_in_of_two_returns_both_directories(self, agent_runner, temp_folder):
+        """All deps are input sources in bus model."""
         for action in ["action_a", "action_b"]:
             (temp_folder / "target" / action).mkdir()
 
@@ -263,7 +204,6 @@ class TestDependencyPatterns:
             "test_action",
         )
 
-        # All dependencies are input sources regardless of primary_dependency
         assert len(result) == 2
         assert {r.name for r in result} == {"action_a", "action_b"}
 
@@ -286,12 +226,8 @@ class TestDependencyPatterns:
         assert len(result) == 4
         assert {r.name for r in result} == {"research_1", "research_2", "research_3", "summarize"}
 
-    def test_versioned_primary_base_name_all_input(self, agent_runner, temp_folder):
-        """
-        All dependencies are input sources regardless of primary_dependency.
-
-        Bus model: primary_dependency is ignored at the runner level.
-        """
+    def test_versioned_and_unversioned_dependencies_are_all_input(self, agent_runner, temp_folder):
+        """Bus model: every dependency is an input source at the runner level."""
         for action in ["research_1", "research_2", "summarize"]:
             (temp_folder / "target" / action).mkdir()
 
@@ -378,24 +314,9 @@ class TestResolveDependencyDirectories:
         assert temp_agent_folder / "target" / "classify_2" in result
         assert temp_agent_folder / "target" / "classify_3" in result
 
-    def test_multiple_dependencies_with_reduce_key_returns_all(
-        self, agent_runner, temp_agent_folder
-    ):
-        """Test aggregation pattern: reduce_key set returns all dependencies."""
-        dependencies = ["action_A", "action_B", "action_C"]
-        result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, "test_action"
-        )
-
-        # Aggregation with reduce_key: all directories returned for merging
-        assert len(result) == 3
-        assert temp_agent_folder / "target" / "action_A" in result
-        assert temp_agent_folder / "target" / "action_B" in result
-        assert temp_agent_folder / "target" / "action_C" in result
-
-    def test_missing_primary_dependency_raises_error(self, agent_runner, temp_agent_folder):
-        """Test that missing PRIMARY dependency raises DependencyError."""
-        # action_A is primary but doesn't exist, action_B exists
+    def test_missing_first_dependency_directory_raises_error(self, agent_runner, temp_agent_folder):
+        """Test that a missing first dependency's directory raises DependencyError."""
+        # action_A is listed first but doesn't exist, action_B exists
         (temp_agent_folder / "target" / "action_B").mkdir(parents=True, exist_ok=True)
         # Remove action_A if it exists from fixture
         action_a_dir = temp_agent_folder / "target" / "action_A"
@@ -412,8 +333,8 @@ class TestResolveDependencyDirectories:
         assert "action_A" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 
-    def test_primary_dependency_ignored_all_input(self, agent_runner, temp_agent_folder):
-        """Test primary_dependency is ignored — all deps are input sources in bus model."""
+    def test_three_dependencies_are_all_input(self, agent_runner, temp_agent_folder):
+        """All deps are input sources in bus model."""
         dependencies = ["action_A", "action_B", "action_C"]
 
         result = agent_runner._resolve_dependency_directories(
@@ -508,7 +429,7 @@ class TestResolveDependencyDirectoriesIntegration:
         """Test aggregate pattern: multiple input sources for merging.
 
         Pattern: dependencies: [validate_1, validate_2, validate_3]
-        All are input sources to be merged by reduce_key.
+        All are input sources, merged by their shared identity.
         """
         # Create validate directories
         for i in range(1, 4):

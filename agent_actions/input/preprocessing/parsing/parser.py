@@ -1,7 +1,6 @@
 """WHERE clause parser using pyparsing with AST construction and LRU caching."""
 
 import logging
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -10,10 +9,14 @@ try:
     from pyparsing import (
         CaselessKeyword,
         Forward,
+        Group,
         Literal,
         OpAssoc,
+        ParseBaseException,
         ParseException,
+        ParseFatalException,
         ParserElement,
+        ParseResults,
         QuotedString,
         Regex,
         Suppress,
@@ -60,6 +63,39 @@ _MULTI_WORD_STARTS: set[str] = set()
 for _key in _OPERATOR_LOOKUP:
     if " " in _key:
         _MULTI_WORD_STARTS.add(_key.split()[0].upper())
+
+_RANGE_OPERATORS = (ComparisonOperator.BETWEEN, ComparisonOperator.NOT_BETWEEN)
+_POSTFIX_REFUSAL = (
+    "only one of IS NULL, IS NOT NULL or BETWEEN a AND b can follow an operand: "
+    "put the first in parentheses to compare its result"
+)
+_RANGE_REFUSAL = (
+    "BETWEEN takes a range of two numbers or two strings: "
+    "write `x BETWEEN a AND b` or `x BETWEEN [a, b]`"
+)
+
+
+def _bounds_a_value(end: Any) -> str | None:
+    """The family a range end orders values in; a boolean or NULL end orders nothing."""
+    if isinstance(end, bool):
+        return None
+    if isinstance(end, int | float):
+        return "number"
+    return "string" if isinstance(end, str) else None
+
+
+def _is_not_a_range(operand: ASTNode) -> bool:
+    """Whether an operand can never be a range. A field may hold one, so it is left to the record."""
+    if isinstance(operand, FieldNode):
+        return False
+    if not (
+        isinstance(operand, LiteralNode)
+        and isinstance(operand.value, list)
+        and len(operand.value) == 2
+    ):
+        return True
+    low, high = (_bounds_a_value(end) for end in operand.value)
+    return low is None or low != high
 
 
 @dataclass
@@ -150,11 +186,15 @@ class WhereClauseParser:
         )
         array_literal.add_parse_action(self._parse_array)
 
+        # Same operand set as a BETWEEN bound (`range_bound` below) -- a field or a
+        # literal, never an array, which none of LENGTH/UPPER/LOWER/TRIM take.
+        function_arg = string_literal | number | boolean | null | field_name
+
         function_name = Word(alphas.upper(), alphanums + "_")
         function_args = Forward()
         function_args <<= (
             tokens["lpar"]
-            + PyOptional(array_element + ZeroOrMore(tokens["comma"] + array_element))
+            + PyOptional(function_arg + ZeroOrMore(tokens["comma"] + function_arg))
             + tokens["rpar"]
         )
 
@@ -168,18 +208,26 @@ class WhereClauseParser:
         comparison_ops = self._build_comparison_operators()
         unary_postfix_ops = self._build_unary_postfix_operators()
 
-        unary_level = (
-            [(unary_postfix_ops, 1, OpAssoc.LEFT, self._parse_comparison)]
-            if unary_postfix_ops
-            else []
+        # `x BETWEEN a AND b` is read whole, as a suffix of `x`, above the AND
+        # level. A bound is any operand but an array, so `x BETWEEN [a, b] AND y`
+        # still reads as the list form beside a second condition.
+        range_bound = function_call | boolean | null | string_literal | number | field_name
+        range_suffix = Group(
+            PyOptional(CaselessKeyword("NOT"))
+            + CaselessKeyword("BETWEEN")
+            + range_bound
+            + Suppress(CaselessKeyword("AND"))
+            + range_bound
         )
+        postfix_ops = Group(unary_postfix_ops) | range_suffix if unary_postfix_ops else range_suffix
 
+        # NOT sits below comparisons so `NOT x == 1` negates the comparison, not `x`.
         where_expr = infix_notation(
             operand,
             [
-                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
-                *unary_level,
+                (postfix_ops, 1, OpAssoc.LEFT, self._parse_postfix),
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
+                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
             ],
@@ -276,6 +324,30 @@ class WhereClauseParser:
         operand = tokens[0][1]  # Skip the NOT keyword
         return LogicalNode(LogicalOperator.NOT, operand)
 
+    def _range_comparison(self, left: ASTNode, suffix: ParseResults) -> ComparisonNode:
+        """Build `x [NOT] BETWEEN a AND b` as the comparison the list form builds."""
+        *negation, _between, low, high = suffix
+        if not (isinstance(low, LiteralNode) and isinstance(high, LiteralNode)):
+            raise ParseFatalException(_RANGE_REFUSAL)
+        literal_range = LiteralNode([low.value, high.value])
+        if _is_not_a_range(literal_range):
+            raise ParseFatalException(_RANGE_REFUSAL)
+        operator = ComparisonOperator.NOT_BETWEEN if negation else ComparisonOperator.BETWEEN
+        return ComparisonNode(left, operator, literal_range)
+
+    def _parse_postfix(self, tokens):
+        """Build the one IS NULL, IS NOT NULL or `BETWEEN a AND b` that follows an operand.
+
+        A second one would compare the first one's boolean, which is the same for every record.
+        """
+        left, *suffixes = tokens[0]
+        if len(suffixes) != 1:
+            raise ParseFatalException(_POSTFIX_REFUSAL)
+        suffix = suffixes[0]
+        if isinstance(suffix[-1], str):
+            return ComparisonNode(left, _OPERATOR_LOOKUP[" ".join(suffix).upper()])
+        return self._range_comparison(left, suffix)
+
     def _parse_comparison(self, tokens):
         """Parse comparison operations with unified operator lookup."""
         result = tokens[0][0]
@@ -314,6 +386,8 @@ class WhereClauseParser:
 
             if i < len(items):
                 right_operand = items[i]
+                if operator_enum in _RANGE_OPERATORS and _is_not_a_range(right_operand):
+                    raise ParseFatalException(_RANGE_REFUSAL)
                 result = ComparisonNode(result, operator_enum, right_operand)
                 i += 1
             else:
@@ -366,12 +440,6 @@ class WhereClauseParser:
                 error=ParseError("WHERE clause too long (max 10000 characters)", 1, 1, "TooLong"),
             )
 
-        if not self._validate_field_names(where_clause):
-            return ParseResult(
-                success=False,
-                error=ParseError("Invalid field names detected", 1, 1, "InvalidFields"),
-            )
-
         return None  # Valid
 
     def _parse_and_build_ast(self, where_clause: str) -> ParseResult:
@@ -400,7 +468,7 @@ class WhereClauseParser:
         try:
             return self._parse_and_build_ast(where_clause)
 
-        except ParseException as e:
+        except ParseBaseException as e:
             return ParseResult(
                 success=False,
                 error=ParseError(f"Parse error: {e.msg}", e.lineno, e.column, "ParseException"),
@@ -411,26 +479,6 @@ class WhereClauseParser:
                 success=False,
                 error=ParseError(f"Unexpected error: {str(e)}", 1, 1, "UnexpectedError"),
             )
-
-    _FIELD_PATTERN = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-    _OPERATOR_SPLIT_PATTERN = re.compile(
-        r"[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b",
-        flags=re.IGNORECASE,
-    )
-
-    def _is_valid_field_token(self, token: str) -> bool:
-        """Check if a token is a valid field name."""
-        token = token.strip()
-        if not token or token.startswith('"') or token.startswith("'"):
-            return True  # Skip empty, string literals
-        if not re.match(r"^[a-zA-Z_]", token):
-            return True  # Not a field name, skip
-        return bool(self._FIELD_PATTERN.fullmatch(token.split()[0]))
-
-    def _validate_field_names(self, where_clause: str) -> bool:
-        """Validate field names against injection patterns."""
-        tokens = self._OPERATOR_SPLIT_PATTERN.split(where_clause)
-        return all(self._is_valid_field_token(token) for token in tokens)
 
     def clear_cache(self):
         """Clear the parsing cache."""

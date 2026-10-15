@@ -28,7 +28,7 @@ def _online(clause: str, priority: str) -> tuple[int, int]:
         "guard": {"clause": clause, "behavior": "filter"},
     }
     row = {"priority": priority, "text": "t"}
-    passing, _skipped, _originals, filtered = prefilter_by_guard(
+    passing, _skipped, _originals, filtered, _ = prefilter_by_guard(
         [dict(row)], config, "triage", is_first_stage=True
     )
     return len(passing), len(filtered)

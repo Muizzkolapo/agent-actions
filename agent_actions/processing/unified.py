@@ -340,7 +340,7 @@ class UnifiedProcessor:
         so the next run puts the record to the guard again rather than carrying it.
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, _original_passing, filtered = prefilter_by_guard(
+        passing, skipped, _original_passing, filtered, failed = prefilter_by_guard(
             records,
             config,
             context.agent_name,
@@ -353,6 +353,19 @@ class UnifiedProcessor:
         )
 
         guard_results: list[ProcessingResult] = []
+
+        for record, error in failed:
+            snapshot = record if isinstance(record, dict) else None
+            guard_results.append(
+                ProcessingResult.failed(
+                    error=f"Guard evaluation failed: {error}",
+                    source_guid=record.get("source_guid") if isinstance(record, dict) else None,
+                    # Both carried, each standing in for the other -- the FAILED
+                    # tombstone builder reads only input_record, with no fallback.
+                    source_snapshot=snapshot,
+                    input_record=snapshot,
+                )
+            )
 
         for item in skipped:
             source_guid = item.get("source_guid")
@@ -367,6 +380,11 @@ class UnifiedProcessor:
                     data=[tombstone],
                     reason=GUARD_SKIP,
                     source_guid=source_guid,
+                    # Unused by a clean skip; carried for when enrichment refuses
+                    # the tombstone (e.g. no source_guid) and needs the record
+                    # the guard skipped to build its own failed row from (1330).
+                    source_snapshot=item,
+                    input_record=item,
                 )
             )
 
@@ -392,7 +410,7 @@ class UnifiedProcessor:
         for the enricher.
         """
         config = cast(dict[str, Any], context.agent_config)
-        passing, skipped, original_passing, filtered = prefilter_by_guard(
+        passing, skipped, original_passing, filtered, failed = prefilter_by_guard(
             records,
             config,
             context.agent_name,
@@ -408,6 +426,19 @@ class UnifiedProcessor:
         guard_results: list[ProcessingResult] = []
         action_name = context.action_name
 
+        for record, error in failed:
+            snapshot = record if isinstance(record, dict) else None
+            guard_results.append(
+                ProcessingResult.failed(
+                    error=f"Guard evaluation failed: {error}",
+                    source_guid=record.get("source_guid") if isinstance(record, dict) else None,
+                    # Both carried, each standing in for the other -- the FAILED
+                    # tombstone builder reads only input_record, with no fallback.
+                    source_snapshot=snapshot,
+                    input_record=snapshot,
+                )
+            )
+
         for item in skipped:
             if action_name and isinstance(item, dict):
                 content = item.get("content")
@@ -417,11 +448,17 @@ class UnifiedProcessor:
                         if key not in skipped_record and key not in _LIFECYCLE_KEYS:
                             skipped_record[key] = item[key]
                     item = skipped_record
+            snapshot = item if isinstance(item, dict) else None
             guard_results.append(
                 ProcessingResult.unprocessed(
                     data=[item],
                     reason=GUARD_PREFILTER_SKIP,
-                    source_guid=item.get("source_guid") if isinstance(item, dict) else None,
+                    source_guid=snapshot.get("source_guid") if snapshot else None,
+                    # Unused by a clean skip; carried for when enrichment refuses
+                    # the tombstone (e.g. no source_guid) and needs the record
+                    # the guard skipped to build its own failed row from (1330).
+                    source_snapshot=snapshot,
+                    input_record=snapshot,
                 )
             )
 

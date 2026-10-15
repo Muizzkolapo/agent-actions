@@ -34,6 +34,7 @@ from typing import Any
 import jinja2
 import yaml
 from jinja2 import Environment, FileSystemLoader, Undefined, meta, nodes
+from jinja2.compiler import CodeGenerator, Frame
 from jinja2.defaults import DEFAULT_NAMESPACE
 from jinja2.environment import TemplateModule
 from jinja2.ext import Extension
@@ -43,6 +44,7 @@ from jinja2.utils import Namespace, missing
 from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
 
 # Private-use characters, which no workflow text holds, mark what the render left.
 _LEFT_OPEN, _LEFT_CLOSE = "\ue000", "\ue001"
@@ -68,6 +70,9 @@ _FLOW_KEY = re.compile(
     r"([A-Za-z_][A-Za-z0-9_.-]*|\"[^\"\n]*\"|'[^'\n]*')[ \t]*:(?=[ \t\n,\[\]{}]|$)"
 )
 _BLOCK_HEADER = re.compile(r"[ \t]+[|>][-+1-9]*[ \t]*(#.*)?\Z")
+# A last tag whose whitespace control strips everything after it, the final newline too.
+_STRIPS_AFTER = re.compile(r"-(?:\}\}|%\}|#\})\s*\Z")
+
 _NAMED = re.compile(
     r"^[ \t]*(?:-[ \t]+)*(name|param)[ \t]*:[ \t]*[\"']?([A-Za-z_][\w-]*)[\"']?[ \t]*(?:#.*)?$",
     re.M,
@@ -190,25 +195,61 @@ class LoadRender:
         # names are read with one that has none, and the load's filters and tests.
         self._names_env = Environment()
         self._names_env.globals.clear()
-        self.env = Environment(
+        self.env = DictKeyFirstEnvironment(
             loader=_Loader(str(templates_folder), self),
             undefined=_undefined_class(self),
             extensions=[_LeaveExtension],
         )
         self.env.template_class = _ImportingTemplate
+        self.env.context_class = _FolderContext
+        self.env.code_generator_class = _IncludeGenerator
         self._names_env.filters = self.env.filters
         self._names_env.tests = self.env.tests
         extension = self.env.extensions[_LeaveExtension.identifier]
         assert isinstance(extension, _LeaveExtension)
         extension.load = self
 
+    def exports(self, text: str) -> frozenset[str]:
+        """The names *text* gives a file that imports it: its top level's variables,
+        macros and imports."""
+        names: set[str] = set()
+
+        def read(node: nodes.Node) -> None:
+            for child in node.iter_child_nodes():
+                if isinstance(child, nodes.Macro):
+                    names.add(child.name)
+                elif isinstance(child, nodes.Assign | nodes.AssignBlock):
+                    target = child.target
+                    names.update(
+                        n.name
+                        for n in (target, *target.find_all(nodes.Name))
+                        if isinstance(n, nodes.Name)
+                    )
+                elif isinstance(child, nodes.Import):
+                    names.add(child.target)
+                elif isinstance(child, nodes.FromImport):
+                    names.update(n if isinstance(n, str) else n[1] for n in child.names)
+                elif not isinstance(
+                    child, nodes.For | nodes.CallBlock | nodes.With | nodes.FilterBlock
+                ):
+                    read(child)
+
+        read(self._names_env.parse(text))
+        return frozenset(name for name in names if not name.startswith("_"))
+
     # ── the render ─────────────────────────────────────────────────────────
 
     def render(self, source: str, origin: str) -> str:
-        template = self.env.from_string(self.wrap(source, origin))
+        wrapped = self.wrap(source, origin)
+        template = self.env.from_string(wrapped)
+        # Jinja drops a source's final newline, which for a block scalar ending the file is
+        # its own line break. Restored here, not on the environment, which would change
+        # every include of a templates/ file; a last tag that strips (`-%}`) keeps that.
+        keeps = wrapped.endswith("\n") and not _STRIPS_AFTER.search(wrapped)
+        final_newline = "\n" if keeps else ""
         while True:
             try:
-                return template.render()
+                return template.render() + final_newline
             except jinja2.UndefinedError as e:
                 name = self._read_by_a_prompt(e)
                 if name is None:
@@ -666,11 +707,50 @@ class _ImportingTemplate(jinja2.Template):
         load = extension.load if isinstance(extension, _LeaveExtension) else None
         if load is None:
             return super().make_module(vars, shared, locals)
+        if vars is None and self.name is not None:
+            # Jinja would copy the globals, keeping from the file's macros every name
+            # templates/ registers after this run.
+            vars, shared = {}, True
         load._importing += 1
         try:
             return super().make_module(vars, shared, locals)
         finally:
             load._importing -= 1
+
+
+class _IncludeGenerator(CodeGenerator):
+    """Writes an include without context so that its text reaches a macro or a set block."""
+
+    _collecting: Frame | None = None
+
+    def visit_Include(self, node: nodes.Include, frame: Frame) -> None:
+        self._collecting = frame if frame.buffer is not None else None
+        try:
+            super().visit_Include(node, frame)
+        finally:
+            self._collecting = None
+
+    def writeline(self, x: str, node: nodes.Node | None = None, extra: int = 0) -> None:
+        # Jinja writes `yield from <the file's text>`, which makes a generator of whatever
+        # collects its output into a buffer: a macro, a set block, a call or filter body.
+        if self._collecting is None or not x.startswith("yield from "):
+            super().writeline(x, node, extra)
+            return
+        super().writeline(f"for event in {x.removeprefix('yield from ')}:", node, extra)
+        self.indent()
+        self.simple_write("event", self._collecting)
+        self.outdent()
+
+
+class _FolderContext(Context):
+    """Reads a name it was not handed from the globals as they stand, so a templates/
+    file finds what the folder registered after the file ran."""
+
+    def resolve_or_missing(self, key: str) -> Any:
+        value = super().resolve_or_missing(key)
+        if value is missing and key in self.environment.globals:
+            return self.environment.globals[key]
+        return value
 
 
 def _undefined_class(load: LoadRender) -> type[Undefined]:
@@ -827,7 +907,7 @@ def _value_ends(
         first = rest.lstrip(" \t")
     if first[0] in "\"'":
         close = _closing_quote(source, line_end - len(first), first[0], by_start)
-        return [] if close is None else _own_newline(source, [_past_line(source, close)])
+        return [] if close is None else [_past_line(source, close)]
     if first[0] in "|>" and not _BLOCK_HEADER.match(rest):
         return []
 
@@ -858,7 +938,7 @@ def _value_ends(
         # Kept (`|+`), the blank lines after the last one are the value's too.
         ends[-1] = blank_after
     # Longest first, then a block left open closed by the tag lines after it, then shorter.
-    return _own_newline(source, [ends[-1], *after, *reversed(ends[:-1])])
+    return [ends[-1], *after, *reversed(ends[:-1])]
 
 
 def _first_value_line(
@@ -969,12 +1049,6 @@ def _indent_tag_lines(body: str) -> str:
         if i and tag_only[i] and len(line) - len(line.lstrip(" ")) < indent:
             lines[i] = " " * indent + line.lstrip(" ")
     return "\n".join(lines)
-
-
-def _own_newline(source: str, ends: list[int]) -> list[int]:
-    """*ends* short of the file's last newline, which Jinja drops as it always has."""
-    last = len(source) - 1 if source.endswith("\n") else len(source)
-    return [min(end, last) for end in ends]
 
 
 def _line_kind(

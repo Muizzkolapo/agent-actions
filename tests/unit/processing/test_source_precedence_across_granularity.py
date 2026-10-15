@@ -493,7 +493,7 @@ class TestTheGuardThePromptAndThePrefilterReadOneResolvedNamespace:
         config = {"granularity": "record", "context_scope": SCOPE, "guard": guard}
 
         for record in (POOLED_BUT_CARRYING, NOT_CARRYING):
-            passing, skipped, _originals, filtered = prefilter_by_guard(
+            passing, skipped, _originals, filtered, _ = prefilter_by_guard(
                 [dict(record)],
                 config,
                 "a2",
@@ -512,7 +512,7 @@ class TestTheGuardThePromptAndThePrefilterReadOneResolvedNamespace:
             "guard": {"clause": "source.url == 'CARRIED'", "behavior": "filter"},
         }
 
-        passing, _skipped, _originals, filtered = prefilter_by_guard(
+        passing, _skipped, _originals, filtered, _ = prefilter_by_guard(
             [dict(POOLED_BUT_CARRYING)],
             config,
             "a2",

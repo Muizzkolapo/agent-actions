@@ -69,9 +69,11 @@ def fetch_competitor_prices(data: dict[str, Any]) -> dict[str, Any]:
     Produces 3-5 competitor entries with realistic price variance and
     a market positioning summary.
     """
-    current_price = float(data.get("current_price", 100.0))
-    category = data.get("product_category", "general")
-    keywords = data.get("search_keywords", [])
+    # A record tool is handed one key per observed action.
+    normalize_product = data.get("normalize_product", {})
+    current_price = float(normalize_product.get("current_price", 100.0))
+    category = normalize_product.get("product_category", "general")
+    keywords = data.get("generate_description", {}).get("search_keywords", [])
 
     # Use keywords as part of the seed for deterministic but varied results
     keyword_seed = "_".join(sorted(keywords[:3])) if keywords else category

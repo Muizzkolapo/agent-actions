@@ -189,7 +189,7 @@ class TestNamespaceProtectionIsBatchStable:
             records=records, context_scope=cs, action_name="agg"
         )
 
-        passing, _, _, filtered = prefilter_by_guard(
+        passing, _, _, filtered, _ = prefilter_by_guard(
             enriched, {"guard": {"clause": "c == 'TARGET'", "behavior": "filter"}}, "agg"
         )
 

@@ -40,15 +40,14 @@ agent_io/staging/
 └── batch_input.csv
 ```
 
-You can also point the start node at a local folder via `data_source` config:
+You can also point the workflow at a local folder via `data_source`, set under `defaults:`:
 
 ```yaml
-actions:
-  - name: extract_facts
-    data_source:
-      type: local
-      folder: ./data
-      file_type: [json, csv]
+defaults:
+  data_source:
+    type: local
+    folder: ./data
+    file_type: [json, csv]
 ```
 
 ### source_data (table)

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: Pre-flight no longer refuses a valid guard clause as invalid field names. A raw-text pre-check split the clause on operator words, ignoring quotes and parentheses, and rejected a string literal containing one of those words, a parenthesised clause ending in a field, or a function call, even though the grammar that runs afterward already accepts each one correctly.
+time: 2026-10-11T13:01:37.970517+01:00

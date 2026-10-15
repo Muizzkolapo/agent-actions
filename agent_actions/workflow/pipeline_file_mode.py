@@ -93,7 +93,7 @@ def _reattach_source_guid(
     stored whole and take a correlation id derived from the one they inherited —
     distinct per row, equal across version branches.
 
-    ``parent_source_guid`` is left as carried: #1046 freed the resolver, #1022 remains.
+    ``parent_source_guid`` is left as carried: it names the first ancestor, not the producer.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -355,19 +355,16 @@ def prefilter_by_guard(
     version_context: dict[str, Any] | None = None,
     workflow_metadata: dict[str, Any] | None = None,
     dependency_configs: dict[str, Any] | None = None,
-) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    """Evaluate the guard per record, as ``(passing, skipped, original_passing, filtered)``.
+) -> tuple[list[dict], list[dict], list[dict], list[dict], list[tuple[dict, Exception]]]:
+    """Evaluate the guard per record, as ``(passing, skipped, original_passing, filtered, failed)``.
 
-    A ``filter`` record appears in none of the first three; a ``skip`` record appears in
-    *skipped* with its original content, for the caller to merge back into output. A
-    record an action above failed or cascade-skipped is not judged: it is passed on for
-    the cascade filter to quarantine, as ``TaskPreparer.prepare`` returns it before the
-    guard.
-
-    *original_data* holds the pre-scope records and is what the guard reads, so
-    ``context_scope`` shapes what the action receives without deciding how it is judged;
-    given none it is *data*. The pipeline context parameters buy the same ``field_context``
-    ``TaskPreparer.prepare`` builds.
+    A ``filter`` record appears in none of the first three; ``skipped`` keeps its
+    original content for the caller to merge back. An action above that failed or
+    cascade-skipped the record is passed on unjudged, for the cascade filter to
+    quarantine. A record the guard could not be evaluated for, unless the error is
+    fatal to the action, appears in *failed* as ``(record, error)`` instead of
+    stopping the pass. *original_data*, the pre-scope records the guard reads,
+    defaults to *data*.
     """
     originals = original_data if original_data is not None else data
 
@@ -379,10 +376,13 @@ def prefilter_by_guard(
 
     guard_config = agent_config.get("guard")
     conditional_clause = agent_config.get("conditional_clause")
+    conditional_clause_passthrough_on_error = agent_config.get(
+        "conditional_clause_passthrough_on_error", True
+    )
     if not guard_config and not conditional_clause:
-        return data, [], originals, []
+        return data, [], originals, [], []
 
-    from agent_actions.errors import GuardNotAppliedError, mark_action_fatal
+    from agent_actions.errors import GuardNotAppliedError, is_action_fatal, mark_action_fatal
     from agent_actions.guards import GuardBehavior
     from agent_actions.input.preprocessing.filtering.evaluator import (
         get_guard_evaluator,
@@ -404,6 +404,7 @@ def prefilter_by_guard(
     skipped: list[dict] = []
     original_passing: list[dict] = []
     filtered: list[dict] = []
+    failed: list[tuple[dict, Exception]] = []
     blocked = 0
     for idx, item in enumerate(data):
         # The guard reads the record as stored. *data* is the scope pass's prompt-shaped
@@ -438,6 +439,7 @@ def prefilter_by_guard(
                 guard_config=guard_config,
                 context=context,
                 conditional_clause=conditional_clause,
+                conditional_clause_passthrough_on_error=conditional_clause_passthrough_on_error,
             )
         except GuardNotAppliedError as e:
             # The evaluator is handed the record's content; the envelope naming it is here.
@@ -450,6 +452,13 @@ def prefilter_by_guard(
                     cause=e,
                 )
             ) from e
+        except Exception as e:
+            if is_action_fatal(e):
+                raise
+            # Not judged by a guard that could not be run for this record alone
+            # (e.g. an unregistered UDF name): fails this record, not the action.
+            failed.append((originals[idx], e))
+            continue
 
         if result.should_execute:
             passing.append(item)
@@ -462,14 +471,22 @@ def prefilter_by_guard(
             filtered.append(originals[idx])
 
     logger.info(
-        "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered, "
+        "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered, %d failed, "
         "%d left unjudged for the cascade filter, of %d total",
         agent_name,
         len(passing) - blocked,
         len(skipped),
         len(filtered),
+        len(failed),
         blocked,
         len(data),
     )
+    for record, error in failed:
+        logger.warning(
+            "Guard evaluation failed for '%s' (source_guid %s), failing the record: %s",
+            agent_name,
+            record.get("source_guid") if isinstance(record, dict) else None,
+            error,
+        )
 
-    return passing, skipped, original_passing, filtered
+    return passing, skipped, original_passing, filtered, failed

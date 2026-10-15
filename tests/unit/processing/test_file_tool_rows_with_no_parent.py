@@ -130,7 +130,7 @@ class TestARowThatNamesNoParent:
     repair may replace. A synthetic row has no producer to name, and nothing is
     added for it here; what the envelope carried is left alone. The FILE-mode
     resolver now reads a record's own ``source`` (#1046), so clearing it no longer
-    skips the row — reconciling the two readers is still #1022."""
+    skips the row — reconciling the two readers is still open."""
 
     @pytest.mark.parametrize("version_merge", [False, True])
     def test_it_claims_no_producer(self, version_merge):
@@ -147,7 +147,7 @@ class TestARowThatNamesNoParent:
 
         Clearing it is the honest answer. The resolver half no longer blocks it —
         the FILE-mode resolver reads a record's own carried ``source`` (#1046) — but
-        the producer reading of ``parent_source_guid`` is still #1022, so the value
+        the producer reading of ``parent_source_guid`` is still open, so the value
         stays as the envelope carried it and this pins that, not the resolver.
         """
         expansion_children = [

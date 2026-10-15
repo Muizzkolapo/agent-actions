@@ -1,9 +1,9 @@
 """A workflow the shipped skill shows is one `agac run` accepts.
 
-Authors copy these blocks. Each is loaded as `agac run` loads it and put through
-the pre-flight it runs. Only what a block leaves to its author is filled in: an
-intent, a prompt, a tool's impl, a HITL's instructions, and a schema whose fields
-nothing in the block reads. A block that names an action it does not show continues
+Each block is loaded as `agac run` loads it and put through the pre-flight it runs.
+Only what a block leaves to its author is filled in: an intent, a prompt, a tool's
+impl, and a schema whose fields nothing in the block reads. A HITL action is loaded
+as shown, `hitl:` settings included. A block that names an action it does not show continues
 a workflow: an action an earlier block of the same page shows is that action, wired
 as shown, and any other stands in with no schema, so any field of it may be read. A
 stand-in the block only reads sits upstream of one it depends on.
@@ -96,9 +96,9 @@ def _authored(action: dict[str, Any]) -> dict[str, Any]:
     kind = action.get("kind", "llm")
     if kind == "tool":
         action.setdefault("impl", action["name"])
-    elif kind == "hitl":
-        action["hitl"] = {"instructions": "Review.", **(action.get("hitl") or {})}
-    elif not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$"):
+    elif kind != "hitl" and (
+        not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$")
+    ):
         action["prompt"] = "Answer."
     if kind != "hitl" and not isinstance(action.get("schema"), dict):
         action["schema"] = {"out": "string"}
@@ -153,3 +153,20 @@ def test_no_guard_reads_its_own_action(block, earlier):
     Pre-flight does not refuse it, and the run reports success with every record guarded out.
     """
     assert [action["name"] for action in block if action["name"] in _guarded(action)] == []
+
+
+def test_the_skill_guards_on_a_field_it_does_not_observe():
+    """A guard reads the record as stored, so a block need not observe what it guards on.
+
+    Each such block is among those pre-flight accepts above.
+    """
+    unobserved = []
+    for param in _blocks():
+        for action in param.values[0]:
+            guard = action.get("guard")
+            condition = guard.get("condition", "") if isinstance(guard, dict) else ""
+            observed = (action.get("context_scope") or {}).get("observe") or []
+            for name, field in re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)", condition):
+                if f"{name}.{field}" not in observed and f"{name}.*" not in observed:
+                    unobserved.append(f"{param.id}: {name}.{field}")
+    assert unobserved != []

@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.logging.core.events import BaseEvent, EventMeta
 from agent_actions.logging.events.formatters import AgentActionsFormatter
 
@@ -414,26 +416,31 @@ class TestActionFailedEvent:
 class TestBatchSubmittedEvent:
     """Tests for _format_batch_submitted."""
 
-    def test_truncates_batch_id(self):
+    @pytest.mark.parametrize(
+        "batch_id", ["batches/abc123def456", "msgbatch_01AbCdEf", "mock_batch_0123456789ab"]
+    )
+    def test_prints_the_whole_batch_id(self, batch_id):
         fmt = AgentActionsFormatter(show_timestamp=False, use_color=False)
-        long_id = "abcdef1234567890"
         event = _make_event(
             "BatchSubmittedEvent",
-            data={
-                "batch_id": long_id,
-                "request_count": 10,
-                "provider": "openai",
-            },
+            data={"batch_id": batch_id, "request_count": 10, "provider": "openai"},
         )
-        result = fmt.format(event)
-        # ID truncated to first 8 chars
-        assert "abcdef12" in result
-        assert long_id not in result
-        assert "10 requests to openai" in result
+
+        assert fmt.format(event) == f"Batch {batch_id} submitted: 10 requests to openai"
 
 
 class TestBatchCompleteEvent:
     """Tests for _format_batch_complete."""
+
+    @pytest.mark.parametrize("failed", [0, 2], ids=["ok", "warn"])
+    def test_prints_the_whole_batch_id(self, failed):
+        fmt = AgentActionsFormatter(show_timestamp=False, use_color=False)
+        event = _make_event(
+            "BatchCompleteEvent",
+            data={"batch_id": "batches/abc123def456", "elapsed_time": 1.5, "failed": failed},
+        )
+
+        assert fmt.format(event).startswith("Batch batches/abc123def456 ")
 
     @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
     def test_no_failures(self):

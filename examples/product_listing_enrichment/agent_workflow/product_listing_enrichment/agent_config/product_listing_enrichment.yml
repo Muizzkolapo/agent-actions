@@ -166,6 +166,7 @@ actions:
     context_scope:
       observe:
         - write_marketing_copy.*
+        - normalize_product.brand
         - seed.marketplace_rules
 
   # ══════════════════════════════════════════════════════════════════════════
@@ -213,7 +214,6 @@ actions:
         - validate_compliance.*
         - optimize_seo.*
         - fetch_competitor_prices.*
-      passthrough:
         - normalize_product.product_id
         - normalize_product.product_name
         - normalize_product.brand

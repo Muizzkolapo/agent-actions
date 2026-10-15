@@ -109,7 +109,7 @@ When swapping datasets, add a normalize tool as step 0 rather than modifying eve
       - source.*
 ```
 
-Then update `generate_description` to depend on `normalize_product` and observe `normalize_product.*` instead of `source.*`. All other actions reference `normalize_product.*` through passthrough chains. The original 6 actions, their prompts, and their tool implementations remain untouched.
+Then update `generate_description` to depend on `normalize_product` and observe `normalize_product.*` instead of `source.*`. Every other action that needs a `normalize_product` field observes it directly too, by name (e.g. `fetch_competitor_prices` observes `normalize_product.product_category`) — `context_scope.passthrough` re-exposes a namespace to whatever observes the *declaring* action next, but it never delivers a field into the declaring action's own output, so it cannot chain a field forward on its own. The original 6 actions, their prompts, and their tool implementations remain untouched.
 
 ### 2. LLM/Tool Hybrid Pipeline
 

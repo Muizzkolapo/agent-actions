@@ -206,12 +206,14 @@ Guards validate semantic and business logic after schema passes:
 ```yaml
 # Filter out responses with unwanted status
 - name: next_action
+  dependencies: [upstream_action]
   guard:
     condition: 'upstream_action.status != "invalid"'
     on_false: filter
 
 # Filter based on category
 - name: process_technical
+  dependencies: [classify]
   guard:
     condition: 'classify.category IN ["technical", "implementation"]'
     on_false: filter
@@ -485,8 +487,9 @@ The limitation: repair costs API tokens. Guards are free. If you're filtering on
 
 # Layer 3: Guard for quality
 - name: process
+  dependencies: [extract]
   guard:
-    condition: 'upstream_action.quality >= threshold'
+    condition: 'extract.quality >= 80'
     on_false: filter
 ```
 
@@ -537,6 +540,7 @@ This is important: guards prevent downstream work. Place guards as early as poss
 # Filter early before expensive actions
 - name: extract  # Cheap
 - name: validate  # Cheap
+  dependencies: [extract]  # Input source
   guard:
     condition: 'extract.facts != []'
     on_false: filter
@@ -549,7 +553,7 @@ This is important: guards prevent downstream work. Place guards as early as poss
 ### Check Schema Validation Errors
 
 ```bash
-agac run -a workflow --log-level DEBUG
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
 Look for:
@@ -561,7 +565,7 @@ SchemaValidationError: Value 'invalid' not in enum
 ### Check Guard Evaluation
 
 ```bash
-agac run -a workflow --log-level DEBUG
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
 Look for:

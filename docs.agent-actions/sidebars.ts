@@ -185,7 +185,6 @@ const sidebars: SidebarsConfig = {
             'reference/architecture/logging',
           ],
         },
-        'reference/inspect',
         'reference/documentation-site',
       ],
     },

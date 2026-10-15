@@ -80,6 +80,18 @@ class ConsoleEventHandler:
     def close(self) -> None:
         """Close the handler (no-op for console)."""
 
+    def _escape(self, text: str) -> str:
+        """Neutralize brackets so record content cannot be read as markup.
+
+        Only when markup is actually rendered: the escape inserts backslashes,
+        and a plain stream would show them.
+        """
+        if not self._use_rich:
+            return str(text)
+        from rich.markup import escape
+
+        return escape(str(text))
+
     def _default_format(self, event: BaseEvent) -> str:
         """Default event formatting."""
         from agent_actions.logging.core.events import EventLevel
@@ -100,7 +112,7 @@ class ConsoleEventHandler:
         rich_level, plain_level = level_indicators.get(event.level, ("[blue]INFO[/blue]", "INFO"))
         parts.append(rich_level if self._use_rich else plain_level)
 
-        parts.append(event.message)
+        parts.append(self._escape(event.message))
 
         separator = " | " if self.show_timestamp else " "
         return separator.join(parts)

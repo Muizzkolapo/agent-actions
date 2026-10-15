@@ -317,11 +317,16 @@ Built with pyparsing's `infix_notation` for operator precedence:
 
 | Precedence | Operators |
 |-----------|-----------|
-| Highest | NOT (unary prefix) |
-| | IS NULL, IS NOT NULL (unary postfix) |
+| Highest | IS NULL, IS NOT NULL, BETWEEN a AND b, NOT BETWEEN a AND b (postfix; the range builds the same node as BETWEEN [a, b]) |
 | | ==, !=, <, <=, >, >=, IN, NOT IN, LIKE, BETWEEN, CONTAINS |
+| | NOT (unary prefix; wraps a full comparison, so `NOT x == 1` negates the comparison, not `x`) |
 | | AND |
 | Lowest | OR |
+
+`x BETWEEN a AND b` is taken whole, as a suffix of `x`, so its `AND` never reaches the AND
+level. A `BETWEEN` fails the parse unless its range is two numbers or two strings, in either
+form, or a field left to hold one: anything else would be false for every record. One postfix
+follows an operand; a second (`x IS NULL IS NULL`, `x BETWEEN 1 AND 2 IS NULL`) fails the parse.
 
 ### AST node types
 

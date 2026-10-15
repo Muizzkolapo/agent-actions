@@ -111,7 +111,9 @@ so which of the two produced it cannot be told apart.
 In both, repairing one of that action's records leaves its previous rows in the
 file beside the new ones. The run reports how many rows it could not place. It
 carries them rather than guessing, because guessing wrong here deletes a row
-that nothing will write again.
+that nothing will write again. It reports a row it carried this way when a record
+it is repairing may have made it, or when the row names no producer; a row that
+names other records as its producers is carried the same way and not reported.
 
 Dispositions are cleared by the ids the retry was given, at every action it
 re-runs, and the re-run decides them again wherever it reaches the record. An id
@@ -319,8 +321,8 @@ of the one it just submitted.
 That is also why a retry is refused while a batch is still out at the provider:
 
 ```
-1 batch job(s) in flight (batch_abc123 (summarize)). Their results would be lost
-to this repair's own submission. Collect them first — run the workflow again —
+1 batch job(s) not collected yet (batch_abc123 (summarize, in flight)). Their results
+would be lost to this repair's own submission. Collect them first — run the workflow again —
 then retry. If the provider no longer has them, pass --abandon-in-flight.
 ```
 
@@ -344,8 +346,8 @@ good and every remedy above needs an answer that is not coming.
 `--abandon-in-flight` proceeds anyway, and says what it costs:
 
 ```
-Abandoning 1 batch job(s) still in flight: batch_abc123 (summarize). Whatever
-they return will not be collected. 3 record(s) waiting on them are marked failed
+Abandoning 1 batch job(s) not collected yet: batch_abc123 (summarize, in flight).
+Whatever they return will not be collected. 3 record(s) waiting on them are marked failed
 so a later retry can still reach them.
 ```
 

@@ -39,18 +39,6 @@ class TestMergeRecordsByKey:
         assert result[0]["answer_1"] == "A"
         assert result[0]["answer_2"] == "B"
 
-    def test_uses_explicit_reduce_key(self):
-        """Should use explicit reduce_key when provided."""
-        records = [
-            {"custom_id": "123", "source_guid": "different1", "data": "a"},
-            {"custom_id": "123", "source_guid": "different2", "data": "b"},
-        ]
-
-        result = merge_records_by_key(records, reduce_key="custom_id")
-
-        assert len(result) == 1
-        assert result[0]["custom_id"] == "123"
-
     def test_keeps_separate_records_with_different_keys(self):
         """Should keep records separate when they have different correlation keys."""
         records = [

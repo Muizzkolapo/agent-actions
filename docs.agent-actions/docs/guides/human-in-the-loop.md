@@ -459,13 +459,17 @@ Configure port at workflow level to avoid conflicts:
 ```yaml
 actions:
   - name: review_stage_1
+    dependencies: [extract_data]
     kind: hitl
     hitl:
+      instructions: "Review the extracted data"
       port: 3001  # First review
 
   - name: review_stage_2
+    dependencies: [generate_summary]
     kind: hitl
     hitl:
+      instructions: "Review the generated summary"
       port: 3002  # Second review (different port)
 ```
 

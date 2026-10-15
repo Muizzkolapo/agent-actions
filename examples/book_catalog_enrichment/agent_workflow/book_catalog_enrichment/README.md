@@ -26,7 +26,7 @@ Rather than one large prompt that tries to do everything, each enrichment task i
 
 ### 2. Validation is built in, not bolted on
 
-After every LLM step that produces a structured output, a deterministic tool action validates it. `validate_bisac` checks that codes are exactly 9 characters in the right prefix set. `validate_description` checks word count, benefit count, and scans for placeholder text. Both are paired with an `expect:` block, so a failing output is regenerated — up to 3 iterations before the framework accepts the best available result.
+After every LLM step that produces a structured output, a deterministic tool action validates it. `validate_bisac` checks that codes are exactly 9 characters in the right prefix set. It is paired with an `expect:` block, so a failing output is regenerated — up to 3 iterations before the framework accepts the best available result.
 
 ### 3. Recommendations are grounded, not hallucinated
 
@@ -63,16 +63,15 @@ The final tool action builds three views from each enriched record — one for t
 | 1 | `classify_genre` | LLM | Primary + secondary BISAC codes |
 | 2 | `validate_bisac` | Tool | Normalized, validated BISAC codes |
 | 3 | `write_description` | LLM | 150–250 word marketing description, hook sentence, benefits |
-| 4 | `validate_description` | Tool | Validation result and issue list |
-| 5 | `generate_seo` | LLM | Primary/long-tail keywords, meta title, meta description |
-| 6a | `generate_search_criteria` | LLM | Genre + keyword search parameters |
-| 6b | `retrieve_candidates` | Tool | Real candidate books from seed catalog |
-| 6c | `generate_recommendations` | LLM | Top 5 ranked from real candidates only |
-| 7 | `assess_reading_level` | LLM | Difficulty, prerequisites, reading time |
-| 8 | `score_quality` | LLM | 1–5 quality score across 4 dimensions |
-| 9 | `format_entry` | Tool | Single consolidated catalog record |
-| 10 | `filter_quality` | Tool | `passes_filter` boolean + reason |
-| 11 | `select_for_users` | Tool | SEO, management, and developer views |
+| 4 | `generate_seo` | LLM | Primary/long-tail keywords, meta title, meta description |
+| 5a | `generate_search_criteria` | LLM | Genre + keyword search parameters |
+| 5b | `retrieve_candidates` | Tool | Real candidate books from seed catalog |
+| 5c | `generate_recommendations` | LLM | Top 5 ranked from real candidates only |
+| 6 | `assess_reading_level` | LLM | Difficulty, prerequisites, reading time |
+| 7 | `score_quality` | LLM | 1–5 quality score across 4 dimensions |
+| 8 | `format_entry` | Tool | Single consolidated catalog record |
+| 9 | `filter_quality` | Tool | `passes_filter` boolean + reason |
+| 10 | `select_for_users` | Tool | SEO, management, and developer views |
 
 ---
 
@@ -99,23 +98,21 @@ LLM generates search criteria → Tool retrieves REAL books → LLM ranks from c
 
 The ranking prompt contains an explicit rule: *"DO NOT invent or hallucinate book titles — use exact titles from candidates."* Every recommendation traces back to a real entry in `seed_data/book_catalog.json`.
 
-### Passthrough for Data Lineage
+### Reading the Original Record Deep in the Pipeline
 
-Source fields travel forward through the pipeline so deep actions can still read the original `isbn`, `title`, etc.:
+`context_scope.passthrough` re-exposes a namespace an action already observes to whatever
+observes *that* action next; it does not copy a field into the declaring action's own output,
+so `write_description`'s `passthrough: - source.isbn` (etc.) never makes `isbn` readable as
+`write_description.isbn`. A deep action that needs the original `isbn`, `title`, `authors`,
+`publisher`, `publish_year`, or `page_count` observes `source.*` directly instead — every
+action can reach `source`, regardless of how many steps separate it from the first one:
 
 ```yaml
 context_scope:
-  passthrough:
+  observe:
     - source.isbn
     - source.title
-    - source.authors
-    - source.publisher
-    - source.publish_year
-    - source.page_count
-    - source.description
 ```
-
-Downstream actions access these as `write_description.isbn`, `write_description.title`, etc.
 
 ### Quality Gate
 
@@ -131,7 +128,7 @@ Only records that pass the quality thresholds (score ≥ 3.0, ≥ 3 enriched fie
 
 ## Inputs
 
-**Main input** (`agent_io/staging/`) — the books to enrich. Drop your catalog extract here. Each record flows through all 11 actions.
+**Main input** (`agent_io/staging/`) — the books to enrich. Drop your catalog extract here. Each record flows through all 10 actions.
 
 ```json
 [

@@ -141,6 +141,65 @@ def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, An
     }
 
 
+def _convert_json_schema_object_to_unified(json_schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert a JSON Schema ``type: object`` to the unified ``fields:`` form.
+
+    The object's properties are the record's fields, exactly as ``fields:``
+    entries are, and the top-level ``required`` list is the one ``fields:``
+    schemas already honour. ``required`` is JSON Schema's: a property is required
+    when it is listed and optional otherwise, whatever the project's
+    ``required_by_default`` says.
+    """
+    schema_name = json_schema.get("name", "response")
+    properties = json_schema.get("properties")
+    if not isinstance(properties, dict):
+        raise SchemaValidationError(
+            f"Object schema '{schema_name}' has a 'properties' that is not a mapping",
+            schema_name=schema_name,
+            validation_type="structure",
+            hint="Declare properties as `properties: {field: {type: string}}`.",
+        )
+
+    required_value = json_schema.get("required", [])
+    if not isinstance(required_value, list):
+        raise SchemaValidationError(
+            f"Object schema '{schema_name}' has a 'required' of type "
+            f"{type(required_value).__name__}; expected a list of property names.",
+            schema_name=schema_name,
+            validation_type="structure",
+            hint="Use `required: [field1, field2]` naming properties declared above.",
+        )
+    undeclared = [name for name in required_value if name not in properties]
+    if undeclared:
+        raise SchemaValidationError(
+            f"Object schema '{schema_name}' lists required "
+            f"{', '.join(repr(n) for n in undeclared)} that are not in 'properties'.",
+            schema_name=schema_name,
+            validation_type="structure",
+            hint="Every name in `required:` must be a key under `properties:`.",
+        )
+
+    for prop_name, prop in properties.items():
+        if not isinstance(prop, dict) or "type" not in prop:
+            raise SchemaValidationError(
+                f"Property '{prop_name}' of object schema '{schema_name}' has no 'type'",
+                schema_name=schema_name,
+                validation_type="structure",
+                hint=f"Declare it as `{prop_name}: {{type: string}}`.",
+            )
+
+    unified: dict[str, Any] = {
+        "name": schema_name,
+        "description": json_schema.get("description", ""),
+        "fields": [{**prop, "id": name} for name, prop in properties.items()],
+        "required": required_value,
+        "required_by_default": False,
+    }
+    if "additionalProperties" in json_schema:
+        unified["additionalProperties"] = json_schema["additionalProperties"]
+    return unified
+
+
 def _without_rules(node: Any) -> Any:
     """A schema node with any expectations: block removed, at every depth.
 
@@ -173,6 +232,12 @@ def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]
             prop[k] = field[k]
     if field["type"] == "array" and "items" in field:
         prop["items"] = _without_rules(field["items"])
+    if field["type"] == "object":
+        for k in ("properties", "additionalProperties"):
+            if k in field:
+                prop[k] = _without_rules(field[k])
+        if isinstance(field.get("required"), list):
+            prop["required"] = list(field["required"])
     if "enum" in field:
         prop["enum"] = field["enum"]
     if "validators" in field:

@@ -79,7 +79,6 @@ def scan_vendors(project_root: Path) -> dict[str, Any]:
         config_map = {
             "OPENAI": "OpenAIConfig",
             "ANTHROPIC": "AnthropicConfig",
-            "GOOGLE": "GoogleConfig",
             "GEMINI": "GoogleConfig",
             "GROQ": "GroqConfig",
             "COHERE": "CohereConfig",

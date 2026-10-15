@@ -58,6 +58,15 @@ class AgentActionsFormatter:
         time_str = ts.strftime("%H:%M:%S")
         return f"[dim]{time_str}[/dim] | " if self.use_color else f"{time_str} | "
 
+    def _text(self, value: object) -> str:
+        """*value* as text a line can hold: brackets in it are not markup."""
+        text = str(value)
+        if not self.use_color:
+            return text
+        from rich.markup import escape
+
+        return escape(text)
+
     def _status(self, status: str) -> str:
         """Format a status indicator with color."""
         if self.use_color and status in self.COLORS:
@@ -67,7 +76,7 @@ class AgentActionsFormatter:
 
     def _format_workflow_start(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        name = event.data.get("workflow_name", "")
+        name = self._text(event.data.get("workflow_name", ""))
         count = event.data.get("action_count", 0)
         mode = event.data.get("execution_mode", "sequential")
 
@@ -99,8 +108,8 @@ class AgentActionsFormatter:
 
     def _format_workflow_failed(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        name = event.data.get("workflow_name", "")
-        error = event.data.get("error_message", "")
+        name = self._text(event.data.get("workflow_name", ""))
+        error = self._text(event.data.get("error_message", ""))
 
         err_status = self._status("ERROR")
         return f"{ts}{err_status} Workflow {name} failed: {error}"
@@ -109,7 +118,7 @@ class AgentActionsFormatter:
         ts = self._timestamp(event)
         idx = event.data.get("action_index", 0)
         total = event.data.get("total_actions", 0)
-        name = event.data.get("action_name", "")
+        name = self._text(event.data.get("action_name", ""))
 
         idx_str = f"{idx + 1}/{total}"
         start = self._status("START")
@@ -119,7 +128,7 @@ class AgentActionsFormatter:
         ts = self._timestamp(event)
         idx = event.data.get("action_index", 0)
         total = event.data.get("total_actions", 0)
-        name = event.data.get("action_name", "")
+        name = self._text(event.data.get("action_name", ""))
         time = event.data.get("execution_time", 0.0)
         tokens = event.data.get("tokens", {}).get("total_tokens", 0)
 
@@ -132,8 +141,8 @@ class AgentActionsFormatter:
         ts = self._timestamp(event)
         idx = event.data.get("action_index", 0)
         total = event.data.get("total_actions", 0)
-        name = event.data.get("action_name", "")
-        reason = event.data.get("skip_reason", "")
+        name = self._text(event.data.get("action_name", ""))
+        reason = self._text(event.data.get("skip_reason", ""))
 
         idx_str = f"{idx + 1}/{total}"
         skip = self._status("SKIP")
@@ -144,7 +153,7 @@ class AgentActionsFormatter:
         ts = self._timestamp(event)
         idx = event.data.get("action_index", 0)
         total = event.data.get("total_actions", 0)
-        name = event.data.get("action_name", "")
+        name = self._text(event.data.get("action_name", ""))
 
         idx_str = f"{idx + 1}/{total}"
         cached = self._status("CACHED")
@@ -154,9 +163,9 @@ class AgentActionsFormatter:
         ts = self._timestamp(event)
         idx = event.data.get("action_index", 0)
         total = event.data.get("total_actions", 0)
-        name = event.data.get("action_name", "")
-        error = event.data.get("error_message", "")
-        suggestion = event.data.get("suggestion", "")
+        name = self._text(event.data.get("action_name", ""))
+        error = self._text(event.data.get("error_message", ""))
+        suggestion = self._text(event.data.get("suggestion", ""))
 
         idx_str = f"{idx + 1}/{total}"
         err = self._status("ERROR")
@@ -172,15 +181,15 @@ class AgentActionsFormatter:
 
     def _format_batch_submitted(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        batch_id = event.data.get("batch_id", "")[:8]  # Truncate ID
+        batch_id = self._text(event.data.get("batch_id", ""))
         count = event.data.get("request_count", 0)
-        provider = event.data.get("provider", "")
+        provider = self._text(event.data.get("provider", ""))
 
         return f"{ts}Batch {batch_id} submitted: {count} requests to {provider}"
 
     def _format_batch_complete(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        batch_id = event.data.get("batch_id", "")[:8]
+        batch_id = self._text(event.data.get("batch_id", ""))
         elapsed = event.data.get("elapsed_time", 0.0)
         failed = event.data.get("failed", 0)
 
@@ -193,4 +202,4 @@ class AgentActionsFormatter:
 
     def _format_default(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        return f"{ts}{event.message}"
+        return f"{ts}{self._text(event.message)}"

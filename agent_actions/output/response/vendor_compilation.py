@@ -12,7 +12,11 @@ from agent_actions.config.schema_field import field_is_required, top_level_requi
 from agent_actions.errors import ConfigValidationError
 from agent_actions.utils.json_safety import ensure_json_safe
 
-from .schema_conversion import _convert_json_schema_to_unified, compile_field
+from .schema_conversion import (
+    _convert_json_schema_object_to_unified,
+    _convert_json_schema_to_unified,
+    compile_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,24 +45,16 @@ def compile_unified_schema(
     Convert a unified YAML/JSON definition into the schema dialect required by
     OpenAI, Anthropic, Gemini, **or Ollama** (new).
 
-    Handles two schema formats:
+    Handles three schema formats:
     1. Unified format: {'name': '...', 'fields': [{id: 'field', type: 'string'}, ...]}
-    2. JSON Schema format: {'name': '...', 'type': 'array', 'items': {...}}
+    2. JSON Schema array: {'name': '...', 'type': 'array', 'items': {...}}
+    3. JSON Schema object: {'name': '...', 'type': 'object', 'properties': {...}}
     """
-    # Check if this is a JSON Schema format (type: array)
-    # instead of unified format (fields: [...])
-    if (
-        "type" in unified
-        and unified.get("type") == "array"
-        and "items" in unified
-        and "fields" not in unified
-    ):
-        # This is a JSON Schema array format - convert to unified format
-        logger.debug(
-            "Converting JSON Schema array format to unified format for schema: %s",
-            unified.get("name", "unknown"),
-        )
-        unified = _convert_json_schema_to_unified(unified)
+    if "fields" not in unified:
+        if unified.get("type") == "array" and "items" in unified:
+            unified = _convert_json_schema_to_unified(unified)
+        elif unified.get("type") == "object" and "properties" in unified:
+            unified = _convert_json_schema_object_to_unified(unified)
 
     properties: dict[str, Any] = {}
     required: list[str] = []

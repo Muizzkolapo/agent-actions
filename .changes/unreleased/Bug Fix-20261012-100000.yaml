@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  `agac inspect action` and `agac inspect context` print a prompt, a guard clause, a model
+  name, action names and schema field names as written. They were printed through Rich markup, so a prompt holding `[INST]` and `[/INST]`, as a
+  Llama-style prompt does, lost the tags or raised `MarkupError` and showed a traceback in
+  place of the action. The helper that escapes field names in the same command also put a
+  backslash before every `]`, which printed as a stray `\`; it now escapes only what Rich
+  reads as a tag.
+time: 2026-10-12T10:00:00Z

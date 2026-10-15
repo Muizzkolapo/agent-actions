@@ -52,17 +52,6 @@ def handle_quiz_type(input_data: str) -> dict:
 
 The tool receives a JSON-encoded context string (source fields, seed data, upstream outputs); decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call.
 
-## Capturing Dispatch Results
-
-Enable `add_dispatch` to preserve the dispatch tool's output in the action output:
-
-```yaml
-- name: generate_question
-  prompt: $quiz_gen.ScenarioGenerator_prompt
-  schema: question_schema
-  add_dispatch: true
-```
-
 ## When to Use Dispatch
 
 | Use dispatch when | Use Jinja2 when |

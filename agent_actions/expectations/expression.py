@@ -33,6 +33,17 @@ class ExpressionParseError(ValueError):
 _parser = WhereClauseParser()
 
 
+def _first_function_call(node: ASTNode | None) -> FunctionNode | None:
+    """The first FunctionNode found in the tree, or None."""
+    if node is None:
+        return None
+    if isinstance(node, FunctionNode):
+        return node
+    if isinstance(node, (ComparisonNode, LogicalNode)):
+        return _first_function_call(node.left) or _first_function_call(node.right)
+    return None
+
+
 @lru_cache(maxsize=256)
 def parse_condition(condition: str) -> WhereClauseAST:
     """Parse a condition through the guard blocklist and grammar; expressions never take udf:."""
@@ -52,6 +63,13 @@ def parse_condition(condition: str) -> WhereClauseAST:
     if not result.success or result.ast is None:
         message = result.error.message if result.error else "unparseable condition"
         raise ExpressionParseError(f"condition {condition!r} does not parse: {message}")
+    call = _first_function_call(result.ast.root)
+    if call is not None:
+        raise ExpressionParseError(
+            f"condition {condition!r} calls {call.function_name}(...): function calls are "
+            "not available in expression conditions; register an @expectation_check "
+            "function instead"
+        )
     return result.ast
 
 

@@ -311,6 +311,7 @@ def finalize_batch_output(
         agent_config=context.agent_config,
         exhausted_recovery=exhausted_recovery,
         action_name=effective_action_name,
+        file_name=identity.file_name,
     )
 
     # The conversion hands back a retry-exhaustion halt rather than throwing it,

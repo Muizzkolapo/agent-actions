@@ -34,7 +34,9 @@ Only data reaches the per-record render. A prompt that renders per record can us
 
 Everything else renders at load. A name nothing defines fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, unless it is guarded with `is defined` or `default(...)`, and so does a field a loaded name lacks. A name a record or a version supplies, read anywhere the load renders, also fails the load, so a record never sees a branch decided once for all of them: in a value other than a prompt, in a `{% set %}` block, macro body or `caller()` body that a prompt outputs, or tested with `is defined`. To hand a per-record tag to a prompt through a macro or a captured block, wrap it in `{% raw %}...{% endraw %}`; the prompt receives the tag as text and renders it per record.
 
-The top level of each `templates/` file runs once as the folder loads, to collect its macros and variables, with nothing bound; there, as before, an undefined name renders as nothing.
+The top level of each `templates/` file runs once as the folder loads, to collect its macros and variables, with the macros and variables of the folder bound and nothing else; there, as before, an undefined name renders as nothing.
+
+A `templates/` file can use another file's macro or variable without importing it, and what the files are called makes no difference. The files run in name order, except that a file runs before any file that reads a name it sets, and all of them read the same names: a macro can call a macro of any other file, a `{% set %}` can read a variable another file sets, a file can append to a list another file set, and a file included or imported, with or without context, reads the folder's names too. Inside a file, its own macros and variables come first. Where two files define the same name, the load warns, and everywhere else the name is the one from the file that ran later: the one whose name sorts later (`helpers.j2` over `base.j2`), or the one that reads the other's names. Of two files that each read the other's variable at their top level, the one that runs first finds the other's unset.
 
 ## Template Location
 

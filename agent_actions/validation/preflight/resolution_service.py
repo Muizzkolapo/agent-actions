@@ -59,7 +59,6 @@ def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
         "openai": OpenAIConfig,
         "anthropic": AnthropicConfig,
         "gemini": GeminiConfig,
-        "google": GeminiConfig,
         "groq": GroqConfig,
         "cohere": CohereConfig,
         "ollama_local": OllamaLocalConfig,

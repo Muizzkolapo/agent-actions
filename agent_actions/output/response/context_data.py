@@ -12,6 +12,7 @@ from typing import Any
 
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
+from agent_actions.utils.schema_utils import is_compiled_schema
 
 from .dispatch_injection import _resolve_dispatch_in_schema
 from .vendor_compilation import SUPPORTED_VENDORS, compile_unified_schema
@@ -40,11 +41,6 @@ def _prepare_context_data_str(
     return str(context_data or "{}")
 
 
-def _is_unified_format(schema: Any) -> bool:
-    """Check if schema is already in unified format with 'fields' list."""
-    return isinstance(schema, dict) and "fields" in schema and isinstance(schema["fields"], list)
-
-
 def _load_inline_schema(
     inline_schema: Any,
     tools_path: str | None,
@@ -70,8 +66,9 @@ def _load_inline_schema(
         inline_schema, tools_path, context_data_str, agent_config, captured_results
     )
 
-    # Convert to unified format if needed
-    if _is_unified_format(resolved_schema):
+    # A compiled form (fields, or a JSON Schema array/object) is compiled later by
+    # compile_unified_schema; only shorthand goes through the shorthand parser.
+    if isinstance(resolved_schema, dict) and is_compiled_schema(resolved_schema):
         base_schema = resolved_schema
     else:
         base_schema = SchemaLoader.construct_schema_from_dict(resolved_schema)

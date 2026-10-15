@@ -59,8 +59,21 @@ def _stamp(record: dict[str, Any], state: RecordState, action_name: str, reason:
 
     Records arrive ACTIVE (after downstream reset) or CASCADE_BLOCKING.
     ACTIVE → any settled is legal. CASCADE_BLOCKING → CASCADE_SKIPPED
-    is legal (cascade propagation). Same → same is a no-op.
+    is legal (cascade propagation). A record whose latest entry is this action's
+    failure already says so: preparation stamps it before the record is collected.
+    It gets the state, which a tombstone built from a context-map entry does not
+    carry, and no second history entry.
     """
+    history = record.get("_state_history")
+    last = history[-1] if isinstance(history, list) and history else None
+    if (
+        state == RecordState.FAILED
+        and isinstance(last, dict)
+        and last.get("action") == action_name
+        and last.get("to") == state.value
+    ):
+        record["_state"] = state.value
+        return
     RecordEnvelope.transition(record, state, action_name, reason)
 
 
@@ -505,6 +518,7 @@ def collect_results_from_processing_results(
     causes: list[str] = []
     pending_dispositions: list[DispositionRow] = []
     echoed: set[str] = set()
+    guard_skipped_count = 0
 
     for idx, result in enumerate(results):
         status = result.status
@@ -843,6 +857,8 @@ def collect_results_from_processing_results(
                     if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
                     else RecordState.CASCADE_SKIPPED
                 )
+                if state == RecordState.GUARD_SKIPPED:
+                    guard_skipped_count += len(data)
                 for d in data:
                     _stamp(d, state, action_name, reason)
                 output.extend(data)  # Preserve in output for lineage
@@ -943,9 +959,11 @@ def collect_results_from_processing_results(
             total_failed=stats["failed"],
             total_exhausted=stats["exhausted"],
             total_unprocessed=stats["unprocessed"],
+            total_guard_skipped=guard_skipped_count,
             total_deferred=stats["deferred"],
             guard_condition=guard_condition,
             guard_on_false=guard_on_false,
+            target_relative_path=(context.target_relative_path or "") if context else "",
         )
     )
 

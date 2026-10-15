@@ -668,17 +668,13 @@ def process_merged_files(
                     _build_file_params(params, file_path, input_path, output_path, str(input_path))
                 )
             else:
-                reduce_key = params.action_config.get("reduce_key")
                 logger.debug(
-                    "Merging %d files for %s (reduce_key=%s)",
+                    "Merging %d files for %s",
                     len(file_paths),
                     relative_path,
-                    reduce_key or "auto",
                 )
                 unreadable: list[Path] = []
-                merged_data = merge_json_files(
-                    file_paths, reduce_key=reduce_key, unreadable=unreadable
-                )
+                merged_data = merge_json_files(file_paths, unreadable=unreadable)
                 if unreadable:
                     # The merge reads fail-open, so a corrupt branch arrives as
                     # a short result rather than an exception the handler below
@@ -902,12 +898,10 @@ def process_from_storage_backend(
             if len(data_sources) == 1:
                 _, data = data_sources[0]
             else:
-                reduce_key = params.action_config.get("reduce_key")
                 logger.debug(
-                    "Merging %d sources for %s from parallel branches (reduce_key=%s)",
+                    "Merging %d sources for %s from parallel branches",
                     len(data_sources),
                     relative_path,
-                    reduce_key or "auto",
                 )
                 all_data: list[Any] = []
                 for _, source_data in data_sources:
@@ -915,7 +909,7 @@ def process_from_storage_backend(
                         all_data.extend(source_data)
                     else:
                         all_data.append(source_data)
-                data = merge_records_by_key(all_data, reduce_key)
+                data = merge_records_by_key(all_data)
 
             data, dropped = _drop_filtered_records(data, filtered_guids)
             if dropped:

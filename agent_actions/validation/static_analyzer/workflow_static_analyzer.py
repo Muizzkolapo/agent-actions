@@ -511,6 +511,26 @@ class WorkflowStaticAnalyzer:
                 )
         return errors
 
+    @staticmethod
+    def _uncovered_namespace_hint(
+        name: str,
+        namespace: str,
+        named_actions: dict[str, dict[str, Any]],
+        upstream: dict[str, set[str]],
+    ) -> str:
+        """The whole remedy: observing an action that is not upstream is refused next."""
+        hint = f"Add '{namespace}.*' to context_scope.observe."
+        if (
+            namespace in named_actions
+            and namespace != name
+            and namespace not in upstream.get(name, set())
+        ):
+            hint += (
+                f" '{namespace}' is not upstream of '{name}' through its dependencies, so also "
+                f"add '{namespace}', or an action downstream of it, to 'dependencies'."
+            )
+        return hint
+
     def _check_template_scope_coverage(self) -> list[StaticTypeError]:
         """Check that template namespace references are declared in context_scope.
 
@@ -524,9 +544,14 @@ class WorkflowStaticAnalyzer:
             extract_action_names_from_template,
         )
         from agent_actions.prompt.formatter import PromptFormatter
+        from agent_actions.validation.dep_observe_validator import upstream_through_dependencies
 
         errors: list[StaticTypeError] = []
         actions = self.workflow_config.get("actions", [])
+        named_actions = {
+            a["name"]: a for a in actions if isinstance(a, dict) and isinstance(a.get("name"), str)
+        }
+        upstream = upstream_through_dependencies(named_actions)
 
         for action in actions:
             if not isinstance(action, dict):
@@ -583,7 +608,7 @@ class WorkflowStaticAnalyzer:
                         ),
                         referenced_agent=ns,
                         referenced_field="",
-                        hint=(f"Add '{ns}.*' to context_scope.observe."),
+                        hint=self._uncovered_namespace_hint(name, ns, named_actions, upstream),
                     )
                 )
 

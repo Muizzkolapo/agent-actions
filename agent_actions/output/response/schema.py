@@ -16,7 +16,6 @@ from typing import Any
 
 from agent_actions.output.response.context_data import (  # noqa: F401
     _compile_schema_for_vendor,
-    _is_unified_format,
     _load_inline_schema,
     _load_named_schema,
     _prepare_context_data_str,

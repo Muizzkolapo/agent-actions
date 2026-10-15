@@ -64,22 +64,29 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
 # Version fan-out puts each version in the dependency graph as its own action, so
 # what order they run in is the graph's answer and no key can change it.
 _VERSION_ORDER_HINT = (
-    "version fan-out is always parallel and there is no per-action ordering; to run a "
-    "whole workflow one action at a time use --execution-mode sequential, and to cap how "
-    "many run at once use --concurrency-limit"
+    "version fan-out runs in parallel and orders nothing per action; ordering is set for "
+    "the whole workflow: --execution-mode sequential runs one action at a time and "
+    "--concurrency-limit caps how many run at once"
 )
 
 # Both shapes the retired block took have a spelling under `expect:`, so a reader told
 # only to remove the key loses the behaviour they were asking for.
 _EXPECT_REPLACES_REPROMPT = (
-    "the expect: block does this now, and both shapes have a spelling there: one that "
-    "only checked the schema becomes expect: {repair: auto}, and one naming a "
-    "validation: function becomes a rule list, e.g. "
-    "expect: {expectations: [{type: no_null_fields}]}"
+    "schema checking and retry live in the expect: block: a check of the output against "
+    "the schema is written expect: {repair: auto}, and one naming a validation: function "
+    "is a rule list, e.g. expect: {expectations: [{type: no_null_fields}]}"
 )
 _EXPECT_REPLACES_SCHEMA_MISMATCH = (
-    "the expect: block does this now: reprompt becomes expect: {repair: auto}, and "
-    "reject becomes expect: {max_iterations: 1, on_exhausted: raise}"
+    "schema mismatch handling lives in the expect: block: expect: {repair: auto} "
+    "regenerates the output, and expect: {max_iterations: 1, on_exhausted: raise} halts "
+    "on the first mismatch"
+)
+
+# Grouping is still reachable, so a reader told only to remove the key loses it.
+_FILE_GRANULARITY_REPLACES_REDUCE_KEY = (
+    "aggregation lives in File granularity: a kind: tool action with granularity: File is "
+    "handed every record of a file in one call, groups them by any field it likes, and "
+    "returns as many rows as the grouping produces"
 )
 
 # Keys whose runtime was deleted; a bare unknown-key error reads as a misspelling
@@ -90,6 +97,8 @@ _RETIRED_CONFIG_KEYS: dict[str, str] = {
     "idempotency_key": "",
     "interceptors": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
+    "policy": "",
+    "reduce_key": _FILE_GRANULARITY_REPLACES_REDUCE_KEY,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
     "version_mode": _VERSION_ORDER_HINT,
 }
@@ -134,6 +143,20 @@ def _refuse_retired_version_keys(data: Any) -> Any:
         raise ValueError(
             "versions: 'mode' is no longer read and configures nothing; remove it "
             f"— {_VERSION_ORDER_HINT}"
+        )
+    return data
+
+
+def refuse_blank_output_field(data: Any, surface: str) -> Any:
+    """Refuse `output_field:` written with no value.
+
+    A blank key counts as set and is dumped as None, which beats the default
+    `raw_response` and reaches pre-flight as a name that cannot be sorted.
+    """
+    if isinstance(data, dict) and "output_field" in data and data["output_field"] is None:
+        raise ValueError(
+            f"{surface} key 'output_field' is present with no value — omit it to take "
+            f"the default 'raw_response', or give it a field name"
         )
     return data
 
@@ -489,7 +512,10 @@ class ActionConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
-        return refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action")
+        return refuse_blank_output_field(
+            refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action"),
+            "action",
+        )
 
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
@@ -508,7 +534,6 @@ class ActionConfig(_RetryValidators):
     guard: str | dict[str, Any] | None = Field(
         default=None, description="Condition for action execution"
     )
-    policy: str | None = Field(default=None, description="Execution policy")
     versions: VersionConfig | None = Field(default=None, description="Version configuration")
     version_consumption: VersionConsumptionConfig | None = Field(
         default=None, description="Version output consumption configuration"
@@ -522,14 +547,6 @@ class ActionConfig(_RetryValidators):
     prompt: str | None = Field(default=None, description="Prompt template or reference")
     dependencies: list[str] = Field(
         default_factory=list, description="List of upstream dependencies"
-    )
-    primary_dependency: str | None = Field(
-        default=None,
-        description="Primary dependency for fan-in pattern (determines execution count)",
-    )
-    reduce_key: str | None = Field(
-        default=None,
-        description="Key for aggregation pattern (groups merged outputs by this field)",
     )
     hitl: HitlConfig | None = Field(
         default=None,
@@ -646,7 +663,10 @@ class DefaultsConfig(_RetryValidators):
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return _refuse_undeclared_keys(
-            refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
+            refuse_blank_output_field(
+                refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
+                "defaults",
+            ),
             cls,
             "defaults",
         )
@@ -842,16 +862,6 @@ class WorkflowConfig(BaseModel):
             raise ValueError(
                 f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
             )
-
-        # Validate primary_dependency references exist as action names
-        invalid_primary = [
-            (action.name, action.primary_dependency)
-            for action in self.actions
-            if action.primary_dependency is not None and action.primary_dependency not in seen
-        ]
-        if invalid_primary:
-            details = ", ".join(f"'{a}' references '{p}'" for a, p in invalid_primary)
-            raise ValueError(f"primary_dependency references non-existent action(s): {details}")
 
         # Iterative DFS cycle detection (avoids RecursionError on deep chains)
         dep_graph = self.get_dependency_graph()

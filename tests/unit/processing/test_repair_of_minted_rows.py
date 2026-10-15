@@ -206,7 +206,7 @@ class TestARepairThatNamesAStoredRow:
 
 class TestAnInputThatWasItselfExpanded:
     """``parent_source_guid`` is the original pool ancestor, not the immediate
-    producer (issue #1022), so rows of a chained expansion name the grandparent
+    producer, so rows of a chained expansion name the grandparent
     and cannot be attributed to the input that made them. Nothing here asks for
     that to work — only that it is not made worse, and that it is not silent."""
 

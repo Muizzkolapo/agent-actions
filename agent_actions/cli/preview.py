@@ -10,6 +10,7 @@ from rich.markup import escape as rich_escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -219,7 +220,7 @@ class PreviewCommand:
         table = Table(show_lines=True)
         table.add_column("#", style="dim", justify="right")
         for key in display_keys:
-            table.add_column(key, overflow="fold", max_width=40)
+            table.add_column(Text(key), overflow="fold", max_width=40)
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):

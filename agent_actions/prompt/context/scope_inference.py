@@ -89,59 +89,18 @@ def _get_version_branches(base_name: str, dependencies: list[str]) -> list[str]:
     ]
 
 
-def _resolve_input_sources_for_fan_in(
-    dependencies: list[str],
-    primary_dependency: str | None = None,
-) -> tuple[list[str], list[str]]:
+def _resolve_input_sources_for_fan_in(dependencies: list[str]) -> tuple[list[str], list[str]]:
+    """Split a fan-in's dependencies into (input_sources, context_sources).
+
+    The first dependency is the input source, with its sibling version branches when it
+    is one; the rest are context sources.
     """
-    Resolve which dependencies are input sources vs context sources for fan-in pattern.
-
-    Used by infer_dependencies() for prompt context classification.
-
-    Args:
-        dependencies: List of all dependency action names
-        primary_dependency: Optional explicit primary override
-
-    Returns:
-        Tuple of (input_sources, context_sources)
-
-    Raises:
-        ValueError: If primary_dependency is invalid (not found in deps or as base name)
-    """
-    if primary_dependency is None:
-        # No explicit primary - use first dependency
-        # But if first dep is a version branch, include ALL sibling branches
-        first_dep = dependencies[0]
-        base_name = _get_base_name(first_dep)
-        sibling_branches = _get_version_branches(base_name, dependencies)
-
-        if sibling_branches and first_dep in sibling_branches:
-            # First dep is a version branch - include all siblings as input
-            input_sources = sibling_branches
-        else:
-            # First dep is not versioned - just use it
-            input_sources = [first_dep]
-    elif primary_dependency in dependencies:
-        # Explicit primary exists in deps - check if it's versioned
-        base_name = _get_base_name(primary_dependency)
-        sibling_branches = _get_version_branches(base_name, dependencies)
-
-        if sibling_branches and primary_dependency in sibling_branches:
-            # Primary is a version branch - include all siblings
-            input_sources = sibling_branches
-        else:
-            # Primary is not versioned - just use it
-            input_sources = [primary_dependency]
+    first_dep = dependencies[0]
+    sibling_branches = _get_version_branches(_get_base_name(first_dep), dependencies)
+    if sibling_branches and first_dep in sibling_branches:
+        input_sources = sibling_branches
     else:
-        # Primary is a base name - expand to all version branches
-        version_branches = _get_version_branches(primary_dependency, dependencies)
-        if version_branches:
-            input_sources = version_branches
-        else:
-            raise ValueError(
-                f"primary_dependency '{primary_dependency}' not found in "
-                f"dependencies list {dependencies} (also checked as base name)"
-            )
+        input_sources = [first_dep]
 
     context_sources = [d for d in dependencies if d not in input_sources]
     return input_sources, context_sources
@@ -227,31 +186,13 @@ def infer_dependencies(
         all_deps = list(deps)
 
     # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
-    # For fan-in, only the primary dependency is an input source
+    # For fan-in, only the first dependency is an input source
     # The rest become context sources (loaded from record namespaces via additive content model)
-    #
-    # Exception: If reduce_key is set, it's an aggregation pattern - all are input sources
-    #
-    # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
-    # that matches version branches (research_1, research_2), ALL matching branches
-    # become input sources.
     fan_in_context_sources: list[str] = []
-    has_reduce_key = action_config.get("reduce_key") is not None
     is_parallel = _is_parallel_branches(all_deps)
 
-    if len(all_deps) > 1 and not is_parallel and not has_reduce_key:
-        # Fan-in detected - use shared helper
-        primary_dep = action_config.get("primary_dependency")
-        try:
-            input_sources, fan_in_context_sources = _resolve_input_sources_for_fan_in(
-                all_deps, primary_dep
-            )
-        except ValueError as e:
-            raise ConfigurationError(
-                f"Action '{action_name}': {e}",
-                context={"action": action_name, "operation": "resolve_fan_in_sources"},
-                cause=e,
-            ) from e
+    if len(all_deps) > 1 and not is_parallel:
+        input_sources, fan_in_context_sources = _resolve_input_sources_for_fan_in(all_deps)
 
         logger.debug(
             "Action '%s': Fan-in detected with dependencies %s. "
@@ -263,7 +204,7 @@ def infer_dependencies(
             fan_in_context_sources,
         )
     else:
-        # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources
+        # Single dependency or parallel branches - all are input sources
         input_sources = all_deps
 
     # 2. Parse context_scope to find all referenced actions. Coerced here rather than at
@@ -320,7 +261,7 @@ def infer_dependencies(
             continue
 
     # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
-    # Also include fan-in context sources (non-primary dependencies from fan-in pattern)
+    # Also include fan-in context sources (the dependencies after the first, in the fan-in pattern)
     potential_context_sources = (
         referenced_actions - set(input_sources) - set(fan_in_context_sources)
     )

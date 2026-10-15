@@ -275,7 +275,6 @@ class WorkflowParser:
             # Extract additional action configuration fields
             action["granularity"] = action_data.get("granularity")  # RECORD or FILE
             action["guard"] = action_data.get("guard")  # Conditional execution
-            action["policy"] = action_data.get("policy")  # Execution policy
             action["prompt"] = action_data.get("prompt")  # Prompt reference
 
             # Loop configuration (legacy)
@@ -291,11 +290,6 @@ class WorkflowParser:
                 action["version_consumption"] = action_data[
                     "version_consumption"
                 ]  # {source, pattern}
-
-            # Parallel merge configuration (MapReduce pattern)
-            # reduce_key specifies field to correlate records from parallel branches
-            if "reduce_key" in action_data:
-                action["reduce_key"] = action_data["reduce_key"]
 
             # Execution mode configuration
             if "run_mode" in action_data:

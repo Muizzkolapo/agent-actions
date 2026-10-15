@@ -83,7 +83,7 @@ def find_missing_observe_deps(action_configs: dict[str, dict[str, Any]]) -> list
     return findings
 
 
-def _upstream_through_dependencies(
+def upstream_through_dependencies(
     action_configs: dict[str, dict[str, Any]],
 ) -> dict[str, set[str]]:
     """Each action's ancestors through ``dependencies``, a version base meaning every branch."""
@@ -134,7 +134,7 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
     findings: list[str] = []
     workflow_actions = list(action_configs)
     operational = {name for name, cfg in action_configs.items() if cfg.get("is_operational", True)}
-    upstream = _upstream_through_dependencies(action_configs)
+    upstream = upstream_through_dependencies(action_configs)
     parser = WhereClauseParser()
     branches: dict[str, set[str]] = {}
     for name in workflow_actions:
@@ -152,6 +152,13 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
             where.setdefault(read, "context_scope or prompt")
         for read in _guard_namespaces(action_configs[name], parser):
             where.setdefault(read, "guard")
+            # A first-stage record is the staging row, whose columns the guard also reads.
+            if read == name and upstream[name]:
+                findings.append(
+                    f"{name}: its guard names '{name}', its own action. A guard runs before "
+                    f"the action, on the record the action is about to read, so it reads only "
+                    f"what is upstream of it through its dependencies."
+                )
         missing = {
             read: place
             for read, place in where.items()

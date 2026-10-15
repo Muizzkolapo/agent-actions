@@ -1,0 +1,27 @@
+kind: Breaking Change
+body: >-
+  `reduce_key:` on an action is refused at load, and the refusal names `granularity: File`
+  as where grouping several records into one call still lives. It grouped nothing. The
+  troubleshooting guide documented it as the aggregation pattern — an action with several
+  dependencies got their outputs "merged and grouped by key", and the groups decided how
+  many times it ran — and two layers stopped that happening. The action expander copies
+  only the fields it knows, and this was not one, so a key written on an action never
+  reached the runtime config: the merge was handed no key, and the run behaved exactly as
+  if the key were absent. Delivered either of the two ways that do reach the merge —
+  under `default_agent_config:` in `agent_actions.yml`, or in an `agents:`-format block,
+  both of which validate against models allowing extra keys and so carry an undeclared one
+  onto the agent — the lookup then searched the record top level and the top of `content`,
+  and every user field sits a level lower, under `content["<action>"]`. No stored record was ever keyed, so each one fell back to its own
+  `source_guid` and formed a group of one. Online and batch behaved the same, both exited
+  0, and the stored output matched the same workflow without the key. Had a record been
+  keyed, the group merge updated `content` namespace by namespace and kept one member's
+  value per namespace, so a group of two rows returned one row's data under the other
+  row's `source_guid`. If you wrote `reduce_key`, the run you were getting was the
+  ungrouped one: remove the key for identical behaviour, or move the grouping into a
+  `kind: tool` action with `granularity: File`, which is handed every record of a file in
+  one call and may return as many rows as the grouping produces.
+  `examples/map_reduce_fanin_check` shows that shape. `merge_records_by_key()` and
+  `merge_json_files()` lose their `reduce_key` parameter; same-source fan-in and
+  version-merge correlation are unchanged. A `reduce_key` written under a workflow's
+  `defaults:` was already refused, as an unknown key, and is now refused by name.
+time: 2026-10-11T08:20:00Z

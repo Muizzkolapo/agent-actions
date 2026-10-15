@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
@@ -161,7 +162,7 @@ class DispositionsCommand:
             if row.get("detail") == HALTED_ON_EXHAUSTED:
                 state = f"{state} (halted)"
                 halted = True
-            table.add_row(action, state, (row.get("reason") or "")[:100])
+            table.add_row(action, state, Text((row.get("reason") or "")[:100]))
 
         self.console.print(table)
         if halted:
@@ -191,7 +192,7 @@ class DispositionsCommand:
                     action,
                     row.get("record_id", "?"),
                     row.get("disposition", "?"),
-                    (row.get("reason") or "")[:60],
+                    Text((row.get("reason") or "")[:60]),
                 )
 
         action_level = self._action_level_rows(backend, actions)
