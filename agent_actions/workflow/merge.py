@@ -342,14 +342,16 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
                 break
 
     # Split records left alone: from several branches and one source, they have no
-    # record of that source to pair with, only each other.
+    # record of that source to pair with, only each other. Each branch holds two or
+    # more of them when it split the source itself; one each is a branch below an
+    # earlier split that lacks some of its records, left as it was.
     unpaired: dict[str, dict[str, list[dict[str, Any]]]] = {}
     for key, members in groups.items():
         if len(branches(key)) == 1 and key not in splits:
             for anchor in split_from(members[0][1])[-1:]:
                 unpaired.setdefault(anchor, {}).setdefault(members[0][0], []).append(members[0][1])
     for anchor, by_branch in unpaired.items():
-        if len(by_branch) > 1:
+        if len(by_branch) > 1 and all(len(found) > 1 for found in by_branch.values()):
             raise _two_branches_split(anchor, sorted(by_branch))
 
     merged: list[Any] = []
