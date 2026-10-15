@@ -1234,12 +1234,13 @@ def test_a_run_that_answers_nothing_writes_the_skip_of_an_answered_input_as_batc
     tmp_path,
 ):
     """The skip is recorded at once, so the action no longer calls that input answered, and
-    a run that fails and answers nothing writes its file rather than leaving the answer."""
+    a run whose only sent record fails writes its file, as batch does, leaving the answer
+    it still holds beside the failure."""
     runs = [_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]]
 
     findings = compare(tmp_path, runs, SKIP, {("a3", 2): "fail"})
 
-    assert findings[1]["online_raised"], "the file answered nothing"
+    assert findings[1]["online_raised"] is None, "a1's stored answer stands for the action"
     assert findings[1]["online"] == ["failed:a3", "guard_skipped:a2", "processed:a1:0@run1"]
     assert findings[1]["batch"] == findings[1]["online"]
 

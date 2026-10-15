@@ -206,11 +206,12 @@ def test_a_retry_after_an_action_failed_every_record_still_runs(chained):  # noq
 
 
 def test_a_retry_whose_record_failed_again_can_be_retried_again(chained):  # noqa: F811
-    """The record it named failing again fails the action, which reached all it was given."""
+    """The record it named failing again leaves the action holding the answers it has, with
+    failures, so it neither fails the action nor skips what reads it."""
     named = _a_failure_at_the_first_action(chained)
     with _the_first_action_fails_every_record():
         _retry("--record", named)
-    assert _status(chained, ACTION) == "failed"
+    assert _status(chained, ACTION) == "completed_with_failures"
 
     result = _retry("--record", named)
 

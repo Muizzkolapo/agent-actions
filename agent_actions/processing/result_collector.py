@@ -28,7 +28,7 @@ from agent_actions.record.reasons import (
     SUCCESS,
     UNPROCESSED,
 )
-from agent_actions.record.state import RecordState
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
@@ -103,6 +103,15 @@ def _get_retry_attempts(result: ProcessingResult) -> str | int:
     return "unknown"
 
 
+def _holds_answer(rows: list[dict[str, Any]]) -> bool:
+    """Whether a carried row stands as an answer: not failed, exhausted or skipped."""
+    return any(
+        row.get("_state") not in CASCADE_BLOCKING_VALUES
+        and row.get("_state") != RecordState.GUARD_SKIPPED.value
+        for row in rows
+    )
+
+
 def _short_guid(source_guid: object) -> str:
     """First segment of a guid — enough to correlate, short enough to read."""
     text = str(source_guid) if source_guid else "unknown"
@@ -121,6 +130,9 @@ class CollectionStats:
     deferred: int = 0
     unprocessed: int = 0
     carry_forward: int = 0
+    # Of the carried records, those holding an answer: the action stands on them as
+    # it does on a success this pass produced.
+    carried_success: int = 0
     # Why the failures failed, in encounter order. Not a count, so it is
     # excluded from the total below.
     causes: tuple[str, ...] = ()
@@ -180,8 +192,12 @@ class CollectionStats:
             )
             return None
 
-        active_input_count = len(data) - self.unprocessed
-        if active_input_count > 0 and self.success == 0 and (self.failed + self.exhausted) > 0:
+        active_input_count = len(data) - self.unprocessed - self.carry_forward
+        if (
+            active_input_count > 0
+            and self.success + self.carried_success == 0
+            and (self.failed + self.exhausted) > 0
+        ):
             tally = (
                 f"produced 0 successful records — "
                 f"all {active_input_count} active input item(s) failed or exhausted "
@@ -533,6 +549,8 @@ def collect_results_from_processing_results(
                     output.extend(data)
                 stats[status_key] -= 1
                 stats["carry_forward"] += 1
+                if _holds_answer(data):
+                    stats["carried_success"] += 1
                 continue
 
             # Detect parse-error records masquerading as SUCCESS.
@@ -847,6 +865,8 @@ def collect_results_from_processing_results(
                     output.extend(data)
                 stats[status_key] -= 1
                 stats["carry_forward"] += 1
+                if _holds_answer(data):
+                    stats["carried_success"] += 1
                 continue
 
             if data:
@@ -998,6 +1018,7 @@ def collect_results_from_processing_results(
         deferred=stats["deferred"],
         unprocessed=stats["unprocessed"],
         carry_forward=stats["carry_forward"],
+        carried_success=stats["carried_success"],
     )
 
 
