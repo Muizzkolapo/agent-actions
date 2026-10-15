@@ -170,9 +170,9 @@ def diamond(expanding):
     """A third action depending on both `flatten` and the expansion over it.
 
     Its input therefore holds a record *and* rows descended from that record,
-    and a descendant names the record standing beside it as its parent. Nothing
-    groups the two back together: the keys `merge_records_by_key` correlates on
-    do not include `parent_source_guid`.
+    and a descendant names the record standing beside it as its parent. The
+    fan-in pairs each descendant row with that record (#1430), so `combine` runs
+    once per row of `split`.
     """
     config = expanding / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(config.read_text().rstrip("\n") + "\n" + COMBINE_ACTION)
@@ -184,8 +184,8 @@ def diamond(expanding):
 
 
 def test_the_diamond_really_puts_a_record_beside_its_own_descendant(diamond):
-    """The premise. If the framework merged the two branches back into one
-    record this shape would not exist and the guard against it would be dead."""
+    """The premise: `combine`'s rows descend from `split`'s, which name a
+    `flatten` record as their parent, so a repair of that record reaches them."""
     parents = {r.get("parent_source_guid") for r in _rows(diamond, "combine")}
     records = set(_record_ids(diamond, ACTION))
 
@@ -209,16 +209,11 @@ def test_repairing_a_record_does_not_delete_its_descendants_rows(diamond):
     assert not (before - after), f"rows deleted by the repair: {sorted(before - after)}"
 
 
-def test_the_growth_it_cannot_prevent_is_two_rows_a_retry(diamond):
-    """The reported symptom, still live in this one shape, pinned as a number.
+def test_a_retry_leaves_the_diamond_the_size_it_was(diamond):
+    """Two rows of `combine` per row of `split`, before and after each retry.
 
-    Neither identity here can be attributed, so the rows are carried and
-    regenerated both — the duplication this ticket is about, surviving where the
-    two cannot be told apart. Not a regression: `main` grows by the same two for
-    the same reason, and the run now says so out loud. The count is recorded
-    rather than left open so a change that makes it worse cannot pass unnoticed.
-    Closing it needs each row to name the action that produced it, which
-    ``parent_source_guid`` does not.
+    While the fan-in ran `flatten`'s records and `split`'s rows unpaired, the
+    rows of `flatten`'s own could not be attributed and each retry added two.
     """
     selected = _record_ids(diamond, ACTION)[0]
     counts = [len(_rows(diamond, "combine"))]
@@ -228,7 +223,7 @@ def test_the_growth_it_cannot_prevent_is_two_rows_a_retry(diamond):
         assert result.exit_code == 0, result.output
         counts.append(len(_rows(diamond, "combine")))
 
-    assert counts == [36, 38, 40], f"the unresolvable growth changed: {counts}"
+    assert counts == [RECORDS * 2 * 2] * 3, f"a retry changed the stored size: {counts}"
 
 
 class TestARecordTheLimitDropped:

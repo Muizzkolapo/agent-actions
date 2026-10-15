@@ -249,29 +249,122 @@ def merge_records_by_key(records: list[Any]) -> list[Any]:
         else:
             records_without_key.append(record)
 
-    merged_results: list[Any] = []
-    for group in groups_by_key.values():
-        if len(group) == 1:
-            # Single-branch passthrough — not a fan-in, so no cascade
-            # propagation needed.  The record keeps its original _state.
-            merged_results.append(group[0])
+    return [_merge_group(group) for group in groups_by_key.values()] + records_without_key
+
+
+def _merge_group(group: list[dict[str, Any]]) -> dict[str, Any]:
+    """One record from the branch records of one logical record, ``group[0]`` the base."""
+    if len(group) == 1:
+        # Single-branch passthrough — not a fan-in, so no cascade
+        # propagation needed.  The record keeps its original _state.
+        return group[0]
+
+    branch_mapping = _identify_branch_mapping(group)
+    if branch_mapping is not None:
+        merged = merge_branch_records(branch_mapping, base_record=group[0])
+        # merge_branch_records handles lineage dedup but not lineage_sources.
+        # merged["node_id"] == group[0]["node_id"] (from {**base, ...}).
+        for rec in group[1:]:
+            _populate_lineage_sources(merged, rec)
+    else:
+        merged = _merge_group_deep(group)
+    _propagate_cascade_blocking(merged, group)
+    return merged
+
+
+def split_from(record: dict[str, Any]) -> list[str]:
+    """Source ids of the record *record* was split from: its producer, then its source."""
+    producers = record.get("producer_source_guids")
+    anchors = list(producers) if isinstance(producers, list) and len(producers) == 1 else []
+    parent = record.get("parent_source_guid")
+    if parent:
+        anchors.append(parent)
+    return [a for a in anchors if a and a != record.get("source_guid")]
+
+
+def _two_branches_split(source: str, split_branches: list[str]) -> Exception:
+    from agent_actions.errors import WorkflowError
+
+    return WorkflowError(
+        f"Branches {split_branches} of a fan-in each returned several records for one "
+        f"source record ({source}), and a fan-in pairs a branch's records one to one "
+        "with the others' record for the same source. Bring all but one of these "
+        "branches to one record per source first, e.g. with a granularity: File tool "
+        "that aggregates them.",
+        context={"source": source, "branches": split_branches},
+    )
+
+
+def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
+    """Merge the records of a fan-in's branches, one record per logical record.
+
+    *sources* holds ``(branch, records)`` per dependency. Records are grouped as
+    ``merge_records_by_key`` groups them. A branch that returned several records for
+    one input gives each a new source id, so each lands in a group of its own; such a
+    group is paired with the group of the record it was split from, once per split
+    record. Two branches split from the same record cannot be paired one to one, and
+    raise rather than run on records that hold one branch alone.
+    """
+    tagged: list[tuple[str, Any]] = []
+    for branch, data in sources:
+        for record in data if isinstance(data, list) else [data]:
+            tagged.append((branch, record))
+
+    universal_key = _select_universal_key([r for _, r in tagged if isinstance(r, dict)])
+    auto_candidates = [universal_key] if universal_key is not None else _AUTO_KEY_CANDIDATES
+
+    groups: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+    without_key: list[Any] = []
+    group_of_guid: dict[str, str] = {}
+    for branch, record in tagged:
+        key = get_correlation_value(record, auto_candidates) if isinstance(record, dict) else None
+        if key is None:
+            without_key.append(record)
             continue
+        groups.setdefault(key, []).append((branch, record))
+        if record.get("source_guid"):
+            group_of_guid.setdefault(str(record["source_guid"]), key)
 
-        branch_mapping = _identify_branch_mapping(group)
-        if branch_mapping is not None:
-            merged = merge_branch_records(branch_mapping, base_record=group[0])
-            # merge_branch_records handles lineage dedup but not lineage_sources.
-            # merged["node_id"] == group[0]["node_id"] (from {**base, ...}).
-            for rec in group[1:]:
-                _populate_lineage_sources(merged, rec)
-            _propagate_cascade_blocking(merged, group)
-            merged_results.append(merged)
-        else:
-            result = _merge_group_deep(group)
-            _propagate_cascade_blocking(result, group)
-            merged_results.append(result)
+    def branches(key: str) -> set[str]:
+        return {branch for branch, _ in groups[key]}
 
-    return merged_results + records_without_key
+    splits: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for key in list(groups):
+        if len(branches(key)) != 1:
+            continue
+        (branch,) = branches(key)
+        for anchor in split_from(groups[key][0][1]):
+            anchor_key = group_of_guid.get(anchor)
+            if anchor_key in groups and anchor_key != key and branches(anchor_key) - {branch}:
+                splits.setdefault(anchor_key, {}).setdefault(branch, []).extend(
+                    record for _, record in groups.pop(key)
+                )
+                break
+
+    # Split records left alone: from several branches and one source, they have no
+    # record of that source to pair with, only each other.
+    unpaired: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for key, members in groups.items():
+        if len(branches(key)) == 1 and key not in splits:
+            for anchor in split_from(members[0][1])[-1:]:
+                unpaired.setdefault(anchor, {}).setdefault(members[0][0], []).append(members[0][1])
+    for anchor, by_branch in unpaired.items():
+        if len(by_branch) > 1:
+            raise _two_branches_split(anchor, sorted(by_branch))
+
+    merged: list[Any] = []
+    for key, members in groups.items():
+        split = splits.get(key)
+        if not split:
+            merged.append(_merge_group([record for _, record in members]))
+            continue
+        split_branches = sorted(split)
+        if len(split_branches) > 1 or split_branches[0] in branches(key):
+            raise _two_branches_split(key, split_branches)
+        others = [record for _, record in members]
+        for split_record in split[split_branches[0]]:
+            merged.append(_merge_group([split_record, *others]))
+    return merged + without_key
 
 
 def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, Any]]) -> None:
@@ -311,15 +404,11 @@ def merge_json_files(
     the caller a short result and no exception, so ``unreadable`` collects the
     paths that were dropped — the only way to learn that records went missing.
     """
-    all_records: list[Any] = []
+    sources: list[tuple[str, Any]] = []
     for file_path in file_paths:
         try:
             with open(file_path, encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    all_records.extend(data)
-                else:
-                    all_records.append(data)
+                sources.append((str(file_path), json.load(f)))
         except (json.JSONDecodeError, OSError) as e:
             if unreadable is not None:
                 unreadable.append(file_path)
@@ -329,11 +418,11 @@ def merge_json_files(
                 e,
             )
 
-    merged = merge_records_by_key(all_records)
+    merged = merge_fan_in(sources)
 
     logger.debug(
         "Merged %d records from %d files into %d correlated records",
-        len(all_records),
+        sum(len(data) if isinstance(data, list) else 1 for _, data in sources),
         len(file_paths),
         len(merged),
     )
