@@ -47,18 +47,43 @@ def _is_null_or_empty_namespace(ns_value: Any) -> bool:
     return is_null_namespace(ns_value) or (isinstance(ns_value, dict) and not ns_value)
 
 
-def _reads_through_null_namespace(node: Any, data: Any) -> bool:
-    """Whether *node* is a dotted field whose namespace is null or empty in *data*.
+def _is_unknown(node: Any, data: Any) -> bool:
+    """Whether *node* cannot be decided because it reads through a null namespace.
 
-    Such a field has no value, not a value of None: SQL's ``NULL != 'x'`` is not
-    true, so only IS NULL / IS NOT NULL may see it.
+    A field in a skipped or failed upstream's namespace has no value, not a value
+    of None, and SQL's ``NULL != 'x'`` and ``NOT UNKNOWN`` are not true. Only
+    IS NULL / IS NOT NULL see such a field; AND / OR stay unknown unless the other
+    operand decides them on its own.
     """
-    if not isinstance(node, FieldNode) or "." not in node.field_path:
-        return False
-    if not isinstance(data, dict):
-        return False
-    top_key = node.field_path.split(".", 1)[0]
-    return top_key in data and _is_null_or_empty_namespace(data[top_key])
+    if isinstance(node, FieldNode):
+        if "." not in node.field_path or not isinstance(data, dict):
+            return False
+        top_key = node.field_path.split(".", 1)[0]
+        return top_key in data and _is_null_or_empty_namespace(data[top_key])
+    if isinstance(node, FunctionNode):
+        return any(_is_unknown(arg, data) for arg in node.arguments)
+    if isinstance(node, ComparisonNode):
+        if node.operator in (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL):
+            return False
+        return _is_unknown(node.left, data) or _is_unknown(node.right, data)
+    if isinstance(node, LogicalNode):
+        if node.operator == LogicalOperator.NOT:
+            return _is_unknown(node.left, data)
+        left_unknown = _is_unknown(node.left, data)
+        if node.right is None:
+            return left_unknown
+        right_unknown = _is_unknown(node.right, data)
+        if not (left_unknown or right_unknown):
+            return False
+        if left_unknown and right_unknown:
+            return True
+        known = node.right if left_unknown else node.left
+        absorbing = node.operator == LogicalOperator.OR
+        try:
+            return bool(evaluate_node(known, data)) != absorbing
+        except MissingFieldError:
+            return True
+    return False
 
 
 def value_type_family(value: Any) -> str | None:
@@ -395,13 +420,7 @@ def evaluate_node(
                     ) from e
                 raise
 
-        if node.operator not in (
-            ComparisonOperator.IS_NULL,
-            ComparisonOperator.IS_NOT_NULL,
-        ) and (
-            _reads_through_null_namespace(node.left, data)
-            or _reads_through_null_namespace(node.right, data)
-        ):
+        if _is_unknown(node, data):
             return False
 
         _warn_comparison_type_mismatch(node, left_value, right_value)
@@ -412,6 +431,8 @@ def evaluate_node(
 
     if isinstance(node, LogicalNode):
         if node.operator == LogicalOperator.NOT:
+            if _is_unknown(node, data):
+                return False
             return not evaluate_node(node.left, data, functions)
         if node.operator not in (LogicalOperator.AND, LogicalOperator.OR):
             raise ValueError(f"Unknown logical operator: {node.operator}")
