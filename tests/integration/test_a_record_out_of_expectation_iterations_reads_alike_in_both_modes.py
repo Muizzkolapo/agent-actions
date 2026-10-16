@@ -1,6 +1,6 @@
 """A record out of expectation iterations under `on_exhausted: fail` reads the same in both modes.
 
-Two staged records, a field check that fails the second one it is asked about, and
+Two staged records, a field check that fails the second record it is asked about (once), and
 `expect: {repair: retry, max_iterations: 1, on_exhausted: fail}` on `summarize` with a
 reader below it. Online and batch run the same workflow through `agac run` against the agac
 provider mock; only `run_mode` differs. What each leaves stored must match: the record's
@@ -40,7 +40,7 @@ actions:
     schema: exhaust_fail_summary
     prompt: $p.Summarize
     context_scope: { observe: [source.page_content] }
-    expect: { repair: retry, max_iterations: 1, on_exhausted: fail }
+    expect: { repair: retry, max_iterations: 1, on_exhausted: ON_EXHAUSTED }
   - name: publish
     dependencies: [summarize]
     intent: "Publish"
@@ -70,15 +70,20 @@ additionalProperties: true
 
 _CHECK = """\
 from itertools import count
+from pathlib import Path
 
 from agent_actions import expectation_check
 
 _calls = count(1)
+_failed_once = Path(__file__).with_name("failed_once")
 
 
 @expectation_check("every_other_call_fails")
 def every_other_call_fails(value, params):
-    if next(_calls) % 2 == 0:
+    # The second record it is asked about fails, once. A later process, such as a retry,
+    # finds the mark and passes.
+    if next(_calls) % 2 == 0 and not _failed_once.exists():
+        _failed_once.write_text("x")
         return False, "the second record fails"
     return True, ""
 """
@@ -98,13 +103,13 @@ Publish this summary.
 """
 
 
-def _project(tmp_path: Path, run_mode: str) -> Path:
+def _project(tmp_path: Path, run_mode: str, on_exhausted: str = "fail") -> Path:
     root = tmp_path / "project"
     shutil.copytree(FIXTURE, root, ignore=shutil.ignore_patterns("logs"))
     workflow = root / "agent_workflow" / WORKFLOW
     (workflow / "agent_config").mkdir(parents=True)
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(
-        _CONFIG.replace("RUN_MODE", run_mode)
+        _CONFIG.replace("RUN_MODE", run_mode).replace("ON_EXHAUSTED", on_exhausted)
     )
     (workflow / "agent_io" / "staging").mkdir(parents=True)
     (workflow / "agent_io" / "staging" / "pages.json").write_text(
