@@ -62,16 +62,14 @@ DANGEROUS_PATTERNS_UDF = DANGEROUS_PATTERNS | {"__"}
 def contains_dangerous_pattern(
     expression: str, patterns: frozenset[str] = DANGEROUS_PATTERNS
 ) -> str | None:
-    """Check if expression contains a dangerous pattern as a whole word.
+    """Return the first dangerous pattern in expression, or None.
 
-    Uses word-boundary matching (so "exec" blocks "exec(" but NOT
-    "execution_status"). The "__" pattern uses substring matching.
-
-    Returns:
-        The matched pattern string, or None if clean.
+    Whole-word match ("exec" blocks "exec(" but not "execution_status"); "__" is a
+    substring match. Quoted string literals are values, so their contents are skipped.
     """
     import re
 
+    expression = re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', '""', expression)
     for pattern in patterns:
         if pattern == "__":
             if "__" in expression:
