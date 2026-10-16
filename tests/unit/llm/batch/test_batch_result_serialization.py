@@ -28,6 +28,7 @@ def _full_record() -> BatchResult:
         recovery_metadata=RecoveryMetadata(
             retry=RetryMetadata(attempts=2, failures=1, succeeded=False, reason="rate_limit")
         ),
+        exhausted=True,
     )
 
 
@@ -51,6 +52,10 @@ class TestEveryFieldSurvivesTheRoundTrip:
         assert restored.error == "rate limited"
         assert restored.recovery_metadata is not None
         assert restored.recovery_metadata.retry.attempts == 2
+
+    def test_a_record_the_expectation_loop_gave_up_on_stays_exhausted(self):
+        restored = deserialize_results(serialize_results([_full_record()]))[0]
+        assert restored.exhausted is True
 
     def test_what_is_persisted_is_actually_json(self):
         """The state file is written with json.dumps, so key presence is not enough."""

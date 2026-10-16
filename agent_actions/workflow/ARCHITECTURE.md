@@ -144,7 +144,7 @@ node-level skipped row?  (online: an input file's every record was guard-filtere
     │
 node-level passthrough row and no record held?  (batch's spelling) → SKIPPED
     │
-get_failed_items() returns failures?
+get_failed_items() returns failures?  (failed or exhausted: the set `agac retry` selects)
     │
     NO → COMPLETED
     │

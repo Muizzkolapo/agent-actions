@@ -78,6 +78,9 @@ class BatchResult:
     metadata: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
     recovery_metadata: RecoveryMetadata | None = None  # From agent_actions.core.types
+    # The expectation loop gave up on this record. Not a provider failure: it
+    # reads as an exhausted record, as online's does.
+    exhausted: bool = False
 
 
 class BaseBatchClient(ABC):

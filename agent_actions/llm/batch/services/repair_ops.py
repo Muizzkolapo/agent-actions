@@ -158,6 +158,7 @@ def apply_exhaustion_policy(
         if result.content is not None and not _can_carry_a_verdict(result.content):
             result.success = False
             result.content = None
+            result.exhausted = True
 
     if policy == "return_last":
         return None
@@ -186,6 +187,7 @@ def apply_exhaustion_policy(
         failed = ", ".join(expectations.failed) if expectations and expectations.failed else "none"
         attempts = expectations.attempts if expectations else strategy.max_attempts
         result.success = False
+        result.exhausted = True
         result.error = f"Expectations exhausted after {attempts} iteration(s) (failed: {failed})"
     return None
 

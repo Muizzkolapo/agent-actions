@@ -864,11 +864,16 @@ class StorageBackend(ABC):
         """
 
     def get_failed_items(self, action_name: str) -> list[dict[str, Any]]:
-        """Return item-level failure dispositions, excluding node-level sentinels."""
+        """Return item-level failure dispositions (failed or exhausted), excluding node-level sentinels.
+
+        The same set `agac retry` selects, so an action holding a record it would retry
+        never reads as clean.
+        """
         return [
             d
-            for d in self.get_disposition(action_name, disposition=DISPOSITION_FAILED)
-            if d.get("record_id") != NODE_LEVEL_RECORD_ID
+            for d in self.get_disposition(action_name)
+            if d.get("disposition") in FAILURE_DISPOSITIONS
+            and d.get("record_id") != NODE_LEVEL_RECORD_ID
         ]
 
     def has_successful_items(self, action_name: str) -> bool:
