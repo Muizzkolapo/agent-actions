@@ -128,6 +128,21 @@ agac maps each provider's batch statuses onto its own. A status no mapping knows
 one a provider adds later, is taken as still running: the run pauses, naming the batch and
 the status, and each run after it asks the provider again until it reports one agac knows.
 
+### When a file's input changes while its batch is out
+
+A batch answers the records it was sent. If a record leaves a file's input while that
+file's batch is out, for example by being removed from staging, a run that resumes the
+action after a collect pass stopped partway, or after a run checking on the batch was
+interrupted, reads the input again and leaves that record's answer out of the file, as
+online does. Two cases still write the departed answers into the file:
+
+- A run that only collects. It does not read the input again.
+- A file that every record has left. It is not stored empty while its batch is out, and the
+  collect writes the batch's answers into it.
+
+In every case the provider has already answered the records it was sent: once a batch is
+out, its answers are paid for whether they are kept or not.
+
 ### Batch Commands
 
 ```bash

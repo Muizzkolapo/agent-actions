@@ -283,6 +283,9 @@ class BatchSubmissionService:
                     "Skipping new batch submission. "
                     "Use --batch_continue to process completed batches."
                 )
+                self._record_inputs_of_a_file_whose_batch_is_out(
+                    action_name, batch_name, run_inputs
+                )
                 return SubmissionResult(batch_id=entry.batch_id)
             # A finished job blocks resubmission while its results are still owed, so
             # the run collects them instead. Once collected it is no reason to skip:
@@ -292,6 +295,9 @@ class BatchSubmissionService:
                     "Found completed batch job for %s: %s — skipping resubmission",
                     batch_name,
                     entry.batch_id,
+                )
+                self._record_inputs_of_a_file_whose_batch_is_out(
+                    action_name, batch_name, run_inputs
                 )
                 return SubmissionResult(batch_id=entry.batch_id)
         # Never off `data`: the record limit and the gate below both narrow it, and a
@@ -505,6 +511,24 @@ class BatchSubmissionService:
             output_root=output_directory,
             stored_name=stored_name,
         )
+
+    def _record_inputs_of_a_file_whose_batch_is_out(
+        self, action_name: str, batch_name: str, run_inputs: list[dict[str, Any]] | None
+    ) -> None:
+        """Record the inputs this run offers, since collecting writes the file for them.
+
+        Not sent again, the file is collected against the inputs recorded when it was
+        sent, which a record that has left since would still be written under. A repair
+        records none.
+        """
+        repairing = self._disposition_gate is not None and bool(self._disposition_gate.repairing)
+        if run_inputs is None or repairing or self._storage_backend is None:
+            return
+        guids = [guid for row in run_inputs if (guid := row.get("source_guid"))]
+        if guids:
+            self._context_manager.save_batch_inputs(
+                self._storage_backend, action_name, guids, batch_name
+            )
 
     def _forget_the_batch_of(
         self, backend: StorageBackend, action_name: str, batch_name: str
