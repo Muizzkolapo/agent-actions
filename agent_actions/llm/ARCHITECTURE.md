@@ -289,9 +289,12 @@ All state is persisted to StorageBackend metadata between runs:
   batch_inputs:{action}:{name}    what the action took as input, above every
                                   narrowing — read by carry-forward to tell a
                                   record the run left out from one that is gone
+  batch_no_input:{action}:{name}  set when a run finds the file's batch out and the
+                                  file now takes no input, so the collect stores
+                                  it empty
 ```
 
-`clear_batch_state` removes all four.
+`clear_batch_state` removes all five.
 
 ---
 
