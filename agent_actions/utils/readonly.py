@@ -339,4 +339,14 @@ def readonly_view(data: Any) -> Any:
     return _rebuild(data, True)
 
 
-__all__ = ["ReadOnlyDict", "ReadOnlyError", "ReadOnlyList", "readonly_view"]
+def plain_copy(data: Any) -> Any:
+    """A deep, writable copy of *data* made without recursing once per level.
+
+    ``copy.deepcopy`` fails on a record about 500 levels deep. Shared and
+    self-referencing containers stay shared, and anything that is not a dict, list,
+    tuple or set is the same object in the copy, as for a view.
+    """
+    return _rebuild(data, False)
+
+
+__all__ = ["ReadOnlyDict", "ReadOnlyError", "ReadOnlyList", "plain_copy", "readonly_view"]

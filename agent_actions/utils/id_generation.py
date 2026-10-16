@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 from agent_actions.errors import DataValidationError
@@ -69,19 +70,38 @@ class IDGenerator:
         spreadsheet header or a ragged csv row's None restkey has no usable name and no
         stable identity, so fail loud instead of hashing it ambiguously (stringifying such
         keys would silently collapse distinct keys into one identity).
+
+        Walked on a stack of iterators, not by recursion: a record about 800 levels deep
+        would otherwise fail here before it is hashed.
         """
-        if isinstance(obj, dict):
-            for key, value in obj.items():
-                if not isinstance(key, str):
-                    raise DataValidationError(
-                        f"Record field name {key!r} is a {type(key).__name__}, not a string; "
-                        f"first-stage field names must be strings",
-                        context={"field": repr(key), "field_type": type(key).__name__},
+        seen: set[int] = set()
+        stack: list[Iterator[Any]] = [iter((obj,))]
+        while stack:
+            for node in stack[-1]:
+                if isinstance(node, (dict, list)):
+                    if id(node) in seen:
+                        continue
+                    seen.add(id(node))
+                    stack.append(
+                        IDGenerator._string_keyed_values(node)
+                        if isinstance(node, dict)
+                        else iter(node)
                     )
-                IDGenerator._require_string_keys(value)
-        elif isinstance(obj, list):
-            for value in obj:
-                IDGenerator._require_string_keys(value)
+                    break
+            else:
+                stack.pop()
+
+    @staticmethod
+    def _string_keyed_values(node: dict) -> Iterator[Any]:
+        """The values of *node*, each yielded once its key has been checked."""
+        for key, value in node.items():
+            if not isinstance(key, str):
+                raise DataValidationError(
+                    f"Record field name {key!r} is a {type(key).__name__}, not a string; "
+                    f"first-stage field names must be strings",
+                    context={"field": repr(key), "field_type": type(key).__name__},
+                )
+            yield value
 
     @staticmethod
     def generate_content_hash(content: Any) -> str:
