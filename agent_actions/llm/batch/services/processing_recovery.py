@@ -14,7 +14,7 @@ import logging
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
@@ -280,7 +280,13 @@ def handle_retry_recovery(
 # ---------------------------------------------------------------------------
 
 
-def park_halt(context: RecoveryContext, pending: Exception | None) -> None:
+class HaltCarrier(Protocol):
+    """What parks a halt for a finaliser: a file's recovery context, or a whole collect pass."""
+
+    pending_exhaustion: Exception | None
+
+
+def park_halt(context: HaltCarrier, pending: Exception | None) -> None:
     """Keep the first halt decided for this file, and say so when a second is dropped.
 
     Only one error can be raised, and the run stops either way — but an operator
@@ -764,7 +770,7 @@ def handle_repair_recovery(
     )
 
 
-def raise_pending_exhaustion(context: RecoveryContext) -> None:
+def raise_pending_exhaustion(context: HaltCarrier) -> None:
     """Halt the run for `on_exhausted: raise`, once nothing is left to lose.
 
     Called from the finalisers rather than the policy itself: batch writes its

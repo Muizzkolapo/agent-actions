@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.errors import ProcessingError, is_action_fatal
+from agent_actions.errors import ProcessingError, is_action_fatal, raised_by_exhaustion_policy
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
@@ -53,13 +53,14 @@ from agent_actions.llm.batch.services.processing_recovery import (
     finalize_batch_output as _finalize_batch_output_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
+    park_halt,
+    register_recovery_batch,
+)
+from agent_actions.llm.batch.services.processing_recovery import (
     process_recovery_batch as _process_recovery_batch_impl,
 )
 from agent_actions.llm.batch.services.processing_recovery import (
     raise_pending_exhaustion as _raise_pending_exhaustion_impl,
-)
-from agent_actions.llm.batch.services.processing_recovery import (
-    register_recovery_batch,
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
 from agent_actions.llm.batch.services.retry_serialization import (
@@ -147,6 +148,13 @@ class CollectPass:
 
     written: list[str] = field(default_factory=list)
     unread: list[str] = field(default_factory=list)
+
+
+@dataclass
+class _ParkedHalt:
+    """Carries the first halt of a collect pass, as the recovery context carries one in a file."""
+
+    pending_exhaustion: Exception | None = None
 
 
 class BatchProcessingService:
@@ -339,142 +347,154 @@ class BatchProcessingService:
         # original batch. Superseded once, skipped for the whole pass.
         superseded = _superseded_entries(all_jobs)
         collected_before = False
-        for file_name in all_jobs:
-            if file_name in superseded:
-                logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
-                continue
+        parked = _ParkedHalt()
+        # A hard failure anywhere in the pass, not only in a file, must not drop a
+        # halt parked earlier: the halting file is written and collected, so a rerun
+        # would skip it.
+        with halt_survives_failure(parked):
+            for file_name in all_jobs:
+                if file_name in superseded:
+                    logger.info("Skipping %s: a later recovery attempt supersedes it", file_name)
+                    continue
 
-            # The loop body replaces and deletes entries, so a snapshot batch_id
-            # can already be stale — and an unregistered id has no client, which
-            # ends the run rather than this batch.
-            entry = manager.get_batch_job(file_name)
-            if entry is None:
-                logger.info("Skipping %s: no longer in the registry", file_name)
-                continue
+                # The loop body replaces and deletes entries, so a snapshot batch_id
+                # can already be stale — and an unregistered id has no client, which
+                # ends the run rather than this batch.
+                entry = manager.get_batch_job(file_name)
+                if entry is None:
+                    logger.info("Skipping %s: no longer in the registry", file_name)
+                    continue
 
-            batch_id = entry.batch_id
-            if not batch_id:
-                continue
+                batch_id = entry.batch_id
+                if not batch_id:
+                    continue
 
-            # Its results are already written, and a later run may have written over
-            # them: read again, a spent batch puts back rows for records that have left.
-            # Before the poll, so a spent batch costs no provider call and cannot fail
-            # the pass. An entry from before the stamp existed reads as uncollected.
-            if entry.collected_at is not None:
-                collected_before = True
-                logger.info("Skipping %s: collected at %s", file_name, entry.collected_at)
-                continue
+                # Its results are already written, and a later run may have written over
+                # them: read again, a spent batch puts back rows for records that have left.
+                # Before the poll, so a spent batch costs no provider call and cannot fail
+                # the pass. An entry from before the stamp existed reads as uncollected.
+                if entry.collected_at is not None:
+                    collected_before = True
+                    logger.info("Skipping %s: collected at %s", file_name, entry.collected_at)
+                    continue
 
-            # Ended before it finished, as the poll before this pass recorded: nothing
-            # will come back, and no later pass can read it. Stamped once its records
-            # are failed, it holds the action no longer; until then it is owed, so a
-            # pass that could not reach them leaves it for the next. A recovery round
-            # is left to the paths below: a retry's failure path continues it, and the
-            # pass over a repair's file puts its records back in play.
-            if entry.recovery_type is None and entry.status in (
-                BatchStatus.FAILED,
-                BatchStatus.CANCELLED,
-            ):
-                if self._fail_unreadable_batch(
-                    file_name, entry, entry.status, output_directory, effective_action_name
+                # Ended before it finished, as the poll before this pass recorded: nothing
+                # will come back, and no later pass can read it. Stamped once its records
+                # are failed, it holds the action no longer; until then it is owed, so a
+                # pass that could not reach them leaves it for the next. A recovery round
+                # is left to the paths below: a retry's failure path continues it, and the
+                # pass over a repair's file puts its records back in play.
+                if entry.recovery_type is None and entry.status in (
+                    BatchStatus.FAILED,
+                    BatchStatus.CANCELLED,
                 ):
-                    manager.mark_collected(file_name)
-                else:
-                    unread.append(file_name)
-                continue
-
-            # A dead retry recovery is processed without a readiness poll: its
-            # provider status is terminal, and the failure path needs no results.
-            if not _is_dead_retry(entry):
-                status = self._provider_status(
-                    batch_id, output_directory, agent_config, action_name=effective_action_name
-                )
-                if status != BatchStatus.COMPLETED:
-                    if entry.status != BatchStatus.COMPLETED:
-                        continue
-                    # Its last poll said finished, so its results are owed all the same.
-                    if status is None or status in BatchStatus.in_flight_states():
-                        logger.warning(
-                            "Could not read %s (batch %s) in this pass: %s. The action "
-                            "waits for it",
-                            file_name,
-                            batch_id,
-                            "the provider could not be asked about it"
-                            if status is None
-                            else f"the provider reports it {status}",
-                        )
-                        unread.append(file_name)
-                        continue
-                    # Ended without results, or unknown to the provider: no later pass
-                    # can read it, so waiting would hold the action for good.
-                    if not self._fail_unreadable_batch(
-                        file_name, entry, status, output_directory, effective_action_name
+                    if self._fail_unreadable_batch(
+                        file_name, entry, entry.status, output_directory, effective_action_name
                     ):
+                        manager.mark_collected(file_name)
+                    else:
                         unread.append(file_name)
                     continue
 
-            try:
-                output_file = self._process_single_batch_file(
-                    batch_id=batch_id,
-                    file_name=file_name,
-                    entry=entry,
-                    output_directory=output_directory,
-                    agent_config=agent_config,
-                    manager=manager,
-                    action_name=effective_action_name,
-                    workflow_metadata=workflow_metadata,
-                )
-                if output_file:
-                    processed_files.append(output_file)
-            except (RuntimeError, ExpectationConfigurationError, EmptyOutputError):
-                # An unresolvable `expect:` block is not this file's problem:
-                # every remaining file carries the same action config and fails
-                # the same way, so continuing would finish the run reporting
-                # success with each of them missing from the output. A plain
-                # ConfigurationError is per record — a malformed lifecycle state
-                # — and stays below, costing only its own file. The halt `on_empty:
-                # error` asks for is raised once its file is written: taken as that
-                # file's failure, its records are marked failed over what they hold.
-                raise
-            except Exception as e:
-                # Declared where it was raised: a store that failed to write the file,
-                # or the halt `on_exhausted: raise` asks for. Taken as this file's
-                # failure, the action completes over what the file held before.
-                if is_action_fatal(e):
-                    raise
-                logger.exception(
-                    "Failed to process batch %s (%s): %s",
-                    batch_id,
-                    file_name,
-                    e,
-                    extra={
-                        "batch_id": batch_id,
-                        "file_name": file_name,
-                        "output_directory": output_directory,
-                        "operation": "batch_result_processing",
-                        "total_processed": len(processed_files),
-                        "registry_size": len(all_jobs),
-                    },
-                )
-                self._fail_abandoned_records(
-                    file_name=file_name,
-                    output_directory=output_directory,
-                    action_name=effective_action_name,
-                    error=e,
-                )
-                continue
+                # A dead retry recovery is processed without a readiness poll: its
+                # provider status is terminal, and the failure path needs no results.
+                if not _is_dead_retry(entry):
+                    status = self._provider_status(
+                        batch_id, output_directory, agent_config, action_name=effective_action_name
+                    )
+                    if status != BatchStatus.COMPLETED:
+                        if entry.status != BatchStatus.COMPLETED:
+                            continue
+                        # Its last poll said finished, so its results are owed all the same.
+                        if status is None or status in BatchStatus.in_flight_states():
+                            logger.warning(
+                                "Could not read %s (batch %s) in this pass: %s. The action "
+                                "waits for it",
+                                file_name,
+                                batch_id,
+                                "the provider could not be asked about it"
+                                if status is None
+                                else f"the provider reports it {status}",
+                            )
+                            unread.append(file_name)
+                            continue
+                        # Ended without results, or unknown to the provider: no later pass
+                        # can read it, so waiting would hold the action for good.
+                        if not self._fail_unreadable_batch(
+                            file_name, entry, status, output_directory, effective_action_name
+                        ):
+                            unread.append(file_name)
+                        continue
 
-        # A recovery dropped in this pass hands back the parent it superseded, which
-        # the loop has already skipped. One that finalized stamped its parent collected.
-        for name in sorted(superseded - _superseded_entries(manager.get_all_jobs())):
-            parent = manager.get_batch_job(name)
-            if parent is not None and parent.awaits_collection:
-                logger.warning(
-                    "Could not read %s in this pass: it was skipped for a recovery since "
-                    "dropped. The action waits for it",
-                    name,
-                )
-                unread.append(name)
+                try:
+                    output_file = self._process_single_batch_file(
+                        batch_id=batch_id,
+                        file_name=file_name,
+                        entry=entry,
+                        output_directory=output_directory,
+                        agent_config=agent_config,
+                        manager=manager,
+                        action_name=effective_action_name,
+                        workflow_metadata=workflow_metadata,
+                    )
+                    if output_file:
+                        processed_files.append(output_file)
+                except Exception as e:
+                    if raised_by_exhaustion_policy(e):
+                        # Raised once the file is written. Stopping here would leave every
+                        # later finished batch in the registry uncollected, and a halted
+                        # action is refused by `run` and, with a batch owed, by `retry`.
+                        park_halt(parked, e)
+                        continue
+                    if isinstance(
+                        e, (RuntimeError, ExpectationConfigurationError, EmptyOutputError)
+                    ):
+                        # An unresolvable `expect:` block fails every remaining file the same
+                        # way, so continuing would report success with each missing. A plain
+                        # ConfigurationError is per record and stays below. The `on_empty:
+                        # error` halt comes once its file is written, so it is not that file's
+                        # failure.
+                        raise
+                    # Declared where it was raised, such as a store that failed to write the
+                    # file: taken as this file's failure, the action would complete over what
+                    # the file held before.
+                    if is_action_fatal(e):
+                        raise
+                    logger.exception(
+                        "Failed to process batch %s (%s): %s",
+                        batch_id,
+                        file_name,
+                        e,
+                        extra={
+                            "batch_id": batch_id,
+                            "file_name": file_name,
+                            "output_directory": output_directory,
+                            "operation": "batch_result_processing",
+                            "total_processed": len(processed_files),
+                            "registry_size": len(all_jobs),
+                        },
+                    )
+                    self._fail_abandoned_records(
+                        file_name=file_name,
+                        output_directory=output_directory,
+                        action_name=effective_action_name,
+                        error=e,
+                    )
+                    continue
+
+            # A recovery dropped in this pass hands back the parent it superseded, which
+            # the loop has already skipped. One that finalized stamped its parent collected.
+            for name in sorted(superseded - _superseded_entries(manager.get_all_jobs())):
+                parent = manager.get_batch_job(name)
+                if parent is not None and parent.awaits_collection:
+                    logger.warning(
+                        "Could not read %s in this pass: it was skipped for a recovery since "
+                        "dropped. The action waits for it",
+                        name,
+                    )
+                    unread.append(name)
+
+        _raise_pending_exhaustion_impl(parked)
 
         # A file already collected counts as one this pass did not fail, as a replay of
         # it that succeeded did. One left unread is waited for, not failed.
