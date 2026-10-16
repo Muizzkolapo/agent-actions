@@ -718,7 +718,7 @@ class BatchResultStrategy:
             extra_metadata=extra_metadata,
             reason=EXPECTATIONS_EXHAUSTED,
         )
-        return ProcessingResult.exhausted(
+        result = ProcessingResult.exhausted(
             error=error,
             data=[tombstone],
             source_guid=source_guid,
@@ -726,6 +726,10 @@ class BatchResultStrategy:
             source_snapshot=copy.deepcopy(original_row) if original_row else None,
             input_record=original_row,
         )
+        self._attach_passthrough_context(
+            result, ctx, original_row, ctx.reconciler.get_record_index(custom_id)
+        )
+        return result
 
     def _build_exhausted_passthrough(
         self,
