@@ -294,6 +294,7 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: dict[str, Any] | None = None,
         action_name: str | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> CollectPass:
         """Process the completed batch jobs whose results are still owed.
 
@@ -421,6 +422,7 @@ class BatchProcessingService:
                     agent_config=agent_config,
                     manager=manager,
                     action_name=effective_action_name,
+                    workflow_metadata=workflow_metadata,
                 )
                 if output_file:
                     processed_files.append(output_file)
@@ -584,6 +586,7 @@ class BatchProcessingService:
         agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
         action_name: str | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> str | None:
         """Process a single batch file and return output path.
 
@@ -616,6 +619,7 @@ class BatchProcessingService:
                 agent_config=agent_config,
                 manager=manager,
                 action_name=action_name,
+                workflow_metadata=workflow_metadata,
             )
 
         # Branch A: Original batch
@@ -627,6 +631,7 @@ class BatchProcessingService:
             agent_config=agent_config,
             manager=manager,
             action_name=action_name,
+            workflow_metadata=workflow_metadata,
         )
 
     def _process_original_batch(
@@ -638,6 +643,7 @@ class BatchProcessingService:
         agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
         action_name: str | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> str | None:
         """Process an original (non-recovery) batch file.
 
@@ -703,6 +709,7 @@ class BatchProcessingService:
                     output_directory=output_directory,
                     file_name=file_name,
                     agent_config=agent_config,
+                    workflow_metadata=workflow_metadata,
                 ):
                     retry_batch_id, _record_count = submission
                     register_recovery_batch(
@@ -746,6 +753,7 @@ class BatchProcessingService:
             output_directory=output_directory,
             action_name=effective_name,
             start_time=start_time,
+            workflow_metadata=workflow_metadata,
         )
         identity = BatchIdentity(
             batch_id=batch_id,
@@ -791,6 +799,7 @@ class BatchProcessingService:
         agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
         action_name: str | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> str | None:
         """Process a recovery batch (retry or repair).
 
@@ -805,6 +814,7 @@ class BatchProcessingService:
             agent_config=agent_config,
             manager=manager,
             action_name=action_name,
+            workflow_metadata=workflow_metadata,
         )
 
     def _finalize_batch_output(

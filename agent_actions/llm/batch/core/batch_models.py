@@ -202,6 +202,8 @@ class RecoveryContext:
     output_directory: str
     action_name: str | None
     start_time: float
+    # The collecting run's metadata, so a recovery round renders {{ workflow.* }} like the first submission.
+    workflow_metadata: dict[str, Any] | None = None
 
     # Set when an exhaustion policy of `raise` has decided the run must stop.
     # Batch writes its output file once at the end, so the error is carried here

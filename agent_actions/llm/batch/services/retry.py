@@ -56,6 +56,7 @@ class BatchRetryService:
         record_count: int | None = None,
         file_name: str | None = None,
         agent_config: dict[str, Any] | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> tuple[list[BatchResult], dict[str, RecoveryMetadata] | None]:
         """Retrieve batch results, resubmitting the records the provider did not return."""
         from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
@@ -113,6 +114,7 @@ class BatchRetryService:
                         output_directory=output_directory,
                         file_name=file_name,
                         agent_config=agent_config,
+                        workflow_metadata=workflow_metadata,
                     )
 
                     (
@@ -143,6 +145,7 @@ class BatchRetryService:
         output_directory: str,
         file_name: str | None,
         agent_config: dict[str, Any] | None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> list[BatchResult]:
         """Resubmit missing records as a new batch and wait for completion."""
         return _retry.resubmit_missing_records(
@@ -155,6 +158,7 @@ class BatchRetryService:
             agent_config=agent_config,
             action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,
+            workflow_metadata=workflow_metadata,
         )
 
     def submit_retry_batch(
@@ -165,6 +169,7 @@ class BatchRetryService:
         output_directory: str,
         file_name: str | None,
         agent_config: dict[str, Any] | None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> tuple[str, int] | None:
         """Submit a retry batch for missing records without blocking."""
         return _retry.submit_retry_batch(
@@ -177,6 +182,7 @@ class BatchRetryService:
             agent_config=agent_config,
             action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,
+            workflow_metadata=workflow_metadata,
         )
 
     def process_retry_results(
