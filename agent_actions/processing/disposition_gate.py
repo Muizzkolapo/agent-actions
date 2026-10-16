@@ -351,26 +351,24 @@ def stored_rows_not_reproduced(
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
     A row carries only if its input is in *batch_inputs* and unanswered this run, matched by
-    producer -- minted rows share no identity across runs -- or by its own identity.
-    *filtered* inputs (guard-filtered or -skipped) hold no row beyond their tombstone, as
-    online writes. With no inputs recorded, everything unanswered carries. An input the run
-    wrote a failure for keeps none of its stored rows, minted ones included, as online writes
-    only the failure. A failed run that answered nothing leaves every stored answer standing,
-    unless ``stored_answers_stand`` says otherwise (via *still_answered*).
+    producer (minted rows share no identity across runs) or by its own identity. *filtered*
+    inputs hold no row beyond their tombstone. With no inputs recorded, everything unanswered
+    carries. In a run with a failure, an input it wrote no answer for keeps none of its stored
+    rows, as online writes only that row. A failed run that answered nothing leaves every
+    stored answer standing, unless ``stored_answers_stand`` says otherwise (via *still_answered*).
     """
     stored = list(stored)
     answered: set[str] = set()
     rewritten: set[str] = set()
     failed = False
-    unanswered: set[str] = set()
+    not_answers: set[str] = set()
     for row in produced:
         guid = row.get("source_guid")
         if guid:
             rewritten.add(guid)
-        if row.get("_state") in _FAILURE_STATES:
-            failed = True
-            if guid:
-                unanswered.add(guid)
+            if row.get("_state") != RecordState.PROCESSED.value:
+                not_answers.add(guid)
+        failed = failed or row.get("_state") in _FAILURE_STATES
         if row.get("_state") != RecordState.PROCESSED.value:
             continue
         # Producers are named during enrichment, before collection settles the state,
@@ -410,7 +408,7 @@ def stored_rows_not_reproduced(
         if answers_for in answered:
             continue
         # Online writes only the failure for an input that failed, whatever else answered.
-        if not refused and answers_for in unanswered:
+        if failed and not refused and answers_for in not_answers:
             continue
         if answers_for in excluded and not refused:
             filtered_out.add(guid)

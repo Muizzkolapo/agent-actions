@@ -285,6 +285,21 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
 
         assert [r["source_guid"] for r in result] == ["n3", "i1"]
 
+    @pytest.mark.parametrize("reset", [False, True], ids=["without_a_reset", "after_a_reset"])
+    def test_a_record_blocked_upstream_beside_a_failure_keeps_none_of_its_earlier_rows(
+        self, tmp_path, reset
+    ):
+        stored = [
+            _row("m1", producers=["i1"]),
+            _row("m2", producers=["i1"]),
+            _row("m3", producers=["i2"]),
+        ]
+        blocked = {"source_guid": "i1", "metadata": {}, "_state": "cascade_skipped"}
+
+        result = _rerun(tmp_path, stored, [_failed("i2"), blocked], reset=reset)
+
+        assert [r["source_guid"] for r in result] == ["i2", "i1"]
+
 
 class TestIdentityCarryingActionsAreUnchanged:
     """An action whose rows keep their input's identity: the existing rule already
