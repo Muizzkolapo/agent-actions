@@ -260,3 +260,60 @@ class TestARepairThatWorkedIsUnchanged:
         result = project.retry("--record", guid, "--dry-run")
 
         assert result.exit_code == 0, result.output
+
+
+def _split_staging(project, first_file: int) -> Project:
+    staging = project.root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    pages = json.loads((staging / "pages.json").read_text())
+    (staging / "pages.json").unlink()
+    (staging / "pages1.json").write_text(json.dumps(pages[:first_file]))
+    (staging / "pages2.json").write_text(json.dumps(pages[first_file:]))
+    assert project.run("--fresh").exit_code == 0
+    return project
+
+
+class TestARetryNarrowedToOneStagedFile:
+    """Records the retry did not name sit elsewhere; they are still the action's answers."""
+
+    @pytest.fixture
+    def alone_in_its_file(self, project):
+        return _split_staging(project, 1)
+
+    @pytest.fixture
+    def beside_a_sibling(self, project):
+        return _split_staging(project, 2)
+
+    def test_a_record_alone_in_its_file_failing_again_leaves_the_action_completed_with_failures(
+        self, alone_in_its_file
+    ):
+        guid = alone_in_its_file.mark_failed("page 0")[0]
+        alone_in_its_file.break_on("page 0")
+
+        result = alone_in_its_file.retry()
+
+        assert result.exit_code == 0, result.output
+        assert alone_in_its_file.disposition(guid) == "failed"
+        assert "Failed actions" not in result.output
+        assert "Failed to process file" not in result.output
+
+    def test_a_resumed_run_whose_only_sent_record_fails_does_not_log_its_file_as_failed(
+        self, beside_a_sibling
+    ):
+        guid = beside_a_sibling.mark_failed("page 0")[0]
+        beside_a_sibling.break_on("page 0")
+
+        result = beside_a_sibling.run()
+
+        assert result.exit_code == 0, result.output
+        assert beside_a_sibling.disposition(guid) == "failed"
+        assert "Failed to process file" not in result.output
+        assert "all 2 active input" not in result.output
+
+    def test_every_record_failing_with_nothing_stored_still_fails_the_action(
+        self, alone_in_its_file
+    ):
+        alone_in_its_file.break_on(*ALL_PAGES)
+
+        result = alone_in_its_file.run("--fresh")
+
+        assert result.exit_code != 0, result.output
