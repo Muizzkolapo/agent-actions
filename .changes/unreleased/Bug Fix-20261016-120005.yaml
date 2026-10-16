@@ -6,6 +6,7 @@ body: >-
   was sent, so a record removed from staging in between was still stored. Such a run now
   records the file's current inputs, and the collect leaves out the answers to records no
   longer among them, as an online run holds only the records its file has. A run that only
-  collects does not read staging again, so this covers the run that resumes after a collect
-  pass stopped partway.
+  collects does not read staging again, so this covers a run that resumes after a collect
+  pass stopped or a status check was interrupted. A file that every record has left while its
+  batch is out still holds the batch's answers.
 time: 2026-10-16T12:05:00Z
