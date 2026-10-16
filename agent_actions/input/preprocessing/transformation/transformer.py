@@ -1,7 +1,8 @@
 """Data transformation utilities for agent actions."""
 
-import copy
 from typing import Any
+
+from agent_actions.utils.readonly import plain_copy
 
 
 class DataTransformer:
@@ -29,7 +30,7 @@ class DataTransformer:
         data_old: dict[str, Any], data_new: dict[str, Any], keys_to_update: list[str]
     ) -> dict[str, Any]:
         """Merge keys from data_old into data_new: replace if same type, combine if types differ."""
-        result = copy.deepcopy(data_new)
+        result = plain_copy(data_new)
 
         for key in keys_to_update:
             if key in data_old:
@@ -38,11 +39,11 @@ class DataTransformer:
 
                 if new_value is not None:
                     if isinstance(old_value, type(new_value)):
-                        result[key] = copy.deepcopy(old_value)
+                        result[key] = plain_copy(old_value)
                     else:
-                        result[key] = [new_value, copy.deepcopy(old_value)]
+                        result[key] = [new_value, plain_copy(old_value)]
                 else:
-                    result[key] = copy.deepcopy(old_value)
+                    result[key] = plain_copy(old_value)
 
         return result
 

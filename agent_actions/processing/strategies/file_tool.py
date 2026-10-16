@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 from collections.abc import Sequence
 from typing import Any, cast
@@ -27,6 +26,7 @@ from agent_actions.record.reasons import EMPTY_OUTPUT, TOOL_MISSING_RECORD
 from agent_actions.record.tracking import TrackedItem, is_input_position
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.content import is_version_merge
+from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.tools_resolver import resolve_tools_path
 from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.utils.udf_management.tooling import output_schema_errors
@@ -247,7 +247,7 @@ class FileToolStrategy:
                             ),
                             reason=EMPTY_OUTPUT,
                             source_guid=record.get("source_guid"),
-                            source_snapshot=copy.deepcopy(record),
+                            source_snapshot=plain_copy(record),
                             input_record=record,
                         )
                         for record in records
@@ -261,7 +261,7 @@ class FileToolStrategy:
                     ProcessingResult.failed(
                         error=error_msg,
                         source_guid=record.get("source_guid"),
-                        source_snapshot=copy.deepcopy(record),
+                        source_snapshot=plain_copy(record),
                     )
                     for record in records
                 ]

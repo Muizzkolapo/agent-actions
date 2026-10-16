@@ -1,9 +1,8 @@
 """Orchestrator for passthrough transformations using the Strategy Pattern."""
 
-import copy
-
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.utils.field_management import FieldManager
+from agent_actions.utils.readonly import plain_copy
 
 from .strategies import (
     ContextScopeStructuredStrategy,
@@ -33,13 +32,13 @@ def merge_passthrough_namespaces(
             continue
         existing_ns = content.get(ns)
         if ns not in content:
-            content[ns] = copy.deepcopy(ns_fields)
+            content[ns] = plain_copy(ns_fields)
         elif isinstance(existing_ns, dict):
             missing = {k: v for k, v in ns_fields.items() if k not in existing_ns}
             if missing:
                 # Copy-on-write: namespace dicts may be shared with the input
                 # record's content, so never mutate them in place.
-                content[ns] = {**existing_ns, **copy.deepcopy(missing)}
+                content[ns] = {**existing_ns, **plain_copy(missing)}
 
 
 class PassthroughTransformer:

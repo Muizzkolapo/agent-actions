@@ -1,0 +1,18 @@
+kind: Bug Fix
+body: >-
+  A record nested hundreds of levels deep no longer fails a batch run. The run failed
+  with "maximum recursion depth exceeded" for a record about 600 levels deep, and every
+  later run submitted again and failed again. `copy.deepcopy` recurses once per level
+  and breaks at about 500 levels, and a batch run copies the record while it prepares the
+  task (applying the action's `context_scope`), and again for the snapshot kept with each
+  result built for a record a guard turned away, an empty answer, or a record the
+  provider did not answer; a FILE tool that returns nothing snapshots its input records
+  the same way. Those copies now use the non-recursive copy that guard evaluation already
+  uses. So do the other copies of record content that a deep record reaches: the storage
+  read cache, which a downstream action hits when it reads the rows above it, passthrough
+  merging, `update_schema_objects`, and the envelope an action's output is wrapped in. A
+  record's identity was derived by a check for string field names that also recursed once
+  per level and failed at about 800 levels in every run mode; it now walks the record on a
+  stack. A record is identified, copied and collected at any depth the standard library's
+  JSON encoder accepts, about a thousand levels on Python 3.11.
+time: 2026-10-16T15:00:00Z

@@ -4,7 +4,6 @@ Converts raw BatchResult objects into enriched ProcessingResult records
 that can flow through the shared enrich/collect pipeline.
 """
 
-import copy
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -50,6 +49,7 @@ from agent_actions.utils.content import (
     is_version_merge,
     merge_version_content,
 )
+from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation.passthrough import merge_passthrough_namespaces
@@ -521,7 +521,7 @@ class BatchResultStrategy:
                 passthrough_data=tombstone,
                 reason=EMPTY_OUTPUT,
                 source_guid=source_guid,
-                source_snapshot=copy.deepcopy(original_row) if original_row else None,
+                source_snapshot=plain_copy(original_row) if original_row else None,
                 input_record=original_row,
             )
             self._attach_passthrough_context(skipped, ctx, original_row, record_index)
@@ -570,7 +570,7 @@ class BatchResultStrategy:
         if recovery_metadata:
             failed_row["_recovery"] = recovery_metadata.to_dict()
 
-        source_snapshot = copy.deepcopy(original_input) if original_input else None
+        source_snapshot = plain_copy(original_input) if original_input else None
 
         result = ProcessingResult.failed(
             error=error_message,
@@ -713,7 +713,7 @@ class BatchResultStrategy:
             data=[tombstone],
             source_guid=source_guid,
             recovery_metadata=recovery_metadata,
-            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+            source_snapshot=plain_copy(original_row) if original_row else None,
             input_record=original_row,
         )
         self._attach_passthrough_context(
@@ -753,7 +753,7 @@ class BatchResultStrategy:
             data=[exhausted_item],
             source_guid=source_guid,
             recovery_metadata=recovery_meta,
-            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+            source_snapshot=plain_copy(original_row) if original_row else None,
         )
         self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         return processing_result
@@ -787,7 +787,7 @@ class BatchResultStrategy:
             data=[passthrough_item],
             reason=reason,
             source_guid=source_guid,
-            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+            source_snapshot=plain_copy(original_row) if original_row else None,
         )
         self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
         return processing_result
@@ -862,8 +862,8 @@ class BatchResultStrategy:
             processing_result = ProcessingResult.failed(
                 error=error,
                 source_guid=None,
-                source_snapshot=copy.deepcopy(original_row),
-                input_record=copy.deepcopy(original_row),
+                source_snapshot=plain_copy(original_row),
+                input_record=plain_copy(original_row),
             )
             self._attach_passthrough_context(processing_result, ctx, original_row, record_index)
             return processing_result
@@ -878,7 +878,7 @@ class BatchResultStrategy:
         processing_result = ProcessingResult.failed(
             error=error,
             source_guid=source_guid,
-            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+            source_snapshot=plain_copy(original_row) if original_row else None,
         )
         processing_result.data = [passthrough_item]
         self._attach_passthrough_context(processing_result, ctx, original_row, record_index)

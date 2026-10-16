@@ -3,7 +3,6 @@
 import json
 import logging
 from collections import Counter
-from copy import deepcopy
 from typing import Any
 
 from agent_actions.errors import ConfigurationError, RecordContextError
@@ -25,6 +24,7 @@ from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVE
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content, require_content_envelope
 from agent_actions.utils.dict import pop_nested_value
+from agent_actions.utils.readonly import plain_copy
 
 logger = logging.getLogger(__name__)
 
@@ -161,10 +161,10 @@ def apply_context_scope(
         and "passthrough" not in context_scope
         and "drop" not in context_scope
     ):
-        return (deepcopy(field_context), {}, {})
+        return (plain_copy(field_context), {}, {})
 
     # Deep copy to avoid mutating original field_context
-    prompt_context = deepcopy(field_context)
+    prompt_context = plain_copy(field_context)
     llm_context: dict[str, dict[str, Any]] = {}
     passthrough_fields: dict[str, dict[str, Any]] = {}
 
@@ -832,9 +832,9 @@ def apply_context_scope_for_records(
 
         # Rebuild enriched record: ALL namespaces preserved, drops applied. Flat
         # keys wait for pass 2 — their names depend on the whole batch.
-        enriched_content = deepcopy(content)
+        enriched_content = plain_copy(content)
         if source_content:
-            enriched_content["source"] = deepcopy(source_content)
+            enriched_content["source"] = plain_copy(source_content)
         _apply_drops_to_content(enriched_content, drop_refs, inert_drops_reported)
         prepared.append((record, enriched_content))
 
