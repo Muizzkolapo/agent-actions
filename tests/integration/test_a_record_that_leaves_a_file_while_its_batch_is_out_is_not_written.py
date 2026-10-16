@@ -1,8 +1,11 @@
 """A record that leaves a file while its batch is out is not written into that file.
 
-The run that finds the batch out does not send the file again, so the collect wrote the
+A run that finds the file's batch out does not send it again, so the collect wrote the
 inputs recorded when it was sent. A record removed from staging in between was still
 written, where an online run holds only the records the file now has.
+
+The resumed run is the one the batch was collected by after a collect pass stopped partway:
+a run that only collects never reads staging again.
 """
 
 import json
@@ -10,9 +13,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from tests.integration.test_a_batch_the_provider_ends_without_results import _agac
 from tests.integration.test_a_batch_the_provider_refuses import (
     WORKFLOW,
+    _agac,
     _project,
     _stored_rows,
 )
@@ -24,12 +27,13 @@ def _staging(project):
 
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory):
-    """a_pages.json = [a1, a2] is sent; a2 is removed from staging while the batch is out."""
+    """a_pages.json = [a1, a2] is sent; a2 leaves staging, then a collect pass stops."""
     project = _project(tmp_path_factory.mktemp("left") / "project", ("a",))
     submitted = _agac(project, "--fresh")
     assert submitted.status == "batch_submitted", submitted.output
     pages = json.loads(_staging(project).read_text())
     _staging(project).write_text(json.dumps(pages[:1]))
+    assert _agac(project, STOP_AT="a_pages.json").code != 0
     collected = [_agac(project)]
     while collected[-1].status == "batch_submitted" and len(collected) < 3:
         collected.append(_agac(project))
