@@ -12,6 +12,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 # Import operation modules for delegation
+from agent_actions.llm.batch.infrastructure.recovery_state import retries_left
 from agent_actions.llm.batch.services import retry_ops as _retry
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -84,7 +85,7 @@ class BatchRetryService:
                 record_failure_counts: dict[str, int] = {rid: 1 for rid in missing_ids}
                 retry_attempts = 0
 
-                while missing_ids and retry_attempts < max_attempts:
+                while missing_ids and retries_left(retry_attempts, max_attempts) > 0:
                     retry_attempts += 1
                     if retry_attempts > 1:
                         backoff = min(base_delay * (2 ** (retry_attempts - 2)), max_delay)
@@ -94,13 +95,13 @@ class BatchRetryService:
                         logger.info(
                             "Batch retry backoff: sleeping %.1fs before attempt %d/%d",
                             sleep_time,
-                            retry_attempts,
+                            retry_attempts + 1,
                             max_attempts,
                         )
                         time.sleep(sleep_time)
                     logger.info(
                         "Batch retry attempt %d/%d: resubmitting %d missing records",
-                        retry_attempts,
+                        retry_attempts + 1,
                         max_attempts,
                         len(missing_ids),
                     )
@@ -127,9 +128,9 @@ class BatchRetryService:
                         missing_ids=missing_ids,
                     )
 
-                if retry_attempts > 0 and missing_ids:
+                if missing_ids:
                     exhausted_recovery = self.build_exhausted_recovery(
-                        missing_ids, record_failure_counts, retry_attempts
+                        missing_ids, record_failure_counts, retry_attempts + 1
                     )
 
         return all_results, exhausted_recovery

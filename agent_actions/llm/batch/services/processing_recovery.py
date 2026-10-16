@@ -22,6 +22,7 @@ from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
     RecoveryStateManager,
+    retries_left,
 )
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
@@ -195,7 +196,8 @@ def handle_retry_recovery(
     still_missing = BatchResultReconciler.resendable_ids(still_missing, context_map)
 
     submission_impossible = False
-    if still_missing and state.retry_attempt < state.retry_max_attempts:
+    left = retries_left(state.retry_attempt, state.retry_max_attempts)
+    if still_missing and left > 0:
         next_attempt = state.retry_attempt + 1
         try:
             submission = context.service._retry_service.submit_retry_batch(
@@ -233,7 +235,7 @@ def handle_retry_recovery(
             return None
 
     exhausted_recovery = None
-    if still_missing and (state.retry_attempt >= state.retry_max_attempts or submission_impossible):
+    if still_missing and (left <= 0 or submission_impossible):
         exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
             still_missing, updated_counts
         )
@@ -247,7 +249,7 @@ def handle_retry_recovery(
             "Retry submission for %s did not go out with %d of %d attempts left; "
             "%d record(s) carried forward unexhausted",
             identity.file_name,
-            state.retry_max_attempts - state.retry_attempt,
+            left,
             state.retry_max_attempts,
             len(still_missing),
         )

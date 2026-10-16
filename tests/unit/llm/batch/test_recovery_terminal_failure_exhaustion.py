@@ -29,7 +29,7 @@ MISSING_ID = "rec-missing"
 
 AGENT_CONFIG = {
     "kind": "llm",
-    "retry": {"enabled": True, "max_attempts": 2, "on_exhausted": "raise"},
+    "retry": {"enabled": True, "max_attempts": 3, "on_exhausted": "raise"},
 }
 
 
@@ -178,7 +178,7 @@ class TestADeadRecoveryBatchAdvancesTheCounter:
         h.run_pass()
 
         assert h.submitted == ["batch_retry_1", "batch_retry_2"], (
-            "a third provider batch was submitted after max_attempts=2 was spent"
+            "a third retry batch was submitted after max_attempts=3 was spent"
         )
         exhausted = h.finalized[-1]["exhausted_recovery"]
         assert exhausted is not None and MISSING_ID in exhausted

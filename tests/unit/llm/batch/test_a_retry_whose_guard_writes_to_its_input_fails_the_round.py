@@ -53,7 +53,7 @@ def _config() -> dict[str, Any]:
         "prompt": "Restate: {{ source.page_content }}",
         "context_scope": {"observe": ["source.page_content"]},
         "conditional_clause": "guard_writes_to_its_input_1314",
-        "retry": {"enabled": True, "max_attempts": 1},
+        "retry": {"enabled": True, "max_attempts": 2},
     }
 
 

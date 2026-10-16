@@ -83,7 +83,7 @@ def test_no_sleep_on_first_retry_attempt(mock_sleep, _mock_uniform):
     _run_retry_loop(
         service,
         context_map,
-        agent_config={"retry": {"enabled": True, "max_attempts": 1}},
+        agent_config={"retry": {"enabled": True, "max_attempts": 2}},
         resubmit_side_effect=_resubmit,
     )
 
@@ -113,7 +113,7 @@ def test_backoff_attempt_2_sleeps_base_delay(mock_uniform, mock_sleep):
         service,
         context_map,
         agent_config={
-            "retry": {"enabled": True, "max_attempts": 2, "base_delay": 5.0, "max_delay": 120.0}
+            "retry": {"enabled": True, "max_attempts": 3, "base_delay": 5.0, "max_delay": 120.0}
         },
         resubmit_side_effect=_resubmit,
     )
@@ -145,7 +145,7 @@ def test_backoff_attempt_3_doubles(mock_uniform, mock_sleep):
         service,
         context_map,
         agent_config={
-            "retry": {"enabled": True, "max_attempts": 3, "base_delay": 5.0, "max_delay": 120.0}
+            "retry": {"enabled": True, "max_attempts": 4, "base_delay": 5.0, "max_delay": 120.0}
         },
         resubmit_side_effect=_resubmit,
     )
@@ -179,7 +179,7 @@ def test_backoff_capped_at_max_delay(mock_sleep, _mock_uniform):
         service,
         context_map,
         agent_config={
-            "retry": {"enabled": True, "max_attempts": 3, "base_delay": 100.0, "max_delay": 8.0}
+            "retry": {"enabled": True, "max_attempts": 4, "base_delay": 100.0, "max_delay": 8.0}
         },
         resubmit_side_effect=_resubmit,
     )
@@ -211,7 +211,7 @@ def test_jitter_added_to_backoff(mock_uniform, mock_sleep):
         service,
         context_map,
         agent_config={
-            "retry": {"enabled": True, "max_attempts": 2, "base_delay": 5.0, "max_delay": 120.0}
+            "retry": {"enabled": True, "max_attempts": 3, "base_delay": 5.0, "max_delay": 120.0}
         },
         resubmit_side_effect=_resubmit,
     )
@@ -242,7 +242,7 @@ def test_defaults_when_config_omits_delay_keys(mock_sleep, _mock_uniform):
     _run_retry_loop(
         service,
         context_map,
-        agent_config={"retry": {"enabled": True, "max_attempts": 2}},
+        agent_config={"retry": {"enabled": True, "max_attempts": 3}},
         resubmit_side_effect=_resubmit,
     )
 

@@ -42,7 +42,7 @@ PROVIDER_ERROR = "rate_limit_exceeded: slow down"
 AGENT_CONFIG = {
     "kind": "llm",
     "action_name": ACTION,
-    "retry": {"enabled": True, "max_attempts": 2},
+    "retry": {"enabled": True, "max_attempts": 3},
 }
 
 
@@ -274,7 +274,7 @@ class TestExhaustionStaysTerminal:
         h.run_pass()
 
         assert h.submitted == ["batch_retry_1", "batch_retry_2"], (
-            "a third provider batch was submitted after max_attempts=2 was spent"
+            "a third retry batch was submitted after max_attempts=3 was spent"
         )
         assert h.state() is None, "recovery state must be deleted at finalization"
 

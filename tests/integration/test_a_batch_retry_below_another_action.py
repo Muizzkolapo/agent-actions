@@ -51,7 +51,7 @@ actions:
     schema: retry_below_summary
     prompt: $p.Publish
     context_scope: { observe: [summarize.summary] }
-    retry: { enabled: true, max_attempts: 2 }
+    retry: { enabled: true, max_attempts: 3 }
 """
 
 _VERSIONED = _CONFIG.replace(

@@ -177,8 +177,8 @@ def test_a_permanent_submission_failure_does_stamp_exhaustion():
 def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
     """The boundary the other cases miss.
 
-    At attempt max-1 the submit gate still fires, so a transient failure lands in
-    the same branch with one attempt left. A guard written `>= max - 1` passes
+    With one retry batch left the submit gate still fires, so a transient failure lands in
+    the same branch with one attempt left. A guard written `>= max - 2` passes
     every other test here and re-introduces the bug one round later.
     """
     entry = BatchJobEntry(
@@ -194,7 +194,7 @@ def test_the_last_attempt_before_the_budget_is_still_not_exhaustion():
     )
     identity = BatchIdentity(batch_id="b-1", file_name=PARENT, entry=entry)
     context = _context()
-    state = _state(attempt=2, max_attempts=3)
+    state = _state(attempt=2, max_attempts=4)
     seen = {}
 
     def _capture(context, identity, *, exhausted_recovery=None, **kwargs):
@@ -242,7 +242,7 @@ def test_the_exhausted_branch_keeps_the_id_set_it_stamped():
     context = _context()
     context.service._retry_service.build_exhausted_recovery.side_effect = None
     context.service._retry_service.build_exhausted_recovery.return_value = {MISSING: object()}
-    state = _state(attempt=3, max_attempts=3)
+    state = _state(attempt=3, max_attempts=4)
     seen = {}
 
     def _capture(context, identity, *, exhausted_recovery=None, **kwargs):

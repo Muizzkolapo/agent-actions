@@ -29,6 +29,7 @@ from agent_actions.llm.batch.infrastructure.context import (
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
     RecoveryStateManager,
+    retries_left,
 )
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
@@ -672,6 +673,8 @@ class BatchProcessingService:
 
         retry_config = (agent_config or {}).get("retry")
         retry_enabled = retry_config and retry_config.get("enabled", True)
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None
+        exhausted_state: RecoveryState | None = None
 
         if retry_enabled:
             missing_ids = BatchResultReconciler.resendable_ids(
@@ -680,15 +683,27 @@ class BatchProcessingService:
 
             if missing_ids:
                 max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
-                submission = self._retry_service.submit_retry_batch(
+                if retries_left(0, max_attempts) <= 0:
+                    # The original batch was the only attempt the action allows.
+                    failure_counts = {rid: 1 for rid in missing_ids}
+                    exhausted_recovery = self._retry_service.build_exhausted_recovery(
+                        missing_ids, failure_counts
+                    )
+                    exhausted_state = RecoveryState(
+                        phase=RecoveryPhase.RETRY,
+                        retry_attempt=0,
+                        retry_max_attempts=max_attempts,
+                        missing_ids=list(missing_ids),
+                        record_failure_counts=failure_counts,
+                    )
+                elif submission := self._retry_service.submit_retry_batch(
                     provider=provider,
                     missing_ids=missing_ids,
                     context_map=context_map,
                     output_directory=output_directory,
                     file_name=file_name,
                     agent_config=agent_config,
-                )
-                if submission:
+                ):
                     retry_batch_id, _record_count = submission
                     register_recovery_batch(
                         manager,
@@ -750,7 +765,7 @@ class BatchProcessingService:
                 identity=identity,
                 batch_results=batch_results,
                 context_map=context_map,
-                recovery_state=None,
+                recovery_state=exhausted_state,
             ):
                 _raise_pending_exhaustion_impl(context)
                 return None  # Repair round submitted, processing paused
@@ -760,6 +775,7 @@ class BatchProcessingService:
                 identity=identity,
                 batch_results=batch_results,
                 context_map=context_map,
+                exhausted_recovery=exhausted_recovery,
             )
 
     # =========================================================================
