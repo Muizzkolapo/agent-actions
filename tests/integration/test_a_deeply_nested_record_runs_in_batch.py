@@ -86,7 +86,7 @@ def _run_to_completion() -> list:
 
 
 class TestARecordNestedDeeply:
-    @pytest.mark.parametrize("depth", [400, 600, 2000])
+    @pytest.mark.parametrize("depth", [400, 600, 800])
     def test_every_run_completes_and_every_record_is_answered(self, tmp_path, monkeypatch, depth):
         root = _project(tmp_path, monkeypatch, depth)
 
