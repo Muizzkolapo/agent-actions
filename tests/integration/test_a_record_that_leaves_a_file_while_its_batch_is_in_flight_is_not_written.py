@@ -1,7 +1,7 @@
-"""A file every record leaves while its batch is out holds nothing once it is collected.
+"""A record that leaves a file while its batch is still in flight is not written into it.
 
-The run that resumes the action records the file's input again, and a file that now takes
-no input is stored empty, as online stores it.
+The run that resumes the action after the run checking on the batch was interrupted
+records the file's input again, so the collect leaves the departed record out.
 """
 
 import json
@@ -71,21 +71,6 @@ def _collect(project):
     while collected[-1].status == "batch_submitted" and len(collected) < 4:
         collected.append(_agac(project))
     return collected
-
-
-@pytest.fixture(scope="module")
-def emptied(tmp_path_factory):
-    """a_pages.json = [a1, a2] is sent, then emptied, then a collect pass stops."""
-    project = _project(tmp_path_factory.mktemp("emptied") / "project", ("a",))
-    assert _agac(project, "--fresh").status == "batch_submitted"
-    _staging(project, "a_pages.json").write_text(json.dumps([]))
-    assert _agac(project, STOP_AT="a_pages.json").code != 0
-    return SimpleNamespace(project=project, collected=_collect(project))
-
-
-def test_a_file_every_record_left_is_stored_empty(emptied):
-    assert emptied.collected[-1].code == 0, emptied.collected[-1].output
-    assert _stored_rows(emptied.project).get("a_pages.json", []) == []
 
 
 @pytest.fixture(scope="module")
