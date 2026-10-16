@@ -524,6 +524,9 @@ class BatchSubmissionService:
         repairing = self._disposition_gate is not None and bool(self._disposition_gate.repairing)
         if run_inputs is None or repairing or self._storage_backend is None:
             return
+        if not run_inputs:
+            self._context_manager.record_no_input(self._storage_backend, action_name, batch_name)
+            return
         guids = [guid for row in run_inputs if (guid := row.get("source_guid"))]
         if guids:
             self._context_manager.save_batch_inputs(

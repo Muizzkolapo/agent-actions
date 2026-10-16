@@ -965,6 +965,7 @@ class StorageBackend(ABC):
         # context map's scope and must share its lifetime: a repair records none, and
         # one left behind would be read as the repair's.
         self.delete_metadata_prefix(f"batch_inputs:{action_name}:")
+        self.delete_metadata_prefix(f"batch_no_input:{action_name}:")
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner.

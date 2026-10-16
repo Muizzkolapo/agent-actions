@@ -224,6 +224,7 @@ class BatchContextManager:
         try:
             key = BatchContextManager._inputs_key(action_name, batch_name)
             backend.save_metadata(key, json.dumps(sorted(source_guids)))
+            backend.delete_metadata(BatchContextManager._no_input_key(action_name, batch_name))
         except Exception as e:
             raise ProcessingError(
                 f"Failed to save batch inputs: {e}",
@@ -235,6 +236,25 @@ class BatchContextManager:
     def clear_batch_inputs(backend: "StorageBackend", action_name: str, batch_name: str) -> None:
         """Remove the recording, so the next reader finds none recorded."""
         backend.delete_metadata(BatchContextManager._inputs_key(action_name, batch_name))
+        backend.delete_metadata(BatchContextManager._no_input_key(action_name, batch_name))
+
+    @staticmethod
+    def _no_input_key(action_name: str, batch_name: str) -> str:
+        return f"batch_no_input:{action_name}:{checked_batch_file_name(batch_name)}"
+
+    @staticmethod
+    def record_no_input(backend: "StorageBackend", action_name: str, batch_name: str) -> None:
+        """Record that the file now takes no input, while its batch is still owed.
+
+        Its own key, not an empty recording: an empty recording is what a file whose
+        records carry no identity records, and is read as none recorded.
+        """
+        backend.save_metadata(BatchContextManager._no_input_key(action_name, batch_name), "true")
+
+    @staticmethod
+    def takes_no_input(backend: "StorageBackend", action_name: str, batch_name: str) -> bool:
+        key = BatchContextManager._no_input_key(action_name, batch_name)
+        return backend.load_metadata(key) is not None
 
     @staticmethod
     def load_batch_inputs(
