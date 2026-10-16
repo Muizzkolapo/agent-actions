@@ -210,7 +210,9 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
 
         assert [r["source_guid"] for r in result] == ["i1", "m3"]
 
-    def test_a_run_answering_one_input_and_failing_another_keeps_both(self, tmp_path):
+    def test_a_run_answering_one_input_and_failing_another_keeps_only_the_failure_of_the_second(
+        self, tmp_path
+    ):
         stored = [
             _row("m1", producers=["i1"]),
             _row("m2", producers=["i1"]),
@@ -220,7 +222,7 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
 
         result = _rerun(tmp_path, stored, produced)
 
-        assert [r["source_guid"] for r in result] == ["n1", "n2", "i2", "m3"]
+        assert [r["source_guid"] for r in result] == ["n1", "n2", "i2"]
 
     def test_a_failed_row_replaces_the_answer_under_its_identity_when_another_was_answered(
         self, tmp_path
@@ -269,9 +271,9 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
             f"a row stamped {state} deleted the answers it did not replace: {result}"
         )
 
-    def test_an_exhausted_row_replaces_nothing_it_was_minted_beside(self, tmp_path):
+    def test_an_exhausted_input_keeps_none_of_the_rows_it_was_minted_beside(self, tmp_path):
         """Exhaustion holds no answer either, on the same reading as a failure: the run
-        answered another record, and the exhausted one keeps its rows beside it."""
+        answered another record, and the exhausted one is written as its exhaustion alone."""
         stored = [
             _row("m1", producers=["i1"]),
             _row("m2", producers=["i1"]),
@@ -281,7 +283,7 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
 
         result = _rerun(tmp_path, stored, produced)
 
-        assert [r["source_guid"] for r in result] == ["n3", "i1", "m1", "m2"]
+        assert [r["source_guid"] for r in result] == ["n3", "i1"]
 
 
 class TestIdentityCarryingActionsAreUnchanged:

@@ -1368,6 +1368,19 @@ def test_a_reset_in_which_every_input_fails_keeps_no_answer_from_before_it(
     assert findings[1]["batch"] == findings[1]["online"]
 
 
+@pytest.mark.parametrize("unanswered", ["fail", "exhaust"])
+def test_a_reset_in_which_one_input_fails_beside_an_answered_one_holds_only_its_failure(
+    tmp_path, unanswered
+):
+    """An input sent again that fails keeps none of the rows it split into before, as
+    online writes its failure alone; the other input's new rows replace its old ones."""
+    runs = [["a1", "a2"], {"inputs": ["a1", "a2"], "reset": True}]
+
+    findings = compare(tmp_path, runs, None, {"a1": 2, "a2": 2, ("a2", 2): unanswered})
+
+    assert findings[1]["batch"] == findings[1]["online"]
+
+
 def test_a_reset_that_answered_nothing_records_what_it_held_back_for_the_write(tmp_path):
     """The file is written with its failure, then what collection held back for the write
     is recorded, as after any write; raised first, the empty answer it kept goes
