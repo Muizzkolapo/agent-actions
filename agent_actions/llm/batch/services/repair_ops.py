@@ -139,7 +139,7 @@ def apply_exhaustion_policy(
     strategy: ExpectationStrategy,
     action_name: str,
 ) -> Exception | None:
-    """`return_last` keeps the annotated record; `fail` tombstones it.
+    """`return_last` keeps the annotated record; `fail` and `raise` tombstone it.
 
     Returns the error `raise` wants thrown rather than throwing it, because the
     caller has not written the output file yet: raising here would halt the run
@@ -163,17 +163,9 @@ def apply_exhaustion_policy(
     if policy == "return_last":
         return None
 
-    if policy == "raise":
-        from agent_actions.expectations.service import ExpectationsExhaustedError
-
-        first = exhausted[0].recovery_metadata
-        expectations = first.expectations if first else None
-        return ExpectationsExhaustedError(
-            action_name,
-            expectations.failed if expectations else [],
-            expectations.attempts if expectations else strategy.max_attempts,
-        )
-
+    # `fail` and `raise` both end the record as exhausted. Under `raise` the records are
+    # still stored before the halt is thrown, and shipping them as successes would hand the
+    # record that broke its rule to the actions below once the halt is resumed.
     for result in exhausted:
         # A record that never produced content failed at the provider, not at
         # its expectations. Overwriting that error replaces a true cause with a
@@ -189,6 +181,17 @@ def apply_exhaustion_policy(
         result.success = False
         result.exhausted = True
         result.error = f"Expectations exhausted after {attempts} iteration(s) (failed: {failed})"
+
+    if policy == "raise":
+        from agent_actions.expectations.service import ExpectationsExhaustedError
+
+        first = exhausted[0].recovery_metadata
+        expectations = first.expectations if first else None
+        return ExpectationsExhaustedError(
+            action_name,
+            expectations.failed if expectations else [],
+            expectations.attempts if expectations else strategy.max_attempts,
+        )
     return None
 
 

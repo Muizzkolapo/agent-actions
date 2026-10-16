@@ -114,3 +114,43 @@ class TestWhichResultsReadAsExhausted:
         stamp_exhausted([result], strategy, attempts=2)
         apply_exhaustion_policy([result], strategy, ACTION)
         assert result.exhausted is False
+
+
+class TestOnExhaustedRaise:
+    """`raise` halts the run, and the records it stopped at are not answers."""
+
+    def _apply(self, content: Any, error: str | None = None):
+        strategy = build_repair_strategy(_agent_config("raise"))
+        result = BatchResult(custom_id="r1", content=content, success=error is None, error=error)
+        strategy.evaluate(result)
+        strategy.write_verdicts([result])
+        stamp_exhausted([result], strategy, attempts=2)
+        return result, apply_exhaustion_policy([result], strategy, ACTION)
+
+    def test_the_halt_it_returns_is_tagged_as_one(self):
+        from agent_actions.errors import raised_by_exhaustion_policy
+
+        _, halt = self._apply(dict(FAILING))
+
+        assert halt is not None
+        assert raised_by_exhaustion_policy(halt)
+
+    def test_the_record_it_stopped_at_is_exhausted_not_a_success(self):
+        result, _ = self._apply(dict(FAILING))
+
+        assert result.success is False
+        assert result.exhausted is True
+
+    def test_a_provider_failure_is_still_not_an_exhaustion(self):
+        result, halt = self._apply(None, error="429 rate limited")
+
+        assert result.exhausted is False
+        assert "429 rate limited" in (result.error or "")
+        assert halt is not None
+
+
+def test_an_online_exhaustion_halt_is_tagged_as_one():
+    from agent_actions.errors import raised_by_exhaustion_policy
+    from agent_actions.expectations.service import ExpectationsExhaustedError
+
+    assert raised_by_exhaustion_policy(ExpectationsExhaustedError("act", ["rule"], 2))

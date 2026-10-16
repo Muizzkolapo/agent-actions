@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  An expectation's `on_exhausted: raise` is now recorded as a halt in both run modes. Online,
+  the node-level failure was written without the halt marker, so the next plain `agac run` reset
+  the action and called the model again, only to reach the same deterministic halt. Under batch
+  the error was not recognised as a halt at all: no node-level failure was written, the record
+  that broke its rule was stored as a success beside the others, and the next plain run
+  completed with nothing sent and handed that record to the action below. The error now carries
+  the `on_exhausted: raise` tag wherever it is built, so the run holds the halt and points at
+  `agac retry` or `--fresh`; and batch stores the records the policy stopped at as `exhausted`,
+  so a resumed `agac retry` asks for them again. (#1280)
+time: 2026-10-16T11:00:00Z
