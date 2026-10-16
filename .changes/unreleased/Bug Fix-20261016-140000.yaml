@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  After a batch collect pass stopped on an ordinary error, `agac retry` printed a green
+  "Nothing to retry" and exited 0 while the action read `failed` and a file stayed
+  unanswered. The error left the action failed with no failed record: the executor
+  re-raised it without the node-level failed row every other action failure writes, and
+  `retry` looks for failures only in the disposition table, so it returned before it
+  checked for the finished, uncollected batch the failed pass left behind. The executor
+  now writes the row, and `retry` settles an owed batch, or names a failed action, before
+  it reports nothing to retry. Stores written before this hold the failure with no row,
+  and retry now refuses those too, with the existing remedy: run the workflow again to
+  collect the batch, then retry.
+time: 2026-10-16T14:00:00Z

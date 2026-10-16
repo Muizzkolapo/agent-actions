@@ -304,6 +304,7 @@ def _left_by(created_at: str, **statuses: ActionStatus) -> MagicMock:
     state_mgr = MagicMock()
     state_mgr.get_status_details.side_effect = lambda action: details[action]
     state_mgr.get_status.side_effect = lambda action: details[action]["status"]
+    state_mgr.get_failed_actions.return_value = []
     return state_mgr
 
 

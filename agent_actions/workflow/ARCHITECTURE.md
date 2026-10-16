@@ -574,6 +574,13 @@ Run 2: Poll
         │
         └── "cancelled" (every entry, none collected) → return error
 
+  An ordinary error raised in the poll or the pass is not caught here: the
+  executor writes the node-level FAILED row every action failure leaves, keeps
+  CHECKING_BATCH and re-raises, and the workflow handler fails the action. Its
+  finished batch stays in the registry uncollected, so the next run pauses on it
+  and collects it, and `agac retry` finds the failure and refuses to clear the
+  batch until it has been collected.
+
 Run N: Resume (if recovery submitted)
   Same poll path — recovery batches are registered in .batch_registry.json
   with recovery_type and parent_file_name. Processed like original batches.

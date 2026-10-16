@@ -1760,15 +1760,17 @@ class ActionExecutor:
 
         Only a halt is converted: `on_exhausted: raise`, `on_empty: error`, or a
         `terminal_failure`, each raised once the file is written. An ordinary
-        polling failure must keep CHECKING_BATCH so the next run re-polls the
-        existing job — turning it into FAILED would reset it to PENDING and submit
-        a duplicate batch.
+        error keeps CHECKING_BATCH here and is raised, so the next run re-polls the
+        existing job, but it leaves the node-level failed row every other action
+        failure leaves: the workflow handler fails the action, and `agac retry`
+        finds failures only in the disposition table.
         """
         if not (
             raised_by_exhaustion_policy(error)
             or _raised_by_on_empty_error(error)
             or raised_by_terminal_failure(error)
         ):
+            self._write_failed_disposition(action_name, str(error))
             raise error
         return self._handle_run_failure(
             ActionRunParams(
