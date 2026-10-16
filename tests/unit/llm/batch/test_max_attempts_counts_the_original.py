@@ -50,3 +50,82 @@ def test_the_synchronous_loop_resubmits_one_fewer_time_than_max_attempts(max_att
     assert resubmitted == max_attempts - 1
     assert exhausted["id-1"].retry.attempts == max_attempts
     assert exhausted["id-1"].retry.succeeded is False
+
+
+def _original_batch(max_attempts: int, submitted_retry):
+    """Drive the original-batch path over one record the provider never answered.
+
+    Returns what the path handed the repair check and the finaliser, and whether it returned
+    because a recovery batch went out.
+    """
+    from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+    from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+    service = BatchProcessingService(
+        client_resolver=MagicMock(),
+        context_manager=MagicMock(),
+        result_processor=MagicMock(),
+        registry_manager_factory=MagicMock(),
+        action_indices={},
+        dependency_configs={},
+        storage_backend=MagicMock(),
+        workflow_name="act",
+    )
+    service._context_manager.load_batch_context_map.return_value = {
+        "r1": {"target_id": "r1", "source_guid": "sg-r1", "content": {"source": {"t": "x"}}}
+    }
+    entry = BatchJobEntry(
+        batch_id="b-1", status="completed", timestamp="t", provider="p", file_name="f.json"
+    )
+    seen: dict = {}
+
+    def _repair_check(**kwargs):
+        seen["recovery_state"] = kwargs["recovery_state"]
+        return True
+
+    submit = MagicMock(return_value=submitted_retry)
+    with (
+        patch(
+            "agent_actions.llm.batch.services.processing.retrieve_and_reconcile", return_value=[]
+        ),
+        patch(
+            "agent_actions.llm.batch.services.processing._check_and_submit_repair_impl",
+            side_effect=_repair_check,
+        ),
+        patch.object(service._retry_service, "submit_retry_batch", submit),
+        patch.object(service, "_finalize_batch_output", return_value="/out.json") as finalize,
+        patch("agent_actions.llm.batch.services.processing.register_recovery_batch"),
+        patch("agent_actions.llm.batch.services.processing.RecoveryStateManager"),
+    ):
+        returned = service._process_original_batch(
+            batch_id="b-1",
+            file_name="f.json",
+            entry=entry,
+            output_directory="/out",
+            agent_config={"retry": {"enabled": True, "max_attempts": max_attempts}},
+            manager=MagicMock(),
+            action_name="act",
+        )
+    return returned, seen, submit, finalize
+
+
+def test_an_action_that_allows_one_attempt_is_exhausted_by_its_original_batch():
+    returned, seen, submit, finalize = _original_batch(1, submitted_retry=("rb-1", 1))
+
+    submit.assert_not_called()
+    assert returned == "/out.json"
+    exhausted = finalize.call_args.kwargs["exhausted_recovery"]
+    assert exhausted["r1"].retry.attempts == 1
+    assert exhausted["r1"].retry.succeeded is False
+    # What a repair round carries forward: finalisation rebuilds the stamp from these.
+    assert seen["recovery_state"].missing_ids == ["r1"]
+    assert seen["recovery_state"].record_failure_counts == {"r1": 1}
+
+
+def test_an_action_that_allows_two_attempts_sends_its_one_retry_instead():
+    returned, seen, submit, finalize = _original_batch(2, submitted_retry=("rb-1", 1))
+
+    submit.assert_called_once()
+    assert returned is None
+    assert seen == {}
+    finalize.assert_not_called()
