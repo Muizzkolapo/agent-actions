@@ -713,7 +713,7 @@ class BatchResultStrategy:
             data=[tombstone],
             source_guid=source_guid,
             recovery_metadata=recovery_metadata,
-            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+            source_snapshot=plain_copy(original_row) if original_row else None,
             input_record=original_row,
         )
         self._attach_passthrough_context(
