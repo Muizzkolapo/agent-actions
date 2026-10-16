@@ -663,7 +663,9 @@ Two mechanisms keep it halted, because either alone is insufficient:
   every terminal status, so there the exclusion alone would do.)
 
 `agac retry` from the halted action clears the node-level disposition and runs it in
-full, and `--fresh` clears everything, so both remain working resume paths. A retry that
+full, and `--fresh` clears everything, so both remain working resume paths. The batch
+collect pass collects every finished file before it raises the halt, so the halted action
+holds no finished batch uncollected for `retry` to refuse over. A retry that
 would clear the halt while narrowed to the records it names is refused: it would complete
 the action without the records past the halt.
 

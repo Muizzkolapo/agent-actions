@@ -102,7 +102,10 @@ When a record exhausts all retry attempts:
 - **`on_exhausted: return_last`** — record is marked with exhaustion metadata, workflow continues without it. The action ends `completed_with_failures` (`failed` when no record succeeds), as it does for any `exhausted` or `failed` record
 - **`on_exhausted: raise`** — the output file is written first, then the run stops. Batch
   writes once at the end, so halting mid-conversion would discard every record that had
-  already converted cleanly; the halt is carried to the caller and raised after the write
+  already converted cleanly; the halt is carried to the caller and raised after the write.
+  A run that collects several files collects every one of them first, so a halt in one file
+  never leaves another file's finished batch uncollected; when more than one file halts, the
+  first halt is raised and the others are logged
 
 Both policies apply to every record that spends its attempts, but the two exhausted shapes
 do not land in the same disposition. The split is whether a result row came back at all. A record the provider never

@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  Under batch, a halt raised during the collect pass no longer leaves another file's
+  finished batch uncollected. `on_exhausted: raise` (a retry that spent its attempts, or
+  a repair loop that did) stops the run, but the collect loop stopped at the entry that
+  raised, so a sibling file's finished batch stayed in the registry with its records
+  deferred and its file unstored. A plain `agac run` refuses a halted action, and
+  `agac retry` refuses while a finished batch is uncollected, so the only way on was
+  `--abandon-in-flight`, which marks the sibling's records failed so a later retry sends
+  them again, paying again for answers the provider had already returned. The pass now
+  collects every file, then raises the first halt and logs any other.
+time: 2026-10-16T13:00:00Z
