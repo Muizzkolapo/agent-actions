@@ -44,3 +44,34 @@ def test_its_context_map_inputs_and_recovery_state_go_and_another_files_stay(tmp
 
     assert _keys(backend, "b.json") == []
     assert len(_keys(backend, "a.json")) == 3
+
+
+def _write_for(backend, tmp_path, run_inputs):
+    guids = [row["source_guid"] for row in run_inputs]
+    _service(backend)._write_for_inputs_carried(
+        "summarize", "b.json", str(tmp_path), run_inputs, guids
+    )
+
+
+def _store_with_state_for_b(tmp_path):
+    backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+    backend.initialize()
+    backend.save_metadata(BatchContextManager._metadata_key(ACTION, "b.json"), "{}")
+    return backend
+
+
+def test_a_file_the_run_narrowed_to_nothing_keeps_its_state(tmp_path):
+    """Its input is not empty: a guard or record limit left nothing to send."""
+    backend = _store_with_state_for_b(tmp_path)
+
+    _write_for(backend, tmp_path, [{"source_guid": "r1"}])
+
+    assert len(_keys(backend, "b.json")) == 1
+
+
+def test_a_file_that_took_no_input_loses_its_state_when_it_is_written(tmp_path):
+    backend = _store_with_state_for_b(tmp_path)
+
+    _write_for(backend, tmp_path, [])
+
+    assert _keys(backend, "b.json") == []
