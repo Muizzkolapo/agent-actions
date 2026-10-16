@@ -165,7 +165,7 @@ class TestRepairRoundIsPreparedLikeTheFirstSubmission:
                 provider=_provider(),
                 failed_results=[failed],
                 strategy=strategy,
-                context_map={"rec_1": {"target_id": "rec_1"}},
+                context_map={"rec_1": {"target_id": "rec_1", "source_guid": "sg-1"}},
                 output_directory="/tmp/out",
                 file_name="f.json",
                 agent_config=config,
