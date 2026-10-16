@@ -42,7 +42,7 @@ After retrieving batch results, the system compares the expected record IDs agai
 1. Collect all `custom_id` values from the context map (expected)
 2. Collect the `custom_id` values of results the provider answered successfully. A result returned with an error carries the record's real `custom_id` but no content, so it does not count as answered
 3. Compute the difference — these are the missing records
-4. For each retry attempt (up to `max_attempts`):
+4. While attempts remain (`max_attempts` counts every attempt, the original batch included, so `max_attempts: 1` sends no retry batch):
    - Build new records from the context map for missing IDs
    - Submit as a new batch
    - Poll until complete
@@ -75,7 +75,7 @@ the action nor `defaults:` gives a `retry:` block:
 defaults:
   retry:
     enabled: true
-    max_attempts: 3        # Retry up to 3 times
+    max_attempts: 3        # 3 attempts in all: the original batch and up to 2 retry batches
     on_exhausted: return_last  # or "raise"
 ```
 

@@ -42,7 +42,7 @@ actions:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enabled` | bool | `true` | A `retry:` block turns retry on unless it sets `enabled: false`. Other fields below take effect only when `enabled` is `true`. |
-| `max_attempts` | int | `3` | Maximum attempts (1-10) |
+| `max_attempts` | int | `3` | Attempts per record in all, the first call or batch included (1-10). `1` never retries. |
 | `on_exhausted` | string | `return_last` | Behavior when retries exhausted |
 
 ### Exhaustion Behavior

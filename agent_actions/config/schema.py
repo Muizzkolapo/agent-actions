@@ -364,7 +364,7 @@ class RetryConfig(BaseModel):
         default=3,
         ge=1,
         le=10,
-        description="Maximum number of retry attempts (1-10)",
+        description="Attempts per record in all, the first call or batch included (1-10)",
     )
     on_exhausted: Literal["return_last", "raise"] = Field(
         default="return_last",

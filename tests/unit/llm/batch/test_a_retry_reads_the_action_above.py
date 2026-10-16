@@ -36,7 +36,7 @@ _CONFIG: dict[str, Any] = {
     "prompt": "Restate: {{ summarize.summary }}",
     "dependencies": [UPSTREAM],
     "context_scope": {"observe": [f"{UPSTREAM}.summary"]},
-    "retry": {"enabled": True, "max_attempts": 1},
+    "retry": {"enabled": True, "max_attempts": 2},
 }
 
 

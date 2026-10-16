@@ -32,7 +32,7 @@ OK_ID = "rec-ok"
 MISSING_ID = "rec-missing"
 
 NO_RECOVERY = {"kind": "llm", "retry": {"enabled": False}}
-WITH_RETRY = {"kind": "llm", "retry": {"enabled": True, "max_attempts": 1}}
+WITH_RETRY = {"kind": "llm", "retry": {"enabled": True, "max_attempts": 2}}
 
 
 class _MetadataBackend:

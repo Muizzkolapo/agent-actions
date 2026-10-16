@@ -18,6 +18,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def retries_left(retries_sent: int, max_attempts: int) -> int:
+    """Retry batches still allowed once the original batch and *retries_sent* retries went out.
+
+    ``retry.max_attempts`` counts every attempt, the original included, as online does.
+    """
+    return max_attempts - 1 - retries_sent
+
+
 @dataclass
 class RecoveryState:
     """Cross-pass state for batch recovery (retry + repair).
