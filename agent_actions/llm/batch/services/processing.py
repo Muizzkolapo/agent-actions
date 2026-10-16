@@ -63,6 +63,7 @@ from agent_actions.llm.batch.services.processing_recovery import (
     raise_pending_exhaustion as _raise_pending_exhaustion_impl,
 )
 from agent_actions.llm.batch.services.retry import BatchRetryService
+from agent_actions.llm.batch.services.retry_ops import RetrySubmissionImpossible
 from agent_actions.llm.batch.services.retry_serialization import (
     serialize_results,
 )
@@ -711,8 +712,27 @@ class BatchProcessingService:
 
             if missing_ids:
                 max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
-                if retries_left(0, max_attempts) <= 0:
-                    # The original batch was the only attempt the action allows.
+                submission = None
+                exhausted_now = retries_left(0, max_attempts) <= 0
+                if not exhausted_now:
+                    try:
+                        submission = self._retry_service.submit_retry_batch(
+                            provider=provider,
+                            missing_ids=missing_ids,
+                            context_map=context_map,
+                            output_directory=output_directory,
+                            file_name=file_name,
+                            agent_config=agent_config,
+                            workflow_metadata=workflow_metadata,
+                        )
+                    except RetrySubmissionImpossible as exc:
+                        # No later pass changes this: the records cannot be rebuilt into a
+                        # batch at all, so they are given up as when no attempt is left.
+                        logger.warning("Retry for %s cannot be submitted: %s", file_name, exc)
+                        exhausted_now = True
+                if exhausted_now:
+                    # The original batch was the only attempt the action allows, or no
+                    # retry of these records can be built.
                     failure_counts = {rid: 1 for rid in missing_ids}
                     exhausted_recovery = self._retry_service.build_exhausted_recovery(
                         missing_ids, failure_counts
@@ -724,15 +744,7 @@ class BatchProcessingService:
                         missing_ids=list(missing_ids),
                         record_failure_counts=failure_counts,
                     )
-                elif submission := self._retry_service.submit_retry_batch(
-                    provider=provider,
-                    missing_ids=missing_ids,
-                    context_map=context_map,
-                    output_directory=output_directory,
-                    file_name=file_name,
-                    agent_config=agent_config,
-                    workflow_metadata=workflow_metadata,
-                ):
+                elif submission:
                     retry_batch_id, _record_count = submission
                     register_recovery_batch(
                         manager,

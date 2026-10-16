@@ -49,6 +49,8 @@ After retrieving batch results, the system compares the expected record IDs agai
    - Update the missing set
 5. If records remain missing after all attempts, mark them with exhaustion metadata
 
+A retry that cannot be built at all, because preparation admits no task for the records (a guard turns every one of them away when it is evaluated again), ends the loop for them at once, as spent attempts do: they are exhausted under `on_exhausted`, and the file is stored.
+
 A retry is prepared again from each record's stored context, the way its first request was:
 with the action's dependencies and version, and with the run's `workflow.*` values. Its prompt
 reads the same upstream answers, and its guard decides as it did for the first request.
@@ -135,6 +137,8 @@ A repair round is a whole provider batch, so it defers rather than blocking:
 3. Records that fail are collected into a repair batch, each carrying its own regeneration prompt
 4. The batch is submitted and the run defers; the next pass resumes into the same loop
 5. When `max_iterations` rounds are spent, `on_exhausted` decides what ships
+
+A round with nothing to send is not submitted. When a guard turns every failing record away as it is evaluated again, no empty batch goes to the provider: those records are given up under `on_exhausted`, as when the rounds are spent.
 
 A record the provider never returns is reconstructed as a failure rather than left to become a
 silent passthrough, and a record with no content at all failed at the provider rather than at its

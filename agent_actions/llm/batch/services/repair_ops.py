@@ -212,7 +212,7 @@ def submit_repair_batch(
 ) -> RepairSubmission | None:
     """Submit a repair batch for records whose expectations failed, without blocking.
 
-    Returns the submission, or None when there is nothing to send.
+    Returns the submission, or None when there is nothing to send or preparation admitted no task.
     """
     from agent_actions.llm.batch.services.shared import recovery_preparator
 
@@ -251,6 +251,10 @@ def submit_repair_batch(
         feedback_by_id=feedback_by_id,
         workflow_metadata=workflow_metadata,
     )
+
+    if not prepared.tasks:
+        logger.warning("No tasks prepared for repair batch (file_name=%s)", file_name)
+        return None
 
     batch_id, _status = provider.submit_batch(
         tasks=prepared.tasks,
