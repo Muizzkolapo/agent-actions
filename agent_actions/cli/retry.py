@@ -189,10 +189,17 @@ class RetryCommand:
         failures = self._find_failures(backend, execution_order, unwritten)
 
         if not failures:
-            self.console.print(
-                "[green]No failed or exhausted records found. Nothing to retry.[/green]"
+            found = self._failures_when_none_is_recorded(
+                backend, state_mgr, execution_order, unwritten
             )
-            return
+            if found is None:
+                return
+            if not found:
+                self.console.print(
+                    "[green]No failed or exhausted records found. Nothing to retry.[/green]"
+                )
+                return
+            failures = found
 
         from_action = self.args.from_action
         if from_action:
@@ -706,6 +713,32 @@ class RetryCommand:
             guid not in reached and parent not in reached
             for guid, parent in backend.target_row_identities(action)
         )
+
+    def _failures_when_none_is_recorded(
+        self, backend, state_mgr, execution_order: list[str], unwritten: list[dict]
+    ) -> dict[str, list[dict]] | None:
+        """What a retry finds when no failed record is recorded: a refusal, or nothing.
+
+        A collect pass that stopped on an error leaves its action failed and the
+        batch it could not read still owed, which is not nothing to retry. Stores
+        written before the executor recorded that failure hold it with no row. An
+        action that is not failed has nothing to retry, whatever batch it waits on.
+        Abandoning the batch strands its waiting records as failed, and those are
+        then the failures. None when a dry run has already reported the refusal.
+        """
+        failed = state_mgr.get_failed_actions(execution_order)
+        if not failed:
+            return {}
+        owed = self._batches_owed(backend, failed)
+        if not owed:
+            raise click.ClickException(
+                f"No failed record is recorded, but {', '.join(failed)} read as failed. "
+                f"Run 'agac run -a {self.agent_name}' to run it again."
+            )
+        self._settle_batches_in_flight(backend, owed)
+        if self.args.dry_run:
+            return None
+        return self._find_failures(backend, execution_order, unwritten)
 
     def _batches_owed(self, backend, actions: list[str]) -> list[tuple[str, str, str, str]]:
         """Every batch nobody has collected that this repair would lose, as

@@ -32,7 +32,7 @@ Always safe — nothing executes:
 agac retry -a my_workflow --dry-run
 ```
 
-When nothing is stuck it reports `No failed or exhausted records found. Nothing to retry.`
+When nothing is stuck — no failed record, no failed action, and no batch waiting to be collected — it reports `No failed or exhausted records found. Nothing to retry.`
 
 ### Retry from the earliest failure
 
@@ -334,6 +334,13 @@ retry is refused, so the failures it would have repaired are still there to find
 
 `--dry-run` reports the refusal rather than raising it, so the plan you are shown
 is the one that would actually run.
+
+The batch need not be out at the provider. One that has finished but whose results
+were never collected is refused the same way. That is what a collect pass leaves when
+it stops on an error, such as the provider dropping the connection while a file's
+results are read: the action reads `failed`, the file's records are still waiting,
+and the finished batch is still in the registry. `retry` does not call that nothing
+to retry. Run the workflow again to collect the batch, then retry what is still failed.
 
 ### When the batch cannot be collected
 
