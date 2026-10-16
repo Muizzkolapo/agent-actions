@@ -201,6 +201,7 @@ def write_batch_file(
     if storage_backend is not None:
         from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
+        rows = _rows_answering_inputs(rows, batch_inputs)
         rows = with_stored_rows_not_reproduced(
             rows,
             action_name,
@@ -212,6 +213,26 @@ def write_batch_file(
     return store_batch_file(
         storage_backend, action_name, rows, output_root=output_root, stored_name=stored_name
     )
+
+
+def _rows_answering_inputs(
+    rows: list[dict[str, Any]], inputs: Collection[str]
+) -> list[dict[str, Any]]:
+    """*rows* without those answering only for records that are no longer inputs.
+
+    A batch is collected against the inputs recorded for the file, so a record that has
+    left it since is not written, as an online run holds only the records the file has.
+    """
+    if not inputs:
+        return rows
+    wanted = frozenset(inputs)
+    return [
+        row
+        for row in rows
+        if not (names := row.get("producer_source_guids") or [row.get("source_guid")])
+        or not any(names)
+        or wanted.intersection(names)
+    ]
 
 
 def store_batch_file(

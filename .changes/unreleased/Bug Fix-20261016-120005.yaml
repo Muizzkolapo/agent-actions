@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A record that leaves a file while its batch is out is no longer written into that file when
+  the batch is collected. A run that finds the file's batch in flight, or finished and not
+  yet collected, does not send it again, and the collect wrote the inputs recorded when it
+  was sent, so a record removed from staging in between was still stored. Such a run now
+  records the file's current inputs, and the collect leaves out the answers to records no
+  longer among them, as an online run holds only the records its file has. A run that only
+  collects does not read staging again, so this covers the run that resumes after a collect
+  pass stopped partway.
+time: 2026-10-16T12:05:00Z
