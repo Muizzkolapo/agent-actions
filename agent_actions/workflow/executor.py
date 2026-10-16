@@ -1795,7 +1795,10 @@ class ActionExecutor:
         pre_run_count = self._count_records_for_action(action_name)
         try:
             output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
-                action_name, output_directory, action_config
+                action_name,
+                output_directory,
+                action_config,
+                workflow_metadata=self.deps.action_runner.workflow_metadata,
             )
         except Exception as e:
             return self._handle_batch_exception(
@@ -1831,6 +1834,7 @@ class ActionExecutor:
                 action_name,
                 output_directory,
                 action_config,
+                workflow_metadata=self.deps.action_runner.workflow_metadata,
             )
         except Exception as e:
             return self._handle_batch_exception(

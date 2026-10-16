@@ -208,12 +208,13 @@ def submit_repair_batch(
     file_name: str,
     agent_config: dict[str, Any] | None,
     attempt: int,
+    workflow_metadata: dict[str, Any] | None = None,
 ) -> RepairSubmission | None:
     """Submit a repair batch for records whose expectations failed, without blocking.
 
     Returns the submission, or None when there is nothing to send.
     """
-    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+    from agent_actions.llm.batch.services.shared import recovery_preparator
 
     repair_records: list[dict[str, Any]] = []
     feedback_by_id: dict[str, str] = {}
@@ -236,10 +237,8 @@ def submit_repair_batch(
         return None
 
     batch_name = f"{file_name}_repair_{attempt}"
-    preparator = BatchTaskPreparator(
-        action_indices=action_indices,
-        dependency_configs=dependency_configs,
-        storage_backend=storage_backend,
+    preparator = recovery_preparator(
+        storage_backend, agent_config, action_indices, dependency_configs
     )
     prepared = preparator.prepare_tasks(
         agent_config=agent_config or {},
@@ -250,6 +249,7 @@ def submit_repair_batch(
         source_data=_load_source_data(storage_backend),
         attempt=attempt,
         feedback_by_id=feedback_by_id,
+        workflow_metadata=workflow_metadata,
     )
 
     batch_id, _status = provider.submit_batch(

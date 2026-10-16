@@ -50,18 +50,17 @@ After retrieving batch results, the system compares the expected record IDs agai
    - Update the missing set
 5. If records remain missing after all attempts, mark them with exhaustion metadata
 
-A retry is prepared again from each record's stored context, with the action's dependencies
-and version, so its prompt reads the same upstream answers and its guard decides as it did for
-the first request. The run's `workflow.*` values are not handed to it yet. A record whose
-prompt reads them is not retried: nothing is sent for it, and it is failed as below.
-A guard that reads them cannot be evaluated on a retry, and the collect run fails.
+A retry is prepared again from each record's stored context, the way its first request was:
+with the action's dependencies and version, and with the run's `workflow.*` values. Its prompt
+reads the same upstream answers, and its guard decides as it did for the first request.
+`workflow.run_id` is the id of the run that collects the batch, not of the run that sent the
+first request. A repair round is prepared the same way.
 
 ### A record nothing sends again
 
 A record the provider left out of its results that no retry will send again is failed, with
 the reason `batch_not_returned`. That is a record of an action with retry off, or one whose
-retry batch did not go out, because its prompt could not be rendered (as for a prompt that
-reads `workflow.*`) or the provider refused it.
+retry batch did not go out, because its prompt could not be rendered or the provider refused it.
 The action completes with failures (`completed_with_failures`), the actions that read it
 skip the record, and [`agac retry`](../cli/retry) sends it again. Once its answer is
 collected, the actions that read it answer it too.

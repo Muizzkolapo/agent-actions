@@ -87,7 +87,7 @@ class TestBatchActionNamePresent:
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
         captured_config = {}
 
-        def capture_config(action_name, output_dir, agent_config):
+        def capture_config(action_name, output_dir, agent_config, workflow_metadata=None):
             captured_config.update(agent_config)
             return ("/output", "completed")
 
@@ -101,3 +101,40 @@ class TestBatchActionNamePresent:
             )
 
         assert captured_config["action_name"] == "my_extract"
+
+
+class TestBatchCheckCarriesTheRunsMetadata:
+    """The collecting run's workflow metadata must reach the collect pass.
+
+    Retry and repair rounds are prepared while a batch is collected, and their
+    prompts and guards may read `workflow.*`.
+    """
+
+    METADATA = {"name": "wf", "run_id": "run_42"}
+
+    def test_sync_check_passes_the_runner_metadata(self, executor, mock_deps):
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
+        mock_deps.action_runner.workflow_metadata = self.METADATA
+        mock_deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
+
+        with patch("agent_actions.workflow.executor.fire_event"):
+            executor.execute_action_sync(
+                "my_extract", action_idx=0, action_config={"kind": "llm"}, is_last_action=False
+            )
+
+        sent = mock_deps.batch_manager.handle_batch_agent.call_args.kwargs
+        assert sent["workflow_metadata"] == self.METADATA
+
+    @pytest.mark.asyncio
+    async def test_async_check_passes_the_runner_metadata(self, executor, mock_deps):
+        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
+        mock_deps.action_runner.workflow_metadata = self.METADATA
+        mock_deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
+
+        with patch("agent_actions.workflow.executor.fire_event"):
+            await executor.execute_action_async(
+                "my_extract", action_idx=0, action_config={"kind": "llm"}, is_last_action=False
+            )
+
+        sent = mock_deps.batch_manager.handle_batch_agent.call_args.kwargs
+        assert sent["workflow_metadata"] == self.METADATA

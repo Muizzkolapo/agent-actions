@@ -165,6 +165,7 @@ class BatchRetryService:
         output_directory: str,
         file_name: str | None,
         agent_config: dict[str, Any] | None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> tuple[str, int] | None:
         """Submit a retry batch for missing records without blocking."""
         return _retry.submit_retry_batch(
@@ -177,6 +178,7 @@ class BatchRetryService:
             agent_config=agent_config,
             action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,
+            workflow_metadata=workflow_metadata,
         )
 
     def process_retry_results(

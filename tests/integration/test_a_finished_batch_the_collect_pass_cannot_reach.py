@@ -37,10 +37,10 @@ names = set(filter(None, os.environ.get("UNREACHABLE", "").split(",")))
 cut_off = set()
 
 collect = BatchProcessingService.process_all_batch_results
-def collecting(self, output_directory, agent_config=None, action_name=None):
+def collecting(self, output_directory, agent_config=None, action_name=None, **rest):
     jobs = self._registry_manager_factory(action_name).get_all_jobs()
     cut_off.update(entry.batch_id for name, entry in jobs.items() if name in names)
-    return collect(self, output_directory, agent_config=agent_config, action_name=action_name)
+    return collect(self, output_directory, agent_config=agent_config, action_name=action_name, **rest)
 BatchProcessingService.process_all_batch_results = collecting
 
 fetch_status = AgacBatchClient._fetch_status

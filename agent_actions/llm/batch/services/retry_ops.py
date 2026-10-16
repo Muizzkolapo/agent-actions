@@ -2,18 +2,17 @@
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import is_action_fatal
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.retry_polling import wait_for_batch_completion
+from agent_actions.llm.batch.services.shared import recovery_preparator
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
 if TYPE_CHECKING:
-    from agent_actions.config.types import ActionConfigDict
-    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -32,31 +31,6 @@ def _collect_missing_records(
                 record["target_id"] = custom_id
             records.append(record)
     return records
-
-
-def _retry_preparator(
-    storage_backend: "StorageBackend | None",
-    agent_config: dict[str, Any] | None,
-    action_indices: dict[str, int],
-    dependency_configs: dict[str, dict],
-) -> "BatchTaskPreparator":
-    """The preparator a retry rebuilds its prompts with, built as the first submission's was.
-
-    A versioned action's prompt and guard read `version.*`, which only the
-    pipeline context carries.
-    """
-    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-    from agent_actions.workflow.pipeline import ProcessingPipeline
-
-    _, _, version_context = ProcessingPipeline._build_pipeline_context(
-        cast("ActionConfigDict", agent_config or {}), dependency_configs
-    )
-    return BatchTaskPreparator(
-        action_indices=action_indices,
-        dependency_configs=dependency_configs,
-        storage_backend=storage_backend,
-        version_context=version_context,
-    )
 
 
 class RetrySubmissionImpossible(RuntimeError):
@@ -79,6 +53,7 @@ def submit_retry_batch(
     *,
     action_indices: dict[str, int],
     dependency_configs: dict[str, dict],
+    workflow_metadata: dict[str, Any] | None = None,
 ) -> tuple[str, int] | None:
     """Submit a retry batch for missing records without blocking.
 
@@ -116,7 +91,7 @@ def submit_retry_batch(
         # No attempt bump: a retry re-issues the identical prompt for a record
         # the provider never returned, so it rewrites its own attempt-0 trace
         # rather than opening a new round the way a repair does.
-        preparator = _retry_preparator(
+        preparator = recovery_preparator(
             storage_backend, agent_config, action_indices, dependency_configs
         )
         prepared = preparator.prepare_tasks(
@@ -125,6 +100,7 @@ def submit_retry_batch(
             provider=provider,
             output_directory=output_directory,
             batch_name=batch_name,
+            workflow_metadata=workflow_metadata,
         )
 
         if not prepared.tasks:
@@ -182,7 +158,7 @@ def resubmit_missing_records(
         # No attempt bump: a retry re-issues the identical prompt for a record
         # the provider never returned, so it rewrites its own attempt-0 trace
         # rather than opening a new round the way a repair does.
-        preparator = _retry_preparator(
+        preparator = recovery_preparator(
             storage_backend, agent_config, action_indices, dependency_configs
         )
         prepared = preparator.prepare_tasks(

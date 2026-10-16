@@ -63,6 +63,7 @@ def process_recovery_batch(
     agent_config: dict[str, Any] | None,
     manager: BatchRegistryManager,
     action_name: str | None = None,
+    workflow_metadata: dict[str, Any] | None = None,
 ) -> str | None:
     """Process a recovery batch (retry or repair).
 
@@ -113,6 +114,7 @@ def process_recovery_batch(
         output_directory=output_directory,
         action_name=effective_action_name,
         start_time=time.time(),
+        workflow_metadata=workflow_metadata,
     )
     identity = BatchIdentity(
         batch_id=batch_id,
@@ -207,6 +209,7 @@ def handle_retry_recovery(
                 output_directory=context.output_directory,
                 file_name=identity.file_name,
                 agent_config=context.agent_config,
+                workflow_metadata=context.workflow_metadata,
             )
         except RetrySubmissionImpossible as exc:
             # No later pass changes this: the records cannot be rebuilt into a
@@ -577,6 +580,7 @@ def check_and_submit_repair(
         file_name=identity.file_name,
         agent_config=context.agent_config,
         attempt=next_attempt,
+        workflow_metadata=context.workflow_metadata,
     )
     if not submission:
         return _give_up(still_failing)
@@ -701,6 +705,7 @@ def handle_repair_recovery(
             file_name=identity.file_name,
             agent_config=context.agent_config,
             attempt=next_attempt,
+            workflow_metadata=context.workflow_metadata,
         )
         if submission:
             register_recovery_batch(
