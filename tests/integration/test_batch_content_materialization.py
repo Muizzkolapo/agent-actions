@@ -442,4 +442,8 @@ class TestProviderParseChain:
         )
         assert results[0].status == ProcessingStatus.FAILED
         assert results[0].error.startswith("Empty LLM response for record")
-        assert "content" not in results[0].data[0]
+        # The failed row keeps the record's content, as online's does, and the failed
+        # action's own namespace is null rather than a hollow answer.
+        content = results[0].data[0]["content"]
+        assert content[action_config["action_name"]] is None
+        assert content["summarize_page_content"] == {"summary": "AWS S3 bucket policies..."}
