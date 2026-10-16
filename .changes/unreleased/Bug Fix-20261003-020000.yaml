@@ -31,8 +31,7 @@ body: >-
   have left. Rows of records a record limit holds back are kept, where online drops them and
   answers them again. A run in which everything fails writes the failed rows; online, outside
   a reset, writes nothing. An answered record that now fails the guard keeps its answer in
-  batch. A record split into several rows that is sent again and fails, in a run that answers
-  another record of its file, keeps its earlier rows beside the failure. A row merged from
+  batch. A row merged from
   several inputs is always kept. One consequence to know: an answer for a record that is no
   longer in the input, because it was filtered upstream or the file now holds different
   records, is dropped by the next batch run that produces an output. That is what the online

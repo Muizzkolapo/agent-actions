@@ -351,21 +351,23 @@ def stored_rows_not_reproduced(
     """Identities in *stored* to write beside, or in place of, what *produced* holds.
 
     A row carries only if its input is in *batch_inputs* and unanswered this run, matched by
-    producer -- minted rows share no identity across runs -- or by its own identity.
-    *filtered* inputs (guard-filtered or -skipped) hold no row beyond their tombstone, as
-    online writes. With no inputs recorded, everything unanswered carries. A failed run that
-    answered nothing leaves every stored answer standing, unless ``stored_answers_stand``
-    says otherwise (via *still_answered*) -- then the file follows its inputs, keeping none
-    of an answered input's stored rows, minted ones included.
+    producer (minted rows share no identity across runs) or by its own identity. *filtered*
+    inputs hold no row beyond their tombstone. With no inputs recorded, everything unanswered
+    carries. In a run with a failure, an input it wrote no answer for keeps none of its stored
+    rows, as online writes only that row. A failed run that answered nothing leaves every
+    stored answer standing, unless ``stored_answers_stand`` says otherwise (via *still_answered*).
     """
     stored = list(stored)
     answered: set[str] = set()
     rewritten: set[str] = set()
     failed = False
+    not_answers: set[str] = set()
     for row in produced:
         guid = row.get("source_guid")
         if guid:
             rewritten.add(guid)
+            if row.get("_state") != RecordState.PROCESSED.value:
+                not_answers.add(guid)
         failed = failed or row.get("_state") in _FAILURE_STATES
         if row.get("_state") != RecordState.PROCESSED.value:
             continue
@@ -382,7 +384,6 @@ def stored_rows_not_reproduced(
         and not answered
         and (still_answered is None or every_answer_vouched_for(stored, still_answered()))
     )
-    taken_back = failed and not answered and not refused
     inputs = frozenset(batch_inputs)
     excluded = frozenset(filtered)
     carry: set[str] = set()
@@ -406,8 +407,8 @@ def stored_rows_not_reproduced(
         answers_for = next(iter(producers), guid)
         if answers_for in answered:
             continue
-        # Online writes only this run's row for an input whose answers were taken back.
-        if taken_back and answers_for in rewritten:
+        # Online writes only the failure for an input that failed, whatever else answered.
+        if failed and not refused and answers_for in not_answers:
             continue
         if answers_for in excluded and not refused:
             filtered_out.add(guid)
