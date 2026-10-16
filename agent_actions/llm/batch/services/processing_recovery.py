@@ -330,8 +330,12 @@ def finalize_batch_output(
     # Not the context map: the gate narrows before the map is built, so the map holds
     # only what was submitted and reading it deletes the rows of everything it carried.
     batch_inputs: set[str] | None = None
+    takes_no_input = False
     if service._storage_backend and identity.file_name:
         batch_inputs = BatchContextManager.load_batch_inputs(
+            service._storage_backend, effective_action_name, identity.file_name
+        )
+        takes_no_input = BatchContextManager.takes_no_input(
             service._storage_backend, effective_action_name, identity.file_name
         )
     service._write_batch_output(
@@ -341,6 +345,7 @@ def finalize_batch_output(
         context.action_name,
         batch_inputs=batch_inputs or (),
         filtered=filtered_inputs(context_map),
+        takes_no_input=takes_no_input,
     )
 
     # A placeholder an earlier version wrote at submission stays on disk when the

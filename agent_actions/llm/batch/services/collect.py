@@ -189,6 +189,7 @@ def write_batch_file(
     stored_name: str,
     batch_inputs: Collection[str] = (),
     filtered: Collection[str] = (),
+    takes_no_input: bool = False,
 ) -> Path:
     """Store *rows* as the file *stored_name*, with every stored row they do not replace.
 
@@ -196,9 +197,12 @@ def write_batch_file(
     its own identities, the rows alone cannot say which producers still exist.
     *filtered* is ``filtered_inputs`` of the file's context map: a record the guard
     filtered or skipped holds no row, so none stored for it is kept, unless the run
-    failed and answered nothing.
+    failed and answered nothing. A file that *takes_no_input* is stored empty, as online
+    stores it.
     """
-    if storage_backend is not None:
+    if takes_no_input:
+        rows = []
+    elif storage_backend is not None:
         from agent_actions.processing.disposition_gate import with_stored_rows_not_reproduced
 
         rows = _rows_answering_inputs(rows, batch_inputs)
