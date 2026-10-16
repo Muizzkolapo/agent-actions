@@ -23,7 +23,6 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.limits import record_indices_to_process
@@ -674,29 +673,6 @@ def _prepare_online_data(ctx: DataPreparationContext):
     return data_chunk, src_text
 
 
-def _get_batch_id_from_chunk(data_chunk: list[dict[str, Any]]) -> str:
-    """Get batch ID from data chunk or generate new one."""
-    if data_chunk:
-        default_batch_id = f"batch_{uuid.uuid4().hex}"
-        try:
-            batch_id: str = data_chunk[0].get("batch_id", default_batch_id)
-            return batch_id
-        except (AttributeError, TypeError):
-            return default_batch_id
-    return f"batch_{uuid.uuid4().hex}"
-
-
-def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_name):
-    """Write batch job placeholder file."""
-    placeholder = {
-        "batch_job_id": local_batch_id,
-        "vendor_batch_id": result,
-        "status": "submitted",
-        "agent": agent_name,
-    }
-    atomic_json_write(output_file_path, placeholder)
-
-
 def _staged_at_the_top(
     base_directory: str, file_type_filter: set[str] | None
 ) -> Callable[[str], bool]:
@@ -742,8 +718,6 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     from agent_actions.processing.disposition_gate import DispositionGate
     from agent_actions.workflow.pipeline import ProcessingPipeline
 
-    local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
-
     agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
         cast("ActionConfigDict", ctx.agent_config),
         ctx.action_configs,
@@ -779,7 +753,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         base_owner=_staged_at_the_top(ctx.base_directory, ctx.file_type_filter),
         registry=registry_manager_factory,
     )
-    result = submission_service.submit_batch_job(
+    submission_service.submit_batch_job(
         ctx.agent_config,
         batch_name,
         ctx.data_chunk,
@@ -790,11 +764,6 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     )
 
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # A run with nothing to send has written its file already.
-    if not result.is_passthrough:
-        _write_batch_placeholder(output_file_path, local_batch_id, result.batch_id, ctx.agent_name)
-
     return str(output_file_path)
 
 

@@ -340,9 +340,8 @@ def finalize_batch_output(
         filtered=filtered_inputs(context_map),
     )
 
-    # Remove batch placeholder file if storage backend wrote to SQLite instead.
-    # The placeholder (written at batch submission) persists on disk when
-    # write_target goes to the backend, causing downstream reads to hit it.
+    # A placeholder an earlier version wrote at submission stays on disk when the
+    # output goes to the backend, and a disk reader would take it for a batch still out.
     output_path = Path(output_file) if not isinstance(output_file, Path) else output_file
     if service._storage_backend and output_path.exists():
         _remove_batch_placeholder(output_path)
