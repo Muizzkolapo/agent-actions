@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
 
 DEPTH = 800
 
@@ -112,6 +113,21 @@ class TestEveryBuilderSnapshotsADeepRow:
             return_value=(MagicMock(), SimpleNamespace(attempts=2)),
         ):
             result = strategy._build_exhausted_passthrough(_ctx(row), "t-1", row, "act", "sg-1", 0)
+
+        _assert_snapshot_is_a_full_independent_copy(result.source_snapshot, row)
+
+    def test_a_record_the_expectation_loop_gave_up_on(self):
+        row = _row()
+        batch_result = BatchResult(
+            custom_id="t-1",
+            content=None,
+            success=False,
+            recovery_metadata=RecoveryMetadata(
+                expectations=ExpectationsMetadata(attempts=2, failed=["enough"])
+            ),
+        )
+
+        result = BatchResultStrategy()._build_expectations_exhausted(_ctx(row), "t-1", batch_result)
 
         _assert_snapshot_is_a_full_independent_copy(result.source_snapshot, row)
 
