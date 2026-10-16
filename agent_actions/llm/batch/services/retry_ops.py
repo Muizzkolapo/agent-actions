@@ -142,6 +142,7 @@ def resubmit_missing_records(
     *,
     action_indices: dict[str, int],
     dependency_configs: dict[str, dict],
+    workflow_metadata: dict[str, Any] | None = None,
 ) -> list[BatchResult]:
     """Resubmit missing records as a new batch and wait for completion."""
     missing_records = _collect_missing_records(missing_ids, context_map)
@@ -167,6 +168,7 @@ def resubmit_missing_records(
             provider=provider,
             output_directory=output_directory,
             batch_name=batch_name,
+            workflow_metadata=workflow_metadata,
         )
 
         if not prepared.tasks:
