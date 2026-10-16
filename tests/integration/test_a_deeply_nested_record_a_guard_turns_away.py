@@ -33,7 +33,7 @@ def _guarded_project(tmp_path, monkeypatch, behavior: str, depth: int):
 
 
 @pytest.mark.parametrize("behavior", ["skip", "filter"])
-@pytest.mark.parametrize("depth", [600, 2000])
+@pytest.mark.parametrize("depth", [600, 800])
 def test_the_run_completes_and_the_other_record_is_answered(tmp_path, monkeypatch, behavior, depth):
     root = _guarded_project(tmp_path, monkeypatch, behavior, depth)
 

@@ -12,7 +12,9 @@ accessors. `guards/ARCHITECTURE.md` ("The read-only view") has the contract and 
 
 from __future__ import annotations
 
-from typing import Any, NoReturn
+from typing import Any, NoReturn, TypeVar, cast
+
+_T = TypeVar("_T")
 
 _MESSAGE = (
     "A guard's evaluation context is read-only: it is built from the record, so writing to "
@@ -339,14 +341,14 @@ def readonly_view(data: Any) -> Any:
     return _rebuild(data, True)
 
 
-def plain_copy(data: Any) -> Any:
+def plain_copy(data: _T) -> _T:
     """A deep, writable copy of *data* made without recursing once per level.
 
     ``copy.deepcopy`` fails on a record about 500 levels deep. Shared and
     self-referencing containers stay shared, and anything that is not a dict, list,
     tuple or set is the same object in the copy, as for a view.
     """
-    return _rebuild(data, False)
+    return cast(_T, _rebuild(data, False))
 
 
 __all__ = ["ReadOnlyDict", "ReadOnlyError", "ReadOnlyList", "plain_copy", "readonly_view"]

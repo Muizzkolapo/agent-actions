@@ -1,6 +1,5 @@
 """Abstract storage backend interface for extensible data persistence."""
 
-import copy
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -14,6 +13,7 @@ from agent_actions.config.defaults import StorageDefaults
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.record.reasons import PARSE_ERROR
+from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
 logger = logging.getLogger(__name__)
@@ -312,7 +312,7 @@ class StorageBackend(ABC):
             result = self._reconstruct_from_deltas(action_name, relative_path, result)
             validate_lifecycle_batch(result, action_name=action_name)
             self._reconstruction_cache[cache_key] = result
-        return copy.deepcopy(self._reconstruction_cache[cache_key])
+        return plain_copy(self._reconstruction_cache[cache_key])
 
     def target_rows_per_source_guid(self, action_name: str) -> dict[str, int]:
         """How many stored rows this action holds for each identity.

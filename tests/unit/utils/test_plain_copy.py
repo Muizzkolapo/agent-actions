@@ -29,6 +29,20 @@ class TestPlainCopy:
         assert _depth(copied["deep"]) == 5000
         assert copied["deep"] is not record["deep"]
 
+    def test_the_innermost_container_of_a_deep_copy_is_independent(self):
+        record = {"deep": _nested(2000)}
+
+        copied = plain_copy(record)
+        node = copied["deep"]
+        while node:
+            node = node[0]
+        node.append("changed")
+
+        node = record["deep"]
+        while node:
+            node = node[0]
+        assert node == []
+
     def test_the_copy_is_independent_of_the_original(self):
         record = {"a": [1, {"b": [2, 3]}], "t": (1, 2)}
 

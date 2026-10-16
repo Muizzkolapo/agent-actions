@@ -48,10 +48,18 @@ def _ctx(row: dict, **config) -> MagicMock:
     return ctx
 
 
+def _innermost(node: list) -> list:
+    while node:
+        node = node[0]
+    return node
+
+
 def _assert_snapshot_is_a_full_independent_copy(snapshot: dict, row: dict) -> None:
     deep = snapshot["content"]["source"]["deep"]
     assert _depth(deep) == DEPTH
     assert deep is not row["content"]["source"]["deep"]
+    _innermost(deep).append("changed")
+    assert _innermost(row["content"]["source"]["deep"]) == [], "the copy shares its depths"
 
 
 class TestEveryBuilderSnapshotsADeepRow:

@@ -20,6 +20,7 @@ from agent_actions.record.state import (
     RESETTABLE_DOWNSTREAM_STATES,
     RecordState,
 )
+from agent_actions.utils.readonly import plain_copy
 
 logger = logging.getLogger(__name__)
 
@@ -142,9 +143,7 @@ class RecordEnvelope:
             )
 
         existing = _extract_existing(input_record)
-        result: dict[str, Any] = {
-            "content": {**existing, action_name: copy.deepcopy(action_output)}
-        }
+        result: dict[str, Any] = {"content": {**existing, action_name: plain_copy(action_output)}}
         return _carry_persistent_fields(result, input_record)
 
     @staticmethod

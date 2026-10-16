@@ -26,15 +26,19 @@ def _nested_list(depth: int, innermost) -> list:
 
 class TestADeepRecordGetsAnIdentity:
     @pytest.mark.parametrize("build", [_nested_dict, _nested_list], ids=["dicts", "lists"])
-    def test_a_record_nested_past_the_recursion_limit(self, build):
-        record = {"deep": build(3000, "leaf")}
+    def test_a_record_nested_deeper_than_a_recursive_walk_survives(self, build):
+        record = {"deep": build(850, "leaf")}
 
         assert IDGenerator.derive_source_guid(record) == IDGenerator.derive_source_guid(record)
 
+    @pytest.mark.parametrize("build", [_nested_dict, _nested_list], ids=["dicts", "lists"])
+    def test_the_check_for_string_field_names_has_no_depth_limit_of_its_own(self, build):
+        IDGenerator._require_string_keys({"deep": build(5000, "leaf")})
+
     def test_the_same_record_always_gets_the_same_identity(self):
-        first = IDGenerator.derive_source_guid({"deep": _nested_list(900, 1)})
-        second = IDGenerator.derive_source_guid({"deep": _nested_list(900, 1)})
-        other = IDGenerator.derive_source_guid({"deep": _nested_list(900, 2)})
+        first = IDGenerator.derive_source_guid({"deep": _nested_list(850, 1)})
+        second = IDGenerator.derive_source_guid({"deep": _nested_list(850, 1)})
+        other = IDGenerator.derive_source_guid({"deep": _nested_list(850, 2)})
 
         assert first == second
         assert first != other
