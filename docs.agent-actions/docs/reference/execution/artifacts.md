@@ -291,7 +291,7 @@ same string as `category`.
 | A | `action` | `ActionStartEvent` (A001), `ActionCompleteEvent` (A002), `ActionSkipEvent` (A003), `ActionFailedEvent` (A004), `ActionCachedEvent` (A005) |
 | L | `llm` | `LLMRequestEvent` (L001), `LLMResponseEvent` (L002), `LLMErrorEvent` (L003), `RateLimitEvent` (L004), `LLMJSONParseErrorEvent` (L005) |
 | T | `template` | `TemplateRenderingFailedEvent` (T001) |
-| B | `batch` | `BatchSubmittedEvent` (B001), `BatchProgressEvent` (B002), `BatchCompleteEvent` (B003), `BatchStatusEvent` (B008), `BatchSubmissionFailedEvent` (B009) |
+| B | `batch` | `BatchSubmittedEvent` (B001), `BatchCompleteEvent` (B003), `BatchStatusEvent` (B008), `BatchSubmissionFailedEvent` (B009) |
 | BP | `data_processing` | `BatchProcessingStartedEvent` (BP001), `BatchProcessingProgressEvent` (BP002), `BatchDataProcessingCompleteEvent` (BP003) |
 | RP | `data_processing` | `RecordProcessingStartedEvent` (RP001), `RecordFilteredEvent` (RP002), `RecordTransformedEvent` (RP003), `RecordEmptyOutputEvent` (RP005) |
 | DT | `data_processing` | `EnrichmentPipelineStartedEvent` (DT001), `EnricherExecutedEvent` (DT002), `EnrichmentPipelineCompleteEvent` (DT003) |

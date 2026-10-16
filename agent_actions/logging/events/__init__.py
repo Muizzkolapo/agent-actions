@@ -6,7 +6,6 @@ from agent_actions.logging.events.batch_events import (
     BatchErrorEvent,
     BatchPassthroughEvent,
     BatchProcessingCompleteEvent,
-    BatchProgressEvent,
     BatchResultsProcessedEvent,
     BatchStatusCheckFailedEvent,
     BatchStatusEvent,
@@ -133,7 +132,6 @@ __all__ = [
     "StepCompleteEvent",
     # Batch
     "BatchSubmittedEvent",
-    "BatchProgressEvent",
     "BatchCompleteEvent",
     "BatchProcessingCompleteEvent",
     "BatchResultsProcessedEvent",

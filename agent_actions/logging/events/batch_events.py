@@ -7,7 +7,6 @@ from agent_actions.logging.events.types import EventCategories
 
 __all__ = [
     "BatchSubmittedEvent",
-    "BatchProgressEvent",
     "BatchCompleteEvent",
     "BatchProcessingCompleteEvent",
     "BatchResultsProcessedEvent",
@@ -44,33 +43,6 @@ class BatchSubmittedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "B001"
-
-
-@dataclass
-class BatchProgressEvent(BaseEvent):
-    """Fired to report batch processing progress."""
-
-    batch_id: str = ""
-    completed: int = 0
-    total: int = 0
-    failed: int = 0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.BATCH
-        pct = (self.completed / self.total * 100) if self.total > 0 else 0
-        self.message = f"Batch {self.batch_id}: {self.completed}/{self.total} ({pct:.1f}%)"
-        self.data = {
-            "batch_id": self.batch_id,
-            "completed": self.completed,
-            "total": self.total,
-            "failed": self.failed,
-            "percentage": pct,
-        }
-
-    @property
-    def code(self) -> str:
-        return "B002"
 
 
 @dataclass

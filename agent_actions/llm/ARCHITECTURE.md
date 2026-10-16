@@ -652,7 +652,7 @@ Both paths share:
 | File | Role |
 |------|------|
 | `batch/services/retry.py` | Retry facade |
-| `batch/services/retry_ops.py` | Resubmit missing records |
+| `batch/services/retry_ops.py` | Submit a retry batch, merge its results, build exhaustion metadata |
 | `batch/services/repair_ops.py` | Expectation evaluation + repair rounds |
 | `batch/services/processing_recovery.py` | Recovery state machine |
 | `batch/infrastructure/recovery_state.py` | RecoveryState persistence |
@@ -1040,7 +1040,6 @@ Events fired during an LLM call:
 
 Batch events:
   B001 BatchSubmitted    → after provider accepts the batch
-  B002 BatchProgress     → during polling loop
   B003 BatchComplete     → all results processed
   B009 SubmissionFailed  → provider rejected submission
   B012 PartialFailure   → some records failed
