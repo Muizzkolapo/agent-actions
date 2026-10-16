@@ -207,7 +207,7 @@ Event types are spread across 8 source files in `events/`:
 | File | Domain | Count |
 |------|--------|-------|
 | `workflow_events.py` | Workflow + action lifecycle | 10 |
-| `batch_events.py` | Batch submission, polling, completion | 10 |
+| `batch_events.py` | Batch submission, status, completion | 9 |
 | `llm_events.py` | LLM requests, responses, errors | 6 |
 | `validation_events.py` | Validation, recovery, guard | 9 |
 | `initialization_events.py` | CLI, config, project, UDF | 13 |
@@ -215,7 +215,7 @@ Event types are spread across 8 source files in `events/`:
 | `data_pipeline_events.py` | Record processing, enrichment, results | 17 |
 | `cache_events.py` | Cache hit/miss/invalidation | 5 |
 
-All 84 event types are re-exported from `events/__init__.py`.
+All 83 event types are re-exported from `events/__init__.py`.
 
 ---
 
@@ -371,11 +371,11 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 ### events/
 | File | Role |
 |------|------|
-| `events/__init__.py` | Re-exports all 84 event types + EventCategories + AgentActionsFormatter |
+| `events/__init__.py` | Re-exports all 83 event types + EventCategories + AgentActionsFormatter |
 | `events/types.py` | EventCategories constants + `_safe_value_repr()` |
 | `events/formatters.py` | AgentActionsFormatter -- dispatch table for console display |
 | `events/workflow_events.py` | W/A prefix events (workflow + action lifecycle) |
-| `events/batch_events.py` | B prefix events (batch submission, polling, completion) |
+| `events/batch_events.py` | B prefix events (batch submission, status, completion) |
 | `events/llm_events.py` | L prefix events (LLM request/response/error) |
 | `events/validation_events.py` | V/G/R prefix events (validation, guard, recovery) |
 | `events/initialization_events.py` | F/E/I/P prefix events (config, env, CLI, UDF) |

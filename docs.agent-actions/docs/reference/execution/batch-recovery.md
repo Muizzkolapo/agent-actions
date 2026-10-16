@@ -17,8 +17,8 @@ flowchart TD
     B --> C{Unanswered Records?}
     C -->|Yes| D[Phase 1: Retry Unanswered]
     C -->|No| G
-    D --> E[Resubmit as New Batch]
-    E --> F[Poll for Completion]
+    D --> E[Submit a Retry Batch]
+    E --> F[Collected by a Later Run]
     F --> G{Expectations Configured?}
     G -->|Yes| H[Phase 2: Validate All Results]
     G -->|No| L[Done]
@@ -44,9 +44,8 @@ After retrieving batch results, the system compares the expected record IDs agai
 3. Compute the difference — these are the missing records
 4. While attempts remain (`max_attempts` counts every attempt, the original batch included, so `max_attempts: 1` sends no retry batch):
    - Build new records from the context map for missing IDs
-   - Submit as a new batch
-   - Poll until complete
-   - Merge the results back, replacing any earlier answer for the same record
+   - Submit them as a new batch and stop: the run asks to be run again
+   - The next run collects that batch and merges the results back, replacing any earlier answer for the same record
    - Update the missing set
 5. If records remain missing after all attempts, mark them with exhaustion metadata
 

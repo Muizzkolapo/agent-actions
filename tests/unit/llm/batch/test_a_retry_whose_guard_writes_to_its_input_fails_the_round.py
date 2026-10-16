@@ -1,6 +1,6 @@
 """A retry round whose guard UDF writes to its input fails, not transiently (1314).
 
-submit_retry_batch and resubmit_missing_records treat every prepare_tasks
+submit_retry_batch treated every prepare_tasks
 exception as transient and swallow it, so the lost record would complete as
 though a later pass could still resolve it. A write-to-input refusal is
 action-fatal and must propagate instead -- the identical guard, run through
@@ -77,23 +77,6 @@ def test_submit_retry_batch_fails_the_round_not_the_provider(tmp_path, registere
             missing_ids={LOST},
             context_map=_context_map(),
             output_directory=str(tmp_path),
-            file_name="pages.json",
-            agent_config=_config(),
-        )
-
-    assert provider.submitted == []
-
-
-def test_retrieve_results_with_retry_fails_the_round_not_the_provider(tmp_path, registered_udf):
-    service = BatchRetryService(action_indices={ACTION: 0}, dependency_configs={})
-    provider = RecordingProvider()
-
-    with pytest.raises(ConfigurationError, match="wrote to its input"):
-        service.retrieve_results_with_retry(
-            provider,
-            "batch-0",
-            str(tmp_path),
-            context_map=_context_map(),
             file_name="pages.json",
             agent_config=_config(),
         )

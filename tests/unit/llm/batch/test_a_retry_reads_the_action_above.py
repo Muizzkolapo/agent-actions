@@ -80,22 +80,6 @@ def test_a_retry_sent_without_waiting_carries_the_answer_above(tmp_path):
     assert _sent_prompts(provider) == [f"Restate: {ANSWER_ABOVE}"]
 
 
-def test_a_retry_waited_on_carries_the_answer_above(tmp_path):
-    """The blocking loop prepares its retries through a function of its own."""
-    provider = RecordingProvider()
-
-    _service().retrieve_results_with_retry(
-        provider,
-        "batch-0",
-        str(tmp_path),
-        context_map=_context_map(),
-        file_name="pages.json",
-        agent_config=_CONFIG,
-    )
-
-    assert _sent_prompts(provider) == [f"Restate: {ANSWER_ABOVE}"]
-
-
 def _send_without_waiting(
     service: BatchRetryService, config: dict[str, Any], context_map: dict[str, Any], out: Path
 ) -> RecordingProvider:
@@ -111,25 +95,8 @@ def _send_without_waiting(
     return provider
 
 
-def _send_waited_on(
-    service: BatchRetryService, config: dict[str, Any], context_map: dict[str, Any], out: Path
-) -> RecordingProvider:
-    provider = RecordingProvider()
-    service.retrieve_results_with_retry(
-        provider,
-        "batch-0",
-        str(out),
-        context_map=context_map,
-        file_name="pages.json",
-        agent_config=config,
-    )
-    return provider
-
-
 Send = Callable[[BatchRetryService, dict[str, Any], dict[str, Any], Path], RecordingProvider]
-_SENDERS = pytest.mark.parametrize(
-    "send", [_send_without_waiting, _send_waited_on], ids=["sent without waiting", "waited on"]
-)
+_SENDERS = pytest.mark.parametrize("send", [_send_without_waiting], ids=["sent without waiting"])
 
 
 @_SENDERS
