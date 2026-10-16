@@ -24,6 +24,7 @@ from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
     batch_output_name,
 )
+from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryStateManager
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
@@ -53,6 +54,7 @@ from agent_actions.storage.backend import (
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -464,6 +466,8 @@ class BatchSubmissionService:
         """
         if run_input_guids is None or self._storage_backend is None or not output_directory:
             return
+        if not run_inputs:
+            self._forget_the_batch_of(self._storage_backend, action_name, batch_name)
         stored_name = batch_output_name(batch_name)
         try:
             stored: list[dict[str, Any]] | None = self._storage_backend.read_target_for_rewrite(
@@ -501,6 +505,24 @@ class BatchSubmissionService:
             output_root=output_directory,
             stored_name=stored_name,
         )
+
+    def _forget_the_batch_of(
+        self, backend: StorageBackend, action_name: str, batch_name: str
+    ) -> None:
+        """Drop what the file's last batch left behind once the file takes no input.
+
+        Nothing is owed for a file that holds no record, and what stays is read on every
+        later run as a batch still to collect.
+        """
+        manager = self._registry_manager_factory(action_name)
+        entry = manager.get_batch_job(batch_name)
+        if entry is not None:
+            manager.remove_batch_job(batch_name)
+            if entry.batch_id:
+                release_local_batch_record(entry.batch_id)
+        self._context_manager.delete_batch_context_map(backend, action_name, batch_name)
+        self._context_manager.clear_batch_inputs(backend, action_name, batch_name)
+        RecoveryStateManager.delete(backend, action_name, batch_name)
 
     def _stamp_deferred(
         self,
