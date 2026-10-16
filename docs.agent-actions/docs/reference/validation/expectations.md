@@ -301,7 +301,7 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 |---|---|
 | `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
 | `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count. The record is stored `exhausted`, online and under batch alike, and the action ends `completed_with_failures` (`failed` when no record succeeds); `agac retry` runs it again |
-| `raise` | Nothing — the run halts with an error naming the action and the still-failing rules |
+| `raise` | Nothing — the run halts with an error naming the action and the still-failing rules. The halt is recorded, online and under batch alike: the next `agac run` refuses the action without calling the model, and [`agac retry`](../cli/retry.md#a-retry-resumes-a-halted-action-in-full) resumes it. Under batch the records it stopped at are stored `exhausted`, not as answers |
 
 :::tip See exhaustion happen
 `tests/integration/fixtures/runtime_probes/repair_exhaustion` is a rule the mock provider can never satisfy, `on_exhausted: return_last`, run through the real CLI in `tests/integration/test_runtime_probes.py`. It asserts the record survives with its final failing verdict attached — the concrete shape of the `return_last` row above. The same fixture project's `partial_file_rejection` workflow is also worth reading if you're relying on a run's exit code to mean "every record succeeded": it currently doesn't, for a reason unrelated to `expect:` — see the test file's docstring.

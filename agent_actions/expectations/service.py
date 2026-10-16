@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.expectations.loader import (
     NoRulesDeclared,
     SuiteLoadError,
@@ -118,6 +118,9 @@ class ExpectationsExhaustedError(RuntimeError):
             f"Action '{action_name}' exhausted {iterations} expectation iteration(s); "
             f"still failing: {', '.join(failed_ids) or '(none)'}"
         )
+        # The policy that raises this is the one that halts the run, so every site
+        # that builds it carries the tag the next run reads the halt by.
+        enrich_exception_context(self, on_exhausted="raise")
 
 
 class ExpectationService:
