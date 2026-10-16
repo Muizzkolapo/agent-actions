@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  Under batch, a FILE tool or HITL action now quarantines a record that an action above it
+  failed, as online does. The row batch stored for a record the provider failed (an error row,
+  a processing error, an empty answer under `on_empty: warn`) had no `content`, where online's
+  failed row keeps the record's content and nulls the failed action's namespace. A FILE
+  tool's or HITL action's `context_scope` pass runs before the cascade filter, found no
+  namespace for the failed action in that row, and dropped the record as `observe_field_missing`,
+  which points the author at their own `context_scope`; the action below it stored nothing
+  for the record. Batch's failed row is now online's tombstone, with the provider's message,
+  the raw answer and the recovery metadata kept on it, so the record is `cascade_skipped` with an
+  `unprocessed upstream_unprocessed` disposition at every action below, and `agac retry`
+  answers it at each. (#1363)
+time: 2026-10-16T12:00:00Z

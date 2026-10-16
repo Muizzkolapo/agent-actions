@@ -691,7 +691,10 @@ A record with no `source_guid` is not among them: both paths refuse it before it
 and record nothing for it, under its target id or any other (see the identity notes below).
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
-and `skip` a tombstone, the same in each. Under `error` online raises at the record and
+and `skip` a tombstone, the same in each. A batch failed row, whatever failed it (a provider
+error row, a processing error or an empty answer), is online's: the record's own content with
+the failed action's namespace null, so a FILE tool or HITL action below reads it as it reads
+online's and quarantines the record, instead of dropping it as a missing observe field. Under `error` online raises at the record and
 stores nothing; a batch stores the record as failed with the other answers, since a batch
 has one write and they are in it, and then halts: the halt leaves the loop over the
 action's files and the executor records the action as failed. An empty answer is never a

@@ -548,38 +548,28 @@ class BatchResultStrategy:
         raw_content: Any = None,
         recovery_metadata: RecoveryMetadata | None = None,
     ) -> ProcessingResult:
-        """Build a FAILED ProcessingResult for a batch error.
+        """Build a FAILED ProcessingResult whose row is online's failed tombstone.
 
-        Error results carry the error dict in ``data`` so that downstream
-        ``write_record_dispositions()`` can still find and disposition them.
-        The ``data[0]`` dict contains ``error``, ``metadata``, and optionally
-        ``raw_content`` and ``_recovery`` keys — this structure is load-bearing
-        because ``write_record_dispositions()`` iterates ``data`` items and
-        checks ``item.get("error")`` to detect failures.
-
-        This differs from the online/file_tool paths where errors are only on
-        ``result.error`` with ``result.data == []``.  The dual representation
-        exists because batch post-processing (disposition writing) needs
-        per-item error context while online errors are handled at the
-        result-status level in ``collect_results()``.
-
-        Enriched like any other result, so one with no source_guid is refused there.
+        The row keeps the record's content: a FILE or HITL action below reads its
+        `context_scope` before the cascade filter sees the record's state, and a row
+        without content would be dropped there as a missing field.
         """
         source_guid = ctx.reconciler.get_source_guid(custom_id)
+        original_input = ctx.reconciler.get_record_by_id(custom_id)
+        action_name = (ctx.agent_config or {}).get("action_name", "unknown")
 
-        error_item: dict[str, Any] = {
-            "source_guid": source_guid,
-            "error": error_message,
-            "metadata": metadata or {},
-        }
+        failed_row = build_tombstone(
+            action_name, original_input, error_message, source_guid=source_guid
+        )
+        failed_row["error"] = error_message
+        failed_row["metadata"] = {**(metadata or {}), **failed_row["metadata"]}
 
         if raw_content is not None:
-            error_item["raw_content"] = raw_content
+            failed_row["raw_content"] = raw_content
 
         if recovery_metadata:
-            error_item["_recovery"] = recovery_metadata.to_dict()
+            failed_row["_recovery"] = recovery_metadata.to_dict()
 
-        original_input = ctx.reconciler.get_record_by_id(custom_id)
         source_snapshot = copy.deepcopy(original_input) if original_input else None
 
         result = ProcessingResult.failed(
@@ -588,7 +578,7 @@ class BatchResultStrategy:
             source_snapshot=source_snapshot,
             input_record=original_input,
         )
-        result.data = [error_item]
+        result.data = [failed_row]
         result.recovery_metadata = recovery_metadata
         return result
 
