@@ -89,3 +89,28 @@ class TestARecordThatCanCarryAVerdictStillShips:
         stamp_exhausted([result], strategy, attempts=2)
         apply_exhaustion_policy([result], strategy, ACTION)
         assert "429 rate limited" in (result.error or "")
+
+
+class TestWhichResultsReadAsExhausted:
+    """The mark that makes a batch record read `exhausted`, as online's does."""
+
+    def test_a_record_the_fail_policy_gave_up_on_is_marked(self):
+        result = _exhaust(dict(FAILING), "fail")
+        assert result.success is False
+        assert result.exhausted is True
+
+    def test_a_response_with_nowhere_for_a_verdict_is_marked_under_every_policy(self):
+        assert _exhaust("I cannot answer that.", "return_last").exhausted is True
+        assert _exhaust("I cannot answer that.", "fail").exhausted is True
+
+    def test_return_last_keeps_a_carryable_record_as_the_success_it_ships_as(self):
+        result = _exhaust(dict(FAILING), "return_last")
+        assert result.success is True
+        assert result.exhausted is False
+
+    def test_a_provider_failure_stays_a_failure_not_an_exhaustion(self):
+        strategy = build_repair_strategy(_agent_config("fail"))
+        result = BatchResult(custom_id="r1", content=None, success=False, error="429 rate limited")
+        stamp_exhausted([result], strategy, attempts=2)
+        apply_exhaustion_policy([result], strategy, ACTION)
+        assert result.exhausted is False

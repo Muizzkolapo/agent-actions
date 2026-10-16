@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A record that runs out of expectation iterations under `on_exhausted: fail` now reads the same
+  in both run modes. Online stores it `exhausted` and left the action reading `completed`;
+  batch stored it `failed` and read `completed_with_failures`, so whether a run reported a
+  failure at all depended on its mode. Batch now stores the record `exhausted` with the same
+  `expectations_exhausted` tombstone online writes, and an action's status counts every failure
+  `agac retry` selects, so an action holding an exhausted record reads `completed_with_failures`
+  (`failed` when no record succeeds) in either mode. This also applies to records exhausted by
+  retry, which an action used to ignore when reading itself complete. (#1282)
+time: 2026-10-16T10:00:00Z

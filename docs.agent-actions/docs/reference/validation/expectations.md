@@ -300,7 +300,7 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 | `on_exhausted` | What ships |
 |---|---|
 | `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
-| `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count |
+| `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count. The record is stored `exhausted`, online and under batch alike, and the action ends `completed_with_failures` (`failed` when no record succeeds); `agac retry` runs it again |
 | `raise` | Nothing — the run halts with an error naming the action and the still-failing rules |
 
 :::tip See exhaustion happen

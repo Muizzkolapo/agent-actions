@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import RETRY_EXHAUSTED
 from agent_actions.utils.id_generation import IDGenerator
@@ -31,6 +31,18 @@ class ExhaustedRecordBuilder:
                 else:
                     empty_content[field_name] = ""
         return empty_content
+
+    @staticmethod
+    def expectations_exhaustion(expectations: ExpectationsMetadata) -> tuple[str, dict[str, Any]]:
+        """The error and tombstone metadata for a record the expectation loop gave up on."""
+        error = (
+            f"Expectations exhausted after {expectations.attempts} iteration(s) "
+            f"(failed: {', '.join(expectations.failed) or 'none recorded'})"
+        )
+        return error, {
+            "expectations_failed": expectations.failed,
+            "expectations_iterations": expectations.attempts,
+        }
 
     @staticmethod
     def build_exhausted_item(

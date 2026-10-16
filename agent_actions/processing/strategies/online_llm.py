@@ -516,16 +516,10 @@ class OnlineLLMStrategy:
                         # Expectations wrap the inner recovery layers, so their
                         # exhaustion is the terminal cause even when inner retry
                         # metadata is also present.
-                        expectations = recovery_metadata.expectations
                         tombstone_reason = EXPECTATIONS_EXHAUSTED
-                        error_msg = (
-                            f"Expectations exhausted after {expectations.attempts} iteration(s) "
-                            f"(failed: {', '.join(expectations.failed) or 'none recorded'})"
+                        error_msg, extra_metadata = ExhaustedRecordBuilder.expectations_exhaustion(
+                            recovery_metadata.expectations
                         )
-                        extra_metadata = {
-                            "expectations_failed": expectations.failed,
-                            "expectations_iterations": expectations.attempts,
-                        }
                     else:
                         retry = recovery_metadata.retry
                         assert retry is not None

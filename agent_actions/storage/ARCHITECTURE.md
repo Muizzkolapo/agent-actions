@@ -292,7 +292,7 @@ NODE_LEVEL_RECORD_ID = "__node__"
 
 Some signals apply to an entire action node, not to individual records. For example, when the entire action is deferred (batch submitted) or when a node-level failure occurs. The sentinel `__node__` is used as the `record_id` in these cases.
 
-Methods like `get_failed_items()` and `has_successful_items()` explicitly filter out `__node__` rows so they only return item-level dispositions.
+Methods like `get_failed_items()` (every `FAILURE_DISPOSITIONS` row: `failed` and `exhausted`) and `has_successful_items()` explicitly filter out `__node__` rows so they only return item-level dispositions.
 
 `get_terminal_record_ids()` also excludes `__node__` from its results — it returns only real record IDs with gate-terminal dispositions.
 

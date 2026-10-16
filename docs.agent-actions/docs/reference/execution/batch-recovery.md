@@ -101,7 +101,7 @@ The system tracks failure counts per record, not globally. If record `A` succeed
 
 When a record exhausts all retry attempts:
 
-- **`on_exhausted: return_last`** — record is marked with exhaustion metadata, workflow continues without it
+- **`on_exhausted: return_last`** — record is marked with exhaustion metadata, workflow continues without it. The action ends `completed_with_failures` (`failed` when no record succeeds), as it does for any `exhausted` or `failed` record
 - **`on_exhausted: raise`** — the output file is written first, then the run stops. Batch
   writes once at the end, so halting mid-conversion would discard every record that had
   already converted cleanly; the halt is carried to the caller and raised after the write

@@ -41,6 +41,7 @@ from agent_actions.record.envelope import (
 from agent_actions.record.reasons import (
     BATCH_NOT_RETURNED,
     EMPTY_OUTPUT,
+    EXPECTATIONS_EXHAUSTED,
     GUARD_SKIP,
     PREP_FAILED,
 )
@@ -283,6 +284,10 @@ class BatchResultStrategy:
                             "error": str(e),
                         },
                     )
+
+            elif batch_result.exhausted:
+                results.append(self._build_expectations_exhausted(ctx, custom_id, batch_result))
+                ctx.reconciler.mark_processed(custom_id)
 
             else:
                 recovery_metadata = batch_result.recovery_metadata
@@ -688,6 +693,43 @@ class BatchResultStrategy:
             record_index=record_index,
             output_directory=ctx.output_directory,
         )
+
+    def _build_expectations_exhausted(
+        self, ctx: BatchProcessingContext, custom_id: str, batch_result: BatchResult
+    ) -> ProcessingResult:
+        """An EXHAUSTED result for a record the expectation loop gave up on, as online builds it."""
+        recovery_metadata = batch_result.recovery_metadata
+        if recovery_metadata is None or recovery_metadata.expectations is None:
+            raise RuntimeError(
+                f"Batch result {custom_id} was marked exhausted by the expectation loop "
+                "but carries no expectations metadata"
+            )
+        agent_config = ctx.agent_config or {}
+        original_row = ctx.reconciler.get_record_by_id(custom_id)
+        source_guid = ctx.reconciler.get_source_guid(custom_id)
+        error, extra_metadata = ExhaustedRecordBuilder.expectations_exhaustion(
+            recovery_metadata.expectations
+        )
+        tombstone = build_exhausted_tombstone(
+            agent_config.get("action_name", "unknown"),
+            original_row,
+            ExhaustedRecordBuilder.build_empty_content(agent_config),
+            source_guid=source_guid,
+            extra_metadata=extra_metadata,
+            reason=EXPECTATIONS_EXHAUSTED,
+        )
+        result = ProcessingResult.exhausted(
+            error=error,
+            data=[tombstone],
+            source_guid=source_guid,
+            recovery_metadata=recovery_metadata,
+            source_snapshot=copy.deepcopy(original_row) if original_row else None,
+            input_record=original_row,
+        )
+        self._attach_passthrough_context(
+            result, ctx, original_row, ctx.reconciler.get_record_index(custom_id)
+        )
+        return result
 
     def _build_exhausted_passthrough(
         self,
