@@ -5,9 +5,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import is_action_fatal
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-from agent_actions.llm.batch.services.retry_polling import wait_for_batch_completion
 from agent_actions.llm.batch.services.shared import recovery_preparator
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
@@ -55,10 +53,7 @@ def submit_retry_batch(
     dependency_configs: dict[str, dict],
     workflow_metadata: dict[str, Any] | None = None,
 ) -> tuple[str, int] | None:
-    """Submit a retry batch for missing records without blocking.
-
-    Unlike resubmit_missing_records, this returns immediately after
-    submission — no polling/waiting.
+    """Submit a retry batch for missing records; the next pass collects it.
 
     Args:
         storage_backend: Optional storage backend for task preparation
@@ -129,83 +124,6 @@ def submit_retry_batch(
         # Transient: the next pass re-enters and can send the same records again.
         logger.warning("Failed to submit retry batch: %s", e, exc_info=True)
         return None
-
-
-def resubmit_missing_records(
-    storage_backend: "StorageBackend | None",
-    provider: BaseBatchClient,
-    missing_ids: set[str],
-    context_map: dict[str, Any],
-    output_directory: str,
-    file_name: str | None,
-    agent_config: dict[str, Any] | None,
-    *,
-    action_indices: dict[str, int],
-    dependency_configs: dict[str, dict],
-    workflow_metadata: dict[str, Any] | None = None,
-) -> list[BatchResult]:
-    """Resubmit missing records as a new batch and wait for completion."""
-    missing_records = _collect_missing_records(missing_ids, context_map)
-    if not missing_records:
-        logger.warning(
-            "No records found in context_map for %d missing IDs (file_name=%s)",
-            len(missing_ids),
-            file_name,
-        )
-        return []
-
-    try:
-        batch_name = f"{file_name}_retry" if file_name else "retry"
-        # No attempt bump: a retry re-issues the identical prompt for a record
-        # the provider never returned, so it rewrites its own attempt-0 trace
-        # rather than opening a new round the way a repair does.
-        preparator = recovery_preparator(
-            storage_backend, agent_config, action_indices, dependency_configs
-        )
-        prepared = preparator.prepare_tasks(
-            agent_config=agent_config or {},
-            data=missing_records,
-            provider=provider,
-            output_directory=output_directory,
-            batch_name=batch_name,
-            workflow_metadata=workflow_metadata,
-        )
-
-        if not prepared.tasks:
-            logger.warning("No tasks prepared for retry batch (file_name=%s)", file_name)
-            return []
-
-        retry_batch_id, _ = provider.submit_batch(
-            tasks=prepared.tasks,
-            batch_name=batch_name,
-            output_directory=output_directory,
-        )
-        logger.info(
-            "Retry batch submitted: %s with %d records",
-            retry_batch_id,
-            len(prepared.tasks),
-        )
-
-        status = wait_for_batch_completion(
-            provider, retry_batch_id, total_items=len(prepared.tasks)
-        )
-        if status != BatchStatus.COMPLETED:
-            logger.warning(
-                "Retry batch %s did not complete successfully: %s",
-                retry_batch_id,
-                status,
-            )
-            return []
-
-        return provider.retrieve_results(retry_batch_id, output_directory)
-
-    except Exception as e:
-        if is_action_fatal(e):
-            # Not transient: the next pass would hit the identical fatal error,
-            # on the same records, every time.
-            raise
-        logger.warning("Failed to resubmit missing records: %s", e, exc_info=True)
-        return []
 
 
 def process_retry_results(
