@@ -53,7 +53,7 @@ guard:
   condition: "validate.pass == true AND score > 0.8"
 ```
 
-Validated at parse time against `DANGEROUS_PATTERNS` (blocks `exec`, `eval`, `__import__`, etc.). No actual SQL engine is involved — the AST evaluator in `input/preprocessing/filtering/` handles execution.
+Validated at parse time against `DANGEROUS_PATTERNS` (blocks `exec`, `eval`, `__import__`, etc.); the contents of quoted string literals are not checked, since they are values. No actual SQL engine is involved — the AST evaluator in `input/preprocessing/filtering/` handles execution.
 
 ### UDF Guards
 
