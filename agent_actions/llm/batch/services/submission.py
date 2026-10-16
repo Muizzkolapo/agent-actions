@@ -215,6 +215,14 @@ class BatchSubmissionService:
         holding = carry_ids - filtered
         if not holding:
             return filtered
+        # With no file stored, a carried input's only row is a checkpoint row, which
+        # finalize does not read.
+        try:
+            self._storage_backend.read_target_for_rewrite(
+                action_name, batch_output_name(batch_name)
+            )
+        except FileNotFoundError:
+            return filtered | holding
         from agent_actions.processing.disposition_gate import build_carry_forward
 
         _found, missing = build_carry_forward(

@@ -167,6 +167,14 @@ actions:
     run_mode: online  # Override for this action
 ```
 
+### Switching an interrupted online action to batch
+
+An online run stopped partway through a file keeps the records it finished as checkpoint
+rows until the file is written. If the action is then switched to `run_mode: batch`, the
+batch run sends those records again with the rest of the file, so each is answered, and paid
+for, a second time. Resumed online instead, the action keeps those answers and sends only
+the records it had not finished.
+
 ## See Also
 
 - [batch Commands](../cli/batch) - CLI reference for batch operations
