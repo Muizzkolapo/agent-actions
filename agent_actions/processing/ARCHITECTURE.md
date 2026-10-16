@@ -503,8 +503,11 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   held from before the replacement is carried.
 - **A run in which something failed and nothing was answered replaces no answer the
   action still calls answered.** Online leaves the file unwritten when nothing succeeded
-  (`terminal_failure`) while the answers stored for it stand. Here the failures are
-  written beside every stored answer, whichever input it was for. Stored rows that are not
+  and nothing carried holds an answer (`terminal_failure`) while the answers stored for it
+  stand: a carried answer (`carried_success`) keeps the action out of terminal failure, as
+  a disposition-derived outcome does here, and carried rows are not counted among the
+  active inputs. Here the failures are written beside every stored answer, whichever
+  input it was for. Stored rows that are not
   answers follow the inputs as usual. Without a failure the run did produce this run's
   file, however little is in it, and the inputs rule applies in full, as online writes it.
   A record that fails prompt preparation when nothing else is sent is such a failure: it

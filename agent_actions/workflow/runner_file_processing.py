@@ -18,9 +18,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import every_record_failed, is_action_fatal, raised_by_exhaustion_policy
+from agent_actions.errors import (
+    every_record_failed,
+    is_action_fatal,
+    raised_by_exhaustion_policy,
+    raised_by_terminal_failure,
+)
 from agent_actions.logging.diagnostics import DIAGNOSTIC
-from agent_actions.storage.backend import DISPOSITION_FILTERED, NODE_LEVEL_RECORD_ID
+from agent_actions.storage.backend import (
+    DISPOSITION_FILTERED,
+    DISPOSITION_SUCCESS,
+    NODE_LEVEL_RECORD_ID,
+)
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.file_handler import walk_files
 from agent_actions.utils.limits import forget_slice_observation, resolve_file_limit
@@ -141,6 +150,22 @@ def _lose_file(runner: Any, action_name: str) -> None:
     costs a re-run, and under-reporting costs the records.
     """
     forget_slice_observation(getattr(runner, "storage_backend", None), action_name)
+
+
+def _failed_beside_stored_answers(runner: Any, action_name: str, error: Exception) -> bool:
+    """Whether *error* is a file's breaker tripping while the action holds answers.
+
+    A retry narrowed to the files holding its records sends only those, and when
+    they fail again the file has nothing succeeded in it. The action still holds
+    the records it did not send, so the file is left as stored and the failures are
+    left on their dispositions, where the action's outcome is read from.
+    """
+    backend = getattr(runner, "storage_backend", None)
+    if backend is None or not raised_by_terminal_failure(error):
+        return False
+    if is_action_fatal(error) or raised_by_exhaustion_policy(error):
+        return False
+    return bool(backend.get_disposition(action_name, disposition=DISPOSITION_SUCCESS))
 
 
 def _is_regular_file(item: Path) -> bool:
@@ -557,14 +582,24 @@ def process_directory_files(
             )
             count += 1
         except Exception as e:
-            errors.record(relative_path, e)
-            _lose_file(runner, params.action_name)
-            logger.warning(
-                "Failed to process file %s: %s",
-                relative_path,
-                e,
-                exc_info=True,
-            )
+            if _failed_beside_stored_answers(runner, params.action_name, e):
+                _lose_file(runner, params.action_name)
+                count += 1
+                logger.warning(
+                    "File %s left as stored: every record sent failed again, and the action "
+                    "holds answers for the rest: %s",
+                    relative_path,
+                    e,
+                )
+            else:
+                errors.record(relative_path, e)
+                _lose_file(runner, params.action_name)
+                logger.warning(
+                    "Failed to process file %s: %s",
+                    relative_path,
+                    e,
+                    exc_info=True,
+                )
 
         def _unread(position: int = position) -> bool:
             """Whether any entry past *position* would have been processed.
@@ -953,14 +988,24 @@ def process_from_storage_backend(
             files_processed += 1
 
         except Exception as e:
-            errors.record(relative_path, e)
-            _lose_file(runner, params.action_name)
-            logger.warning(
-                "Failed to process backend entry %s: %s",
-                relative_path,
-                e,
-                exc_info=True,
-            )
+            if _failed_beside_stored_answers(runner, params.action_name, e):
+                _lose_file(runner, params.action_name)
+                files_processed += 1
+                logger.warning(
+                    "Backend entry %s left as stored: every record sent failed again, and the "
+                    "action holds answers for the rest: %s",
+                    relative_path,
+                    e,
+                )
+            else:
+                errors.record(relative_path, e)
+                _lose_file(runner, params.action_name)
+                logger.warning(
+                    "Failed to process backend entry %s: %s",
+                    relative_path,
+                    e,
+                    exc_info=True,
+                )
 
         def _unread(taken: int = seen, total: int = len(data_by_path)) -> bool:
             """Whether any stored entry past this one is still to be read."""

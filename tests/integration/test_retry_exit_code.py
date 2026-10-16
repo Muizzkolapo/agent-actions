@@ -28,6 +28,7 @@ from tests.integration.test_retry_ignores_record_cap import (
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 PAGES = 3
+ALL_PAGES = tuple(f"page {i}" for i in range(PAGES))
 
 # The tool reads the marker on every call rather than at import: the fixture has
 # already run the workflow once by the time a test decides what should break, and
@@ -133,57 +134,84 @@ def project(tmp_path, monkeypatch):
 
 
 class TestARepairThatFixedNothingIsNotSuccess:
-    def test_it_exits_non_zero(self, project):
-        guid = project.mark_failed("page 0")[0]
-        project.break_on("page 0")
+    """No record of the action holds an answer, so the action itself has failed."""
 
-        result = project.retry("--record", guid)
+    def test_it_exits_non_zero(self, project):
+        project.mark_failed(*ALL_PAGES)
+        project.break_on(*ALL_PAGES)
+
+        result = project.retry()
 
         assert result.exit_code != 0, result.output
 
     def test_the_record_it_was_asked_to_repair_is_still_failed(self, project):
         """The exit code has to follow the outcome, not merely the command finishing."""
-        guid = project.mark_failed("page 0")[0]
-        project.break_on("page 0")
+        guid = project.mark_failed(*ALL_PAGES)[0]
+        project.break_on(*ALL_PAGES)
 
-        project.retry("--record", guid)
+        project.retry()
 
         assert project.disposition(guid) == "failed"
 
     def test_it_does_not_announce_completion(self, project):
-        guid = project.mark_failed("page 0")[0]
-        project.break_on("page 0")
+        project.mark_failed(*ALL_PAGES)
+        project.break_on(*ALL_PAGES)
 
-        result = project.retry("--record", guid)
+        result = project.retry()
 
         assert "Retry complete." not in result.output
 
     def test_it_names_the_action_that_failed(self, project):
-        guid = project.mark_failed("page 0")[0]
-        project.break_on("page 0")
+        project.mark_failed(*ALL_PAGES)
+        project.break_on(*ALL_PAGES)
 
-        result = project.retry("--record", guid)
+        result = project.retry()
 
         assert f"Failed actions: {ACTION}" in result.output
 
     def test_it_names_a_downstream_action_the_failure_skipped(self, project):
+        project.add_second_action()
+        project.mark_failed(*ALL_PAGES)
+        project.break_on(*ALL_PAGES)
+
+        result = project.retry()
+
+        assert "Skipped actions: enrich" in result.output
+        assert result.exit_code != 0
+
+
+class TestARepairThatFailsAgainBesideStoredSuccessesIsNotAFailedAction:
+    """The action still holds answers, so it reads as batch reads it: with failures."""
+
+    def test_it_exits_zero_and_leaves_the_action_completed_with_failures(self, project):
         project.add_second_action()
         guid = project.mark_failed("page 0")[0]
         project.break_on("page 0")
 
         result = project.retry("--record", guid)
 
-        assert "Skipped actions: enrich" in result.output
-        assert result.exit_code != 0
+        assert result.exit_code == 0, result.output
+        assert project.disposition(guid) == "failed"
+        assert "Failed actions" not in result.output
+        assert "Skipped actions" not in result.output
+
+    def test_a_plain_run_after_it_resumes_instead_of_failing_the_action(self, project):
+        guid = project.mark_failed("page 0")[0]
+        project.break_on("page 0")
+        project.retry("--record", guid)
+
+        result = project.run()
+
+        assert result.exit_code == 0, result.output
 
 
 class TestItAgreesWithRunOnWhatFailureMeans:
     def test_the_same_broken_state_fails_both_commands(self, project):
         """Parity is the point: a repair loop reads the two exit codes the same way."""
-        guid = project.mark_failed("page 0")[0]
-        project.break_on(*(f"page {i}" for i in range(PAGES)))
+        project.mark_failed(*ALL_PAGES)
+        project.break_on(*ALL_PAGES)
 
-        retried = project.retry("--record", guid)
+        retried = project.retry()
         ran = project.run("--fresh")
 
         assert (retried.exit_code == 0) == (ran.exit_code == 0), (retried.output, ran.output)
@@ -232,3 +260,60 @@ class TestARepairThatWorkedIsUnchanged:
         result = project.retry("--record", guid, "--dry-run")
 
         assert result.exit_code == 0, result.output
+
+
+def _split_staging(project, first_file: int) -> Project:
+    staging = project.root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+    pages = json.loads((staging / "pages.json").read_text())
+    (staging / "pages.json").unlink()
+    (staging / "pages1.json").write_text(json.dumps(pages[:first_file]))
+    (staging / "pages2.json").write_text(json.dumps(pages[first_file:]))
+    assert project.run("--fresh").exit_code == 0
+    return project
+
+
+class TestARetryNarrowedToOneStagedFile:
+    """Records the retry did not name sit elsewhere; they are still the action's answers."""
+
+    @pytest.fixture
+    def alone_in_its_file(self, project):
+        return _split_staging(project, 1)
+
+    @pytest.fixture
+    def beside_a_sibling(self, project):
+        return _split_staging(project, 2)
+
+    def test_a_record_alone_in_its_file_failing_again_leaves_the_action_completed_with_failures(
+        self, alone_in_its_file
+    ):
+        guid = alone_in_its_file.mark_failed("page 0")[0]
+        alone_in_its_file.break_on("page 0")
+
+        result = alone_in_its_file.retry()
+
+        assert result.exit_code == 0, result.output
+        assert alone_in_its_file.disposition(guid) == "failed"
+        assert "Failed actions" not in result.output
+        assert "Failed to process file" not in result.output
+
+    def test_a_resumed_run_whose_only_sent_record_fails_does_not_log_its_file_as_failed(
+        self, beside_a_sibling
+    ):
+        guid = beside_a_sibling.mark_failed("page 0")[0]
+        beside_a_sibling.break_on("page 0")
+
+        result = beside_a_sibling.run()
+
+        assert result.exit_code == 0, result.output
+        assert beside_a_sibling.disposition(guid) == "failed"
+        assert "Failed to process file" not in result.output
+        assert "all 2 active input" not in result.output
+
+    def test_every_record_failing_with_nothing_stored_still_fails_the_action(
+        self, alone_in_its_file
+    ):
+        alone_in_its_file.break_on(*ALL_PAGES)
+
+        result = alone_in_its_file.run("--fresh")
+
+        assert result.exit_code != 0, result.output
