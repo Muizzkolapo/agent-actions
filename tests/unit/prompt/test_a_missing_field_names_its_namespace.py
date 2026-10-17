@@ -5,13 +5,16 @@ took it for a namespace nothing supplies. The error now names where the field wa
 read from, by the value's place in the prompt context.
 """
 
+import pickle
+import time
 from unittest.mock import patch
 
 import pytest
 
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
-from agent_actions.prompt.service import PromptPreparationService
+from agent_actions.prompt.jinja_env import MissingFieldError
+from agent_actions.prompt.service import PromptPreparationService, _place_in
 
 CONTEXT = {
     "good": {"x": 1, "inner": {"y": 2}, "items": [{"title": "a"}, {"name": "b"}]},
@@ -85,3 +88,61 @@ def test_a_namespace_nothing_supplies_is_still_reported_as_one():
 
     (event,) = events
     assert "Namespace 'nowhere' not found in context" in event.message
+
+
+def test_a_mapping_two_namespaces_share_is_named_by_the_one_the_template_reads():
+    """Wildcard observe stores a namespace's dicts by reference, so two can share one."""
+    meta = {"x": 1}
+    context = {"extract": {"meta": meta}, "classify": {"meta": meta, "label": "a"}}
+
+    error, _events = _render("{{ classify.meta.zz }}", context)
+
+    assert error.missing_variables == ["classify.meta.zz"]
+    assert "'classify.meta' has no field 'zz' (it has: x)" in str(error)
+
+
+def test_a_shared_mapping_the_template_does_not_name_is_not_given_a_guessed_place():
+    meta = {"x": 1}
+    context = {"extract": {"meta": meta}, "classify": {"meta": meta, "label": "a"}}
+
+    error, events = _render("{{ (extract if true else classify)['meta'].zz }}", context)
+
+    assert error.missing_variables == ["zz"]
+    assert "extract.meta" not in str(error)
+    assert "classify.meta" not in str(error)
+    assert "has no attribute 'zz'" in str(error)
+    assert not [e for e in events if "Namespace 'zz' not found" in e.message]
+
+
+def test_a_mapping_outside_a_large_context_is_given_up_on_quickly():
+    rows = [{"i": i, "v": [i] * 10} for i in range(500_000)]
+    context = {"big": {"rows": rows}, "good": {"a": 1}}
+
+    started = time.perf_counter()
+    error, _events = _render("{% set x = {'k': 1} %}{{ x.zz }}", context)
+    elapsed = time.perf_counter() - started
+
+    assert error.missing_variables == ["zz"]
+    assert elapsed < 2.0
+
+
+def test_a_mapping_at_the_end_of_a_deep_chain_is_placed():
+    target: dict = {"leaf": 1}
+    node = target
+    for _ in range(20_000 - 1):
+        node = {"a": node}
+
+    started = time.perf_counter()
+    place = _place_in({"deep": node}, target, "")
+    elapsed = time.perf_counter() - started
+
+    assert place == "deep" + ".a" * (20_000 - 1)
+    assert elapsed < 2.0
+
+
+def test_a_missing_field_error_survives_pickling():
+    error = MissingFieldError("good", "zz", ["x"])
+
+    copy = pickle.loads(pickle.dumps(error))
+
+    assert (copy.place, copy.field, str(copy)) == ("good", "zz", str(error))
