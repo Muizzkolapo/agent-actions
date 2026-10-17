@@ -59,6 +59,17 @@ REMOVED = (
 )
 
 
+LOOP_SETS_AGAIN = (
+    _HEADER
+    + """\
+    out["items"] = ""
+    for word in content.split():
+        out["items"] = out.pop("items") + word
+    return out
+"""
+)
+
+
 def _with_tool(tmp_path, mode: str, tool: str):
     project = _project(tmp_path, mode, 'out = {"label": content}')
     (project / "tools" / WORKFLOW / "produce.py").write_text(tool)
@@ -93,6 +104,17 @@ def test_a_removed_key_is_refused(tmp_path):
 @pytest.mark.parametrize("mode", ["online", "batch"])
 def test_a_key_set_in_a_try_whose_except_re_raises_runs(tmp_path, mode):
     project = _with_tool(tmp_path, mode, RE_RAISES)
+
+    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    assert "output schema requires" not in output, output
+    assert _dispositions(project) == ["success", "success"], output
+
+
+def test_a_key_a_loop_removes_and_sets_again_runs(tmp_path):
+    project = _with_tool(tmp_path, "online", LOOP_SETS_AGAIN)
 
     result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
     output = result.stdout + result.stderr
