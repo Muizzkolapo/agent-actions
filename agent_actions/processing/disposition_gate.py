@@ -137,6 +137,18 @@ class DispositionGate:
             )
         return carried
 
+    def nameless_rows_past_repair(
+        self, action_name: str, relative_path: str | None
+    ) -> list[dict[str, Any]]:
+        """Stored rows with no source_guid, to carry whole through this run's repair.
+
+        A repair names records by source_guid, so it never re-runs the record such a row
+        was refused for, and narrowing the input would otherwise delete the row.
+        """
+        if not self._repairing or not relative_path or self._backend is None:
+            return []
+        return nameless_rows(self._stored_rows(action_name, relative_path))
+
     def _stored_rows(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Rows this action already holds in *relative_path*."""
         if self._backend is None:
@@ -357,6 +369,14 @@ def stored_answers_stand(
     return every_answer_vouched_for(stored, answered)
 
 
+def nameless_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The rows with no source_guid: those of records refused for arriving without one.
+
+    No identity matching applies to them, so carrying one is all or nothing.
+    """
+    return [row for row in rows if not row.get("source_guid")]
+
+
 def stored_rows_not_reproduced(
     stored: Iterable[dict[str, Any]],
     produced: Iterable[dict[str, Any]],
@@ -484,8 +504,13 @@ def with_stored_rows_not_reproduced(
         filtered=filtered,
         still_answered=lambda: _answered_records(storage_backend, action_name),
     )
+    # A refused record's row, which no identity matches. A run with inputs recorded, or
+    # one that refused such a record itself, wrote what it holds of them; one with none
+    # recorded and none refused is a repair, which cannot name the record, or a store
+    # from before inputs were recorded.
+    unnamed = [] if batch_inputs or nameless_rows(produced) else nameless_rows(stored)
     if not carry_guids:
-        return produced
+        return produced + unnamed
 
     # Re-reads the same file, which the reconstruction cache answers, to keep the
     # one-row-per-identity rule in the place that owns it. Its checkpoint fallback is
@@ -508,7 +533,7 @@ def with_stored_rows_not_reproduced(
     # No `_delta_mode` stamp: `read_target_for_rewrite` marks the rows stored whole, so
     # a row round-trips into the mode it had. Stamping "full" would re-store every
     # carried row whole, rewriting rows this run never reprocessed.
-    return kept + carry_records
+    return kept + carry_records + unnamed
 
 
 def answered_since_stored(

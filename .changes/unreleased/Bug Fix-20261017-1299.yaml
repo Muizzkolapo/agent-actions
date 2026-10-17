@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  An `agac retry` of some of an action's records keeps the failed row the action stored
+  for a record refused for arriving without a `source_guid`, online and under batch. The
+  repair rewrote the file with only the rows it could match by `source_guid`, so the row,
+  the only record of the refusal besides the run log, was deleted while the action read
+  complete (1299).
+time: 2026-10-17T13:00:00Z
