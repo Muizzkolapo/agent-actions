@@ -2,6 +2,7 @@
 
 import logging
 import sys
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,7 +41,7 @@ from agent_actions.prompt.context.static_loader import (
     StaticDataLoadError,
 )
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
+from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment, MissingFieldError
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils import deep_json
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
@@ -58,6 +59,25 @@ def _null_by_record(value: Any) -> bool:
         REASON_NO_OUTPUT,
         REASON_NULL,
     )
+
+
+def _place_in(context: Mapping[str, Any], target: Any) -> str | None:
+    """The shallowest dotted place of *target* in *context*, found by identity, or None."""
+    queue: deque[tuple[str, Any]] = deque((str(key), value) for key, value in context.items())
+    seen: set[int] = set()
+    while queue:
+        place, value = queue.popleft()
+        if value is target:
+            return place
+        if id(value) in seen:
+            continue
+        if isinstance(value, Mapping):
+            seen.add(id(value))
+            queue.extend((f"{place}.{key}", child) for key, child in value.items())
+        elif isinstance(value, list | tuple):
+            seen.add(id(value))
+            queue.extend((f"{place}[{index}]", child) for index, child in enumerate(value))
+    return None
 
 
 def _too_deep_to_render(prompt_context: dict[str, Any]) -> RecordContextError | None:
@@ -361,6 +381,7 @@ class PromptPreparationService:
                 lstrip_blocks=True,
                 keep_trailing_newline=True,
                 finalize=lambda x: "" if is_null_namespace(x) else x,
+                place_of=lambda obj: _place_in(prompt_context, obj),
             )
 
             raw_prompt = escape_jinja_in_inline_code(raw_prompt)
@@ -411,18 +432,26 @@ class PromptPreparationService:
 
             error_str = str(e)
             missing = []
-            # A field read off a null namespace: the raised error's null-namespace
-            # hint diagnoses it, and the name is a field, not a namespace.
-            attribute_of_null = False
-            if "has no attribute" in error_str or "is undefined" in error_str:
+            # A name Jinja reports as a missing attribute is a field read off a
+            # value, not a namespace. Off a null namespace, the raised error's
+            # null-namespace hint diagnoses it; off any other value, Jinja's own
+            # text is the detail.
+            attribute_read = False
+            detail: str | None = None
+            if isinstance(e, MissingFieldError):
+                missing.append(f"{e.place}.{e.field}")
+                detail = error_str
+            elif "has no attribute" in error_str or "is undefined" in error_str:
                 import re
 
                 attribute_match = re.search(r"has no attribute '([^']+)'", error_str)
                 if attribute_match:
                     missing.append(attribute_match.group(1))
-                    attribute_of_null = error_str.startswith(
+                    attribute_read = True
+                    if not error_str.startswith(
                         ("'None' has no attribute", f"'{_NULL_NAMESPACE_TYPE} object'")
-                    )
+                    ):
+                        detail = error_str
                 else:
                     undefined_match = re.search(r"'([^']+)' is undefined", error_str)
                     if undefined_match:
@@ -435,12 +464,12 @@ class PromptPreparationService:
                     fire_event(
                         ContextFieldNotFoundEvent(
                             action_name=agent_name or "",
-                            field_ref=var,
+                            field_ref=field,
                             namespace=ns,
                             available_fields=available,
                         )
                     )
-                elif not attribute_of_null:
+                elif not attribute_read:
                     owners = [
                         ns
                         for ns, fields in namespace_context.items()
@@ -548,6 +577,7 @@ class PromptPreparationService:
                 field_context_metadata=field_context_metadata if field_context_metadata else None,
                 storage_hints=storage_hints if storage_hints else None,
                 null_namespace_hints=null_namespace_hints if null_namespace_hints else None,
+                detail=detail,
             ) from e
 
     @staticmethod

@@ -214,6 +214,7 @@ Raised when Jinja2 template rendering fails for a specific record because a refe
 - `field_context_metadata` — stored vs loaded fields per namespace
 - `storage_hints` — when a field exists in storage but was not loaded (missing schema declaration)
 - `null_namespace_hints` — when the template read a dependency namespace the record has no data for: what the record shows about why (a guard skip by that action, a null without one, no output of it on the record, or none of the observed fields in its output) and the remediation
+- `detail` — appended to the message: for a field a present namespace lacks, "'ns' has no field 'f' (it has: ...)"
 
 Both errors result in a FAILED disposition for the affected record and the pipeline
 continues — except a `TemplateVariableError` wrapping a Jinja `TemplateSyntaxError`,
