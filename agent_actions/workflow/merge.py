@@ -284,16 +284,24 @@ def split_from(record: dict[str, Any]) -> list[str]:
     return [a for a in anchors if a and a != record.get("source_guid")]
 
 
-def _two_branches_split(source: str, split_branches: list[str]) -> Exception:
+def _two_branches_split(
+    source: str, split_branches: list[str], alone: list[str] | None = None
+) -> Exception:
+    """*alone*: the branches whose records of *source* pair with no other branch's."""
     from agent_actions.errors import WorkflowError
 
+    alone = alone or split_branches
+    others = [branch for branch in split_branches if branch not in alone]
+    beside = f"a record {others} hold of it" if others else "another's"
+    who = "each" if len(alone) > 1 else "it"
     return WorkflowError(
-        f"Branches {split_branches} of a fan-in each returned several records for one "
-        f"source record ({source}), and a fan-in pairs a branch's records one to one "
-        "with the others' record for the same source. Bring all but one of these "
-        "branches to one record per source first, e.g. with a granularity: File tool "
-        "that aggregates them.",
-        context={"source": source, "branches": split_branches},
+        f"Branches {split_branches} of a fan-in hold records split from one source record "
+        f"({source}), and no record {alone} hold of it pairs with {beside}: {who} split "
+        "that source on its own. A fan-in pairs a branch's records one to one "
+        "with the others' record for the same source. Bring all but one of these branches "
+        "to one record per source first, e.g. with a granularity: File tool that "
+        "aggregates them.",
+        context={"source": source, "branches": split_branches, "unpaired": alone},
     )
 
 
@@ -304,8 +312,10 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     ``merge_records_by_key`` groups them. A branch that returned several records for
     one input gives each a new source id, so each lands in a group of its own; such a
     group is paired with the group of the record it was split from, once per split
-    record. Two branches split from the same record cannot be paired one to one, and
-    raise rather than run on records that hold one branch alone.
+    record. Two branches split from the same record cannot be paired one to one, nor
+    can a branch's records of a source beside other branches' when it shares no record
+    of that source with any of them; both raise rather than run on records that hold
+    one branch alone.
     """
     tagged: list[tuple[str, Any]] = []
     for branch, data in sources:
@@ -343,18 +353,23 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
                 )
                 break
 
-    # Split records left alone: from several branches and one source, they have no
-    # record of that source to pair with, only each other. Each branch holds two or
-    # more of them when it split the source itself; one each is a branch below an
-    # earlier split that lacks some of its records, left as it was.
-    unpaired: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    # Under each source no record holds, the branches holding a record of it, and those
+    # among them sharing a record of it with another branch. A branch that shares none
+    # split the source on its own, or kept too little of a split to tell; beside any other
+    # branch its records pair with nothing. One that shares some reads the same earlier
+    # split as another and lacks some of its records: those run as they are.
+    present: dict[str, set[str]] = {}
+    paired: dict[str, set[str]] = {}
     for key, members in groups.items():
-        if len(branches(key)) == 1 and key not in splits:
-            for anchor in split_from(members[0][1])[-1:]:
-                unpaired.setdefault(anchor, {}).setdefault(members[0][0], []).append(members[0][1])
-    for anchor, by_branch in unpaired.items():
-        if len(by_branch) > 1 and all(len(found) > 1 for found in by_branch.values()):
-            raise _two_branches_split(anchor, sorted(by_branch))
+        held = branches(key) | set(splits.get(key, {}))
+        for anchor in split_from(members[0][1])[-1:]:
+            present.setdefault(anchor, set()).update(held)
+            if len(held) > 1:
+                paired.setdefault(anchor, set()).update(held)
+    for anchor, here in present.items():
+        alone = here - paired.get(anchor, set())
+        if anchor not in group_of_guid and len(here) > 1 and alone:
+            raise _two_branches_split(anchor, sorted(here), sorted(alone))
 
     merged: list[Any] = []
     for key, members in groups.items():
