@@ -17,7 +17,8 @@ WORKFLOW = "fanin_probe"
 
 TOOLS = """from typing import Any
 
-from agent_actions import udf_tool
+from agent_actions import FileUDFResult, udf_tool
+from agent_actions.config.schema import Granularity
 
 
 def _find(d: Any, key: str):
@@ -78,6 +79,22 @@ def left_of_part(data: Any, *args) -> list[dict]:
 @udf_tool
 def mid_of_part(data: Any, *args) -> list[dict]:
     return [{"mid_tag": "M-" + str(_find(data, "part"))}]
+
+
+@udf_tool(granularity=Granularity.FILE)
+def gather_right(data: list[dict], **kwargs) -> FileUDFResult:
+    by_item: dict[str, list[int]] = {}
+    for position, record in enumerate(data):
+        by_item.setdefault(str(record["right_tag"]).split("-")[1], []).append(position)
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": positions,
+                "data": {"right_tag": "+".join(str(data[p]["right_tag"]) for p in positions)},
+            }
+            for positions in by_item.values()
+        ]
+    )
 
 
 @udf_tool
@@ -303,6 +320,7 @@ def _assert_refused(result, root: Path, *branches: str) -> None:
     assert "join" in output
     for branch in branches:
         assert branch in output
+    assert "upstream of every branch" in output
     assert _joined(root) == []
 
 
@@ -384,3 +402,30 @@ def test_branches_over_one_expansion_pair_record_by_record(tmp_path):
     assert _joined(root) == sorted(
         f"L-{item}-{n}|M-{item}-{n}" for item in ("a", "b", "c") for n in (1, 2)
     )
+
+
+GATHER = """  - name: gather
+    kind: tool
+    intent: "the split records of each source in one record"
+    impl: gather_right
+    granularity: File
+    schema: right_out
+    dependencies: [right]
+    context_scope: { observe: [right.right_tag] }
+"""
+
+
+def test_a_split_gathered_into_one_record_beside_another_split_fails(tmp_path):
+    """`gather` folds `right`'s split of each source into one record, which keeps the
+    identity of a split record, not the source's; `left` split the source too."""
+    config = _config("left, right", left_impl="split_left")
+    config = config.replace("  - name: join\n", GATHER + "  - name: join\n")
+    config = config.replace("dependencies: [left, right]", "dependencies: [left, gather]")
+    config = config.replace(
+        "observe: [left.left_tag, right.right_tag]", "observe: [left.left_tag, gather.right_tag]"
+    )
+    root = _project(tmp_path, config)
+
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
+
+    _assert_refused(result, root, "left", "gather")
