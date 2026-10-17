@@ -5,6 +5,9 @@ import re
 from collections import Counter
 from pathlib import Path
 
+import jinja2
+from jinja2 import meta
+
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathType
 from agent_actions.utils.file_handler import FileHandler
@@ -15,6 +18,14 @@ logger = logging.getLogger(__name__)
 # Supports dots in prompt names (e.g. {prompt file.block}) so that validate_prompt_blocks
 # and get_all_prompt_names correctly handle dot-in-name references.
 PROMPT_PATTERN = re.compile(r"\{prompt\s+([\w.]+)\}")
+
+# A raw block, left as written, or a `{{ load_prompt("file.Prompt") }}` tag of its own.
+_RAW_OR_LOAD_TAG = re.compile(
+    r"(?P<raw>\{%-?\s*raw\s*-?%\}.*?\{%-?\s*endraw\s*-?%\})"
+    r"|\{\{(?P<strip_before>-?)\s*load_prompt\(\s*(?P<q>['\"])(?P<name>[^'\"\n]+)(?P=q)\s*\)"
+    r"\s*(?P<strip_after>-?)\}\}",
+    re.S,
+)
 
 
 class PromptLoader:
@@ -128,3 +139,59 @@ class PromptLoader:
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
         PromptLoader.validate_prompt_blocks(prompt_file_path.name, content)
         return PromptLoader.extract_prompt(content, prompt_key)
+
+    @staticmethod
+    def load_prompt_expanded(
+        prompt_name: str, project_root: Path | None = None, _chain: tuple[str, ...] = ()
+    ) -> str:
+        """Load a prompt with each `{{ load_prompt("...") }}` tag in it replaced by that prompt.
+
+        The per-record render has no `load_prompt`, and Jinja would not render the text a
+        call returns, so the loaded text goes in as written for that render to fill.
+
+        Raises:
+            ValueError: If a prompt cannot be loaded, the prompts load each other in a
+                cycle, or a prompt calls `load_prompt` other than in a tag of its own.
+        """
+        chain = (*_chain, prompt_name)
+        if prompt_name in _chain:
+            raise ValueError(f"Prompts load each other in a cycle: {' -> '.join(chain)}.")
+        text = PromptLoader.load_prompt(prompt_name, project_root=project_root)
+
+        out = ""
+        strip_next = False
+        pos = 0
+        for match in _RAW_OR_LOAD_TAG.finditer(text):
+            literal = text[pos : match.start()]
+            out += literal.lstrip() if strip_next else literal
+            pos = match.end()
+            if match.group("raw"):
+                out += match.group("raw")
+                strip_next = False
+                continue
+            if match.group("strip_before"):
+                out = out.rstrip()
+            out += PromptLoader.load_prompt_expanded(
+                match.group("name"), project_root=project_root, _chain=chain
+            )
+            strip_next = bool(match.group("strip_after"))
+        rest = text[pos:]
+        out += rest.lstrip() if strip_next else rest
+
+        _refuse_unexpanded_load_prompt(prompt_name, out)
+        return out
+
+
+def _refuse_unexpanded_load_prompt(prompt_name: str, text: str) -> None:
+    outside_raw = _RAW_OR_LOAD_TAG.sub(lambda m: "" if m.group("raw") else m.group(0), text)
+    try:
+        names = meta.find_undeclared_variables(jinja2.Environment().parse(outside_raw))
+    except jinja2.TemplateSyntaxError:
+        # The per-record render reports the prompt's syntax error.
+        return
+    if "load_prompt" in names:
+        raise ValueError(
+            f"Prompt '{prompt_name}' calls load_prompt in a form the load cannot expand. "
+            "Write each call as a tag of its own with the prompt's name as a quoted "
+            'string: {{ load_prompt("file.Prompt") }}.'
+        )
