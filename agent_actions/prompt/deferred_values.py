@@ -22,7 +22,6 @@ record or a version supplies it, so nothing they decide is decided at load.
 from __future__ import annotations
 
 import bisect
-import copy
 import math
 import re
 import string
@@ -45,6 +44,7 @@ from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
+from agent_actions.utils.readonly import plain_copy
 
 # Private-use characters, which no workflow text holds, mark what the render left.
 _LEFT_OPEN, _LEFT_CLOSE = "\ue000", "\ue001"
@@ -1163,10 +1163,7 @@ def _frozen(value: Any) -> Any:
     if isinstance(value, LoopContext):
         return _loop_fields(value)
     if isinstance(value, list | dict | tuple):
-        try:
-            return copy.deepcopy(value)
-        except Exception:  # noqa: BLE001 - an uncopyable value is read as it is
-            return value
+        return plain_copy(value)
     return value
 
 
