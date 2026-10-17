@@ -38,6 +38,22 @@ def registered_udf():
     _registered_modules.discard(__name__)
 
 
+def _tally(votes):
+    return {"agreement": len(votes), "verdict": "ok"}
+
+
+def tally_probe(record):
+    return _tally([1, 2])
+
+
+@pytest.fixture
+def unreadable_udf():
+    udf_tool(granularity=Granularity.RECORD)(tally_probe)
+    yield "tally_probe"
+    UDF_REGISTRY.pop("tally_probe", None)
+    _registered_modules.discard(__name__)
+
+
 def _service(action_configs):
     return PreflightService(
         agent_name="wf",
@@ -97,10 +113,17 @@ class TestSynthesizedFieldsReachThePreflightService:
         assert "writer: checksum" in message, message
         assert "output_path" not in message, message
 
-    def test_unregistered_impl_leaves_every_field_reported(self, caplog):
+    def test_unregistered_impl_makes_no_claim(self, caplog):
+        """No source to read means nothing is known about the tool's output (1436)."""
         configs = {
             "upstream": _UPSTREAM,
             "writer": _consumer("not_registered_anywhere", ["output_path"]),
         }
-        message = _dagfit_warnings(configs, caplog)[0].getMessage()
-        assert "writer: output_path" in message, message
+        assert _dagfit_warnings(configs, caplog) == []
+
+    def test_unreadable_output_shape_makes_no_claim(self, unreadable_udf, caplog):
+        configs = {
+            "upstream": _UPSTREAM,
+            "builder": _consumer(unreadable_udf, ["agreement", "verdict"]),
+        }
+        assert _dagfit_warnings(configs, caplog) == []
