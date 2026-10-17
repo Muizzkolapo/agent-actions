@@ -57,6 +57,33 @@ def shout_right(data: Any, *args) -> list[dict]:
 def join_tags(data: Any, *args) -> list[dict]:
     right = _find(data, "loud_tag") or _find(data, "right_tag")
     return [{"joined": f"{_find(data, 'left_tag')}|{right}"}]
+
+
+@udf_tool
+def shout_left(data: Any, *args) -> list[dict]:
+    return [{"left_tag": str(_find(data, "left_tag")).upper()}]
+
+
+@udf_tool
+def expand(data: Any, *args) -> list[dict]:
+    item = str(_find(data, "item_id"))
+    return [{"part": f"{item}-1"}, {"part": f"{item}-2"}]
+
+
+@udf_tool
+def left_of_part(data: Any, *args) -> list[dict]:
+    return [{"left_tag": "L-" + str(_find(data, "part"))}]
+
+
+@udf_tool
+def mid_of_part(data: Any, *args) -> list[dict]:
+    return [{"mid_tag": "M-" + str(_find(data, "part"))}]
+
+
+@udf_tool
+def join_three(data: Any, *args) -> list[dict]:
+    tags = (_find(data, "left_tag"), _find(data, "mid_tag"), _find(data, "right_tag"))
+    return [{"joined": "|".join(str(tag) for tag in tags if tag is not None)}]
 """
 
 LEFT = """  - name: left
@@ -141,6 +168,8 @@ def _project(root: Path, config: str) -> Path:
         ("right", "right_tag"),
         ("loud", "loud_tag"),
         ("join", "joined"),
+        ("expand", "part"),
+        ("mid", "mid_tag"),
     ):
         (root / "schema" / WORKFLOW / f"{action}_out.yml").write_text(
             f"name: {action}_out\nfields:\n  - id: {field}\n    type: string\n"
@@ -215,3 +244,143 @@ def test_a_source_filtered_out_of_one_branch_drops_the_other_branchs_split_recor
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert _joined(root) == [joined for joined in PAIRED if "-b" not in joined]
+
+
+HEADER = (
+    f"name: {WORKFLOW}\n"
+    'description: "fan-in over branches that split one source"\n'
+    'version: "0.1.0"\n'
+    "defaults:\n"
+    "  granularity: Record\n"
+    "  run_mode: online\n"
+    "  model_vendor: agac-provider\n"
+    "  model_name: mock\n"
+    "  api_key: OLLAMA_API_KEY\n"
+    "  data_source: { type: local, folder: ./staging, file_type: [json] }\n"
+    "actions:\n"
+)
+
+
+def _keep_first(branch: str, field: str, prefix: str, impl: str, schema: str) -> str:
+    """An action below a split branch that filters out the second record of each source."""
+    kept = " and ".join(f'{branch}.{field} != "{prefix}-{item}-2"' for item in ("a", "b", "c"))
+    return (
+        f"  - name: keep_{branch}\n"
+        "    kind: tool\n"
+        '    intent: "the first record of each split"\n'
+        f"    impl: {impl}\n"
+        f"    schema: {schema}\n"
+        f"    dependencies: [{branch}]\n"
+        f"    context_scope: {{ observe: [{branch}.{field}] }}\n"
+        f"    guard: {{ condition: '{kept}', on_false: filter }}\n"
+    )
+
+
+def _split_then_kept(*, keep_left: bool, keep_right: bool) -> str:
+    """Both branches split each source; either may then keep one record of each split."""
+    left = "keep_left" if keep_left else "left"
+    right = "keep_right" if keep_right else "right"
+    return (
+        HEADER
+        + LEFT.format(impl="split_left")
+        + RIGHT
+        + (_keep_first("left", "left_tag", "L", "shout_left", "left_out") if keep_left else "")
+        + (_keep_first("right", "right_tag", "R", "shout_right", "loud_out") if keep_right else "")
+        + "  - name: join\n"
+        "    kind: tool\n"
+        '    intent: "fan-in"\n'
+        "    impl: join_tags\n"
+        "    schema: join_out\n"
+        f"    dependencies: [{left}, {right}]\n"
+        f"    context_scope: {{ observe: [{left}.left_tag, "
+        f"{right}.{'loud_tag' if keep_right else 'right_tag'}] }}\n"
+    )
+
+
+def _assert_refused(result, root: Path, *branches: str) -> None:
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert "join" in output
+    for branch in branches:
+        assert branch in output
+    assert _joined(root) == []
+
+
+@pytest.mark.parametrize(("keep_left", "keep_right"), [(True, False), (False, True), (True, True)])
+def test_two_split_branches_fail_the_fan_in_after_keeping_one_record_of_a_split(
+    tmp_path, keep_left, keep_right
+):
+    """Both branches split each source; a guard below one or both then keeps one record
+    of each split. No record of one branch is any record of the other's, so nothing pairs."""
+    root = _project(tmp_path, _split_then_kept(keep_left=keep_left, keep_right=keep_right))
+
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
+
+    _assert_refused(
+        result,
+        root,
+        "keep_left" if keep_left else "left",
+        "keep_right" if keep_right else "right",
+    )
+
+
+EXPAND = """  - name: expand
+    kind: tool
+    intent: "two records per input, read by two branches"
+    impl: expand
+    schema: expand_out
+    context_scope: { observe: [source.item_id] }
+"""
+
+
+def _over_expand(name: str, impl: str, schema: str) -> str:
+    return (
+        f"  - name: {name}\n"
+        "    kind: tool\n"
+        '    intent: "one record per part"\n'
+        f"    impl: {impl}\n"
+        f"    schema: {schema}\n"
+        "    dependencies: [expand]\n"
+        "    context_scope: { observe: [expand.part] }\n"
+    )
+
+
+def _expansion_beside_a_split(*, with_right: bool) -> str:
+    """Two branches read one expansion of each source; a third may split the source itself."""
+    deps = "left, mid, right" if with_right else "left, mid"
+    observe = "left.left_tag, mid.mid_tag" + (", right.right_tag" if with_right else "")
+    return (
+        HEADER
+        + EXPAND
+        + _over_expand("left", "left_of_part", "left_out")
+        + _over_expand("mid", "mid_of_part", "mid_out")
+        + (RIGHT if with_right else "")
+        + "  - name: join\n"
+        "    kind: tool\n"
+        '    intent: "fan-in"\n'
+        "    impl: join_three\n"
+        "    schema: join_out\n"
+        f"    dependencies: [{deps}]\n"
+        f"    context_scope: {{ observe: [{observe}] }}\n"
+    )
+
+
+def test_a_branch_that_splits_a_source_beside_branches_over_an_expansion_of_it_fails(tmp_path):
+    """`left` and `mid` hold one expansion of each source and pair with each other;
+    `right` split the same source on its own, so none of its records pairs with theirs."""
+    root = _project(tmp_path, _expansion_beside_a_split(with_right=True))
+
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
+
+    _assert_refused(result, root, "right")
+
+
+def test_branches_over_one_expansion_pair_record_by_record(tmp_path):
+    root = _project(tmp_path, _expansion_beside_a_split(with_right=False))
+
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _joined(root) == sorted(
+        f"L-{item}-{n}|M-{item}-{n}" for item in ("a", "b", "c") for n in (1, 2)
+    )

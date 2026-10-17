@@ -50,13 +50,56 @@ def test_two_branches_that_each_split_one_source_raise():
         )
 
 
+def test_branches_that_share_no_record_of_a_split_source_raise():
+    """One record of P each and neither is the other's: whether each branch split P on its
+    own or each lacks a different record of one split, nothing here pairs."""
+    with pytest.raises(WorkflowError, match="left.*right"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", "s1", "L1", "P")]),
+                ("right", [_record("right", "s2", "R2", "P")]),
+            ]
+        )
+
+
+def test_a_branch_that_split_a_source_beside_others_paired_under_it_raises():
+    with pytest.raises(WorkflowError, match="right"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", f"s{n}", f"L{n}", "P") for n in (1, 2)]),
+                ("mid", [_record("mid", f"s{n}", f"M{n}", "P") for n in (1, 2)]),
+                ("right", [_record("right", f"r{n}", f"R{n}", "P") for n in (1, 2)]),
+            ]
+        )
+
+
 def test_branches_below_an_earlier_split_missing_different_records_do_not_raise():
-    """Both branches read split records s1, s2 of P; each lacks a different one."""
+    """Both branches read split records s1..s3 of P and pair on s3; each lacks a
+    different one of the others, which run as they are."""
     merged = merge_fan_in(
         [
-            ("left", [_record("left", "s1", "L1", "P")]),
-            ("right", [_record("right", "s2", "R2", "P")]),
+            ("left", [_record("left", "s1", "L1", "P"), _record("left", "s3", "L3", "P")]),
+            ("right", [_record("right", "s2", "R2", "P"), _record("right", "s3", "R3", "P")]),
         ]
     )
 
-    assert _values(merged) == [("-", "R2"), ("L1", "-")]
+    assert _values(merged) == [("-", "R2"), ("L1", "-"), ("L3", "R3")]
+
+
+def test_a_split_paired_below_an_earlier_split_vouches_for_its_branch():
+    """`right` splits each record of an earlier split of P and lacks one; its split
+    records of s1 pair with `left`'s s1, so those of s2 are a lack, not a second split."""
+    merged = merge_fan_in(
+        [
+            ("left", [_record("left", "s1", "L1", "P")]),
+            (
+                "right",
+                [
+                    {**_record("right", f"r{n}", f"R{n}", "P"), "producer_source_guids": [s]}
+                    for n, s in ((1, "s1"), (2, "s1"), (3, "s2"))
+                ],
+            ),
+        ]
+    )
+
+    assert _values(merged) == [("-", "R3"), ("L1", "R1"), ("L1", "R2")]
