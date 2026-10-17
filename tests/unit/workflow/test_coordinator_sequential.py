@@ -449,3 +449,51 @@ class TestStripUnreachableDrops:
         strip_unreachable_drops(wf.action_configs)
 
         assert configs["consumer"]["context_scope"]["drop"] == ["reachable.field_a"]
+
+    def test_drops_through_a_version_base_are_kept(self):
+        """A merge depending on a version base reaches its branches and what is above them."""
+        configs = {
+            "split_words": {"dependencies": []},
+            "other": {"dependencies": []},
+            "vote_1": {"dependencies": ["split_words"]},
+            "vote_2": {"dependencies": ["split_words"]},
+            "merge_votes": {
+                "dependencies": ["vote"],
+                "context_scope": {
+                    "drop": [
+                        "vote_1.voted_word",
+                        "vote_2.voted_word",
+                        "split_words.word",
+                        "other.field",
+                    ],
+                },
+            },
+        }
+
+        strip_unreachable_drops(configs)
+
+        assert configs["merge_votes"]["context_scope"]["drop"] == [
+            "vote_1.voted_word",
+            "vote_2.voted_word",
+            "split_words.word",
+        ]
+
+    def test_drops_below_a_merge_reach_through_the_version_base(self):
+        """An action below a merge reaches the branches the merge depends on by their base."""
+        configs = {
+            "split_words": {"dependencies": []},
+            "vote_1": {"dependencies": ["split_words"]},
+            "vote_2": {"dependencies": ["split_words"]},
+            "merge_votes": {"dependencies": ["vote"]},
+            "recap": {
+                "dependencies": ["merge_votes"],
+                "context_scope": {"drop": ["vote_1.voted_word", "split_words.word"]},
+            },
+        }
+
+        strip_unreachable_drops(configs)
+
+        assert configs["recap"]["context_scope"]["drop"] == [
+            "vote_1.voted_word",
+            "split_words.word",
+        ]
