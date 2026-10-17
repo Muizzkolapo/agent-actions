@@ -91,6 +91,29 @@ record a batch provider left out of its results, which no retry will send again)
 > `guard_prefilter_skip` for an action of `granularity: file`, so the guard judges the
 > record again on the next run.
 
+### The cause on an `upstream_unprocessed` tombstone
+
+The row an action stores for a record an action above it failed, exhausted or skipped
+names what blocked it, in its `metadata`:
+
+```json
+"metadata": {
+  "reason": "upstream_unprocessed",
+  "agent_type": "tombstone",
+  "upstream_action": "summarize",
+  "upstream_state": "failed",
+  "upstream_reason": "the model failed page alpha"
+}
+```
+
+`upstream_action` is the first action that blocked the record, not the one directly
+above: every action below it repeats the same cause. `upstream_state` is the state that
+action left the record in (`failed`, `exhausted` or `cascade_skipped`, the last for a
+record it did not answer for a reason of its own, such as `batch_not_returned`), and
+`upstream_reason` is that action's reason. Below a fan-in, it names the branch that
+blocked the merged record. When nothing on the record names the action, only
+`upstream_state` is there.
+
 ## Version Correlation
 
 When using `version_consumption: merge`, records are correlated via `version_correlation_id`, `root_target_id`, and `parent_target_id`. On root records (records with no parent), `parent_target_id` is **absent** from the JSON object — not `null`. Always use a presence check (`"parent_target_id" in record`) rather than a null check.

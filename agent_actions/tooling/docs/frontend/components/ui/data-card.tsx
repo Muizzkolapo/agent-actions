@@ -503,6 +503,20 @@ export function getDisplayFields(record: Record<string, unknown>): Record<string
   return result
 }
 
+// The tombstone names the action that blocked the record, the state it left it in and why.
+function describeUpstreamCause(metadata: Record<string, unknown> | undefined): string {
+  const action = typeof metadata?.upstream_action === "string" ? metadata.upstream_action : ""
+  const state = typeof metadata?.upstream_state === "string" ? metadata.upstream_state : ""
+  const reason = typeof metadata?.upstream_reason === "string" ? metadata.upstream_reason : ""
+  const what =
+    state === "failed" ? "failed"
+    : state === "exhausted" ? "ran out of retries"
+    : state === "cascade_skipped" ? "skipped it"
+    : "did not process it"
+  const who = action ? `Upstream action "${action}" ${what}` : `An upstream action ${what}`
+  return `${who}${reason ? ` (${reason})` : ""} — no output produced`
+}
+
 export function DataCard({ record, index, fontSize, defaultOpen = true, actionInfo }: DataCardProps) {
   const [recordOpen, setRecordOpen] = useState(defaultOpen)
   const displayRecord = getDisplayFields(record)
@@ -512,6 +526,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
     : undefined
   const guardSkipped = tombstoneReason === "guard_skip"
   const upstreamUnprocessed = tombstoneReason === "upstream_unprocessed"
+  const upstreamMessage = upstreamUnprocessed ? describeUpstreamCause(recordMetadata) : ""
   const { identity, metadata } = classifyRecord(record)
 
   const outputFields = Object.entries(displayRecord)
@@ -712,7 +727,7 @@ export function DataCard({ record, index, fontSize, defaultOpen = true, actionIn
               </div>
             ) : upstreamUnprocessed ? (
               <div className="px-4 pb-3 text-xs text-muted-foreground italic">
-                Upstream failure — no output produced
+                {upstreamMessage}
               </div>
             ) : (
               outputFields.map((f) => {
