@@ -29,6 +29,7 @@ def mock_deps():
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.retried_records = frozenset()
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
     deps.output_manager = MagicMock(spec=ActionOutputManager)

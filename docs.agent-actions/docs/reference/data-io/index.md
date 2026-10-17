@@ -50,6 +50,8 @@ defaults:
     file_type: [json, csv]
 ```
 
+Each input file's output is stored under its path with the suffix replaced by `.json`, so `page.csv` and `page.json` in the same folder would share one name. The run refuses such a folder before processing anything, naming both files; rename or remove one of them.
+
 ### source_data (table)
 
 Metadata layer that tracks what's in staging:

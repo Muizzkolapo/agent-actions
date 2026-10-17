@@ -87,31 +87,6 @@ class AnthropicClient(BaseClient):
         return api_args
 
     @staticmethod
-    def _extract_response_content(
-        response: Any, model_name: str
-    ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Extract content from response, raising error if not found."""
-        response_content = next(
-            (block.input for block in response.content if hasattr(block, "input")), None
-        )
-        if response_content is not None:
-            return response_content  # type: ignore[no-any-return]
-
-        text_content = next(
-            (block.text for block in response.content if hasattr(block, "text")),
-            "No text content available",
-        )
-        raise VendorAPIError(
-            "No valid content with 'input' found in response",
-            context={
-                "model_name": model_name,
-                "vendor": "anthropic",
-                "text_content": text_content[:200],
-                "api_operation": "messages.create",
-            },
-        )
-
-    @staticmethod
     def _call_api(
         api_key: str | None,
         agent_config: dict[str, Any],
@@ -179,21 +154,26 @@ class AnthropicClient(BaseClient):
         response, model_name, request_id = AnthropicClient._call_api(
             api_key, agent_config, prompt_config, context_data, schema
         )
-        try:
-            result = AnthropicClient._extract_response_content(response, model_name)
-            return result if isinstance(result, list) else [result]
-        except VendorAPIError:
-            fire_event(
-                LLMErrorEvent(
-                    provider="anthropic",
-                    model=model_name,
-                    error_type="EmptyResponse",
-                    error_message="No extractable content in Anthropic response",
-                    request_id=request_id,
-                )
+        tool_input = next(
+            (block.input for block in response.content if hasattr(block, "input")), None
+        )
+        if tool_input is not None:
+            return tool_input if isinstance(tool_input, list) else [tool_input]
+
+        text = next((block.text for block in response.content if hasattr(block, "text")), "")
+        stop_reason = getattr(response, "stop_reason", None)
+        message = f"No tool_use block in response (stop_reason={stop_reason}): {text[:200]!r}"
+        fire_event(
+            LLMErrorEvent(
+                provider="anthropic",
+                model=model_name,
+                error_type="EmptyResponse",
+                error_message=message,
+                request_id=request_id,
             )
-            logger.debug("Empty/unusable response from Anthropic API, model=%s", model_name)
-            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
+        )
+        logger.warning("Anthropic model=%s: %s", model_name, message)
+        return [{"raw_response": text, "_parse_error": message}]
 
     @staticmethod
     def call_non_json(

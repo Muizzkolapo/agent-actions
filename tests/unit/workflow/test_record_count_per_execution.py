@@ -43,6 +43,7 @@ def _build_deps(stats_sequence):
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
     deps.output_manager = MagicMock(spec=ActionOutputManager)
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.workflow_name = "wf"
     deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
     deps.action_runner.execution_order = ["agent_a"]

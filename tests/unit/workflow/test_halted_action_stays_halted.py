@@ -60,6 +60,7 @@ def _executor(backend, state_manager) -> ActionExecutor:
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = state_manager
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.storage_backend = backend
     deps.action_runner.execution_order = [HALTED, ORDINARY]
     deps.output_manager = MagicMock()
