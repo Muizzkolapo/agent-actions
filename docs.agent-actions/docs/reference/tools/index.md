@@ -297,7 +297,7 @@ def produce(data: dict, **kwargs) -> dict:
 
 ```
 producer: output schema requires 'items' but the tool 'produce' sets it only at
-line 12 of produce.py, inside an `if`, so a record that does not take that path
+line 5 of produce.py, inside an `if`, so a record that does not take that path
 fails output validation at run time. Make 'items' optional in the schema, or set
 it on every path in the tool.
 ```
