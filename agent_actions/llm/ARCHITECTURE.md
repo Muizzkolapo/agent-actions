@@ -730,7 +730,6 @@ Step 1: PromptPreparationService (runs BEFORE builder.py)
                           ▼
 Step 2: builder.py
   ┌──────────────────────────────────────────────────────┐
-  │ Append observe fields as "Additional context: ..."    │
   │ Compile schema                                        │
   │ Pass to provider client                               │
   └───────────────────────┬──────────────────────────────┘
@@ -851,9 +850,6 @@ context_scope controls what the LLM sees:
   │    {name: "Alice", tenure: 4,                 │
   │     department: "Eng"}                        │
   │    (neither score can anchor this action)     │
-  │                                               │
-  │  Appended as "Additional context:":           │
-  │    department: Engineering  (observe fields)  │
   │                                               │
   │  Available in Jinja2 templates:               │
   │    {{ seed.rules }}  (seed directive)         │

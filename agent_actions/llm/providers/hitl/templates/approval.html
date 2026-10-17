@@ -1202,9 +1202,26 @@ h4.md-heading { font-size: 13.5px; }
             return out.join('');
         }
 
+        /* Whether objects and arrays nest more than `limit` levels, walked on an explicit stack. */
+        function jsonTextNestsDeeperThan(value, limit) {
+            var stack = [{ value: value, depth: 0 }];
+            while (stack.length) {
+                var top = stack.pop(), v = top.value;
+                if (v === null || typeof v !== 'object') continue;
+                if (top.depth >= limit) return true;
+                var children = Array.isArray(v) ? v : Object.keys(v).map(function(k) { return v[k]; });
+                for (var i = 0; i < children.length; i++) stack.push({ value: children[i], depth: top.depth + 1 });
+            }
+            return false;
+        }
+
         function syntaxHighlight(json) {
             if (typeof json !== 'string') {
-                try { json = JSON.stringify(json, null, 2); } catch(_) { json = jsonTextWithoutRecursion(json); }
+                /* Indented text grows with the square of the nesting depth (2,000 levels make
+                   8 MB and can freeze the tab), so a deeply nested value is shown compact. */
+                var compact = jsonTextNestsDeeperThan(json, 50);
+                try { json = compact ? JSON.stringify(json) : JSON.stringify(json, null, 2); }
+                catch(_) { json = jsonTextWithoutRecursion(json); }
             }
             if (!json) json = 'null';
             var s = esc(json);

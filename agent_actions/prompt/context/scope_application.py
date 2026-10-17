@@ -20,7 +20,6 @@ from agent_actions.prompt.context.scope_parsing import (
     parse_field_reference,
 )
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
-from agent_actions.utils import deep_json
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content, require_content_envelope
 from agent_actions.utils.dict import pop_nested_value
@@ -125,7 +124,6 @@ __all__ = [
     "apply_context_scope",
     "apply_context_scope_for_records",
     "plan_flat_observed_keys",
-    "format_llm_context",
     "FRAMEWORK_NAMESPACES",
     "FRAMEWORK_FIELDS",
     "build_workflow_metadata",
@@ -408,25 +406,6 @@ def apply_context_scope(
     )
 
     return (prompt_context, llm_context, passthrough_fields)
-
-
-def format_llm_context(llm_context: dict) -> str:
-    """Format llm_context dict as readable text for LLM message injection.
-
-    llm_context is namespaced: {action_name: {field: value, ...}, ...}.
-    Each namespace is rendered as a labeled section.
-    """
-    if not llm_context:
-        return ""
-
-    lines = ["Additional context:"]
-
-    for ns_name, ns_data in llm_context.items():
-        for field, value in ns_data.items():
-            value_str = deep_json.dumps(value, indent=2, ensure_ascii=False)
-            lines.append(f"{ns_name}.{field}: {value_str}")
-
-    return "\n".join(lines)
 
 
 # ── FILE mode helpers ──────────────────────────────────────────────────

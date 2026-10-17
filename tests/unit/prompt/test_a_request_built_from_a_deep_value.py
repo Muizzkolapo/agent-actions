@@ -13,7 +13,6 @@ import pytest
 from agent_actions.errors import RecordContextError, TemplateVariableError
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 from agent_actions.llm.realtime.services.context import ContextService
-from agent_actions.prompt.context.scope_application import format_llm_context
 from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.prompt.service import PromptPreparationService
@@ -112,23 +111,6 @@ class TestTheOnlineRequest:
     def test_an_ollama_message_serialises_a_deep_context(self):
         text = MessageBuilder._serialise_context({"deep": _deep()}, "ollama_local")
         assert text == '{"deep": ' + _deep_text(False) + "}"
-
-    def test_the_observed_context_lists_a_deep_field(self):
-        ordinary = {"source": {"page": {"a": [1, "é"]}}}
-        assert format_llm_context(ordinary) == (
-            "Additional context:\nsource.page: "
-            + json.dumps({"a": [1, "é"]}, indent=2, ensure_ascii=False)
-        )
-        text = format_llm_context({"source": {"deep": [[LEAF]] * 2}})
-        assert text.endswith(json.dumps([[LEAF]] * 2, indent=2, ensure_ascii=False))
-        # Indented text grows with the square of the depth, so this one stays shallower.
-        deep = format_llm_context({"source": {"deep": _deep(1_500)}})
-        assert deep.startswith("Additional context:\nsource.deep: [\n  [\n    [")
-        body = deep.split("source.deep: ", 1)[1]
-        assert deep_json.dumps(deep_json.loads(body)) == deep_json.dumps(_deep(1_500))
-        assert body.endswith(
-            '"' + LEAF + '"\n' + "".join(" " * (2 * i) + "]\n" for i in range(1_499, 0, -1)) + "]"
-        )
 
 
 class TestTheBatchRequest:

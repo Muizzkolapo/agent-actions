@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  A prompt that reads a field named like a dictionary method (`items`, `keys`,
+  `values`, `get`, ...) on a record that lacks that field now fails the record as a
+  missing field ("'producer' has no field 'items' (it has: label)"), online and in batch.
+  It sent "<built-in method items of dict object at 0x...>" to the model and stored the
+  record as a success, for `{{ producer.items }}` and `{{ producer['items'] }}` alike;
+  the load-time render did the same. Calling the method, as in `{{ source.get('x', '') }}`
+  or `{% for k, v in source.items() %}`, works as before (1503).
+time: 2026-10-17T15:00:00Z

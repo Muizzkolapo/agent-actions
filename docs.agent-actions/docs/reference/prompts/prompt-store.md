@@ -127,6 +127,8 @@ Use inline when prompt is specific to one action. Use prompt store when prompts 
 | `{{ seed.name.field }}` | Seed data files | `{{ seed.exam_syllabus.exam_name }}` |
 | `{{ action_name.field }}` | Upstream action output | `{{ extract_facts.facts }}` |
 
+A field is read by its name even when the name is also a dictionary method (`items`, `keys`, `values`, `get`): `{{ source.items }}` is the `items` field, and a record without that field fails like any missing field. Calling the method still works: `{{ source.get('description', '') }}`, `{% for key, value in source.items() %}`.
+
 ## Jinja2 Features
 
 ### Filters

@@ -97,7 +97,7 @@ bus: every namespace an action adds stays on it for the rest of the run.
 
 | Directive | LLM sees it? | This action forwards it? | Purpose |
 |-----------|-------------|--------------------------|---------|
-| `observe` | YES (in prompt context + "Additional context" injection) | NO (unless also in passthrough) | Feed data to the LLM for reasoning |
+| `observe` | YES (in prompt context) | NO (unless also in passthrough) | Feed data to the LLM for reasoning |
 | `passthrough` | NO (not in LLM context) | YES (merged into output record) | Carry identifiers through without LLM exposure |
 | `drop` | NO | NO | Hide an upstream field from this action's prompt |
 
@@ -152,9 +152,6 @@ context_scope:
                     |  dept: "Eng"}                   |
                     | (the two scores cannot anchor   |
                     |  this action's judgement)       |
-                    |                                 |
-                    | Additional context:             |
-                    |   source.dept: "Eng"            |
                     +---------------------------------+
 
                     +--- What the OUTPUT gets --------+
@@ -258,6 +255,8 @@ _render_prompt_template(raw_prompt, prompt_context)
 **StrictUndefined** means typos in template references fail loudly rather than silently rendering empty. Dereferencing a null namespace is no exception: it raises, but the error carries `null_namespace_hints` naming the namespace, what the record shows about why it has no data (a guard skip by that action, a null without one, no output of that action on the record, or none of the observed fields in its output), and the remediation for that case (`ns.*` null-safe access or a guard on the consuming action for a null; dependencies or the observed field names otherwise). The field read off a null namespace is not reported as a namespace of its own.
 
 A field read off a namespace that has data but not that field fails the same way. Jinja's error names only the field ("'dict object' has no attribute 'f'"), so `DictKeyFirstEnvironment` is given `place_of`, which finds the mapping's dotted place in `prompt_context` by identity (`good`, `good.inner`, `good.items[1]`) when the undefined is used, and raises `MissingFieldError`: the error reports `good.f` as the missing variable and says "'good' has no field 'f' (it has: ...)". A mapping held at several places (wildcard observe keeps a namespace's dicts by reference) is named by the place the template reads; when the template names none or several of them, no place is guessed. The search stops after 50,000 containers, so a mapping outside a large context costs little; then too a place is given only if the template names it. A mapping the template built itself has no place, and its field is still not reported as a namespace.
+
+A field named like a dict method (`items`, `keys`, `values`, `get`, ...) is no exception. Jinja would read `ns.items` or `ns['items']` on a mapping without that key as the bound method and render "<built-in method items of dict object ...>" into the prompt. `DictKeyFirstEnvironment` returns the undefined for any key a mapping lacks, so the read fails as a missing field; when a method has the name, the undefined can be called and calls it, which keeps `ns.items()` and `ns.get('x', 'd')` working. Whether a read is a call is not known when `getattr` runs, so the decision is left to the use of the value: rendering, testing or iterating it fails; calling it calls the method.
 
 ---
 

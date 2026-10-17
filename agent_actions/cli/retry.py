@@ -303,7 +303,8 @@ class RetryCommand:
         cleared = self._clear_for_the_rerun(backend, downstream_actions, record_ids, repairing)
 
         self.console.print(
-            f"\n[cyan]Cleared {cleared} disposition(s) for {len(record_ids)} record(s) "
+            f"\n[cyan]Cleared {cleared} disposition(s) for "
+            f"{len(record_ids - {NODE_LEVEL_RECORD_ID})} record(s) "
             f"across {len(downstream_actions)} action(s).[/cyan]"
         )
 
@@ -1034,17 +1035,34 @@ class RetryCommand:
         from_idx = execution_order.index(from_action)
         downstream = execution_order[from_idx:]
 
+        # The __node__ row is the action's own status, not a record.
+        records = [r for r in target_records if r.get("record_id") != NODE_LEVEL_RECORD_ID]
+        action_rows = [r for r in target_records if r.get("record_id") == NODE_LEVEL_RECORD_ID]
+
         self.console.print("\n[bold]Retry Plan[/bold]")
         self.console.print(f"  From action: [cyan]{from_action}[/cyan]")
         self.console.print(f"  Actions to re-run: {' → '.join(downstream)}")
-        self.console.print(f"  Records to retry: {len(target_records)}")
+        for row in action_rows:
+            reason = (row.get("reason") or "")[:120]
+            self.console.print(
+                Text(f"  Action status: {row.get('disposition', '?')}")
+                + Text(f" — {reason}" if reason else "", style="dim")
+            )
+        self.console.print(f"  Records to retry: {len(records)}")
+        if not records:
+            self.console.print(
+                f"  [dim]The failure is {from_action}'s own, so the retry re-runs it "
+                "without narrowing it to particular records.[/dim]"
+            )
+            self._note_other_failures(from_action, all_failures)
+            return
 
         table = Table(title="Failed Records")
         table.add_column("Record ID", style="red")
         table.add_column("Disposition", style="yellow")
         table.add_column("Reason", style="dim", max_width=60)
 
-        for record in target_records:
+        for record in records:
             table.add_row(
                 record.get("record_id", "?"),
                 record.get("disposition", "?"),
@@ -1052,8 +1070,9 @@ class RetryCommand:
             )
 
         self.console.print(table)
+        self._note_other_failures(from_action, all_failures)
 
-        # Alert user if there are failures at other actions too
+    def _note_other_failures(self, from_action: str, all_failures: dict[str, list[dict]]) -> None:
         other_actions = [a for a in all_failures if a != from_action]
         if other_actions:
             self.console.print(

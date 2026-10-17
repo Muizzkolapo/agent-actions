@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  `agac retry` no longer counts an action's own failure as a record. When every record of
+  an action failed, the action's `__node__` failed disposition was counted under "Records to
+  retry" and listed in the Failed Records table, so a one-record workflow read as two
+  records to retry. The plan now counts and lists only records and shows the action's own
+  failure on an "Action status" line; the "Cleared ..." line counts records the same way.
+  What the retry re-runs is unchanged (1502).
+time: 2026-10-17T14:45:00Z
