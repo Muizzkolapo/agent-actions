@@ -886,3 +886,101 @@ def test_a_load_rendered_again_for_an_action_named_by_a_tag_keeps_what_templates
                 "{% endset %}\n"
             },
         )
+
+
+# ── a loaded prompt of several lines goes in as written ──────────────────
+
+
+def _two_line_store(tmp_path: Path) -> None:
+    (tmp_path / "prompt_store").mkdir(exist_ok=True)
+    (tmp_path / "prompt_store" / "lp.md").write_text(
+        "{prompt Two}\nLine one: {{ source.a }}\n  Line two # not a comment\n{end_prompt}\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        pytest.param(
+            '>\n      {{ load_prompt("lp.Two") }}\n      then\n      {{ source.b }}',
+            "Line one: {{ source.a }}\n  Line two # not a comment then {{ source.b }}\n",
+            id="folded-reading-a-record",
+        ),
+        pytest.param(
+            '>\n      {{ load_prompt("lp.Two") }}\n      then\n      more',
+            "Line one: {{ source.a }}\n  Line two # not a comment then more\n",
+            id="folded",
+        ),
+        pytest.param(
+            '{{ load_prompt("lp.Two") }}',
+            "Line one: {{ source.a }}\n  Line two # not a comment",
+            id="plain",
+        ),
+        pytest.param(
+            "'{{ load_prompt(\"lp.Two\") }} {{ source.b }}'",
+            "Line one: {{ source.a }}\n  Line two # not a comment {{ source.b }}",
+            id="single-quoted-reading-a-record",
+        ),
+        pytest.param(
+            '|\n      {%- set p = load_prompt("lp.Two") %}\n      {{ p }}',
+            "Line one: {{ source.a }}\n  Line two # not a comment\n",
+            id="through-a-variable",
+        ),
+    ],
+)
+def test_an_inline_prompt_puts_a_loaded_prompt_of_several_lines_in_as_written(
+    tmp_path, prompt, expected
+):
+    _two_line_store(tmp_path)
+
+    data = _load(tmp_path, f"actions:\n  - name: a\n    prompt: {prompt}\n    intent: x\n")
+
+    assert _actions(data)["a"]["prompt"] == expected
+
+
+def test_a_loaded_prompt_in_a_flow_mapping_goes_in_as_written(tmp_path):
+    _two_line_store(tmp_path)
+
+    data = _load(
+        tmp_path,
+        "actions:\n"
+        "  - {name: a, intent: x, prompt: \"{{ load_prompt('lp.Two') }} {{ source.b }}\"}\n"
+        "  - {name: b, intent: x, prompt: \"{{ load_prompt('lp.Two') }}\"}\n",
+    )
+
+    loaded = "Line one: {{ source.a }}\n  Line two # not a comment"
+    assert _actions(data)["a"]["prompt"] == loaded + " {{ source.b }}"
+    assert _actions(data)["b"]["prompt"] == loaded
+
+
+def test_a_loaded_prompt_indented_by_a_filter_is_pasted_as_before(tmp_path):
+    """A workflow that indents the loaded text itself keeps the prompt it had."""
+    _two_line_store(tmp_path)
+
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: a\n    prompt: |\n"
+        '      {{ load_prompt("lp.Two") | indent(6) }}\n      {{ source.b }}\n    intent: x\n',
+    )
+
+    assert _actions(data)["a"]["prompt"] == (
+        "Line one: {{ source.a }}\n  Line two # not a comment\n{{ source.b }}\n"
+    )
+
+
+def test_a_loaded_prompt_in_a_versioned_action_gets_its_version_values(tmp_path):
+    (tmp_path / "prompt_store").mkdir()
+    (tmp_path / "prompt_store" / "lp.md").write_text(
+        "{prompt V}\nStrategy ${i}\nof {{ source.a }}\n{end_prompt}\n"
+    )
+
+    data = _load(
+        tmp_path,
+        "actions:\n  - name: a\n    versions: {range: [1, 2]}\n    prompt: |\n"
+        '      {{ load_prompt("lp.V") }}\n      Go.\n    intent: x\n',
+    )
+
+    assert [action["prompt"] for action in data["actions"]] == [
+        "Strategy 1\nof {{ source.a }}\nGo.\n",
+        "Strategy 2\nof {{ source.a }}\nGo.\n",
+    ]
