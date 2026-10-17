@@ -7,6 +7,7 @@ from typing import Any
 
 from agent_actions.errors import FileLoadError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
+from agent_actions.utils import deep_json
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +24,10 @@ class JsonLoader(BaseLoader[dict[str, Any] | list[dict[str, Any]]]):
         try:
             if file_path:
                 content_str = self.load_file(file_path)
-                result: dict[str, Any] | list[dict[str, Any]] = json.loads(content_str)
+                result: dict[str, Any] | list[dict[str, Any]] = deep_json.loads(content_str)
                 return result
             if content:
-                result = json.loads(content)
+                result = deep_json.loads(content)
                 return result
 
             error_context = {

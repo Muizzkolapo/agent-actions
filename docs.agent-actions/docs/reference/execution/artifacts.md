@@ -285,7 +285,7 @@ level.
 | `category` | Coarse grouping, e.g. `action`, `llm`, `data_processing` |
 | `message` | Rendered human-readable line |
 | `diagnostic` | `true` when the line describes framework internals. The console hides these unless the run is verbose; they are always written here |
-| `meta` | `timestamp`, `correlation_id`, `invocation_id`, `thread_id` |
+| `meta` | `timestamp`, `correlation_id`, `invocation_id`, `thread_id`, and the run's context: `workflow_name` and, on an event fired while an action runs, that action's `action_name` and `action_index`. Actions of one step run at once, and each event names the action that fired it |
 | `data` | Per-event fields; the shape differs by `event_type` |
 
 #### Event Codes

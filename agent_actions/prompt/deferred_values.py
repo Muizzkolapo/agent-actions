@@ -10,10 +10,12 @@ reaches it, in block or flow style, on its key's line or below it. A value whose
 all bound renders at load as it always has. A prompt reading a name only a record supplies
 is left whole for the per-record render: its own top-level `{{ }}` tags that read load-time
 names and nothing else render into it, and the load-time data its other tags read is set at
-its top. A value reading a version variable renders once per version, when its action
-expands. A name a prompt reads that the load finds undefined may be an action the file
-names by a tag; the file is rendered again keeping that prompt for the record, and the load
-fails once the file is parsed if no action has that name.
+its top. Text `load_prompt` returned that a prompt's tag outputs as it is goes into the
+YAML as a token and is put in as written once the YAML is parsed, so its line breaks never
+meet the YAML around it. A value reading a version variable renders once per version, when
+its action expands. A name a prompt reads that the load finds undefined may be an action
+the file names by a tag; the file is rendered again keeping that prompt for the record, and
+the load fails once the file is parsed if no action has that name.
 
 Every name the load looks up and does not find is recorded, and the load fails when a
 record or a version supplies it, so nothing they decide is decided at load.
@@ -53,6 +55,10 @@ _TOKEN = re.compile(f"{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
 # A token as `leave` writes it in place of a value.
 _LEFT = re.compile(f" ?{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
 _HELD = re.compile(f"{_HELD_OPEN}(\\d+){_HELD_CLOSE}")
+# A loaded prompt that a prompt's tag outputs, put in once the YAML is parsed.
+_LOADED_OPEN, _LOADED_CLOSE = "\ue004", "\ue005"
+_LOADED = re.compile(f"{_LOADED_OPEN}(\\d+){_LOADED_CLOSE}")
+_HOLD_LOADED = "_agac_hold_loaded"
 
 # Names only a record supplies, whatever the workflow declares.
 _RECORD_NAMES = FRAMEWORK_NAMESPACES | {"source", "i", "idx", "base_name", "param_name"}
@@ -170,12 +176,18 @@ class _NotData(Exception):
     pass
 
 
+class LoadedPrompt(str):
+    """The text `load_prompt` returned at load: a prompt's tag that outputs it as it is
+    puts it in as written, whatever YAML style the prompt is written in."""
+
+
 class LoadRender:
     """One load of a workflow: its environment, the values it left, the names it missed."""
 
     def __init__(self, templates_folder: Path, workflow: str) -> None:
         self._regions: list[_Region] = []
         self._left: list[_Left] = []
+        self._loaded: list[str] = []
         self._missed: list[str] = []
         self._not_recorded: frozenset[str] = frozenset()
         self._importing = 0
@@ -203,6 +215,7 @@ class LoadRender:
         self.env.template_class = _ImportingTemplate
         self.env.context_class = _FolderContext
         self.env.code_generator_class = _IncludeGenerator
+        self.env.globals[_HOLD_LOADED] = self._hold_loaded
         self._names_env.filters = self.env.filters
         self._names_env.tests = self.env.tests
         extension = self.env.extensions[_LeaveExtension.identifier]
@@ -277,7 +290,7 @@ class LoadRender:
                     place(inner)
                 return
             pieces.extend([source[pos : value.start], f"{{% agac_leave {region.site} %}}"])
-            pieces.extend([region.text, "{% agac_endleave %}"])
+            pieces.extend([self._holding_loaded(region), "{% agac_endleave %}"])
             pos = value.start + len(region.text)
 
         for value in _values(source, tags):
@@ -314,6 +327,10 @@ class LoadRender:
         return " " + anchor + token + ("\n" if region.text.endswith("\n") else "")
 
     # ── after the YAML is parsed ───────────────────────────────────────────
+
+    def fill_loaded(self, data: Any) -> Any:
+        """Each loaded prompt a prompt's tag output, put in as written."""
+        return _strings(data, "", lambda text, _path: self._put_loaded(text))
 
     def fill_prompts(self, data: Any) -> Any:
         """Each left prompt, as each record renders it."""
@@ -411,7 +428,7 @@ class LoadRender:
             stage = "kept for each record" if region.is_prompt else "rendered per version"
             return f" <the value at {region.where}, {stage}>"
 
-        return _LEFT.sub(name, text)
+        return _LOADED.sub("<a prompt load_prompt loaded>", _LEFT.sub(name, text))
 
     def explain(self, error: Exception) -> str:
         """Why a name the load found undefined is not there yet, when it is a later one."""
@@ -431,6 +448,31 @@ class LoadRender:
         )
 
     # ── internals ─────────────────────────────────────────────────────────
+
+    def _hold_loaded(self, value: Any) -> Any:
+        """A token for a loaded prompt, so the YAML around it never reads its text."""
+        if not isinstance(value, LoadedPrompt):
+            return value
+        self._loaded.append(str(value))
+        return f"{_LOADED_OPEN}{len(self._loaded) - 1}{_LOADED_CLOSE}"
+
+    def _put_loaded(self, text: str) -> str:
+        return _LOADED.sub(lambda m: self._loaded[int(m.group(1))], text)
+
+    def _holding_loaded(self, region: _Region) -> str:
+        """*region*'s text with each `{{ }}` tag of a prompt passing what it outputs
+        through `_hold_loaded`."""
+        if not region.is_prompt:
+            return region.text
+        pieces = []
+        for part in region.parts:
+            held = _holding_tag(part.text) if part.kind == "{" else part.text
+            try:
+                self._names_env.parse(held)
+            except jinja2.TemplateError:
+                held = part.text
+            pieces.append(held)
+        return "".join(pieces)
 
     def _read(self, text: str) -> tuple[nodes.Template, frozenset[str]]:
         """*text* parsed, and the names it reads that it does not bind itself."""
@@ -569,7 +611,9 @@ class LoadRender:
             if names and not names & region.assigned and all(_bound(context, n) for n in names):
                 if part.text.startswith("{{-") and pieces and pieces[-1][0] == "data":
                     pieces[-1] = ("data", pieces[-1][1].rstrip())
-                rendered = self.env.from_string(_bare(part.text)).render(context.get_all())
+                rendered = self.env.from_string(_holding_tag(_bare(part.text))).render(
+                    context.get_all()
+                )
                 pieces.append(("rendered", rendered))
                 strip_next = part.text.endswith("-}}")
             else:
@@ -596,7 +640,7 @@ class LoadRender:
             raise TemplateRenderingError(
                 f"{where}, and its load-time tags turned it into more YAML"
             )
-        text = _HELD.sub(lambda m: kept[int(m.group(1))], value)
+        text = _HELD.sub(lambda m: kept[int(m.group(1))], self._put_loaded(value))
 
         try:
             ast, free = self._read(text)
@@ -1135,6 +1179,15 @@ def _assigned(ast: nodes.Template) -> frozenset[str]:
 def _bare(tag: str) -> str:
     """A `{{ }}` tag without its whitespace control, to render on its own."""
     return "{{" + tag[2:-2].strip("-+") + "}}"
+
+
+def _holding_tag(tag: str) -> str:
+    """A `{{ }}` tag that outputs what *tag* does, through `_hold_loaded`."""
+    inner = tag[2:-2]
+    lead = inner[:1] if inner[:1] in ("-", "+") else ""
+    trail = inner[-1:] if len(inner) > 1 and inner[-1:] in ("-", "+") else ""
+    expression = inner[len(lead) : len(inner) - len(trail)]
+    return f"{{{{{lead} {_HOLD_LOADED}(({expression})) {trail}}}}}"
 
 
 def _template_texts(folder: Path) -> Iterable[str]:

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ProcessingError
 from agent_actions.storage.backend import batch_file_names_key
+from agent_actions.utils import deep_json
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -304,7 +305,7 @@ class BatchContextManager:
     ) -> None:
         try:
             key = BatchContextManager._metadata_key(action_name, batch_name)
-            backend.save_metadata(key, json.dumps(context_map, ensure_ascii=False))
+            backend.save_metadata(key, deep_json.dumps(context_map, ensure_ascii=False))
             logger.debug(
                 "Saved context map for %s/%s (%d entries)",
                 action_name,
@@ -330,7 +331,7 @@ class BatchContextManager:
                     f"Context map not found for {action_name}/{batch_name}",
                     context={"action_name": action_name, "batch_name": batch_name},
                 )
-            context_map: dict[str, Any] = json.loads(raw)
+            context_map: dict[str, Any] = deep_json.loads(raw)
             logger.debug(
                 "Loaded context map for %s/%s (%d entries)",
                 action_name,

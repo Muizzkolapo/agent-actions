@@ -43,6 +43,24 @@ you are asking.
 Both apply to online and batch alike. Rows written before `source_guid` and
 `run_id` existed leave them `NULL`.
 
+## How Long Traces Are Kept
+
+Traces stay across runs that build on what an action already answered: a
+resumed run, and `agac retry`, keep the traces of the records they do not ask
+again beside those of the records they do. They are cleared when the answers
+they describe are replaced:
+
+- `agac run --fresh` clears every action's traces.
+- An action that runs again over every record clears its own traces, and those
+  of every action reading it that runs again with it. That happens when its
+  prompt, schema, guard or model was edited, when its stored output is gone, and
+  when it failed or was stopped and then edited.
+- A failed or skipped action that runs again from the start clears its traces.
+
+Otherwise, storage maintenance keeps the traces of the most recent
+`storage.prompt_trace_retention_runs` calendar days on which traces were written
+(`0` never prunes).
+
 ## Viewing Traces in the Data Explorer
 
 Run `agac docs` to generate the documentation catalog, then open the Data Explorer in your browser.

@@ -13,6 +13,7 @@ When Ollama ships a real cloud batch API, add a
 ``_submit_to_cloud_batch_api`` branch inside ``_submit_to_provider_api``.
 """
 
+import contextvars
 import json
 import logging
 import os
@@ -241,7 +242,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ollama_batch") as pool:
             futures: dict[Future[dict[str, Any] | None], str] = {
-                pool.submit(self._process_single_task, task, idx, total): task["custom_id"]
+                pool.submit(
+                    contextvars.copy_context().run, self._process_single_task, task, idx, total
+                ): task["custom_id"]
                 for idx, task in enumerate(tasks)
             }
             for future in as_completed(futures):

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.utils import deep_json
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.project_root import find_project_root
 
@@ -244,7 +245,7 @@ def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
         if not _would_be_staged(cache_file, cache_dir):
             continue
         try:
-            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            cached = deep_json.loads(cache_file.read_text(encoding="utf-8"))
         except (OSError, ValueError) as e:
             raise ConfigurationError(
                 f"Cached API data at {cache_file} cannot be read: {e}. "
@@ -295,7 +296,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
                     context={"url": config.url, "operation": "fetch_api_data"},
                 )
 
-        parsed = json.loads(data)
+        parsed = deep_json.loads(data)
 
         atomic_json_write(cache_file, _as_staging_document(parsed), fsync=False)
 

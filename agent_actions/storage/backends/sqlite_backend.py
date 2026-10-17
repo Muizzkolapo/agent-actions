@@ -26,6 +26,7 @@ from agent_actions.storage.backend import (
     StorageBackend,
     batch_file_names_key,
 )
+from agent_actions.utils import deep_json
 
 logger = logging.getLogger(__name__)
 
@@ -392,7 +393,7 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
-        data_json = json.dumps(data, ensure_ascii=False)
+        data_json = deep_json.dumps(data, ensure_ascii=False)
         record_count = len(data)
 
         with self._lock:
@@ -447,7 +448,7 @@ class SQLiteBackend(StorageBackend):
         if row is None:
             raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
 
-        result: list[dict[str, Any]] = json.loads(row["data"])
+        result: list[dict[str, Any]] = deep_json.loads(row["data"])
         return result
 
     def _read_target_raw_batch(
@@ -468,7 +469,7 @@ class SQLiteBackend(StorageBackend):
 
         result: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
-            result[row["action_name"]] = json.loads(row["data"])
+            result[row["action_name"]] = deep_json.loads(row["data"])
         return result
 
     def _save_metadata_raw(self, key: str, value: str) -> None:
@@ -552,7 +553,7 @@ class SQLiteBackend(StorageBackend):
                     f"refusing to drop it silently",
                     context={"relative_path": relative_path, "record_index": index},
                 )
-            rows.append((relative_path, source_guid, json.dumps(item, ensure_ascii=False)))
+            rows.append((relative_path, source_guid, deep_json.dumps(item, ensure_ascii=False)))
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -609,7 +610,7 @@ class SQLiteBackend(StorageBackend):
         if not rows:
             raise FileNotFoundError(f"No source data found for {relative_path}")
 
-        return [json.loads(row["data"]) for row in rows]
+        return [deep_json.loads(row["data"]) for row in rows]
 
     def claim_source_guid_for_run(self, source_guid: str, relative_path: str) -> bool:
         """Claim source_guid for this run under relative_path; True if taken elsewhere."""
@@ -732,7 +733,7 @@ class SQLiteBackend(StorageBackend):
                 if not data_row:
                     continue
 
-                records = json.loads(data_row["data"])
+                records = deep_json.loads(data_row["data"])
                 if records and isinstance(records[0], dict) and "_delta_mode" in records[0]:
                     records = self._reconstruct_from_deltas(action_name, file_path, records)
                 for record in records:
@@ -1081,15 +1082,25 @@ class SQLiteBackend(StorageBackend):
                 chunk = ids[start : start + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE "
+                    f"SELECT 1 FROM source_data WHERE json_valid(data) AND ("
                     f"(source_guid IN ({placeholders}) "
                     f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL) "
-                    f"OR json_extract(data, '$.repeat_of_source_guid') IN ({placeholders}) "
+                    f"OR json_extract(data, '$.repeat_of_source_guid') IN ({placeholders})) "
                     f"LIMIT 1",
                     chunk + chunk,
                 )
                 if cursor.fetchone() is not None:
                     return True
+            # SQLite's JSON functions refuse a row nested 1000 levels deep (and a NaN);
+            # such a row is read here instead of failing the query for every row.
+            cursor.execute("SELECT source_guid, data FROM source_data WHERE NOT json_valid(data)")
+            unreadable_by_sqlite = cursor.fetchall()
+        wanted = set(ids)
+        for row in unreadable_by_sqlite:
+            stored = deep_json.loads(row["data"])
+            repeat_of = stored.get("repeat_of_source_guid") if isinstance(stored, dict) else None
+            if repeat_of is not None and (row["source_guid"] in wanted or repeat_of in wanted):
+                return True
         return False
 
     def clear_dispositions_batch(self, action_name: str, record_ids: Iterable[str]) -> int:
@@ -1232,7 +1243,7 @@ class SQLiteBackend(StorageBackend):
                 )
             answers.setdefault(source_guid, []).append(r)
         rows = [
-            (action_name, relative_path, source_guid, json.dumps(answer, ensure_ascii=False))
+            (action_name, relative_path, source_guid, deep_json.dumps(answer, ensure_ascii=False))
             for source_guid, answer in answers.items()
         ]
         with self._lock:
@@ -1279,7 +1290,7 @@ class SQLiteBackend(StorageBackend):
             )
             rows: list[dict[str, Any]] = []
             for stored in cursor.fetchall():
-                answer = json.loads(stored["record_data"])
+                answer = deep_json.loads(stored["record_data"])
                 # An earlier version stored one row, not a list, per record.
                 rows.extend(answer if isinstance(answer, list) else [answer])
             return rows

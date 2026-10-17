@@ -7,7 +7,6 @@ already done collects nothing and stores its file here too.
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Collection, Iterator
 from contextlib import contextmanager
@@ -29,6 +28,7 @@ from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.record.reasons import EMPTY_OUTPUT, GUARD_FILTER
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
+from agent_actions.utils import deep_json
 from agent_actions.utils.path_utils import ensure_directory_exists
 
 if TYPE_CHECKING:
@@ -348,7 +348,7 @@ def update_prompt_trace_responses(
             action_output = (
                 content.get(action_name, content) if isinstance(content, dict) else content
             )
-            response_text = json.dumps(action_output, ensure_ascii=False, default=str)
+            response_text = deep_json.dumps(action_output, ensure_ascii=False, default=str)
             storage_backend.update_prompt_trace_response(
                 action_name=action_name,
                 record_id=target_id,

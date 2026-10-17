@@ -20,7 +20,8 @@ pathways.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `atomic_write.py` | Module | `atomic_json_write()` — write JSON via temp file + fsync + rename to prevent crash corruption. | `file_io` |
+| `atomic_write.py` | Module | `atomic_json_write()` — write JSON via temp file + fsync + rename to prevent crash corruption. Data nested too deep for `json.dump` is written by `deep_json.dumps` instead. | `file_io` |
+| `deep_json.py` | Module | `loads` / `dumps` (`ensure_ascii`, `sort_keys`, `default`, `indent`): the json module's codec first, and only on its `RecursionError` (about 1000 levels on Python 3.11) the same text or values built on an explicit stack, so a record's nesting depth limits neither loading staging, its identity, the store, the batch context map, nor a written file. Used wherever a record's content is encoded or decoded whole. | `file_io`, `identity`, `storage` |
 | `constants.py` | Module | Shared configuration key constants and reserved names used across CLI/workflows. | `configuration`, `validation` |
 | `content.py` | Module | `get_existing_content` — the single function for reading a record's namespaced content; synthesizes `source` for a first-stage record whose user fields sit at the top level, with `RECORD_FRAMEWORK_FIELDS` drawing the boundary. `require_content_envelope` refuses a source-pool row that carries no `content` namespace dict: such a row has no boundary between the user's keys and the framework's, so both granularities guessed — FILE deleted a document field named `metadata` or `lineage`, RECORD published `source_guid` to the model. `is_version_merge` reports whether an action's content arrives pre-namespaced. | `record.envelope` |
 | `dict.py` | Module | `get_nested_value` helper for safely reading dot-separated fields from nested dicts. | `filtering`, `preprocessing` |
@@ -30,7 +31,7 @@ pathways.
 | `module_loader.py` | Module | Thread-safe module loading and UDF discovery (`load_module_from_path`, `load_module_from_directory`, `discover_and_load_udfs`). No `sys.path` mutation. | `logging`, `errors`, `utils.udf_management` |
 | `correlation.py` | Module | `VersionIdGenerator`: deterministic version correlation IDs for versioned-agent workflows. | `versioning` |
 | `field_management.py` | Module | `FieldManager`: ensures processed items always expose the required metadata/IDs. | `metadata` |
-| `id_generation.py` | Module | `IDGenerator`: UUID/deterministic ID helpers for target/node/source GUIDs. The string-field-name check walks a record on a stack of iterators, and a record too deep for the JSON encoder (about 1000 levels on Python 3.11) is serialized on a stack to the same bytes `json.dumps(..., sort_keys=True, default=str)` gives, so a record's depth does not limit its identity. A staged record whose content another row in the same file already took is given a derived identity of its own (`derive_repeat_source_guid`), hashed in a separate UUID namespace so no record's content can produce one. | `identity` |
+| `id_generation.py` | Module | `IDGenerator`: UUID/deterministic ID helpers for target/node/source GUIDs. The string-field-name check walks a record on a stack of iterators, and a record too deep for the JSON encoder (about 1000 levels on Python 3.11) is serialized by `deep_json` to the same bytes `json.dumps(..., sort_keys=True, default=str)` gives, so a record's depth does not limit its identity. A staged record whose content another row in the same file already took is given a derived identity of its own (`derive_repeat_source_guid`), hashed in a separate UUID namespace so no record's content can produce one. | `identity` |
 | `lineage.py` | Module | `LineageBuilder`: lineage chain building and ancestry propagation. | `lineage` |
 | `path_utils.py` | Module | Convenience path helpers (ensure dirs, mirror target-to-source, resolve absolute paths, find project root) backed by `PathManager`. Thread-safe global singleton with double-checked locking. `set_path_manager()` allows explicit DI of a scoped instance. `derive_workflow_root()` safely finds the workflow root from a path inside a workflow (agent_io fast-path + agent_config walk-up + safe fallback). | `config.paths`, `file_io` |
 | `safe_format.py` | Module | Robust exception formatting (safe formatting, root cause extraction, chain formatting). | `logging`, `errors` |
@@ -79,3 +80,6 @@ pathways.
 | `guards` | inbound | Guard parser uses dangerous pattern constants |
 | `prompt` | inbound | Context scope strategies use transformation utilities |
 | `workflow` | inbound | The executor stamps the record limit and what a run processed; the file walk and the version correlator mark that count unknown for a file they lose |
+| `storage` | inbound | The SQLite backend encodes and decodes stored rows with `deep_json` |
+| `llm` | inbound | The batch context map and batch prompt traces are encoded with `deep_json` |
+| `processing` | inbound | Prompt traces and input snapshots are encoded with `deep_json` |

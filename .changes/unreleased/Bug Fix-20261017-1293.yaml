@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  A `context_scope.drop` on an action that depends on a version base, such as a version
+  merge, keeps the fields it names away from the action. Load-time pruning did not count a
+  version base's branches, or the actions above them, as upstream, so it removed every such
+  drop without a word and the dropped fields reached the tool or the prompt, online, in
+  batch and under `agac retry` (1293).
+time: 2026-10-17T12:00:00Z

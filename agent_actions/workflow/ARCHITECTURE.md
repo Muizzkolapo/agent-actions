@@ -731,9 +731,9 @@ Stopped partway is one of:
                 row instead (processing/ARCHITECTURE.md, "Checkpoint
                 and Resume")
     edited    → ActionExecutor.reopen_with_readers: it and every action
-                reading it are forgotten (dispositions, checkpoints, batch
-                state, a batch still out given up) and put back to pending;
-                the reset then clears the prompt traces of each
+                reading it are forgotten (dispositions, checkpoints, prompt
+                traces, batch state, a batch still out given up) and put
+                back to pending
     unknown   → state written before the stamp existed: reset by status,
                 selective for MID_PROCESSING_STATUSES, bulk for FAILED
 

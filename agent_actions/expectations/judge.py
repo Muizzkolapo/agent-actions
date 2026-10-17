@@ -9,6 +9,7 @@ structured-output schema.
 from __future__ import annotations
 
 import ast
+import contextvars
 import hashlib
 import json
 import logging
@@ -143,8 +144,11 @@ def invoke_judge_with_votes(
             agent_config, rule, value, context=context, model=model, action_name=action_name
         )
 
+    # Each vote runs in a copy of this context, so its model call is logged
+    # against the action that asked for it.
     with ThreadPoolExecutor(max_workers=votes) as pool:
-        results = list(pool.map(one_vote, range(votes)))
+        futures = [pool.submit(contextvars.copy_context().run, one_vote, i) for i in range(votes)]
+        results = [future.result() for future in futures]
 
     passed_count = sum(1 for passed, _ in results if passed)
     majority = passed_count * 2 > votes

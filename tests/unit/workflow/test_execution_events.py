@@ -240,14 +240,13 @@ class TestHandleWorkflowError:
     def test_fires_workflow_failed_event(self, event_logger):
         error = RuntimeError("workflow died")
         mgr = MagicMock()
-        mgr.get_context.return_value = "agent_a"
 
         with (
             patch(FIRE_EVENT_PATH) as mock_fire,
             patch(GET_MANAGER_PATH, return_value=mgr),
             patch(GET_ERROR_DETAIL_PATH, return_value="detail"),
         ):
-            event_logger.handle_workflow_error(error, elapsed_time=3.0)
+            event_logger.handle_workflow_error(error, elapsed_time=3.0, failed_action="agent_a")
 
         event = mock_fire.call_args[0][0]
         assert isinstance(event, WorkflowFailedEvent)

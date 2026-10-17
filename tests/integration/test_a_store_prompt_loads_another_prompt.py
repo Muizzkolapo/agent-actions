@@ -79,6 +79,16 @@ Be brief.
 {prompt Loop_B}
 {{ load_prompt("lp_wf.Loop_A") }}
 {end_prompt}
+
+{prompt Two_Lines}
+Line one.
+Line two.
+{end_prompt}
+
+{prompt Two_Lines_Tagged}
+Line one about {{ source.title }}.
+  Line two, indented.
+{end_prompt}
 """
 
 
@@ -176,3 +186,57 @@ def test_store_prompts_that_load_each_other_fail_the_load_naming_the_cycle(tmp_p
 
     assert code != 0, output
     assert "lp_wf.Loop_A -> lp_wf.Loop_B -> lp_wf.Loop_A" in output, output
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_an_inline_prompt_reading_a_record_loads_a_store_prompt_of_several_lines(tmp_path, mode):
+    """The loaded lines were pasted unindented into the block, failing the load as YAML."""
+    project = _project(
+        tmp_path,
+        mode,
+        '|\n      {{ load_prompt("lp_wf.Two_Lines") }}\n      Summarize {{ source.title }}.',
+    )
+
+    code, output = _run(project)
+
+    assert code == 0, output
+    assert _prompts(project) == [
+        f"Line one.\nLine two.\nSummarize {page['title']}.\n" for page in PAGES
+    ]
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        pytest.param(
+            '|\n      {{ load_prompt("lp_wf.Two_Lines") }}\n      Summarize the page.',
+            "Line one.\nLine two.\nSummarize the page.\n",
+            id="block-reading-no-record-field",
+        ),
+        pytest.param(
+            '|\n      {{ load_prompt("lp_wf.Two_Lines_Tagged") }}\n      Summarize the page.',
+            "Line one about {title}.\n  Line two, indented.\nSummarize the page.\n",
+            id="loaded-text-with-tags",
+        ),
+        pytest.param(
+            '|\n      Intro for {{ source.title }}:\n      {{ load_prompt("lp_wf.Two_Lines") }}'
+            "\n      End.",
+            "Intro for {title}:\nLine one.\nLine two.\nEnd.\n",
+            id="block-reading-a-record-above-it",
+        ),
+        pytest.param(
+            "\"{{ load_prompt('lp_wf.Two_Lines') }} Summarize {{ source.title }}.\"",
+            "Line one.\nLine two. Summarize {title}.",
+            id="double-quoted-keeps-the-line-break",
+        ),
+    ],
+)
+def test_an_inline_prompt_puts_a_loaded_prompt_of_several_lines_in_as_written(
+    tmp_path, prompt, expected
+):
+    project = _project(tmp_path, "online", prompt)
+
+    code, output = _run(project)
+
+    assert code == 0, output
+    assert _prompts(project) == [expected.format(title=page["title"]) for page in PAGES]

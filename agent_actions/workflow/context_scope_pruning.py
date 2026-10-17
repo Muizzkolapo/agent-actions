@@ -8,34 +8,21 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent_actions.validation.dep_observe_validator import upstream_through_dependencies
+
 logger = logging.getLogger(__name__)
-
-
-def _action_deps(cfg: dict[str, Any]) -> list[str]:
-    deps = cfg.get("dependencies") or []
-    return list(deps) if not isinstance(deps, str) else [deps]
-
-
-def _get_reachable_actions(action_name: str, action_configs: dict[str, dict[str, Any]]) -> set[str]:
-    reachable: set[str] = set()
-    stack = _action_deps(action_configs.get(action_name, {}))
-
-    while stack:
-        dep = stack.pop()
-        if dep in reachable:
-            continue
-        reachable.add(dep)
-        for upstream in _action_deps(action_configs.get(dep, {})):
-            if upstream not in reachable:
-                stack.append(upstream)
-
-    return reachable
 
 
 def strip_unreachable_drops(action_configs: dict[str, dict[str, Any]]) -> None:
     """Strip drops on namespaces outside an action's dep chain — they're
-    no-ops at runtime but produce per-record warnings."""
+    no-ops at runtime but produce per-record warnings.
+
+    The chain is pre-flight's, a version base in ``dependencies`` meaning every
+    branch, so a drop on a version merge naming a branch or an action above the
+    branches is kept.
+    """
     all_action_names = set(action_configs.keys())
+    upstream = upstream_through_dependencies(action_configs)
 
     for action_name, config in action_configs.items():
         context_scope = config.get("context_scope")
@@ -46,7 +33,7 @@ def strip_unreachable_drops(action_configs: dict[str, dict[str, Any]]) -> None:
         if not isinstance(drop_refs, list) or not drop_refs:
             continue
 
-        reachable = _get_reachable_actions(action_name, action_configs)
+        reachable = upstream[action_name]
 
         filtered: list[str] = []
         for ref in drop_refs:

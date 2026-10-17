@@ -203,7 +203,9 @@ class WorkflowEventLogger:
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_completed()
 
-    def handle_workflow_error(self, error: Exception, elapsed_time: float = 0.0):
+    def handle_workflow_error(
+        self, error: Exception, elapsed_time: float = 0.0, failed_action: str = ""
+    ):
         """Handle workflow execution error with structured output."""
         self._mark_run_terminal(
             get_error_detail(error),
@@ -218,14 +220,16 @@ class WorkflowEventLogger:
                 error_detail=get_error_detail(error),
                 error_type=type(error).__name__,
                 elapsed_time=elapsed_time,
-                failed_action=get_manager().get_context("action_name") or "",
+                failed_action=failed_action,
             )
         )
 
         # CLI decorator checks this attribute to prevent duplicate output
         error._already_displayed = True  # type: ignore[attr-defined]
 
-    def handle_workflow_interrupt(self, interrupt: BaseException, elapsed_time: float = 0.0):
+    def handle_workflow_interrupt(
+        self, interrupt: BaseException, elapsed_time: float = 0.0, failed_action: str = ""
+    ):
         """Record terminal state for a run killed by Ctrl-C, SIGTERM or cancellation."""
         reason = f"Run interrupted ({type(interrupt).__name__})"
 
@@ -242,7 +246,7 @@ class WorkflowEventLogger:
                 error_detail=reason,
                 error_type=type(interrupt).__name__,
                 elapsed_time=elapsed_time,
-                failed_action=get_manager().get_context("action_name") or "",
+                failed_action=failed_action,
             )
         )
 

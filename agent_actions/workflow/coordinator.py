@@ -256,8 +256,7 @@ class AgentWorkflow:
                     "answer everything again",
                     name,
                 )
-                for reopened in self.services.core.action_executor.reopen_with_readers(name):
-                    self._clear_prompt_traces(reopened)
+                self.services.core.action_executor.reopen_with_readers(name)
             elif edited is False or status in MID_PROCESSING_STATUSES:
                 # Written before the config was recorded as work began, the state is reset
                 # as it was then: by its status alone.
@@ -373,13 +372,8 @@ class AgentWorkflow:
                 from agent_actions.workflow.parallel.action_executor import LevelExecutionParams
 
                 for level_idx, level_actions in enumerate(levels):
-                    for action_name in level_actions:
-                        if action_name in self.action_indices:
-                            manager.set_context(
-                                action_name=action_name,
-                                action_index=self.action_indices[action_name],
-                            )
-
+                    # The orchestrator labels each action's events itself: its
+                    # actions run at once, so no single label is right for a level.
                     orchestrator = self.services.core.action_level_orchestrator
                     level_complete = await orchestrator.execute_level_async(
                         LevelExecutionParams(
@@ -423,7 +417,9 @@ class AgentWorkflow:
                     workflow=self.metadata.agent_name,
                     operation="async_workflow_execution",
                 )
-                self.event_logger.handle_workflow_error(e, elapsed_time=duration)
+                self.event_logger.handle_workflow_error(
+                    e, elapsed_time=duration, failed_action=self._in_flight_actions()
+                )
                 raise
 
             except BaseException as e:
@@ -432,8 +428,15 @@ class AgentWorkflow:
                 # reading 'running' on disk long after the process is gone.
                 duration = (datetime.now() - workflow_start).total_seconds()
                 self.state.failed = True
-                self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
+                self.event_logger.handle_workflow_interrupt(
+                    e, elapsed_time=duration, failed_action=self._in_flight_actions()
+                )
                 raise
+
+    def _in_flight_actions(self) -> str:
+        """The actions of the level the parallel run was in, as one name or a list."""
+        in_flight = getattr(self.services.core.action_level_orchestrator, "in_flight", [])
+        return ", ".join(in_flight) if isinstance(in_flight, list) else ""
 
     def set_retried_records(self, record_ids: Iterable[str]) -> None:
         """Tell this run which records it is repairing, by id.
@@ -460,6 +463,7 @@ class AgentWorkflow:
     def _run_workflow_with_context(self, workflow_start):
         """Execute workflow with retry tracking context active."""
         manager = get_manager()
+        running = ""
         with manager.context():
             try:
                 total_actions = len(self.execution_order)
@@ -484,8 +488,12 @@ class AgentWorkflow:
                     try:
                         for action_name in pending:
                             idx = self.action_indices[action_name]
-                            manager.set_context(action_name=action_name, action_index=idx)
-                            should_stop = self._run_single_action(idx, action_name, total_actions)
+                            running = action_name
+                            with manager.context(action_name=action_name, action_index=idx):
+                                should_stop = self._run_single_action(
+                                    idx, action_name, total_actions
+                                )
+                            running = ""
                             if should_stop:
                                 stop = True
                                 break
@@ -530,7 +538,9 @@ class AgentWorkflow:
                     workflow=self.metadata.agent_name,
                     operation="sequential_workflow_execution",
                 )
-                self.event_logger.handle_workflow_error(e, elapsed_time=duration)
+                self.event_logger.handle_workflow_error(
+                    e, elapsed_time=duration, failed_action=running
+                )
                 raise
 
             except BaseException as e:
@@ -539,7 +549,9 @@ class AgentWorkflow:
                 # reading 'running' on disk long after the process is gone.
                 duration = (datetime.now() - workflow_start).total_seconds()
                 self.state.failed = True
-                self.event_logger.handle_workflow_interrupt(e, elapsed_time=duration)
+                self.event_logger.handle_workflow_interrupt(
+                    e, elapsed_time=duration, failed_action=running
+                )
                 raise
 
     def _run_storage_maintenance(self) -> None:

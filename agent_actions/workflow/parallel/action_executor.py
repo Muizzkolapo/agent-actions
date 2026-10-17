@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from agent_actions.errors import WorkflowError, get_error_detail
-from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
@@ -55,6 +55,8 @@ class ActionLevelOrchestrator:
         """Initialize level orchestrator."""
         self.execution_order = execution_order
         self.action_configs = action_configs
+        # The actions of the level last started, for naming what a run died in.
+        self.in_flight: list[str] = []
 
     def _build_version_base_name_map(self) -> dict[str, list[str]]:
         """Build a mapping from version base names to their expanded action names."""
@@ -178,24 +180,27 @@ class ActionLevelOrchestrator:
         is_last = original_idx == len(self.execution_order) - 1
         total_actions = len(self.execution_order)
 
-        fire_event(
-            ActionStartEvent(
-                action_name=action_name,
-                action_index=original_idx,
-                total_actions=total_actions,
-                mode=action_config.get("run_mode", ""),
+        with get_manager().context(action_name=action_name, action_index=original_idx):
+            fire_event(
+                ActionStartEvent(
+                    action_name=action_name,
+                    action_index=original_idx,
+                    total_actions=total_actions,
+                    mode=action_config.get("run_mode", ""),
+                )
             )
-        )
 
-        result = await action_executor.execute_action_async(
-            action_name,
-            action_idx=original_idx,
-            action_config=action_config,
-            is_last_action=is_last,
-        )
+            result = await action_executor.execute_action_async(
+                action_name,
+                action_idx=original_idx,
+                action_config=action_config,
+                is_last_action=is_last,
+            )
 
-        run_mode = action_config.get("run_mode", "")
-        self._fire_action_result_event(action_name, original_idx, total_actions, result, run_mode)
+            run_mode = action_config.get("run_mode", "")
+            self._fire_action_result_event(
+                action_name, original_idx, total_actions, result, run_mode
+            )
 
         if not result.success:
             logger.warning("Action '%s' failed: %s", action_name, result.error, extra=DIAGNOSTIC)
@@ -208,37 +213,41 @@ class ActionLevelOrchestrator:
 
         async def run_with_limit(action):
             """Run action with semaphore limit, firing events on completion."""
-            async with semaphore:
-                original_idx = params.action_indices[action]
-                action_config = self.action_configs[action]
-                is_last = original_idx == len(self.execution_order) - 1
+            original_idx = params.action_indices[action]
+            action_config = self.action_configs[action]
+            is_last = original_idx == len(self.execution_order) - 1
 
-                try:
-                    result = await params.action_executor.execute_action_async(
-                        action,
-                        action_idx=original_idx,
-                        action_config=action_config,
-                        is_last_action=is_last,
-                    )
-                except Exception as exc:
-                    fire_event(
-                        ActionFailedEvent(
-                            action_name=action,
-                            action_index=original_idx,
-                            total_actions=total_actions,
-                            error_message=str(exc),
-                            error_detail=get_error_detail(exc),
-                            error_type=type(exc).__name__,
-                            mode=action_config.get("run_mode", ""),
+            # gather runs each coroutine as a task with its own copy of the context,
+            # so this label reaches only the events this action fires, its worker
+            # threads included.
+            with get_manager().context(action_name=action, action_index=original_idx):
+                async with semaphore:
+                    try:
+                        result = await params.action_executor.execute_action_async(
+                            action,
+                            action_idx=original_idx,
+                            action_config=action_config,
+                            is_last_action=is_last,
                         )
-                    )
-                    raise
+                    except Exception as exc:
+                        fire_event(
+                            ActionFailedEvent(
+                                action_name=action,
+                                action_index=original_idx,
+                                total_actions=total_actions,
+                                error_message=str(exc),
+                                error_detail=get_error_detail(exc),
+                                error_type=type(exc).__name__,
+                                mode=action_config.get("run_mode", ""),
+                            )
+                        )
+                        raise
 
-                run_mode = action_config.get("run_mode", "")
-                self._fire_action_result_event(
-                    action, original_idx, total_actions, result, run_mode
-                )
-                return result
+                    run_mode = action_config.get("run_mode", "")
+                    self._fire_action_result_event(
+                        action, original_idx, total_actions, result, run_mode
+                    )
+                    return result
 
         tasks = [run_with_limit(action) for action in params.pending_actions]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -344,6 +353,7 @@ class ActionLevelOrchestrator:
 
         # Filter to pending actions only (verification above may have reset some)
         pending_actions = params.state_manager.get_pending_actions(params.level_actions)
+        self.in_flight = list(pending_actions)
 
         fire_step_start(params.level_idx, params.total_steps, params.level_actions, pending_actions)
 
