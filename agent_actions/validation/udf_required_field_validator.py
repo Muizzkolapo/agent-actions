@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterator
+from pathlib import Path
 
 
 def _has_spread(dict_node: ast.Dict) -> bool:
@@ -91,94 +92,192 @@ def _callee_name(func: ast.expr) -> str | None:
     return None
 
 
-def _initial_dict(stmt: ast.stmt, target: str, read_annotated: bool) -> ast.Dict | None:
-    """The dict literal ``stmt`` binds to ``target`` (``target = {...}``), if any."""
-    if (
-        isinstance(stmt, ast.Assign)
-        and len(stmt.targets) == 1
-        and isinstance(stmt.targets[0], ast.Name)
-        and stmt.targets[0].id == target
-        and isinstance(stmt.value, ast.Dict)
-    ):
-        return stmt.value
-    if (
-        read_annotated
-        and isinstance(stmt, ast.AnnAssign)
-        and isinstance(stmt.target, ast.Name)
-        and stmt.target.id == target
-        and isinstance(stmt.value, ast.Dict)
-    ):
-        return stmt.value
+def _is_mapping_literal(node: ast.expr | None) -> bool:
+    """A dict display, or a ``dict(k=v, ...)`` call whose keys are all spelled out."""
+    if isinstance(node, ast.Dict):
+        return True
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "dict"
+        and not node.args
+    )
+
+
+def _mapping_literal_keys(node: ast.expr) -> set[str] | None:
+    """Constant keys of a mapping literal; ``None`` when a ``**spread`` hides some."""
+    if isinstance(node, ast.Dict):
+        return None if _has_spread(node) else _const_str_keys(node)
+    assert isinstance(node, ast.Call)
+    if any(kw.arg is None for kw in node.keywords):
+        return None
+    return {kw.arg for kw in node.keywords if kw.arg is not None}
+
+
+def _is_name(node: ast.expr, target: str) -> bool:
+    return isinstance(node, ast.Name) and node.id == target
+
+
+def _initial_mapping(stmt: ast.stmt, target: str) -> ast.expr | None:
+    """The mapping literal ``stmt`` binds to ``target`` (``target = ...`` or ``target: T = ...``)."""
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+        bound, value = stmt.targets[0], stmt.value
+    elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+        bound, value = stmt.target, stmt.value
+    else:
+        return None
+    if _is_name(bound, target) and _is_mapping_literal(value):
+        return value
     return None
 
 
-def _unconditional_output_keys(
-    func: ast.FunctionDef | ast.AsyncFunctionDef,
-    read_annotated: bool = False,
-) -> set[str] | None:
+def _keys_added(stmt: ast.stmt, target: str) -> set[str] | None:
+    """Keys ``stmt`` puts on ``target`` by name; empty when it adds none, ``None`` when unknowable.
+
+    Reads ``target["k"] = v``, ``target |= {...}``, ``target.update({...}, k=v)``
+    and ``target.setdefault("k", v)``.
+    """
+    if isinstance(stmt, ast.AnnAssign) and stmt.value is None:
+        return set()
+    if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
+        targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
+        return {
+            t.slice.value
+            for t in targets
+            if isinstance(t, ast.Subscript)
+            and _is_name(t.value, target)
+            and isinstance(t.slice, ast.Constant)
+            and isinstance(t.slice.value, str)
+        }
+    if (
+        isinstance(stmt, ast.AugAssign)
+        and isinstance(stmt.op, ast.BitOr)
+        and _is_name(stmt.target, target)
+        and _is_mapping_literal(stmt.value)
+    ):
+        return _mapping_literal_keys(stmt.value)
+    if not (
+        isinstance(stmt, ast.Expr)
+        and isinstance(stmt.value, ast.Call)
+        and isinstance(stmt.value.func, ast.Attribute)
+        and _is_name(stmt.value.func.value, target)
+    ):
+        return set()
+    call = stmt.value
+    method = stmt.value.func.attr
+    if method == "setdefault":
+        first = call.args[0] if call.args else None
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return {first.value}
+        return set()
+    if method != "update":
+        return set()
+    if any(kw.arg is None for kw in call.keywords):
+        return None
+    keys = {kw.arg for kw in call.keywords if kw.arg is not None}
+    if call.args:
+        if not isinstance(call.args[0], ast.Dict):
+            return set()
+        if _has_spread(call.args[0]):
+            return None
+        keys |= _const_str_keys(call.args[0])
+    return keys
+
+
+def _top_level_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Statements that run on every path; a ``with`` block's body runs whenever it is entered."""
+    for stmt in body:
+        if isinstance(stmt, (ast.With, ast.AsyncWith)):
+            yield from _top_level_statements(stmt.body)
+        else:
+            yield stmt
+
+
+def _returned_name(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
+    ret = _last_return(func)
+    if ret is not None and isinstance(ret.value, ast.Name):
+        return ret.value.id
+    return None
+
+
+def _unconditional_output_keys(func: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None:
     """The constant string keys the UDF puts on its returned mapping without any guard.
 
     Returns None when the returned shape is unrecognisable (list/scalar return,
     a helper-call initialiser, a ``**spread`` in the returned literal, etc.).
     None means "decline to decide" — the caller emits no warning.
-    ``read_annotated`` also reads ``target: T = {...}`` as the initialiser; the
-    refusal check leaves it off so its reach stays what it was."""
+    """
     ret = _last_return(func)
     if ret is None or ret.value is None:
         return None
     # `return {...}` — the literal's constant keys are the unconditional set.
-    if isinstance(ret.value, ast.Dict):
-        if _has_spread(ret.value):
-            return None
-        return _const_str_keys(ret.value)
+    if _is_mapping_literal(ret.value):
+        return _mapping_literal_keys(ret.value)
     # `return name` — walk the function's TOP-LEVEL body only. Anything nested
-    # in if/for/while/try/with is by definition conditional.
+    # in if/for/while/try is by definition conditional.
     if not isinstance(ret.value, ast.Name):
         return None
     target = ret.value.id
     keys: set[str] = set()
     initial_found = False
-    for stmt in func.body:
-        initial = _initial_dict(stmt, target, read_annotated)
+    for stmt in _top_level_statements(func.body):
+        initial = _initial_mapping(stmt, target)
         if initial is not None:
-            if _has_spread(initial):
+            initial_keys = _mapping_literal_keys(initial)
+            if initial_keys is None:
                 return None
-            keys |= _const_str_keys(initial)
+            keys |= initial_keys
             initial_found = True
             continue
-        # target["k"] = ...
-        if (
-            isinstance(stmt, ast.Assign)
-            and len(stmt.targets) == 1
-            and isinstance(stmt.targets[0], ast.Subscript)
-            and isinstance(stmt.targets[0].value, ast.Name)
-            and stmt.targets[0].value.id == target
-            and isinstance(stmt.targets[0].slice, ast.Constant)
-            and isinstance(stmt.targets[0].slice.value, str)
-        ):
-            keys.add(stmt.targets[0].slice.value)
-            continue
-        # target.update({...})
-        if (
-            isinstance(stmt, ast.Expr)
-            and isinstance(stmt.value, ast.Call)
-            and isinstance(stmt.value.func, ast.Attribute)
-            and stmt.value.func.attr == "update"
-            and isinstance(stmt.value.func.value, ast.Name)
-            and stmt.value.func.value.id == target
-            and stmt.value.args
-            and isinstance(stmt.value.args[0], ast.Dict)
-        ):
-            if _has_spread(stmt.value.args[0]):
-                return None
-            keys |= _const_str_keys(stmt.value.args[0])
-            continue
+        added = _keys_added(stmt, target)
+        if added is None:
+            return None
+        keys |= added
     if not initial_found:
         # No dict-literal initial assignment (e.g. `result = build(data)` or
         # `result = data.copy()`): we cannot enumerate what the helper puts
         # in, so declining is safer than flagging every required field.
         return None
     return keys
+
+
+_BLOCK_NAMES: dict[type, str] = {
+    ast.If: "an `if`",
+    ast.For: "a `for` loop",
+    ast.AsyncFor: "an `async for` loop",
+    ast.While: "a `while` loop",
+    ast.Try: "a `try`",
+    ast.Match: "a `match`",
+}
+
+
+def _where_set(func: ast.FunctionDef | ast.AsyncFunctionDef, field: str) -> tuple[int, str] | None:
+    """The first line that sets ``field`` on the returned name by name, and the block it sits in."""
+    target = _returned_name(func)
+    if target is None:
+        return None
+    found: list[tuple[int, str]] = []
+
+    def visit(body: list[ast.stmt], block: str | None) -> None:
+        for stmt in body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            added = _keys_added(stmt, target)
+            if block is not None and added and field in added:
+                found.append((stmt.lineno, block))
+            inner = _BLOCK_NAMES.get(type(stmt), block)
+            for child in ast.iter_child_nodes(stmt):
+                if isinstance(child, ast.match_case):
+                    visit(child.body, inner)
+                elif isinstance(child, ast.ExceptHandler):
+                    visit(child.body, "an `except`")
+            for name in ("body", "orelse", "finalbody"):
+                nested = getattr(stmt, name, None)
+                if isinstance(nested, list) and nested and isinstance(nested[0], ast.stmt):
+                    visit(nested, inner)
+
+    visit(func.body, None)
+    return min(found) if found else None
 
 
 def unconditional_output_keys(source: str) -> set[str] | None:
@@ -201,16 +300,18 @@ def unconditional_output_keys(source: str) -> set[str] | None:
                 envelope = _file_udf_result_data(ret.value)
                 if envelope is not None:
                     return envelope
-            return _unconditional_output_keys(node, read_annotated=True)
+            return _unconditional_output_keys(node)
     return None
 
 
 def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]:
-    """One warning per required schema field a kind:tool UDF cannot statically
+    """One finding per required schema field a kind:tool UDF cannot statically
     be shown to emit unconditionally.
 
-    ``additional_properties`` is accepted for call-site parity with the sibling
-    passthrough validator but does not weaken the check — extra keys allowed
+    Each action's info carries ``source`` and ``required``; ``file`` and
+    ``first_line`` (the source's first line in that file), when given, let a
+    finding cite the file line that sets the field.
+    ``additional_properties`` does not weaken the check — extra keys allowed
     does not make a missing required key permissible.
     """
     findings: list[str] = []
@@ -223,21 +324,43 @@ def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]
             tree = ast.parse(source)
         except SyntaxError:
             continue
-        emitted: set[str] | None = None
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                emitted = _unconditional_output_keys(node)
-                break
+        func = next(
+            (
+                node
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ),
+            None,
+        )
+        if func is None:
+            continue
+        emitted = _unconditional_output_keys(func)
         if emitted is None:
             continue
         for field in required:
             if field not in emitted:
-                findings.append(
-                    f"{name}: output schema requires '{field}' but the UDF does not "
-                    f"unconditionally emit it — the field is only written inside a "
-                    f"conditional / dynamic-key branch. Runtime schema validation "
-                    f"will reject any record whose branch does not fire. Add "
-                    f"`optional: true` to '{field}' in the schema, or emit it "
-                    f"unconditionally in the UDF."
-                )
+                findings.append(_finding(name, func, field, info))
     return findings
+
+
+def _finding(
+    action: str, func: ast.FunctionDef | ast.AsyncFunctionDef, field: str, info: dict
+) -> str:
+    where = _where_set(func, field)
+    if where is None:
+        how = "sets it only through a computed key, or not at all"
+        consequence = "a record without it"
+    else:
+        line, block = where
+        first_line = info.get("first_line")
+        file = info.get("file")
+        if isinstance(first_line, int):
+            line += first_line - 1
+        located = f"line {line} of {Path(file).name}" if file else f"line {line}"
+        how = f"sets it only at {located}, inside {block}"
+        consequence = "a record that does not take that path"
+    return (
+        f"{action}: output schema requires '{field}' but the tool '{func.name}' {how}, "
+        f"so {consequence} fails output validation at run time. Make '{field}' "
+        f"optional in the schema, or set it on every path in the tool."
+    )

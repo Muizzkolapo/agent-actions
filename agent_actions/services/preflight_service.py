@@ -257,6 +257,7 @@ class PreflightService:
                 "source": source,
                 "required": list(required),
                 "additional_properties": bool(schema.get("additionalProperties", False)),
+                **self._tool_udf_location(impl),
             }
         return inputs
 
@@ -269,14 +270,26 @@ class PreflightService:
             logger.debug("Cannot read the UDF source of '%s': %s", action, exc)
             return None
 
+    @staticmethod
+    def _tool_udf_location(impl: str) -> dict[str, Any]:
+        """The UDF's file and first source line, for a finding to cite; empty when unknown."""
+        try:
+            function = get_udf_metadata(impl)["function"]
+            return {
+                "file": inspect.getsourcefile(function),
+                "first_line": inspect.getsourcelines(function)[1],
+            }
+        except (FunctionNotFoundError, OSError, TypeError) as exc:
+            logger.debug("Cannot locate the UDF source of '%s': %s", impl, exc)
+            return {}
+
     def _check_tool_conditional_required_field_risks(self) -> None:
         """Refuse preflight when a kind:tool UDF only conditionally emits a required schema field."""
         findings = find_conditional_required_field_risks(self._collect_tool_required_field_inputs())
         if findings:
             raise PreFlightValidationError(
                 "\n".join(findings),
-                hint="Mark the field optional in the schema, "
-                "or emit it unconditionally in the UDF.",
+                hint="Make the field optional in the schema, or set it on every path in the tool.",
             )
 
     def _warn_dag_schema_compatibility_gaps(self) -> None:

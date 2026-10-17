@@ -3,6 +3,7 @@
 from typing import Any
 
 from agent_actions.errors import UDFLoadError
+from agent_actions.errors.preflight import PreFlightValidationError
 
 from ..user_error import UserError
 from .base import ErrorFormatter
@@ -41,6 +42,11 @@ class ConfigurationErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
+        # A pre-flight refusal composes its own message and hint; matching its
+        # wording against the patterns below would replace them with a generic one.
+        if isinstance(exc, PreFlightValidationError) or isinstance(root, PreFlightValidationError):
+            return self._format_invalid_configuration(message, context)
+
         missing_field_patterns = [
             "missing required field",
             "required configuration fields are missing",
@@ -68,6 +74,9 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 docs_url="https://docs.runagac.com/config/schema",
             )
 
+        return self._format_invalid_configuration(message, context)
+
+    def _format_invalid_configuration(self, message: str, context: dict[str, Any]) -> UserError:
         agent = context.get("agent", "unknown")
         return UserError(
             category="Configuration Error",

@@ -258,7 +258,7 @@ def test_a_key_set_only_in_a_branch_is_flagged_in_every_spelling(initialiser):
     findings = _risks(source, ["options", "answer"])
     assert len(findings) == 1
     assert "f: output schema requires 'answer'" in findings[0]
-    assert "inside the `if` at line 4" in findings[0]
+    assert "at line 4, inside an `if`" in findings[0]
 
 
 @pytest.mark.parametrize(
@@ -301,10 +301,10 @@ def test_the_finding_names_the_function_file_line_and_branch():
         }
     )
     assert len(findings) == 1
-    assert "'build' sets it only inside the `if` at line 23 of build.py" in findings[0]
+    assert "'build' sets it only at line 23 of build.py, inside an `if`" in findings[0]
 
 
-def test_a_key_never_set_by_name_is_named_as_such():
+def test_a_key_set_only_through_a_computed_key_is_named_as_such():
     source = (
         "def build(data):\n"
         "    out = {'options': []}\n"
@@ -313,4 +313,57 @@ def test_a_key_never_set_by_name_is_named_as_such():
         "    return out\n"
     )
     (finding,) = _risks(source, ["options", "answer"])
-    assert "never sets 'answer' by name" in finding
+    assert "'build' sets it only through a computed key, or not at all" in finding
+
+
+def test_an_annotation_without_a_value_sets_nothing():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    out['answer']: list\n"
+        "    if data:\n"
+        "        out['answer'] = []\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "at line 5, inside an `if`" in finding
+
+
+def test_a_returned_dict_call_is_read_like_a_returned_literal():
+    source = "def build(data):\n    return dict(options=[])\n"
+    assert _risks(source, ["options"]) == []
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "requires 'answer'" in finding
+
+
+def test_a_key_set_in_a_with_body_is_set_on_every_path():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    with open(data['path']) as f:\n"
+        "        out['answer'] = f.read()\n"
+        "    return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
+
+
+@pytest.mark.parametrize(
+    ("block", "named"),
+    [
+        ("for x in data:", "a `for` loop"),
+        ("while data:", "a `while` loop"),
+        ("try:", "a `try`"),
+    ],
+)
+def test_the_finding_names_the_block_the_key_is_set_in(block, named):
+    tail = "    except KeyError:\n        pass\n" if block == "try:" else ""
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        f"    {block}\n"
+        "        out['answer'] = 1\n"
+        f"{tail}"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert f"at line 4, inside {named}" in finding

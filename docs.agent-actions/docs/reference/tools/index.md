@@ -279,6 +279,38 @@ DuplicateFunctionError: Function 'process_data' already registered
 
 Rename one of the functions.
 
+### Required Output Field Set Only in a Branch
+
+Each record a tool returns is checked against the action's output schema, so a
+required field the tool sets only inside an `if` fails every record that does
+not take that branch. Pre-flight reads the tool before anything runs and refuses
+the workflow when it can see this:
+
+```python
+@udf_tool()
+def produce(data: dict, **kwargs) -> dict:
+    out: dict = {"label": data["source"]["page_content"]}
+    if data["source"]["page_content"] == "has items":
+        out["items"] = "apple, pear"  # 'items' is required by the schema
+    return out
+```
+
+```
+producer: output schema requires 'items' but the tool 'produce' sets it only at
+line 12 of produce.py, inside an `if`, so a record that does not take that path
+fails output validation at run time. Make 'items' optional in the schema, or set
+it on every path in the tool.
+```
+
+Either make the field optional in the schema, or give it a value on every path,
+for example in the dict the tool starts from. The check reads a returned dict
+that starts as a literal, `{...}` or `dict(key=...)`, with or without a type
+annotation, and counts a key as set on every path when a line outside any
+`if`, loop or `try` sets it: `out["key"] = ...`, `out |= {...}`,
+`out.update(...)` or `out.setdefault("key", ...)`. A tool whose output it cannot
+read this way, such as one built by a helper function or returned in a list, is
+not refused; its records are still checked one by one at run time.
+
 ### Function Not Found
 
 ```

@@ -267,7 +267,7 @@ target_word_counts: dict
 'question' is a required property
 ```
 
-**Cause:** Schema requires field but tool didn't return it.
+**Cause:** Schema requires field but tool didn't return it. When the tool sets the field only inside a branch, pre-flight usually refuses the workflow before it runs and names the line; see [Required Output Field Set Only in a Branch](../reference/tools/index.md#required-output-field-set-only-in-a-branch).
 
 **Fix:** Ensure tool returns all required fields:
 ```python
