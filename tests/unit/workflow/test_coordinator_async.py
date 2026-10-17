@@ -137,8 +137,8 @@ class TestAsyncRunLevelExecution:
         wf.event_logger.finalize_workflow.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sets_manager_context_for_known_actions(self):
-        """async_run should call manager.set_context for actions in action_indices."""
+    async def test_sets_no_shared_action_label_for_a_level(self):
+        """The actions of a level run at once: the orchestrator labels each one's events."""
         wf = _build_workflow(execution_order=["agent_a", "agent_b"])
 
         orchestrator = wf.services.core.action_level_orchestrator
@@ -149,11 +149,8 @@ class TestAsyncRunLevelExecution:
         with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
             await wf.async_run()
 
-        # set_context should have been called for each action in the level
-        context_calls = mgr.set_context.call_args_list
-        action_names = [c.kwargs.get("action_name") for c in context_calls]
-        assert "agent_a" in action_names
-        assert "agent_b" in action_names
+        labelled = [c for c in mgr.set_context.call_args_list if "action_name" in c.kwargs]
+        assert labelled == []
 
     @pytest.mark.asyncio
     async def test_concurrency_limit_default(self):
@@ -270,6 +267,25 @@ class TestAsyncRunErrorHandling:
         call_args = wf.event_logger.handle_workflow_error.call_args
         assert call_args[0][0] is error
         assert "elapsed_time" in call_args[1]
+
+    @pytest.mark.asyncio
+    async def test_a_crash_names_the_actions_of_the_level_in_flight(self):
+        wf = _build_workflow()
+
+        orchestrator = wf.services.core.action_level_orchestrator
+        orchestrator.compute_execution_levels.return_value = [["agent_a", "agent_b"]]
+        orchestrator.in_flight = ["agent_a", "agent_b"]
+        orchestrator.execute_level_async = AsyncMock(side_effect=RuntimeError("level died"))
+
+        mgr = _mock_manager()
+        with (
+            patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr),
+            pytest.raises(RuntimeError),
+        ):
+            await wf.async_run()
+
+        call_args = wf.event_logger.handle_workflow_error.call_args
+        assert call_args.kwargs["failed_action"] == "agent_a, agent_b"
 
     @pytest.mark.asyncio
     async def test_exception_reraises(self):

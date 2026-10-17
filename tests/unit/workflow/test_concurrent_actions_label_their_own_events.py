@@ -122,3 +122,36 @@ async def test_a_lone_action_of_a_step_labels_its_model_calls(captured):
     await orchestrator._execute_single_action("only", {"before": 0, "only": 1}, _Executor())
 
     assert _labels(captured) == {"only": ("only", 1, "only")}
+
+
+def test_each_judge_vote_on_a_worker_thread_is_logged_against_the_action(captured, monkeypatch):
+    from agent_actions.expectations import judge
+
+    def one_vote(agent_config, rule, value, **kwargs):
+        _model_call("vote")
+        return True, ""
+
+    monkeypatch.setattr(judge, "invoke_judge", one_vote)
+
+    with EventManager.get().context(action_name="judged", action_index=3):
+        judge.invoke_judge_with_votes({}, "rule", "value", votes=3)
+
+    calls = [event for event in captured if isinstance(event, LLMRequestEvent)]
+    assert len(calls) == 3
+    assert {(e.meta.extra.get("action_name"), e.data["action_name"]) for e in calls} == {
+        ("judged", "judged")
+    }
+
+
+def test_an_event_told_its_action_keeps_it(captured):
+    with EventManager.get().context(action_name="running"):
+        fire_event(LLMRequestEvent(provider="p", action_name="named"))
+
+    assert captured[-1].data["action_name"] == "named"
+
+
+def test_an_event_outside_any_action_is_left_unnamed(captured):
+    fire_event(LLMRequestEvent(provider="p"))
+
+    assert captured[-1].data["action_name"] == ""
+    assert "action_name" not in captured[-1].meta.extra

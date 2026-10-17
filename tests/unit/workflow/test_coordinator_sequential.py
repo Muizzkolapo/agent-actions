@@ -235,6 +235,7 @@ class TestRunWorkflowWithContext:
             wf._run_workflow_with_context(datetime.now())
 
         wf.event_logger.handle_workflow_error.assert_called_once()
+        assert wf.event_logger.handle_workflow_error.call_args.kwargs["failed_action"] == "agent_a"
         assert wf.state.failed is True
 
     def test_success_after_completion(self):

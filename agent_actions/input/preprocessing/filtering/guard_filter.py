@@ -1,6 +1,7 @@
 """Guard filter service with AST-based evaluation, caching, and timeout protection."""
 
 import atexit
+import contextvars
 import logging
 import threading
 import time
@@ -104,7 +105,11 @@ class GuardFilter:
 
         try:
             future = self.executor.submit(
-                self._evaluate_guard_condition, request.data, request.condition, request.functions
+                contextvars.copy_context().run,
+                self._evaluate_guard_condition,
+                request.data,
+                request.condition,
+                request.functions,
             )
 
             matched = future.result(timeout=timeout)

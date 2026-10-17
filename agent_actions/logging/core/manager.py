@@ -163,6 +163,13 @@ class EventManager:
             if key not in ("invocation_id", "correlation_id"):
                 event.meta.extra[key] = value
 
+        # An event with a slot for its action that was not told one (a provider's
+        # LLM events) belongs to the action it fired under.
+        if event.data.get("action_name") == "" and context.get("action_name"):
+            event.data["action_name"] = context["action_name"]
+            if getattr(event, "action_name", None) == "":
+                event.action_name = context["action_name"]  # type: ignore[attr-defined]
+
         for handler in handlers:
             try:
                 if handler.accepts(event):

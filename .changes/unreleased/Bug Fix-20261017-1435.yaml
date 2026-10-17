@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  Every event in `events.json` names the action that fired it, also when several actions
+  of a step run at once. The parallel runner set one process-wide "current action" for
+  each action of a step before any of them ran, so every event of the step, model calls
+  included, carried the last action's `meta.action_name` and `meta.action_index`: a tool
+  action that makes no model call was credited with all of the step's calls. Each action
+  now labels its own events in a context that follows it into its worker threads, and the
+  LLM events also carry the action in `data.action_name`, which was empty (1435).
+time: 2026-10-17T15:30:00Z

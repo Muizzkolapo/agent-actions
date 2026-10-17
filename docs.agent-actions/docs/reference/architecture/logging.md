@@ -356,6 +356,10 @@ with manager.context(
 
 This ensures proper attribution of events to the correct workflow in the execution hierarchy.
 
+Each action runs inside `manager.context(action_name=..., action_index=...)`, so every event
+it fires, from its worker threads too, names it in `meta`. Actions of one step run at once,
+which is why the action is never set with `set_context()`: that value is shared by all of them.
+
 ## Testing
 
 ### Testing Event Emission
