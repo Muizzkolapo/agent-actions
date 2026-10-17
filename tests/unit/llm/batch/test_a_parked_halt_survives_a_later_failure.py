@@ -22,9 +22,8 @@ class TestAParkedHaltWinsOverALaterHardFailure:
         [
             RuntimeError("provider lost the batch"),
             mark_action_fatal(OSError("the store could not write the file")),
-            EmptyOutputError("on_empty: error"),
         ],
-        ids=["runtime_error", "action_fatal_store_error", "on_empty_error"],
+        ids=["runtime_error", "action_fatal_store_error"],
     )
     def test_the_halt_is_raised_with_the_later_failure_as_its_cause(self, later):
         service, visited = _service(
@@ -36,6 +35,18 @@ class TestAParkedHaltWinsOverALaterHardFailure:
 
         assert visited == ["a.json", "b.json"]
         assert raised.value.__cause__ is later
+
+    def test_a_later_on_empty_halt_is_a_second_halt_not_a_failure(self, caplog):
+        later = EmptyOutputError("on_empty: error")
+        service, visited = _service(
+            ["a.json", "b.json"], {"a.json": _halt("alpha"), "b.json": later}
+        )
+
+        with caplog.at_level("WARNING"), pytest.raises(RuntimeError, match="alpha"):
+            service.process_all_batch_results("/out", {}, "act")
+
+        assert visited == ["a.json", "b.json"]
+        assert "on_empty: error" in caplog.text
 
     def test_an_unresolvable_expect_block_still_wins(self):
         later = ExpectationConfigurationError("bad expect")

@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.errors import ProcessingError, is_action_fatal, raised_by_exhaustion_policy
+from agent_actions.errors import (
+    ProcessingError,
+    is_action_fatal,
+    raised_by_exhaustion_policy,
+    raised_by_terminal_failure,
+)
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
@@ -156,6 +161,18 @@ class _ParkedHalt:
     """Carries the first halt of a collect pass, as the recovery context carries one in a file."""
 
     pending_exhaustion: Exception | None = None
+
+
+def _is_a_halt(error: Exception) -> bool:
+    """A stop a policy decided once its file was written: `on_exhausted: raise`,
+    `on_empty: error`, or `terminal_failure`. Each is raised after the pass."""
+    from agent_actions.utils.safe_format import get_error_chain
+
+    return (
+        raised_by_exhaustion_policy(error)
+        or raised_by_terminal_failure(error)
+        or any(isinstance(link, EmptyOutputError) for link in get_error_chain(error))
+    )
 
 
 class BatchProcessingService:
@@ -441,20 +458,17 @@ class BatchProcessingService:
                     if output_file:
                         processed_files.append(output_file)
                 except Exception as e:
-                    if raised_by_exhaustion_policy(e):
+                    if _is_a_halt(e):
                         # Raised once the file is written. Stopping here would leave every
-                        # later finished batch in the registry uncollected, and a halted
-                        # action is refused by `run` and, with a batch owed, by `retry`.
+                        # later finished batch in the registry uncollected until the next
+                        # run, and an exhaustion halt is refused by `run` and, with a batch
+                        # owed, by `retry`.
                         park_halt(parked, e)
                         continue
-                    if isinstance(
-                        e, (RuntimeError, ExpectationConfigurationError, EmptyOutputError)
-                    ):
+                    if isinstance(e, (RuntimeError, ExpectationConfigurationError)):
                         # An unresolvable `expect:` block fails every remaining file the same
                         # way, so continuing would report success with each missing. A plain
-                        # ConfigurationError is per record and stays below. The `on_empty:
-                        # error` halt comes once its file is written, so it is not that file's
-                        # failure.
+                        # ConfigurationError is per record and stays below.
                         raise
                     # Declared where it was raised, such as a store that failed to write the
                     # file: taken as this file's failure, the action would complete over what

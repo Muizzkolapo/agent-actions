@@ -134,6 +134,7 @@ class RetryCommand:
         self.args = args
         self.agent_name = Path(args.agent).stem
         self.console = Console()
+        self._abandoned: set[tuple[str, str, str]] = set()
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
@@ -777,6 +778,9 @@ class RetryCommand:
         refusal names needs the provider to answer about the batch, which it
         cannot when it has forgotten the id.
         """
+        # Finding the failures may already have abandoned these, and an abandoned
+        # batch stays in the registry until the retry clears it.
+        owed = [o for o in owed if o[:3] not in self._abandoned]
         if not owed:
             return
 
@@ -810,6 +814,7 @@ class RetryCommand:
         if self.args.abandon_in_flight:
             waiting = self._records_waiting_on(backend, owed)
             stranded = self._strand_deferred_records(backend, waiting)
+            self._abandoned.update(o[:3] for o in owed)
             self.console.print(
                 f"\n[yellow]Abandoning {len(owed)} batch job(s) not collected yet: "
                 f"{listing}. Whatever they return will not be collected. "

@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -60,10 +61,10 @@ def _load_source_data(storage_backend: StorageBackend | None) -> list[Any] | Non
 class RepairSubmission:
     """What a repair round actually put in flight.
 
-    `sent_ids` is what the preparator accepted, not what the caller asked for: a
-    record with no context_map row or no source_guid is skipped, and recording it
-    as submitted makes the next round reconstruct it as a provider drop over real
-    content.
+    `sent_ids` is what preparation admitted, not what the caller asked for: a
+    record with no context_map row or no source_guid is skipped, and one a guard
+    turns away is never sent. Recording either as submitted makes the next round
+    reconstruct it as a provider drop over real content.
     """
 
     batch_id: str
@@ -270,7 +271,11 @@ def submit_repair_batch(
     return RepairSubmission(
         batch_id=batch_id,
         record_count=len(prepared.tasks),
-        sent_ids=[str(r.get("target_id")) for r in repair_records],
+        sent_ids=[
+            str(r["target_id"])
+            for r in repair_records
+            if BatchContextMetadata.is_included(prepared.context_map.get(str(r["target_id"]), {}))
+        ],
     )
 
 

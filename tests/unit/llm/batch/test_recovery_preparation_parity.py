@@ -39,7 +39,7 @@ class RecordingPreparator:
 
     def prepare_tasks(self, **prepare_kwargs: Any):
         self.prepare_kwargs = prepare_kwargs
-        return SimpleNamespace(tasks=[{"custom_id": "rec_1"}])
+        return SimpleNamespace(tasks=[{"custom_id": "rec_1"}], context_map={})
 
 
 @pytest.fixture(autouse=True)
