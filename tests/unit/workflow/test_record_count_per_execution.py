@@ -1,15 +1,9 @@
-"""Regression tests for cumulative-on-rerun record_count overcount.
+"""record_count is what one execution produced, not the action's stored total.
 
-Before this fix, `_count_output_records` queried the storage backend's
-`get_storage_stats` after the run and reported the SUM of all rows under
-that action_name.  On resume / re-run that wrote to NEW paths (a second
-batch item, a timestamped shard, an additional file), the SUM grew while
-the action only produced the delta.  Example: run 1 wrote 50 rows;
-resume processed item_2.jsonl with 50 more rows; ActionCompleteEvent
-shipped record_count=100 for an execution that produced 50.
-
-The fix is a before/after snapshot taken inside the executor.  The
-per-execution delta (after - before) replaces the cumulative SUM.
+The storage backend keeps a running tally of the rows each action's runs have
+collected (`rows_collected`).  The executor snapshots it before and after an
+execution and reports the difference, so rows already stored by an earlier run
+are not counted again, and rows an execution replaces are counted.
 """
 
 from datetime import datetime
@@ -30,9 +24,9 @@ from agent_actions.workflow.managers.skip import SkipEvaluator
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
 
-def _build_deps(stats_sequence):
-    """Build executor deps with a backend whose get_storage_stats returns
-    successive values from ``stats_sequence``.
+def _build_deps(tally_sequence):
+    """Build executor deps with a backend whose rows_collected returns
+    successive values from ``tally_sequence``.
 
     The first call simulates the pre-run snapshot; the second simulates
     the post-run snapshot.  Use a list of len 2 for a single execution.
@@ -48,7 +42,7 @@ def _build_deps(stats_sequence):
     deps.action_runner.execution_order = ["agent_a"]
     deps.action_runner.storage_backend.has_disposition.return_value = False
     deps.action_runner.storage_backend.get_failed_items.return_value = []
-    deps.action_runner.storage_backend.get_storage_stats.side_effect = stats_sequence
+    deps.action_runner.storage_backend.rows_collected.side_effect = tally_sequence
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     deps.output_manager.resolve_correlated_input.return_value = None
     deps.batch_manager.check_batch_submission.return_value = None
@@ -72,9 +66,7 @@ class TestExecuteActionRunReportsPerExecutionDelta:
         # Pre-existing rows from a prior run that wrote to different paths.
         # The current execution writes 30 more records; ActionCompleteEvent
         # must ship 30, not the cumulative 80.
-        stats_before = {"nodes": {"agent_a": 50}}
-        stats_after = {"nodes": {"agent_a": 80}}
-        deps = _build_deps([stats_before, stats_after])
+        deps = _build_deps([50, 80])
         deps.action_runner.run_action.return_value = "/out"
         executor = ActionExecutor(deps)
 
@@ -91,7 +83,7 @@ class TestExecuteActionRunReportsPerExecutionDelta:
 
     def test_fresh_run_reports_full_record_count(self):
         # No prior rows; this execution wrote 25.
-        deps = _build_deps([{"nodes": {}}, {"nodes": {"agent_a": 25}}])
+        deps = _build_deps([0, 25])
         deps.action_runner.run_action.return_value = "/out"
         executor = ActionExecutor(deps)
 
@@ -102,20 +94,7 @@ class TestExecuteActionRunReportsPerExecutionDelta:
 
     def test_run_that_writes_nothing_reports_zero(self):
         # Snapshots unchanged across the run.
-        deps = _build_deps([{"nodes": {"agent_a": 12}}, {"nodes": {"agent_a": 12}}])
-        deps.action_runner.run_action.return_value = "/out"
-        executor = ActionExecutor(deps)
-
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor._execute_action_run(_run_params())
-
-        assert result.metrics.record_count == 0
-
-    def test_delta_is_clamped_at_zero_if_rows_disappear(self):
-        # If post-snapshot < pre-snapshot (e.g. a cleanup ran concurrently),
-        # report 0 rather than a negative count.  Records-written is a count,
-        # not a signed delta.
-        deps = _build_deps([{"nodes": {"agent_a": 40}}, {"nodes": {"agent_a": 10}}])
+        deps = _build_deps([12, 12])
         deps.action_runner.run_action.return_value = "/out"
         executor = ActionExecutor(deps)
 
@@ -130,7 +109,7 @@ class TestBatchPathReportsPerExecutionDelta:
 
     def test_batch_completion_reports_only_records_this_run_wrote(self):
         # Prior batch shard left 100 rows; this batch completion wrote 40 more.
-        deps = _build_deps([{"nodes": {"batch_a": 100}}, {"nodes": {"batch_a": 140}}])
+        deps = _build_deps([100, 140])
         deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
         executor = ActionExecutor(deps)
 
@@ -150,28 +129,8 @@ class TestBatchPathReportsPerExecutionDelta:
         )
 
 
-class TestSnapshotFailureRaises:
-    """Backend errors during the pre/post snapshot must surface, not return 0."""
-
-    def test_pre_run_snapshot_error_raises_runtimeerror(self):
-        deps = _build_deps([RuntimeError("db locked"), {"nodes": {}}])
-        deps.action_runner.run_action.return_value = "/out"
-        executor = ActionExecutor(deps)
-
-        with pytest.raises(RuntimeError, match="get_storage_stats.* failed"):
-            executor._execute_action_run(_run_params())
-
-    def test_post_run_snapshot_error_raises_runtimeerror(self):
-        # Pre-run succeeds; post-run fails — this must NOT be swallowed
-        # as record_count=0.  A workflow whose telemetry storage is broken
-        # should fail loudly.
-        deps = _build_deps([{"nodes": {}}, RuntimeError("db corrupt")])
-        deps.action_runner.run_action.return_value = "/out"
-        executor = ActionExecutor(deps)
-
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            with pytest.raises(RuntimeError, match="get_storage_stats.* failed"):
-                executor._execute_action_run(_run_params())
+class TestMissingBackendRaises:
+    """An executor with no storage backend must fail loudly, not report 0."""
 
     def test_missing_storage_backend_raises_runtimeerror(self):
         executor = object.__new__(ActionExecutor)
@@ -179,16 +138,6 @@ class TestSnapshotFailureRaises:
         del deps.action_runner.storage_backend  # attribute genuinely absent
         executor.deps = deps
         with pytest.raises(RuntimeError, match="no storage backend"):
-            executor._count_records_for_action("agent_a")
-
-    def test_non_integer_record_count_raises_runtimeerror(self):
-        executor = object.__new__(ActionExecutor)
-        deps = MagicMock()
-        deps.action_runner.storage_backend.get_storage_stats.return_value = {
-            "nodes": {"agent_a": "not-a-number"}
-        }
-        executor.deps = deps
-        with pytest.raises(RuntimeError, match="non-integer record_count"):
             executor._count_records_for_action("agent_a")
 
 

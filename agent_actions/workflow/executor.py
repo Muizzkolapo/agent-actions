@@ -966,49 +966,25 @@ class ActionExecutor:
         )
 
     def _count_records_for_action(self, action_name: str) -> int:
-        """Return the storage-backend record count for ``action_name``.
+        """Return the rows the storage backend has credited to ``action_name`` so far.
 
-        Raises ``RuntimeError`` if the storage backend is unavailable or the
-        underlying query / value parse fails.  This is called immediately
-        before and after running an action so the delta yields the
-        per-execution record count.  A silent fallback to 0 here would let a
-        broken telemetry path masquerade as "action wrote nothing" instead of
-        raising.
+        Called immediately before and after running an action, so the difference is
+        what this execution produced. The stored row count cannot say: a run that
+        replaces stored rows leaves it where it was.
+
+        Raises ``RuntimeError`` if the action runner has no storage backend.
         """
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             raise RuntimeError(
                 f"Cannot count records for {action_name!r}: no storage backend on action_runner"
             )
-        try:
-            stats = storage_backend.get_storage_stats()
-        except Exception as e:
-            raise RuntimeError(
-                f"Storage backend get_storage_stats() failed while counting "
-                f"records for {action_name!r}: {e}"
-            ) from e
-        nodes = stats.get("nodes", {}) if isinstance(stats, dict) else {}
-        raw = nodes.get(action_name, 0)
-        if raw is None:
-            return 0
-        try:
-            return int(raw)
-        except (TypeError, ValueError) as e:
-            raise RuntimeError(
-                f"Storage backend returned non-integer record_count {raw!r} "
-                f"for {action_name!r}: {e}"
-            ) from e
+        collected: int = storage_backend.rows_collected(action_name)
+        return collected
 
     def _records_written_this_run(self, action_name: str, pre_run_count: int) -> int:
-        """Compute records written this execution as (after - before).
-
-        Clamped at 0 — a negative delta would mean rows were deleted during
-        the run, which is not a meaningful "records produced by this
-        execution" signal.
-        """
-        after = self._count_records_for_action(action_name)
-        delta = after - pre_run_count
-        return delta if delta > 0 else 0
+        """Rows this execution produced: the rows credited since *pre_run_count*."""
+        return self._count_records_for_action(action_name) - pre_run_count
 
     def _handle_guard_all_filtered(
         self,
