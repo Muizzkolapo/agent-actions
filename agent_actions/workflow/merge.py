@@ -10,6 +10,7 @@ from typing import Any
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.processing.record_helpers import upstream_cause
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
+from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
 
 logger = logging.getLogger(__name__)
@@ -417,7 +418,7 @@ def merge_json_files(
     for file_path in file_paths:
         try:
             with open(file_path, encoding="utf-8") as f:
-                sources.append((str(file_path), json.load(f)))
+                sources.append((str(file_path), deep_json.loads(f.read())))
         except (json.JSONDecodeError, OSError) as e:
             if unreadable is not None:
                 unreadable.append(file_path)

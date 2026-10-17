@@ -4,7 +4,6 @@ Handles per-record processing: prepare task, invoke LLM, handle response,
 transform output.
 """
 
-import json
 import logging
 import sqlite3
 from dataclasses import replace
@@ -63,6 +62,7 @@ from agent_actions.record.reasons import (
 )
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
+from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
@@ -496,7 +496,7 @@ class OnlineLLMStrategy:
             context.storage_backend.update_prompt_trace_response(
                 action_name=context.agent_name,
                 record_id=prepared.target_id,
-                response_text=json.dumps(response, ensure_ascii=False, default=str),
+                response_text=deep_json.dumps(response, ensure_ascii=False, default=str),
             )
 
         # Deferred (batch mode)

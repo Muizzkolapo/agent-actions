@@ -1,6 +1,5 @@
 """Unified prompt preparation service for batch and online modes."""
 
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +28,7 @@ from agent_actions.prompt.context.static_loader import (
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
 from agent_actions.prompt.prompt_utils import PromptUtils
+from agent_actions.utils import deep_json
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
@@ -543,7 +543,7 @@ class PromptPreparationService:
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
                 tools_path,
-                json.dumps(llm_context, ensure_ascii=False),
+                deep_json.dumps(llm_context, ensure_ascii=False),
                 agent_config=agent_config,
             )
             logger.debug("Injected function outputs for dispatch_task()")

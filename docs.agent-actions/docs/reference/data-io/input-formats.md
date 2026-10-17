@@ -48,6 +48,13 @@ A record is always an object, so a bare value is refused whether it is the whole
 document or a row inside one — wrapping it changes nothing. The refusal names the
 row it stopped on when there is one.
 
+A record may nest to any depth. Staging, the record's `source_guid`, the store,
+retries and a tool action that observes the field all read and write it without a
+depth limit, including past the roughly 1000 levels at which Python 3.11's JSON
+codec stops. An LLM action that observes a field nested that deep still fails the
+action, loudly, while its request is built; flatten the field in a tool action
+first and observe the result.
+
 ## CSV/Tabular Input
 
 Each row becomes a separate record. Header row defines field names.

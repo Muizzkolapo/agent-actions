@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import json
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -18,6 +17,7 @@ from agent_actions.logging.events import (
     FileWriteStartedEvent,
 )
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utils import deep_json
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.path_safety import assert_path_contained
 
@@ -173,6 +173,6 @@ class FileWriter(ProcessorErrorHandlerMixin):
             # carries a meaningful metric. The backend may store data in a different
             # on-disk shape (e.g. SQLite rows), so this measures payload, not
             # storage footprint — but it's accurate enough to spot empty writes.
-            return len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+            return len(deep_json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
         self._execute_write("target", do_write)

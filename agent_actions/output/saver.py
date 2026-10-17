@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -11,6 +10,7 @@ from agent_actions.logging.events import (
     SourceDataSavedEvent,
     SourceDataSavingEvent,
 )
+from agent_actions.utils import deep_json
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -64,7 +64,7 @@ class UnifiedSourceDataSaver:
         self.storage_backend.write_source(
             relative_path, items, enable_deduplication=self.enable_deduplication
         )
-        bytes_written = sum(len(json.dumps(item, default=str).encode()) for item in items)
+        bytes_written = sum(len(deep_json.dumps(item, default=str).encode()) for item in items)
 
         fire_event(
             SourceDataSavedEvent(

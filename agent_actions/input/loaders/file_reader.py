@@ -1,7 +1,6 @@
 """File reader for various file formats."""
 
 import csv
-import json
 from pathlib import Path
 
 import defusedxml.ElementTree as DefusedET  # type: ignore[import-untyped]
@@ -12,6 +11,7 @@ from docx import Document
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utils import deep_json
 
 
 class FileReader(ProcessorErrorHandlerMixin):
@@ -62,7 +62,7 @@ class FileReader(ProcessorErrorHandlerMixin):
 
     def _read_json(self):
         with open(self.file_path, encoding="utf-8") as file:
-            data = json.load(file)
+            data = deep_json.loads(file.read())
             is_batch_placeholder = (
                 isinstance(data, dict)
                 and "batch_job_id" in data

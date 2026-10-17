@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A record nested about 1000 levels deep or more now runs on Python 3.11. Reading the
+  staging file, storing the record, writing the target, the batch context map and prompt
+  traces all used the recursive JSON codec, which raised `RecursionError` at that depth,
+  so the run failed; each now falls back, only for such a record, to a codec built on a
+  stack that gives the same text, so ordinary records are stored byte for byte as before.
+  A retry no longer fails with `malformed JSON` when the store holds a row that deep:
+  SQLite's JSON functions refuse it, so the repeat-chain check reads such a row itself.
+  An LLM action that observes a field nested that deep still fails while its request is
+  built (1479).
+time: 2026-10-17T15:30:00Z

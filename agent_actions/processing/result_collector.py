@@ -1,7 +1,6 @@
 """Shared result aggregation for processing output records."""
 
 import collections
-import json
 import logging
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Optional
@@ -41,6 +40,7 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
     DispositionRow,
 )
+from agent_actions.utils import deep_json
 from agent_actions.utils.schema_echo import is_schema_echo
 
 if TYPE_CHECKING:
@@ -294,7 +294,7 @@ def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
     if not source or not isinstance(source, dict):
         return None
     try:
-        return json.dumps(source, ensure_ascii=False, default=str)
+        return deep_json.dumps(source, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         logger.debug("Could not serialize input snapshot: %s", type(source).__name__, exc_info=True)
         return None

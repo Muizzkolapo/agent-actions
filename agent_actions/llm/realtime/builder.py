@@ -4,12 +4,12 @@ This module provides the main entry point for creating and executing dynamic age
 with support for multiple LLM vendors.
 """
 
-import json
 from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.schema import ResponseSchemaCompiler
+from agent_actions.utils import deep_json
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
 from .services import (
@@ -100,7 +100,7 @@ def create_dynamic_agent(
         (
             context_data
             if isinstance(context_data, str)
-            else json.dumps(context_data, ensure_ascii=False)
+            else deep_json.dumps(context_data, ensure_ascii=False)
         ),
         schema,  # type: ignore[arg-type]
     )

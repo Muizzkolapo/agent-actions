@@ -1,6 +1,5 @@
 """Unified task preparation for both batch and online modes."""
 
-import json
 import logging
 import threading
 from collections.abc import Callable
@@ -18,6 +17,7 @@ from agent_actions.processing.source_resolution import (
     resolve_source_content,
 )
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
+from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 
@@ -125,7 +125,7 @@ class TaskPreparer:
                 action_name=context.agent_name,
                 record_id=prepared.target_id,
                 compiled_prompt=prepared.formatted_prompt,
-                llm_context=json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
+                llm_context=deep_json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
                 model_name=context.agent_config.get("model_name")
                 or context.agent_config.get("model"),
                 model_vendor=context.agent_config.get("model_vendor"),

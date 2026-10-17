@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils import deep_json
+
 
 def atomic_json_write(
     path: Path,
@@ -30,7 +32,9 @@ def atomic_json_write(
         fsync: Whether to fsync before rename (default True). Disable only
                for non-critical data where speed matters more than durability.
         **json_kwargs: Forwarded to ``json.dump`` (e.g. ``indent=2``,
-                       ``ensure_ascii=False``).
+                       ``ensure_ascii=False``); data nested too deep for it is
+                       written by ``deep_json.dumps``, which takes ``indent``,
+                       ``ensure_ascii``, ``sort_keys`` and ``default``.
 
     Raises:
         OSError: If the write or rename fails. The original exception is
@@ -48,7 +52,12 @@ def atomic_json_write(
 
     try:
         with f:
-            json.dump(data, f, **json_kwargs)
+            try:
+                json.dump(data, f, **json_kwargs)
+            except RecursionError:
+                f.seek(0)
+                f.truncate()
+                f.write(deep_json.dumps(data, **json_kwargs))
             if fsync:
                 f.flush()
                 os.fsync(f.fileno())
