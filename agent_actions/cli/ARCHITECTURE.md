@@ -258,6 +258,8 @@ RetryCommand.execute()
   │
   ├─ Resolve from_action (explicit or earliest failure)
   ├─ _display_retry_plan()                          ← Rich table of what will be retried
+  │                                                   (records only; a __node__ row is
+  │                                                   the action's status line)
   │
   ├─ (dry_run? → stop here)
   │
