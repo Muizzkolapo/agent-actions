@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A prompt that reads a field of an upstream namespace the record has no data for still
+  fails that record, but the error now says what the record shows instead of
+  "Namespace 'X' is null (likely guard-filtered or guard-skipped)" in every case: a guard
+  on 'X' skipped the record (named only when the record's state history shows that
+  skip), 'X' wrote null without one, no output of 'X' reached the record, or the output
+  of 'X' holds none of the fields the action observes from it (naming the observed
+  fields and the ones it has). The field is no longer also logged as a namespace that
+  "nothing supplies" (1489).
+time: 2026-10-17T17:00:00Z
