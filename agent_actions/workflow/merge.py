@@ -312,10 +312,10 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     ``merge_records_by_key`` groups them. A branch that returned several records for
     one input gives each a new source id, so each lands in a group of its own; such a
     group is paired with the group of the record it was split from, once per split
-    record. Two branches split from the same record cannot be paired one to one, nor
-    can a branch's records of a source beside other branches' when it shares no record
-    of that source with any of them; both raise rather than run on records that hold
-    one branch alone.
+    record, and a split of a split record with that record's pairing in turn. Two
+    branches split from the same record cannot be paired one to one, nor can a branch's
+    records of a source beside other branches' when it shares no record of that source
+    with any of them; both raise rather than run on records that hold one branch alone.
     """
     tagged: list[tuple[str, Any]] = []
     for branch, data in sources:
@@ -340,18 +340,30 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     def branches(key: str) -> set[str]:
         return {branch for branch, _ in groups[key]}
 
-    splits: dict[str, dict[str, list[dict[str, Any]]]] = {}
-    for key in list(groups):
+    # Under each group, the groups split from it by branch. Every anchor is looked up
+    # among all groups, so a split of a split finds its own split record however the
+    # branches are ordered, and that record is paired in turn with the one it came from.
+    splits: dict[str, dict[str, list[str]]] = {}
+    is_split: set[str] = set()
+    for key in groups:
         if len(branches(key)) != 1:
             continue
         (branch,) = branches(key)
         for anchor in split_from(groups[key][0][1]):
             anchor_key = group_of_guid.get(anchor)
             if anchor_key in groups and anchor_key != key and branches(anchor_key) - {branch}:
-                splits.setdefault(anchor_key, {}).setdefault(branch, []).extend(
-                    record for _, record in groups.pop(key)
-                )
+                splits.setdefault(anchor_key, {}).setdefault(branch, []).append(key)
+                is_split.add(key)
                 break
+
+    def below(key: str) -> set[str]:
+        """The branches of every group split from *key*, however deep."""
+        held: set[str] = set()
+        for branch, keys in splits.get(key, {}).items():
+            held.add(branch)
+            for split_key in keys:
+                held |= below(split_key)
+        return held
 
     # Under each source no record holds, the branches holding a record of it, and those
     # among them sharing a record of it with another branch. A branch that shares none
@@ -360,8 +372,9 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     # split as another and lacks some of its records: those run as they are.
     present: dict[str, set[str]] = {}
     paired: dict[str, set[str]] = {}
-    for key, members in groups.items():
-        held = branches(key) | set(splits.get(key, {}))
+    roots = {key: members for key, members in groups.items() if key not in is_split}
+    for key, members in roots.items():
+        held = branches(key) | below(key)
         for anchor in split_from(members[0][1])[-1:]:
             present.setdefault(anchor, set()).update(held)
             if len(held) > 1:
@@ -371,18 +384,29 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
         if anchor not in group_of_guid and len(here) > 1 and alone:
             raise _two_branches_split(anchor, sorted(here), sorted(alone))
 
-    merged: list[Any] = []
-    for key, members in groups.items():
+    def to_merge(key: str, above: set[str], one_each: bool) -> list[list[dict[str, Any]]]:
+        """The groups to merge for *key*: its own records under each of its splits'.
+
+        *above*: the branches of the groups *key* was split from. A split group's records
+        are one each, so each leads a merged record of its own.
+        """
+        own = [record for _, record in groups[key]]
+        units = [[record] for record in own] if one_each else [own]
         split = splits.get(key)
         if not split:
-            merged.append(_merge_group([record for _, record in members]))
-            continue
+            return units
+        held = above | branches(key)
         split_branches = sorted(split)
-        if len(split_branches) > 1 or split_branches[0] in branches(key):
+        if len(split_branches) > 1 or split_branches[0] in held:
             raise _two_branches_split(key, split_branches)
-        others = [record for _, record in members]
-        for split_record in split[split_branches[0]]:
-            merged.append(_merge_group([split_record, *others]))
+        leads = [
+            lead
+            for split_key in split[split_branches[0]]
+            for lead in to_merge(split_key, held, True)
+        ]
+        return [lead + unit for lead in leads for unit in units]
+
+    merged = [_merge_group(group) for key in roots for group in to_merge(key, set(), False)]
     return merged + without_key
 
 

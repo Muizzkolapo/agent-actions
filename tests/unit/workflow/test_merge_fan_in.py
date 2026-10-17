@@ -151,3 +151,15 @@ def test_a_split_of_a_split_beside_a_second_split_of_the_source_raises():
                 ("other", [_split("other", f"o{n}", f"O{n}", "P") for n in (1, 2)]),
             ]
         )
+
+
+def test_a_branch_holding_a_source_and_a_split_of_its_split_raises():
+    """`left` holds P and a record split from `right`'s split of P: merged along the
+    chain, one record would carry two of `left`'s."""
+    with pytest.raises(WorkflowError, match="left"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", "P", "L"), _split("left", "s1x", "L1x", "s1")]),
+                ("right", [_split("right", "s1", "R1", "P")]),
+            ]
+        )
