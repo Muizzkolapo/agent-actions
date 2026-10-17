@@ -6,6 +6,9 @@ input items, and `context_scope.passthrough` fields land beside the tool's own
 output after it is validated; none of them supply a field the tool leaves out.
 So an upstream schema that requires the same field name guarantees nothing, and
 the dag-fit warning must still name the field (1492).
+
+A RECORD tool whose output literal leaves out a required field is refused
+before the warning is reached, however the literal is spelt (1491).
 """
 
 from __future__ import annotations
@@ -89,8 +92,6 @@ _WORKFLOW = textwrap.dedent("""\
       - {name: a_file, kind: tool, intent: x, granularity: File, schema: note_out,
          impl: file_note, dependencies: [extract],
          context_scope: {observe: [extract.id, extract.summary]}}
-      - {name: a_record, kind: tool, intent: x, schema: note_out, impl: record_note,
-         dependencies: [extract], context_scope: {observe: [extract.id]}}
       - {name: a_passthrough, kind: tool, intent: x, granularity: File, schema: note_out,
          impl: file_note, dependencies: [extract],
          context_scope: {observe: [extract.summary], passthrough: [extract.id]}}
@@ -102,7 +103,13 @@ _WORKFLOW = textwrap.dedent("""\
     """)
 
 
-def _project(root: Path) -> Path:
+_RECORD_ACTION = """\
+  - {name: a_record, kind: tool, intent: x, schema: note_out, impl: record_note,
+     dependencies: [extract], context_scope: {observe: [extract.id]}}
+"""
+
+
+def _project(root: Path, *, with_record_tool: bool = False) -> Path:
     (root / "agent_actions.yml").write_text(
         "default_agent_config:\n  model_vendor: agac-provider\n  model_name: mock\n"
         'tool_path: ["tools"]\nschema_path: schema\nrequired_by_default: true\n'
@@ -119,7 +126,8 @@ def _project(root: Path) -> Path:
         (schema_dir / f"{name}.yml").write_text(f"name: {name}\n{body}")
     wf = root / "agent_workflow" / "wf"
     (wf / "agent_config").mkdir(parents=True)
-    (wf / "agent_config" / "wf.yml").write_text(_WORKFLOW)
+    workflow = _WORKFLOW + (_RECORD_ACTION if with_record_tool else "")
+    (wf / "agent_config" / "wf.yml").write_text(workflow)
     (wf / "agent_io" / "staging").mkdir(parents=True)
     (wf / "agent_io" / "staging" / "pages.json").write_text(
         json.dumps([{"page_id": "p1", "page_content": "hello"}])
@@ -142,7 +150,6 @@ def test_inspect_names_each_field_a_tool_does_not_return(tmp_path):
     block = _dag_fit_block(output)
     for action, tool in (
         ("a_file", "file_note"),
-        ("a_record", "record_note"),
         ("a_passthrough", "file_note"),
     ):
         line = next((ln for ln in block.splitlines() if f"{action}: id" in ln), None)
@@ -161,3 +168,10 @@ def test_inspect_does_not_report_what_the_tool_returns_or_declares(tmp_path):
     assert "a_declared" not in block, block
     assert "a_complete" not in block, block
     assert "note" not in block.replace("record_note", "").replace("file_note", ""), block
+
+
+def test_a_record_tool_that_never_returns_the_field_is_refused(tmp_path):
+    result = run_agac(_project(tmp_path, with_record_tool=True), "inspect", "-a", "wf")
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert "a_record" in output and "'id'" in output and "record_note" in output, output

@@ -54,6 +54,8 @@ Pre-flight: dag-fit — 1 required output field(s) a tool's code does not return
 
 Return the field, or make it optional in the schema (`optional: true` on a `fields:` entry). If the tool does return it in a way the check cannot read, list it under `defaults:` on the action. A tool whose output the check cannot read at all, such as one built by a helper or in a loop, is not checked.
 
+A record tool whose returned dict starts as a literal is held to more than a warning: a required field it never sets, or sets only inside a branch, refuses the workflow. See [Required Output Field Set Only in a Branch](#required-output-field-set-only-in-a-branch).
+
 ### Minimal Decorator
 
 ```python
