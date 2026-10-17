@@ -173,14 +173,16 @@ How the branches' records pair:
 | Each returns one record per input | One merged record per source record |
 | One returns several records per input (a tool that splits a record), the others one | One merged record per split record, each with the other branches' record for its source |
 | All read one earlier split (an action upstream of every branch returned several records per input) | One merged record per record of that split |
-| Two or more each split the same source record, or one splits a source beside branches that read an earlier split of it | Nothing: the action fails, naming the branches and the source record |
+| Two or more each hold a split of the same source record of their own, or one splits a source beside branches that read an earlier split of it | Nothing: the action fails, naming the branches and the source record |
 
 A record of one split is not a record of another, so two splits of one source have no
 pairing that keeps every branch's fields: the action fails rather than run on records
 that hold one branch with the others' fields empty. It fails too when a branch splits a
 source and keeps one record of the split, for example behind a guard that filters the
-rest. Bring all but one of those branches to one record per source first, for example
-with a `granularity: File` tool that aggregates each split.
+rest, and when a `granularity: File` tool gathers a split back into one record, since
+that record keeps the identity of a split record rather than the source's. To read two
+branches' records of each split, split the source once, in an action upstream of both,
+and have each branch read that action; otherwise let no more than one branch split it.
 
 ## Resolution Order
 

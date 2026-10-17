@@ -293,14 +293,14 @@ def _two_branches_split(
     alone = alone or split_branches
     others = [branch for branch in split_branches if branch not in alone]
     beside = f"a record {others} hold of it" if others else "another's"
-    who = "each" if len(alone) > 1 else "it"
+    who = "each holds" if len(alone) > 1 else "it holds"
     return WorkflowError(
         f"Branches {split_branches} of a fan-in hold records split from one source record "
-        f"({source}), and no record {alone} hold of it pairs with {beside}: {who} split "
-        "that source on its own. A fan-in pairs a branch's records one to one "
-        "with the others' record for the same source. Bring all but one of these branches "
-        "to one record per source first, e.g. with a granularity: File tool that "
-        "aggregates them.",
+        f"({source}), and no record {alone} hold of it pairs with {beside}: {who} a split "
+        "of that source of its own. A fan-in pairs a branch's records one to one with the "
+        "others' record for the same source, and a record of one split is no record of "
+        "another. Split the source once, in an action upstream of every branch, so the "
+        "branches read the same records; or let no more than one of them split it.",
         context={"source": source, "branches": split_branches, "unpaired": alone},
     )
 
