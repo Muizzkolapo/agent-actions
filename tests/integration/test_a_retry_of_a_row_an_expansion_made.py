@@ -167,20 +167,23 @@ def batch_below(two_mints, monkeypatch):
     return two_mints
 
 
-def test_a_batch_action_below_answers_the_replaced_rows_once(batch_below):
+def test_a_batch_action_below_leaves_the_replacement_as_online_does(batch_below):
+    """The same retry in a workflow that runs a batch action below the second mint.
+
+    Whether that action answers the replaced rows is #1375's, not pinned here: it holds
+    no row of the split row the retry names, so it neither grows nor shrinks.
+    """
     selected = _rows(batch_below, "split")[0]["source_guid"]
+    stale = _made_by(_rows(batch_below, "split2"), selected)
     _fail(batch_below, selected, "split")
 
-    for _ in range(3):
-        _retry(batch_below, "--record", selected)
-        if len(_rows(batch_below, "publish")) >= RECORDS * 4:
-            break
-    split2 = {r["source_guid"] for r in _rows(batch_below, "split2")}
-    published = _rows(batch_below, "publish")
+    result = _retry(batch_below, "--record", selected)
 
-    assert len(split2) == RECORDS * 4
-    assert len(published) == RECORDS * 4
-    assert {r["source_guid"] for r in published} == split2
+    after = _rows(batch_below, "split2")
+    assert len(after) == RECORDS * 4
+    assert stale.isdisjoint(r["source_guid"] for r in after)
+    assert len(_rows(batch_below, "publish")) == RECORDS * 4
+    assert WARNING not in result.output
 
 
 def test_a_retry_of_every_failure_replaces_the_rows_too(two_mints):

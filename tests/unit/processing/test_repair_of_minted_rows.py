@@ -206,27 +206,33 @@ class TestARepairThatNamesAStoredRow:
 
 class TestAnInputThatWasItselfExpanded:
     """``parent_source_guid`` is the original pool ancestor, not the immediate
-    producer, so rows of a chained expansion name the grandparent
-    and cannot be attributed to the input that made them. Nothing here asks for
-    that to work — only that it is not made worse, and that it is not silent."""
+    producer, so rows of a chained expansion name the grandparent. Each row also
+    lists the input that made it, which is what places it."""
 
-    def test_no_row_is_lost(self, run):
+    @staticmethod
+    def _made_from(rows: list[dict], guid: str) -> set[str]:
+        return {r["source_guid"] for r in rows if r["content"]["prev"]["id"] == guid}
+
+    def test_the_named_inputs_rows_are_replaced_and_the_others_kept(self, run):
         r = run({"m0": 2})
         first = r(_records("m0", "m1", ancestor="s0"))
         assert {row.get("parent_source_guid") for row in first} == {"s0"}
 
         r.repair(_records("m0", "m1", ancestor="s0"), {"m0"})
 
-        assert {row["source_guid"] for row in first} <= {row["source_guid"] for row in r.stored()}
+        stored = r.stored()
+        assert len(stored) == 3, "m0's stale rows were carried beside its fresh ones"
+        assert self._made_from(first, "m0").isdisjoint(row["source_guid"] for row in stored)
+        assert self._made_from(first, "m1") <= {row["source_guid"] for row in stored}
 
-    def test_a_row_it_cannot_attribute_is_reported(self, caplog, run):
+    def test_nothing_is_reported(self, caplog, run):
         r = run({"m0": 2})
         r(_records("m0", "m1", ancestor="s0"))
 
         with caplog.at_level("WARNING"):
             r.repair(_records("m0", "m1", ancestor="s0"), {"m0"})
 
-        assert "cannot be attributed" in caplog.text
+        assert "cannot be attributed" not in caplog.text
 
 
 class TestWhatAOneToOneRepairDoes:
@@ -300,14 +306,20 @@ class TestAnInputBesideItsOwnAncestor:
 
         assert "cannot be attributed" not in caplog.text
 
-    def test_the_ambiguity_is_reported(self, caplog, run):
+    def test_the_ancestors_own_row_is_placed_by_what_made_it(self, caplog, run):
+        """Its parent names itself and is ambiguous; its producer list is not."""
         r = run({"m0": 2})
-        r(self._diamond())
+        first = r(self._diamond())
+        from_s0 = self._descending_from(first, "s0")
+        assert len(from_s0) == 1
 
         with caplog.at_level("WARNING"):
             r.repair(self._diamond(), {"s0"})
 
-        assert "cannot be attributed" in caplog.text
+        stored = r.stored()
+        assert len(stored) == 3
+        assert from_s0.isdisjoint(row["source_guid"] for row in stored)
+        assert "cannot be attributed" not in caplog.text
 
 
 class TestARepairGivenNoInput:
