@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  An action that runs again over every record after an edit to its prompt, schema, guard or
+  model, or because its stored output is gone, keeps only the prompt traces of the new run.
+  The traces of the run it replaced, for the action and every reader reset with it, were left
+  beside the new ones until retention pruned them, and filled the first page the trace preview
+  returns. A retry, and a resumed action whose config is unchanged, still keep the traces of
+  the records they do not ask again (1335).
+time: 2026-10-17T16:00:00Z

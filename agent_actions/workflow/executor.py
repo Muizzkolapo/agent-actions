@@ -642,6 +642,9 @@ class ActionExecutor:
                 )
         storage_backend.clear_disposition(action_name)
         storage_backend.clear_checkpoint_records(action_name)
+        # Every record is asked again, so a trace of the run being replaced shows a
+        # prompt whose answer no longer stands.
+        storage_backend.clear_prompt_traces(action_name)
         # The batch this reset replaces left a registry entry, recovery state and
         # a context map the next submission must not read as its own.
         storage_backend.clear_batch_state(action_name)
@@ -785,6 +788,8 @@ class ActionExecutor:
             readers = self._stale_readers(action_name)
             for name in readers:
                 self._forget_what_it_did(name)
+            if not getattr(self.deps.action_runner, "retried_records", ()):
+                storage_backend.clear_prompt_traces(action_name)
             self.deps.state_manager.reopen([*readers, action_name])
         return (should_skip, result)
 

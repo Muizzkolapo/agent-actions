@@ -256,8 +256,7 @@ class AgentWorkflow:
                     "answer everything again",
                     name,
                 )
-                for reopened in self.services.core.action_executor.reopen_with_readers(name):
-                    self._clear_prompt_traces(reopened)
+                self.services.core.action_executor.reopen_with_readers(name)
             elif edited is False or status in MID_PROCESSING_STATUSES:
                 # Written before the config was recorded as work began, the state is reset
                 # as it was then: by its status alone.
