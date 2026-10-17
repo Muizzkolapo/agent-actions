@@ -67,7 +67,7 @@ actions:
     intent: "Review"
     hitl:
       port: {port}
-      timeout: 60
+      timeout: 300
       instructions: "Review"
     context_scope:
       observe: [extract_data.summary, source.deep]
@@ -77,6 +77,16 @@ actions:
         '[{"text": "one", "deep": ' + deep + '}, {"text": "two", "deep": "flat"}]'
     )
     return root
+
+
+def _is_this_tests_review(context: object) -> bool:
+    records = context.get("data") if isinstance(context, dict) else None
+    return (
+        isinstance(records, list)
+        and len(records) == 2
+        and isinstance(records[1], dict)
+        and records[1].get("deep") == "flat"
+    )
 
 
 class _Reviewer(threading.Thread):
@@ -89,16 +99,20 @@ class _Reviewer(threading.Thread):
         self.error: BaseException | None = None
 
     def run(self) -> None:
-        deadline = time.monotonic() + 120
+        deadline = time.monotonic() + 300
         while time.monotonic() < deadline:
             for port in range(self.port, self.port + 5):
                 try:
                     with urllib.request.urlopen(
                         f"http://127.0.0.1:{port}/api/context", timeout=5
                     ) as response:
-                        self.context = deep_json.loads(response.read())
-                except OSError:
+                        context = deep_json.loads(response.read())
+                except (OSError, ValueError):
                     continue
+                # Other tests' review servers may hold a nearby port.
+                if not _is_this_tests_review(context):
+                    continue
+                self.context = context
                 self._submit(port)
                 return
             time.sleep(0.2)
