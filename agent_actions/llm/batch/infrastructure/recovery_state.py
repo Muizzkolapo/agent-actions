@@ -8,9 +8,14 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.llm.batch.core.batch_constants import (
     OnExhaustedPolicy,
     RecoveryPhase,
+    RecoveryType,
     coerce_recovery_phase,
 )
-from agent_actions.llm.batch.infrastructure.context import checked_batch_file_name
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
+    checked_batch_file_name,
+)
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -128,3 +133,66 @@ class RecoveryStateManager:
     def exists(backend: "StorageBackend", action_name: str, file_name: str) -> bool:
         key = RecoveryStateManager._metadata_key(action_name, file_name)
         return backend.load_metadata(key) is not None
+
+
+@dataclass(frozen=True)
+class AwaitingRecovery:
+    """The recovery round a DEFERRED record waits on, and the failure that sent it there.
+
+    ``failure`` is the error recorded for the record's last attempt; None when the
+    provider returned nothing for it, and always None for a repair round.
+    """
+
+    recovery_type: RecoveryType
+    attempt: int
+    max_attempts: int
+    failure: str | None
+
+
+def records_awaiting_recovery(
+    backend: "StorageBackend", action_name: str
+) -> dict[str, AwaitingRecovery]:
+    """Each source_guid a recovery batch not yet collected holds, and where it waits.
+
+    Read from what a collect pass leaves once it submits a recovery batch: the registry
+    entry, the parent file's recovery state and its context map. A file whose state or
+    map cannot be read contributes nothing, so its records stay unexplained.
+    """
+    parents = {
+        entry.parent_file_name: RecoveryType(entry.recovery_type)
+        for entry in BatchRegistryManager(backend, action_name).get_all_jobs().values()
+        if entry.recovery_type is not None and entry.parent_file_name and not entry.collected_at
+    }
+
+    awaiting: dict[str, AwaitingRecovery] = {}
+    for parent, recovery_type in parents.items():
+        try:
+            state = RecoveryStateManager.load(backend, action_name, parent)
+            if state is None:
+                continue
+            context_map = BatchContextManager.load_batch_context_map(backend, action_name, parent)
+        except Exception:
+            logger.debug("Could not read the recovery of %s/%s", action_name, parent, exc_info=True)
+            continue
+
+        failures: dict[str, str] = {}
+        if recovery_type == RecoveryType.RETRY:
+            held = state.missing_ids
+            attempt, max_attempts = state.retry_attempt + 1, state.retry_max_attempts
+            failures = {
+                str(r.get("custom_id")): str(r["error"])
+                for r in state.accumulated_results
+                if isinstance(r, dict) and r.get("error")
+            }
+        else:
+            held = state.repair_submitted_ids
+            attempt, max_attempts = state.repair_attempt, state.repair_max_attempts
+
+        for custom_id in held:
+            record = context_map.get(custom_id)
+            guid = record.get("source_guid") if isinstance(record, dict) else None
+            if guid:
+                awaiting[str(guid)] = AwaitingRecovery(
+                    recovery_type, attempt, max_attempts, failures.get(custom_id)
+                )
+    return awaiting
