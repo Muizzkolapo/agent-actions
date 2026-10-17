@@ -43,7 +43,7 @@
 | `OperationalError` | Class | Base exception for operational errors. | - |
 | `AgentExecutionError` | Class | Raised when an error occurs during agent execution. | - |
 | `TemplateRenderingError` | Class | Raised when an error occurs during template rendering. | - |
-| `TemplateVariableError` | Class | Raised when Jinja2 template references undefined variables. Includes namespace context for enhanced error messages. | - |
+| `TemplateVariableError` | Class | Raised when Jinja2 template references undefined variables. Includes namespace context for enhanced error messages; `detail` is appended to the message. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `namespace_context` | Attr | Dict mapping namespace names to available fields for diagnostic output. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `template_line` | Attr | Line number in template where error occurred (for syntax errors). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `field_context_metadata` | Attr | Metadata about stored vs loaded fields per namespace (for enhanced diagnostics). | - |

@@ -56,9 +56,9 @@ actions:
 
 | Error Type | Examples | Retryable |
 |------------|----------|-----------|
-| Rate Limits | HTTP 429, quota exceeded | Yes, except Ollama ([by provider](#provider-support)) |
+| Rate Limits | HTTP 429, quota exceeded | Yes |
 | Network Issues | Connection refused, reset or dropped mid-response, timeout, DNS failure | Yes |
-| Server Errors | HTTP 500, 502, 503, 504 | Yes, except Ollama; which statuses depends on the provider ([by provider](#provider-support)) |
+| Server Errors | HTTP 500, 502, 503, 504 | Yes; which other statuses depends on the provider ([by provider](#provider-support)) |
 | Invalid Request | Bad API key, malformed input | No |
 | Schema Violation | Invalid JSON output | No (uses `expect:` repair) |
 
@@ -73,9 +73,8 @@ Provider-specific errors are normalized into unified `RateLimitError` and `Netwo
 | Provider | Rate limit (429) | Server errors |
 |----------|------------------|---------------|
 | OpenAI, Groq | Retried | Any HTTP 5xx retried |
-| Anthropic | Retried | Any HTTP 5xx retried except 529 (overloaded) |
-| Gemini, Cohere | Retried | HTTP 500, 502, 503, 504 retried |
-| Ollama | Not retried | Not retried |
+| Anthropic | Retried | Any HTTP 5xx retried, 529 (overloaded) included |
+| Gemini, Cohere, Ollama | Retried | HTTP 500, 502, 503, 504 retried |
 
 A status the table does not mark as retried is not retried.
 

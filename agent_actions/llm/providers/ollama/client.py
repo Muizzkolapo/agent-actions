@@ -46,16 +46,18 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+# The SDK raises an HTTP error answer as ResponseError, its status on .status_code (-1
+# when a streamed response carries an error), so the status decides whether it is retried.
 _ERROR_MAPPING_LOCAL = VendorErrorMapping(
     vendor_name="ollama_local",
-    status_code_error_types=(httpx.HTTPStatusError,),
+    status_code_error_types=(ResponseError, httpx.HTTPStatusError),
     base_api_error_type=ResponseError,
     supports_retry_after=False,
 )
 
 _ERROR_MAPPING_CLOUD = VendorErrorMapping(
     vendor_name="ollama_cloud",
-    status_code_error_types=(httpx.HTTPStatusError,),
+    status_code_error_types=(ResponseError, httpx.HTTPStatusError),
     base_api_error_type=ResponseError,
     supports_retry_after=False,
 )

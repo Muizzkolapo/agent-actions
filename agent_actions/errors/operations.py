@@ -39,6 +39,7 @@ class TemplateVariableError(TemplateRenderingError):
         field_context_metadata: dict | None = None,
         storage_hints: dict | None = None,
         null_namespace_hints: dict | None = None,
+        detail: str | None = None,
     ):
         """
         Initialize TemplateVariableError.
@@ -56,6 +57,7 @@ class TemplateVariableError(TemplateRenderingError):
                 in storage but wasn't loaded (missing schema declaration)
             null_namespace_hints: Dict mapping namespace names to remediation info
                 when namespace is null due to guard-filter at a fan-in point
+            detail: What the render found missing, in words, appended to the message
         """
         self.missing_variables = missing_variables
         self.available_variables = available_variables
@@ -82,6 +84,8 @@ class TemplateVariableError(TemplateRenderingError):
         if storage_hints:
             ctx["storage_hints"] = storage_hints
         msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
+        if detail:
+            msg += f" — {detail}"
         if null_namespace_hints:
             ctx["null_namespace_hints"] = null_namespace_hints
             remediation = next(iter(null_namespace_hints.values())).get("remediation", "")

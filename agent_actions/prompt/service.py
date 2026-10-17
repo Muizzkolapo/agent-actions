@@ -1,7 +1,9 @@
 """Unified prompt preparation service for batch and online modes."""
 
 import logging
+import re
 import sys
+from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,7 +42,7 @@ from agent_actions.prompt.context.static_loader import (
     StaticDataLoadError,
 )
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
+from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment, MissingFieldError
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils import deep_json
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
@@ -58,6 +60,75 @@ def _null_by_record(value: Any) -> bool:
         REASON_NO_OUTPUT,
         REASON_NULL,
     )
+
+
+# Containers the place search visits before it gives up; a record's own nesting
+# (a 20,000-deep chain) fits, a context of hundreds of thousands of rows does not.
+_PLACE_SEARCH_BUDGET = 50_000
+_PLACES_KEPT = 16
+
+
+def _place_in(context: Mapping[str, Any], target: Any, template: str) -> str | None:
+    """The dotted place of mapping *target* in *context*, found by identity, or None.
+
+    A mapping can sit at several places (wildcard observe keeps a namespace's dicts by
+    reference). The place *template* names wins; with none or several named, a place is
+    given only when the whole context was searched and it is the only one.
+    """
+    # Each node is (parent node index, segment); a place is built only for a match.
+    nodes: list[tuple[int, str]] = []
+    queue: deque[tuple[int, Any]] = deque()
+    complete = True
+    for key, value in context.items():
+        if isinstance(value, Mapping | list | tuple):
+            nodes.append((-1, str(key)))
+            queue.append((len(nodes) - 1, value))
+    matches: list[int] = []
+    while queue:
+        index, value = queue.popleft()
+        if value is target:
+            matches.append(index)
+            if len(matches) == _PLACES_KEPT:
+                complete = False
+                break
+            continue
+        children = (
+            ((f".{key}", child) for key, child in value.items())
+            if isinstance(value, Mapping)
+            else ((f"[{position}]", child) for position, child in enumerate(value))
+        )
+        for segment, child in children:
+            if not isinstance(child, Mapping | list | tuple):
+                continue
+            if len(nodes) >= _PLACE_SEARCH_BUDGET:
+                complete = False
+                break
+            nodes.append((index, segment))
+            queue.append((len(nodes) - 1, child))
+        if not complete:
+            break
+
+    places = [_place_of_node(nodes, index) for index in matches]
+    named = {place for place in places if _named_in(template, place)}
+    if len(named) == 1:
+        return named.pop()
+    if not named and complete and len(places) == 1:
+        return places[0]
+    return None
+
+
+def _place_of_node(nodes: list[tuple[int, str]], index: int) -> str:
+    segments: list[str] = []
+    while index != -1:
+        index, segment = nodes[index]
+        segments.append(segment)
+    return "".join(reversed(segments))
+
+
+def _named_in(template: str, place: str) -> bool:
+    """Whether *template* reads *place* as a dotted reference (list positions left out)."""
+    dotted = re.sub(r"\[\d+\]", "", place)
+    return re.search(r"(?<![\w.])" + re.escape(dotted) + r"(?!\w)", template) is not None
 
 
 def _too_deep_to_render(prompt_context: dict[str, Any]) -> RecordContextError | None:
@@ -361,6 +432,7 @@ class PromptPreparationService:
                 lstrip_blocks=True,
                 keep_trailing_newline=True,
                 finalize=lambda x: "" if is_null_namespace(x) else x,
+                place_of=lambda obj: _place_in(prompt_context, obj, raw_prompt),
             )
 
             raw_prompt = escape_jinja_in_inline_code(raw_prompt)
@@ -411,18 +483,26 @@ class PromptPreparationService:
 
             error_str = str(e)
             missing = []
-            # A field read off a null namespace: the raised error's null-namespace
-            # hint diagnoses it, and the name is a field, not a namespace.
-            attribute_of_null = False
-            if "has no attribute" in error_str or "is undefined" in error_str:
+            # A name Jinja reports as a missing attribute is a field read off a
+            # value, not a namespace. Off a null namespace, the raised error's
+            # null-namespace hint diagnoses it; off any other value, Jinja's own
+            # text is the detail.
+            attribute_read = False
+            detail: str | None = None
+            if isinstance(e, MissingFieldError):
+                missing.append(f"{e.place}.{e.field}")
+                detail = error_str
+            elif "has no attribute" in error_str or "is undefined" in error_str:
                 import re
 
                 attribute_match = re.search(r"has no attribute '([^']+)'", error_str)
                 if attribute_match:
                     missing.append(attribute_match.group(1))
-                    attribute_of_null = error_str.startswith(
+                    attribute_read = True
+                    if not error_str.startswith(
                         ("'None' has no attribute", f"'{_NULL_NAMESPACE_TYPE} object'")
-                    )
+                    ):
+                        detail = error_str
                 else:
                     undefined_match = re.search(r"'([^']+)' is undefined", error_str)
                     if undefined_match:
@@ -435,12 +515,12 @@ class PromptPreparationService:
                     fire_event(
                         ContextFieldNotFoundEvent(
                             action_name=agent_name or "",
-                            field_ref=var,
+                            field_ref=field,
                             namespace=ns,
                             available_fields=available,
                         )
                     )
-                elif not attribute_of_null:
+                elif not attribute_read:
                     owners = [
                         ns
                         for ns, fields in namespace_context.items()
@@ -548,6 +628,7 @@ class PromptPreparationService:
                 field_context_metadata=field_context_metadata if field_context_metadata else None,
                 storage_hints=storage_hints if storage_hints else None,
                 null_namespace_hints=null_namespace_hints if null_namespace_hints else None,
+                detail=detail,
             ) from e
 
     @staticmethod

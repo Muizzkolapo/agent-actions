@@ -247,11 +247,17 @@ _render_prompt_template(raw_prompt, prompt_context)
   |           |                - null_namespace_hints (why the dereferenced null
   |           |                  namespace has no data on this record, from its
   |           |                  NullNamespace reason, and the remediation)
+  |           |                - detail ("'ns' has no field 'f' (it has: ...)" for a
+  |           |                  field a present mapping lacks, placed by identity
+  |           |                  in prompt_context, preferring the place the
+  |           |                  template names; Jinja's text otherwise)
   |
   5. Return rendered string
 ```
 
 **StrictUndefined** means typos in template references fail loudly rather than silently rendering empty. Dereferencing a null namespace is no exception: it raises, but the error carries `null_namespace_hints` naming the namespace, what the record shows about why it has no data (a guard skip by that action, a null without one, no output of that action on the record, or none of the observed fields in its output), and the remediation for that case (`ns.*` null-safe access or a guard on the consuming action for a null; dependencies or the observed field names otherwise). The field read off a null namespace is not reported as a namespace of its own.
+
+A field read off a namespace that has data but not that field fails the same way. Jinja's error names only the field ("'dict object' has no attribute 'f'"), so `DictKeyFirstEnvironment` is given `place_of`, which finds the mapping's dotted place in `prompt_context` by identity (`good`, `good.inner`, `good.items[1]`) when the undefined is used, and raises `MissingFieldError`: the error reports `good.f` as the missing variable and says "'good' has no field 'f' (it has: ...)". A mapping held at several places (wildcard observe keeps a namespace's dicts by reference) is named by the place the template reads; when the template names none or several of them, no place is guessed. The search stops after 50,000 containers, so a mapping outside a large context costs little; then too a place is given only if the template names it. A mapping the template built itself has no place, and its field is still not reported as a namespace.
 
 ---
 

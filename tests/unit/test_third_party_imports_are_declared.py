@@ -15,9 +15,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Imported directly yet undeclared; each is to be declared and then removed here.
-KNOWN_UNDECLARED = {"click", "werkzeug"}
-
 
 def _normalise(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
@@ -69,11 +66,9 @@ def test_httpx_is_declared():
     assert "httpx" in _declared()
 
 
-def test_no_new_undeclared_third_party_import():
-    unexpected = {m: f for m, f in _undeclared().items() if m not in KNOWN_UNDECLARED}
-
-    assert unexpected == {}
+def test_click_and_werkzeug_are_declared():
+    assert {"click", "werkzeug"} <= _declared()
 
 
-def test_the_known_undeclared_list_holds_only_undeclared_imports():
-    assert KNOWN_UNDECLARED <= set(_undeclared())
+def test_no_undeclared_third_party_import():
+    assert _undeclared() == {}

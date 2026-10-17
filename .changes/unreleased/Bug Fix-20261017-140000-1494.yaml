@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  The Ollama providers (`ollama_local`, `ollama_cloud`) now retry a 429 and HTTP 500, 502, 503
+  and 504 as an action's `retry:` asks. The ollama SDK raises every HTTP error as
+  `ollama.ResponseError`, which was taken for a non-retriable API error, so such a record was
+  failed at its first attempt. Any other status, such as a 400 or a 404 for a model the server
+  does not have, is still not retried.
+time: 2026-10-17T14:00:00Z
