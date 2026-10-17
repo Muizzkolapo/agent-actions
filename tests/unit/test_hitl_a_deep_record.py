@@ -189,3 +189,38 @@ def test_a_review_saved_over_a_deep_context_is_restored_by_the_next_server(tmp_p
     )
 
     assert second.record_reviews == [{"hitl_status": "approved", "user_comment": ""}, None]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node to run the page's script")
+def test_the_review_page_shows_a_deep_value_as_compact_text_of_linear_size():
+    """Indented text grows with the square of the depth: 2,000 levels made 8 MB (1497)."""
+    page = TEMPLATE.read_text(encoding="utf-8")
+    names = ["esc", "syntaxHighlight"] + re.findall(r"function (jsonText\w*)\(", page)
+    depth = 2_000
+    script = (
+        "\n".join(_js_function(page, name) for name in names)
+        + f"""
+function nested(depth) {{
+    var value = {{note: "{LEAF}", n: [1, 2]}};
+    for (var i = 0; i < depth; i++) value = {{inner: value}};
+    return value;
+}}
+var deep = nested({depth});
+var html = syntaxHighlight(deep);
+var text = html.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"');
+var ordinary = nested(12);
+process.stdout.write(JSON.stringify({{
+    text: text,
+    expected: JSON.stringify(deep),
+    ordinary: syntaxHighlight(ordinary) === syntaxHighlight(JSON.stringify(ordinary, null, 2)),
+}}));
+"""
+    )
+
+    ran = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
+
+    assert ran.returncode == 0, ran.stderr[-2000:]
+    shown = json.loads(ran.stdout)
+    assert shown["text"] == shown["expected"]
+    assert len(shown["text"]) < 12 * depth + 100
+    assert shown["ordinary"] is True
