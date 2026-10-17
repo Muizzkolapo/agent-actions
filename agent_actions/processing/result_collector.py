@@ -558,18 +558,24 @@ def collect_results_from_processing_results(
             # parse failure, which flows through as SUCCESS data.
             # The repair loop has already had its chance (it runs during
             # invocation, before result collection).
+            rows = data
             if data and _data_has_parse_error(data):
-                result.status = ProcessingStatus.FAILED
-                for d in data:
+                # A bundled FILE result holds one row per record, so only the
+                # rows that hold the error fail; a keyed result is one record.
+                if result.source_guid is None:
+                    broken = [d for d in data if _data_has_parse_error([d])]
+                    data = [d for d in data if not _data_has_parse_error([d])]
+                else:
+                    broken, data = data, []
+                for d in broken:
                     _stamp(d, RecordState.FAILED, action_name, PARSE_ERROR)
-                output.extend(data)
-                stats[status_key] -= 1
-                stats["failed"] += 1
+                stats["failed"] += len(broken) if result.source_guid is None else 1
                 logger.warning(
-                    "[%s] SUCCESS result source_guid=%s contains _parse_error "
+                    "[%s] SUCCESS result source_guid=%s contains _parse_error in %d row(s) "
                     "— dispositioned as FAILED",
                     action_name,
                     result.source_guid,
+                    len(broken),
                 )
                 fire_event(
                     ResultCollectedEvent(
@@ -590,20 +596,24 @@ def collect_results_from_processing_results(
                             None,
                         )
                     )
-                elif storage_backend and result.source_guid is None and data:
+                elif storage_backend:
                     _per_item_dispositions(
                         pending_dispositions,
                         action_name,
-                        data,
+                        broken,
                         DISPOSITION_FAILED,
                         reason=PARSE_ERROR,
                     )
-                continue
+                if not data:
+                    result.status = ProcessingStatus.FAILED
+                    stats[status_key] -= 1
+                    output.extend(rows)
+                    continue
 
             if data:
                 for d in data:
                     _stamp(d, RecordState.PROCESSED, action_name, SUCCESS)
-                output.extend(data)
+                output.extend(rows)
                 echoed |= _schema_echoes(data, action_name)
             logger.debug(
                 "Collected SUCCESS result source_guid=%s count=%d",
