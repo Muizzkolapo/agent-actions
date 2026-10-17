@@ -59,3 +59,15 @@ def test_untouched_staging_runs_nothing_again(chained):  # noqa: F811
 
     assert result.exit_code == 0, result.output
     assert {action: _raw_rows(chained, action) for action in (ACTION, SECOND)} == before
+
+
+def test_a_file_rewritten_under_the_same_name_is_read_again(chained):  # noqa: F811
+    _staging(chained).joinpath("pages.json").write_text(
+        json.dumps([{"page_content": "page rewritten"}])
+    )
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+
+    assert result.exit_code == 0, result.output
+    for action in (ACTION, SECOND):
+        assert len(_raw_rows(chained, action)) == 1, action
