@@ -16,7 +16,10 @@ from typing import Any, ClassVar
 import anthropic
 
 from agent_actions.errors import VendorAPIError
-from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
+from agent_actions.llm.providers.anthropic import (
+    PROMPT_CACHING_BETA_HEADER,
+    server_busy_errors,
+)
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -38,6 +41,7 @@ _ERROR_MAPPING = VendorErrorMapping(
         anthropic.APIConnectionError,
         anthropic.APITimeoutError,
         anthropic.InternalServerError,
+        *server_busy_errors(anthropic),
     ),
     base_api_error_type=anthropic.APIError,
     supports_retry_after=True,

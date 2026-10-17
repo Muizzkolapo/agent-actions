@@ -73,7 +73,7 @@ Provider-specific errors are normalized into unified `RateLimitError` and `Netwo
 | Provider | Rate limit (429) | Server errors |
 |----------|------------------|---------------|
 | OpenAI, Groq | Retried | Any HTTP 5xx retried |
-| Anthropic | Retried | Any HTTP 5xx retried except 529 (overloaded) |
+| Anthropic | Retried | Any HTTP 5xx retried, 529 (overloaded) included |
 | Gemini, Cohere, Ollama | Retried | HTTP 500, 502, 503, 504 retried |
 
 A status the table does not mark as retried is not retried.

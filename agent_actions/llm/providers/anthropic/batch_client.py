@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER
+from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
 
@@ -55,7 +55,11 @@ class AnthropicBatchClient(BaseBatchClient):
             import anthropic
 
             self.anthropic = anthropic
-            self._transient_errors = (anthropic.APIConnectionError, anthropic.InternalServerError)
+            self._transient_errors = (
+                anthropic.APIConnectionError,
+                anthropic.InternalServerError,
+                *server_busy_errors(anthropic),
+            )
             if api_key:
                 self.client = anthropic.Anthropic(api_key=api_key)
             else:
