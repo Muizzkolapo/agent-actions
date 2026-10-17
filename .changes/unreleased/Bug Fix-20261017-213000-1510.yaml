@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  Pre-flight no longer refuses a RECORD tool that sets a required output field on every path
+  that returns. A key set in a `try` whose `except` always re-raises, in both branches of an
+  `if`, in every case of a `match` with a `case _:`, or in a `finally`, now counts as set.
+  Such tools used to be refused although every record they return has the field. dag-fit reads
+  a tool's output the same way. (#1510)
+time: 2026-10-17T21:30:00Z

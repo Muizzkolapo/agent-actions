@@ -468,3 +468,94 @@ def test_a_re_bound_dict_is_read_from_its_last_binding():
     assert "f: output schema requires 'answer'" in finding
     assert "re-binds 'out' without it at line 3" in finding
     assert _risks(source, ["options"]) == []
+
+
+# The scan follows each path to the tail return: a key counts when every path holds it.
+@pytest.mark.parametrize(
+    "body",
+    [
+        # both branches of an `if`
+        "    if data:\n        out['answer'] = 1\n    else:\n        out['answer'] = 2\n",
+        # the body of a `try`, and the `except` that falls back
+        "    try:\n        out['answer'] = data['a']\n    except KeyError:\n"
+        "        out['answer'] = None\n",
+        # a `finally` runs on every path
+        "    try:\n        data.load()\n    finally:\n        out['answer'] = 1\n",
+        # every case of a `match` that has a catch-all
+        "    match data:\n        case {'a': a}:\n            out['answer'] = a\n"
+        "        case _:\n            out['answer'] = None\n",
+        # a branch that raises never reaches the return
+        "    if not data:\n        raise ValueError('empty')\n    else:\n        out['answer'] = 1\n",
+        # set inside a `with`
+        "    with lock:\n        out['answer'] = 1\n",
+    ],
+)
+def test_a_key_every_path_to_the_return_holds_is_not_flagged(body):
+    source = "def build(data):\n    out = {'options': []}\n" + body + "    return out\n"
+    assert _risks(source, ["options", "answer"]) == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "    if data:\n        del out['answer']\n",
+        "    for k in data:\n        out.pop('answer', None)\n",
+        "    try:\n        out.clear()\n    except KeyError:\n        pass\n",
+        "    match data:\n        case {'a': a}:\n            del out['answer']\n",
+        "    if data:\n        out = {'options': []}\n",
+        # the other path still lacks it, whatever a helper builds on this one
+        "    if data:\n        out = build_from(data)\n    else:\n        out.pop('answer')\n",
+    ],
+)
+def test_a_key_some_path_to_the_return_lacks_is_flagged(body):
+    source = (
+        "def build(data):\n    out = {'options': [], 'answer': 0}\n" + body + "    return out\n"
+    )
+    findings = _risks(source, ["options", "answer"])
+    assert any("requires 'answer'" in finding for finding in findings), findings
+
+
+def test_a_key_set_in_a_match_without_a_catch_all_is_flagged():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    match data:\n"
+        "        case {'a': a}:\n"
+        "            out['answer'] = a\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "at line 5, inside a `match`" in finding
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # removed by a computed name: which key went is unknowable
+        "    out.pop(data['key'])\n",
+        "    del out[data['key']]\n",
+        "    out.popitem()\n",
+        # re-bound to something the scan cannot enumerate
+        "    out = dict(out, extra=1)\n",
+        "    out = build_from(out)\n",
+        "    if (out := build_from(data)):\n        pass\n",
+    ],
+)
+def test_a_mapping_the_scan_cannot_follow_is_not_flagged(body):
+    source = "def build(data):\n    out = {'options': []}\n" + body + "    return out\n"
+    assert _risks(source, ["options", "answer"]) == []
+
+
+def test_a_tail_return_inside_a_loop_is_not_read():
+    source = (
+        "def build(data):\n"
+        "    for row in data:\n"
+        "        out = {'options': row}\n"
+        "        return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
+
+
+def test_a_list_of_two_is_not_read():
+    source = "def build(data):\n    out = {'options': []}\n    return [out, out]\n"
+    assert _risks(source, ["options", "answer"]) == []

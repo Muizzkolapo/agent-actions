@@ -184,61 +184,298 @@ def _keys_added(stmt: ast.stmt, target: str) -> set[str] | None:
     return keys
 
 
-def _top_level_statements(body: list[ast.stmt]) -> Iterator[ast.stmt]:
-    """Statements that run on every path; a ``with`` block's body runs whenever it is entered."""
-    for stmt in body:
-        if isinstance(stmt, (ast.With, ast.AsyncWith)):
-            yield from _top_level_statements(stmt.body)
-        else:
-            yield stmt
+class _Decline(Exception):
+    """The returned mapping's keys cannot be read; the caller makes no claim."""
 
 
-def _returned_name(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    ret = _last_return(func)
-    if ret is not None and isinstance(ret.value, ast.Name):
-        return ret.value.id
+class _Unreached:
+    """No path gets here: every one raised or returned before."""
+
+
+_UNREACHED = _Unreached()
+
+# The keys a path's mapping is known to hold. None when its contents are unknown (a
+# parameter, a helper's result), which bounds nothing: such a path neither adds a key
+# nor takes one away when paths are joined.
+_State = frozenset[str] | None | _Unreached
+
+
+def _merge(states: list[_State]) -> _State:
+    """The keys every path holds, over the paths that reach this point."""
+    live = [s for s in states if not isinstance(s, _Unreached)]
+    if not live:
+        return _UNREACHED
+    known = [s for s in live if s is not None]
+    if not known:
+        return None
+    return frozenset.intersection(*known)
+
+
+def _walk_own(nodes: list[ast.AST]) -> Iterator[ast.AST]:
+    """Every node under ``nodes`` that runs in this scope — not a nested def, lambda or class body."""
+    stack = list(nodes)
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+
+
+def _const_key(node: ast.expr | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
     return None
 
 
-def _unconditional_output_keys(func: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None:
-    """The constant string keys the UDF puts on its returned mapping without any guard.
+def _removals(nodes: list[ast.AST], target: str) -> tuple[set[str], bool]:
+    """Keys ``nodes`` remove from ``target`` by name, and whether they may empty it.
 
-    Returns None when the returned shape is unrecognisable (list/scalar return,
-    a helper-call initialiser, a ``**spread`` in the returned literal, etc.).
-    None means "decline to decide" — the caller emits no warning.
+    Reads ``del target["k"]``, ``target.pop("k", ...)`` and ``target.clear()``; a key
+    removed by a computed name, or ``popitem()``, is unknowable and declines.
+    """
+    removed: set[str] = set()
+    cleared = False
+    for node in _walk_own(nodes):
+        if isinstance(node, ast.Delete):
+            for t in node.targets:
+                if isinstance(t, ast.Subscript) and _is_name(t.value, target):
+                    key = _const_key(t.slice)
+                    if key is None:
+                        raise _Decline
+                    removed.add(key)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and _is_name(node.func.value, target)
+        ):
+            method = node.func.attr
+            if method == "pop":
+                key = _const_key(node.args[0]) if node.args else None
+                if key is None:
+                    raise _Decline
+                removed.add(key)
+            elif method == "popitem":
+                raise _Decline
+            elif method == "clear":
+                cleared = True
+    return removed, cleared
+
+
+def _binds_name(node: ast.AST | None, target: str) -> bool:
+    """True if ``node``, an assignment target, binds ``target`` (directly or by unpacking)."""
+    if isinstance(node, ast.Name):
+        return node.id == target
+    if isinstance(node, (ast.Tuple, ast.List)):
+        return any(_binds_name(e, target) for e in node.elts)
+    if isinstance(node, ast.Starred):
+        return _binds_name(node.value, target)
+    return False
+
+
+def _rebinds(nodes: list[ast.AST], target: str) -> bool:
+    """True if ``nodes`` may bind ``target`` to something new, in any spelling."""
+    for node in _walk_own(nodes):
+        if isinstance(node, ast.Assign) and any(_binds_name(t, target) for t in node.targets):
+            return True
+        if isinstance(node, ast.AnnAssign) and node.value is not None:
+            if _binds_name(node.target, target):
+                return True
+        if isinstance(node, ast.AugAssign) and _binds_name(node.target, target):
+            # `target |= {...}` only adds keys to the mapping it already holds.
+            if not isinstance(node.op, ast.BitOr):
+                return True
+        if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            if _binds_name(node.target, target):
+                return True
+        if isinstance(node, ast.withitem) and _binds_name(node.optional_vars, target):
+            return True
+        if isinstance(node, ast.NamedExpr) and _binds_name(node.target, target):
+            return True
+        if isinstance(node, ast.Delete) and any(_binds_name(t, target) for t in node.targets):
+            return True
+        if isinstance(node, ast.ExceptHandler) and node.name == target:
+            return True
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == target:
+                return True
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            if any((alias.asname or alias.name.split(".")[0]) == target for alias in node.names):
+                return True
+        if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name == target:
+            return True
+        if isinstance(node, ast.MatchMapping) and node.rest == target:
+            return True
+    return False
+
+
+def _header(stmt: ast.stmt) -> list[ast.AST]:
+    """The parts of ``stmt`` that run before any block it holds — all of it for a simple one."""
+    if isinstance(stmt, (ast.If, ast.While)):
+        return [stmt.test]
+    if isinstance(stmt, (ast.For, ast.AsyncFor)):
+        return [stmt.iter, stmt.target]
+    if isinstance(stmt, (ast.With, ast.AsyncWith)):
+        return list(stmt.items)
+    if isinstance(stmt, ast.Match):
+        return [stmt.subject]
+    if isinstance(stmt, (ast.Try, ast.TryStar, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return []
+    if isinstance(stmt, ast.ClassDef):
+        return []
+    return [stmt]
+
+
+def _without(keys: _State, nodes: list[ast.AST], target: str) -> _State:
+    """``keys`` less what ``nodes`` remove from ``target``."""
+    if not isinstance(keys, frozenset):
+        return keys
+    removed, cleared = _removals(nodes, target)
+    return frozenset() if cleared else keys - removed
+
+
+_COMPOUND = (ast.If, ast.While, ast.For, ast.AsyncFor, ast.With, ast.AsyncWith, ast.Match)
+
+
+def _is_irrefutable(case: ast.match_case) -> bool:
+    pattern = case.pattern
+    while isinstance(pattern, ast.MatchAs) and pattern.pattern is not None:
+        pattern = pattern.pattern
+    return case.guard is None and isinstance(pattern, ast.MatchAs) and pattern.pattern is None
+
+
+class _OutputFlow:
+    """Walks a UDF's body path by path, tracking the keys its returned name holds.
+
+    A key counts only when every path that reaches the tail return holds it: an ``if``
+    keeps what both branches hold, a loop body may run no times so it only removes, and
+    a ``try`` joins its body's end with each ``except`` that falls through. A path that
+    raises or returns elsewhere never reaches the tail and adds nothing.
+    """
+
+    def __init__(self, target: str, tail: ast.Return) -> None:
+        self.target = target
+        self.tail = tail
+        self.at_tail: list[_State] = []
+
+    def block(self, body: list[ast.stmt], state: _State) -> _State:
+        for stmt in body:
+            if isinstance(state, _Unreached):
+                break
+            state = self.stmt(stmt, state)
+        return state
+
+    def may(self, nodes: list[ast.AST], state: _State) -> _State:
+        """``state`` after code that may run any number of times, or not at all: only its removals hold.
+
+        A path on which that code re-binds the name holds unknown contents, which bound nothing.
+        """
+        return _without(state, nodes, self.target)
+
+    def stmt(self, stmt: ast.stmt, state: _State) -> _State:
+        target = self.target
+        state = _without(state, _header(stmt), target)
+        if isinstance(stmt, ast.Return):
+            if stmt is self.tail:
+                self.at_tail.append(state)
+            return _UNREACHED
+        if isinstance(stmt, ast.Raise):
+            return _UNREACHED
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return None if stmt.name == target else state
+        if isinstance(stmt, _COMPOUND) and _rebinds(_header(stmt), target):
+            state = None
+        if isinstance(stmt, ast.If):
+            return _merge([self.block(stmt.body, state), self.block(stmt.orelse, state)])
+        if isinstance(stmt, (ast.With, ast.AsyncWith)):
+            return self.block(stmt.body, state)
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            return self.may([stmt], state)
+        if isinstance(stmt, (ast.Try, ast.TryStar)):
+            finished = self.block(stmt.orelse, self.block(stmt.body, state))
+            # A handler starts wherever the body raised, so it holds only what the body cannot remove.
+            entry = self.may(list(stmt.body), state)
+            handled = [
+                self.block(handler.body, None if handler.name == target else entry)
+                for handler in stmt.handlers
+            ]
+            return self.block(stmt.finalbody, _merge([finished, *handled]))
+        if isinstance(stmt, ast.Match):
+            outcomes = [
+                self.block(case.body, None if _rebinds([case.pattern], target) else state)
+                for case in stmt.cases
+            ]
+            if not any(_is_irrefutable(case) for case in stmt.cases):
+                outcomes.append(state)
+            return _merge(outcomes)
+        return self.simple(stmt, state)
+
+    def simple(self, stmt: ast.stmt, state: _State) -> _State:
+        target = self.target
+        literal = _initial_mapping(stmt, target)
+        if literal is not None:
+            keys = _mapping_literal_keys(literal)
+            return None if keys is None else frozenset(keys)
+        if _rebinds([stmt], target):
+            return None
+        added = _keys_added(stmt, target)
+        if added is None:
+            raise _Decline
+        return state | added if isinstance(state, frozenset) else state
+
+
+def _returned_value(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.expr | None:
+    """What the tail return hands back; a one-element list stands for its element.
+
+    Each item of a returned list is validated on its own, so ``return [out]`` is
+    checked exactly as ``return out``.
     """
     ret = _last_return(func)
     if ret is None or ret.value is None:
         return None
-    # `return {...}` — the literal's constant keys are the unconditional set.
-    if _is_mapping_literal(ret.value):
-        return _mapping_literal_keys(ret.value)
-    # `return name` — walk the function's TOP-LEVEL body only. Anything nested
-    # in if/for/while/try is by definition conditional.
-    if not isinstance(ret.value, ast.Name):
+    value = ret.value
+    if isinstance(value, ast.List) and len(value.elts) == 1:
+        element = value.elts[0]
+        if not isinstance(element, ast.Starred):
+            return element
+    return value
+
+
+def _returned_name(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
+    value = _returned_value(func)
+    if isinstance(value, ast.Name):
+        return value.id
+    return None
+
+
+def _unconditional_output_keys(func: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None:
+    """The constant string keys the UDF's returned mapping holds on every path to its tail return.
+
+    Returns None when the returned shape is unrecognisable (a scalar or longer list
+    return, a helper-call initialiser, a ``**spread``, a key removed by a computed
+    name, a tail return inside a loop, etc.). None means "decline to decide" — the
+    caller emits no warning.
+    """
+    value = _returned_value(func)
+    if value is None:
         return None
-    target = ret.value.id
-    keys: set[str] = set()
-    initial_found = False
-    for stmt in _top_level_statements(func.body):
-        initial = _initial_mapping(stmt, target)
-        if initial is not None:
-            initial_keys = _mapping_literal_keys(initial)
-            if initial_keys is None:
-                return None
-            keys |= initial_keys
-            initial_found = True
-            continue
-        added = _keys_added(stmt, target)
-        if added is None:
-            return None
-        keys |= added
-    if not initial_found:
-        # No dict-literal initial assignment (e.g. `result = build(data)` or
-        # `result = data.copy()`): we cannot enumerate what the helper puts
-        # in, so declining is safer than flagging every required field.
+    if _is_mapping_literal(value):
+        return _mapping_literal_keys(value)
+    if not isinstance(value, ast.Name):
         return None
-    return keys
+    tail = _last_return(func)
+    assert tail is not None
+    flow = _OutputFlow(value.id, tail)
+    try:
+        flow.block(func.body, None)
+    except _Decline:
+        return None
+    reached = _merge(flow.at_tail)
+    if not isinstance(reached, frozenset):
+        # Never bound to a literal on the way (e.g. `result = build(data)`), or the tail
+        # return sits in a loop: what it holds cannot be enumerated, so decline.
+        return None
+    return set(reached)
 
 
 _BLOCK_NAMES: dict[type, str] = {
@@ -247,8 +484,32 @@ _BLOCK_NAMES: dict[type, str] = {
     ast.AsyncFor: "an `async for` loop",
     ast.While: "a `while` loop",
     ast.Try: "a `try`",
+    ast.TryStar: "a `try`",
     ast.Match: "a `match`",
 }
+
+
+def _statements(body: list[ast.stmt], block: str | None) -> Iterator[tuple[ast.stmt, str | None]]:
+    """Every statement in this scope, in source order, with the block it sits in (None at top)."""
+    for stmt in body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        yield stmt, block
+        inner = _BLOCK_NAMES.get(type(stmt), block)
+        if isinstance(stmt, (ast.Try, ast.TryStar)):
+            yield from _statements(stmt.body, inner)
+            for handler in stmt.handlers:
+                yield from _statements(handler.body, "an `except`")
+            yield from _statements(stmt.orelse, inner)
+            yield from _statements(stmt.finalbody, inner)
+        elif isinstance(stmt, ast.Match):
+            for case in stmt.cases:
+                yield from _statements(case.body, inner)
+        else:
+            for name in ("body", "orelse"):
+                nested = getattr(stmt, name, None)
+                if isinstance(nested, list):
+                    yield from _statements(nested, inner)
 
 
 def _where_set(func: ast.FunctionDef | ast.AsyncFunctionDef, field: str) -> tuple[int, str] | None:
@@ -256,28 +517,35 @@ def _where_set(func: ast.FunctionDef | ast.AsyncFunctionDef, field: str) -> tupl
     target = _returned_name(func)
     if target is None:
         return None
-    found: list[tuple[int, str]] = []
-
-    def visit(body: list[ast.stmt], block: str | None) -> None:
-        for stmt in body:
-            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                continue
-            added = _keys_added(stmt, target)
-            if block is not None and added and field in added:
-                found.append((stmt.lineno, block))
-            inner = _BLOCK_NAMES.get(type(stmt), block)
-            for child in ast.iter_child_nodes(stmt):
-                if isinstance(child, ast.match_case):
-                    visit(child.body, inner)
-                elif isinstance(child, ast.ExceptHandler):
-                    visit(child.body, "an `except`")
-            for name in ("body", "orelse", "finalbody"):
-                nested = getattr(stmt, name, None)
-                if isinstance(nested, list) and nested and isinstance(nested[0], ast.stmt):
-                    visit(nested, inner)
-
-    visit(func.body, None)
+    found = [
+        (stmt.lineno, block)
+        for stmt, block in _statements(func.body, None)
+        if block is not None and field in (_keys_added(stmt, target) or ())
+    ]
     return min(found) if found else None
+
+
+def _where_dropped(
+    func: ast.FunctionDef | ast.AsyncFunctionDef, field: str
+) -> tuple[int, str, str | None] | None:
+    """The first line that removes ``field`` from the returned name, or re-binds it without it."""
+    target = _returned_name(func)
+    if target is None:
+        return None
+    put = False
+    for stmt, block in _statements(func.body, None):
+        try:
+            removed, cleared = _removals(_header(stmt), target)
+        except _Decline:
+            removed, cleared = set(), False
+        if put and (field in removed or cleared):
+            return stmt.lineno, "removes it", block
+        literal = _initial_mapping(stmt, target)
+        keys = _mapping_literal_keys(literal) if literal is not None else _keys_added(stmt, target)
+        if literal is not None and put and keys is not None and field not in keys:
+            return stmt.lineno, f"re-binds '{target}' without it", block
+        put = put or field in (keys or ())
+    return None
 
 
 def unconditional_output_keys(source: str) -> set[str] | None:
@@ -346,21 +614,30 @@ def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]
 def _finding(
     action: str, func: ast.FunctionDef | ast.AsyncFunctionDef, field: str, info: dict
 ) -> str:
+    dropped = _where_dropped(func, field)
     where = _where_set(func, field)
-    if where is None:
+    if dropped is not None:
+        line, verb, block = dropped
+        how = f"{verb} at {_located(line, info)}" + (f", inside {block}" if block else "")
+        consequence = "a record returned without it"
+    elif where is None:
         how = "sets it only through a computed key, or not at all"
         consequence = "a record without it"
     else:
         line, block = where
-        first_line = info.get("first_line")
-        file = info.get("file")
-        if isinstance(first_line, int):
-            line += first_line - 1
-        located = f"line {line} of {Path(file).name}" if file else f"line {line}"
-        how = f"sets it only at {located}, inside {block}"
+        how = f"sets it only at {_located(line, info)}, inside {block}"
         consequence = "a record that does not take that path"
     return (
         f"{action}: output schema requires '{field}' but the tool '{func.name}' {how}, "
         f"so {consequence} fails output validation at run time. Make '{field}' "
         f"optional in the schema, or set it on every path in the tool."
     )
+
+
+def _located(line: int, info: dict) -> str:
+    """``line`` of the UDF's source as a line of its file, when the file is known."""
+    first_line = info.get("first_line")
+    file = info.get("file")
+    if isinstance(first_line, int):
+        line += first_line - 1
+    return f"line {line} of {Path(file).name}" if file else f"line {line}"
