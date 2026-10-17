@@ -38,8 +38,8 @@ PUBLISH_ACTION = f"""  - name: {PUBLISHER}
 
 
 @pytest.fixture
-def online(tmp_path, monkeypatch):
-    """Four pages in two files, answered online by the mock provider, and a reader."""
+def project(tmp_path, monkeypatch):
+    """Four pages in two files, answered by the mock provider, and a reader."""
     from agent_actions.utils import path_utils
 
     root = tmp_path / "project"
@@ -48,7 +48,6 @@ def online(tmp_path, monkeypatch):
     config.write_text(
         config.read_text()
         .replace("model_vendor: ollama_cloud", "model_vendor: agac-provider")
-        .replace("run_mode: batch", "run_mode: online")
         .rstrip("\n")
         + "\n"
         + PUBLISH_ACTION
@@ -59,10 +58,18 @@ def online(tmp_path, monkeypatch):
     for name, pages in PAGES.items():
         (staging / name).write_text(json.dumps([{"page_content": page} for page in pages]))
     monkeypatch.chdir(root)
+    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
     monkeypatch.setattr(path_utils, "_global_path_manager", path_utils._global_path_manager)
     return root
+
+
+@pytest.fixture
+def online(project):
+    config = _config(project)
+    config.write_text(config.read_text().replace("run_mode: batch", "run_mode: online"))
+    return project
 
 
 def _config(root):
@@ -127,3 +134,59 @@ def test_a_retry_reports_only_the_record_it_answered(online, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert _completions(online)[ACTION] == 1
+    assert "✓ summarize 1 record" in " ".join(result.output.split())
+
+
+def _run_batch_to_completion(*args):
+    """A batch action is submitted by one run and collected by the next."""
+    for attempt in range(3):
+        result = _run(*(args if attempt == 0 else ()))
+    return result
+
+
+def test_a_batch_rerun_after_an_edit_reports_the_records_it_collected(project):
+    _run_batch_to_completion("--fresh")
+    assert _completions(project) == {ACTION: 4, PUBLISHER: 4}
+    _edit_prompt(project)
+
+    result = _run_batch_to_completion()
+
+    assert _completions(project) == {ACTION: 4, PUBLISHER: 4}
+    assert f"✓ {PUBLISHER} 4 records" in " ".join(result.output.split())
+
+
+READER = "tally"
+READER_ACTION = f"""  - name: {READER}
+    kind: tool
+    dependencies: [{ACTION}]
+    run_mode: online
+    intent: "Tally"
+    schema: tool_action_output
+    impl: echo_summary
+    context_scope: {{ observe: [{ACTION}.summary] }}
+    expect: {{ repair: none }}
+"""
+ECHO_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def echo_summary(data: Any, *args) -> list[dict]:
+    return [{"summary": (data or {})["summarize"]["summary"], "exam_density": "low"}]
+"""
+
+
+def test_a_tool_action_reports_the_rows_it_stored_and_again_after_an_edit(online):
+    config = _config(online)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
+    (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
+    (online / "tools" / WORKFLOW / "echo.py").write_text(ECHO_TOOL)
+
+    _run("--fresh")
+    assert _completions(online)[READER] == 4
+
+    _edit_prompt(online)
+    _run()
+
+    assert _completions(online)[READER] == 4

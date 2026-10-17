@@ -140,7 +140,10 @@ action produced on this run. Known divergences, not an exhaustive list:
   backend's in-memory `rows_collected` tally across the action
   (`_records_written_this_run`), which the result collector credits with the rows
   a run produced, carried-forward rows excluded; a command reading the store
-  afterwards has no such vantage point.
+  afterwards has no such vantage point. The credit is made when the rows are
+  collected, before a batch file narrows them to the inputs it still has, so a
+  batch whose inputs shrank between submit and collect can report more than it
+  stores.
 - **Carried-forward records.** Cascade- and guard-skipped records are kept in
   an action's output for lineage, so they are counted even though the action
   did not produce them.

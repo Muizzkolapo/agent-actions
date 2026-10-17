@@ -879,11 +879,10 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle successful action run result.
 
-        ``pre_run_count`` is the storage-backend record count for this action
-        captured BEFORE the runner executed.  The delta against the post-run
-        snapshot is what this execution actually wrote — using
-        ``get_storage_stats`` directly would inflate on resume / re-run when
-        prior runs left rows on different paths.
+        ``pre_run_count`` is the backend's ``rows_collected`` tally for this action
+        captured BEFORE the runner executed.  The change against the post-run
+        reading is what this execution produced — the stored row total would
+        read 0 for a run that replaces rows already stored.
         """
         if batch_status == "batch_submitted":
             self.deps.state_manager.update_status(
@@ -1887,7 +1886,7 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Map batch_manager result to status, events, and ActionExecutionResult.
 
-        ``pre_run_count`` is the storage-backend record count captured BEFORE
+        ``pre_run_count`` is the backend's ``rows_collected`` tally captured BEFORE
         the batch result was processed.  Used for the per-execution delta —
         see ``_handle_run_success`` for the rationale.
         """
