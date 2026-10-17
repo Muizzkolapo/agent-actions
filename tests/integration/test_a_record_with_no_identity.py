@@ -369,13 +369,31 @@ def test_the_preflight_still_stops_a_broken_template_behind_a_record_with_no_sou
     tmp_path,
 ):
     """Passing over the refused record, it renders the next prompt, which is what it is
-    there to check: a1 has no topic."""
+    there to check: the template is malformed."""
     batch = _Batch(tmp_path)
+    malformed = {**SKIP, "prompt": f"Write a question about {{{{ {UPSTREAM}.topic ."}
 
-    batch.run(1, [nameless(topic="dbt"), rec("a1", keep=True)], extra=EXTRA)
+    batch.run(1, [nameless(topic="dbt"), rec("a1", keep=True, topic="dbt")], extra=malformed)
 
     assert "references undefined variables" in batch.raised[-1]
     assert batch.provider.submitted == []
+
+
+def test_the_preflight_passes_over_a_record_with_no_source_guid_and_one_that_fails_alone(
+    tmp_path,
+):
+    """a1 has no topic: online fails it alone, so the preflight passes over it too and the
+    run fails it. a2 is sent."""
+    batch = _Batch(tmp_path)
+
+    batch.run(
+        1,
+        [nameless(topic="dbt"), rec("a1", keep=True), rec("a2", keep=True, topic="dbt")],
+        extra=EXTRA,
+    )
+
+    assert batch.raised[-1] is None
+    assert [task["custom_id"] for task in batch.provider.submitted[-1]] == ["t-a2"]
 
 
 @pytest.mark.parametrize(

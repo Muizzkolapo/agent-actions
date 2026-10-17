@@ -1,8 +1,9 @@
-"""The batch preflight passes over a record refused for having no source_guid, and nothing else.
+"""The batch preflight passes over a record refused for having no source_guid.
 
 It renders the first prompts to stop a broken template before anything is sent. A refused
-record renders nothing, so it says nothing about the template; any other error preparing
-the head record is what the preflight is there to stop on.
+record renders nothing, so it says nothing about the template. The other records it
+passes over are in ``test_the_preflight_passes_over_a_record_that_fails_alone``; any
+other error preparing the head record still stops it.
 """
 
 from unittest.mock import MagicMock, patch
