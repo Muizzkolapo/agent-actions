@@ -100,7 +100,7 @@ class TestDagFitGrouping:
             "assemble": _tool(["id", "items"]),
         }
         combined = "\n".join(r.getMessage() for r in _capture_dagfit(configs, caplog))
-        assert combined.count("optional in the consumer schema") == 1, combined
+        assert combined.count("optional in the tool's output schema") == 1, combined
 
     def test_header_carries_counts(self, caplog):
         configs = {

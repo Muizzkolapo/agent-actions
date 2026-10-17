@@ -1,7 +1,7 @@
 """`agac inspect` must not report a dag-fit gap for a tool whose output it cannot read.
 
 The dag-fit pre-flight compares a tool action's required output fields with what
-the tool provably emits and what upstream guarantees. Where the static reader
+the tool provably emits. Where the static reader
 cannot see the tool's output keys (an annotated assignment, a helper that builds
 the dict, a FILE tool that appends its outputs in a loop, a key whose value a
 helper computes), it knows nothing about those fields, so warning that they

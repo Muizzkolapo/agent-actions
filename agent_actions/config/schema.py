@@ -560,9 +560,9 @@ class ActionConfig(_RetryValidators):
     defaults: dict[str, Any] | None = Field(
         default=None,
         description="Per-output-field default values a tool UDF is expected to "
-        "synthesize when upstream input omits the field. Consumed by the DAG "
-        "schema-fit preflight check to exclude declared fields from the "
-        "implicit-input requirement set. The framework does not apply these "
+        "synthesize when upstream input omits the field. The dag-fit preflight "
+        "check takes a declared field as returned by the tool and does not "
+        "report it. The framework does not apply these "
         "defaults automatically — the UDF must produce them.",
     )
 

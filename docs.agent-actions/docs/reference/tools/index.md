@@ -40,6 +40,20 @@ The `@udf_tool` decorator registers a Python function as a tool action.
 Input and output schemas are defined in the workflow YAML `schema:` field, not in the decorator.
 :::
 
+### Required Output Fields
+
+A tool's output is checked against its schema exactly as the function returns it. A required field must be in what the tool returns: a field of the same name upstream reaches the tool only as input, and a `context_scope.passthrough` field is added beside the output after the check, so neither one counts. A record missing a required field is rejected.
+
+Pre-flight (`agac inspect`, `run` and `retry`) reads the tool's source and warns about each required field it can see the tool does not return:
+
+```text
+Pre-flight: dag-fit — 1 required output field(s) a tool's code does not return, across 1 action(s)
+  ├─ collect: id — not returned by tool 'collect'
+  └─ Fix: return the field from the tool on every path, or mark it optional in the tool's output schema ...
+```
+
+Return the field, or make it optional in the schema (`optional: true` on a `fields:` entry). If the tool does return it in a way the check cannot read, list it under `defaults:` on the action. A tool whose output the check cannot read at all, such as one built by a helper or in a loop, is not checked.
+
 ### Minimal Decorator
 
 ```python

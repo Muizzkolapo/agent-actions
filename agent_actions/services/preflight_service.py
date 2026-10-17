@@ -149,9 +149,9 @@ class PreflightService:
         # 8. Cross-check kind:tool UDFs against their required output-schema fields
         self._check_tool_conditional_required_field_risks()
 
-        # 9. DAG schema-fit: per producer/consumer edge, does the producer's schema
-        # guarantee every field the tool consumer requires (implicit), or does the
-        # consumer declare `defaults:` for it? (warn-only.)
+        # 9. dag-fit: does each tool's UDF return every required root output field,
+        # or declare it with `defaults:`? Upstream supplies nothing to a tool's
+        # output. (warn-only.)
         self._warn_dag_schema_compatibility_gaps()
 
         # 10. Expect blocks: registered types, accepted parameters, and fields
@@ -280,18 +280,23 @@ class PreflightService:
             )
 
     def _warn_dag_schema_compatibility_gaps(self) -> None:
-        """Warn when a tool consumer's required output field is neither guaranteed by an upstream producer nor declared as synthesized via `defaults:`."""
+        """Warn when a tool's required output field is one its UDF does not return and `defaults:` does not declare."""
         gaps = find_dag_schema_compatibility_gaps(
             self.action_configs, synthesized=self._collect_synthesized_output_fields()
         )
         if not gaps:
             return
         total = sum(len(fields) for fields in gaps.values())
+        findings = []
+        for action, fields in gaps.items():
+            config = self.action_configs.get(action, {})
+            impl = config.get("model_name") or config.get("impl") or action
+            findings.append(f"{action}: {', '.join(fields)} — not returned by tool '{impl}'")
         self._warn_findings(
             "dag-fit",
-            [f"{action}: {', '.join(fields)}" for action, fields in gaps.items()],
+            findings,
             header=(
-                f"dag-fit — {total} required field(s) with no upstream guarantee "
+                f"dag-fit — {total} required output field(s) a tool's code does not return, "
                 f"across {len(gaps)} action(s)"
             ),
             remedy=DAG_FIT_REMEDY,

@@ -147,8 +147,9 @@ def test_inspect_names_each_field_a_tool_does_not_return(tmp_path):
     ):
         line = next((ln for ln in block.splitlines() if f"{action}: id" in ln), None)
         assert line is not None, f"{action} was not reported:\n{block}"
-        assert tool in line, f"the line does not name the tool's UDF:\n{block}"
-    assert "does not return" in block, block
+        assert f"not returned by tool '{tool}'" in line, (
+            f"the line does not name the tool:\n{block}"
+        )
 
 
 def test_inspect_does_not_report_what_the_tool_returns_or_declares(tmp_path):
