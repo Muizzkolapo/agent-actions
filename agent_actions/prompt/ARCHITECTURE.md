@@ -256,6 +256,8 @@ _render_prompt_template(raw_prompt, prompt_context)
 
 A field read off a namespace that has data but not that field fails the same way. Jinja's error names only the field ("'dict object' has no attribute 'f'"), so `DictKeyFirstEnvironment` is given `place_of`, which finds the mapping's dotted place in `prompt_context` by identity (`good`, `good.inner`, `good.items[1]`) when the undefined is used, and raises `MissingFieldError`: the error reports `good.f` as the missing variable and says "'good' has no field 'f' (it has: ...)". A mapping held at several places (wildcard observe keeps a namespace's dicts by reference) is named by the place the template reads; when the template names none or several of them, no place is guessed. The search stops after 50,000 containers, so a mapping outside a large context costs little; then too a place is given only if the template names it. A mapping the template built itself has no place, and its field is still not reported as a namespace.
 
+A field named like a dict method (`items`, `keys`, `values`, `get`, ...) is no exception. Jinja would read `ns.items` or `ns['items']` on a mapping without that key as the bound method and render "<built-in method items of dict object ...>" into the prompt. `DictKeyFirstEnvironment` returns the undefined for any key a mapping lacks, so the read fails as a missing field; when a method has the name, the undefined can be called and calls it, which keeps `ns.items()` and `ns.get('x', 'd')` working. Whether a read is a call is not known when `getattr` runs, so the decision is left to the use of the value: rendering, testing or iterating it fails; calling it calls the method.
+
 ---
 
 ## Complete Prompt Preparation Pipeline
