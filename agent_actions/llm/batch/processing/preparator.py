@@ -11,6 +11,7 @@ from agent_actions.errors import (
     RecordContextError,
     TemplateVariableError,
     is_action_fatal,
+    mark_action_fatal,
 )
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
@@ -47,6 +48,18 @@ def _fails_only_its_record(error: Exception) -> bool:
     if isinstance(error, (MissingSourceGuidError, RecordContextError)):
         return True
     return isinstance(error, TemplateVariableError) and bool(error.missing_variables)
+
+
+def _stops_the_action(error: Exception) -> bool:
+    """Whether *error*, raised preparing one record, stops the action, as online stops it.
+
+    Online stops on an error declared fatal to the action, a ``ConfigurationError``,
+    and a template error with no variable to blame, such as one this record's data
+    provoked; it fails any other record alone.
+    """
+    if _fails_only_its_record(error):
+        return False
+    return is_action_fatal(error) or isinstance(error, (ConfigurationError, TemplateVariableError))
 
 
 def _append_feedback(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]) -> None:
@@ -166,9 +179,11 @@ class BatchTaskPreparator:
                     stats.included_items += 1
 
             except Exception as e:
-                if is_action_fatal(e):
-                    # Preflight only samples up to the first row the guard admits; a
-                    # later fatal row lands here unmarked. Nothing has been sent yet.
+                if _stops_the_action(e):
+                    # The preflight renders only the first rows, so one behind them
+                    # lands here. Marked, so a recovery round does not take it as
+                    # transient. Nothing has been sent yet.
+                    mark_action_fatal(e)
                     raise
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
