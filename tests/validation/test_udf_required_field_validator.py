@@ -367,3 +367,104 @@ def test_the_finding_names_the_block_the_key_is_set_in(block, named):
     )
     (finding,) = _risks(source, ["options", "answer"])
     assert f"at line 4, inside {named}" in finding
+
+
+# 1510: a one-element list, a re-raising `except`, removed keys and a re-bound dict.
+_LIST_OF_ONE = (
+    "def build(data):\n"
+    "    out = {'options': []}\n"
+    "    if data.get('flag'):\n"
+    "        out['answer'] = []\n"
+    "    return [out]\n"
+)
+
+
+def test_a_one_element_list_return_is_read_like_returning_the_dict():
+    (finding,) = _risks(_LIST_OF_ONE, ["options", "answer"])
+    assert "f: output schema requires 'answer'" in finding
+    assert "at line 4, inside an `if`" in finding
+    assert _risks(_LIST_OF_ONE, ["options"]) == []
+
+
+def test_a_one_element_list_of_a_literal_is_read():
+    source = "def build(data):\n    return [{'options': []}]\n"
+    assert _risks(source, ["options"]) == []
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "requires 'answer'" in finding
+
+
+@pytest.mark.parametrize(
+    "handler",
+    ["raise", "raise ValueError('bad') from exc", "log(exc)\n        raise"],
+)
+def test_a_key_set_in_a_try_whose_except_always_re_raises_is_not_flagged(handler):
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    try:\n"
+        "        out['answer'] = data['answer']\n"
+        "    except KeyError as exc:\n"
+        f"        {handler}\n"
+        "    return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
+
+
+def test_a_key_set_in_a_try_whose_except_can_fall_through_is_flagged():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    try:\n"
+        "        out['answer'] = data['answer']\n"
+        "    except KeyError:\n"
+        "        if data:\n"
+        "            raise\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "at line 4, inside a `try`" in finding
+
+
+@pytest.mark.parametrize(
+    "removal",
+    [
+        "del out['answer']",
+        "out.pop('answer')",
+        "out.pop('answer', None)",
+        "kept = out.pop('answer')",
+    ],
+)
+def test_a_key_removed_on_every_path_is_flagged(removal):
+    source = (
+        "def build(data):\n"
+        "    out = {'options': [], 'answer': []}\n"
+        f"    {removal}\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "f: output schema requires 'answer'" in finding
+    assert "removes it at line 3" in finding
+
+
+def test_a_key_removed_and_set_again_is_not_flagged():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': [], 'answer': []}\n"
+        "    del out['answer']\n"
+        "    out['answer'] = [1]\n"
+        "    return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
+
+
+def test_a_re_bound_dict_is_read_from_its_last_binding():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': [], 'answer': []}\n"
+        "    out = {'options': data}\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "f: output schema requires 'answer'" in finding
+    assert "re-binds 'out' without it at line 3" in finding
+    assert _risks(source, ["options"]) == []
