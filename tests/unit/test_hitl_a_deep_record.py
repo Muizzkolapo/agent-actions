@@ -102,7 +102,8 @@ def test_the_fingerprint_of_a_deep_context_tells_it_from_another():
 
 
 def test_an_ordinary_context_is_served_and_fingerprinted_as_before():
-    """Same bytes as ``jsonify`` and the same fingerprint, so a saved review state still matches."""
+    """The page reads what ``jsonify`` gave it, keys in the same order, and the fingerprint
+    is unchanged, so a review state saved before still matches."""
     context = [{"b": 1, "a": {"auth_token": "t", "z": [1.5, None, True]}, "é": "ü"}]
     server = _server(context)
 
@@ -115,11 +116,10 @@ def test_an_ordinary_context_is_served_and_fingerprinted_as_before():
             }
         )
 
-    assert served.get_data() == expected.get_data()
-    legacy = hashlib.sha256(json.dumps(context, sort_keys=True, default=str).encode()).hexdigest()[
-        :16
-    ]
-    assert server._data_fingerprint == legacy
+    assert served.mimetype == expected.mimetype
+    assert json.dumps(json.loads(served.get_data())) == json.dumps(json.loads(expected.get_data()))
+    legacy = json.dumps(context, sort_keys=True, default=str)
+    assert server._data_fingerprint == hashlib.sha256(legacy.encode()).hexdigest()[:16]
 
 
 def _js_function(source: str, name: str) -> str:
@@ -155,12 +155,37 @@ var value = "{LEAF}";
 for (var i = 0; i < {DEPTH}; i++) value = [value];
 var html = syntaxHighlight(value);
 var text = html.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"');
-process.stdout.write(JSON.stringify({{text: text.replace(/\\s/g, "")}}));
+var shallow = {{b: [1, -2.5, true, null, "x\\"y"], a: {{}}, c: [[]], "é": "ü"}};
+process.stdout.write(JSON.stringify({{
+    text: text,
+    shallow: syntaxHighlight(shallow) === syntaxHighlight(JSON.stringify(shallow, null, 2)),
+    compact: jsonTextWithoutRecursion(shallow) === JSON.stringify(shallow),
+}}));
 """
     )
 
     ran = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=60)
 
     assert ran.returncode == 0, ran.stderr[-2000:]
-    text = json.loads(ran.stdout)["text"]
-    assert text == "[" * DEPTH + json.dumps(LEAF) + "]" * DEPTH
+    shown = json.loads(ran.stdout)
+    assert shown["text"] == "[" * DEPTH + json.dumps(LEAF) + "]" * DEPTH
+    assert shown["shallow"] is True
+    assert shown["compact"] is True
+
+
+def test_a_review_saved_over_a_deep_context_is_restored_by_the_next_server(tmp_path):
+    state_file = tmp_path / ".hitl_reviews_x.json"
+    context = [{"deep": _deep_list()}, {"deep": "flat"}]
+    first = HitlServer(
+        port=3097, instructions="Review", context_data=context, timeout=1, state_file=state_file
+    )
+    saved = first.app.test_client().post(
+        "/api/review-record", json={"index": 0, "hitl_status": "approved"}
+    )
+    assert saved.status_code == 200
+
+    second = HitlServer(
+        port=3097, instructions="Review", context_data=context, timeout=1, state_file=state_file
+    )
+
+    assert second.record_reviews == [{"hitl_status": "approved", "user_comment": ""}, None]
