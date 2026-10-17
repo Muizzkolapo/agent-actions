@@ -317,6 +317,11 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         ) from e
 
 
+def is_api_data_source(data_source: Any) -> bool:
+    """Whether *data_source* names an API, whose resolution may fetch over the network."""
+    return bool(data_source) and _parse_data_source(data_source).type == DataSourceType.API
+
+
 def resolve_start_node_data_source(
     agent_folder: Path,
     data_source: Any,

@@ -94,6 +94,7 @@ def backend(tmp_path):
 
 def _executor(backend, tmp_path) -> ActionExecutor:
     runner = MagicMock()
+    runner.staged_input_fingerprint.return_value = None
     runner.storage_backend = backend
     runner.execution_order = [ACTION]
     runner.retried_records = frozenset()

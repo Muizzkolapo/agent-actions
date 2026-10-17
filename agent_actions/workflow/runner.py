@@ -14,7 +14,10 @@ if TYPE_CHECKING:
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
-from agent_actions.input.loaders.data_source import resolve_start_node_data_source
+from agent_actions.input.loaders.data_source import (
+    is_api_data_source,
+    resolve_start_node_data_source,
+)
 from agent_actions.utils.file_handler import FileHandler
 from agent_actions.workflow.runner_file_processing import (
     process_files as _process_files,
@@ -246,8 +249,12 @@ class ActionRunner:
     def staged_input_fingerprint(
         self, action_name: str, action_config: ActionConfigDict
     ) -> dict[str, list[int]] | None:
-        """The input files a first stage reads, or None for an action reading another."""
-        if action_config.get("dependencies"):
+        """The input files a first stage reads, or None for an action reading another.
+
+        None for an API source too: resolving one can fetch, and this is asked on every
+        skip check.
+        """
+        if action_config.get("dependencies") or is_api_data_source(self.data_source_config):
             return None
         result = resolve_start_node_data_source(
             Path(self.get_action_folder(action_name)), self.data_source_config, action_name

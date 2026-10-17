@@ -220,8 +220,9 @@ Every action goes through this decision tree before any code runs:
 execute_action_sync(action_name)
     │
     ▼
-Config changed since last run?
-(prompt, model, schema, guard changed)
+Config or staged input changed since last run?
+(prompt, model, schema, guard, limits; or, for a first stage,
+ a staged file added, removed or rewritten)
     YES → invalidate COMPLETED, reset to PENDING
           and reset every action that reads its output, in any state,
           directly or through other actions (see below)
@@ -775,6 +776,11 @@ If you change one of these fields and re-run WITHOUT --fresh:
     found, so the next plain run still sees the mismatch. An action stopped
     partway is compared at the start of the next run, against the
     `answered_under` its run recorded (_edits_since serves both).
+
+A first stage also stamps `staged_input` (path, size, mtime of each file
+it read, taken as its work began). A different set on a later run resets
+it and every reader the same way. A stamp without the key never differs;
+an API data source is not fingerprinted, since resolving it can fetch.
 
 If you add a new config field that affects output but don't add it
 to the hash computation:

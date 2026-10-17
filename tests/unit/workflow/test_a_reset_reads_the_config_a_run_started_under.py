@@ -54,6 +54,7 @@ def _process(tmp_path, backend, configs=CONFIGS, *, retried=()):
     """One `agac run`: a state manager read from the status file, and an executor."""
     state = ActionStateManager(tmp_path / ".agent_status.json", ORDER)
     runner = MagicMock()
+    runner.staged_input_fingerprint.return_value = None
     runner.storage_backend = backend
     runner.action_configs = configs
     runner.retried_records = frozenset(retried)

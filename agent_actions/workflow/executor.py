@@ -132,6 +132,10 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
 # startup reset needs it for an action that stopped partway.
 ANSWERED_UNDER = "answered_under"
 
+# The staged input as the work began. A file added while a run walks is not read by it,
+# so the completion stamp takes this rather than what staging holds by then.
+INPUT_AT_START = "staged_input_at_start"
+
 
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> tuple[bool, bool]:
     """Whether the semantic config, then the model, differ from what *stamp* recorded.
@@ -488,7 +492,7 @@ class ActionExecutor:
             "records_processed": records_processed,
             "truncated": truncated,
             "staged_input": self._stamped(
-                action_name, "staged_input", self._staged_input(action_name, action_config)
+                action_name, "staged_input", self._input_read(action_name, action_config)
             ),
         }
         if not keep_stored:
@@ -503,6 +507,15 @@ class ActionExecutor:
             action_name, action_config
         )
         return fingerprint
+
+    def _input_read(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> dict[str, list[int]] | None:
+        details = self.deps.state_manager.get_status_details(action_name)
+        if INPUT_AT_START in details:
+            read: dict[str, list[int]] | None = details[INPUT_AT_START]
+            return read
+        return self._staged_input(action_name, action_config)
 
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
@@ -2065,7 +2078,10 @@ class ActionExecutor:
         self.deps.state_manager.update_status(
             params.action_name,
             ActionStatus.RUNNING,
-            **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
+            **{
+                ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config),
+                INPUT_AT_START: self._staged_input(params.action_name, params.action_config),
+            },
         )
         self._track_action_start(params)
 
