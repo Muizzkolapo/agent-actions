@@ -35,6 +35,10 @@ class MissingFieldError(UndefinedError):
         super().__init__(f"'{place}' has no field '{field}' (it has: {shown})")
         self.place = place
         self.field = field
+        self.present = present
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        return (type(self), (self.place, self.field, self.present))
 
 
 class DictKeyFirstEnvironment(Environment):
