@@ -195,4 +195,57 @@ class TestOutputTheReaderCannotSee:
         }
         configs = {"upstream": _UPSTREAM, "writer": consumer}
         gaps = find_dag_schema_compatibility_gaps(configs, synthesized={"writer": {"items"}})
-        assert gaps == {"writer": ["inner", "missing"]}, gaps
+        assert gaps == {"writer": ["missing"]}, gaps
+
+
+class TestUpstreamSuppliesNothingToATool:
+    """A tool's output is validated as its UDF returns it; upstream fields are not in it (1492)."""
+
+    _PRODUCER = {
+        "kind": "llm",
+        "json_output_schema": {
+            "type": "object",
+            "properties": {"id": {"type": "string"}, "label": {"type": "string"}},
+            "required": ["id", "label"],
+        },
+    }
+
+    def _consumer(self, properties: dict, required: list[str]) -> dict:
+        return {
+            "kind": "tool",
+            "dependencies": ["extract"],
+            "context_scope": {"passthrough": ["extract.id"]},
+            "json_output_schema": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        }
+
+    def test_a_field_upstream_requires_is_reported_when_the_tool_omits_it(self):
+        consumer = self._consumer(
+            {"id": {"type": "string"}, "note": {"type": "string"}}, ["id", "note"]
+        )
+        configs = {"extract": self._PRODUCER, "collect": consumer}
+        gaps = find_dag_schema_compatibility_gaps(configs, synthesized={"collect": {"note"}})
+        assert gaps == {"collect": ["id"]}, gaps
+
+    def test_a_required_field_inside_an_optional_object_the_tool_omits_is_not_reported(self):
+        """The object is optional and absent, so nothing inside it is checked at runtime."""
+        consumer = self._consumer(
+            {
+                "note": {"type": "string"},
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"label": {"type": "string"}, "rank": {"type": "string"}},
+                        "required": ["label", "rank"],
+                    },
+                },
+            },
+            ["note"],
+        )
+        configs = {"extract": self._PRODUCER, "collect": consumer}
+        gaps = find_dag_schema_compatibility_gaps(configs, synthesized={"collect": {"note"}})
+        assert gaps == {}, gaps

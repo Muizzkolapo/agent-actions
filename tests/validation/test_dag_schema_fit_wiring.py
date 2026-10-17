@@ -144,23 +144,18 @@ def test_preflight_warns_when_tool_consumer_required_field_not_guaranteed_upstre
     assert any("dag-fit" in m and "flatten_code" in m and "description" in m for m in msgs), msgs
 
 
-def test_preflight_quiet_when_producer_guarantees_the_field(caplog):
-    """When the producer declares `required: [description]` on its nested items,
-    F must NOT emit for the target consumer. The sentinel consumer proves F ran."""
+def test_preflight_warns_even_when_the_producer_requires_the_field(caplog):
+    """The tool's output is validated exactly as its UDF returns it, so a producer
+    that requires `description` supplies nothing to a tool that does not return it
+    (1492). F must still warn, naming the tool's UDF."""
     cfgs = {
         "code_extractor": _llm_producer(nested_required=["code_block", "description"]),
         "flatten_code": _tool_consumer("flatten_code", required=["code_block", "description"]),
-        _SENTINEL_NAME: _sentinel(),
     }
     msgs = _capture_preflight_warnings(cfgs, caplog)
-    # Sentinel must fire — proves F ran and its message prefix hasn't drifted.
-    assert any("dag-fit" in m and _SENTINEL_NAME in m and _SENTINEL_FIELD in m for m in msgs), (
-        f"F did not warn on the sentinel — is step 9 wired? msgs={msgs}"
-    )
-    # Target consumer must be quiet.
-    assert not any("dag-fit" in m and "flatten_code" in m and "description" in m for m in msgs), (
-        msgs
-    )
+    assert any(
+        "dag-fit" in m and "flatten_code: code_block, description" in m and _TOOL in m for m in msgs
+    ), msgs
 
 
 def test_preflight_quiet_when_consumer_declares_defaults(caplog):
