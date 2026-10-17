@@ -144,7 +144,7 @@ EventManager (singleton, thread-safe)
 
 **Context management:**
 
-- `set_context(**kwargs)` sets global context values (invocation_id, workflow_name). Never use it for a per-action value: actions of one step run at once and share it.
+- `set_context(**kwargs)` sets global context values (invocation_id, workflow_name, correlation_id). Every later event of the process carries them. Never use it for a per-action or per-batch value: actions of one step run at once and share it, and it outlives the action that set it. A batch id travels in the batch events' `data.batch_id`.
 - `context(**kwargs)` provides a thread-local overlay via `ContextVar`, nestable with `with` blocks.
 - `_effective_context()` merges global + overlay, with overlay winning on collision.
 - `action_name` and `action_index` live only in the overlay, set around each action by the coordinator (sequential) or `ActionLevelOrchestrator` (parallel). asyncio tasks and `asyncio.to_thread` copy the overlay; a plain `ThreadPoolExecutor` does not, so code that fires events from one submits through `contextvars.copy_context().run`.

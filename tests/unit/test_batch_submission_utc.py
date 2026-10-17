@@ -51,7 +51,6 @@ class TestBatchEntryTimestampIsUTCAware:
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             svc._submit_to_provider(
                 agent_config={"model_vendor": "openai"},

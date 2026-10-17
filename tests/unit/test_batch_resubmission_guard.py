@@ -96,7 +96,6 @@ class TestACollectedBatchNoLongerBlocks:
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             result = svc.submit_batch_job(
                 agent_config={"model_vendor": "openai"},
@@ -170,7 +169,6 @@ class TestFailedCancelledBatchAllowsResubmission:
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             result = svc.submit_batch_job(
                 agent_config={"model_vendor": "openai"},
@@ -195,7 +193,6 @@ class TestForceOverridesCompletedGuard:
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             result = svc.submit_batch_job(
                 agent_config={"model_vendor": "openai"},
@@ -217,7 +214,6 @@ class TestForceOverridesCompletedGuard:
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             result = svc.submit_batch_job(
                 agent_config={"model_vendor": "openai"},
@@ -240,7 +236,6 @@ class TestNoBatchEntryAllowsSubmission:
 
         with (
             patch("agent_actions.llm.batch.services.submission.fire_event"),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             result = svc.submit_batch_job(
                 agent_config={"model_vendor": "openai"},

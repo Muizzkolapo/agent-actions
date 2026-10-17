@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  An event in `events.json` names a batch in `meta.batch_id` no longer. Sending a batch
+  wrote its id into the process-wide event context, so every event fired after it, by any
+  action, carried the last batch sent: a tool action beside two batch actions logged over
+  a hundred events naming a batch it never sent, and each LLM action logged events naming
+  the other's. The batch id is in the batch events' `data.batch_id`, as before (1482).
+time: 2026-10-17T16:30:00Z

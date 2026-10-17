@@ -307,12 +307,11 @@ EventManager automatically enriches events with correlation context:
 manager.set_context(
     workflow_name="my_workflow",
     correlation_id="abc123",
-    agent_name="extract_data",
 )
 
 # All events inherit this context
 fire_event(AgentStartEvent(message="Starting"))
-# Event will have workflow_name, correlation_id, agent_name populated
+# Event will have workflow_name and correlation_id populated
 ```
 
 ### 4. Handler Dispatch
