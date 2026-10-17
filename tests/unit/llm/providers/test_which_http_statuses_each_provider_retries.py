@@ -87,14 +87,17 @@ ANY_5XX = {500, 501, 502, 503, 504, 505, 529}
 RETRIED = {
     "openai": {429} | ANY_5XX,
     "groq": {429} | ANY_5XX,
-    "anthropic": {429} | ANY_5XX - {529},
+    "anthropic": {429} | ANY_5XX,
     "gemini": {429, 500, 502, 503, 504},
     "cohere": {429, 500, 502, 503, 504},
-    "ollama": set(),
+    "ollama": {429, 500, 502, 503, 504},
 }
+# A request the provider refuses (a bad request, a bad key, a model it does not have) is
+# refused again on a retry.
+REFUSED = {400, 401, 403, 404, 422}
 
 
-@pytest.mark.parametrize("status", sorted({429} | ANY_5XX))
+@pytest.mark.parametrize("status", sorted({429} | ANY_5XX | REFUSED))
 @pytest.mark.parametrize("provider", sorted(PROVIDERS))
 def test_a_status_is_retried_only_where_the_retry_reference_says(provider, status):
     call, mapping = PROVIDERS[provider]

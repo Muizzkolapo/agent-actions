@@ -43,8 +43,8 @@ UNANSWERED = [
     ),
     pytest.param(
         AnthropicBatchClient,
-        anthropic.InternalServerError("", response=_response(529), body=None),
-        id="anthropic-529",
+        anthropic.InternalServerError("", response=_response(500), body=None),
+        id="anthropic-500",
     ),
     pytest.param(GroqBatchClient, groq.APIConnectionError(request=_REQUEST), id="groq"),
     pytest.param(
@@ -97,3 +97,17 @@ def test_a_provider_that_does_not_know_the_batch_is_not_taken_as_out_of_reach(cl
     """That is an answer, the same on every run: waited for, it would hold the action."""
     with pytest.raises(type(error)):
         _client(client_type, error).check_status("batch-1")
+
+
+@pytest.mark.parametrize("status", [500, 503, 504, 529])
+def test_an_anthropic_server_that_cannot_answer_now_is_asked_again(status):
+    """529 is Anthropic's "overloaded"; its SDK raises OverloadedError for it, which is not
+    an InternalServerError."""
+    client = AnthropicBatchClient(api_key="test")
+    transport = httpx.MockTransport(lambda _: httpx.Response(status, json={"error": "busy"}))
+    client.client = anthropic.Anthropic(
+        api_key="test", max_retries=0, http_client=httpx.Client(transport=transport)
+    )
+
+    with pytest.raises(ConnectionError):
+        client.check_status("batch-1")
