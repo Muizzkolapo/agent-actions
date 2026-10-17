@@ -1172,8 +1172,40 @@ h4.md-heading { font-size: 13.5px; }
             return out;
         }
 
+        /* JSON.stringify recurses once per nesting level and throws a RangeError on a value
+           nested past the engine's stack; this writes compact JSON on an explicit stack. */
+        function jsonTextWithoutRecursion(value) {
+            var out = [], stack = [{ value: value }];
+            while (stack.length) {
+                var top = stack.pop();
+                if ('text' in top) { out.push(top.text); continue; }
+                var v = top.value, i;
+                if (Array.isArray(v)) {
+                    stack.push({ text: ']' });
+                    for (i = v.length - 1; i >= 0; i--) {
+                        stack.push({ value: v[i] });
+                        if (i > 0) stack.push({ text: ',' });
+                    }
+                    stack.push({ text: '[' });
+                } else if (v !== null && typeof v === 'object') {
+                    var keys = Object.keys(v);
+                    stack.push({ text: '}' });
+                    for (i = keys.length - 1; i >= 0; i--) {
+                        stack.push({ value: v[keys[i]] });
+                        stack.push({ text: (i > 0 ? ',' : '') + JSON.stringify(keys[i]) + ':' });
+                    }
+                    stack.push({ text: '{' });
+                } else {
+                    out.push(v === undefined ? 'null' : JSON.stringify(v));
+                }
+            }
+            return out.join('');
+        }
+
         function syntaxHighlight(json) {
-            if (typeof json !== 'string') { try { json = JSON.stringify(json, null, 2); } catch(_) { json = String(json); } }
+            if (typeof json !== 'string') {
+                try { json = JSON.stringify(json, null, 2); } catch(_) { json = jsonTextWithoutRecursion(json); }
+            }
             if (!json) json = 'null';
             var s = esc(json);
             /* Scan for JSON tokens: strings, numbers, booleans, null */

@@ -8,6 +8,7 @@ from typing import Any, ClassVar
 from agent_actions.config.schema import HitlConfig
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.hitl.server import HitlServer
+from agent_actions.utils import deep_json
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class HitlClient:
 
         if isinstance(context_data, str):
             try:
-                context_dict = json.loads(context_data)
+                context_dict = deep_json.loads(context_data)
             except json.JSONDecodeError:
                 context_dict = {"raw": context_data}
         else:

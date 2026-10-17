@@ -10,6 +10,6 @@ workflow execution.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | HITL provider exports. | `llm.providers`, `hitl` |
-| `client.py` | Module | HITL client that validates config and blocks for reviewer response. | `llm.realtime`, `hitl` |
-| `server.py` | Module | Flask server that serves approval UI plus `/api/approve`, `/api/reject`, `/api/review-record`, `/api/review-state`, and `/api/submit` for per-record decision persistence and final file-level review submission. | `web`, `hitl` |
-| `templates/approval.html` | Template | Browser UI for per-record review navigation with auto-advance decisions, Fields/JSON record views, and final review submission. | `hitl.ui` |
+| `client.py` | Module | HITL client that validates config and blocks for reviewer response. Decodes a JSON context with `deep_json`, so a record's nesting depth does not limit it. | `llm.realtime`, `hitl` |
+| `server.py` | Module | Flask server that serves approval UI plus `/api/approve`, `/api/reject`, `/api/review-record`, `/api/review-state`, and `/api/submit` for per-record decision persistence and final file-level review submission. The context's fingerprint and `/api/context` body are encoded with `deep_json`, and `_sanitize_context` redacts on an explicit stack, so a record nested past the JSON codec's recursion limit is served whole. | `web`, `hitl` |
+| `templates/approval.html` | Template | Browser UI for per-record review navigation with auto-advance decisions, Fields/JSON record views, and final review submission. A value `JSON.stringify` cannot encode for its depth is shown as compact JSON written on an explicit stack (`jsonTextWithoutRecursion`). | `hitl.ui` |

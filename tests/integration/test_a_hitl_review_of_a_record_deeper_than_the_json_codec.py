@@ -174,7 +174,7 @@ def test_the_reviewer_sees_the_deep_record_and_the_decisions_are_stored(tmp_path
     assert result.returncode == 0, output
     assert reviewer.error is None, (reviewer.error, output)
     served = reviewer.context["data"]
-    assert [_depth_and_leaf(record["source"]["deep"]) for record in served] == [
+    assert [_depth_and_leaf(record["deep"]) for record in served] == [
         (DEPTH, LEAF),
         (0, "flat"),
     ]
