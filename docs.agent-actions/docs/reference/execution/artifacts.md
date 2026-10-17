@@ -117,6 +117,14 @@ coarse throughout: any change to it re-runs the action, including a change to a
 value larger than the number of files. If anything else in the stamp differs on a
 later run, the action is reset to `pending` and re-executed rather than skipped.
 
+A first-stage action (one with no `dependencies`) also stores `staged_input`: the
+relative path, size and modification time of every input file it read. When a later
+run finds a file added, removed or changed, it logs which, resets that action and
+every action reading it to `pending`, and runs them again over all input, so a new
+file's records reach every action and a removed file's rows are dropped. Untouched
+staging still skips. A stamp written before this key existed holds no value and is
+left alone until the action next completes.
+
 An action also records, when it starts work, what that work is answered under:
 `answered_under`, holding the same `config_hash`, `model_name` and `model_vendor`. A run
 that stops partway through an action — killed, interrupted, or stopped by an error —
@@ -177,7 +185,7 @@ resumed after it stopped, keeps them for each record it does not ask again.
 | `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
 
-Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished unless it was edited since.
+Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished unless it was edited since. A completed first-stage action whose staged input files changed runs again, with everything reading it.
 
 ### Run Results (`run_results.json`)
 

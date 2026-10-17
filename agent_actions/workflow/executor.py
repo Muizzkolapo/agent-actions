@@ -123,6 +123,7 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "records_processed",
         "truncated",
         "max_records",
+        "staged_input",
     }
 )
 
@@ -130,6 +131,10 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
 # holds are answered under. The completion stamp says so only once it completes, and the
 # startup reset needs it for an action that stopped partway.
 ANSWERED_UNDER = "answered_under"
+
+# The staged input as the work began. A file added while a run walks is not read by it,
+# so the completion stamp takes this rather than what staging holds by then.
+INPUT_AT_START = "staged_input_at_start"
 
 
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> tuple[bool, bool]:
@@ -486,11 +491,31 @@ class ActionExecutor:
             # cannot tell one that truncated from one too large to have bitten.
             "records_processed": records_processed,
             "truncated": truncated,
+            "staged_input": self._stamped(
+                action_name, "staged_input", self._input_read(action_name, action_config)
+            ),
         }
         if not keep_stored:
             return did_the_work
         submitted = self.deps.state_manager.get_status_details(action_name)
         return {key: submitted.get(key, value) for key, value in did_the_work.items()}
+
+    def _staged_input(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> dict[str, list[int]] | None:
+        fingerprint: dict[str, list[int]] | None = self.deps.action_runner.staged_input_fingerprint(
+            action_name, action_config
+        )
+        return fingerprint
+
+    def _input_read(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> dict[str, list[int]] | None:
+        details = self.deps.state_manager.get_status_details(action_name)
+        if INPUT_AT_START in details:
+            read: dict[str, list[int]] | None = details[INPUT_AT_START]
+            return read
+        return self._staged_input(action_name, action_config)
 
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
@@ -528,10 +553,34 @@ class ActionExecutor:
         )
         limits_changed = record_limit_changed or details.get("file_limit") != file_limit
         was_truncated = self.deps.state_manager.adopt_truncation_marker(action_name)
+        stored_input = details.get("staged_input")
+        current_input = (
+            self._staged_input(action_name, action_config) if stored_input is not None else None
+        )
+        input_changed = stored_input is not None and stored_input != current_input
+        if input_changed:
+            current_input = current_input or {}
+            added = sorted(set(current_input) - set(stored_input))
+            removed = sorted(set(stored_input) - set(current_input))
+            changed = sorted(
+                k
+                for k in set(current_input) & set(stored_input)
+                if current_input[k] != stored_input[k]
+            )
+            logger.warning(
+                "The input files of %s changed since it completed (added: %s; removed: %s; "
+                "changed: %s). It and every action reading it run again over all input",
+                action_name,
+                ", ".join(added) or "none",
+                ", ".join(removed) or "none",
+                ", ".join(changed) or "none",
+            )
 
-        if limits_changed or config_changed or model_changed or was_truncated:
+        if limits_changed or config_changed or model_changed or was_truncated or input_changed:
             reason = (
-                "limit config"
+                "staged input"
+                if input_changed
+                else "limit config"
                 if limits_changed
                 else "model"
                 if model_changed
@@ -2031,7 +2080,10 @@ class ActionExecutor:
         self.deps.state_manager.update_status(
             params.action_name,
             ActionStatus.RUNNING,
-            **{ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config)},
+            **{
+                ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config),
+                INPUT_AT_START: self._staged_input(params.action_name, params.action_config),
+            },
         )
         self._track_action_start(params)
 

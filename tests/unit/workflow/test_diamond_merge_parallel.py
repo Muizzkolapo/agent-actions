@@ -30,6 +30,7 @@ def mock_deps():
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = MagicMock()
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.output_manager = MagicMock()
     deps.batch_manager = MagicMock()
     deps.batch_manager.check_batch_submission.return_value = None

@@ -39,6 +39,7 @@ def executor():
     # otherwise answer with something truthy.
     deps.state_manager.adopt_truncation_marker.return_value = False
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.retried_records = frozenset()
     return ActionExecutor(deps)
 

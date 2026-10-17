@@ -161,6 +161,7 @@ class TestTheReopenIsWhatMakesTheRemovalDurable:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = state
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         deps.action_runner.storage_backend = MagicMock()
         return ActionExecutor(deps)

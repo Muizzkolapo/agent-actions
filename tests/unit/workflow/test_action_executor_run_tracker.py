@@ -18,6 +18,7 @@ from agent_actions.workflow.executor import (
 def mock_deps():
     deps = MagicMock(spec=ExecutorDependencies)
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.state_manager = MagicMock()
     deps.skip_evaluator = MagicMock()
     deps.batch_manager = MagicMock()

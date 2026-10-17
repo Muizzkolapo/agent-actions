@@ -57,6 +57,7 @@ def _executor(backend):
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.storage_backend = backend
     deps.action_runner.execution_order = [ACTION, "author_stem"]
     return ActionExecutor(deps)

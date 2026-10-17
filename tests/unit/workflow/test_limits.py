@@ -787,6 +787,7 @@ class TestLimitStatusInvalidation:
         # otherwise answer with something truthy.
         deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         deps.action_runner.workflow_name = "test"
         deps.action_runner.get_action_folder.return_value = "/tmp/io"
@@ -929,6 +930,7 @@ class TestTheCompletionStamp:
         # otherwise answer with something truthy.
         deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
@@ -989,6 +991,7 @@ class TestTheCompletionStamp:
             "config_hash",
             "records_processed",
             "truncated",
+            "staged_input",
         }
 
     def test_a_changed_file_limit_invalidates(self, executor):
@@ -1116,6 +1119,7 @@ class TestALimitAcrossTheBatchPause:
         deps.state_manager = MagicMock(spec=ActionStateManager)
         deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
@@ -1143,6 +1147,7 @@ class TestALimitAcrossTheBatchPause:
             "config_hash",
             "records_processed",
             "truncated",
+            "staged_input",
         }
 
     def test_the_collecting_run_keeps_the_submitted_config_hash(self, executor):
@@ -1301,6 +1306,7 @@ class TestAFileLimitMeetingAConfigChange:
         deps.state_manager = MagicMock(spec=ActionStateManager)
         deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
@@ -1371,6 +1377,7 @@ class TestTheBatchPauseWiring:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = ActionStateManager(tmp_path / ".agent_status.json", ["act"])
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         backend = MagicMock()
         backend.count_records_for_action.return_value = 0
@@ -1495,6 +1502,7 @@ class TestTheBatchPauseIsAProcessBoundary:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = ActionStateManager(status_file, ["act"])
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         backend = MagicMock()
         backend.get_storage_stats.return_value = {"nodes": {"act": rows_written}}
