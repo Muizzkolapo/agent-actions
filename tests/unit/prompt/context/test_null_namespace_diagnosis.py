@@ -13,6 +13,7 @@ from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.prompt.context.null_namespace import is_null_namespace
 from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 from agent_actions.prompt.service import PromptPreparationService
+from agent_actions.record.envelope import STATE_HISTORY_CAP
 
 INDICES = {"extract": 0, "classify": 1, "summarize": 2}
 CONFIG = {
@@ -114,3 +115,18 @@ def test_a_legacy_none_namespace_names_no_guard():
 
     assert message.startswith("Namespace 'classify' is null on this record.")
     assert "guard-" not in message
+
+
+@pytest.mark.parametrize(
+    "history",
+    [None, [_guard_skip("extract")] * STATE_HISTORY_CAP],
+    ids=["no-history", "capped-history"],
+)
+def test_a_history_that_cannot_rule_out_a_skip_makes_no_claim_about_one(history):
+    """With no history, or one at its cap that may have dropped the skip, say only "null"."""
+    ns = _classify_namespace({"extract": {"text": "x"}, "classify": None}, history=history)
+
+    message = _render_error(ns)
+    assert message.startswith("Namespace 'classify' is null on this record.")
+    assert "state history" not in message
+    assert "guard on 'classify'" not in message
