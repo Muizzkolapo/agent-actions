@@ -125,7 +125,9 @@ wrap_vendor_error()
      │     ├── network_error_types  → NetworkError   + fire LLMErrorEvent
      │     └── base_api_error_type  → VendorAPIError + fire LLMErrorEvent
      │
-     ├── Status-code match (Gemini, Cohere, Ollama)
+     ├── Status-code match (Gemini, Cohere; Ollama maps httpx.HTTPStatusError, but its
+     │   SDK's chat() raises ResponseError for every HTTP status, which falls to
+     │   base_api_error_type → VendorAPIError, so Ollama retries no status)
      │     ├── 429                  → RateLimitError + fire RateLimitEvent
      │     ├── 500/502/503/504      → NetworkError   + fire LLMErrorEvent
      │     └── other codes          → VendorAPIError + fire LLMErrorEvent
