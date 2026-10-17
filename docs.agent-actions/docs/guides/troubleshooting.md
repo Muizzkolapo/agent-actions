@@ -669,7 +669,7 @@ by whichever field it likes and return as many rows as the grouping produces.
 
 **Debug:**
 1. Check if dependencies are parallel branches (same base name) or different actions
-2. For fan-in: one execution per source record after the branches are merged. A record a guard filtered out in any branch is dropped; one a guard skipped arrives with that branch's fields null. A branch that returns several records per input runs once per record, each paired with the other branches' record for its source; two branches that both split one source fail the action
+2. For fan-in: one execution per source record after the branches are merged. A record a guard filtered out in any branch is dropped; one a guard skipped arrives with that branch's fields null. A branch that returns several records per input runs once per record, each paired with the other branches' record for its source; two branches that both split one source fail the action, even when a guard below one of them keeps a single record of its split ([Context Scope](../reference/context/context-scope.md) lists the shapes)
 3. For parallel: merged outputs determine execution count
 4. For `granularity: File`: one execution per input file, whatever its record count
 

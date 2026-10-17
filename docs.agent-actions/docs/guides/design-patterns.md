@@ -231,7 +231,7 @@ actions:
 
 :::tip[Fan-in Pattern]
 
-When multiple different actions feed into one action, the system uses **fan-in**: every dependency is an input, and their outputs for the same source record are merged into one record before the action runs. The action runs once per merged record, so each execution sees every branch's data for the same source record, and the order of `dependencies` changes nothing. A branch that returns several records per input is paired record by record with the other branches' record for that source.
+When multiple different actions feed into one action, the system uses **fan-in**: every dependency is an input, and their outputs for the same source record are merged into one record before the action runs. The action runs once per merged record, so each execution sees every branch's data for the same source record, and the order of `dependencies` changes nothing. A branch that returns several records per input is paired record by record with the other branches' record for that source. Two branches that each split the same source record cannot be paired, and the action fails with a message naming them.
 
 :::
 
