@@ -21,6 +21,7 @@ from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingResult,
     ProcessingStatus,
+    RecoveryMetadata,
 )
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_PREFILTER_SKIP, GUARD_SKIP
@@ -322,9 +323,19 @@ class UnifiedProcessor:
         checkpoint's stamp makes collection raise on an answer that failed to parse, and
         nothing of the file is stored.
         """
+        from agent_actions.processing.strategies.online_llm import CHECKPOINT_RECOVERY
+
+        earned = row.get(CHECKPOINT_RECOVERY)
         return ProcessingResult.success(
-            data=[{key: value for key, value in row.items() if key != "_state"}],
+            data=[
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key not in ("_state", CHECKPOINT_RECOVERY)
+                }
+            ],
             source_guid=row.get("source_guid"),
+            recovery_metadata=RecoveryMetadata.from_dict(earned) if earned else None,
         )
 
     def _guard_filter(

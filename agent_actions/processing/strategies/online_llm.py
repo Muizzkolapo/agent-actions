@@ -68,6 +68,9 @@ from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_err
 
 logger = logging.getLogger(__name__)
 
+# The key a checkpoint row carries its record's recovery metadata under.
+CHECKPOINT_RECOVERY = "_checkpoint_recovery"
+
 
 def _create_item_context(
     base_context: ProcessingContext, index: int, item: Any
@@ -359,8 +362,12 @@ class OnlineLLMStrategy:
                     # Copy records to avoid mutating result.data in-place —
                     # downstream consumers (enrichment, collectors) hold
                     # references to the same dicts.
+                    # What the record earned on the way to its answer travels with the
+                    # row: enrichment on a resume has nothing else to write `_recovery` from.
+                    earned = result.recovery_metadata
+                    recovery = {CHECKPOINT_RECOVERY: earned.to_dict()} if earned else {}
                     checkpoint_records = [
-                        {**item, "_state": RecordState.PROCESSED}
+                        {**item, "_state": RecordState.PROCESSED, **recovery}
                         if isinstance(item, dict) and "_state" not in item
                         else item
                         for item in result.data

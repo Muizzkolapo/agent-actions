@@ -3,7 +3,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
@@ -856,10 +856,13 @@ class StorageBackend(ABC):
         self,
         action_name: str,
         relative_path: str | None = None,
+        *,
+        source_guids: Collection[str] | None = None,
     ) -> None:
         """Delete checkpoint records for an action after successful completion.
 
-        If relative_path is provided, only records for that path are cleared.
+        If relative_path is provided, only records for that path are cleared; if
+        source_guids is, only those records' rows are.
         Otherwise all checkpoint records for the action are removed.
         """
 

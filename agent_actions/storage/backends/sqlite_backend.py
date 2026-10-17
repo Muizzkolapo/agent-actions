@@ -5,7 +5,7 @@ import logging
 import sqlite3
 import string
 import threading
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -1298,8 +1298,14 @@ class SQLiteBackend(StorageBackend):
             )
             return {row["source_guid"] for row in cursor.fetchall()}
 
-    def clear_checkpoint_records(self, action_name: str, relative_path: str | None = None) -> None:
-        """Delete checkpoint records for an action (optionally scoped to one path)."""
+    def clear_checkpoint_records(
+        self,
+        action_name: str,
+        relative_path: str | None = None,
+        *,
+        source_guids: Collection[str] | None = None,
+    ) -> None:
+        """Delete checkpoint records for an action, scoped to one path or to some records."""
         action_name = self._validate_identifier(action_name, "action_name")
 
         query = "DELETE FROM checkpoint_output WHERE action_name = ?"
@@ -1308,6 +1314,12 @@ class SQLiteBackend(StorageBackend):
             relative_path = self._validate_identifier(relative_path, "relative_path")
             query += " AND relative_path = ?"
             params.append(relative_path)
+        if source_guids is not None:
+            guids = sorted(source_guids)
+            if not guids:
+                return
+            query += f" AND source_guid IN ({', '.join('?' * len(guids))})"
+            params.extend(guids)
 
         with self._lock:
             cursor = self.connection.cursor()
