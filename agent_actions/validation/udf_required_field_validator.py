@@ -6,7 +6,7 @@ no warning, so unconditionally-emitting tools stay clean."""
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 
@@ -107,7 +107,10 @@ def _is_mapping_literal(node: ast.expr | None) -> bool:
 def _mapping_literal_keys(node: ast.expr) -> set[str] | None:
     """Constant keys of a mapping literal; ``None`` when a ``**spread`` hides some."""
     if isinstance(node, ast.Dict):
-        return None if _has_spread(node) else _const_str_keys(node)
+        # A `**spread` or a computed key could put any key in it.
+        if any(k is None or not isinstance(k, ast.Constant) for k in node.keys):
+            return None
+        return _const_str_keys(node)
     assert isinstance(node, ast.Call)
     if any(kw.arg is None for kw in node.keywords):
         return None
@@ -131,31 +134,53 @@ def _initial_mapping(stmt: ast.stmt, target: str) -> ast.expr | None:
     return None
 
 
-def _keys_added(stmt: ast.stmt, target: str) -> set[str] | None:
+def _key_name(node: ast.expr | None, names: Mapping[str, str] | None) -> str | None:
+    """The key ``node`` names: a string constant, or a loop variable bound to one."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if names and isinstance(node, ast.Name):
+        return names.get(node.id)
+    return None
+
+
+def _flat_targets(targets: list[ast.expr]) -> Iterator[ast.expr]:
+    for t in targets:
+        if isinstance(t, (ast.Tuple, ast.List)):
+            yield from _flat_targets(t.elts)
+        elif isinstance(t, ast.Starred):
+            yield from _flat_targets([t.value])
+        else:
+            yield t
+
+
+def _keys_added(
+    stmt: ast.stmt, target: str, names: Mapping[str, str] | None = None
+) -> set[str] | None:
     """Keys ``stmt`` puts on ``target`` by name; empty when it adds none, ``None`` when unknowable.
 
     Reads ``target["k"] = v``, ``target |= {...}``, ``target.update({...}, k=v)``
-    and ``target.setdefault("k", v)``.
+    and ``target.setdefault("k", v)``. A key named by anything but a constant (or a
+    loop variable over constants, in ``names``), or merged in from something other
+    than a literal, could be any key, so the statement is unknowable.
     """
     if isinstance(stmt, ast.AnnAssign) and stmt.value is None:
         return set()
     if isinstance(stmt, (ast.Assign, ast.AnnAssign)):
         targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
-        return {
-            t.slice.value
-            for t in targets
-            if isinstance(t, ast.Subscript)
-            and _is_name(t.value, target)
-            and isinstance(t.slice, ast.Constant)
-            and isinstance(t.slice.value, str)
-        }
+        keys: set[str] = set()
+        for t in _flat_targets(targets):
+            if isinstance(t, ast.Subscript) and _is_name(t.value, target):
+                key = _key_name(t.slice, names)
+                if key is None:
+                    return None
+                keys.add(key)
+        return keys
     if (
         isinstance(stmt, ast.AugAssign)
         and isinstance(stmt.op, ast.BitOr)
         and _is_name(stmt.target, target)
-        and _is_mapping_literal(stmt.value)
     ):
-        return _mapping_literal_keys(stmt.value)
+        return _mapping_literal_keys(stmt.value) if _is_mapping_literal(stmt.value) else None
     if not (
         isinstance(stmt, ast.Expr)
         and isinstance(stmt.value, ast.Call)
@@ -166,21 +191,18 @@ def _keys_added(stmt: ast.stmt, target: str) -> set[str] | None:
     call = stmt.value
     method = stmt.value.func.attr
     if method == "setdefault":
-        first = call.args[0] if call.args else None
-        if isinstance(first, ast.Constant) and isinstance(first.value, str):
-            return {first.value}
-        return set()
+        key = _key_name(call.args[0] if call.args else None, names)
+        return None if key is None else {key}
     if method != "update":
         return set()
-    if any(kw.arg is None for kw in call.keywords):
+    if any(kw.arg is None for kw in call.keywords) or len(call.args) > 1:
         return None
     keys = {kw.arg for kw in call.keywords if kw.arg is not None}
     if call.args:
-        if not isinstance(call.args[0], ast.Dict):
-            return set()
-        if _has_spread(call.args[0]):
+        literal = _mapping_literal_keys(call.args[0]) if _is_mapping_literal(call.args[0]) else None
+        if literal is None:
             return None
-        keys |= _const_str_keys(call.args[0])
+        keys |= literal
     return keys
 
 
@@ -195,18 +217,20 @@ class _Unreached:
 _UNREACHED = _Unreached()
 
 # The keys a path's mapping is known to hold. None when its contents are unknown (a
-# parameter, a helper's result), which bounds nothing: such a path neither adds a key
-# nor takes one away when paths are joined.
+# parameter, a helper's result); joined with any other path, that stays unknown.
 _State = frozenset[str] | None | _Unreached
 
 
 def _merge(states: list[_State]) -> _State:
-    """The keys every path holds, over the paths that reach this point."""
+    """The keys every path holds, over the paths that reach this point.
+
+    One path holding unknown contents makes the join unknown: it may lack any key.
+    """
     live = [s for s in states if not isinstance(s, _Unreached)]
     if not live:
         return _UNREACHED
     known = [s for s in live if s is not None]
-    if not known:
+    if len(known) < len(live):
         return None
     return frozenset.intersection(*known)
 
@@ -222,13 +246,9 @@ def _walk_own(nodes: list[ast.AST]) -> Iterator[ast.AST]:
         stack.extend(ast.iter_child_nodes(node))
 
 
-def _const_key(node: ast.expr | None) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    return None
-
-
-def _removals(nodes: list[ast.AST], target: str) -> tuple[set[str], bool]:
+def _removals(
+    nodes: list[ast.AST], target: str, names: Mapping[str, str] | None = None
+) -> tuple[set[str], bool]:
     """Keys ``nodes`` remove from ``target`` by name, and whether they may empty it.
 
     Reads ``del target["k"]``, ``target.pop("k", ...)`` and ``target.clear()``; a key
@@ -240,7 +260,7 @@ def _removals(nodes: list[ast.AST], target: str) -> tuple[set[str], bool]:
         if isinstance(node, ast.Delete):
             for t in node.targets:
                 if isinstance(t, ast.Subscript) and _is_name(t.value, target):
-                    key = _const_key(t.slice)
+                    key = _key_name(t.slice, names)
                     if key is None:
                         raise _Decline
                     removed.add(key)
@@ -251,7 +271,7 @@ def _removals(nodes: list[ast.AST], target: str) -> tuple[set[str], bool]:
         ):
             method = node.func.attr
             if method == "pop":
-                key = _const_key(node.args[0]) if node.args else None
+                key = _key_name(node.args[0] if node.args else None, names)
                 if key is None:
                     raise _Decline
                 removed.add(key)
@@ -326,11 +346,13 @@ def _header(stmt: ast.stmt) -> list[ast.AST]:
     return [stmt]
 
 
-def _without(keys: _State, nodes: list[ast.AST], target: str) -> _State:
+def _without(
+    keys: _State, nodes: list[ast.AST], target: str, names: Mapping[str, str] | None = None
+) -> _State:
     """``keys`` less what ``nodes`` remove from ``target``."""
     if not isinstance(keys, frozenset):
         return keys
-    removed, cleared = _removals(nodes, target)
+    removed, cleared = _removals(nodes, target, names)
     return frozenset() if cleared else keys - removed
 
 
@@ -344,19 +366,51 @@ def _is_irrefutable(case: ast.match_case) -> bool:
     return case.guard is None and isinstance(pattern, ast.MatchAs) and pattern.pattern is None
 
 
+def _constant_loop(stmt: ast.stmt) -> tuple[str, list[str]] | None:
+    """``for name in ("a", "b"):`` — the loop variable and the constants it takes, in order."""
+    if not (
+        isinstance(stmt, ast.For)
+        and isinstance(stmt.target, ast.Name)
+        and isinstance(stmt.iter, (ast.Tuple, ast.List))
+    ):
+        return None
+    values = [_key_name(e, None) for e in stmt.iter.elts]
+    if any(v is None for v in values):
+        return None
+    return stmt.target.id, [v for v in values if v is not None]
+
+
+def _always_true(test: ast.expr) -> bool:
+    return isinstance(test, ast.Constant) and bool(test.value)
+
+
+# A loop's state only shrinks pass by pass, so a real body never reaches this.
+_MAX_LOOP_PASSES = 64
+
+
+class _Loop:
+    """The states that leave a loop body early, by ``break`` and by ``continue``."""
+
+    def __init__(self) -> None:
+        self.breaks: list[_State] = []
+        self.continues: list[_State] = []
+
+
 class _OutputFlow:
     """Walks a UDF's body path by path, tracking the keys its returned name holds.
 
     A key counts only when every path that reaches the tail return holds it: an ``if``
-    keeps what both branches hold, a loop body may run no times so it only removes, and
-    a ``try`` joins its body's end with each ``except`` that falls through. A path that
-    raises or returns elsewhere never reaches the tail and adds nothing.
+    keeps what both branches hold, a loop keeps what holds after any number of passes
+    (none included), and a ``try`` joins its body's end with each ``except`` that falls
+    through. A path that raises or returns elsewhere never reaches the tail.
     """
 
     def __init__(self, target: str, tail: ast.Return) -> None:
         self.target = target
         self.tail = tail
         self.at_tail: list[_State] = []
+        self.loops: list[_Loop] = []
+        self.names: dict[str, str] = {}
 
     def block(self, body: list[ast.stmt], state: _State) -> _State:
         for stmt in body:
@@ -365,21 +419,31 @@ class _OutputFlow:
             state = self.stmt(stmt, state)
         return state
 
-    def may(self, nodes: list[ast.AST], state: _State) -> _State:
-        """``state`` after code that may run any number of times, or not at all: only its removals hold.
+    def anywhere_in(self, body: list[ast.stmt], state: _State) -> _State:
+        """What holds at every point of ``body``, where an ``except`` may start.
 
-        A path on which that code re-binds the name holds unknown contents, which bound nothing.
+        A re-binding anywhere in it leaves the contents unknown there.
         """
-        return _without(state, nodes, self.target)
+        if _rebinds(list(body), self.target):
+            return None
+        return _without(state, list(body), self.target, self.names)
 
     def stmt(self, stmt: ast.stmt, state: _State) -> _State:
         target = self.target
-        state = _without(state, _header(stmt), target)
+        state = _without(state, _header(stmt), target, self.names)
         if isinstance(stmt, ast.Return):
             if stmt is self.tail:
+                if self.loops:
+                    raise _Decline
                 self.at_tail.append(state)
             return _UNREACHED
         if isinstance(stmt, ast.Raise):
+            return _UNREACHED
+        if isinstance(stmt, ast.Break):
+            self.loops[-1].breaks.append(state)
+            return _UNREACHED
+        if isinstance(stmt, ast.Continue):
+            self.loops[-1].continues.append(state)
             return _UNREACHED
         if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             return None if stmt.name == target else state
@@ -390,11 +454,10 @@ class _OutputFlow:
         if isinstance(stmt, (ast.With, ast.AsyncWith)):
             return self.block(stmt.body, state)
         if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
-            return self.may([stmt], state)
+            return self.loop(stmt, state)
         if isinstance(stmt, (ast.Try, ast.TryStar)):
             finished = self.block(stmt.orelse, self.block(stmt.body, state))
-            # A handler starts wherever the body raised, so it holds only what the body cannot remove.
-            entry = self.may(list(stmt.body), state)
+            entry = self.anywhere_in(stmt.body, state)
             handled = [
                 self.block(handler.body, None if handler.name == target else entry)
                 for handler in stmt.handlers
@@ -410,6 +473,56 @@ class _OutputFlow:
             return _merge(outcomes)
         return self.simple(stmt, state)
 
+    def loop(self, stmt: ast.For | ast.AsyncFor | ast.While, state: _State) -> _State:
+        frame = _Loop()
+        self.loops.append(frame)
+        try:
+            constant = _constant_loop(stmt)
+            if constant is not None:
+                state = self._unrolled(stmt, frame, state, *constant)
+            else:
+                state = self._to_fixpoint(stmt, frame, state)
+        finally:
+            self.loops.pop()
+        if isinstance(stmt, ast.While) and _always_true(stmt.test):
+            # `while True:` runs its body at least once and leaves only by `break`.
+            return _merge(frame.breaks)
+        return _merge([self.block(stmt.orelse, state), *frame.breaks])
+
+    def _unrolled(
+        self, stmt: ast.stmt, frame: _Loop, state: _State, variable: str, values: list[str]
+    ) -> _State:
+        """A loop over constant names runs its body once per name, in order."""
+        assert isinstance(stmt, ast.For)
+        outer = self.names.get(variable)
+        try:
+            for value in values:
+                self.names[variable] = value
+                frame.continues = []
+                state = _merge([self.block(stmt.body, state), *frame.continues])
+        finally:
+            if outer is None:
+                self.names.pop(variable, None)
+            else:
+                self.names[variable] = outer
+        return state
+
+    def _to_fixpoint(
+        self, stmt: ast.For | ast.AsyncFor | ast.While, frame: _Loop, state: _State
+    ) -> _State:
+        """What holds after any number of passes, joined until another pass changes nothing."""
+        current = state
+        for _ in range(_MAX_LOOP_PASSES):
+            frame.breaks, frame.continues = [], []
+            head = current
+            if isinstance(stmt, ast.While):
+                head = _without(current, [stmt.test], self.target, self.names)
+            following = _merge([current, self.block(stmt.body, head), *frame.continues])
+            if following == current:
+                return head
+            current = following
+        raise _Decline
+
     def simple(self, stmt: ast.stmt, state: _State) -> _State:
         target = self.target
         literal = _initial_mapping(stmt, target)
@@ -418,7 +531,7 @@ class _OutputFlow:
             return None if keys is None else frozenset(keys)
         if _rebinds([stmt], target):
             return None
-        added = _keys_added(stmt, target)
+        added = _keys_added(stmt, target, self.names)
         if added is None:
             raise _Decline
         return state | added if isinstance(state, frozenset) else state

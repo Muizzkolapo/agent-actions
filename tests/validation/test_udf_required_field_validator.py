@@ -643,3 +643,16 @@ def test_a_re_binding_the_scan_cannot_read_makes_the_reading_unknown(body):
         "def build(data):\n    out = {'options': [], 'answer': 1}\n" + body + "    return out\n"
     )
     assert unconditional_output_keys(source) is None
+
+
+def test_a_key_set_before_the_break_of_a_while_true_is_not_flagged():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    while True:\n"
+        "        out['answer'] = data.next()\n"
+        "        if out['answer']:\n"
+        "            break\n"
+        "    return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
