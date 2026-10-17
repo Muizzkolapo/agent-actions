@@ -21,7 +21,6 @@ from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
     apply_context_scope_for_records,
-    format_llm_context,
 )
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_parsing import (
@@ -503,24 +502,6 @@ class TestFieldParsing:
         names = extract_action_names_from_context_scope(scope)
         assert "dep_d" not in names
         assert "dep_a" in names
-
-
-# ---------------------------------------------------------------------------
-# TestFormatAndMerge
-# ---------------------------------------------------------------------------
-
-
-class TestFormatAndMerge:
-    """format_llm_context utility."""
-
-    def test_format_empty_returns_empty(self):
-        assert format_llm_context({}) == ""
-
-    def test_format_produces_readable_output(self):
-        llm_ctx = {"dep": {"summary": "hello world"}}
-        result = format_llm_context(llm_ctx)
-        assert "dep.summary" in result
-        assert "hello world" in result
 
 
 # ---------------------------------------------------------------------------

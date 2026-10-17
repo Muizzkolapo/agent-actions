@@ -1,0 +1,11 @@
+kind: Under the Hood
+body: >-
+  `create_dynamic_agent` no longer takes an `additional_context` argument, and
+  `format_llm_context` is gone. The argument was the only route to that function,
+  and its one caller, `run_dynamic_agent`, always passed `None`, so observed fields
+  were never appended to a prompt as an "Additional context:" block. The LLM and
+  prompt architecture docs said they were; they no longer do. Observed fields still
+  reach the model through the prompt context exactly as before. The removed path
+  encoded each field with `indent=2`, which grows with the square of a value's
+  depth; nothing in a run produced that text. (#1498)
+time: 2026-10-17T15:00:00Z

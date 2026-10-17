@@ -97,7 +97,7 @@ bus: every namespace an action adds stays on it for the rest of the run.
 
 | Directive | LLM sees it? | This action forwards it? | Purpose |
 |-----------|-------------|--------------------------|---------|
-| `observe` | YES (in prompt context + "Additional context" injection) | NO (unless also in passthrough) | Feed data to the LLM for reasoning |
+| `observe` | YES (in prompt context) | NO (unless also in passthrough) | Feed data to the LLM for reasoning |
 | `passthrough` | NO (not in LLM context) | YES (merged into output record) | Carry identifiers through without LLM exposure |
 | `drop` | NO | NO | Hide an upstream field from this action's prompt |
 
@@ -152,9 +152,6 @@ context_scope:
                     |  dept: "Eng"}                   |
                     | (the two scores cannot anchor   |
                     |  this action's judgement)       |
-                    |                                 |
-                    | Additional context:             |
-                    |   source.dept: "Eng"            |
                     +---------------------------------+
 
                     +--- What the OUTPUT gets --------+

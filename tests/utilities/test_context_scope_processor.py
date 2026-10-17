@@ -5,7 +5,6 @@ import pytest
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
-    format_llm_context,
 )
 from agent_actions.prompt.context.scope_namespace import (
     _extract_allowed_fields_per_dependency,
@@ -67,37 +66,6 @@ class TestContextScopeProcessor:
         # Validate prompt_context only contains scoped fields (observe + passthrough)
         # candidate_facts is NOT in observe or passthrough — excluded from prompt_context
         assert "candidate_facts" not in prompt_context.get("fact_extractor", {})
-
-    def test_format_llm_context(self):
-        """Test formatting namespaced llm_context dict as readable text."""
-        llm_context = {
-            "fact_extractor": {
-                "extracted_entities": ["entity1", "entity2", "entity3"],
-                "metadata": {"source": "research_paper", "date": "2024-01-15", "count": 3},
-                "reference_id": "ref-456",
-            },
-        }
-
-        result = format_llm_context(llm_context)
-
-        assert result.startswith("Additional context:")
-        assert "fact_extractor.extracted_entities:" in result
-        assert "fact_extractor.metadata:" in result
-        assert "fact_extractor.reference_id:" in result
-
-    def test_format_llm_context_empty(self):
-        """Empty llm_context returns empty string."""
-        assert format_llm_context({}) == ""
-
-    def test_format_llm_context_multiple_namespaces(self):
-        """Multiple namespaces rendered with qualified field names."""
-        llm_context = {
-            "voter_1": {"score": 8},
-            "voter_2": {"score": 7},
-        }
-        result = format_llm_context(llm_context)
-        assert "voter_1.score:" in result
-        assert "voter_2.score:" in result
 
     def test_seed_data_namespaced_in_prompt_context(self):
         """Seed data should be namespaced under seed for prompt context only.

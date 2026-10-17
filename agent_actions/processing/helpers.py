@@ -59,7 +59,6 @@ def run_dynamic_agent(
         tools_path=tools_path,
         tool_args=tool_args,
         source_content=source_content,
-        additional_context=None,
     )
 
     response = _validate_llm_output_schema(response, agent_config, agent_name)

@@ -26,7 +26,6 @@ def create_dynamic_agent(
     tools_path: str | None = None,
     tool_args: dict[str, Any] | None = None,
     source_content: Any | None = None,
-    additional_context: dict | None = None,
 ) -> list[Any]:
     """Build and execute a prompt against the selected vendor.
 
@@ -38,8 +37,6 @@ def create_dynamic_agent(
         tools_path: Path to tool functions (optional).
         tool_args: Tool arguments (optional).
         source_content: Source content for tool handler (optional).
-        additional_context: Additional context from context_scope.observe (optional).
-            Formatted and appended to prompt before LLM invocation.
 
     Returns:
         List of response items from the LLM.
@@ -73,14 +70,6 @@ def create_dynamic_agent(
     context_data = ContextService.prepare_context_data(context_data_str, is_tool)
 
     captured_results = {}
-
-    # Append additional_context if provided (context_scope.observe fields)
-    if additional_context:
-        from agent_actions.prompt.context.scope_application import format_llm_context
-
-        context_msg = format_llm_context(additional_context)
-        if context_msg:
-            prompt_config = f"{prompt_config}\n\n{context_msg}"
 
     # Prepare schema with dispatch support
     _pr = agent_config.get("_project_root")

@@ -10,7 +10,6 @@ import pytest
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope,
-    format_llm_context,
 )
 
 
@@ -414,24 +413,6 @@ class TestPassthroughNamespacing:
         assert pt == {"dep": {"pt": "p"}}
         assert "pt" not in lc.get("dep", {})
         assert "obs" not in pt.get("dep", {})
-
-
-class TestFormatAndMerge:
-    """format_llm_context utility."""
-
-    def test_format_namespaced(self):
-        lc = {"dep_1": {"score": 8}, "dep_2": {"score": 7}}
-        text = format_llm_context(lc)
-        assert text.startswith("Additional context:")
-        assert "dep_1.score:" in text
-        assert "dep_2.score:" in text
-
-    def test_format_empty(self):
-        assert format_llm_context({}) == ""
-
-    def test_format_single_namespace(self):
-        text = format_llm_context({"dep": {"name": "test"}})
-        assert "dep.name:" in text
 
 
 class TestDropVersioned:
