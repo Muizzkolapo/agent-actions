@@ -22,7 +22,14 @@ from agent_actions.errors import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
-from agent_actions.prompt.context.null_namespace import is_null_namespace
+from agent_actions.prompt.context.null_namespace import (
+    REASON_NO_OUTPUT,
+    REASON_NULL,
+    REASON_SKIPPED,
+    NullNamespace,
+    diagnose,
+    is_null_namespace,
+)
 from agent_actions.prompt.context.scope_application import (
     FRAMEWORK_NAMESPACES,
     apply_context_scope,
@@ -39,6 +46,18 @@ from agent_actions.utils import deep_json
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
+
+
+_NULL_NAMESPACE_TYPE = f"{NullNamespace.__module__}.{NullNamespace.__qualname__}"
+
+
+def _null_by_record(value: Any) -> bool:
+    """Whether the record holds the namespace as null, which a guard or ``ns.*`` can handle."""
+    return not isinstance(value, NullNamespace) or value.reason in (
+        REASON_SKIPPED,
+        REASON_NO_OUTPUT,
+        REASON_NULL,
+    )
 
 
 def _too_deep_to_render(prompt_context: dict[str, Any]) -> RecordContextError | None:
@@ -392,12 +411,18 @@ class PromptPreparationService:
 
             error_str = str(e)
             missing = []
+            # A field read off a null namespace: the raised error's null-namespace
+            # hint diagnoses it, and the name is a field, not a namespace.
+            attribute_of_null = False
             if "has no attribute" in error_str or "is undefined" in error_str:
                 import re
 
                 attribute_match = re.search(r"has no attribute '([^']+)'", error_str)
                 if attribute_match:
                     missing.append(attribute_match.group(1))
+                    attribute_of_null = error_str.startswith(
+                        ("'None' has no attribute", f"'{_NULL_NAMESPACE_TYPE} object'")
+                    )
                 else:
                     undefined_match = re.search(r"'([^']+)' is undefined", error_str)
                     if undefined_match:
@@ -415,7 +440,7 @@ class PromptPreparationService:
                             available_fields=available,
                         )
                     )
-                else:
+                elif not attribute_of_null:
                     owners = [
                         ns
                         for ns, fields in namespace_context.items()
@@ -497,18 +522,20 @@ class PromptPreparationService:
                             and isinstance(v, dict)
                             and k not in FRAMEWORK_NAMESPACES
                         ]
-                        null_namespace_hints[blamed_ns] = {
-                            "alternate_deps": other_ns,
-                            "remediation": (
-                                f"Namespace '{blamed_ns}' is null (likely "
-                                f"guard-filtered or guard-skipped). Other "
-                                f"namespaces present: "
-                                f"{', '.join(sorted(other_ns)) if other_ns else '(none)'}. "
-                                f"Consider adding a guard to '{agent_name}' to "
+                        blamed_value = prompt_context[blamed_ns]
+                        remediation = diagnose(blamed_ns, blamed_value, agent_name or "")
+                        if _null_by_record(blamed_value):
+                            remediation += (
+                                f" Other namespaces present: "
+                                f"{', '.join(sorted(other_ns)) if other_ns else '(none)'}."
+                                f" Consider adding a guard to '{agent_name}' to "
                                 f"exclude these records, or using "
                                 f"'{blamed_ns}.*' (null-safe) instead of "
                                 f"specific fields."
-                            ),
+                            )
+                        null_namespace_hints[blamed_ns] = {
+                            "alternate_deps": other_ns,
+                            "remediation": remediation,
                         }
 
             raise TemplateVariableError(

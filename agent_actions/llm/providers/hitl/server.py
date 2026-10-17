@@ -20,6 +20,7 @@ from werkzeug.serving import make_server
 from agent_actions.errors import NetworkError
 from agent_actions.record.tracking import is_input_position
 from agent_actions.tooling.rendering.data_card import METADATA_KEYS
+from agent_actions.utils import deep_json
 
 # `^secret$` matches the bare key only; the remaining alternates are
 # suffix matches via the trailing `$`.
@@ -208,7 +209,11 @@ class HitlServer:
         response = {"_envelope": True, "data": _sanitize_context(self.context_data)}
         if self.field_order:
             response["field_order"] = self.field_order
-        return jsonify(response)
+        # Not jsonify: Flask's encoder recurses once per level and fails on a deep record.
+        return self.app.response_class(
+            deep_json.dumps(response, sort_keys=True, default=str) + "\n",
+            mimetype="application/json",
+        )
 
     def _handle_review_state(self):
         with self._lock:
@@ -446,7 +451,7 @@ class HitlServer:
     @staticmethod
     def _compute_data_fingerprint(context_data: Any) -> str:
         """Return a short hash of the review dataset for stale-state detection."""
-        serialized = json.dumps(context_data, sort_keys=True, default=str)
+        serialized = deep_json.dumps(context_data, sort_keys=True, default=str)
         return hashlib.sha256(serialized.encode()).hexdigest()[:16]
 
     @staticmethod
@@ -597,19 +602,30 @@ class HitlServer:
 
 
 def _sanitize_context(data: Any) -> Any:
-    """Recursively redact values for keys matching sensitive patterns.
+    """A copy of *data* with the value of every key matching a sensitive pattern redacted.
 
-    Prevents accidental leakage of credentials or secrets through the
-    ``/api/context`` endpoint.
+    Prevents accidental leakage of credentials or secrets through the ``/api/context``
+    endpoint. Walks on an explicit stack, so a value at any nesting depth is redacted.
     """
-    if isinstance(data, dict):
-        return {
-            k: (_REDACTED if _SENSITIVE_KEY_PATTERN.search(k) else _sanitize_context(v))
-            for k, v in data.items()
-        }
-    if isinstance(data, list):
-        return [_sanitize_context(item) for item in data]
-    return data
+    holder: list[Any] = [None]
+    stack: list[tuple[Any, Any, Any]] = [(data, holder, 0)]
+    while stack:
+        value, parent, slot = stack.pop()
+        if isinstance(value, dict):
+            copy: dict[Any, Any] = {}
+            for key, item in value.items():
+                # Set now, so the copy keeps the key order; a walked value replaces it.
+                copy[key] = _REDACTED
+                if not _SENSITIVE_KEY_PATTERN.search(key):
+                    stack.append((item, copy, key))
+            parent[slot] = copy
+        elif isinstance(value, list):
+            items: list[Any] = [None] * len(value)
+            stack.extend((item, items, index) for index, item in enumerate(value))
+            parent[slot] = items
+        else:
+            parent[slot] = value
+    return holder[0]
 
 
 def _utc_timestamp() -> str:

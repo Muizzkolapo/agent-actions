@@ -5,7 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError, MissingSourceGuidError, is_action_fatal
+from agent_actions.errors import (
+    ConfigurationError,
+    MissingSourceGuidError,
+    RecordContextError,
+    TemplateVariableError,
+    is_action_fatal,
+)
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
@@ -26,6 +32,21 @@ from agent_actions.utils.tools_resolver import resolve_tools_path
 logger = logging.getLogger(__name__)
 
 _PREFLIGHT_SAMPLE_SIZE: int = 5
+
+
+def _fails_only_its_record(error: Exception) -> bool:
+    """Whether *error*, raised preparing one record, says nothing about the template.
+
+    The records online fails alone while preparing them: one refused for having no
+    ``source_guid``, one whose context is incomplete or too deep to render, and one
+    lacking a variable the template names. A template error with no variable to blame
+    is the template's, and fails every record.
+    """
+    if is_action_fatal(error):
+        return False
+    if isinstance(error, (MissingSourceGuidError, RecordContextError)):
+        return True
+    return isinstance(error, TemplateVariableError) and bool(error.missing_variables)
 
 
 def _append_feedback(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]) -> None:
@@ -397,7 +418,8 @@ class BatchTaskPreparator:
         """Run pre-flight validation on sample rows to catch template errors early.
 
         Batch-only by design: online surfaces template errors on the first row;
-        batch submits thousands at once, so we sample first to fail fast.
+        batch submits thousands at once, so we sample first to fail fast. A record
+        that fails alone (``_fails_only_its_record``) is passed over for the next.
         """
         if not data:
             return
@@ -421,8 +443,11 @@ class BatchTaskPreparator:
 
             try:
                 prepared = task_preparer.prepare(row, prep_context, skip_guard=False)
-            except MissingSourceGuidError:
-                continue  # Refused before its template renders; the run refuses it alone
+            except Exception as e:
+                if not _fails_only_its_record(e):
+                    raise
+                logger.debug("Preflight passed over a record that fails alone: %s", e)
+                continue  # The run fails this record alone, as online does
 
             if prepared.guard_status in (
                 GuardStatus.SKIPPED,
@@ -433,7 +458,7 @@ class BatchTaskPreparator:
 
             return  # Template rendered successfully — preflight passed
 
-        # All sampled rows guard-skipped/filtered or refused — nothing to validate
+        # Every sampled row was guard-skipped, filtered or failed alone — nothing to validate
         logger.info(
             "Preflight skipped: no prompt rendered for the %d sampled rows of '%s'",
             sample_size,

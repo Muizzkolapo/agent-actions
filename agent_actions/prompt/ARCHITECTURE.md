@@ -201,13 +201,23 @@ Version and workflow convenience: `i`, `idx`, and custom version params are prom
 
 ## NullNamespace Sentinel
 
-When a guard skips or filters an upstream action, the downstream record has `{action_name: None}` in its content. The `DependencyNamespaceBuilder` wraps this in a `NullNamespace` sentinel so downstream code can distinguish three cases:
+When a declared dependency has no data on the record, the `DependencyNamespaceBuilder` puts a `NullNamespace` sentinel in its place. Its `reason` records what the record shows about why:
 
 ```
-1. NullNamespace(reason="skipped")  --> Namespace declared but absent (guard-skipped)
-2. Dict with fields                 --> Normal namespace with data
-3. Key absent from field_context    --> Undeclared namespace (config bug / typo --> error)
+NullNamespace(reason="skipped")             --> null on the record; its _state_history shows
+                                                a guard on that action skipping it
+NullNamespace(reason="no_output")           --> null on the record; its _state_history (below the
+                                                cap) records no guard skip by that action
+NullNamespace(reason="null")                --> null on the record; no history, or one at its cap
+                                                that may have dropped the skip (no cause claimed)
+NullNamespace(reason="absent")              --> the record has no key for that action at all
+NullNamespace(reason="no_declared_fields")  --> the action's output holds none of the observed
+                                                fields (carries observed and present fields)
+Dict with fields                            --> Normal namespace with data
+Key absent from field_context               --> Undeclared namespace (config bug / typo --> error)
 ```
+
+`diagnose(ns, value, action)` turns the reason into the first sentence of the render error. A guard is named only for `skipped`; nothing guesses at a guard from the namespace being missing.
 
 `is_null_namespace(value)` returns True for both `NullNamespace` instances and legacy `None` values. This is used by:
 - `apply_context_scope` -- resolves observe/passthrough fields to `None` instead of crashing
@@ -234,14 +244,14 @@ _render_prompt_template(raw_prompt, prompt_context)
   |     +-- UndefinedError --> Raise TemplateVariableError with diagnostics:
   |           |                - namespace_context (available refs per namespace)
   |           |                - storage_hints (field exists in DB but not loaded)
-  |           |                - null_namespace_hints (guard-skipped/filtered dep
-  |           |                  advice; fires whenever a null namespace is in
-  |           |                  scope and the template dereferenced it)
+  |           |                - null_namespace_hints (why the dereferenced null
+  |           |                  namespace has no data on this record, from its
+  |           |                  NullNamespace reason, and the remediation)
   |
   5. Return rendered string
 ```
 
-**StrictUndefined** means typos in template references fail loudly rather than silently rendering empty. Dereferencing a guard-skipped namespace is no exception: it raises, but the error carries `null_namespace_hints` naming the namespace and the remediation (`ns.*` null-safe access, or a guard on the consuming action).
+**StrictUndefined** means typos in template references fail loudly rather than silently rendering empty. Dereferencing a null namespace is no exception: it raises, but the error carries `null_namespace_hints` naming the namespace, what the record shows about why it has no data (a guard skip by that action, a null without one, no output of that action on the record, or none of the observed fields in its output), and the remediation for that case (`ns.*` null-safe access or a guard on the consuming action for a null; dependencies or the observed field names otherwise). The field read off a null namespace is not reported as a namespace of its own.
 
 ---
 
@@ -451,7 +461,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 
 8. **dispatch_task() runs after Jinja2 rendering.** The resolution order is: Jinja2 template render first (step 6), then `dispatch_task()` resolution (step 7). This means `dispatch_task()` calls see the fully rendered prompt with all template variables resolved. User functions receive the LLM context as a JSON string argument.
 
-9. **StrictUndefined has no exceptions.** Jinja2 uses `StrictUndefined` so typos in template references fail loudly. Dereferencing a guard-skipped namespace fails loudly too — silently rendering `""` would send a half-empty prompt to the provider. The failure is made actionable instead: `null_namespace_hints` names the null namespace the template touched, lists the non-null namespaces available, and points at `ns.*` null-safe access or a guard on the consuming action.
+9. **StrictUndefined has no exceptions.** Jinja2 uses `StrictUndefined` so typos in template references fail loudly. Dereferencing a null namespace fails loudly too — silently rendering `""` would send a half-empty prompt to the provider. The failure is made actionable instead: `null_namespace_hints` names the null namespace the template touched and says why the record has no data for it, from the sentinel's reason; for a null on the record it also lists the non-null namespaces available and points at `ns.*` null-safe access or a guard on the consuming action.
 
 10. **Drop order matters for passthrough.** Passthrough fields are extracted from the pre-drop prompt_context, then drop is applied to both prompt_context and passthrough_fields. This means passthrough captures the value before drop, but drop still removes it. If the order were reversed (drop then passthrough), passthrough would never see the field. The current order ensures drop is the final word on what the declaring action forwards.
 

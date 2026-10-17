@@ -14,13 +14,22 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
-from agent_actions.prompt.context.null_namespace import SKIPPED_NAMESPACE
+from agent_actions.prompt.context.null_namespace import (
+    ABSENT_NAMESPACE,
+    NO_OUTPUT_NAMESPACE,
+    NULL_NAMESPACE,
+    SKIPPED_NAMESPACE,
+    NullNamespace,
+    no_declared_fields_namespace,
+)
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from agent_actions.prompt.context.scope_namespace import (
     _extract_allowed_fields_per_dependency,
     _extract_content_data,
     _filter_and_store_fields,
 )
+from agent_actions.record.envelope import STATE_HISTORY_CAP
+from agent_actions.record.state import RecordState
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +89,26 @@ class SourceNamespaceBuilder:
         return source_namespace
 
 
+def _null_namespace_for(
+    dep_name: str, namespaced_content: dict, current_item: dict
+) -> NullNamespace:
+    """The sentinel saying what *current_item* shows about why *dep_name* has no data."""
+    if dep_name not in namespaced_content:
+        return ABSENT_NAMESPACE
+    history = current_item.get("_state_history")
+    if not isinstance(history, list):
+        return NULL_NAMESPACE
+    if any(
+        isinstance(entry, dict)
+        and entry.get("action") == dep_name
+        and entry.get("to") == RecordState.GUARD_SKIPPED.value
+        for entry in history
+    ):
+        return SKIPPED_NAMESPACE
+    # A history at its cap may have dropped the skip; it cannot vouch for its absence.
+    return NO_OUTPUT_NAMESPACE if len(history) < STATE_HISTORY_CAP else NULL_NAMESPACE
+
+
 class DependencyNamespaceBuilder:
     """Build dependency namespaces from record's namespaced content."""
 
@@ -93,7 +122,8 @@ class DependencyNamespaceBuilder:
     ) -> tuple[dict[str, Any], dict]:
         """Return (dep_namespaces, metadata).
 
-        dep_namespaces maps dep_name -> filtered data (or None for guard-skipped).
+        dep_namespaces maps dep_name -> filtered data, or a NullNamespace saying why
+        the record has none.
         metadata maps dep_name -> {stored_fields, loaded_fields, stored_count, loaded_count}.
 
         Raises:
@@ -148,19 +178,17 @@ class DependencyNamespaceBuilder:
 
                     dep_data = namespaced_content.get(dep_name)
                     if dep_data is None:
-                        # Namespace is null (guard-skipped) or absent (guard-filtered /
-                        # arrived via a different branch).  Wrap in NullNamespace so
-                        # downstream observe/passthrough can distinguish "declared but
-                        # absent" from "undeclared" and resolve fields to None instead
-                        # of crashing.  The reason is "skipped" by default; Phase 9c
-                        # will refine this to distinguish filtered namespaces.
+                        # Declared but not supplied: observe/passthrough resolve its
+                        # fields to None, and a prompt reading one fails naming what
+                        # the record shows about why.
+                        null_ns = _null_namespace_for(dep_name, namespaced_content, current_item)
                         logger.debug(
-                            "[RECORD NAMESPACE] '%s' null/absent on record for action '%s' "
-                            "(likely guard-skipped or guard-filtered)",
+                            "[RECORD NAMESPACE] '%s' null/absent on record for action '%s' (%s)",
                             dep_name,
                             agent_name,
+                            null_ns.reason,
                         )
-                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
+                        dep_namespaces[dep_name] = null_ns
                         continue
 
                     if not isinstance(dep_data, dict):
@@ -178,18 +206,20 @@ class DependencyNamespaceBuilder:
                     # Zero-overlap guard: if specific fields are declared but
                     # none of them exist in the namespace, the content is
                     # corrupted (e.g. schema-echo, wrong action output).
-                    # Wrap as SKIPPED_NAMESPACE to prevent RecordContextError.
+                    # Wrap as a null namespace to prevent RecordContextError.
                     if allowed_fields and not set(dep_data.keys()) & set(allowed_fields):
                         logger.warning(
                             "[OBSERVE NULL-SAFE] '%s': namespace has zero overlap "
                             "with declared fields %s (actual keys: %s) — "
-                            "treating as skipped",
+                            "treating as null",
                             dep_name,
                             sorted(allowed_fields),
                             sorted(dep_data.keys()),
                             extra=DIAGNOSTIC,
                         )
-                        dep_namespaces[dep_name] = SKIPPED_NAMESPACE
+                        dep_namespaces[dep_name] = no_declared_fields_namespace(
+                            list(allowed_fields), list(dep_data.keys())
+                        )
                         continue
 
                     _filter_and_store_fields(

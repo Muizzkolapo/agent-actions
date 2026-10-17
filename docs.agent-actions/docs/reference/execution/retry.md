@@ -56,9 +56,9 @@ actions:
 
 | Error Type | Examples | Retryable |
 |------------|----------|-----------|
-| Rate Limits | HTTP 429, quota exceeded | Yes |
+| Rate Limits | HTTP 429, quota exceeded | Yes, except Ollama ([by provider](#provider-support)) |
 | Network Issues | Connection refused, reset or dropped mid-response, timeout, DNS failure | Yes |
-| Server Errors | HTTP 502, 503, 504 | Yes |
+| Server Errors | HTTP 500, 502, 503, 504 | Yes, except Ollama; which statuses depends on the provider ([by provider](#provider-support)) |
 | Invalid Request | Bad API key, malformed input | No |
 | Schema Violation | Invalid JSON output | No (uses `expect:` repair) |
 
@@ -68,7 +68,16 @@ For invalid LLM outputs, Agent Actions uses the [expectations](../validation/exp
 
 ## Provider Support
 
-All provider-specific errors are normalized into unified `RateLimitError` and `NetworkError` types, ensuring consistent retry behavior across OpenAI, Anthropic, Gemini, Cohere, Groq, and Ollama.
+Provider-specific errors are normalized into unified `RateLimitError` and `NetworkError` types, and those two are retried. Connection failures are retried for every provider. Which HTTP statuses are retried depends on how the provider's SDK reports them:
+
+| Provider | Rate limit (429) | Server errors |
+|----------|------------------|---------------|
+| OpenAI, Groq | Retried | Any HTTP 5xx retried |
+| Anthropic | Retried | Any HTTP 5xx retried except 529 (overloaded) |
+| Gemini, Cohere | Retried | HTTP 500, 502, 503, 504 retried |
+| Ollama | Not retried | Not retried |
+
+A status the table does not mark as retried is not retried.
 
 ## Best Practices
 

@@ -82,6 +82,6 @@ pathways.
 | `prompt` | inbound | Context scope strategies use transformation utilities |
 | `workflow` | inbound | The executor stamps the record limit and what a run processed; the file walk and the version correlator mark that count unknown for a file they lose |
 | `storage` | inbound | The SQLite backend encodes and decodes stored rows with `deep_json` |
-| `llm` | inbound | The batch context map, batch prompt traces and each LLM request's context (online context string, batch `user_content`) are encoded with `deep_json` |
+| `llm` | inbound | The batch context map, batch prompt traces and each LLM request's context (online context string, batch `user_content`) are encoded with `deep_json`; the HITL provider decodes, fingerprints and serves its review context with it |
 | `prompt` | inbound | The observed-context text, the Ollama context string and Jinja's `tojson` filter encode with `deep_json`; a render that runs out of stack names the deepest field with `nesting_depth` |
 | `processing` | inbound | Prompt traces and input snapshots are encoded with `deep_json` |

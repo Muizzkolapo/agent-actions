@@ -57,9 +57,8 @@ a prompt can render it with `{{ source.field | tojson }}` at any depth.
 A prompt that prints such a field with a bare `{{ source.field }}` cannot: Jinja
 prints a list or object with Python's `str()`, which stops at the interpreter's
 recursion limit (1000 by default). That record fails, with a reason naming the field,
-how deep it is and the limit, and other records go on. Under `run_mode: batch`, if
-it is the first record batch pre-flight renders, the action stops with that reason
-instead. Use `| tojson`, or flatten the field in a tool action first.
+how deep it is and the limit, and other records go on, under `run_mode: batch` as
+under online. Use `| tojson`, or flatten the field in a tool action first.
 
 ## CSV/Tabular Input
 

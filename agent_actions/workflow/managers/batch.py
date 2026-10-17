@@ -8,6 +8,7 @@ from rich.console import Console
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ProcessingError
+from agent_actions.llm.batch.core.batch_constants import RecoveryType
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     BatchErrorEvent,
@@ -228,7 +229,9 @@ class BatchLifecycleManager:
                 if not (deferred_ids - terminal_ids):
                     return
 
-            orphan_ids = deferred_ids - terminal_ids
+            orphan_ids = self._report_records_awaiting_recovery(
+                agent_name, deferred_ids - terminal_ids
+            )
             if orphan_ids:
                 sample = sorted(orphan_ids)[:10]
                 logger.warning(
@@ -244,6 +247,64 @@ class BatchLifecycleManager:
                 agent_name,
                 exc_info=True,
             )
+
+    def _report_records_awaiting_recovery(self, agent_name: str, record_ids: set[str]) -> set[str]:
+        """Report the records a pending recovery batch holds; return the rest.
+
+        A record a retry or repair batch was sent for waits on it, and is reported
+        with the failure recorded for its last attempt rather than as an orphan.
+        """
+        from agent_actions.llm.batch.infrastructure.recovery_state import (
+            AwaitingRecovery,
+            records_awaiting_recovery,
+        )
+
+        try:
+            awaiting = records_awaiting_recovery(self.storage_backend, agent_name)
+        except Exception:
+            logger.debug("Could not read the recovery batches of %s", agent_name, exc_info=True)
+            return record_ids
+
+        groups: dict[AwaitingRecovery, list[str]] = {}
+        for record_id in record_ids & awaiting.keys():
+            groups.setdefault(awaiting[record_id], []).append(record_id)
+
+        for where, ids in sorted(
+            groups.items(), key=lambda item: (str(item[0].recovery_type), item[0].failure or "")
+        ):
+            attempt, max_attempts, failure = where.attempt, where.max_attempts, where.failure
+            sample = sorted(ids)[:10]
+            if where.recovery_type == RecoveryType.REPAIR:
+                logger.info(
+                    "[%s] %d record(s) wait on repair round %d of %d: %s",
+                    agent_name,
+                    len(ids),
+                    attempt,
+                    max_attempts,
+                    sample,
+                )
+            elif failure:
+                logger.warning(
+                    "[%s] %d record(s) wait on retry attempt %d of %d after their last "
+                    "attempt failed: %s: %s",
+                    agent_name,
+                    len(ids),
+                    attempt,
+                    max_attempts,
+                    failure[:500],
+                    sample,
+                )
+            else:
+                logger.warning(
+                    "[%s] %d record(s) wait on retry attempt %d of %d: the provider "
+                    "returned no result for them: %s",
+                    agent_name,
+                    len(ids),
+                    attempt,
+                    max_attempts,
+                    sample,
+                )
+        return record_ids - awaiting.keys()
 
     def check_batch_submission(
         self,

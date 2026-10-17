@@ -125,7 +125,9 @@ wrap_vendor_error()
      │     ├── network_error_types  → NetworkError   + fire LLMErrorEvent
      │     └── base_api_error_type  → VendorAPIError + fire LLMErrorEvent
      │
-     ├── Status-code match (Gemini, Cohere, Ollama)
+     ├── Status-code match (Gemini, Cohere; Ollama maps httpx.HTTPStatusError, but its
+     │   SDK's chat() raises ResponseError for every HTTP status, which falls to
+     │   base_api_error_type → VendorAPIError, so Ollama retries no status)
      │     ├── 429                  → RateLimitError + fire RateLimitEvent
      │     ├── 500/502/503/504      → NetworkError   + fire LLMErrorEvent
      │     └── other codes          → VendorAPIError + fire LLMErrorEvent
@@ -211,7 +213,7 @@ Raised when Jinja2 template rendering fails for a specific record because a refe
 - `template_line` — line number in the template where the error occurred
 - `field_context_metadata` — stored vs loaded fields per namespace
 - `storage_hints` — when a field exists in storage but was not loaded (missing schema declaration)
-- `null_namespace_hints` — when a namespace is null due to guard-filter at a fan-in point
+- `null_namespace_hints` — when the template read a dependency namespace the record has no data for: what the record shows about why (a guard skip by that action, a null without one, no output of it on the record, or none of the observed fields in its output) and the remediation
 
 Both errors result in a FAILED disposition for the affected record and the pipeline
 continues — except a `TemplateVariableError` wrapping a Jinja `TemplateSyntaxError`,

@@ -1000,6 +1000,12 @@ State persistence:
   On restart: validates record count + data fingerprint (SHA-256)
   Stale state (different data) is discarded
 
+Record depth:
+  The client decodes its context, and the server fingerprints, redacts and
+  serves it, with deep_json and explicit-stack walks, so a record nested past
+  the JSON codec's recursion limit is reviewed like any other. The page's JSON
+  view falls back to compact JSON built on a stack when JSON.stringify throws.
+
 Timeout:
   No response within timeout → hitl_status: "timeout"
   Partial reviews are persisted → next run resumes where left off

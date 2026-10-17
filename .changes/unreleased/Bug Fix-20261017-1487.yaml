@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A HITL action over a record nested about 1000 levels deep or more now opens its review
+  and stores the reviewer's decisions, online and in batch. The HITL provider decoded its
+  context, fingerprinted it for saved reviews, redacted secret keys and served it to the
+  review page with the recursive JSON codec and recursive walks, so the action failed with
+  a bare `RecursionError` before anyone saw it; each now handles any depth, and an
+  ordinary record is served and fingerprinted as before, so saved partial reviews still
+  resume. The review page shows a value too deep for the browser's `JSON.stringify` as
+  compact JSON instead of breaking the page (1487).
+time: 2026-10-17T18:00:00Z
