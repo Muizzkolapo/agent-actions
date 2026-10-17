@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import (
+    ConfigurationError,
     every_record_failed,
     is_action_fatal,
     raised_by_exhaustion_policy,
@@ -546,6 +547,42 @@ def warn_no_files_found(params: FileProcessParams) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _refuse_inputs_sharing_a_stored_name(
+    items: list[Path],
+    input_path: Path,
+    processed_paths: set,
+    file_type_filter: set[str] | None,
+) -> None:
+    """Raise when two files the walk would take are stored under one name.
+
+    Both modes store a staged file under ``batch_output_name``, which drops its
+    suffix, so ``page.csv`` and ``page.json`` would overwrite each other. A file
+    the walk cannot classify is left to the walk, which records it as a loss.
+    """
+    from agent_actions.llm.batch.infrastructure.context import batch_output_name
+
+    owners: dict[str, list[str]] = {}
+    for item in items:
+        try:
+            if should_skip_item(item, input_path, processed_paths, file_type_filter):
+                continue
+        except OSError:
+            continue
+        relative = item.relative_to(input_path).as_posix()
+        owners.setdefault(batch_output_name(relative), []).append(relative)
+    shared = {stored: names for stored, names in owners.items() if len(names) > 1}
+    if not shared:
+        return
+    clashes = "; ".join(
+        f"{', '.join(sorted(names))} -> {stored}" for stored, names in sorted(shared.items())
+    )
+    raise ConfigurationError(
+        f"Staged files in {input_path} would be stored under one name and overwrite "
+        f"each other: {clashes}. Rename or remove one of each.",
+        context={"input_directory": str(input_path), "shared_names": shared},
+    )
+
+
 def process_directory_files(
     runner: ActionRunner,
     input_path: Path,
@@ -569,6 +606,9 @@ def process_directory_files(
     )
     # Same reason the walk above is sorted: `errors` keeps only the first
     # _MAX_TRACKED_ERRORS, so filesystem order would decide which losses are named.
+    _refuse_inputs_sharing_a_stored_name(
+        items, input_path, processed_paths, params.file_type_filter
+    )
     unreadable.sort(key=lambda pair: pair[0])
     for directory, error in unreadable:
         where = _walk_label(directory, input_path)
