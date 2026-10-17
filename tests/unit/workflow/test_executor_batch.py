@@ -27,6 +27,7 @@ def mock_deps():
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
     deps.output_manager = MagicMock(spec=ActionOutputManager)
     deps.action_runner.workflow_name = "test_workflow"

@@ -27,6 +27,7 @@ def mock_deps():
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.skip_evaluator = MagicMock(spec=SkipEvaluator)
     deps.output_manager = MagicMock(spec=ActionOutputManager)
     deps.action_runner.workflow_name = "test_workflow"
@@ -327,6 +328,7 @@ class TestHandleRunSuccess:
             config_hash=ANY,
             records_processed=None,
             truncated=None,
+            staged_input=None,
         )
 
     def test_normal_completion_with_tokens(self, executor, mock_deps):
@@ -632,6 +634,7 @@ class TestHandleAgentSkip:
             # A WHERE-skip never slices, so it has no count to report.
             records_processed=None,
             truncated=None,
+            staged_input=None,
         )
         mock_fire.assert_called_once()
 

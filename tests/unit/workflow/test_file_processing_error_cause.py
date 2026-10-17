@@ -215,6 +215,7 @@ class TestTheCauseReachesTheStoredDisposition:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock()
         deps.action_runner = MagicMock()
+        deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.storage_backend = backend
         executor = ActionExecutor(deps)
         executor._handle_run_failure(

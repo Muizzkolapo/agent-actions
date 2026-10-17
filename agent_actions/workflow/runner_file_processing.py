@@ -213,6 +213,36 @@ def _walk_files(root: Path, unreadable: list[tuple[Path, OSError]]) -> list[Path
     return walk_files(root, _note)
 
 
+def staged_input_fingerprint(
+    directories: list[Path], file_type_filter: set[str] | None
+) -> dict[str, list[int]]:
+    """Size and mtime of every file a first stage would read, keyed by path.
+
+    Selected by the same rules the walk applies, so a file the walk skips cannot
+    read as new input.
+    """
+
+    def _note(exc: OSError) -> None:
+        logger.debug("Could not list a directory while fingerprinting staged input: %s", exc)
+
+    fingerprint: dict[str, list[int]] = {}
+    for directory in directories:
+        if not directory.is_dir():
+            continue
+        for item in walk_files(directory, _note):
+            key = f"{directory.name}/{item.relative_to(directory).as_posix()}"
+            try:
+                if should_skip_item(item, directory, set(), file_type_filter):
+                    continue
+                info = item.stat()
+            except OSError:
+                # Unreadable now: it differs from any readable state, so it still counts.
+                fingerprint[key] = [-1, -1]
+                continue
+            fingerprint[key] = [info.st_size, info.st_mtime_ns]
+    return dict(sorted(fingerprint.items()))
+
+
 def _log_processing_errors(
     messages: list[str],
     processed: int,

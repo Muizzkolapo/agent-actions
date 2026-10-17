@@ -35,6 +35,7 @@ def deps():
     d.state_manager = MagicMock(spec=ActionStateManager)
     d.batch_manager = MagicMock(spec=BatchLifecycleManager)
     d.action_runner = MagicMock()
+    d.action_runner.staged_input_fingerprint.return_value = None
     d.skip_evaluator = MagicMock(spec=SkipEvaluator)
     d.output_manager = MagicMock(spec=ActionOutputManager)
     d.action_runner.execution_order = [ACTION, "agent_b"]

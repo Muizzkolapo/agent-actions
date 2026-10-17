@@ -44,6 +44,7 @@ def _executor(state_manager, *, jobs: dict[str, BatchJobEntry] | None = None) ->
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = state_manager
     deps.action_runner = MagicMock()
+    deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.action_configs = {ACTION: CONFIG}
     backend = MagicMock()
     backend.has_disposition.side_effect = lambda *a, **k: False
