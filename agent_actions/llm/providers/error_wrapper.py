@@ -10,11 +10,26 @@ how to classify vendor-specific exception types into our unified error hierarchy
 import logging
 from dataclasses import dataclass
 
+import httpx
+
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMErrorEvent, RateLimitEvent
 
 logger = logging.getLogger(__name__)
+
+# A request that never got an answer: the connection was refused, dropped, reset or
+# timed out. Every mapping wraps them as NetworkError. The clients whose SDKs let them
+# through (gemini, cohere: raw httpx) or re-raise them as builtins (ollama:
+# ConnectionError for httpx.ConnectError) catch them; openai, anthropic and groq
+# already turn them into their own APIConnectionError.
+TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
+    ConnectionError,
+    TimeoutError,
+    httpx.NetworkError,
+    httpx.TimeoutException,
+    httpx.RemoteProtocolError,
+)
 
 
 def _extract_retry_after(e: Exception) -> float | None:
@@ -56,7 +71,8 @@ class VendorErrorMapping:
         network_error_types: Exception types indicating connection/timeout/server errors.
         base_api_error_type: Catch-all vendor API error base type.
         status_code_error_types: Exception types that carry a `.status_code` or `.code` attribute.
-        extra_network_types: Additional Python-builtin or httpx types treated as network errors.
+        extra_network_types: Network error types beyond ``TRANSPORT_ERRORS``, which every
+            mapping treats as network errors.
         supports_retry_after: Whether retry-after header extraction should be attempted.
     """
 
@@ -167,8 +183,8 @@ def wrap_vendor_error(
         )
         return VendorAPIError(f"{vendor} API error: {e}", context=context, cause=e)
 
-    # --- Extra network types (Python builtins, httpx) ---
-    if mapping.extra_network_types and isinstance(e, mapping.extra_network_types):
+    # --- Transport failures and extra network types (Python builtins, httpx) ---
+    if isinstance(e, TRANSPORT_ERRORS + mapping.extra_network_types):
         fire_event(
             LLMErrorEvent(
                 provider=vendor,

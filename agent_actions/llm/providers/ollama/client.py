@@ -22,7 +22,11 @@ from ollama import Client, ResponseError
 from agent_actions.config.defaults import OllamaCloudDefaults
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.error_wrapper import (
+    TRANSPORT_ERRORS,
+    VendorErrorMapping,
+    wrap_vendor_error,
+)
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
@@ -44,7 +48,6 @@ logger = logging.getLogger(__name__)
 
 _ERROR_MAPPING_LOCAL = VendorErrorMapping(
     vendor_name="ollama_local",
-    extra_network_types=(httpx.ConnectError, httpx.TimeoutException),
     status_code_error_types=(httpx.HTTPStatusError,),
     base_api_error_type=ResponseError,
     supports_retry_after=False,
@@ -52,10 +55,16 @@ _ERROR_MAPPING_LOCAL = VendorErrorMapping(
 
 _ERROR_MAPPING_CLOUD = VendorErrorMapping(
     vendor_name="ollama_cloud",
-    extra_network_types=(httpx.ConnectError, httpx.TimeoutException),
     status_code_error_types=(httpx.HTTPStatusError,),
     base_api_error_type=ResponseError,
     supports_retry_after=False,
+)
+
+
+_OLLAMA_ERRORS: tuple[type[Exception], ...] = (
+    httpx.HTTPStatusError,
+    ResponseError,
+    *TRANSPORT_ERRORS,
 )
 
 
@@ -160,12 +169,7 @@ def _call_ollama_json(
             chat_kwargs["options"] = options
         client = _build_ollama_client(agent_config, api_key, cloud=cloud)
         response = client.chat(**chat_kwargs)
-    except (
-        httpx.ConnectError,
-        httpx.TimeoutException,
-        httpx.HTTPStatusError,
-        ResponseError,
-    ) as e:
+    except _OLLAMA_ERRORS as e:
         raise wrap_vendor_error(
             e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
         ) from e
@@ -225,12 +229,7 @@ def _call_ollama_non_json(
             chat_kwargs["options"] = non_json_options
         client = _build_ollama_client(agent_config, api_key, cloud=cloud)
         response = client.chat(**chat_kwargs)
-    except (
-        httpx.ConnectError,
-        httpx.TimeoutException,
-        httpx.HTTPStatusError,
-        ResponseError,
-    ) as e:
+    except _OLLAMA_ERRORS as e:
         raise wrap_vendor_error(
             e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
         ) from e
