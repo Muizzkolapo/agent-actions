@@ -206,7 +206,10 @@ When a declared dependency has no data on the record, the `DependencyNamespaceBu
 ```
 NullNamespace(reason="skipped")             --> null on the record; its _state_history shows
                                                 a guard on that action skipping it
-NullNamespace(reason="no_output")           --> null on the record; no guard skip by it recorded
+NullNamespace(reason="no_output")           --> null on the record; its _state_history (below the
+                                                cap) records no guard skip by that action
+NullNamespace(reason="null")                --> null on the record; no history, or one at its cap
+                                                that may have dropped the skip (no cause claimed)
 NullNamespace(reason="absent")              --> the record has no key for that action at all
 NullNamespace(reason="no_declared_fields")  --> the action's output holds none of the observed
                                                 fields (carries observed and present fields)

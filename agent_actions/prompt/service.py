@@ -24,6 +24,7 @@ from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
 from agent_actions.prompt.context.null_namespace import (
     REASON_NO_OUTPUT,
+    REASON_NULL,
     REASON_SKIPPED,
     NullNamespace,
     diagnose,
@@ -55,6 +56,7 @@ def _null_by_record(value: Any) -> bool:
     return not isinstance(value, NullNamespace) or value.reason in (
         REASON_SKIPPED,
         REASON_NO_OUTPUT,
+        REASON_NULL,
     )
 
 

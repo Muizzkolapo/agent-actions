@@ -17,6 +17,7 @@ from agent_actions.logging.events.io_events import ContextNamespaceLoadedEvent
 from agent_actions.prompt.context.null_namespace import (
     ABSENT_NAMESPACE,
     NO_OUTPUT_NAMESPACE,
+    NULL_NAMESPACE,
     SKIPPED_NAMESPACE,
     NullNamespace,
     no_declared_fields_namespace,
@@ -27,6 +28,7 @@ from agent_actions.prompt.context.scope_namespace import (
     _extract_content_data,
     _filter_and_store_fields,
 )
+from agent_actions.record.envelope import STATE_HISTORY_CAP
 from agent_actions.record.state import RecordState
 
 logger = logging.getLogger(__name__)
@@ -94,14 +96,17 @@ def _null_namespace_for(
     if dep_name not in namespaced_content:
         return ABSENT_NAMESPACE
     history = current_item.get("_state_history")
-    if isinstance(history, list) and any(
+    if not isinstance(history, list):
+        return NULL_NAMESPACE
+    if any(
         isinstance(entry, dict)
         and entry.get("action") == dep_name
         and entry.get("to") == RecordState.GUARD_SKIPPED.value
         for entry in history
     ):
         return SKIPPED_NAMESPACE
-    return NO_OUTPUT_NAMESPACE
+    # A history at its cap may have dropped the skip; it cannot vouch for its absence.
+    return NO_OUTPUT_NAMESPACE if len(history) < STATE_HISTORY_CAP else NULL_NAMESPACE
 
 
 class DependencyNamespaceBuilder:

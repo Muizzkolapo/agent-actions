@@ -54,6 +54,8 @@ class NullNamespace:
 REASON_SKIPPED = "skipped"
 # The namespace is null, and the record's state history shows no guard skip by it.
 REASON_NO_OUTPUT = "no_output"
+# The namespace is null, and the record's state history cannot say why (none, or capped).
+REASON_NULL = "null"
 # The record carries no key for the namespace at all.
 REASON_ABSENT = "absent"
 # The namespace holds data, but none of the fields the action observes from it.
@@ -64,6 +66,7 @@ REASON_NO_DECLARED_FIELDS = "no_declared_fields"
 
 SKIPPED_NAMESPACE = NullNamespace(reason=REASON_SKIPPED)
 NO_OUTPUT_NAMESPACE = NullNamespace(reason=REASON_NO_OUTPUT)
+NULL_NAMESPACE = NullNamespace(reason=REASON_NULL)
 ABSENT_NAMESPACE = NullNamespace(reason=REASON_ABSENT)
 
 

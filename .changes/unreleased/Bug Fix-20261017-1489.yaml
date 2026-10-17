@@ -4,7 +4,8 @@ body: >-
   fails that record, but the error now says what the record shows instead of
   "Namespace 'X' is null (likely guard-filtered or guard-skipped)" in every case: a guard
   on 'X' skipped the record (named only when the record's state history shows that
-  skip), 'X' wrote null without one, no output of 'X' reached the record, or the output
+  skip), 'X' wrote null without one (or only that it is null, when the record's history
+  cannot rule a skip out), no output of 'X' reached the record, or the output
   of 'X' holds none of the fields the action observes from it (naming the observed
   fields and the ones it has). The field is no longer also logged as a namespace that
   "nothing supplies" (1489).
