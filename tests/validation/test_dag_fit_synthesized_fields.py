@@ -147,8 +147,8 @@ class TestOutputTheReaderCannotSee:
         """)
         assert unconditional_output_keys(source) == {"alpha", "beta", "gamma"}
 
-    def test_annotated_assignment_does_not_reach_the_refusal_check(self):
-        """The refusal check stops a run; it keeps reading only what it read before."""
+    def test_annotated_assignment_reaches_the_refusal_check_too(self):
+        """Both checks read the same output; the refusal sees `out: dict = {...}` (1491)."""
         source = textwrap.dedent("""
             def build(data):
                 out: dict = {"alpha": 1}
@@ -156,12 +156,10 @@ class TestOutputTheReaderCannotSee:
                     out["beta"] = 2
                 return out
         """)
-        assert (
-            find_conditional_required_field_risks(
-                {"build": {"source": source, "required": ["alpha", "beta"]}}
-            )
-            == []
+        (finding,) = find_conditional_required_field_risks(
+            {"build": {"source": source, "required": ["alpha", "beta"]}}
         )
+        assert "requires 'beta'" in finding
 
     def test_unreadable_output_is_not_reported(self):
         configs = {"upstream": _UPSTREAM, "writer": _CONSUMER}

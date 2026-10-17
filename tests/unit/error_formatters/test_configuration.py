@@ -60,3 +60,21 @@ class TestStillClaimsOtherConfigurationErrors:
     def test_claims_message_with_yaml_substring(self, formatter):
         exc = ValueError("invalid yaml in config")
         assert formatter.can_handle(exc, exc, str(exc))
+
+
+class TestAPreflightRefusalKeepsItsOwnWords:
+    """A refusal that mentions schema validation must not become a generic YAML error (1491)."""
+
+    def test_the_refusal_message_and_hint_are_shown(self):
+        from agent_actions.errors.preflight import PreFlightValidationError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        exc = PreFlightValidationError(
+            "producer: output schema requires 'items'; runtime schema validation fails it",
+            hint="Make the field optional",
+        )
+        error = ErrorTranslator().translate(exc, {"agent": "w"})
+
+        assert "output schema requires 'items'" in error.details
+        assert error.fix == "Make the field optional"
+        assert "YAML" not in error.fix

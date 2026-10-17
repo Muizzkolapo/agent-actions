@@ -5,6 +5,8 @@ required list + a boolean for additionalProperties, return one warning per
 required field the UDF cannot statically be shown to emit unconditionally.
 """
 
+import pytest
+
 from agent_actions.validation.udf_required_field_validator import (
     find_conditional_required_field_risks,
 )
@@ -229,3 +231,86 @@ def test_two_flagged_actions_yield_two_findings():
     findings = find_conditional_required_field_risks(actions)
     flagged = {name for name in ("safe", "risky_a", "risky_b") if any(name in f for f in findings)}
     assert flagged == {"risky_a", "risky_b"}
+
+
+# 1491: the scan reads every spelling of the initial output dict the same way.
+_SET_IN_A_BRANCH = (
+    "def build(data):\n"
+    "    {initialiser}\n"
+    "    if data.get('flag'):\n"
+    "        out['answer'] = []\n"
+    "    return out\n"
+)
+
+
+@pytest.mark.parametrize(
+    "initialiser",
+    [
+        "out = {'options': []}",
+        "out: dict = {'options': []}",
+        "out: dict[str, Any] = {'options': []}",
+        "out = dict(options=[])",
+        "out: dict[str, Any] = dict(options=[])",
+    ],
+)
+def test_a_key_set_only_in_a_branch_is_flagged_in_every_spelling(initialiser):
+    source = _SET_IN_A_BRANCH.format(initialiser=initialiser)
+    findings = _risks(source, ["options", "answer"])
+    assert len(findings) == 1
+    assert "f: output schema requires 'answer'" in findings[0]
+    assert "inside the `if` at line 4" in findings[0]
+
+
+@pytest.mark.parametrize(
+    "initialiser", ["out = dict(data, options=[])", "out = dict(**data, options=[])"]
+)
+def test_a_dict_call_with_a_spread_or_a_positional_is_not_read(initialiser):
+    source = _SET_IN_A_BRANCH.format(initialiser=initialiser)
+    assert _risks(source, ["options", "answer"]) == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "out |= {'answer': []}",
+        "out.update(answer=[])",
+        "out.setdefault('answer', [])",
+    ],
+)
+def test_a_key_set_on_every_path_by_a_later_line_is_not_flagged(line):
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        f"    {line}\n"
+        "    if data.get('flag'):\n"
+        "        out['answer'] = [1]\n"
+        "    return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
+
+
+def test_the_finding_names_the_function_file_line_and_branch():
+    findings = find_conditional_required_field_risks(
+        {
+            "producer": {
+                "source": _SET_IN_A_BRANCH.format(initialiser="out: dict = {'options': []}"),
+                "required": ["options", "answer"],
+                "file": "/proj/tools/w/build.py",
+                "first_line": 20,
+            }
+        }
+    )
+    assert len(findings) == 1
+    assert "'build' sets it only inside the `if` at line 23 of build.py" in findings[0]
+
+
+def test_a_key_never_set_by_name_is_named_as_such():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    for k in data:\n"
+        "        out[k] = data[k]\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "never sets 'answer' by name" in finding
