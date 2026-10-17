@@ -10,7 +10,7 @@ import math
 
 import pytest
 
-from agent_actions.errors import RecordContextError
+from agent_actions.errors import RecordContextError, TemplateVariableError
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 from agent_actions.llm.realtime.services.context import ContextService
 from agent_actions.prompt.context.scope_application import format_llm_context
@@ -18,7 +18,7 @@ from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.prompt.service import PromptPreparationService
 from agent_actions.utils import deep_json
-from agent_actions.utils.json_safety import ensure_json_safe
+from agent_actions.utils.json_safety import _convert_without_recursion, ensure_json_safe
 
 DEPTH = 20_000
 LEAF = "leaf é"
@@ -83,9 +83,9 @@ class TestEnsureJsonSafe:
             "1": "with this",
         }
         expected = _recursive_reference(value)
-        got = ensure_json_safe(value)
-        assert got == expected
-        assert json.dumps(got) == json.dumps(expected)
+        for got in (ensure_json_safe(value), _convert_without_recursion(value)):
+            assert got == expected
+            assert json.dumps(got) == json.dumps(expected)
 
     def test_a_deep_value_converts(self):
         assert deep_json.dumps(ensure_json_safe({"d": (_deep(),)}), ensure_ascii=False) == (
@@ -179,3 +179,11 @@ class TestThePromptTemplate:
             "{{ source.v }}", {"source": {"v": [[1], {"a": "é"}]}}, agent_name="summarize"
         )
         assert rendered == str([[1], {"a": "é"}])
+
+    def test_a_recursion_no_field_explains_fails_as_it_did(self):
+        with pytest.raises(TemplateVariableError):
+            PromptPreparationService._render_prompt_template(
+                "{% macro f() %}{{ f() }}{% endmacro %}{{ f() }}",
+                {"source": {"page": [[1]]}},
+                agent_name="summarize",
+            )

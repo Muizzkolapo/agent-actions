@@ -15,6 +15,7 @@ from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.utils import deep_json
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
@@ -112,7 +113,7 @@ class BaseBatchClient(ABC):
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=json.dumps(row["content"]),
+                user_content=deep_json.dumps(row["content"]),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),

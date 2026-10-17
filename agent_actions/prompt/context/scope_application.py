@@ -1,6 +1,5 @@
 """Context scope application and LLM context formatting."""
 
-import json
 import logging
 from collections import Counter
 from typing import Any
@@ -21,6 +20,7 @@ from agent_actions.prompt.context.scope_parsing import (
     parse_field_reference,
 )
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
+from agent_actions.utils import deep_json
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content, require_content_envelope
 from agent_actions.utils.dict import pop_nested_value
@@ -423,7 +423,7 @@ def format_llm_context(llm_context: dict) -> str:
 
     for ns_name, ns_data in llm_context.items():
         for field, value in ns_data.items():
-            value_str = json.dumps(value, indent=2, ensure_ascii=False)
+            value_str = deep_json.dumps(value, indent=2, ensure_ascii=False)
             lines.append(f"{ns_name}.{field}: {value_str}")
 
     return "\n".join(lines)

@@ -303,7 +303,7 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |
   2. Serialise context to string
   |     --> dict -> str(ensure_json_safe(data))  (most providers)
-  |     --> dict -> json.dumps(data)             (ollama)
+  |     --> dict -> deep_json.dumps(data)        (ollama; any depth)
   |
   3. Assemble body (based on PromptStyle)
   |     TAGGED      --> <|begin_of_user_instruction|>: {prompt} :<|end|>
