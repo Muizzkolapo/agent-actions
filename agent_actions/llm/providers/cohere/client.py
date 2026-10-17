@@ -18,7 +18,11 @@ from cohere.core import api_error as cohere_errors
 
 from agent_actions.errors import ConfigurationError, NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.error_wrapper import (
+    TRANSPORT_ERRORS,
+    VendorErrorMapping,
+    wrap_vendor_error,
+)
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
@@ -39,7 +43,6 @@ logger = logging.getLogger(__name__)
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="cohere",
     status_code_error_types=(cohere_errors.ApiError,),
-    extra_network_types=(ConnectionError, TimeoutError),
     supports_retry_after=False,
 )
 
@@ -112,6 +115,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise
         except cohere_errors.ApiError as e:
             raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+        except TRANSPORT_ERRORS as e:
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(
@@ -180,6 +185,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+        except TRANSPORT_ERRORS as e:
             raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(

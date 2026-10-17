@@ -7,7 +7,7 @@ redoes the work on an explicit stack, producing exactly what the C codec would h
 
 import json
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from json.decoder import JSONDecodeError
 from json.encoder import encode_basestring, encode_basestring_ascii
 from json.scanner import NUMBER_RE
@@ -45,6 +45,29 @@ def dumps(
         return _dumps_without_recursion(
             obj, ensure_ascii=ensure_ascii, sort_keys=sort_keys, default=default, indent=indent
         )
+
+
+def nesting_depth(obj: Any) -> int:
+    """How many dicts, lists and tuples deep *obj* goes; a scalar is 0."""
+    deepest = 0
+    seen: set[int] = set()
+    stack: list[tuple[Any, int]] = [(obj, 0)]
+    while stack:
+        value, depth = stack.pop()
+        if isinstance(value, (Mapping, list, tuple)):
+            if id(value) in seen:
+                continue
+            seen.add(id(value))
+        if isinstance(value, Mapping):
+            children: Iterable[Any] = value.values()
+        elif isinstance(value, (list, tuple)):
+            children = value
+        else:
+            deepest = max(deepest, depth)
+            continue
+        deepest = max(deepest, depth + 1)
+        stack.extend((child, depth + 1) for child in children)
+    return deepest
 
 
 def _dumps_without_recursion(

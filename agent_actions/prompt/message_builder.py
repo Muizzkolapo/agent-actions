@@ -23,6 +23,7 @@ from agent_actions.errors import PromptTooLargeError
 from agent_actions.input.preprocessing.transformation.string_transformer import (
     StringProcessor,
 )
+from agent_actions.utils import deep_json
 from agent_actions.utils.json_safety import ensure_json_safe
 
 logger = logging.getLogger(__name__)
@@ -425,7 +426,7 @@ class MessageBuilder:
         if provider in {"ollama_local", "ollama_cloud"}:
             if isinstance(context_data, str):
                 return context_data
-            return json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
+            return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
 
         if isinstance(context_data, dict):
             return str(ensure_json_safe(context_data))

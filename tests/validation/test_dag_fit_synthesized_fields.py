@@ -132,3 +132,67 @@ class TestFileUDFResultEnvelope:
 
     def test_unparsable_source_declines(self):
         assert unconditional_output_keys("def broken(:") is None
+
+
+class TestOutputTheReaderCannotSee:
+    """A tool whose output keys cannot be read makes no dag-fit claim (1436)."""
+
+    def test_annotated_assignment_is_read_like_a_plain_one(self):
+        source = textwrap.dedent("""
+            def build(data):
+                out: dict[str, Any] = {"alpha": 1}
+                out.update({"beta": 2})
+                out["gamma"] = 3
+                return out
+        """)
+        assert unconditional_output_keys(source) == {"alpha", "beta", "gamma"}
+
+    def test_annotated_assignment_does_not_reach_the_refusal_check(self):
+        """The refusal check stops a run; it keeps reading only what it read before."""
+        source = textwrap.dedent("""
+            def build(data):
+                out: dict = {"alpha": 1}
+                if data:
+                    out["beta"] = 2
+                return out
+        """)
+        assert (
+            find_conditional_required_field_risks(
+                {"build": {"source": source, "required": ["alpha", "beta"]}}
+            )
+            == []
+        )
+
+    def test_unreadable_output_is_not_reported(self):
+        configs = {"upstream": _UPSTREAM, "writer": _CONSUMER}
+        gaps = find_dag_schema_compatibility_gaps(configs, synthesized={"writer": None})
+        assert gaps == {}, gaps
+
+    def test_fields_inside_an_emitted_key_are_not_reported(self):
+        """The tool computes the whole value of a key it emits; its insides are the tool's."""
+        consumer = {
+            "kind": "tool",
+            "dependencies": ["upstream"],
+            "json_output_schema": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                            "required": ["id"],
+                        },
+                    },
+                    "missing": {
+                        "type": "object",
+                        "properties": {"inner": {"type": "string"}},
+                        "required": ["inner"],
+                    },
+                },
+                "required": ["items", "missing"],
+            },
+        }
+        configs = {"upstream": _UPSTREAM, "writer": consumer}
+        gaps = find_dag_schema_compatibility_gaps(configs, synthesized={"writer": {"items"}})
+        assert gaps == {"writer": ["inner", "missing"]}, gaps

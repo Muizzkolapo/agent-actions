@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A version merge (`version_consumption: { pattern: merge }`) now receives its other
+  dependencies. A dependency that is not one of the versions it merges, such as a sibling
+  branch of the same upstream, was never read: a tool merging versions got the version
+  namespaces alone and reported success over half its input, and an LLM merge reading the
+  sibling failed with a message blaming a guard. Its records are now paired with the
+  merged versions as a fan-in pairs its branches, online, in batch and under `agac retry`.
+  As in any fan-in, a record such a dependency failed is now cascade-skipped rather than
+  merged without it, and `agac retry` answers it once the dependency does (1433).
+time: 2026-10-17T16:00:00Z

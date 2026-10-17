@@ -91,14 +91,38 @@ def _callee_name(func: ast.expr) -> str | None:
     return None
 
 
+def _initial_dict(stmt: ast.stmt, target: str, read_annotated: bool) -> ast.Dict | None:
+    """The dict literal ``stmt`` binds to ``target`` (``target = {...}``), if any."""
+    if (
+        isinstance(stmt, ast.Assign)
+        and len(stmt.targets) == 1
+        and isinstance(stmt.targets[0], ast.Name)
+        and stmt.targets[0].id == target
+        and isinstance(stmt.value, ast.Dict)
+    ):
+        return stmt.value
+    if (
+        read_annotated
+        and isinstance(stmt, ast.AnnAssign)
+        and isinstance(stmt.target, ast.Name)
+        and stmt.target.id == target
+        and isinstance(stmt.value, ast.Dict)
+    ):
+        return stmt.value
+    return None
+
+
 def _unconditional_output_keys(
     func: ast.FunctionDef | ast.AsyncFunctionDef,
+    read_annotated: bool = False,
 ) -> set[str] | None:
     """The constant string keys the UDF puts on its returned mapping without any guard.
 
     Returns None when the returned shape is unrecognisable (list/scalar return,
     a helper-call initialiser, a ``**spread`` in the returned literal, etc.).
-    None means "decline to decide" — the caller emits no warning."""
+    None means "decline to decide" — the caller emits no warning.
+    ``read_annotated`` also reads ``target: T = {...}`` as the initialiser; the
+    refusal check leaves it off so its reach stays what it was."""
     ret = _last_return(func)
     if ret is None or ret.value is None:
         return None
@@ -115,17 +139,11 @@ def _unconditional_output_keys(
     keys: set[str] = set()
     initial_found = False
     for stmt in func.body:
-        # target = {...}
-        if (
-            isinstance(stmt, ast.Assign)
-            and len(stmt.targets) == 1
-            and isinstance(stmt.targets[0], ast.Name)
-            and stmt.targets[0].id == target
-            and isinstance(stmt.value, ast.Dict)
-        ):
-            if _has_spread(stmt.value):
+        initial = _initial_dict(stmt, target, read_annotated)
+        if initial is not None:
+            if _has_spread(initial):
                 return None
-            keys |= _const_str_keys(stmt.value)
+            keys |= _const_str_keys(initial)
             initial_found = True
             continue
         # target["k"] = ...
@@ -183,7 +201,7 @@ def unconditional_output_keys(source: str) -> set[str] | None:
                 envelope = _file_udf_result_data(ret.value)
                 if envelope is not None:
                     return envelope
-            return _unconditional_output_keys(node)
+            return _unconditional_output_keys(node, read_annotated=True)
     return None
 
 

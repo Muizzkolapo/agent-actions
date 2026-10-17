@@ -124,7 +124,6 @@ Set shared context values for all events.
 LoggerFactory.set_context(
     workflow_name="my_workflow",
     correlation_id="abc123",
-    agent_name="extract_data",
 )
 ```
 
@@ -133,7 +132,7 @@ LoggerFactory.set_context(
 
 **Returns:** None
 
-**Note:** Context is automatically attached to all events emitted after this call.
+**Note:** Context is automatically attached to all events emitted after this call, whatever action fires them. Put a per-action or per-batch value in `EventManager.context()` or in the event's own fields instead.
 
 #### LoggerFactory.flush()
 
@@ -281,6 +280,8 @@ manager.set_context(
 - `**kwargs`: Context key-value pairs
 
 **Returns:** None
+
+The values are process-wide: every later event in the process carries them in `meta`, whatever action fires it. A per-action or per-batch value belongs in `context()` below, or in the event's own `data` (a batch id is in the batch events' `data.batch_id`).
 
 ---
 

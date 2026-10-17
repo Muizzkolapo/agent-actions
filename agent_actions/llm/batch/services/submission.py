@@ -36,7 +36,7 @@ from agent_actions.llm.batch.services.collect import (
     write_batch_file,
 )
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.logging.core.manager import fire_event, get_manager
+from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchSubmittedEvent
 from agent_actions.logging.events.batch_events import (
     BatchStatusCheckFailedEvent,
@@ -621,8 +621,6 @@ class BatchSubmissionService:
             provider = self._client_resolver.get_for_config(agent_config)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
             taken = True
-
-            get_manager().set_context(batch_id=batch_id)
 
             fire_event(
                 BatchSubmittedEvent(

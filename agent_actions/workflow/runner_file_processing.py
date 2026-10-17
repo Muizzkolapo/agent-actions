@@ -936,13 +936,18 @@ def process_from_storage_backend(
     lost = 0
 
     upstream_to_read = params.upstream_data_dirs
-    if params.correlated_input is not None:
-        # A version merge's input is handed over, not read: its own target holds its
-        # answers, which a run carries records from.
+    merged_versions = params.correlated_input
+    if merged_versions is not None:
+        # A version merge's versions are handed over, not read: its own target holds
+        # its answers, which a run carries records from. Its other dependencies are
+        # read and paired with them below as a fan-in's branches are, in the files
+        # the versions hold.
         data_by_path = {
-            path: [(params.action_name, rows)] for path, rows in params.correlated_input.items()
+            path: [(params.action_name, rows)] for path, rows in merged_versions.items()
         }
-        upstream_to_read = []
+        upstream_to_read = [
+            d for d in params.upstream_data_dirs if Path(d).name != params.action_name
+        ]
 
     for input_directory in upstream_to_read:
         input_path = Path(input_directory)
@@ -971,6 +976,8 @@ def process_from_storage_backend(
             continue
 
         for relative_path in target_files:
+            if merged_versions is not None and relative_path not in merged_versions:
+                continue
             try:
                 data = runner.storage_backend.read_target(action_name, relative_path)
                 if relative_path not in data_by_path:

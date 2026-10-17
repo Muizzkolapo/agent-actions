@@ -57,7 +57,7 @@ actions:
 | Error Type | Examples | Retryable |
 |------------|----------|-----------|
 | Rate Limits | HTTP 429, quota exceeded | Yes |
-| Network Issues | Connection timeout, DNS failure | Yes |
+| Network Issues | Connection refused, reset or dropped mid-response, timeout, DNS failure | Yes |
 | Server Errors | HTTP 502, 503, 504 | Yes |
 | Invalid Request | Bad API key, malformed input | No |
 | Schema Violation | Invalid JSON output | No (uses `expect:` repair) |

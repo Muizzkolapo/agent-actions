@@ -19,7 +19,11 @@ from google.genai import types
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.error_wrapper import (
+    TRANSPORT_ERRORS,
+    VendorErrorMapping,
+    wrap_vendor_error,
+)
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
@@ -100,6 +104,8 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise
         except genai_errors.APIError as e:
             raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+        except TRANSPORT_ERRORS as e:
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(
@@ -158,6 +164,8 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except genai_errors.APIError as e:
+            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+        except TRANSPORT_ERRORS as e:
             raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         except Exception as e:
             fire_event(

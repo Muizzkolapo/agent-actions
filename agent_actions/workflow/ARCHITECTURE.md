@@ -285,7 +285,11 @@ could not list, a file it could not stat, an upstream listing or stored file it 
 read: it cannot say which inputs are gone), or under a repair. A version merge's walk is
 the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
 per file a version source lists, a file every version holds empty among them as an empty
-one, so the merge writes that file empty as any reader would. Its input is never stored:
+one, so the merge writes that file empty as any reader would. The merge's other
+dependencies, those that are not the versions it merges (`_resolve_dependencies_besides_versions`),
+are read from the store in those same files and paired with the merged versions by
+`merge_fan_in`, as any fan-in pairs its branches, so a namespace it observes from a
+sibling branch reaches it. Its input is never stored:
 its own target holds its answers, which a re-run carries records from. The correlator
 also deletes, before the walk, each stored file of the merge that no version source
 lists, under a file limit and a repair too: it lists every file its version sources hold,

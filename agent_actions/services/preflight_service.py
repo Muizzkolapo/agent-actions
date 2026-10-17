@@ -250,10 +250,8 @@ class PreflightService:
             required = schema.get("required") or []
             if not required:
                 continue
-            try:
-                source = inspect.getsource(get_udf_metadata(impl)["function"])
-            except (FunctionNotFoundError, OSError, TypeError) as exc:
-                logger.debug("Skipping required-field check for '%s': %s", name, exc)
+            source = self._tool_udf_source(name, impl)
+            if source is None:
                 continue
             inputs[name] = {
                 "source": source,
@@ -261,6 +259,15 @@ class PreflightService:
                 "additional_properties": bool(schema.get("additionalProperties", False)),
             }
         return inputs
+
+    @staticmethod
+    def _tool_udf_source(action: str, impl: str) -> str | None:
+        """The registered UDF's source, or None when it is unregistered or unreadable."""
+        try:
+            return inspect.getsource(get_udf_metadata(impl)["function"])
+        except (FunctionNotFoundError, OSError, TypeError) as exc:
+            logger.debug("Cannot read the UDF source of '%s': %s", action, exc)
+            return None
 
     def _check_tool_conditional_required_field_risks(self) -> None:
         """Refuse preflight when a kind:tool UDF only conditionally emits a required schema field."""
@@ -290,13 +297,20 @@ class PreflightService:
             remedy=DAG_FIT_REMEDY,
         )
 
-    def _collect_synthesized_output_fields(self) -> dict[str, set[str]]:
-        """Output keys each kind:tool action's UDF provably emits on every path."""
-        synthesized: dict[str, set[str]] = {}
-        for name, info in self._collect_tool_required_field_inputs().items():
-            emitted = unconditional_output_keys(info.get("source", ""))
-            if emitted:
-                synthesized[name] = emitted
+    def _collect_synthesized_output_fields(self) -> dict[str, set[str] | None]:
+        """Output keys each kind:tool action's UDF provably emits on every path.
+
+        None for a tool whose output keys cannot be read — an unregistered or
+        unreadable UDF, or a shape the reader does not follow — so dag-fit
+        makes no claim about it.
+        """
+        synthesized: dict[str, set[str] | None] = {}
+        for name, config in self.action_configs.items():
+            if config.get("kind") != "tool":
+                continue
+            impl = config.get("model_name") or config.get("impl")
+            source = self._tool_udf_source(name, impl) if impl else None
+            synthesized[name] = unconditional_output_keys(source) if source else None
         return synthesized
 
     def _collect_action_output_fields(self) -> dict[str, set[str]]:

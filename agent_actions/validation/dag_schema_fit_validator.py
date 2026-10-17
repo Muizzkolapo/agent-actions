@@ -1,9 +1,11 @@
 """Preflight check: a tool consumer's required output must be guaranteed by an
 upstream producer's schema or declared as synthesized via `defaults:`. Symmetric
-two-level descent on both sides (root, `field.`, `field[].`); no UDF source read."""
+two-level descent on both sides (root, `field.`, `field[].`). The caller reads
+the UDF source and passes what each tool provably emits as `synthesized`."""
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping
 from typing import Any
 
 _NESTED_DEPTH = 2
@@ -30,12 +32,23 @@ def _walk_required(node: Any, out: set[str], depth: int) -> None:
         _walk_required(node.get("items") or {}, out, depth + 1)
 
 
-def _required_fields_two_level(schema: dict[str, Any]) -> set[str]:
+def _required_fields_two_level(
+    schema: dict[str, Any], skip_under: Collection[str] = ()
+) -> set[str]:
     """Set of field names required at any position within the depth window.
     Used for BOTH producer-guaranteed and consumer-required sides so the
-    check is symmetric."""
+    check is symmetric. Fields nested under a root property named in
+    ``skip_under`` are left out; the root property itself is still counted."""
     out: set[str] = set()
-    _walk_required(schema, out, depth=0)
+    if not skip_under or schema.get("type") != "object":
+        _walk_required(schema, out, depth=0)
+        return out
+    for field in schema.get("required") or []:
+        if isinstance(field, str):
+            out.add(field)
+    for name, prop_schema in (schema.get("properties") or {}).items():
+        if name not in skip_under:
+            _walk_required(prop_schema, out, depth=1)
     return out
 
 
@@ -91,32 +104,37 @@ DAG_FIT_REMEDY = (
 
 def find_dag_schema_compatibility_gaps(
     action_configs: dict[str, dict[str, Any]],
-    synthesized: dict[str, set[str]] | None = None,
+    synthesized: Mapping[str, set[str] | None] | None = None,
 ) -> dict[str, list[str]]:
     """Per tool consumer, the required output fields nothing guarantees, as
     ``{consumer_action: [sorted missing fields]}``.
 
-    ``synthesized`` maps an action to output keys its UDF provably emits — a
-    value the tool computes cannot be guaranteed upstream, so reporting it
-    would be a gap that does not exist.
+    ``synthesized`` maps an action to the root output keys its UDF provably
+    emits — a value the tool computes cannot be guaranteed upstream, so
+    reporting it, or a field inside it, would be a gap that does not exist.
+    ``None`` for an action means its output keys could not be read: nothing
+    is known about what it writes, so it is not checked.
     """
     synthesized = synthesized or {}
     gaps: dict[str, list[str]] = {}
     for consumer_name, consumer in action_configs.items():
         if consumer.get("kind") != "tool":
             continue
+        if consumer_name in synthesized and synthesized[consumer_name] is None:
+            continue
+        emitted = synthesized.get(consumer_name) or set()
 
         output_schema = consumer.get("json_output_schema")
         if not isinstance(output_schema, dict):
             continue
 
-        required_output = _required_fields_two_level(output_schema)
+        required_output = _required_fields_two_level(output_schema, skip_under=emitted)
         if not required_output:
             continue
 
         defaults_raw = consumer.get("defaults") or {}
         defaults = set(defaults_raw.keys()) if isinstance(defaults_raw, dict) else set()
-        implicit_inputs = required_output - defaults - synthesized.get(consumer_name, set())
+        implicit_inputs = required_output - defaults - emitted
         if not implicit_inputs:
             continue
 

@@ -68,16 +68,14 @@ the same guard passes the notes that quote faithfully and filters the rest.
 If you change the grounding rule, this is where you will see it: the run summary
 moving off `16 completed, 2 skipped` means a guard stopped firing.
 
-## Two things worth knowing
+## Worth knowing
 
-**`flatten_marks` reports a dag-fit warning, and it is telling the truth.**
-`canonicalize_marks` emits `canonical_marks` as an array; `flatten_marks` reaches
-inside it and synthesises `mark_text`, `mark_kind` and `species` on new records.
-No upstream action guarantees those names, because at the DAG level they do not
-exist until the tool creates them. The fields are declared `required: true`
-because the tool does set them on every record it emits, which is what the
-prompt-contract check reads. The two checks cannot both be satisfied here: the
-guarantee is real, but it lives inside a tool rather than in the DAG.
+**`flatten_marks` synthesises its required fields.** `canonicalize_marks` emits
+`canonical_marks` as an array; `flatten_marks` reaches inside it and sets
+`mark_text`, `mark_kind` and `species` on every record it emits, so they are
+declared `required: true`. No upstream action guarantees those names, and
+pre-flight does not ask for one: the tool builds its records in a loop, and the
+dag-fit check makes no claim about a tool whose output keys it cannot read.
 
 **Array fields declare their item shape.** `extracted_marks.marks` and
 `canonical_marks.canonical_marks` both carry an `items:` block. Without it a

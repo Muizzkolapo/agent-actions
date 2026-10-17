@@ -18,6 +18,7 @@ from agent_actions.input.loaders.data_source import (
     is_api_data_source,
     resolve_start_node_data_source,
 )
+from agent_actions.prompt.context.scope_inference import expand_version_base_names
 from agent_actions.utils.file_handler import FileHandler
 from agent_actions.workflow.runner_file_processing import (
     process_files as _process_files,
@@ -199,6 +200,34 @@ class ActionRunner:
 
         return resolved_dirs
 
+    def _resolve_dependencies_besides_versions(
+        self, agent_folder: Path, action_config: dict, agent_name: str
+    ) -> list[Path]:
+        """Directories of a version merge's dependencies that are not the versions it merges.
+
+        The merge pairs their records with the merged versions as a fan-in pairs its
+        branches, so a namespace it observes from one of them reaches it.
+        """
+        consumption = action_config.get("version_consumption_config") or {}
+        source = consumption.get("source")
+        workflow_actions = list(self.execution_order or self.action_configs or [])
+        versions = (
+            {source, *expand_version_base_names([source], workflow_actions)} if source else set()
+        )
+        declared = action_config.get("dependencies") or []
+        if isinstance(declared, str):
+            declared = [declared]
+        others = [
+            dep
+            for dep in expand_version_base_names(
+                [dep for dep in declared if dep not in versions], workflow_actions
+            )
+            if dep not in versions and dep != agent_name
+        ]
+        if not others:
+            return []
+        return self._resolve_dependency_directories(agent_folder, others, agent_name)
+
     def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Path | None:
         """Resolve a single dependency directory, or None if not found."""
         # Try storage backend first if available
@@ -320,7 +349,12 @@ class ActionRunner:
         if params.correlated_input is not None:
             agent_type = params.action_config["agent_type"]
             output_directory = str(Path(agent_folder) / "target" / agent_type)
-            input_directories = [output_directory]
+            input_directories = [output_directory] + [
+                str(d)
+                for d in self._resolve_dependencies_besides_versions(
+                    Path(agent_folder), params.action_config, agent_type
+                )
+            ]
         else:
             input_directories, output_directory = self.setup_directories(
                 agent_folder, params.action_config, params.previous_action_type

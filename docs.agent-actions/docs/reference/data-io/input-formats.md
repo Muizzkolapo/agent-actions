@@ -49,11 +49,17 @@ document or a row inside one — wrapping it changes nothing. The refusal names 
 row it stopped on when there is one.
 
 A record may nest to any depth. Staging, the record's `source_guid`, the store,
-retries and a tool action that observes the field all read and write it without a
-depth limit, including past the roughly 1000 levels at which Python 3.11's JSON
-codec stops. An LLM action that observes a field nested that deep still fails the
-action, loudly, while its request is built; flatten the field in a tool action
-first and observe the result.
+retries, a tool action that observes the field and an LLM action that observes it
+all read and write it without a depth limit, including past the roughly 1000 levels
+at which Python 3.11's JSON codec stops. The request carries the field as JSON, and
+a prompt can render it with `{{ source.field | tojson }}` at any depth.
+
+A prompt that prints such a field with a bare `{{ source.field }}` cannot: Jinja
+prints a list or object with Python's `str()`, which stops at the interpreter's
+recursion limit (1000 by default). That record fails, with a reason naming the field,
+how deep it is and the limit, and other records go on. Under `run_mode: batch`, if
+it is the first record batch pre-flight renders, the action stops with that reason
+instead. Use `| tojson`, or flatten the field in a tool action first.
 
 ## CSV/Tabular Input
 

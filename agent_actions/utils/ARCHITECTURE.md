@@ -155,7 +155,7 @@ Return type is `dict | list | str`. Callers branch on the type: structured data 
 
 ### ensure_json_safe — serialization boundary
 
-Recursively converts non-JSON-safe types before handing data to SDK calls or JSONL writes:
+Converts non-JSON-safe types before handing data to SDK calls or JSONL writes. A value nested past the interpreter's recursion limit is converted again on an explicit stack, with the same result:
 
 - `float('nan')` / `float('inf')` → `None` (with warning)
 - `bytes` → UTF-8 string

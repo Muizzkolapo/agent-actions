@@ -31,7 +31,15 @@ ENV = {
 }
 
 
-def _project(tmp_path: Path, workflow: str, run_mode: str, observe_deep: bool = False) -> Path:
+def _project(
+    tmp_path: Path,
+    workflow: str,
+    run_mode: str,
+    observe_deep: bool = False,
+    prompt_line: str | None = None,
+    p1_deep: str | None = None,
+    deep_last: bool = False,
+) -> Path:
     root = tmp_path / "project"
     shutil.copytree(FIXTURE, root, ignore=shutil.ignore_patterns("logs"))
     config = root / "agent_workflow" / workflow / "agent_config" / f"{workflow}.yml"
@@ -43,14 +51,24 @@ def _project(tmp_path: Path, workflow: str, run_mode: str, observe_deep: bool = 
         assert text.count(anchor) == 1
         text = text.replace(anchor, "observe: [source.page_content, source.deep]")
     config.write_text(text)
+    if prompt_line is not None:
+        prompts = root / "prompt_store" / "p.md"
+        anchor = "{{ source.page_content }}"
+        assert prompts.read_text().count(anchor) == 1
+        prompts.write_text(prompts.read_text().replace(anchor, prompt_line))
     staging = root / "agent_workflow" / workflow / "agent_io" / "staging"
     for old in staging.glob("*.json"):
         old.unlink()
     deep = "[" * DEPTH + json.dumps(LEAF) + "]" * DEPTH
-    (staging / "pages.json").write_text(
-        '[{"page_id": "p0", "page_content": "page 0", "deep": ' + deep + "}, "
-        '{"page_id": "p1", "page_content": "page 1"}]'
-    )
+    rows = [
+        '{"page_id": "p0", "page_content": "page 0", "deep": ' + deep + "}",
+        '{"page_id": "p1", "page_content": "page 1"'
+        + (', "deep": ' + p1_deep if p1_deep is not None else "")
+        + "}",
+    ]
+    if deep_last:
+        rows.reverse()
+    (staging / "pages.json").write_text("[" + ", ".join(rows) + "]")
     return root
 
 
@@ -149,3 +167,100 @@ def test_a_tool_that_observes_the_deep_field_runs_and_a_retry_reaches_the_record
     assert retried.returncode == 0, _output(retried)
     assert "malformed JSON" not in retried.stdout + retried.stderr
     assert _stored(root, "tool_action", "flatten")[0] == first
+
+
+def _traces(root: Path, workflow: str, action: str) -> list[dict]:
+    paths = ProjectPathsFactory.create_project_paths(
+        workflow, workflow, auto_create=False, project_root=root
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=workflow)
+    backend.initialize()
+    try:
+        return backend.get_prompt_traces(action)
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_an_llm_action_that_observes_the_deep_field_sends_it_and_a_retry_runs(tmp_path, run_mode):
+    root = _project(
+        tmp_path, "batch_field_rules", run_mode, observe_deep=True, p1_deep='[["shallow"]]'
+    )
+
+    ran = _run_to_completion(root, "batch_field_rules")
+
+    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    assert "recursion" not in "".join(r.stdout + r.stderr for r in ran)
+    assert sorted(_stored(root, "batch_field_rules", "summarize")[0].values()) == [
+        "success",
+        "success",
+    ]
+    deep = "[" * DEPTH + json.dumps(LEAF) + "]" * DEPTH
+    contexts = [t["llm_context"] or "" for t in _traces(root, "batch_field_rules", "summarize")]
+    assert any(deep in c for c in contexts), "the deep field never reached the request"
+
+    retried = _agac(root, "retry", "-a", "batch_field_rules")
+    assert retried.returncode == 0, _output(retried)
+    again = _agac(root, "run", "-a", "batch_field_rules")
+    assert again.returncode == 0, _output(again)
+    assert sorted(_stored(root, "batch_field_rules", "summarize")[0].values()) == [
+        "success",
+        "success",
+    ]
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_a_prompt_that_renders_the_deep_field_with_tojson_sends_it(tmp_path, run_mode):
+    root = _project(
+        tmp_path,
+        "batch_field_rules",
+        run_mode,
+        observe_deep=True,
+        prompt_line="{{ source.deep | tojson }}",
+        p1_deep='[["shallow"]]',
+    )
+
+    ran = _run_to_completion(root, "batch_field_rules")
+
+    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    assert sorted(_stored(root, "batch_field_rules", "summarize")[0].values()) == [
+        "success",
+        "success",
+    ]
+    prompts = [t["compiled_prompt"] for t in _traces(root, "batch_field_rules", "summarize")]
+    deep = "[" * DEPTH + json.dumps(LEAF) + "]" * DEPTH
+    assert any(deep in p for p in prompts)
+    assert any('[["shallow"]]' in p for p in prompts)
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_a_prompt_that_prints_the_deep_field_fails_that_record_naming_the_field_and_limit(
+    tmp_path, run_mode
+):
+    """``{{ value }}`` prints with Python's ``str()``, which cannot go that deep.
+
+    The deep record comes second: batch pre-flight renders the first record and stops
+    the action on any per-record failure there, whatever caused it.
+    """
+    root = _project(
+        tmp_path,
+        "batch_field_rules",
+        run_mode,
+        observe_deep=True,
+        prompt_line="{{ source.deep }}",
+        p1_deep='[["shallow"]]',
+        deep_last=True,
+    )
+
+    ran = _run_to_completion(root, "batch_field_rules")
+
+    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    shown = " ".join("".join(r.stdout + r.stderr for r in ran).split())
+    assert (
+        f"cannot render source.deep: it is nested {DEPTH} levels deep" in shown
+        and "Python's recursion limit (" in shown
+    ), shown[-3000:]
+    dispositions, rows = _stored(root, "batch_field_rules", "summarize")
+    assert sorted(dispositions.values()) == ["failed", "success"]
+    answered = [r["content"]["source"]["page_id"] for r in rows if r["content"]["summarize"]]
+    assert answered == ["p1"]

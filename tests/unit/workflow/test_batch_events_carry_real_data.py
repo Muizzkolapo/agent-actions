@@ -265,7 +265,6 @@ class TestTheSurvivingEventsNameTheAction:
             patch(
                 "agent_actions.llm.batch.services.submission.fire_event", side_effect=fired.append
             ),
-            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             service._submit_to_provider(
                 {"model_vendor": "ollama_cloud"},

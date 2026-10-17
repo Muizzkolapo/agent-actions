@@ -19,6 +19,7 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
 )
 from agent_actions.output.response.response_builder import ResponseBuilder
+from agent_actions.utils import deep_json
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,7 @@ class AgacClient(BaseClient):
             identifier = context_data.get("source_guid", identifier)
         elif isinstance(context_data, str):
             try:
-                parsed = json.loads(context_data)
+                parsed = deep_json.loads(context_data)
                 if isinstance(parsed, dict):
                     identifier = parsed.get("source_guid", identifier)
             except (json.JSONDecodeError, AttributeError):

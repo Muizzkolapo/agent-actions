@@ -165,6 +165,24 @@ for item in records:
     ]
 ```
 
+**Other dependencies.** A merge may list dependencies besides the versioned source, such as a sibling branch of the same upstream. Their records are paired with the merged versions the way a fan-in pairs its branches, so each namespace the merge observes from them sits beside the version namespaces, in prompts and tools alike:
+
+```yaml
+- name: tally_verdicts
+  kind: tool
+  impl: tally_verdicts
+  dependencies: [policy_judge, claim_judge]
+  version_consumption:
+    source: policy_judge
+    pattern: merge
+  context_scope:
+    observe:
+      - policy_judge.*   # policy_judge_1, policy_judge_2, ...
+      - claim_judge.*    # the sibling branch, on the same record
+```
+
+The versions decide which files the merge reads: another dependency's records are read from the files the versions hold. As in any fan-in, a record a guard `filter` removed in any of these dependencies is not merged, and a record one of them failed is cascade-skipped.
+
 ## Common Patterns
 
 ### Multi-Strategy Extraction

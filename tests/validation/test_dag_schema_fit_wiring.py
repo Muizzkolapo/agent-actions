@@ -3,13 +3,40 @@ the public `PreflightService.validate()` — no new symbol is imported.
 
 Quiet tests include a sentinel consumer that is expected to warn: if F is ever
 silenced or its message prefix is renamed, the sentinel assertion breaks first,
-so the quiet-side assertions cannot pass on a dead check."""
+so the quiet-side assertions cannot pass on a dead check.
+
+Every consumer runs a registered FILE tool whose output the check can read and
+which writes none of the required fields: a tool whose output cannot be read
+makes no dag-fit claim at all."""
 
 from __future__ import annotations
 
 import logging
 
+import pytest
+
+from agent_actions.config.types import Granularity
 from agent_actions.services.preflight_service import PreflightService
+from agent_actions.utils.udf_management.registry import (
+    UDF_REGISTRY,
+    FileUDFResult,
+    _registered_modules,
+    udf_tool,
+)
+
+_TOOL = "cc_writes_note"
+
+
+def cc_writes_note(records):
+    return FileUDFResult(outputs=[{"source_index": 0, "data": {"note": "x"}}])
+
+
+@pytest.fixture(autouse=True)
+def _registered_tool():
+    udf_tool(granularity=Granularity.FILE)(cc_writes_note)
+    yield
+    UDF_REGISTRY.pop(_TOOL, None)
+    _registered_modules.discard(__name__)
 
 
 def _make_service(action_configs: dict) -> PreflightService:
@@ -77,7 +104,7 @@ def _tool_consumer(
     schema_props = {f: {"type": "string"} for f in required}
     cfg: dict = {
         "kind": "tool",
-        "impl": f"cc_{name}",
+        "impl": _TOOL,
         "dependencies": [producer],
         "context_scope": {"observe": [f"{producer}.*"]},
         "schema": {"type": "object", "properties": schema_props},

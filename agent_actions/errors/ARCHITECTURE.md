@@ -130,8 +130,10 @@ wrap_vendor_error()
      │     ├── 500/502/503/504      → NetworkError   + fire LLMErrorEvent
      │     └── other codes          → VendorAPIError + fire LLMErrorEvent
      │
-     └── extra_network_types (Python builtins, httpx)
-           └── ConnectionError, etc → NetworkError   + fire LLMErrorEvent
+     └── TRANSPORT_ERRORS (every vendor) + extra_network_types
+           └── ConnectionError, TimeoutError, httpx.NetworkError,
+               httpx.TimeoutException, httpx.RemoteProtocolError
+                                    → NetworkError   + fire LLMErrorEvent
      │
      ▼
 RetryService.execute()

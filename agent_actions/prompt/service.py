@@ -1,6 +1,8 @@
 """Unified prompt preparation service for batch and online modes."""
 
 import logging
+import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -11,7 +13,12 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError, TemplateVariableError, mark_action_fatal
+from agent_actions.errors import (
+    ConfigurationError,
+    RecordContextError,
+    TemplateVariableError,
+    mark_action_fatal,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
@@ -32,6 +39,32 @@ from agent_actions.utils import deep_json
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
+
+
+def _too_deep_to_render(prompt_context: dict[str, Any]) -> RecordContextError | None:
+    """The error for a record whose value nests past what the template's ``{{ }}`` can print.
+
+    ``{{ value }}`` prints a dict or list with Python's ``str()``, which recurses once per
+    nesting level. A field at least half the recursion limit deep takes the blame; with
+    none, the recursion came from somewhere else (a recursive macro) and this gives None.
+    """
+    limit = sys.getrecursionlimit()
+    depths = {
+        f"{namespace}.{field}": deep_json.nesting_depth(value)
+        for namespace, fields in prompt_context.items()
+        if isinstance(fields, Mapping)
+        for field, value in fields.items()
+    }
+    if not depths or max(depths.values()) < limit // 2:
+        return None
+    field = max(depths, key=lambda name: depths[name])
+    return RecordContextError(
+        f"The prompt template cannot render {field}: it is nested {depths[field]} "
+        f"levels deep, past what `{{{{ }}}}` can print within Python's recursion limit "
+        f"({limit}). Render it with `| tojson`, which has no depth limit, or flatten the "
+        "field in a tool action first.",
+        context={"field": field, "nesting_depth": depths[field], "recursion_limit": limit},
+    )
 
 
 @dataclass
@@ -331,6 +364,11 @@ class PromptPreparationService:
             mark_action_fatal(error)
             raise error from e
         except Exception as e:
+            too_deep = (
+                _too_deep_to_render(prompt_context) if isinstance(e, RecursionError) else None
+            )
+            if too_deep is not None:
+                raise too_deep from e
             logger.exception("Error rendering prompt template: %s", e)
 
             namespace_context: dict[str, list[str]] = {}
