@@ -3,13 +3,38 @@
 A run with N unguaranteed fields used to emit N near-identical multi-line
 warnings, each repeating the full remedy. The contract here: one warning
 record per check group, fields grouped by action, remedy stated once.
+
+Each action runs a registered tool whose output the check can read and which
+writes none of the required fields.
 """
 
 import logging
 
+import pytest
+
+from agent_actions.config.types import Granularity
 from agent_actions.services.preflight_service import PreflightService
+from agent_actions.utils.udf_management.registry import (
+    UDF_REGISTRY,
+    FileUDFResult,
+    _registered_modules,
+    udf_tool,
+)
 
 _LOGGER = "agent_actions.services.preflight_service"
+_TOOL = "grouping_writes_note"
+
+
+def grouping_writes_note(records):
+    return FileUDFResult(outputs=[{"source_index": 0, "data": {"note": "x"}}])
+
+
+@pytest.fixture(autouse=True)
+def _registered_tool():
+    udf_tool(granularity=Granularity.FILE)(grouping_writes_note)
+    yield
+    UDF_REGISTRY.pop(_TOOL, None)
+    _registered_modules.discard(__name__)
 
 
 def _capture_dagfit(configs, caplog):
@@ -39,6 +64,7 @@ def _tool(required, properties=None):
     props = properties or {f: {"type": "string"} for f in required}
     return {
         "kind": "tool",
+        "impl": _TOOL,
         "dependencies": [],
         "json_output_schema": {
             "type": "object",
