@@ -135,9 +135,15 @@ action produced on this run. Known divergences, not an exhaustive list:
 - **Re-runs.** `target_data` is keyed `(action_name, relative_path)` and only
   replaced per path, so rows a previous run wrote under a different path
   survive and are counted alongside the current ones. Only `--fresh` clears
-  them. `executor.py` sidesteps this for its own count by capturing the total
-  before the action and taking a delta after (`_records_written_this_run`);
-  a command reading the store afterwards has no such vantage point.
+  them. `executor.py` does not read the stored total for its own count: a run
+  that replaces rows leaves the total where it was. It takes the change in the
+  backend's in-memory `rows_collected` tally across the action
+  (`_records_written_this_run`), which the result collector credits with the rows
+  a run produced, carried-forward rows excluded; a command reading the store
+  afterwards has no such vantage point. The credit is made when the rows are
+  collected, before a batch file narrows them to the inputs it still has, so a
+  batch whose inputs shrank between submit and collect can report more than it
+  stores.
 - **Carried-forward records.** Cascade- and guard-skipped records are kept in
   an action's output for lineage, so they are counted even though the action
   did not produce them.

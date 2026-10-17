@@ -27,15 +27,12 @@ def _build_successful_result(record_count: int):
     return result
 
 
-def _make_executor_with_backend(stats_return=None, stats_side_effect=None, has_backend=True):
+def _make_executor_with_backend(rows_collected=0, has_backend=True):
     executor = ActionExecutor.__new__(ActionExecutor)
     deps = MagicMock()
     if has_backend:
         backend = MagicMock()
-        if stats_side_effect is not None:
-            backend.get_storage_stats.side_effect = stats_side_effect
-        else:
-            backend.get_storage_stats.return_value = stats_return
+        backend.rows_collected.return_value = rows_collected
         deps.action_runner.storage_backend = backend
     else:
         del deps.action_runner.storage_backend
@@ -178,31 +175,15 @@ def test_serial_mode_missing_metrics_defaults_to_zero_explicitly():
     assert complete[0].record_count == 0
 
 
-# Migration note: the silent-fallback `_count_output_records` helper was
-# removed.  Its happy-path / missing-nodes-key behavior is now covered by
-# `_count_records_for_action` (which raises on storage failure) in
-# tests/unit/workflow/test_record_count_per_execution.py.  The synthetic
-# "None value for action returns 0" test was deleted: get_storage_stats
-# uses COALESCE(SUM(record_count), 0) and cannot produce None for an
-# existing action, so the test exercised an unreachable code path.
-
-
-def test_count_records_for_action_happy_path_returns_node_count():
-    executor = _make_executor_with_backend(stats_return={"nodes": {"agent_a": 5}})
+def test_count_records_for_action_reads_the_backend_tally():
+    executor = _make_executor_with_backend(rows_collected=5)
     assert executor._count_records_for_action("agent_a") == 5
 
 
-def test_count_records_for_action_missing_nodes_key_returns_zero():
-    # Empty stats payload means the action has no rows yet — that's a legitimate
-    # 0, not a "we don't know" — so it does NOT raise.
-    executor = _make_executor_with_backend(stats_return={})
-    assert executor._count_records_for_action("agent_a") == 0
-
-
 def test_resolve_batch_outcome_completed_populates_record_count():
-    # After-run snapshot is 12, before-run snapshot was 0, so this execution
+    # After-run tally is 12, before-run tally was 0, so this execution
     # produced 12 records.  Passing pre_run_count=0 mirrors a fresh run.
-    executor = _make_executor_with_backend(stats_return={"nodes": {"batch_action": 12}})
+    executor = _make_executor_with_backend(rows_collected=12)
     executor._compute_batch_wall_clock = MagicMock(return_value=3.0)
     executor._resolve_completion_status = MagicMock(return_value=ActionStatus.COMPLETED)
     executor._completion_metadata = MagicMock(return_value={})

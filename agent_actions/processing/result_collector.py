@@ -535,6 +535,7 @@ def collect_results_from_processing_results(
     pending_dispositions: list[DispositionRow] = []
     echoed: set[str] = set()
     guard_skipped_count = 0
+    carried_rows = 0
 
     for idx, result in enumerate(results):
         status = result.status
@@ -547,6 +548,7 @@ def collect_results_from_processing_results(
             if result.skip_reason == CARRY_FORWARD_REASON:
                 if data:
                     output.extend(data)
+                    carried_rows += len(data)
                 stats[status_key] -= 1
                 stats["carry_forward"] += 1
                 if _holds_answer(data):
@@ -873,6 +875,7 @@ def collect_results_from_processing_results(
             if result.skip_reason == CARRY_FORWARD_REASON:
                 if data:
                     output.extend(data)
+                    carried_rows += len(data)
                 stats[status_key] -= 1
                 stats["carry_forward"] += 1
                 if _holds_answer(data):
@@ -1017,6 +1020,9 @@ def collect_results_from_processing_results(
             stats["exhausted"],
             stats["unprocessed"],
         )
+
+    if storage_backend is not None:
+        storage_backend.credit_rows_collected(action_name, len(output) - carried_rows)
 
     return output, CollectionStats(
         causes=tuple(causes),

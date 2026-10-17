@@ -1403,3 +1403,65 @@ class TestCarriedSuccessStandsForTheAction:
         output, stats = collect_results_from_processing_results(results, "act")
 
         assert stats.terminal_failure("act", [{}, {}], output) is not None
+
+
+# ---------------------------------------------------------------------------
+# The rows a collection credits to the backend are the ones this run produced
+# ---------------------------------------------------------------------------
+
+
+class _TallyBackend:
+    """Only what the collector credits rows to; no dispositions are written."""
+
+    def __init__(self) -> None:
+        self.credited: dict[str, int] = {}
+
+    def credit_rows_collected(self, action_name: str, count: int) -> None:
+        self.credited[action_name] = self.credited.get(action_name, 0) + count
+
+    def set_dispositions_batch(self, rows) -> None:
+        pass
+
+
+class TestCollectionCreditsTheRowsItProduced:
+    def test_carried_rows_are_not_credited_beside_a_row_answered_now(self):
+        backend = _TallyBackend()
+        results = [
+            _carried_success("p1"),
+            ProcessingResult.success(data=[{"content": {"act": {"a": 1}}}], source_guid="p2"),
+        ]
+
+        output, _ = collect_results_from_processing_results(results, "act", storage_backend=backend)
+
+        assert len(output) == 2
+        assert backend.credited == {"act": 1}
+
+    def test_a_carried_result_of_several_rows_credits_none_of_them(self):
+        backend = _TallyBackend()
+        carried = _carried_success("p1")
+        carried.data = [*carried.data, {**carried.data[0], "target_id": "second"}]
+
+        output, _ = collect_results_from_processing_results(
+            [carried], "act", storage_backend=backend
+        )
+
+        assert len(output) == 2
+        assert backend.credited == {"act": 0}
+
+    def test_every_row_of_a_result_that_expands_is_credited(self):
+        backend = _TallyBackend()
+        rows = [{"content": {"act": {"n": n}}} for n in range(3)]
+        results = [ProcessingResult.success(data=rows, source_guid="p1")]
+
+        collect_results_from_processing_results(results, "act", storage_backend=backend)
+
+        assert backend.credited == {"act": 3}
+
+    def test_a_collection_with_no_results_credits_nothing_and_needs_no_backend(self):
+        backend = _TallyBackend()
+
+        collect_results_from_processing_results([], "act", storage_backend=backend)
+        output, _ = collect_results_from_processing_results([], "act")
+
+        assert backend.credited == {"act": 0}
+        assert output == []

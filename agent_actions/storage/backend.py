@@ -2,6 +2,7 @@
 
 import json
 import logging
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable
 from enum import Enum
@@ -103,6 +104,23 @@ class StorageBackend(ABC):
         self._dependency_graph_cache: dict[str, list[str]] | None = None
         self._format_version_written = False
         self._format_version_checked = False
+        self._rows_collected: dict[str, int] = {}
+        self._rows_collected_lock = threading.Lock()
+
+    def credit_rows_collected(self, action_name: str, count: int) -> None:
+        """Add *count* rows an action's run produced to its running total.
+
+        The stored row count cannot say what a run wrote: one that replaces rows
+        already stored leaves it where it was. Rows carried forward from an earlier
+        run are not credited. In memory only; a run reads the change across it.
+        """
+        with self._rows_collected_lock:
+            self._rows_collected[action_name] = self._rows_collected.get(action_name, 0) + count
+
+    def rows_collected(self, action_name: str) -> int:
+        """Rows credited to *action_name* by :meth:`credit_rows_collected` so far."""
+        with self._rows_collected_lock:
+            return self._rows_collected.get(action_name, 0)
 
     @classmethod
     @abstractmethod
