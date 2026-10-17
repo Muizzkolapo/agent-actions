@@ -81,7 +81,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert full analysis to dictionary for JSON serialization. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `filter_to_field` | Method | Filter analysis to a specific field. | - |
 | `reference_extractor.py` | Module | Extract field references from agent configurations. | - |
-| `ReferenceExtractor` | Class | Extracts field references from agent prompts, guards, and directives. | - |
+| `ReferenceExtractor` | Class | Extracts field references from agent prompts, guards, and directives. A prompt call of a dict method on a namespace (`ns.items()`, `ns.keys()`) references the namespace whole (`*`), not a field named after the method; `ns.get('f', ...)` with a literal key references `f`. A bare `ns.items` is still the field `items`. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_agent` | Method | Extract all field references from an agent configuration. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_referenced_agents` | Method | Get set of all agents referenced (excluding special namespaces). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_workflow` | Method | Extract references from all agents in a workflow. | - |

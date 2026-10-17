@@ -253,9 +253,11 @@ class ActionLevelOrchestrator:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         errors = []
+        raised: list[tuple[str, BaseException]] = []
         for action, result in zip(params.pending_actions, results, strict=True):
             if isinstance(result, BaseException):
                 errors.append((action, result))
+                raised.append((action, result))
             elif not result.success:
                 errors.append((action, result.error))
 
@@ -267,6 +269,21 @@ class ActionLevelOrchestrator:
                 len(errors),
                 error_details,
             )
+
+        if raised:
+            self._end_level_on(raised)
+
+    def _end_level_on(self, raised: list[tuple[str, BaseException]]) -> None:
+        """Raise what escaped an action's run, so it ends the run as in sequential mode.
+
+        An exception here never reached the handler that fails an action, so the
+        action is still ``running`` (or never left ``pending``) and nothing marks it
+        failed or skips its readers. The run's error handler sweeps it to failed.
+        An interrupt goes first: it is not an error of the action beside it.
+        """
+        self.in_flight = [action for action, _ in raised]
+        interrupts = [exc for _, exc in raised if not isinstance(exc, Exception)]
+        raise (interrupts or [exc for _, exc in raised])[0]
 
     def _fire_action_result_event(
         self, action_name: str, idx: int, total: int, result, run_mode: str = ""
@@ -336,7 +353,8 @@ class ActionLevelOrchestrator:
             True if level completed, False if batch jobs pending.
 
         Failed actions are logged but do not raise — the circuit breaker
-        in ActionExecutor handles downstream skipping.
+        in ActionExecutor handles downstream skipping. An exception that escaped
+        an action's run is raised once the level's other actions finish.
         """
         start_time = datetime.now()
 

@@ -80,7 +80,8 @@ class DispositionGate:
         row holds none carrying any input's, so rows are resolved to their input
         through ``parent_source_guid`` — read as a producer only where it names one
         of *inputs* (the action's input before narrowing), since that field is the
-        original pool ancestor once an input has itself been expanded.
+        original pool ancestor once an input has itself been expanded — or through
+        ``producer_source_guids`` where every input it lists is named.
         """
         if not self._repairing:
             return set()
@@ -118,8 +119,14 @@ class DispositionGate:
             producer = row.get("parent_source_guid")
             if guid in named or producer in resolvable:
                 continue
+            made_by = row.get("producer_source_guids")
+            # A row minted here from named records alone is theirs, whatever its parent
+            # says: below an upstream expansion that names an ancestor no input holds. A
+            # row keeping an input's identity is never placed this way, since its list
+            # leaves out the input that identity stands for.
+            if guid not in held and made_by and named.issuperset(made_by):
+                continue
             if producer in blocked or (guid not in held and producer not in held):
-                made_by = row.get("producer_source_guids")
                 if not made_by or named.intersection(made_by):
                     at_risk.add(guid)
             carried.add(guid)
@@ -128,8 +135,8 @@ class DispositionGate:
             logger.warning(
                 "Action '%s': %d stored row(s) cannot be attributed to an input of "
                 "this run, so repairing %d record(s) carries them as untouched and "
-                "duplicates any it regenerates. Either an identity minted below "
-                "another mint, or an input standing beside its own ancestor; "
+                "duplicates any it regenerates. Each lists no producer, or was made "
+                "from a named record together with records the repair did not name; "
                 "the retry reference describes both",
                 action_name,
                 len(at_risk),

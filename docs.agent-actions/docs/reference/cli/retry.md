@@ -92,28 +92,33 @@ no record of the failure at all.
 An action that turns one record into several gives the new rows fresh
 identifiers, so a retry's ids match none of them. Those rows are resolved back
 to the record they came from instead. A row is rewritten when the retry named a
-record that is an input of that action, and the row either carries that
-record's id or names it as its parent — the second only where no *other* input
-of that action names the same record as its own parent. Every other row is
-carried. So repairing a record whose row was split in two replaces both halves
-rather than adding two more beside them.
+record that is an input of that action, and the row carries that record's id,
+lists only records the retry named as the inputs that produced it
+(`producer_source_guids`), or names the record as its parent — the last only
+where no *other* input of that action names the same record as its own parent.
+Every other row is carried. So repairing a record whose row was split in two
+replaces both halves rather than adding two more beside them.
 
-One shape falls outside that, and is carried rather than rewritten (a
-file-granularity tool is not one of them: a retry rewrites a file it reaches
-whole, [below](#a-file-tool-runs-over-the-whole-file)). A row
+The producer list is what places a row whose parent says nothing useful. A row
 names the *original* staged record it descends from, not the record that
 produced it directly, so where one such action feeds another the rows of the
 second name a record that is no longer its input. An action that reads both a
 record and an expansion over that same record — `dependencies` naming both — is
 this shape too: the fan-in pairs each row of the expansion with the record, so the
-action's input is the expansion's rows.
+action's input is the expansion's rows. Retrying one of the first action's rows
+replaces the rows the second made of it, in both shapes.
 
-There, repairing one of that action's records leaves its previous rows in the
-file beside the new ones. The run reports how many rows it could not place. It
-carries them rather than guessing, because guessing wrong here deletes a row
-that nothing will write again. It reports a row it carried this way when a record
-it is repairing may have made it, or when the row names no producer; a row that
-names other records as its producers is carried the same way and not reported.
+A row the retry still cannot place is carried rather than rewritten (a
+file-granularity tool is not one of them: a retry rewrites a file it reaches
+whole, [below](#a-file-tool-runs-over-the-whole-file)): one that lists no
+producers, as a row stored by an earlier release may, or one made from a record
+the retry named together with records it did not. If the retry regenerates such
+a row, the file holds the previous one beside the new. The run reports how many
+rows it could not place. It carries them rather than guessing, because guessing
+wrong here deletes a row that nothing will write again. It reports a row it
+carried this way when a record it is repairing may have made it, or when the row
+names no producer; a row that names other records as its producers is carried
+the same way and not reported.
 
 Dispositions are cleared by the ids the retry was given, at every action it
 re-runs, and the re-run decides them again wherever it reaches the record. An id

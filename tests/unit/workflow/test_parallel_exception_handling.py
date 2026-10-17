@@ -1,10 +1,12 @@
 """Tests for parallel action executor exception handling.
 
-Verifies that when one or more parallel actions raise exceptions,
-asyncio.gather(return_exceptions=True) captures them, other actions
-complete normally, and errors are logged.
+An exception escaping an action's run is not an action failure: the action never
+reached the handler that records one. Its siblings, already running, finish; then
+the exception ends the level and the run, as it ends a sequential run (1508).
+A failure the action returned is not raised: the circuit breaker handles it.
 """
 
+import asyncio
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, patch
 
@@ -47,7 +49,7 @@ class TestParallelExceptionHandling:
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
     async def test_one_of_three_raises_others_complete(self, mock_fire_event):
-        """One action raises; all three are still attempted."""
+        """One action raises; all three are still attempted, then the error ends the level."""
         actions = ["action_a", "action_b", "action_c"]
         orchestrator = self._make_orchestrator(actions)
 
@@ -61,14 +63,17 @@ class TestParallelExceptionHandling:
         executor.execute_action_async.side_effect = side_effect
         params = self._make_params(actions, executor)
 
-        await orchestrator._execute_parallel_actions(params)
+        with pytest.raises(RuntimeError, match="action_b exploded"):
+            await orchestrator._execute_parallel_actions(params)
+
+        assert orchestrator.in_flight == ["action_b"]
 
         assert executor.execute_action_async.call_count == 3
 
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
-    async def test_all_actions_raise_all_captured(self, mock_fire_event):
-        """All actions raise — all are captured, function returns normally."""
+    async def test_all_actions_raise_all_attempted(self, mock_fire_event):
+        """All actions raise — all are attempted, and the first raised ends the level."""
         actions = ["act_1", "act_2", "act_3"]
         orchestrator = self._make_orchestrator(actions)
 
@@ -76,14 +81,17 @@ class TestParallelExceptionHandling:
         executor.execute_action_async.side_effect = RuntimeError("boom")
         params = self._make_params(actions, executor)
 
-        await orchestrator._execute_parallel_actions(params)
+        with pytest.raises(RuntimeError, match="boom"):
+            await orchestrator._execute_parallel_actions(params)
+
+        assert orchestrator.in_flight == actions
 
         assert executor.execute_action_async.call_count == 3
 
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
-    async def test_exception_and_failed_result_both_captured(self, mock_fire_event):
-        """One raises, one returns failed result — both handled without raising."""
+    async def test_exception_raised_failed_result_not(self, mock_fire_event):
+        """One raises, one returns failed result — the raised error ends the level."""
         actions = ["raises", "fails_gracefully"]
         orchestrator = self._make_orchestrator(actions)
 
@@ -97,7 +105,10 @@ class TestParallelExceptionHandling:
         executor.execute_action_async.side_effect = side_effect
         params = self._make_params(actions, executor)
 
-        await orchestrator._execute_parallel_actions(params)
+        with pytest.raises(RuntimeError, match="crash"):
+            await orchestrator._execute_parallel_actions(params)
+
+        assert orchestrator.in_flight == ["raises"]
 
         assert executor.execute_action_async.call_count == 2
 
@@ -112,7 +123,8 @@ class TestParallelExceptionHandling:
         executor.execute_action_async.side_effect = RuntimeError("kaboom")
         params = self._make_params(actions, executor)
 
-        await orchestrator._execute_parallel_actions(params)
+        with pytest.raises(RuntimeError):
+            await orchestrator._execute_parallel_actions(params)
 
         assert mock_fire_event.call_count >= 1
         event = mock_fire_event.call_args_list[0][0][0]
@@ -133,3 +145,40 @@ class TestParallelExceptionHandling:
         await orchestrator._execute_parallel_actions(params)
 
         assert executor.execute_action_async.call_count == 3
+
+    @pytest.mark.asyncio
+    @patch("agent_actions.workflow.parallel.action_executor.fire_event")
+    async def test_failed_results_alone_return_normally(self, mock_fire_event):
+        """Failures the actions returned are the circuit breaker's: nothing is raised."""
+        actions = ["a", "b"]
+        orchestrator = self._make_orchestrator(actions)
+
+        executor = AsyncMock()
+        executor.execute_action_async.return_value = FakeActionResult(
+            success=False, error=ValueError("bad input")
+        )
+        params = self._make_params(actions, executor)
+
+        await orchestrator._execute_parallel_actions(params)
+
+        assert executor.execute_action_async.call_count == 2
+
+    @pytest.mark.asyncio
+    @patch("agent_actions.workflow.parallel.action_executor.fire_event")
+    async def test_an_interrupt_is_raised_before_an_error(self, mock_fire_event):
+        """A cancelled action ends the level as an interrupt, not as an error beside it."""
+        actions = ["errors", "cancelled"]
+        orchestrator = self._make_orchestrator(actions)
+
+        executor = AsyncMock()
+
+        async def side_effect(action, **kwargs):
+            if action == "errors":
+                raise RuntimeError("crash")
+            raise asyncio.CancelledError()
+
+        executor.execute_action_async.side_effect = side_effect
+        params = self._make_params(actions, executor)
+
+        with pytest.raises(asyncio.CancelledError):
+            await orchestrator._execute_parallel_actions(params)

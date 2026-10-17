@@ -14,6 +14,10 @@ from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 from .data_flow_graph import InputRequirement
 
+# A call such as `ns.items()` or `ns.get('x', 'd')` reaches the method of the mapping
+# behind `ns`, not a field of that name (see `prompt/jinja_env.py`).
+_MAPPING_METHODS = frozenset(name for name in dir(dict) if not name.startswith("_"))
+
 
 class ReferenceExtractor:
     """Extracts field references from action prompts, guards, and directives."""
@@ -198,6 +202,14 @@ class ReferenceExtractor:
                 self._walk_ast(child, references, new_locals)
             return
 
+        if (
+            isinstance(node, nodes.Call)
+            and isinstance(node.node, nodes.Getattr)
+            and node.node.attr in _MAPPING_METHODS
+        ):
+            self._walk_method_call(node, node.node, references, local_vars)
+            return
+
         if isinstance(node, nodes.Getattr):
             ref = self._extract_getattr_chain(node)
             if ref:
@@ -213,6 +225,44 @@ class ReferenceExtractor:
 
         for child in node.iter_child_nodes():
             self._walk_ast(child, references, local_vars)
+
+    def _walk_method_call(
+        self,
+        call: nodes.Call,
+        method: nodes.Getattr,
+        references: list[tuple],
+        local_vars: set[str],
+    ) -> None:
+        """Read `x.items()` as a use of `x`, not of a field named `items`.
+
+        A namespace called directly is referenced whole (`*`): the action must exist
+        and be upstream, but no field is named, except by `x.get('field', ...)`, which
+        reads that field.
+        """
+        receiver = method.node
+        if isinstance(receiver, nodes.Name):
+            root = namespace = receiver.name
+        elif (
+            isinstance(receiver, nodes.Getattr)
+            and isinstance(receiver.node, nodes.Name)
+            and receiver.node.name == "action"
+        ):
+            root, namespace = "action", receiver.attr
+        else:
+            root = namespace = ""
+        if not namespace:
+            self._walk_ast(receiver, references, local_vars)
+        elif root not in local_vars and root not in self.JINJA_BUILTINS:
+            key = call.args[0] if method.attr == "get" and call.args else None
+            if isinstance(key, nodes.Const) and isinstance(key.value, str):
+                references.append(
+                    (namespace, key.value, f"{{{{ {namespace}.get({key.value!r}) }}}}")
+                )
+            else:
+                references.append((namespace, "*", f"{{{{ {namespace}.{method.attr}() }}}}"))
+        for arg in (*call.args, *call.kwargs, call.dyn_args, call.dyn_kwargs):
+            if arg is not None:
+                self._walk_ast(arg, references, local_vars)
 
     def _extract_getattr_chain(self, node: nodes.Getattr) -> tuple | None:
         """Extract the full attribute chain from a Getattr node."""

@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  A parallel run ends failed, as a sequential run does, when an error keeps an action from
+  starting its work, such as the store failing while the action is set running or while its
+  rows are counted before it runs. In a step of several actions the error was logged and the
+  run went on: the action was left `running` (or `pending`), the actions reading it ran against
+  output it never wrote and failed on that, and the run ended "paused … Run again to continue"
+  with exit 0. The actions already running beside it now finish, then the run stops with a
+  non-zero exit and the error; the action is recorded failed (or left
+  pending, when it was never set running) and nothing below it runs. Run again once the store
+  answers. Failures inside an action's own work are unchanged: the action fails, its readers
+  are skipped and independent branches carry on. (#1508)
+time: 2026-10-17T21:00:00Z

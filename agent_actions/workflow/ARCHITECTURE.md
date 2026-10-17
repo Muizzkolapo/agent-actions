@@ -204,9 +204,23 @@ for each level:
     ├── 1 pending → execute_single_action (no semaphore)
     │   N pending → asyncio.gather(*tasks) with Semaphore
     │               (each task runs in asyncio.to_thread)
+    │               an exception a task raised is re-raised once
+    │               every task has finished (see below)
     │
     └── check for BATCH_SUBMITTED → pause if found
 ```
+
+A failure of an action's own work comes back as a failed result: the action is
+recorded failed, the circuit breaker skips its readers, and independent branches
+carry on, in either mode. An exception that escapes `execute_action_async` never
+reached that handler — a store error from `_start_work` or the pre-run
+`_count_records_for_action` snapshot, which `_execute_action_run` keeps outside it on
+purpose. Sequential mode ends the run on it. Parallel mode matches: `gather` collects
+it with the other tasks' results, and `_end_level_on` re-raises it after the step's
+other actions have finished (an interrupt before an error), setting `in_flight` to
+the actions that raised. The coordinator's error handler then sweeps the action from
+`running` to failed and the run exits non-zero; an action whose `_start_work` failed
+before it was set running stays `pending`, as in sequential mode.
 
 Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. True I/O overlap is between different actions only; within a single action, processing is synchronous.
 

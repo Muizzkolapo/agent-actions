@@ -305,13 +305,36 @@ it on every path in the tool.
 ```
 
 Either make the field optional in the schema, or give it a value on every path,
-for example in the dict the tool starts from. The check reads a returned dict
-that starts as a literal, `{...}` or `dict(key=...)`, with or without a type
-annotation, and counts a key as set on every path when a line outside any
-`if`, loop or `try` sets it: `out["key"] = ...`, `out |= {...}`,
-`out.update(...)` or `out.setdefault("key", ...)`. A tool whose output it cannot
-read this way, such as one built by a helper function or returned in a list, is
-not refused; its records are still checked one by one at run time.
+for example in the dict the tool starts from. The check reads a dict the tool
+returns, alone or as the one item of a list (`return [out]`), that is bound to a
+literal, `{...}` or `dict(key=...)`, with or without a type annotation. It
+follows each path to that return and counts a key only when every path sets it:
+in the literal, or with `out["key"] = ...`, `out |= {...}`,
+`out.update({...})`, `out.update(key=...)` or `out.setdefault("key", ...)`.
+
+- Both branches of an `if`, every case of a `match` with a `case _:`, a `with`
+  body, a `finally`, and a `try` body together with each `except` that does not
+  re-raise must all set the key. A path that raises never returns, so an
+  `except` that always re-raises does not count against it.
+- A loop body may run no times, so a key set only inside a loop does not count,
+  except in a loop over a literal list of names, such as
+  `for field in ("a", "b"): out[field] = ...`, which runs once per name. A key a
+  loop removes and sets again in the same pass still counts.
+- `del out["key"]`, `out.pop("key")` and `out.clear()` remove a key on the paths
+  they run on, and binding `out` to a new literal keeps only that literal's
+  keys.
+
+The refusal names the line that sets the field only in a branch, or the line
+that removes it. A tool whose output it cannot read this way is not refused,
+and its records are still checked one by one at run time. That covers:
+
+- a dict a helper function builds, or that any path binds to something other
+  than a literal;
+- keys merged in from something other than a literal, as in
+  `out.update(build(data))` or `out |= extra`;
+- a key set or removed by a name the check cannot know, as in
+  `for field in FIELDS: out[field] = ...`;
+- a return inside a loop.
 
 ### Function Not Found
 

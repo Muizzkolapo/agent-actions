@@ -78,3 +78,56 @@ class TestAPreflightRefusalKeepsItsOwnWords:
         assert "output schema requires 'items'" in error.details
         assert error.fix == "Make the field optional"
         assert "YAML" not in error.fix
+
+
+class TestAnErrorThatMentionsSchemaValidationKeepsItsOwnWords:
+    """Only an error with nothing better to say gets the generic schema text (1510)."""
+
+    def test_a_configuration_error_shows_its_message(self):
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        exc = ConfigurationError(
+            "Seed 'prices': row 3 failed schema validation: 'amount' must be a number"
+        )
+        error = ErrorTranslator().translate(exc, {"agent": "w"})
+
+        assert "row 3 failed schema validation: 'amount' must be a number" in error.details
+        assert "The configuration format is invalid" not in error.details
+
+    def test_a_hint_the_error_carries_is_the_fix(self):
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        exc = ConfigurationError(
+            "Seed 'prices': row 3 failed schema validation",
+            context={"hint": "Fix row 3 of seed_data/prices.json"},
+        )
+        error = ErrorTranslator().translate(exc, {"agent": "w"})
+
+        assert error.fix == "Fix row 3 of seed_data/prices.json"
+
+    def test_a_wrapped_error_shows_its_root_message(self):
+        from agent_actions.errors import AgentActionsError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        root = ValueError("payload failed schema validation: 'id' is required")
+        exc = AgentActionsError("Error executing UDF 'load'", cause=root)
+        exc.__cause__ = root
+        error = ErrorTranslator().translate(exc, {"agent": "w"})
+
+        assert "payload failed schema validation: 'id' is required" in error.details
+
+    def test_a_schema_validation_error_still_shows_its_report(self):
+        from agent_actions.errors import SchemaValidationError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        exc = SchemaValidationError(
+            "Output schema validation failed for UDF 'produce' at root: 'items' is required",
+            missing_fields=["items"],
+        )
+        error = ErrorTranslator().translate(exc, {"agent": "w"})
+
+        assert error.title == "Schema validation failed"
+        assert "'items' is required" in error.details
+        assert "items" in error.details

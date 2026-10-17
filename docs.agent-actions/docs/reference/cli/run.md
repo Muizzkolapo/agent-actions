@@ -143,6 +143,8 @@ graph LR
 
 Notice that `analyze` and `transform` both depend on `extract`, but not on each other - so they run concurrently. The `merge` action waits for both to complete.
 
+When an action fails, the actions that read it are skipped and the rest of the workflow carries on, whichever mode runs it. An error that keeps an action from starting its work at all, such as the store not answering, ends the run instead: in parallel mode the actions already running beside it finish first, then the run stops with the error and a non-zero exit, and nothing below it runs. Run the workflow again once the cause is fixed.
+
 :::info Concurrency Limits
 The default concurrency limit is 5 actions. If your agentic workflow has many parallel actions and you're hitting rate limits, consider reducing this. If you have capacity, increase it up to 50.
 :::

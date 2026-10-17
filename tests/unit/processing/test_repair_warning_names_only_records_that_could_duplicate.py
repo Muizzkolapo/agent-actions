@@ -74,23 +74,47 @@ class TestNoWarningWhenOtherInputsMadeTheUnplacedRows:
         assert "cannot be attributed" not in text
 
 
-class TestWarningWhereANamedRecordMayHaveMadeAnUnplacedRow:
-    def test_a_row_lists_the_named_record_as_its_producer(self, caplog):
+def _carried(rows: list[dict], inputs: list[str], named: set[str], caplog) -> tuple[set, str]:
+    caplog.set_level(logging.WARNING, logger="agent_actions.processing.disposition_gate")
+    gate = DispositionGate(_Backend(rows), repairing=named)
+    carried = gate.carried_past_repair(ACTION, PATH, [{"source_guid": g} for g in inputs])
+    return carried, caplog.text
+
+
+class TestARowMintedFromNamedRecordsAloneIsTheirs:
+    """Its producer list places it whatever its parent names, so the rerun replaces it."""
+
+    def test_it_is_neither_carried_nor_reported(self, caplog):
         rows = [_row("u1", producers=["i1"]), _row("u2", producers=["i2"])]
 
-        text = _warning(rows, ["i1", "i2"], {"i1"}, caplog)
+        carried, text = _carried(rows, ["i1", "i2"], {"i1"}, caplog)
 
-        assert "1 stored row(s) cannot be attributed" in text
+        assert carried == {"u2"}
+        assert "cannot be attributed" not in text
 
     def test_even_when_the_named_records_own_row_is_a_failed_one(self, caplog):
-        """A failed row of its own does not mean it made no other: rows it made in an
-        earlier run can stand beside it, and regenerating it adds a second set."""
+        """Rows it made in an earlier run stand beside its failed row; they go too."""
         rows = [_row("i1", state="failed"), _row("m1", producers=["i1"], parent="elsewhere")]
 
-        text = _warning(rows, ["i1", "i2"], {"i1"}, caplog)
+        carried, text = _carried(rows, ["i1", "i2"], {"i1"}, caplog)
 
-        assert "1 stored row(s) cannot be attributed" in text
+        assert carried == set()
+        assert "cannot be attributed" not in text
 
+    def test_a_row_keeping_an_unnamed_inputs_identity_is_carried(self, caplog):
+        """A FILE row keeping i2's identity lists only the other input it took (#1438),
+        so its list alone would hand it to a repair of i1."""
+        carried, _ = _carried([_row("i2", producers=["i1"])], ["i1", "i2"], {"i1"}, caplog)
+
+        assert carried == {"i2"}
+
+    def test_a_row_made_by_a_record_that_is_no_input_here_is_carried(self, caplog):
+        carried, _ = _carried([_row("u1", producers=["i9"])], ["i1"], {"i9"}, caplog)
+
+        assert carried == {"u1"}
+
+
+class TestWarningWhereANamedRecordMayHaveMadeAnUnplacedRow:
     def test_among_several_producers(self, caplog):
         rows = [_row("u1", producers=["i1", "i2"])]
 
@@ -108,7 +132,7 @@ class TestWarningWhereANamedRecordMayHaveMadeAnUnplacedRow:
 
     def test_only_the_rows_a_named_record_may_have_made_are_counted(self, caplog):
         rows = [
-            _row("u1", producers=["i1"]),
+            _row("u1", producers=["i1", "i2"]),
             _row("u2", producers=["i2"]),
             _row("u3"),
             _row("u4", producers=["i3"]),
@@ -120,8 +144,9 @@ class TestWarningWhereANamedRecordMayHaveMadeAnUnplacedRow:
         assert "repairing 1 record(s)" in text
 
     def test_the_message_cites_no_issue_number(self, caplog):
-        text = _warning([_row("u1", producers=["i1"])], ["i1"], {"i1"}, caplog)
+        text = _warning([_row("u1")], ["i1"], {"i1"}, caplog)
 
+        assert "cannot be attributed" in text
         assert "issue #" not in text
 
 
