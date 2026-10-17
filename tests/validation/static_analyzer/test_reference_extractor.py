@@ -451,20 +451,31 @@ class TestADictMethodCallIsNotAFieldReference:
         "prompt",
         [
             "{% for k, v in producer.items() %}{{ k }}{% endfor %}",
-            "{{ producer.get('items', 'none') }}",
             "{{ producer.keys() | list }}",
             "{{ producer.values() | list }}",
+            "{{ action.producer.items() | list }}",
+            "{{ producer.get(source.key) }}",
         ],
     )
     def test_a_call_on_the_namespace_references_the_whole_namespace(self, prompt):
-        assert self._refs(prompt) == {("producer", "*")}
+        assert self._refs(prompt) - {("source", "key")} == {("producer", "*")}
+
+    @pytest.mark.parametrize(
+        "prompt", ["{{ producer.get('items') }}", "{{ producer.get('items', 'none') }}"]
+    )
+    def test_get_with_a_literal_key_references_that_field(self, prompt):
+        assert self._refs(prompt) == {("producer", "items")}
 
     def test_a_call_on_a_field_references_that_field(self):
         assert self._refs("{{ producer.meta.get('x') }}") == {("producer", "meta")}
 
     def test_the_call_arguments_are_still_read(self):
-        assert self._refs("{{ producer.get('x', other.fallback) }}") == {
+        assert self._refs("{{ producer.keys() | select('in', other.fallback) }}") == {
             ("producer", "*"),
+            ("other", "fallback"),
+        }
+        assert self._refs("{{ producer.get('x', other.fallback) }}") == {
+            ("producer", "x"),
             ("other", "fallback"),
         }
 

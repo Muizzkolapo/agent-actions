@@ -129,6 +129,8 @@ Use inline when prompt is specific to one action. Use prompt store when prompts 
 
 A field is read by its name even when the name is also a dictionary method (`items`, `keys`, `values`, `get`): `{{ source.items }}` is the `items` field, and a record without that field fails like any missing field. Calling the method still works: `{{ source.get('description', '') }}`, `{% for key, value in source.items() %}`.
 
+The same calls work on an upstream action, as in `{% for key, value in extract_facts.items() %}`. Pre-flight reads a call to `items()`, `keys()` or `values()` as a use of the whole action, not of a field named after the method. It checks the field named in `extract_facts.get('facts', '')` against the action's schema, the same way it checks `extract_facts.facts`, so a misspelt field is refused before the run either way.
+
 ## Jinja2 Features
 
 ### Filters

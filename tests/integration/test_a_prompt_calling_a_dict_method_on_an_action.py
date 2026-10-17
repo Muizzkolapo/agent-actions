@@ -3,8 +3,9 @@ renders, in either run mode (1506).
 
 Pre-flight read `merge_alternatives.items()` as a reference to a field named `items`
 and refused the run, so the prompt-store docs' "Dictionary Iteration with Filtering"
-example could not run. A call such as `ns.items()`, `ns.get(...)` or `ns.keys()` is not
-a field reference; a bare `ns.items` and a misspelt field still are.
+example could not run. A call such as `ns.items()` or `ns.keys()` is not a field
+reference; `ns.get('field', ...)` reads that field, and a bare `ns.items` and a misspelt
+field are still refused.
 """
 
 from __future__ import annotations
@@ -152,7 +153,9 @@ def _query(project: Path, sql: str) -> list[tuple]:
 
 
 def _sent(project: Path) -> list[str]:
-    rows = _query(project, "select compiled_prompt from prompt_trace where action_name = 'consumer'")
+    rows = _query(
+        project, "select compiled_prompt from prompt_trace where action_name = 'consumer'"
+    )
     return sorted(" ".join(prompt.split()) for (prompt,) in rows)
 
 
@@ -180,8 +183,7 @@ def test_get_keys_and_values_called_on_an_action_render(tmp_path, mode):
     _run_to_the_end(project)
 
     assert _sent(project) == [
-        "second=flaky;severity=high;"
-        "keys=issue_description_1,issue_description_2,severity;values=3",
+        "second=flaky;severity=high;keys=issue_description_1,issue_description_2,severity;values=3",
         "second=none;severity=high;keys=issue_description_1,severity;values=2",
     ]
     assert _dispositions(project) == ["success", "success"]
@@ -194,6 +196,7 @@ def test_get_keys_and_values_called_on_an_action_render(tmp_path, mode):
         ("merge_alternatives.severty", "severty"),
         ("merge_alternatives.severty()", "severty"),
         ("merge_alternatives.nested.get('x')", "nested"),
+        ("merge_alternatives.get('severty', 'low')", "severty"),
     ],
 )
 def test_a_field_the_schema_lacks_is_still_refused(tmp_path, read, field):
@@ -203,6 +206,6 @@ def test_a_field_the_schema_lacks_is_still_refused(tmp_path, read, field):
 
     output = result.stdout + result.stderr
     assert result.returncode != 0, output
-    assert (
-        f"Field '{field}' not found in action 'merge_alternatives' output schema" in output
-    ), output
+    assert f"Field '{field}' not found in action 'merge_alternatives' output schema" in output, (
+        output
+    )
