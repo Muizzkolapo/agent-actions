@@ -149,6 +149,8 @@ def test_an_upstream_output_without_the_observed_field_is_not_blamed_on_a_guard(
     assert "none of the fields 'publish' observes from it" in output
     assert "observes: summary" in output
     assert "'note_direct' has: note" in output
+    # `summary` is a field of the namespace, not a namespace nothing supplies.
+    assert "Namespace 'summary' not found in context" not in output
     if run_mode == "online":
         (reason,) = _publish_failures(root)
         assert "guard" not in reason.lower()
@@ -168,6 +170,7 @@ def test_a_guard_skip_the_record_shows_is_named(tmp_path, run_mode):
         in output
     )
     assert "likely" not in output
+    assert "Namespace 'summary' not found in context" not in output
     if run_mode == "online":
         (reason,) = _publish_failures(root)
         assert "a guard on 'note_direct' skipped it" in reason
