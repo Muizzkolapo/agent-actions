@@ -142,14 +142,20 @@ def test_the_run_ends_failed_and_nothing_below_the_fault_runs(project, execution
     assert _rows(root, READER) == []
 
 
-@pytest.mark.parametrize("recover", ["run", "retry"])
-def test_once_the_fault_clears_every_action_answers_every_record(project, recover):
+@pytest.mark.parametrize("execution", ["parallel", "sequential"])
+def test_once_the_fault_clears_a_run_answers_every_record(project, execution):
     root, stand_in = project
     (root / FAULT).write_text("count")
-    _agac(root, stand_in, "run", "-a", WORKFLOW, "--fresh", "--execution-mode", "parallel")
+    _agac(root, stand_in, "run", "-a", WORKFLOW, "--fresh", "--execution-mode", execution)
     (root / FAULT).unlink()
 
-    result = _agac(root, stand_in, recover, "-a", WORKFLOW)
+    # The faulted action failed with no failed record: retry has nothing to
+    # repair and says so, rather than reporting success.
+    refused = _agac(root, stand_in, "retry", "-a", WORKFLOW)
+    assert refused.returncode != 0, refused.stdout + refused.stderr
+    assert f"agac run -a {WORKFLOW}" in refused.stdout + refused.stderr
+
+    result = _agac(root, stand_in, "run", "-a", WORKFLOW, "--execution-mode", execution)
     output = result.stdout + result.stderr
 
     assert result.returncode == 0, output
