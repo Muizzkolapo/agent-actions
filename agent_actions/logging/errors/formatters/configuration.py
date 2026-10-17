@@ -60,7 +60,9 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         if "schema validation" in message.lower():
             from agent_actions.errors import SchemaValidationError
 
-            details = "The configuration format is invalid"
+            # The error's own words name what failed; the generic line is only for an
+            # error that has none.
+            details = message.strip() or "The configuration format is invalid"
             if isinstance(root, SchemaValidationError) and hasattr(root, "format_user_message"):
                 details = root.format_user_message()
             elif isinstance(exc, SchemaValidationError) and hasattr(exc, "format_user_message"):
@@ -69,7 +71,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 category="Configuration Error",
                 title="Schema validation failed",
                 details=details,
-                fix="Check your YAML/JSON syntax and required fields",
+                fix=self._hint_or(context, "Check your YAML/JSON syntax and required fields"),
                 context=context,
                 docs_url="https://docs.runagac.com/config/schema",
             )
