@@ -1,0 +1,15 @@
+kind: Bug Fix
+body: >-
+  A fan-in whose branches each split the same source record now fails whatever
+  number of records each branch keeps. It failed only while every branch held two
+  or more records of the split, so a branch that kept one (a guard filtering the
+  rest below the split), or a branch splitting a source beside branches that read
+  an earlier expansion of it, ran the fan-in once per record with the other
+  branches' fields empty, and the run reported success. So did a branch whose split
+  a granularity: File tool gathered back into one record, which keeps a split
+  record's identity rather than the source's. The error names the branches and the
+  source record, and advises splitting the source once upstream of every branch; it
+  no longer advises the File tool, which does not pair. Branches below one earlier split that share no
+  record of a source at all (each lacks every record the other holds) fail the same
+  way now, rather than run each record with the other branch's fields empty. (#1439)
+time: 2026-10-17T17:15:00Z

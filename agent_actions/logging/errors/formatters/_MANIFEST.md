@@ -12,7 +12,7 @@ configuration errors with consistent context for CLI output.
 | `api.py` | Module | Formats API responses and HTTP errors. | `logging`, `errors` |
 | `authentication.py` | Module | Formats authentication/credential errors. | `logging`, `security` |
 | `base.py` | Module | Base formatter helpers (message templating, context formatting). | `logging`, `errors` |
-| `configuration.py` | Module | Formats configuration/schema validation failures. | `configuration`, `logging` |
+| `configuration.py` | Module | Formats configuration/schema validation failures. A `PreFlightValidationError` keeps its own message and hint whatever words it contains. | `configuration`, `logging` |
 | `file.py` | Module | Formats file-related errors (IO, permission). | `file_io`, `logging` |
 | `function.py` | Module | Formats errors arising from UDF/tool function calls. | `utils.udf_management`, `logging` |
 | `generic.py` | Module | Generic formatter used as the default when no specific formatter is configured. | `logging` |

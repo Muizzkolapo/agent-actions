@@ -183,6 +183,8 @@ for item in records:
 
 The versions decide which files the merge reads: another dependency's records are read from the files the versions hold. As in any fan-in, a record a guard `filter` removed in any of these dependencies is not merged, and a record one of them failed is cascade-skipped.
 
+**When the merge cannot read its versions.** If the store fails while the merge reads what its versions hold, or a version's records cannot be aligned with the others, the merge fails as any action does: it is marked `failed` with the reason, the actions that read it are skipped, actions on other branches run on, and the run ends with failures. The next `agac run`, or `agac retry`, runs the merge again. A merge whose every version holds no record, because a guard filtered them all, is skipped instead.
+
 ## Common Patterns
 
 ### Multi-Strategy Extraction

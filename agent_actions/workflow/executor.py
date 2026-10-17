@@ -2073,16 +2073,13 @@ class ActionExecutor:
 
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
-        # except clause below: only failures from the user-supplied action
-        # runner should be funneled through _handle_run_failure.
+        # except clause below: only failures of the action's own work (reading
+        # its input, a version merge's correlation included, and running it)
+        # are funneled through _handle_run_failure.
         pre_run_count = self._count_records_for_action(params.action_name)
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-        except AllVersionsFilteredError as avf:
-            return self._handle_all_versions_filtered(params, avf)
-
-        try:
             output_folder = self.deps.action_runner.run_action(
                 params.action_config,
                 params.action_name,
@@ -2090,6 +2087,8 @@ class ActionExecutor:
                 params.action_idx,
                 correlated_input=correlated_input,
             )
+        except AllVersionsFilteredError as avf:
+            return self._handle_all_versions_filtered(params, avf)
         except NoInputFilesError as nothing:
             return self._handle_no_input(params, nothing)
         except Exception as e:
@@ -2114,10 +2113,6 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-        except AllVersionsFilteredError as avf:
-            return self._handle_all_versions_filtered(params, avf)
-
-        try:
             output_folder = await asyncio.to_thread(
                 self.deps.action_runner.run_action,
                 params.action_config,
@@ -2126,6 +2121,8 @@ class ActionExecutor:
                 params.action_idx,
                 correlated_input=correlated_input,
             )
+        except AllVersionsFilteredError as avf:
+            return self._handle_all_versions_filtered(params, avf)
         except NoInputFilesError as nothing:
             return self._handle_no_input(params, nothing)
         except Exception as e:

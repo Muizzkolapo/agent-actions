@@ -40,6 +40,22 @@ The `@udf_tool` decorator registers a Python function as a tool action.
 Input and output schemas are defined in the workflow YAML `schema:` field, not in the decorator.
 :::
 
+### Required Output Fields
+
+A tool's output is checked against its schema exactly as the function returns it. A required field must be in what the tool returns: a field of the same name upstream reaches the tool only as input, and a `context_scope.passthrough` field is added beside the output after the check, so neither one counts. A record missing a required field is rejected.
+
+Pre-flight (`agac inspect`, `run` and `retry`) reads the tool's source and warns about each required field it can see the tool does not return:
+
+```text
+Pre-flight: dag-fit — 1 required output field(s) a tool's code does not return, across 1 action(s)
+  ├─ collect: id — not returned by tool 'collect'
+  └─ Fix: return the field from the tool on every path, or mark it optional in the tool's output schema ...
+```
+
+Return the field, or make it optional in the schema (`optional: true` on a `fields:` entry). If the tool does return it in a way the check cannot read, list it under `defaults:` on the action. A tool whose output the check cannot read at all, such as one built by a helper or in a loop, is not checked.
+
+A record tool whose returned dict starts as a literal is held to more than a warning: a required field it never sets, or sets only inside a branch, refuses the workflow. See [Required Output Field Set Only in a Branch](#required-output-field-set-only-in-a-branch).
+
 ### Minimal Decorator
 
 ```python
@@ -264,6 +280,38 @@ DuplicateFunctionError: Function 'process_data' already registered
 ```
 
 Rename one of the functions.
+
+### Required Output Field Set Only in a Branch
+
+Each record a tool returns is checked against the action's output schema, so a
+required field the tool sets only inside an `if` fails every record that does
+not take that branch. Pre-flight reads the tool before anything runs and refuses
+the workflow when it can see this:
+
+```python
+@udf_tool()
+def produce(data: dict, **kwargs) -> dict:
+    out: dict = {"label": data["source"]["page_content"]}
+    if data["source"]["page_content"] == "has items":
+        out["items"] = "apple, pear"  # 'items' is required by the schema
+    return out
+```
+
+```
+producer: output schema requires 'items' but the tool 'produce' sets it only at
+line 5 of produce.py, inside an `if`, so a record that does not take that path
+fails output validation at run time. Make 'items' optional in the schema, or set
+it on every path in the tool.
+```
+
+Either make the field optional in the schema, or give it a value on every path,
+for example in the dict the tool starts from. The check reads a returned dict
+that starts as a literal, `{...}` or `dict(key=...)`, with or without a type
+annotation, and counts a key as set on every path when a line outside any
+`if`, loop or `try` sets it: `out["key"] = ...`, `out |= {...}`,
+`out.update(...)` or `out.setdefault("key", ...)`. A tool whose output it cannot
+read this way, such as one built by a helper function or returned in a list, is
+not refused; its records are still checked one by one at run time.
 
 ### Function Not Found
 

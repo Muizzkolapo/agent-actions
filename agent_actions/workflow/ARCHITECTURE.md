@@ -293,7 +293,11 @@ sibling branch reaches it. Its input is never stored:
 its own target holds its answers, which a re-run carries records from. The correlator
 also deletes, before the walk, each stored file of the merge that no version source
 lists, under a file limit and a repair too: it lists every file its version sources hold,
-so it can tell an input that is gone from one it never opened.
+so it can tell an input that is gone from one it never opened. Correlation runs inside
+the executor's handler for the action's run, so a store fault while it reads the versions,
+or a version record it cannot align, fails the merge as any failure of its run does: its
+readers are skipped and the other branches run on. Only `AllVersionsFilteredError` is
+answered differently, by skipping the merge.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
 because its config, model or limit changed, or because its output is gone, is about to

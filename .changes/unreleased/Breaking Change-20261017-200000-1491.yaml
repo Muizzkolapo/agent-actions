@@ -1,0 +1,8 @@
+kind: Breaking Change
+body: >-
+  A workflow whose RECORD tool sets a required output field only inside a branch is now
+  refused at pre-flight when the tool's output dict starts as `out: T = {...}` or
+  `out = dict(key=...)`, as it already was for `out = {...}`. Such a workflow used to run and
+  fail each record that did not take the branch. The refusal names the field and the line; make
+  the field optional in the schema, or set it on every path in the tool. (#1491)
+time: 2026-10-17T20:00:00Z
