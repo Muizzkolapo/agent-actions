@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  An inline prompt can load a store prompt of several lines with `{{ load_prompt("...") }}`.
+  The loaded text was pasted into the workflow's YAML before it was parsed, so its second
+  line ended a block scalar and the load failed as invalid YAML, and a quoted or folded
+  prompt folded its line breaks into spaces. The text a prompt's tag outputs from
+  `load_prompt` now goes into the parsed prompt as written, as the same prompt in the
+  prompt store would have it, whatever YAML style the prompt is written in. A loaded prompt
+  passed through a filter first, such as `| indent(6)`, is pasted as before (1477).
+time: 2026-10-17T15:30:00Z

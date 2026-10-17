@@ -174,6 +174,16 @@ You are evaluator {{ i }} of {{ version.length }}.
 {end_prompt}
 ```
 
+An action's inline `prompt:` in the workflow file can load a store prompt the same way, however many lines it has. The loaded text goes in as written, exactly as in a store prompt, whatever YAML style the `prompt:` uses (a `|` or `>` block, or a quoted value): its line breaks are kept and its lines are not read as YAML, so it needs no indentation of its own. A filter applied to it first, such as `{{ load_prompt("common.Standard_Header") | indent(6) }}`, makes it ordinary text that the YAML reads where the tag stands, as it always has.
+
+```yaml
+actions:
+  - name: analyze
+    prompt: |
+      {{ load_prompt("common.Standard_Header") }}
+      Summarize {{ source.title }}.
+```
+
 ## Advanced Patterns (Production Cookbook)
 
 These patterns come from production agentic workflows and show what's possible with Jinja2 in prompts.

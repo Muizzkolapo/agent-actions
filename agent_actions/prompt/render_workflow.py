@@ -15,7 +15,7 @@ from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
-from agent_actions.prompt.deferred_values import LoadRender
+from agent_actions.prompt.deferred_values import LoadedPrompt, LoadRender
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.utils.schema_utils import is_compiled_schema
@@ -572,6 +572,10 @@ def _expand_workflow_versions(
     data["actions"] = expanded_actions
 
 
+def _load_prompt(prompt_name: str, project_root: Path | None = None) -> LoadedPrompt:
+    return LoadedPrompt(PromptLoader.load_prompt_expanded(prompt_name, project_root=project_root))
+
+
 def _load_yaml_content(yaml_path, project_root: Path | None = None):
     """
     Load YAML content from file, resolving prompt references if needed.
@@ -649,9 +653,7 @@ def render_pipeline_with_templates(
 
     load = LoadRender(Path(templates_folder), yaml_content)
     env = load.env
-    env.globals["load_prompt"] = functools.partial(
-        PromptLoader.load_prompt_expanded, project_root=project_root
-    )
+    env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
     env.filters["dedent"] = textwrap.dedent
     _load_template_globals(load, str(templates_folder))
 
@@ -697,6 +699,7 @@ def render_pipeline_with_templates(
         ) from e
 
     # Step 3: Resolve prompt references
+    data = load.fill_loaded(data)
     data = load.fill_prompts(data)
     _resolve_prompt_fields(data, project_root=project_root)
 
