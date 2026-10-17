@@ -103,3 +103,51 @@ def test_a_split_paired_below_an_earlier_split_vouches_for_its_branch():
     )
 
     assert _values(merged) == [("-", "R3"), ("L1", "R1"), ("L1", "R2")]
+
+
+def _split(branch: str, guid: str, value: str, producer: str) -> dict:
+    return {**_record(branch, guid, value, "P"), "producer_source_guids": [producer]}
+
+
+SPLIT_AND_ITS_SPLIT = {
+    "left": [_record("left", "P", "L")],
+    "right": [_split("right", f"s{n}", f"R{n}", "P") for n in (1, 2)],
+    "again": [_split("again", f"s{n}{e}", f"A{n}{e}", f"s{n}") for n in (1, 2) for e in "xy"],
+}
+
+
+def _triples(merged: list[dict]) -> list[tuple]:
+    return sorted(
+        tuple(r["content"].get(b, {}).get("v", "-") for b in ("left", "right", "again"))
+        for r in merged
+    )
+
+
+@pytest.mark.parametrize("order", [("left", "right", "again"), ("again", "right", "left")])
+def test_a_split_of_a_split_pairs_with_its_split_and_their_source(order):
+    merged = merge_fan_in([(branch, SPLIT_AND_ITS_SPLIT[branch]) for branch in order])
+
+    assert _triples(merged) == sorted(("L", f"R{n}", f"A{n}{e}") for n in (1, 2) for e in "xy")
+    assert sorted(r["source_guid"] for r in merged) == ["s1x", "s1y", "s2x", "s2y"]
+
+
+def test_a_split_none_of_whose_own_split_is_pooled_still_pairs_with_its_source():
+    merged = merge_fan_in(
+        [
+            ("again", SPLIT_AND_ITS_SPLIT["again"][:2]),
+            ("right", SPLIT_AND_ITS_SPLIT["right"]),
+            ("left", SPLIT_AND_ITS_SPLIT["left"]),
+        ]
+    )
+
+    assert _triples(merged) == [("L", "R1", "A1x"), ("L", "R1", "A1y"), ("L", "R2", "-")]
+
+
+def test_a_split_of_a_split_beside_a_second_split_of_the_source_raises():
+    with pytest.raises(WorkflowError, match="other.*right"):
+        merge_fan_in(
+            [
+                *SPLIT_AND_ITS_SPLIT.items(),
+                ("other", [_split("other", f"o{n}", f"O{n}", "P") for n in (1, 2)]),
+            ]
+        )
