@@ -127,6 +127,7 @@ class UnifiedProcessor:
         # record it turns away, so a record still in the input when the guard runs
         # is a record a repair has already decided the fate of.
         repair_carry_ids: set[str] = set()
+        repair_carry_nameless: list[dict[str, Any]] = []
         repair_reaches_file = False
         if self._disposition_gate is not None and self._disposition_gate.repairing:
             from agent_actions.processing.disposition_gate import positions_named_by_repair
@@ -154,6 +155,9 @@ class UnifiedProcessor:
                         raw_records = [raw_records[i] for i in kept]
                 repair_carry_ids = self._disposition_gate.carried_past_repair(
                     context.action_name, context.target_relative_path, repair_inputs
+                )
+                repair_carry_nameless = self._disposition_gate.nameless_rows_past_repair(
+                    context.action_name, context.target_relative_path
                 )
 
         if raw_records is not None:
@@ -211,7 +215,6 @@ class UnifiedProcessor:
                 relative_path = context.target_relative_path
                 if relative_path and context.storage_backend:
                     from agent_actions.processing.disposition_gate import (
-                        CARRY_FORWARD_REASON,
                         answered_since_stored,
                         build_carry_forward,
                     )
@@ -250,28 +253,17 @@ class UnifiedProcessor:
                         )
                     )
                     for record in carry_data:
-                        if raw_records is not None:
-                            carry_results.append(
-                                ProcessingResult.unprocessed(
-                                    data=[record],
-                                    reason=CARRY_FORWARD_REASON,
-                                    source_guid=record.get("source_guid"),
-                                )
-                            )
-                        elif from_checkpoint:
+                        if from_checkpoint:
                             checkpointed_results.append(self._answered_from_checkpoint(record))
                         else:
                             carry_results.append(
-                                ProcessingResult(
-                                    status=ProcessingStatus.SUCCESS,
-                                    data=[record],
-                                    source_guid=record.get("source_guid"),
-                                    skip_reason=CARRY_FORWARD_REASON,
-                                )
+                                self._carried(record, file_mode=raw_records is not None)
                             )
                 else:
                     to_process = passing
             passing = to_process
+        for record in repair_carry_nameless:
+            carry_results.append(self._carried(record, file_mode=raw_records is not None))
         # Not a file a repair passes over, which carries nothing only for want of rows.
         context.replaces_file_whole = (
             whole_file
@@ -314,6 +306,22 @@ class UnifiedProcessor:
             enriched.extend(carry_results)
 
         return self._collect(enriched, context)
+
+    @staticmethod
+    def _carried(row: dict[str, Any], *, file_mode: bool) -> ProcessingResult:
+        """A stored row handed back as it stands, for collection to write unchanged."""
+        from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
+
+        if file_mode:
+            return ProcessingResult.unprocessed(
+                data=[row], reason=CARRY_FORWARD_REASON, source_guid=row.get("source_guid")
+            )
+        return ProcessingResult(
+            status=ProcessingStatus.SUCCESS,
+            data=[row],
+            source_guid=row.get("source_guid"),
+            skip_reason=CARRY_FORWARD_REASON,
+        )
 
     @staticmethod
     def _answered_from_checkpoint(row: dict[str, Any]) -> ProcessingResult:

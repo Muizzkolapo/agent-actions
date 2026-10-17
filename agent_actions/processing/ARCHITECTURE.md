@@ -689,6 +689,9 @@ leaves such a row out, so a store they wrote is put to the guard again too.
 
 A record with no `source_guid` is not among them: both paths refuse it before it is sent
 and record nothing for it, under its target id or any other (see the identity notes below).
+A repair cannot name such a record, so it hands the failed row back whole: online through
+`nameless_rows_past_repair`, and batch, whose repair records no inputs, wherever a merge has
+no inputs recorded and the run refused no such record itself (1299).
 
 An empty answer goes by the action's `on_empty` on both paths. `warn` stores a failed row
 and `skip` a tombstone, the same in each. A batch failed row, whatever failed it (a provider

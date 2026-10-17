@@ -40,7 +40,7 @@ class PromptFormatter:
             if PROMPT_KEY not in agent_config:
                 return "Process the following content: {content}"
             if isinstance(raw_prompt, str) and raw_prompt.startswith("$"):
-                raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
+                raw_prompt = PromptLoader.load_prompt_expanded(raw_prompt[1:])
                 if not raw_prompt:
                     raise PromptValidationError(
                         f"Prompt file/block resolved to empty content for action "

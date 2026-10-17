@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.processing.record_helpers import upstream_cause
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
 from agent_actions.utils.content import get_existing_content
 
@@ -386,7 +387,13 @@ def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, An
     for rec in group:
         state = rec.get("_state")
         if state in CASCADE_BLOCKING_VALUES:
+            # The merged record's history is the base branch's, which may not be the
+            # branch that blocked it; the tombstone below reads the cause from here.
+            cause = upstream_cause(rec)
             merged["_state"] = RecordState.CASCADE_SKIPPED.value
+            if cause.get("upstream_action"):
+                metadata = merged.get("metadata")
+                merged["metadata"] = {**(metadata if isinstance(metadata, dict) else {}), **cause}
             logger.debug(
                 "Merge fan-in: propagating cascade-blocking state '%s' "
                 "from branch to merged record (source_guid=%s)",

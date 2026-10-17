@@ -335,7 +335,7 @@ get_existing_content(record, is_first_stage=False)
 
 1. **constants.py is public API.** Imported by ~57 files. Renaming or removing any constant is a breaking change across the entire codebase. Treat every export as a stable interface.
 
-2. **`generate_content_hash` is a checkpoint key.** The UUID5 hash produced by `IDGenerator.generate_content_hash()` is used for deduplication and incremental checkpointing. Changing the hash algorithm or serialization order would invalidate all existing checkpoints.
+2. **`generate_content_hash` is a checkpoint key.** The UUID5 hash produced by `IDGenerator.generate_content_hash()` is used for deduplication and incremental checkpointing. Changing the hash algorithm or serialization order would invalidate all existing checkpoints. A record too deep for the recursive JSON encoder (about 1000 levels on Python 3.11) falls back to `_dumps_without_recursion`, which must stay byte-for-byte equal to `json.dumps(content, sort_keys=True, default=str)`; `tests/unit/utils/test_id_generation_deep_record.py` pins that.
 
 3. **`UDF_REGISTRY` is process-wide.** It assumes one workflow per process. Running concurrent workflows in the same process would share (and potentially corrupt) the registry. The `clear_registry()` function cleans both the dict and `sys.modules` entries.
 

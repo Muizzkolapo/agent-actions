@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.reasons import RETRY_EXHAUSTED
+from agent_actions.record.reasons import RETRY_EXHAUSTED, UPSTREAM_UNPROCESSED
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import is_version_merge, merge_version_content
 
 # Framework fields carried from input to output when the envelope builder
@@ -23,6 +24,37 @@ CARRY_FORWARD_FIELDS: tuple[str, ...] = (
     "_recovery",
     "metadata",
 )
+
+UPSTREAM_CAUSE_FIELDS: tuple[str, ...] = ("upstream_action", "upstream_state", "upstream_reason")
+
+
+def upstream_cause(record: dict[str, Any] | None) -> dict[str, Any]:
+    """The action, state and reason that first blocked *record*, as tombstone metadata.
+
+    A record already quarantined below the failure carries the cause on its metadata,
+    which outlives a capped ``_state_history``; otherwise the latest history entry
+    that blocked it for a reason of its own names it. Empty when *record* is not
+    blocked; only ``upstream_state`` when nothing names the action.
+    """
+    if not isinstance(record, dict) or record.get("_state") not in CASCADE_BLOCKING_VALUES:
+        return {}
+    metadata = record.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("upstream_action"):
+        return {f: metadata[f] for f in UPSTREAM_CAUSE_FIELDS if f in metadata}
+    history = record.get("_state_history")
+    for entry in reversed(history if isinstance(history, list) else []):
+        if (
+            isinstance(entry, dict)
+            and entry.get("to") in CASCADE_BLOCKING_VALUES
+            and entry.get("reason") != UPSTREAM_UNPROCESSED
+            and entry.get("action")
+        ):
+            return {
+                "upstream_action": entry["action"],
+                "upstream_state": entry["to"],
+                "upstream_reason": entry.get("reason"),
+            }
+    return {"upstream_state": record["_state"]}
 
 
 def build_tombstone(
@@ -39,7 +71,8 @@ def build_tombstone(
     marker (``action_name: None``) while preserving upstream content.
 
     Always sets ``metadata.reason`` and ``metadata.agent_type = "tombstone"``.
-    Carries ``target_id`` from *input_record*.
+    Carries ``target_id`` from *input_record*. An ``upstream_unprocessed``
+    tombstone also names its cause (:func:`upstream_cause`).
 
     For retry-exhausted records that need empty content under the
     namespace (not null), use :func:`build_exhausted_tombstone` instead.
@@ -47,6 +80,8 @@ def build_tombstone(
     item = RecordEnvelope.build_skipped(action_name, input_record)
     item["source_guid"] = source_guid
     item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
+    if reason == UPSTREAM_UNPROCESSED:
+        item["metadata"].update(upstream_cause(input_record))
     if extra_metadata:
         item["metadata"].update(extra_metadata)
     item["_tombstone"] = True

@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  The row an action stores for a record an action above it failed, exhausted or skipped
+  says what blocked it. Its `metadata` carried only `reason: upstream_unprocessed`, so
+  which action had blocked the record, and why, could not be read from it, and the docs
+  UI called every such record an "Upstream failure". The tombstone's metadata now carries
+  `upstream_action`, `upstream_state` and `upstream_reason` from the first action that
+  blocked the record, online and in a batch, at every action below it and below a fan-in
+  one of whose branches blocked it; the docs UI shows that cause (1429).
+time: 2026-10-17T13:00:00Z

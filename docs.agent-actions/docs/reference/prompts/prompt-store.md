@@ -163,6 +163,8 @@ You are evaluator {{ i }} of {{ version.length }}.
 
 ### Load Other Prompts
 
+`{{ load_prompt("file.Prompt") }}` puts another store prompt in, as written, when the workflow loads; its own tags then render for each record like the rest of the prompt. A loaded prompt may load others in turn. Write each call as a tag of its own with the prompt's name as a quoted string: the load fails on any other form, and on prompts that load each other in a cycle, naming them.
+
 ```markdown
 {prompt Main_Analysis}
 {{ load_prompt("common.Standard_Header") }}

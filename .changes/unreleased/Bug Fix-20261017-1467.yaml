@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  A workflow-file value left to render per version reads a load-time variable as the file
+  had it at that value, however deeply the variable is nested. A variable nested about 500
+  levels deep was read live instead, so a change the file made to it further down reached
+  the version's render (1467).
+time: 2026-10-17T14:07:00Z

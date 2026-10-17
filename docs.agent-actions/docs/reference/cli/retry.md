@@ -153,7 +153,8 @@ stored as a failed row with no `source_guid`, so `retry` neither lists nor
 repairs it. The row keeps the record's target id, unless the action's guard
 skipped the record in an online run. If the action's other records succeeded, it
 reads complete, and the failed row and the run log say what was refused; if
-nothing succeeded, the action fails. The remedy is upstream: give the record its
+nothing succeeded, the action fails. A retry of the action's other records
+keeps that row as it was, in either run mode. The remedy is upstream: give the record its
 `source_guid` back where it is produced. A batch run that sends nothing at all
 refuses it the same way, and since nothing in such a run succeeds, the action
 fails.

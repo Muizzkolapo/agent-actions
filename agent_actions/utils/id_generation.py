@@ -3,6 +3,7 @@
 import json
 import uuid
 from collections.abc import Iterator
+from json.encoder import encode_basestring_ascii
 from typing import Any
 
 from agent_actions.errors import DataValidationError
@@ -113,7 +114,73 @@ class IDGenerator:
         """
         if isinstance(content, dict):
             IDGenerator._require_string_keys(content)
-            content_for_hash = json.dumps(content, sort_keys=True, default=str)
+            try:
+                content_for_hash = json.dumps(content, sort_keys=True, default=str)
+            except RecursionError:
+                content_for_hash = _dumps_without_recursion(content)
         else:
             content_for_hash = str(content)
         return str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
+
+
+def _dumps_without_recursion(obj: Any) -> str:
+    """The bytes of ``json.dumps(obj, sort_keys=True, default=str)``, built on a stack.
+
+    Python 3.11's encoder recurses once per nesting level and gives up about 1000 levels
+    down; identity is a hash of these bytes, so this must match the encoder exactly.
+    """
+    parts: list[str] = []
+    open_containers: set[int] = set()
+    stack: list[tuple[Iterator[tuple[str, Any]], str, int]] = [(iter((("", obj),)), "", -1)]
+    while stack:
+        members, closer, marker = stack[-1]
+        for prefix, value in members:
+            parts.append(prefix)
+            if value is None:
+                parts.append("null")
+            elif value is True:
+                parts.append("true")
+            elif value is False:
+                parts.append("false")
+            elif isinstance(value, str):
+                parts.append(encode_basestring_ascii(value))
+            elif isinstance(value, int):
+                parts.append(int.__repr__(value))
+            elif isinstance(value, float):
+                parts.append(_float_repr(value))
+            elif isinstance(value, (list, tuple, dict)):
+                if not value:
+                    parts.append("{}" if isinstance(value, dict) else "[]")
+                    continue
+                if id(value) in open_containers:
+                    raise ValueError("Circular reference detected")
+                open_containers.add(id(value))
+                if isinstance(value, dict):
+                    parts.append("{")
+                    children: Iterator[tuple[str, Any]] = (
+                        (("" if i == 0 else ", ") + encode_basestring_ascii(k) + ": ", v)
+                        for i, (k, v) in enumerate(sorted(value.items()))
+                    )
+                    stack.append((children, "}", id(value)))
+                else:
+                    parts.append("[")
+                    children = (("" if i == 0 else ", ", v) for i, v in enumerate(value))
+                    stack.append((children, "]", id(value)))
+                break
+            else:
+                parts.append(encode_basestring_ascii(str(value)))
+        else:
+            stack.pop()
+            parts.append(closer)
+            open_containers.discard(marker)
+    return "".join(parts)
+
+
+def _float_repr(value: float) -> str:
+    if value != value:
+        return "NaN"
+    if value == float("inf"):
+        return "Infinity"
+    if value == float("-inf"):
+        return "-Infinity"
+    return float.__repr__(value)

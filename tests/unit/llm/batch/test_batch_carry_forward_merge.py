@@ -474,3 +474,45 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         )
 
         assert [r["source_guid"] for r in result] == ["n0", "p0"], "i9's content was deleted"
+
+
+class TestRowsWithNoSourceGuid:
+    """A record refused for arriving without a source_guid leaves a failed row no identity
+    matches (1299). A repair records no inputs and cannot name that record."""
+
+    REFUSED = {"source_guid": None, "target_id": "t-n1", "_state": "failed"}
+
+    def _merge(self, produced: list[dict], *, batch_inputs: tuple[str, ...] = ()) -> list[dict]:
+        stored = [
+            {"source_guid": "r1", "_state": "processed"},
+            dict(self.REFUSED),
+            {"source_guid": "r2", "_state": "processed"},
+        ]
+        backend = _mock_backend(target_files=["data.json"], prior_output={"data.json": stored})
+        return _make_service(storage_backend=backend)._merge_carry_forward(
+            "test_action", produced, "data.json", batch_inputs=batch_inputs
+        )
+
+    def test_a_repair_of_another_record_keeps_it(self):
+        result = self._merge([{"source_guid": "r1", "_state": "processed", "new": True}])
+
+        assert [row.get("source_guid") for row in result] == ["r1", "r2", None]
+        assert result[-1] == self.REFUSED
+
+    def test_a_repair_that_answers_every_other_record_keeps_it(self):
+        produced = [{"source_guid": g, "_state": "processed"} for g in ("r1", "r2")]
+
+        assert [row.get("source_guid") for row in self._merge(produced)] == ["r1", "r2", None]
+
+    def test_a_run_that_refuses_such_a_record_itself_keeps_only_its_own_row(self):
+        own = {"source_guid": None, "target_id": "t-n1", "_state": "failed", "run": 2}
+        result = self._merge([own, {"source_guid": "r1", "_state": "processed"}])
+
+        assert [row for row in result if not row.get("source_guid")] == [own]
+
+    def test_a_run_with_inputs_recorded_keeps_only_what_it_wrote(self):
+        produced = [{"source_guid": g, "_state": "processed"} for g in ("r1", "r2")]
+
+        result = self._merge(produced, batch_inputs=("r1", "r2"))
+
+        assert [row.get("source_guid") for row in result] == ["r1", "r2"]

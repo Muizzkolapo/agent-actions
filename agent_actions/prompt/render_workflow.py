@@ -161,7 +161,7 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
     Recursively resolve prompt fields starting with '$'.
 
     Searches for keys named 'prompt' whose values begin with '$'
-    and resolves them using PromptLoader.load_prompt.
+    and resolves them using PromptLoader.load_prompt_expanded.
 
     Args:
         item: Dictionary, list, or other value to process
@@ -175,7 +175,9 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                     prompt_key = parts[0][1:]
                     extra = parts[1] if len(parts) > 1 else ""
                     try:
-                        resolved = PromptLoader.load_prompt(prompt_key, project_root=project_root)
+                        resolved = PromptLoader.load_prompt_expanded(
+                            prompt_key, project_root=project_root
+                        )
                         item[key] = resolved + (" " + extra if extra else "")
                     except ValueError as e:
                         raise ConfigurationError(
@@ -648,7 +650,7 @@ def render_pipeline_with_templates(
     load = LoadRender(Path(templates_folder), yaml_content)
     env = load.env
     env.globals["load_prompt"] = functools.partial(
-        PromptLoader.load_prompt, project_root=project_root
+        PromptLoader.load_prompt_expanded, project_root=project_root
     )
     env.filters["dedent"] = textwrap.dedent
     _load_template_globals(load, str(templates_folder))

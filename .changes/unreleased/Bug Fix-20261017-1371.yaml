@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A prompt-store prompt that calls `load_prompt`, as the prompt-store page shows it, sends
+  each record the loaded prompt filled from that record, online and batch. Before, a `$`
+  reference to such a prompt failed every record with "'load_prompt' is undefined". Each
+  `{{ load_prompt("file.Prompt") }}` tag in a store prompt is now replaced by that prompt
+  when the workflow loads, recursively, so the same holds for a prompt loaded by another,
+  whether from the store or from an inline prompt. Prompts that load each other in a cycle,
+  and a call written other than as a tag of its own with a quoted name, fail the load
+  naming them instead of failing every record (1371).
+time: 2026-10-17T13:17:00Z
