@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  Three batch fixes. A repair round reports as sent only the records preparation admitted:
+  a record a guard turns away at preparation is given up under the action's `on_exhausted`
+  in the same pass, instead of being failed as one the provider dropped when the round
+  comes back (1465). The `on_empty: error` and `terminal_failure` halts are raised once
+  the collect pass has read every finished batch, as `on_exhausted: raise` already was, so
+  a sibling file's results are stored in the same run (1464). `agac retry
+  --abandon-in-flight` abandons an owed batch once, and prints its message once, when no
+  failed record is recorded (1469).
+time: 2026-10-17T10:00:00Z

@@ -39,6 +39,7 @@ _FAILURE_STATES = frozenset({RecordState.FAILED.value, RecordState.EXHAUSTED.val
 # each slice admitted: `agac retry` runs a workflow in the process that just finished one.
 _FOUND_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 _ANSWERED_BY_REPAIR: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
+_CLEARED_BY_REPAIR: WeakKeyDictionary[Any, set[str]] = WeakKeyDictionary()
 # Per action, the files an action above it replaced whole in this run, keyed the same way.
 _REPLACED_ABOVE: WeakKeyDictionary[Any, dict[str, set[str]]] = WeakKeyDictionary()
 
@@ -207,16 +208,19 @@ def positions_named_by_repair(
 
     Given the run's backend and the action, notes what it found for ``found_by_repair``.
     """
-    if not repairing or not isinstance(records, list):
+    if not isinstance(records, list):
         return None
-    kept = [
+    if storage_backend is not None and action_name:
+        noting = _noting(repairing, storage_backend)
+        found = (r for r in records if isinstance(r, dict) and r.get("source_guid") in noting)
+        _note(_FOUND_BY_REPAIR, storage_backend, action_name, found)
+    if not repairing:
+        return None
+    return [
         index
         for index, record in enumerate(records)
         if isinstance(record, dict) and record.get("source_guid") in repairing
     ]
-    if storage_backend is not None and action_name:
-        _note(_FOUND_BY_REPAIR, storage_backend, action_name, (records[i] for i in kept))
-    return kept
 
 
 def note_answered_by_repair(
@@ -231,10 +235,23 @@ def note_answered_by_repair(
     Called once the file returns, not where it is narrowed: a file that raises is caught
     and the walk carries on, so a record found in it was cleared and never re-decided.
     """
-    if storage_backend is None or not repairing or not isinstance(records, list):
+    if storage_backend is None or not isinstance(records, list):
         return
-    named = (r for r in records if isinstance(r, dict) and r.get("source_guid") in repairing)
+    noting = _noting(repairing, storage_backend)
+    named = (r for r in records if isinstance(r, dict) and r.get("source_guid") in noting)
     _note(_ANSWERED_BY_REPAIR, storage_backend, action_name, named)
+
+
+def note_cleared_by_repair(storage_backend: Any, record_ids: Iterable[str]) -> None:
+    """Note the records a repair cleared, so what the run finds and answers for them is
+    noted whether or not it narrows to them: a resume of a halt names no record."""
+    if storage_backend is None:
+        return
+    _CLEARED_BY_REPAIR.setdefault(storage_backend, set()).update(record_ids)
+
+
+def _noting(repairing: Collection[str], storage_backend: Any) -> frozenset[str]:
+    return frozenset(repairing) | frozenset(_CLEARED_BY_REPAIR.get(storage_backend, ()))
 
 
 def found_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]:

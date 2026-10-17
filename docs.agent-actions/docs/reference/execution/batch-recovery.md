@@ -107,7 +107,8 @@ When a record exhausts all retry attempts:
   already converted cleanly; the halt is carried to the caller and raised after the write.
   A run that collects several files collects every one of them first, so a halt in one file
   never leaves another file's finished batch uncollected; when more than one file halts, the
-  first halt is raised and the others are logged
+  first halt is raised and the others are logged. The halts `on_empty: error` asks for and
+  the one raised when no record of a file succeeds are carried the same way
 
 Both policies apply to every record that spends its attempts, but the two exhausted shapes
 do not land in the same disposition. The split is whether a result row came back at all. A record the provider never
@@ -138,7 +139,7 @@ A repair round is a whole provider batch, so it defers rather than blocking:
 4. The batch is submitted and the run defers; the next pass resumes into the same loop
 5. When `max_iterations` rounds are spent, `on_exhausted` decides what ships
 
-A round with nothing to send is not submitted. When a guard turns every failing record away as it is evaluated again, no empty batch goes to the provider: those records are given up under `on_exhausted`, as when the rounds are spent.
+A round with nothing to send is not submitted. When a guard turns every failing record away as it is evaluated again, no empty batch goes to the provider: those records are given up under `on_exhausted`, as when the rounds are spent. When it turns some of them away, the round goes out for the rest, and the records it did not send are given up the same way in that pass; they are not counted as sent, so the round coming back without them is not read as the provider dropping them.
 
 A record the provider never returns is reconstructed as a failure rather than left to become a
 silent passthrough, and a record with no content at all failed at the provider rather than at its

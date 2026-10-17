@@ -253,9 +253,15 @@ without them.
 A retry that starts at the halted action and is not given `--record` names no
 record: it runs that action, and every action after it, on each record they hold
 no stored answer for — the ones past the halt and the ones that failed — and says
-so in its plan. That includes what the halted action answered in the file it
-halted in: the file was never stored, so those records are asked, and paid for,
-again. A plain `retry` does this when the halt is the earliest failure.
+so in its plan. What the halted action answered in the file it halted in is kept:
+the file was never stored, but each answer was written down as it was given, and
+the retry carries those records rather than asking for them again. A plain `retry`
+does this when the halt is the earliest failure.
+
+A retry clears what it wrote down only for the records whose failures it clears.
+A record keeping its `success` keeps its answer, so one answered after an edit
+replaced the stored file is answered again, as a plain run answers it, rather
+than carried from the stored file the edit made stale.
 
 ```bash
 agac retry -a my_workflow --from extract_facts
@@ -284,8 +290,9 @@ instead of raising it.
 A halted action before the retry's starting point is not refused, and the retry
 leaves it halted. An action in the retry's range that reads it cannot run while
 it is halted: it is skipped, the retry exits 1, and the failures the retry cleared
-there are put back unrepaired. A retry that resumes the halt and runs it again
-repairs them. Resume the halt first.
+there are put back unrepaired, and the notice names the halted action and the
+retry that resumes it (`agac retry --from <halted>`), which runs the skipped
+action again. Resume the halt first.
 
 ## When a retry is interrupted
 

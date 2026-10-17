@@ -42,6 +42,7 @@ from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
     from agent_actions.llm.batch.services.processing import BatchProcessingService
+    from agent_actions.processing.evaluation.strategies import ExpectationStrategy
 
 from agent_actions.llm.batch.services.repair_ops import RepairSubmission, pool_records
 from agent_actions.llm.batch.services.retry_ops import RetrySubmissionImpossible
@@ -459,6 +460,34 @@ def _repair_round_in_flight(context: RecoveryContext, identity: BatchIdentity) -
     return False
 
 
+def _not_sent(repairable: list[BatchResult], submission: RepairSubmission) -> list[BatchResult]:
+    """The records a round set out to repair and did not send: a guard turned them
+    away at preparation, or they could not be prepared. The round ends for them."""
+    sent = set(submission.sent_ids)
+    return [r for r in repairable if str(r.custom_id) not in sent]
+
+
+def _exhaust(
+    context: RecoveryContext,
+    strategy: "ExpectationStrategy",
+    exhausted: list[BatchResult],
+    attempts: int,
+) -> None:
+    """End the loop for *exhausted*, applying the action's on_exhausted."""
+    from agent_actions.llm.batch.services.repair_ops import apply_exhaustion_policy, stamp_exhausted
+
+    if not exhausted:
+        return
+    strategy.write_verdicts(exhausted)
+    stamp_exhausted(exhausted, strategy, attempts)
+    park_halt(
+        context,
+        apply_exhaustion_policy(
+            exhausted, strategy, context.service._resolve_action_name(context.action_name)
+        ),
+    )
+
+
 def check_and_submit_repair(
     context: RecoveryContext,
     identity: BatchIdentity,
@@ -477,10 +506,8 @@ def check_and_submit_repair(
     so anything the loop has since rewritten is folded in over them.
     """
     from agent_actions.llm.batch.services.repair_ops import (
-        apply_exhaustion_policy,
         build_repair_strategy,
         carry_forward,
-        stamp_exhausted,
         submit_repair_batch,
     )
     from agent_actions.llm.batch.services.retry_serialization import serialize_results
@@ -562,14 +589,7 @@ def check_and_submit_repair(
         settle the policy the same way — otherwise whether a run halts depends
         on which exit the pass happened to take.
         """
-        strategy.write_verdicts(exhausted)
-        stamp_exhausted(exhausted, strategy, current_attempt + 1)
-        park_halt(
-            context,
-            apply_exhaustion_policy(
-                exhausted, strategy, context.service._resolve_action_name(context.action_name)
-            ),
-        )
+        _exhaust(context, strategy, exhausted, current_attempt + 1)
         return True
 
     if not repairable:
@@ -595,6 +615,8 @@ def check_and_submit_repair(
     )
     if not submission:
         return _give_up(still_failing)
+    not_sent = _not_sent(repairable, submission)
+    _exhaust(context, strategy, not_sent, next_attempt)
 
     register_recovery_batch(
         context.manager,
@@ -609,7 +631,7 @@ def check_and_submit_repair(
         recovery_state,
         repair_attempt=next_attempt,
         repair_max_attempts=max_rounds,
-        graduated=graduated + unrepairable,
+        graduated=graduated + unrepairable + not_sent,
         submitted_ids=list(submission.sent_ids),
         judge_budget_remaining=strategy.judge_budget_remaining,
     )
@@ -624,7 +646,7 @@ def check_and_submit_repair(
         identity.file_name,
         next_attempt,
         max_rounds,
-        len(repairable),
+        len(submission.sent_ids),
     )
     return False
 
@@ -719,6 +741,9 @@ def handle_repair_recovery(
             workflow_metadata=context.workflow_metadata,
         )
         if submission:
+            not_sent = _not_sent(repairable, submission)
+            _exhaust(context, strategy, not_sent, next_attempt)
+            carried.extend(not_sent)
             register_recovery_batch(
                 context.manager,
                 submission,

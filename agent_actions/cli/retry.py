@@ -23,7 +23,11 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
-from agent_actions.processing.disposition_gate import answered_by_repair, found_by_repair
+from agent_actions.processing.disposition_gate import (
+    answered_by_repair,
+    found_by_repair,
+    note_cleared_by_repair,
+)
 from agent_actions.record.reasons import BATCH_ABANDONED, HALTED_ON_EXHAUSTED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
@@ -134,6 +138,7 @@ class RetryCommand:
         self.args = args
         self.agent_name = Path(args.agent).stem
         self.console = Console()
+        self._abandoned: set[tuple[str, str, str]] = set()
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
@@ -290,21 +295,12 @@ class RetryCommand:
         )
 
         workflow.set_retried_records(repairing)
+        note_cleared_by_repair(
+            workflow.services.core.action_runner.storage_backend,
+            record_ids - {NODE_LEVEL_RECORD_ID},
+        )
 
-        cleared = 0
-        for action in downstream_actions:
-            for record_id in record_ids:
-                cleared += backend.clear_disposition(action, record_id=record_id)
-            # Clear node-level disposition so the executor doesn't see a
-            # stale action-level FAILED/SKIPPED signal.
-            backend.clear_disposition(action, record_id=NODE_LEVEL_RECORD_ID)
-            # Clear checkpoint records so stale partial output from a prior
-            # interrupted run is not carried forward instead of reprocessing.
-            backend.clear_checkpoint_records(action)
-            # A registry entry not yet collected hands this repair the prior batch id
-            # instead of its own narrowed submission, and the collecting run replays
-            # that batch whole.
-            backend.clear_batch_state(action)
+        cleared = self._clear_for_the_rerun(backend, downstream_actions, record_ids, repairing)
 
         self.console.print(
             f"\n[cyan]Cleared {cleared} disposition(s) for {len(record_ids)} record(s) "
@@ -357,6 +353,7 @@ class RetryCommand:
                 downstream_actions,
                 record_ids,
                 snapshot_dispositions,
+                halted_above=_halted_among(failures, execution_order[:from_idx]),
             )
             status = _classify_outcome(state_mgr)
         except Exception:
@@ -390,6 +387,32 @@ class RetryCommand:
 
         self.console.print("\n[green]Retry complete.[/green]")
 
+    @staticmethod
+    def _clear_for_the_rerun(
+        backend, downstream_actions: list[str], record_ids: set[str], repairing: set[str]
+    ) -> int:
+        """Forget, at each action the retry runs, what it is asked to decide again.
+
+        The checkpoint rows cleared are those of the records whose dispositions are: a
+        record keeping its `success` keeps the row that says it was answered after its
+        stored file, or that is its only answer where none was stored. Clearing it carried
+        the stored row an edit had replaced, or asked the record again.
+        """
+        cleared = 0
+        forgetting = (record_ids | repairing) - {NODE_LEVEL_RECORD_ID}
+        for action in downstream_actions:
+            for record_id in record_ids:
+                cleared += backend.clear_disposition(action, record_id=record_id)
+            # Clear node-level disposition so the executor doesn't see a
+            # stale action-level FAILED/SKIPPED signal.
+            backend.clear_disposition(action, record_id=NODE_LEVEL_RECORD_ID)
+            backend.clear_checkpoint_records(action, source_guids=forgetting)
+            # A registry entry not yet collected hands this repair the prior batch id
+            # instead of its own narrowed submission, and the collecting run replays
+            # that batch whole.
+            backend.clear_batch_state(action)
+        return cleared
+
     def _put_back_what_the_repair_never_answered(
         self,
         backend,
@@ -400,6 +423,7 @@ class RetryCommand:
         downstream_actions: list[str],
         cleared_ids: set[str],
         cleared_rows: list[dict],
+        halted_above: list[str] = (),  # type: ignore[assignment]
     ) -> None:
         """Put back what was cleared for a record the re-run never answered at *from_action*.
 
@@ -482,6 +506,20 @@ class RetryCommand:
                 f"were not repaired, because '{from_action}' did not finish, and their "
                 f"failures stand",
                 "Fix what stopped it and run retry again.",
+            )
+            return
+        readers = workflow.services.core.action_executor.readers_of
+        halted = [h for h in halted_above if from_action in readers(h)]
+        if state_mgr.get_status(from_action) == ActionStatus.SKIPPED and halted:
+            named = ", ".join(f"'{h}'" for h in halted)
+            self._say_unrepaired(
+                from_action,
+                never_answered,
+                f"were not repaired, because '{from_action}' was skipped: {named} is halted "
+                f"by on_exhausted: raise, and a halted action is not re-run, so their "
+                f"failures stand",
+                f"Resume the halt with `agac retry --from {halted[0]}`, which runs "
+                f"'{from_action}' again on every record it holds no stored answer for.",
             )
             return
         found = found_by_repair(runner_backend, from_action)
@@ -777,6 +815,9 @@ class RetryCommand:
         refusal names needs the provider to answer about the batch, which it
         cannot when it has forgotten the id.
         """
+        # Finding the failures may already have abandoned these, and an abandoned
+        # batch stays in the registry until the retry clears it.
+        owed = [o for o in owed if o[:3] not in self._abandoned]
         if not owed:
             return
 
@@ -810,6 +851,7 @@ class RetryCommand:
         if self.args.abandon_in_flight:
             waiting = self._records_waiting_on(backend, owed)
             stranded = self._strand_deferred_records(backend, waiting)
+            self._abandoned.update(o[:3] for o in owed)
             self.console.print(
                 f"\n[yellow]Abandoning {len(owed)} batch job(s) not collected yet: "
                 f"{listing}. Whatever they return will not be collected. "

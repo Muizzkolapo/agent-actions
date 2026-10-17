@@ -114,6 +114,16 @@ class RecoveryMetadata:
         """Return True if no recovery occurred."""
         return self.retry is None and self.evaluation is None and self.expectations is None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RecoveryMetadata":
+        return cls(
+            retry=RetryMetadata(**data["retry"]) if data.get("retry") else None,
+            evaluation=EvaluationMetadata(**data["evaluation"]) if data.get("evaluation") else None,
+            expectations=(
+                ExpectationsMetadata(**data["expectations"]) if data.get("expectations") else None
+            ),
+        )
+
 
 @dataclass
 class ProcessingResult:
