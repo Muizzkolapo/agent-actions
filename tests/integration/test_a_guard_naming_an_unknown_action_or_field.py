@@ -186,6 +186,16 @@ def test_a_misspelt_field_under_is_null_is_refused(tmp_path):
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])
+def test_a_field_the_upstream_only_observed_is_refused(tmp_path, mode):
+    """`merge_alternatives` observes `source.page_content`; its namespace never holds it."""
+    project = _project(tmp_path, "merge_alternatives.page_content == 'two'", mode)
+
+    output = _refused(project, "run", "-a", WORKFLOW, "--fresh")
+
+    assert "Field 'page_content' not found in action 'merge_alternatives' output schema" in output
+
+
+@pytest.mark.parametrize("mode", ["online", "batch"])
 @pytest.mark.parametrize(
     ("condition", "passed"),
     [

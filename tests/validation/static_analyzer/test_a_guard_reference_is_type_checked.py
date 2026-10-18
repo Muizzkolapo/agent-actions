@@ -64,6 +64,21 @@ def test_any_name_may_be_a_field_a_version_merge_tool_spread_flat():
     assert _errors("decision.level == 'x'", **spread) == []
 
 
+def test_a_field_the_upstream_observes_or_passes_through_is_not_its_own():
+    forwarding = {"context_scope": {"observe": ["source.x"], "passthrough": ["source.y"]}}
+
+    assert _errors("up.x == 'a'", **forwarding) == [
+        "Field 'x' not found in action 'up' output schema"
+    ]
+    assert _errors("up.y == 'a'", **forwarding) == [
+        "Field 'y' not found in action 'up' output schema"
+    ]
+
+
+def test_the_verdict_expectations_attach_is_on_the_namespace():
+    assert _errors("up.expect.overall_pass == true") == []
+
+
 def test_a_field_an_open_schema_admits_is_not_an_error():
     open_schema = {
         "schema": {
