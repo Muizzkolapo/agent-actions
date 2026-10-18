@@ -67,7 +67,11 @@ class ReferenceExtractor:
 
         prompt = agent_config.get("prompt", "")
         if prompt:
-            requirements.extend(self._extract_from_template(prompt, agent_name, "prompt"))
+            requirements.extend(
+                self._extract_from_template(
+                    prompt, agent_name, "prompt", self._promoted_reserved_names(agent_config)
+                )
+            )
 
         guard = agent_config.get("guard")
         if guard:
@@ -93,17 +97,31 @@ class ReferenceExtractor:
 
         return requirements
 
+    @staticmethod
+    def _promoted_reserved_names(agent_config: dict[str, Any]) -> set[str]:
+        """Reserved names a version param puts on the record (`versions: {param: schema}`)."""
+        # Imported here: scope_builder pulls in the runtime's logging and record stack.
+        from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+
+        version_context = agent_config.get("_version_context")
+        if not isinstance(version_context, dict):
+            return set()
+        return (
+            VersionNamespaceBuilder.promoted_names(version_context) & RESERVED_NAMES_NO_RECORD_HAS
+        )
+
     def _extract_from_template(
         self,
         template: str,
         _agent_name: str,
         location: str,
+        on_the_record: set[str] | None = None,
     ) -> list[InputRequirement]:
         """Extract references from Jinja2 template using AST parsing."""
         requirements: list[InputRequirement] = []
         seen: set[str] = set()
 
-        jinja_refs = self._extract_jinja_references(template)
+        jinja_refs = self._extract_jinja_references(template, on_the_record or set())
         for source, field, raw_ref in jinja_refs:
             ref_key = f"{source}.{field}"
             if ref_key not in seen:
@@ -136,7 +154,8 @@ class ReferenceExtractor:
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            if ref_key not in seen and source != "action":
+            # Single braces are literal text: `{schema.x}` reads nothing.
+            if ref_key not in seen and source not in RESERVED_NAMES_NO_RECORD_HAS:
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(
@@ -149,7 +168,9 @@ class ReferenceExtractor:
 
         return requirements
 
-    def _extract_jinja_references(self, template: str) -> list[tuple]:
+    def _extract_jinja_references(
+        self, template: str, on_the_record: set[str] | None = None
+    ) -> list[tuple]:
         """Extract variable references from Jinja2 template using AST."""
         references: list[tuple] = []
 
@@ -164,7 +185,7 @@ class ReferenceExtractor:
             )
             raise
 
-        self._walk_ast(ast, references, local_vars=set())
+        self._walk_ast(ast, references, local_vars=set(on_the_record or ()))
         return references
 
     def _walk_ast(
