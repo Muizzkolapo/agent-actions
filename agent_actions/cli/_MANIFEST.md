@@ -120,7 +120,7 @@
 | `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
 | `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `SchemaCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema_name` |
-| `StatusCommand.execute()` | `agent_io/staging/` | Reads | — |
+| `StatusCommand.execute()` | `agent_io/.agent_status.json` | Reads | — |
 | `RetryCommand.execute()` | `agent_io/store/{workflow}/_retry_repair_notes.json` | Reads, Deletes | — |
 | `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
 | `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
