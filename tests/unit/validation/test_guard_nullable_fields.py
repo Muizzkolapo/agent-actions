@@ -541,6 +541,7 @@ class TestApplyGuardNullableSchemaFixes:
             assert sorted(fixes) == ["cons.text", "mid.text"], (scope, fixes)
 
     def test_a_tool_returning_another_name_carries_nothing(self):
+        """`mid` reads the skipped `g.text` but returns only `label`: nothing is relayed."""
         action_configs = dict(
             [
                 _guarded_llm_config("g", guard={"condition": "ok == true", "on_false": "skip"}),
@@ -548,7 +549,7 @@ class TestApplyGuardNullableSchemaFixes:
                     "mid",
                     json_output_schema={
                         "type": "object",
-                        "properties": {"text": {"type": "string"}, "label": {"type": "string"}},
+                        "properties": {"label": {"type": "string"}},
                     },
                     observe=["g.text"],
                 ),
@@ -556,14 +557,14 @@ class TestApplyGuardNullableSchemaFixes:
                     "cons",
                     json_output_schema={
                         "type": "object",
-                        "properties": {"label": {"type": "string"}},
+                        "properties": {"text": {"type": "string"}},
                     },
-                    observe=["mid.label"],
+                    observe=["mid.text"],
                 ),
             ]
         )
 
-        assert apply_guard_nullable_schema_fixes(action_configs) == ["mid.text"]
+        assert apply_guard_nullable_schema_fixes(action_configs) == []
 
     def test_a_read_under_a_forwarding_model_action_is_not_fixed(self):
         """A model action's output is its own answer, never a relay of the skipped field."""
