@@ -81,7 +81,7 @@ class TestReservedNamespaceCollision:
 
 
 class TestPartialFileRejection:
-    """One staging file is rejected, the other succeeds."""
+    """One staging file is rejected, so the whole first stage is: nothing of the clean file runs."""
 
     def test_the_rejection_is_reported(self, run):
         r = run("partial_file_rejection")
@@ -89,26 +89,33 @@ class TestPartialFileRejection:
         assert "b_reserved.json" in r.output
         assert "collide with reserved namespace names" in r.output
 
-    def test_only_the_clean_file_produces_a_record(self, run):
-        records = run("partial_file_rejection").records
+    def test_no_file_produces_a_record(self, run):
+        assert run("partial_file_rejection").records == []
 
-        assert len(records) == 1
-        assert [rec["content"]["source"]["title"] for rec in records] == ["Models"]
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "A staging file rejected at load leaves no durable trace. The action "
-            "records status 'completed' and the run exits 0, so a rejected file is "
-            "indistinguishable from one that never existed — the only evidence is a "
-            "log line. The same workflow with every file rejected exits 1, so the "
-            "silence is specific to the partial case."
-        ),
-    )
-    def test_a_partially_rejected_action_is_not_reported_as_a_clean_success(self, run):
+    def test_the_run_fails_and_the_action_is_not_completed(self, run):
         r = run("partial_file_rejection")
 
-        assert r.returncode != 0 or r.status("label_page") != "completed"
+        assert r.returncode != 0, r.output
+        assert r.status("label_page") != "completed"
+
+
+class TestEveryStagedFileIsCheckedFirst:
+    """A row no seed file covers in the second file stops the run before the first is sent."""
+
+    def test_the_run_names_the_file_and_the_record(self, run):
+        r = run("staging_precheck")
+
+        assert r.returncode != 0, r.output
+        assert (
+            "record value 'snowflak' for 'source.exam' is not in the file map. "
+            "Known values: dbt, snowflake. (staging/b_uncovered.json, record 1)"
+        ) in r.output.replace("\n", " ")
+
+    def test_nothing_of_the_clean_file_is_stored(self, run):
+        r = run("staging_precheck")
+
+        assert r.records == []
+        assert r.status("label_page") != "completed"
 
 
 class TestRepairExhaustion:
