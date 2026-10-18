@@ -9,6 +9,7 @@ reviewer saw anything. Here a reviewer thread drives the real review server over
 
 from __future__ import annotations
 
+import http.client
 import json
 import socket
 import threading
@@ -107,7 +108,9 @@ class _Reviewer(threading.Thread):
                         f"http://127.0.0.1:{port}/api/context", timeout=5
                     ) as response:
                         context = deep_json.loads(response.read())
-                except (OSError, ValueError):
+                # A probe of a port no server holds can connect to itself and read
+                # its own request back as a malformed status line.
+                except (OSError, ValueError, http.client.HTTPException):
                     continue
                 # Other tests' review servers may hold a nearby port.
                 if not _is_this_tests_review(context):

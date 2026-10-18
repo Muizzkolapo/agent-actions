@@ -10,11 +10,34 @@ merge-blocking anti-pattern.
 """
 
 import logging
+from functools import lru_cache
 from typing import Any
 
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 
 logger = logging.getLogger(__name__)
+
+
+def _guard_can_read_seed(agent_config: dict[str, Any]) -> bool:
+    """Whether the action's guard may read `seed`: a SQL clause naming it, or any UDF."""
+    if agent_config.get("conditional_clause"):
+        return True
+    guard = agent_config.get("guard")
+    clause = guard.get("clause") if isinstance(guard, dict) else guard
+    if not isinstance(clause, str) or "seed" not in clause:
+        return False
+    return _clause_names_seed(clause)
+
+
+@lru_cache(maxsize=256)
+def _clause_names_seed(clause: str) -> bool:
+    from agent_actions.expectations.expression import referenced_field_paths
+    from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+
+    parsed = WhereClauseParser().parse(clause)
+    if not parsed.success or parsed.ast is None:
+        return False
+    return any(path.split(".", 1)[0] == "seed" for path in referenced_field_paths(parsed.ast.root))
 
 
 def build_guard_context(
@@ -83,17 +106,20 @@ def build_guard_context(
     )
     field_context.pop("_dependency_metadata", None)
 
-    # The declared seed, loaded as the prompt loads it. Every declared key, as a guard
-    # reads the record whole: `context_scope` decides what the action is handed, not
-    # what its guard sees.
-    seed = PromptPreparationService.load_seed_data(
-        agent_config,
-        agent_config.get("context_scope") or {},
-        agent_name,
-        source=field_context.get("source"),
-    )
-    if seed:
-        field_context["seed"] = seed
+    # The declared seed, loaded through the prompt's loader, for a guard that can read it.
+    # Every declared key, as a guard reads the record whole: `context_scope` decides what
+    # the action is handed, not what its guard sees. Shared and read-only (the evaluator
+    # only reads, and hands a UDF a read-only view), so each file is parsed once.
+    if _guard_can_read_seed(agent_config):
+        seed = PromptPreparationService.load_seed_data(
+            agent_config,
+            agent_config.get("context_scope") or {},
+            agent_name,
+            source=field_context.get("source"),
+            shared=True,
+        )
+        if seed:
+            field_context["seed"] = seed
 
     # Promote output_field values to top-level so guards can reference them
     # directly (e.g., "severity" instead of "assess.severity").

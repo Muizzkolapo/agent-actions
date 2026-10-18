@@ -149,10 +149,11 @@ For tool actions, `content` contains the tool return value.
 
 ## Passthrough Fields
 
-Fields from `context_scope.passthrough` are preserved at the root level of each record:
+Fields from `context_scope.passthrough` are kept on the action's output record, under the
+namespace they came from, not under the action's own namespace and not at the root:
 
 ```yaml
-# Workflow config
+# Workflow config, on an action named summarize
 context_scope:
   passthrough:
     - source.url
@@ -162,11 +163,15 @@ context_scope:
 ```json
 {
   "source_guid": "doc_1",
-  "content": {...},
-  "url": "https://example.com",
-  "metadata": {"author": "John"}
+  "content": {
+    "source": {"url": "https://example.com", "metadata": {"author": "John"}},
+    "summarize": {...}
+  }
 }
 ```
+
+A later action reads them as `source.url` and `source.metadata`, never as `summarize.url`;
+see [Context Scope](../context/context-scope.md#passthrough-directive).
 
 ## Reading Outputs
 

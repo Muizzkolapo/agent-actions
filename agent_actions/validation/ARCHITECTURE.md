@@ -212,7 +212,7 @@ took every guard for a filter.
 
 A guard clause's own `namespace.field` reads are type checked like a prompt's: `ReferenceExtractor`
 parses the clause (`clause` once expanded) and reports each path at location `guard`, and
-`StaticTypeChecker` refuses an action that does not exist or a field its schema does not list. A guard's field is checked against what the action produces plus the `expect` verdict: a stored namespace never holds what the action observed or passed through. A prompt's reference, and an `observe` or `passthrough` entry, is checked the same way, since each reads the same stored namespace; a `drop` entry is still checked against what the action forwards.
+`StaticTypeChecker` refuses an action that does not exist or a field its schema does not list. A guard's field is checked against what the action produces plus the `expect` verdict: a stored namespace never holds what the action observed or passed through. A prompt's reference, and an `observe` or `passthrough` entry, is checked the same way, since each reads the same stored namespace, and a field an open schema admits without listing is a warning for each of them as for a guard; a `drop` entry is still checked against what the action forwards.
 Names the guard context promotes are not reported as actions: record fields, version keys and
 params (extractor), a direct dependency's `output_field`, and anything below a flat-spreading
 version-merge tool (`WorkflowStaticAnalyzer._without_guard_promotions`). Reach — the guarded action

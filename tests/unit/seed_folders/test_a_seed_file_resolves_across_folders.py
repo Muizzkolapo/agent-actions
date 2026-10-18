@@ -229,3 +229,59 @@ class TestTheResolverReportsWhereAFileCameFrom:
             ("listed", "more_seeds"),
             ("listed", "shared_seeds"),
         ]
+
+
+class TestASharedLoaderIsOnePerFolderList:
+    def test_two_workflows_with_different_folders_do_not_share_a_loader(self, tmp_path):
+        from agent_actions.config.path_config import seed_search_folders
+        from agent_actions.prompt.context.static_loader import shared_static_data_loader
+
+        _, config_a = _project(
+            tmp_path / "a", listed=None, workflow_files={"x.json": {"label": "A"}}
+        )
+        _, config_b = _project(
+            tmp_path / "b", listed=None, workflow_files={"x.json": {"label": "B"}}
+        )
+        folders_a = seed_search_folders(config_a)
+        folders_b = seed_search_folders(config_b)
+
+        loader_a = shared_static_data_loader(folders_a)
+        loader_b = shared_static_data_loader(folders_b)
+
+        assert loader_a is not loader_b
+        assert loader_a is shared_static_data_loader(seed_search_folders(config_a))
+        assert loader_a.load_static_data({"x": "$file:x.json"}) == {"x": {"label": "A"}}
+        assert loader_b.load_static_data({"x": "$file:x.json"}) == {"x": {"label": "B"}}
+
+    def test_a_guard_shares_the_load_and_reads_the_record_s_file(self, tmp_path):
+        from agent_actions.processing.guard_context import build_guard_context
+
+        _, config_path = _project(
+            tmp_path,
+            workflow_files={"dbt.json": {"label": "DBT"}},
+            shared={"shared_seeds": {"snowflake.json": {"label": "SNOW"}}},
+        )
+        config = {
+            "workflow_config_path": config_path,
+            "guard": {
+                "clause": "seed.syllabus.label == 'SNOW'",
+                "behavior": "filter",
+                "scope": "item",
+            },
+            "context_scope": {
+                "seed": {
+                    "syllabus": {
+                        "select_by": "source.exam",
+                        "files": {"dbt": "$file:dbt.json", "snowflake": "$file:snowflake.json"},
+                    }
+                },
+                "observe": ["source.title"],
+            },
+        }
+        record = {"content": {"source": {"exam": "snowflake", "title": "t"}}, "source_guid": "g"}
+
+        context = build_guard_context(
+            record, agent_name="a", agent_config=config, is_first_stage=True
+        )
+
+        assert context["seed"]["syllabus"]["label"] == "SNOW"

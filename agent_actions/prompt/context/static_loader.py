@@ -7,6 +7,7 @@
 import csv
 import json
 import logging
+import threading
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -101,8 +102,13 @@ class StaticDataLoader:
                 # Resolve and validate path
                 resolved_path = self._resolve_path(file_path, field_name)
 
-                # Check cache
-                cache_key = str(resolved_path)
+                # Check cache. The file's size and mtime are in the key, so a shared
+                # loader re-reads a file that changed.
+                try:
+                    stat = resolved_path.stat()
+                    cache_key = f"{resolved_path}:{stat.st_mtime_ns}:{stat.st_size}"
+                except OSError:
+                    cache_key = str(resolved_path)
                 if cache_key in self._cache:
                     logger.debug("Cache hit for field '%s': %s", field_name, cache_key)
                     fire_event(CacheHitEvent(cache_type="static_data", key=field_name))
@@ -399,3 +405,27 @@ class StaticDataLoader:
             "total_size_bytes": total_size,
             "total_size_mb": round(total_size / 1024 / 1024, 2),
         }
+
+
+_SHARED_LOADERS: dict[tuple[Path, ...], StaticDataLoader] = {}
+_SHARED_LOADERS_LOCK = threading.Lock()
+
+
+def shared_static_data_loader(static_data_dir: Path | Sequence[SeedFolder]) -> StaticDataLoader:
+    """One loader per folder list for the process, so a file is parsed once.
+
+    What it returns is shared between callers: read it, never write to it. One
+    path is a list of one folder, as for ``StaticDataLoader`` itself.
+    """
+    if isinstance(static_data_dir, Path):
+        resolved = static_data_dir.resolve()
+        folders: list[SeedFolder] = [SeedFolder(resolved, "workflow", resolved.name)]
+    else:
+        folders = list(static_data_dir)
+    key = tuple(folder.path for folder in folders)
+    with _SHARED_LOADERS_LOCK:
+        loader = _SHARED_LOADERS.get(key)
+        if loader is None:
+            loader = StaticDataLoader(folders)
+            _SHARED_LOADERS[key] = loader
+        return loader

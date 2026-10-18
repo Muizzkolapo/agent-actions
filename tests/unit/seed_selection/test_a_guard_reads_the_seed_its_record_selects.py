@@ -38,8 +38,9 @@ def _record(exam):
 class TestTheGuardContextLoadsTheRecordsSeed:
     @pytest.mark.parametrize(("exam", "label"), [("dbt", "DBT-LABEL"), ("snowflake", "SNOW-LABEL")])
     def test_each_record_gets_its_own_file_in_the_guard_context(self, tmp_path, exam, label):
+        config = _config(tmp_path, guard='seed.syllabus.label != ""')
         context = build_guard_context(
-            _record(exam), agent_name="a", agent_config=_config(tmp_path), is_first_stage=True
+            _record(exam), agent_name="a", agent_config=config, is_first_stage=True
         )
 
         assert context["seed"]["syllabus"]["label"] == label
