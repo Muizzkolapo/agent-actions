@@ -70,6 +70,11 @@ id,title,content,category
 2,Second Doc,More content...,general
 ```
 
+A quoted cell may hold line breaks, and the record keeps them exactly as written.
+A file saved with a UTF-8 byte order mark (as Excel's "CSV UTF-8" does) is read
+without it, so the first column is named by its header alone. A `.tsv` file is
+read the same way, split on tabs.
+
 ## Excel Input
 
 The same rule reaches `.xlsx` through the sheet rather than the file: a sheet is

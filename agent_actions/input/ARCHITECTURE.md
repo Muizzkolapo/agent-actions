@@ -105,7 +105,7 @@ FileReader(file_path)
   +-- .html  --> BeautifulSoup      --> str (text content)
 ```
 
-Note that CSV returns raw rows (list of lists), not dicts, and `FileReader` has no `.tsv` handler. The first stage does not read a delimited staged file through `FileReader`: `_read_staged_file` reads `.csv` and `.tsv` with `TabularLoader` into `list[dict]` before anything validates them, and preparation reads the file with the same loader, so the first-record template check (`_validate_staged_data`) renders a row the run envelopes. The reserved-name check is not applied to a delimited file, which it always skipped. XLSX returns `list[dict]` directly via pandas.
+Note that CSV returns raw rows (list of lists), not dicts, and `FileReader` has no `.tsv` handler. The first stage does not read a delimited staged file through `FileReader`: `_read_staged_file` reads `.csv` and `.tsv` with `TabularLoader` into `list[dict]` before anything validates them, and preparation reads the file with the same loader, so the first-record template check (`_validate_staged_data`) renders a row the run envelopes. `TabularLoader` reads the file with `newline=""` and `utf-8-sig`, so a quoted cell keeps its line breaks and a byte order mark is not part of the first column name. The reserved-name check is not applied to a delimited file, which it always skipped. XLSX returns `list[dict]` directly via pandas.
 
 ### SourceDataLoader -- storage backend reads
 

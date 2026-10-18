@@ -87,7 +87,7 @@ class FileReader(ProcessorErrorHandlerMixin):
             return file.read()
 
     def _read_csv(self):
-        with open(self.file_path, encoding="utf-8") as file:
+        with open(self.file_path, encoding="utf-8-sig", newline="") as file:
             reader = csv.reader(file)
             return list(reader)
 
