@@ -171,7 +171,7 @@ class TestInspectShowsWhereEachSeedFileComesFrom:
         }
 
     def test_a_file_nowhere_is_reported_not_raised(self, tmp_path):
-        _, config_path = _project(tmp_path, workflow_files={"own.json": {}})
+        _, config_path = _project(tmp_path, listed=None, workflow_files={"own.json": {}})
 
         files = ContextCommand._seed_files(
             {"seed": {"rules": "$file:rules.json"}}, str(config_path)
