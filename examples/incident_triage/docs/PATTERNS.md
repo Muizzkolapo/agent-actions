@@ -153,15 +153,15 @@ Use this team: dispatch_task('get_team')
   dependencies: [generate_response_plan]
   guard:
     condition: 'final_severity == "SEV1" or final_severity == "SEV2"'
-    on_false: "filter"
+    on_false: "skip"
   schema:
     executive_summary: string
 ```
 
 **How It Works**:
 - Guard checks INPUT context (from dependencies)
-- If condition false: record filtered out (on_false: "filter")
-- Or skip action entirely (on_false: "skip")
+- If condition false: the action is skipped for the record, which still reaches the actions below (on_false: "skip")
+- Or the record is dropped, and no action below sees it (on_false: "filter")
 
 **Benefits**:
 - ✅ Reduce LLM costs (skip unnecessary calls)

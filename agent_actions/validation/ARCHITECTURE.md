@@ -203,6 +203,15 @@ Guard conditions are validated in the static analyzer through several checks:
 
 These checks run **before** wildcard expansion to avoid false positives from expanded wildcards.
 
+A guard clause's own `namespace.field` reads are type checked like a prompt's: `ReferenceExtractor`
+parses the clause (`clause` once expanded) and reports each path at location `guard`, and
+`StaticTypeChecker` refuses an action that does not exist or a field its schema does not list. A guard's field is checked against what the action produces plus the `expect` verdict: a stored namespace never holds what the action observed or passed through.
+Names the guard context promotes are not reported as actions: record fields, version keys and
+params (extractor), a direct dependency's `output_field`, and anything below a flat-spreading
+version-merge tool (`WorkflowStaticAnalyzer._without_guard_promotions`). Reach — the guarded action
+itself, or one not upstream through `dependencies` — is left to
+`dep_observe_validator.find_reads_not_upstream`, which words it for a guard.
+
 ### apply_guard_nullable_schema_fixes()
 
 A module-level function (not a method on the analyzer) that **mutates `json_output_schema` dicts in place**. Called after schema compilation and static validation but before workflow execution:

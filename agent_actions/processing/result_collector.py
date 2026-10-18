@@ -340,8 +340,11 @@ def _safe_set_disposition(
     record_id: str,
     disposition: str,
     **kwargs: Any,
-) -> None:
-    """Write a disposition record — log ERROR on failure, do not crash pipeline."""
+) -> bool:
+    """Write a disposition record — log ERROR on failure, do not crash pipeline.
+
+    Returns whether it was stored.
+    """
     try:
         backend.set_disposition(action_name, record_id, disposition, **kwargs)
     except Exception:
@@ -352,16 +355,21 @@ def _safe_set_disposition(
             record_id,
             disposition,
         )
+        return False
+    return True
 
 
 def write_dispositions(
     storage_backend: Optional["StorageBackend"],
     rows: list[DispositionRow],
     action_name: str,
-) -> None:
-    """Write *rows* in one transaction — log on failure, do not crash pipeline."""
+) -> bool:
+    """Write *rows* in one transaction — log on failure, do not crash pipeline.
+
+    Returns False only when the store refused them, so none of them is stored.
+    """
     if not storage_backend or not rows:
-        return
+        return True
     try:
         storage_backend.set_dispositions_batch(rows)
     except Exception:
@@ -370,6 +378,8 @@ def write_dispositions(
             len(rows),
             action_name,
         )
+        return False
+    return True
 
 
 def write_node_level_disposition(
@@ -887,7 +897,9 @@ def collect_results_from_processing_results(
         pending_dispositions = [
             row for row in pending_dispositions if row[2] not in _CARRIED_FROM_THE_STORED_FILE
         ]
-    write_dispositions(storage_backend, pending_dispositions, action_name)
+    if not write_dispositions(storage_backend, pending_dispositions, action_name):
+        if context is not None:
+            context.dispositions_not_stored.update(row[1] for row in pending_dispositions)
 
     guard_config = effective_config.get("guard", {})
     guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""

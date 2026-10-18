@@ -102,7 +102,10 @@ stored record.
 `IS NULL` is the one to watch. A name it cannot resolve — misspelled, or written without its
 prefix — is treated as null, so the clause is true and the record passes. Every other operator
 reports a missing field and filters; `IS NULL` alone lets it through, and logs nothing while
-doing it. A guard written `summarize.descriptio IS NULL` filters nothing and says nothing.
+doing it. Preflight refuses the misspellings it can prove (see [Context Access](#context-access)):
+`summarize.descriptio IS NULL` is refused when `summarize`'s schema lists its fields. Against an
+action with no schema, or one whose schema sets `additionalProperties`, the same guard filters
+nothing and says nothing.
 
 ### Boolean Values
 
@@ -174,6 +177,19 @@ every namespace the record carries, addressed as `action_name.field`. A record c
 actions upstream of it through `dependencies`, so a clause names only those: preflight refuses
 a guard that names an action running beside or after its own, one on a parallel branch, or its own
 action: the guard runs before the action, so the action's output is not yet on the record.
+
+Preflight checks each `action_name.field` a clause names the way it checks a prompt's
+references. It refuses a name that is no action in the workflow, and suggests the closest name
+when one is near. It also refuses a field the action's schema does not list, and names the field
+you probably meant or the fields the schema has. An action's namespace holds what it produced
+and the `expect` verdict its expectations attach, not what it observes or passes through, so a
+guard naming one of those fields under the action is refused too. Without
+this check, such a guard would filter every record while the run reported success. A versioned
+action is read by its branch names, `vote_1.vote` and `vote_2.vote`. Its base name `vote` is on
+no record, so preflight refuses it and names the branches. Some fields cannot be checked: those of
+an action with no schema, and those its schema admits with `additionalProperties` without listing
+them. Preflight warns about these instead of refusing. `source.*`, `workflow.*`, version params
+and a dependency's `output_field` are not action names, and are not checked as actions.
 
 | Source | Syntax |
 |--------|--------|

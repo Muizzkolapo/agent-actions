@@ -1,0 +1,6 @@
+kind: Enhancement or New Feature
+body: >-
+  `agac status` shows why an action failed: when a failed action's status holds an
+  `error_message`, an Error column gives its first line (cut to 200 characters). Only
+  `.agent_status.json` held it before. (#1519)
+time: 2026-10-18T09:01:00Z

@@ -163,3 +163,56 @@ def test_a_branch_holding_a_source_and_a_split_of_its_split_raises():
                 ("right", [_split("right", "s1", "R1", "P")]),
             ]
         )
+
+
+def _aggregate(branch: str, value: str, made_by: str = "right") -> dict:
+    """A row a FILE tool returned with `source_index: None`: it belongs to no source."""
+    return {**_record(branch, "agg", value), "aggregated_by": made_by}
+
+
+def test_an_aggregate_one_branch_holds_raises_naming_the_branch_and_its_maker():
+    with pytest.raises(WorkflowError, match=r"right.*source_index"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", "P", "L")]),
+                ("right", [_record("right", "P", "R"), _aggregate("right", "total")]),
+            ]
+        )
+
+
+def test_an_aggregate_carried_below_its_maker_raises_naming_the_maker():
+    with pytest.raises(WorkflowError, match="tally"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", "P", "L")]),
+                ("loud", [_record("loud", "P", "R"), _aggregate("loud", "TOTAL", "tally")]),
+            ]
+        )
+
+
+def test_an_aggregate_every_branch_reads_pairs_like_any_record():
+    merged = merge_fan_in(
+        [("left", [_aggregate("left", "L")]), ("right", [_aggregate("right", "R")])]
+    )
+
+    assert _values(merged) == [("L", "R")]
+
+
+def test_an_aggregate_over_split_records_does_not_pair_with_their_source():
+    """Built over its file's first record, the aggregate carries that record's
+    `parent_source_guid`; it is still no record of that source."""
+    over_a_split = {**_aggregate("right", "total"), "parent_source_guid": "P"}
+    with pytest.raises(WorkflowError, match="source_index"):
+        merge_fan_in([("left", [_record("left", "P", "L")]), ("right", [over_a_split])])
+
+
+def test_a_split_of_an_aggregate_pairs_with_the_aggregate():
+    split = [
+        {**_record("again", f"t{n}", f"A{n}", "agg"), "aggregated_by": "right"} for n in (1, 2)
+    ]
+    merged = merge_fan_in([("right", [_aggregate("right", "R")]), ("again", split)])
+
+    assert sorted((r["content"]["right"]["v"], r["content"]["again"]["v"]) for r in merged) == [
+        ("R", "A1"),
+        ("R", "A2"),
+    ]

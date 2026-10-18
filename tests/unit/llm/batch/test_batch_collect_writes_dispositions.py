@@ -357,3 +357,75 @@ class TestAFileThatThrewMarksItsRecordsFailedBeforeClearingDeferred:
             service._fail_abandoned_records("f.json", "/unused", ACTION, RuntimeError("boom"))
 
         assert _held(backend)["r1"]["disposition"] == "failed"
+
+
+class _StoreError(Exception):
+    """A store error on a terminal disposition write; clearing ``deferred`` still works."""
+
+
+def _failing_terminal_writes(backend: SQLiteBackend, *, only: str | None = None) -> None:
+    """Make every terminal disposition write raise, or only those for record *only*."""
+    real_one, real_many = backend.set_disposition, backend.set_dispositions_batch
+
+    def one(action, record_id, disposition, *args, **kwargs):
+        if disposition != "deferred" and only in (None, record_id):
+            raise _StoreError(f"disk I/O error writing {disposition} for {record_id}")
+        return real_one(action, record_id, disposition, *args, **kwargs)
+
+    def many(rows):
+        if any(row[2] != "deferred" and only in (None, row[1]) for row in rows):
+            raise _StoreError("disk I/O error writing a batch of dispositions")
+        return real_many(rows)
+
+    backend.set_disposition = one
+    backend.set_dispositions_batch = many
+
+
+class TestAFailedTerminalWriteKeepsDeferred:
+    """A record whose terminal disposition was not stored keeps ``deferred`` (1519).
+
+    Clearing it anyway left the record holding no disposition at all.
+    """
+
+    @pytest.mark.parametrize("outcome", list(OUTCOMES))
+    def test_the_record_still_holds_deferred(self, backend, tmp_path, outcome):
+        entry, results, exhausted, _expected = OUTCOMES[outcome]
+        _deferred(backend, "r1")
+        _failing_terminal_writes(backend)
+
+        _collect(backend, {entry["target_id"]: entry}, results, exhausted, tmp_path)
+
+        assert {rid: row["disposition"] for rid, row in _held(backend).items()} == {
+            "r1": "deferred"
+        }, "the record was left holding no disposition"
+
+    def test_only_the_record_whose_write_failed_keeps_it(self, backend, tmp_path):
+        context_map = {
+            "t-f": _entry("f", "filtered", "guard_filter"),
+            "t-i": _entry("i", "included"),
+        }
+        _deferred(backend, "f", "i")
+        _failing_terminal_writes(backend, only="f")
+
+        _collect(
+            backend,
+            context_map,
+            [BatchResult(custom_id="t-i", content={"answer": "ok"}, success=True)],
+            tmp_path=tmp_path,
+        )
+
+        assert {rid: row["disposition"] for rid, row in _held(backend).items()} == {
+            "f": "deferred",
+            "i": "success",
+        }
+
+    def test_a_file_that_threw_keeps_deferred_when_failed_is_not_stored(self, backend):
+        _deferred(backend, "r1")
+        service = TestAFileThatThrewMarksItsRecordsFailedBeforeClearingDeferred._service(backend)
+        _failing_terminal_writes(backend)
+
+        service._fail_abandoned_records("f.json", "/unused", ACTION, RuntimeError("boom"))
+
+        assert {rid: row["disposition"] for rid, row in _held(backend).items()} == {
+            "r1": "deferred"
+        }

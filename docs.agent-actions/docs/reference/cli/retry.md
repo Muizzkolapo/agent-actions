@@ -217,10 +217,12 @@ it is asked again, since what the reviewer decided on is gone.
 
 Some failures belong to an action rather than to any record of it: its input could
 not be read, or the store did not answer as its work began — counting the rows it
-held, or setting it running. The second ends the run (see
-[`run`](./run#parallel-execution)). Either way the action reads `failed`, and the
-status file (`agent_io/.agent_status.json`) records the error under its
-`error_message`. An action that runs again, and does not fail, no longer carries it.
+held, or setting it running — or as the rows it wrote were counted once it had run. A
+store error ends the run (see [`run`](./run#parallel-execution)), and the action is
+failed even where it had stored its rows, so nothing reads them before it runs again.
+Either way the action reads `failed`, and the status file
+(`agent_io/.agent_status.json`) records the error under its `error_message`, which
+[`agac status`](./utilities#status) shows. An action that runs again, and does not fail, no longer carries it.
 
 `retry` re-runs such an action in full, and every action after it: no record of
 it failed, so there are none to narrow it to. Its plan names the error and says so:
@@ -359,6 +361,15 @@ could not repair: those go back though every action has completed, since nothing
 decided them again. And an action the stopped retry completed never gets back a
 failure recorded against the action as a whole, which would make the next
 `agac run` run it again.
+
+A retry stopped after an action that [splits records](#a-retry-runs-the-records-it-named-and-only-those)
+wrote, but before the actions below it ran, has not yet taken out of those actions
+what they held for the rows the split replaced, such as the record's tombstone. The
+next `retry` re-runs the split over the rows the stopped one wrote, so it cannot see
+those rows go. The stopped retry keeps a note of them beside its record of the
+failures (`_retry_repair_notes.json` in the workflow's store folder), and the next
+`retry` takes them out of each action the stopped one never completed, as the stopped
+one would have.
 
 `--dry-run` puts nothing back and leaves the record of the stopped retry where it
 is. The plan it shows counts what a retry would put back.

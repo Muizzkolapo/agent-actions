@@ -11,6 +11,7 @@ from typing import Any
 from jinja2.exceptions import TemplateSyntaxError
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.guards.bare_reference import spreads_output_flat
 from agent_actions.guards.consolidated_guard import GuardBehavior
 from agent_actions.input.context.normalizer import (
     SEED_CONFIG_KEYS,
@@ -30,6 +31,7 @@ from .data_flow_graph import (
     ActionKind,
     DataFlowGraph,
     DataFlowNode,
+    InputRequirement,
     InputSchema,
     OutputSchema,
 )
@@ -2020,7 +2022,9 @@ class WorkflowStaticAnalyzer:
         )
 
         # Extract input requirements (field references)
-        input_requirements = self.reference_extractor.extract_from_agent(action_config)
+        input_requirements = self._without_guard_promotions(
+            action_config, self.reference_extractor.extract_from_agent(action_config)
+        )
 
         # Use auto-inferred dependency model
         from agent_actions.prompt.context.scope_inference import infer_dependencies
@@ -2056,6 +2060,34 @@ class WorkflowStaticAnalyzer:
         )
 
         self.graph.add_node(node)
+
+    def _without_guard_promotions(
+        self, action_config: dict[str, Any], requirements: list[InputRequirement]
+    ) -> list[InputRequirement]:
+        """Drop guard reads of a name a dependency puts at the top of the guard context.
+
+        `build_guard_context` promotes each dependency's `output_field`, and a
+        FILE-granularity version-merge tool spreads its output flat over the record, so
+        any name may be one of its fields. Neither is an action, and neither is provably
+        absent, so neither is checked as one.
+        """
+        if not any(req.location == "guard" for req in requirements):
+            return requirements
+        configs = {
+            a.get("name"): a for a in self.workflow_config.get("actions", []) if isinstance(a, dict)
+        }
+        declared = action_config.get("dependencies") or []
+        if isinstance(declared, str):
+            declared = [declared]
+        upstreams = [configs[d] for d in declared if isinstance(d, str) and d in configs]
+        if any(spreads_output_flat(up) for up in upstreams):
+            return [req for req in requirements if req.location != "guard"]
+        promoted = {up.get("output_field") for up in upstreams} - {None}
+        return [
+            req
+            for req in requirements
+            if not (req.location == "guard" and req.source_agent in promoted)
+        ]
 
     def get_graph(self) -> DataFlowGraph:
         """Return the data flow graph for inspection.

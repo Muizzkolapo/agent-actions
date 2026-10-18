@@ -656,3 +656,121 @@ def test_a_key_set_before_the_break_of_a_while_true_is_not_flagged():
         "    return out\n"
     )
     assert _risks(source, ["options", "answer"]) == []
+
+
+# 1519: every return hands back a record to validate, not only the last one.
+@pytest.mark.parametrize(
+    "early",
+    [
+        "    if not data.get('x'):\n        return {'options': []}\n",
+        "    if not data.get('x'):\n        return [{'options': []}]\n",
+        "    if not data.get('x'):\n        return dict(options=[])\n",
+        "    try:\n        data['x']\n    except KeyError:\n        return {'options': []}\n",
+        "    for r in data:\n        if r:\n            return {'options': r}\n",
+        "    match data:\n        case {'x': 1}:\n            return {'options': []}\n",
+    ],
+    ids=["dict", "list_of_one", "dict_call", "in_except", "in_loop", "in_case"],
+)
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "    return {'options': [], 'answer': 1}\n",
+        "    out = {'options': []}\n    out['answer'] = 1\n    return [out]\n",
+        # The last return cannot be read; the early one still can.
+        "    return build_from(data)\n",
+    ],
+    ids=["tail_literal", "tail_list_of_name", "tail_unreadable"],
+)
+def test_an_early_return_without_a_required_key_is_flagged(early, tail):
+    source = "def build(data):\n" + early + tail
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "requires 'answer'" in finding
+    assert "returns without it at line" in finding
+    assert unconditional_output_keys(source) == {"options"}
+
+
+def test_an_early_return_of_the_dict_before_the_key_is_set_is_flagged():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': []}\n"
+        "    if not data:\n"
+        "        return out\n"
+        "    out['answer'] = 1\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "returns without it at line 4, inside an `if`" in finding
+    assert unconditional_output_keys(source) == {"options"}
+
+
+@pytest.mark.parametrize(
+    "early",
+    [
+        "    if not data:\n        return None\n",
+        "    if not data:\n        return\n",
+        "    if not data:\n        return []\n",
+        "    if not isinstance(data, dict):\n        return data\n",
+        "    if data.get('raw'):\n        return {**data}\n",
+        "    if data.get('raw'):\n        return build_from(data)\n",
+        "    if data.get('raw'):\n        return [{'options': []}, {'options': []}]\n",
+        "    if not data:\n        raise ValueError('no data')\n",
+        "    if data.get('raw'):\n        result = build_from(data)\n        return result\n",
+        "    def helper():\n        return {'options': []}\n",
+        # after an unconditional return: no path reaches it
+        "    if data:\n        return {'options': [], 'answer': 1}\n"
+        "    else:\n        return {'options': [], 'answer': 2}\n"
+        "    return {'options': []}\n",
+        "    if data.get('serve'):\n        while True:\n            pass\n"
+        "        return {'options': []}\n",
+    ],
+    ids=[
+        "none",
+        "bare",
+        "empty_list",
+        "parameter",
+        "spread",
+        "helper_call",
+        "list_of_two",
+        "raises",
+        "helper_bound_name",
+        "nested_def",
+        "after_return",
+        "after_while_true",
+    ],
+)
+def test_an_early_return_handing_back_no_readable_record_is_not_flagged(early):
+    source = "def build(data):\n" + early + "    return {'options': [], 'answer': 1}\n"
+    assert _risks(source, ["options", "answer"]) == []
+    assert unconditional_output_keys(source) == {"options", "answer"}
+
+
+def test_an_early_return_of_the_dict_once_every_key_is_set_is_not_flagged():
+    source = (
+        "def build(data):\n"
+        "    out = {'options': [], 'answer': 0}\n"
+        "    if not data:\n"
+        "        return out\n"
+        "    out['answer'] = 1\n"
+        "    return out\n"
+    )
+    assert _risks(source, ["options", "answer"]) == []
+
+
+def test_the_last_return_is_named_when_it_lacks_the_key_too():
+    source = (
+        "def build(data):\n"
+        "    if not data:\n"
+        "        return {'options': []}\n"
+        "    out = {'options': []}\n"
+        "    if data.get('flag'):\n"
+        "        out['answer'] = 1\n"
+        "    return out\n"
+    )
+    (finding,) = _risks(source, ["options", "answer"])
+    assert "sets it only at line 6, inside an `if`" in finding
+
+
+def test_a_tool_with_only_returns_of_nothing_is_not_read():
+    source = "def build(data):\n    if not data:\n        return None\n    return []\n"
+    assert _risks(source, ["options"]) == []
+    assert unconditional_output_keys(source) is None

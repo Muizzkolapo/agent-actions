@@ -35,8 +35,9 @@ User data files (agent_io/staging/)
        |
        v
 +---------------------+
-| FileReader.read()   |     Format dispatch: .json, .csv, .xlsx,
-| (loaders/file_reader)|     .xml, .pdf, .docx, .txt, .md, .html
+| _read_staged_file   |     .csv/.tsv: TabularLoader --> list[dict]
+| (staging/initial_   |     everything else: FileReader.read()
+|  pipeline)          |     (.json, .xlsx, .xml, .pdf, .docx, ...)
 +----------+----------+
            |
            v
@@ -104,7 +105,7 @@ FileReader(file_path)
   +-- .html  --> BeautifulSoup      --> str (text content)
 ```
 
-Note that CSV returns raw rows (list of lists), not dicts. The `TabularLoader` handles dict conversion downstream. XLSX returns `list[dict]` directly via pandas.
+Note that CSV returns raw rows (list of lists), not dicts, and `FileReader` has no `.tsv` handler. The first stage does not read a delimited staged file through `FileReader`: `_read_staged_file` reads `.csv` and `.tsv` with `TabularLoader` into `list[dict]` before anything validates them, and preparation reads the file with the same loader, so the first-record template check (`_validate_staged_data`) renders a row the run envelopes. The reserved-name check is not applied to a delimited file, which it always skipped. XLSX returns `list[dict]` directly via pandas.
 
 ### SourceDataLoader -- storage backend reads
 

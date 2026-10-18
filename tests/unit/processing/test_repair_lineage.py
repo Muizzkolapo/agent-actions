@@ -9,7 +9,10 @@ import pytest
 from agent_actions.processing.repair_lineage import (
     drop_rows_built_on_rows_gone_above,
     gone_above,
+    keep_notes_at,
     note_rewritten_by_repair,
+    notes_kept_at,
+    resume_notes,
     written_above,
 )
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -97,3 +100,34 @@ def test_nothing_is_written_when_nothing_above_was_taken_away(backend):
 
     assert [row["source_guid"] for row in before] == ["kept"]
     assert _guids(backend) == ["kept"]
+
+
+def test_kept_notes_go_back_only_to_the_actions_named_and_only_for_their_retry(backend, tmp_path):
+    kept = tmp_path / "notes.json"
+    keep_notes_at(backend, kept, "retry-1")
+    note_rewritten_by_repair(backend, ["below", "further"], [_row("record")], [_row("half-1")])
+
+    assert notes_kept_at(kept, "retry-2") == {}
+    assert notes_kept_at(tmp_path / "missing.json", "retry-1") == {}
+    notes = notes_kept_at(kept, "retry-1")
+    assert notes["gone"] == {"below": ["record"], "further": ["record"]}
+    assert notes["written"] == {"below": ["half-1"], "further": ["half-1"]}
+
+    resumed = SQLiteBackend(str(tmp_path / "other.db"), "wf")
+    resumed.initialize()
+    try:
+        resume_notes(resumed, notes, {"further"})
+        assert gone_above(resumed, "further") == {"record"}
+        assert written_above(resumed, "further") == {"half-1"}
+        assert gone_above(resumed, "below") == frozenset()
+    finally:
+        resumed.close()
+
+
+def test_notes_resumed_are_kept_again_under_the_retry_resuming_them(backend, tmp_path):
+    kept = tmp_path / "notes.json"
+    resume_notes(backend, {"gone": {"below": ["record"]}, "written": {}}, {"below"})
+
+    keep_notes_at(backend, kept, "retry-2")
+
+    assert notes_kept_at(kept, "retry-2")["gone"] == {"below": ["record"]}

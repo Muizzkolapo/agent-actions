@@ -55,11 +55,15 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
 # parent_source_guid is the original source-pool identity, set wherever a minted
 # row knows its producer (an expansion, or a FILE tool splitting one input into
 # several). A row with no single producer adds none of its own.
+# aggregated_by names the FILE-tool action that returned the row, or the row it
+# descends from, with `source_index: None`: a record of no source, which a fan-in
+# can pair only with itself.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
         "parent_source_guid",
         "version_correlation_id",
+        "aggregated_by",
     }
 )
 

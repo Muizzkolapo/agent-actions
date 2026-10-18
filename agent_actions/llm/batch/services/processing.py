@@ -974,14 +974,16 @@ class BatchProcessingService:
             if not source_guid:
                 continue
 
-            # FAILED first: dying before DEFERRED is cleared leaves the failure queryable.
-            _safe_set_disposition(
+            # FAILED first: dying before DEFERRED is cleared leaves the failure queryable,
+            # and a FAILED the store refused keeps the DEFERRED rather than nothing.
+            if not _safe_set_disposition(
                 self._storage_backend,
                 action_name,
                 source_guid,
                 DISPOSITION_FAILED,
                 reason=reason,
-            )
+            ):
+                continue
             try:
                 self._storage_backend.clear_disposition(
                     action_name,

@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A first action reads a staged `.csv`, `.tsv` or `.xlsx` row by its column names, as it
+  reads a JSON row. `context_scope: {observe: [source.item_id]}` over a staged spreadsheet
+  used to stop the run with "context_scope.observe field 'source.item_id' not found in
+  namespace 'source'", and a prompt reading `{{ source.item_id }}` failed to render, in
+  either run mode, while `source.*` on the same file delivered every column. The check that
+  renders the first record before any is sent read a spreadsheet as one text page rather
+  than as its rows; it now renders the first row as the run envelopes it, so a column the
+  file lacks is still refused there. A documented `.tsv` file, which every run refused as
+  "Unsupported file type: .tsv", now stages one record per row (1518).
+time: 2026-10-18T08:30:00Z

@@ -170,7 +170,9 @@ def collect_batch_rows(
     with halt_survives_failure(ctx):
         rows, stats = processor.enrich_and_collect(results, ctx)
         if storage_backend is not None:
-            clear_deferred_dispositions(storage_backend, action_name, rows)
+            clear_deferred_dispositions(
+                storage_backend, action_name, rows, keep=ctx.dispositions_not_stored
+            )
             clear_deferred_of_records_with_no_identity(
                 storage_backend, action_name, context_map or {}
             )
@@ -265,12 +267,20 @@ def store_batch_file(
 
 
 def clear_deferred_dispositions(
-    storage_backend: StorageBackend, action_name: str, rows: list[dict[str, Any]]
+    storage_backend: StorageBackend,
+    action_name: str,
+    rows: list[dict[str, Any]],
+    *,
+    keep: Collection[str] = (),
 ) -> None:
-    """Clear the DEFERRED stamped at submission for each record entering output."""
+    """Clear the DEFERRED stamped at submission for each record entering output.
+
+    A record in *keep* has no terminal disposition stored, so it keeps its DEFERRED
+    rather than hold nothing.
+    """
     for row in rows:
         source_guid = row.get("source_guid")
-        if source_guid:
+        if source_guid and source_guid not in keep:
             _try_clear_deferred(storage_backend, action_name, source_guid)
 
 
@@ -309,7 +319,7 @@ def write_filtered_dispositions(
     """Write FILTERED for each record the guard filtered, as online's collector does.
 
     FILTERED is written before DEFERRED is cleared, so dying between the two leaves
-    the record's outcome queryable.
+    the record's outcome queryable; a FILTERED the store refused keeps the DEFERRED.
     """
     for entry in context_map.values():
         if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
@@ -329,6 +339,7 @@ def write_filtered_dispositions(
                 source_guid,
                 exc_info=True,
             )
+            continue
         _try_clear_deferred(storage_backend, action_name, source_guid)
 
 

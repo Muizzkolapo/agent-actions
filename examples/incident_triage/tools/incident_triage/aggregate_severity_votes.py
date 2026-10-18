@@ -49,7 +49,9 @@ def aggregate_severity_votes(data: dict[str, Any]) -> dict[str, Any]:
             "final_severity": "SEV5",
             "confidence_score": 0.0,
             "consensus_method": "default",
+            "is_split_decision": False,
             "vote_summary": "No votes received",
+            "severity_distribution": {},
         }
 
     # Weighted voting: higher severity weighted by confidence
