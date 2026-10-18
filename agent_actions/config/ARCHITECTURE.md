@@ -418,6 +418,9 @@ Both `ActionConfig` and `DefaultsConfig` have validators that accept `retry: fal
 
 `ActionConfig.validate_guard()` calls `GuardParser.parse()` (for string guards) or `parse_guard_config()` (for dict guards) during Pydantic validation. Invalid guard expressions fail at config load time, not at runtime when the action executes. This provides early feedback for guard syntax errors.
 
-### 20. seed_data_path rejects path traversal
+### 20. seed_data_path rejects path traversal; seed_data_paths refuses a bad folder
+
+`seed_search_folders()` lists every folder a `$file:` reference is looked for in: the workflow's own folder, the project folder, then each folder of `seed_data_paths`. `get_seed_data_paths()` resolves each listed entry against the project root with symlinks followed and raises `ConfigurationError` for an absolute path, a path outside the project, or a folder that does not exist; nothing is skipped in silence. `resolve_seed_file()` picks the first folder that holds the file, lets a workflow file win over a shared one, and raises `SeedFileError` when no folder has it or two shared folders do. The loader, preflight, the editor and `inspect context` all call these two.
+
 
 `get_seed_data_path()` in `path_config.py` rejects any `seed_data_path` containing `..`, `/`, or `\\`. These are interpreted as path traversal attempts and fall back to the default `"seed_data"` with a warning. The `seed_data_path` must be a simple directory name, not a path.

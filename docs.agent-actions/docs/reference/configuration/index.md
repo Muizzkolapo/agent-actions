@@ -38,6 +38,7 @@ default_agent_config:
 schema_path: schema
 tool_path: ["tools"]
 seed_data_path: seed_data
+seed_data_paths: [shared_seeds]
 required_by_default: false
 ```
 
@@ -47,6 +48,7 @@ required_by_default: false
 | `schema_path` | Directory containing output schemas (default: `schema`) |
 | `tool_path` | Directories to scan for custom tools |
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
+| `seed_data_paths` | Shared seed folders, relative to the project root, searched after the workflow's and the project's own folder; see [Seed Data](../context/seed-data#shared-folders) |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required unless marked `optional: true`; when `false` (default) they are optional unless marked `required: true`. Applies project-wide; a schema declaring its own `required_by_default` overrides it. |
 
 ## Agentic Workflow Configuration

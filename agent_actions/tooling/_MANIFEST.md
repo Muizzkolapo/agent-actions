@@ -39,7 +39,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | `build_index()` | `schema/{workflow}/{action}.yml` | Reads | — |
 | `find_project_root()` | `agent_actions.yml` | Reads | — |
 | `find_all_project_roots()` | `agent_actions.yml` | Reads | — |
-| `resolve_reference()` | `seed_data/*.json` | Reads | `seed_data_path` |
+| `resolve_reference()` | `seed_data/*.json`, `<seed_data_paths>/*.json` | Reads, through `config.path_config.resolve_seed_file` so it opens the file the run reads | `seed_data_path`, `seed_data_paths` |
 | `render_card_markdown()` | `seed_data/*.json` | Transforms | — |
 
 ## Dependencies

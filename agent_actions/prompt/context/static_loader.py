@@ -7,13 +7,14 @@
 import csv
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from agent_actions.config.defaults import SeedDataDefaults
+from agent_actions.config.path_config import SeedFileError, SeedFolder, resolve_seed_file
 from agent_actions.errors import ConfigurationError, FileSystemError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
@@ -51,17 +52,27 @@ class StaticDataLoader:
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {".json", ".yml", ".yaml", ".md", ".txt", ".csv"}
 
-    def __init__(self, static_data_dir: Path):
-        """Initialize StaticDataLoader with path to static_data/ or seed/ folder."""
-        if not static_data_dir.exists():
-            raise ValueError(f"Static data directory does not exist: {static_data_dir}")
-        if not static_data_dir.is_dir():
-            raise ValueError(f"Static data path is not a directory: {static_data_dir}")
+    def __init__(self, static_data_dir: Path | Sequence[SeedFolder]):
+        """The folders a reference is looked for in, in order; one path is a list of one."""
+        if isinstance(static_data_dir, Path):
+            if not static_data_dir.exists():
+                raise ValueError(f"Static data directory does not exist: {static_data_dir}")
+            if not static_data_dir.is_dir():
+                raise ValueError(f"Static data path is not a directory: {static_data_dir}")
+            resolved = static_data_dir.resolve()
+            folders = [SeedFolder(resolved, "workflow", resolved.name)]
+        else:
+            folders = list(static_data_dir)
+            if not folders:
+                raise ValueError("No seed folder to load from")
 
-        self.static_data_dir = static_data_dir.resolve()
+        self.folders = folders
+        self.static_data_dir = folders[0].path
         self._cache: dict[str, Any] = {}
 
-        logger.debug("StaticDataLoader initialized with directory: %s", self.static_data_dir)
+        logger.debug(
+            "StaticDataLoader initialized with folders: %s", [str(f.path) for f in folders]
+        )
 
     def load_static_data(
         self,
@@ -146,14 +157,11 @@ class StaticDataLoader:
         return file_spec  # Use as-is
 
     def _resolve_path(self, file_path: str, field_name: str) -> Path:
-        """Resolve file path relative to static_data_dir with security validation.
+        """The file *file_path* names, from the first folder that holds it.
 
-        Delegates core traversal prevention to the shared ``resolve_seed_path``
-        utility and wraps any failure in a ``StaticDataLoadError`` with rich
-        context for diagnostics.
+        Traversal prevention is the shared ``resolve_seed_file`` rule; any failure
+        is wrapped in a ``StaticDataLoadError`` with context for diagnostics.
         """
-        from agent_actions.utils.path_security import resolve_seed_path
-
         path = Path(file_path)
 
         # Reject absolute paths immediately
@@ -170,7 +178,20 @@ class StaticDataLoader:
             )
 
         try:
-            resolved = resolve_seed_path(file_path, self.static_data_dir)
+            found = resolve_seed_file(file_path, self.folders)
+        except SeedFileError as exc:
+            not_found = str(exc).startswith("Seed file not found")
+            raise StaticDataLoadError(
+                f"Static data field '{field_name}': "
+                + ("File not found. " if not_found else "")
+                + str(exc),
+                context={
+                    "field_name": field_name,
+                    "file_path": file_path,
+                    "searched": [str(folder.path) for folder in self.folders],
+                    "error_type": "file_not_found" if not_found else "seed_file_in_two_folders",
+                },
+            ) from exc
         except ValueError as exc:
             logger.error(
                 "Path traversal attempt detected for field '%s': %s",
@@ -187,8 +208,8 @@ class StaticDataLoader:
                 },
             ) from exc
 
-        logger.debug("Resolved path for field '%s': %s", field_name, resolved)
-        return resolved
+        logger.debug("Resolved path for field '%s': %s", field_name, found.path)
+        return found.path
 
     def _load_file(self, file_path: Path, field_name: str) -> Any:
         """Load file content based on file extension."""

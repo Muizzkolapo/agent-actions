@@ -1,12 +1,14 @@
 """Project-specific path configuration loading."""
 
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 
@@ -314,52 +316,162 @@ def get_required_by_default(project_root: Path) -> bool:
     return bool(config.get("required_by_default", False))
 
 
-def resolve_seed_data_dir(workflow_config_path: str | None) -> tuple[Path | None, str]:
-    """Resolve the seed data directory: workflow root first, then project root.
+def get_seed_data_paths(project_root: Path) -> list[Path]:
+    """The shared seed folders ``seed_data_paths`` lists, each one inside the project and present.
 
-    Single authority for seed directory resolution — the runtime loader and
-    the preflight seed checks must agree on which folder is consulted.
-    Returns ``(directory, seed_dir_name)``; directory is ``None`` when
-    neither the workflow-level nor the project-level folder exists.
+    A folder that is missing, absolute, or outside the project root once symlinks
+    are followed is a configuration error, never skipped.
+    """
+    try:
+        config = load_project_config(project_root)
+    except (OSError, ConfigValidationError) as exc:
+        logger.debug("Could not load seed_data_paths from project config: %s", exc)
+        return []
+
+    raw = config.get("seed_data_paths")
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not all(isinstance(entry, str) and entry for entry in raw):
+        raise ConfigurationError(
+            "seed_data_paths: must be a list of folder names inside the project root.",
+            context={"seed_data_paths": raw},
+        )
+
+    root = project_root.resolve()
+    folders: list[Path] = []
+    for entry in raw:
+        outside = ConfigurationError(
+            f"seed_data_paths: '{entry}' is outside the project. "
+            "Use a folder inside the project root.",
+            context={"entry": entry, "project_root": str(project_root)},
+        )
+        if Path(entry).is_absolute():
+            raise outside
+        resolved = (root / entry).resolve()
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            raise outside from None
+        if not resolved.is_dir():
+            raise ConfigurationError(
+                f"seed_data_paths: folder '{entry}' does not exist (project root: {project_root}).",
+                context={"entry": entry, "project_root": str(project_root)},
+            )
+        folders.append(resolved)
+    return folders
+
+
+@dataclass(frozen=True)
+class SeedFolder:
+    """One folder a seed reference is looked for in; ``kind`` is workflow, project or listed."""
+
+    path: Path
+    kind: str
+    label: str
+
+
+@dataclass(frozen=True)
+class ResolvedSeedFile:
+    """The file a seed reference names, and the shared files a workflow file hides."""
+
+    path: Path
+    folder: SeedFolder
+    overrides: tuple[Path, ...] = ()
+
+
+class SeedFileError(ValueError):
+    """A seed reference names no file, or a name two shared folders both hold."""
+
+
+def _workflow_root(workflow_config_path: Path) -> Path:
+    current = workflow_config_path.resolve().parent
+    search_up = current
+    while search_up != search_up.parent:
+        if (search_up / "agent_config").exists():
+            return search_up
+        if search_up.name == "agent_config":
+            return search_up.parent
+        search_up = search_up.parent
+    return current
+
+
+def _folder_label(path: Path, project_root: Path | None) -> str:
+    if project_root is not None:
+        try:
+            return path.resolve().relative_to(project_root.resolve()).as_posix()
+        except ValueError:
+            pass
+    return str(path)
+
+
+def seed_search_folders(
+    workflow_config_path: str | None, project_root: Path | None = None
+) -> list[SeedFolder]:
+    """Every folder a seed reference is looked for in, in search order.
+
+    The workflow's own folder first, then the project folder named by
+    ``seed_data_path``, then each folder of ``seed_data_paths`` in order. The
+    runtime loader, preflight, the editor and ``inspect`` all search this list,
+    so they cannot disagree about which file a name means. A default folder that
+    does not exist is left out; a listed one that does not exist is an error.
     """
     from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 
-    seed_dir_name = "seed_data"
-    try:
-        pm = PathManager()
-        start_path = Path(workflow_config_path).parent if workflow_config_path else None
-        if start_path is not None:
-            try:
-                project_root = pm.get_project_root(start_path=start_path)
-                seed_dir_name = get_seed_data_path(project_root)
-            except ProjectRootNotFoundError:
-                logger.debug("No project root found from %s", start_path)
+    root = project_root
+    if root is None:
+        start = Path(workflow_config_path).parent if workflow_config_path else None
+        try:
+            root = PathManager().get_project_root(start_path=start)
+        except ProjectRootNotFoundError:
+            logger.debug("No project root found from %s", start)
 
-        if workflow_config_path:
-            current = Path(workflow_config_path).resolve().parent
-            workflow_root = None
-            search_up = current
-            while search_up != search_up.parent:
-                if (search_up / "agent_config").exists():
-                    workflow_root = search_up
-                    break
-                if search_up.name == "agent_config":
-                    workflow_root = search_up.parent
-                    break
-                search_up = search_up.parent
-            if workflow_root is None:
-                workflow_root = current
+    seed_dir_name = get_seed_data_path(root) if root is not None else "seed_data"
+    folders: list[SeedFolder] = []
+    project_dir = (root / seed_dir_name).resolve() if root is not None else None
 
-            workflow_seed_dir = workflow_root / seed_dir_name
-            if workflow_seed_dir.is_dir():
-                logger.debug("Found workflow-level seed data: %s", workflow_seed_dir)
-                return workflow_seed_dir, seed_dir_name
+    if workflow_config_path:
+        workflow_dir = (_workflow_root(Path(workflow_config_path)) / seed_dir_name).resolve()
+        if workflow_dir.is_dir() and workflow_dir != project_dir:
+            folders.append(SeedFolder(workflow_dir, "workflow", _folder_label(workflow_dir, root)))
 
-        project_seed_dir = pm.get_project_root() / seed_dir_name
-        if project_seed_dir.is_dir():
-            logger.debug("Found project-level seed data: %s", project_seed_dir)
-            return project_seed_dir, seed_dir_name
-    except Exception as e:
-        logger.warning("Error during seed data resolution: %s", e, exc_info=True)
+    if root is not None and project_dir is not None:
+        if project_dir.is_dir():
+            folders.append(SeedFolder(project_dir, "project", _folder_label(project_dir, root)))
+        for listed in get_seed_data_paths(root):
+            folders.append(SeedFolder(listed, "listed", _folder_label(listed, root)))
 
-    return None, seed_dir_name
+    return folders
+
+
+def resolve_seed_file(file_spec: str, folders: Sequence[SeedFolder]) -> ResolvedSeedFile:
+    """The file *file_spec* names, from the first folder that holds it.
+
+    A workflow folder's file wins over any shared folder's, and the shared files
+    it hides are reported as ``overrides``. A name held by more than one shared
+    folder is refused, so no run ever picks one of them in silence. A path that
+    escapes a folder raises the same ``ValueError`` as before.
+    """
+    from agent_actions.utils.path_security import FILE_PREFIX, resolve_seed_path
+
+    name = file_spec[len(FILE_PREFIX) :] if file_spec.startswith(FILE_PREFIX) else file_spec
+    hits: list[tuple[SeedFolder, Path]] = []
+    for folder in folders:
+        candidate = resolve_seed_path(file_spec, folder.path)
+        if candidate.is_file():
+            hits.append((folder, candidate))
+
+    if not hits:
+        searched = ", ".join(folder.label for folder in folders) or "no seed folder exists"
+        raise SeedFileError(f"Seed file not found: {name}. Searched: {searched}.")
+
+    shared = [(folder, path) for folder, path in hits if folder.kind != "workflow"]
+    for folder, path in hits:
+        if folder.kind == "workflow":
+            return ResolvedSeedFile(path, folder, tuple(path for _, path in shared))
+    if len(shared) > 1:
+        raise SeedFileError(
+            f"Seed file '{name}' is in more than one shared seed folder: "
+            f"{', '.join(folder.label for folder, _ in shared)}. Keep it in one."
+        )
+    folder, path = shared[0]
+    return ResolvedSeedFile(path, folder)

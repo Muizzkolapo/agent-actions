@@ -464,8 +464,67 @@ class ContextCommand(BaseInspectCommand):
                 "drop": context_scope.get("drop", []),
             },
             "seed_selection": self._seed_selection(context_scope),
+            "seed_files": self._seed_files(
+                context_scope, str(getattr(inspector, "config_path", "") or "") or None
+            ),
             "total_template_variables": sum(len(fs) for fs in namespaces.values()),
         }
+
+    @staticmethod
+    def _seed_files(
+        context_scope: dict[str, Any], workflow_config_path: str | None
+    ) -> dict[str, list[dict[str, Any]]]:
+        """For each seed key, the file each reference resolves to and the shared files it hides."""
+        from agent_actions.config.path_config import (
+            SeedFileError,
+            resolve_seed_file,
+            seed_search_folders,
+        )
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.prompt.context.seed_entry import parse_seed_entry
+
+        seed_entries = context_scope.get("seed")
+        if not isinstance(seed_entries, dict):
+            return {}
+        try:
+            folders = seed_search_folders(workflow_config_path)
+        except ConfigurationError as exc:
+            return {
+                key: [{"file": None, "overrides": [], "error": str(exc)}] for key in seed_entries
+            }
+
+        def label(path: Path) -> str:
+            for folder in folders:
+                if path.is_relative_to(folder.path):
+                    return f"{folder.label}/{path.relative_to(folder.path).as_posix()}"
+            return str(path)
+
+        files: dict[str, list[dict[str, Any]]] = {}
+        for key, raw in seed_entries.items():
+            try:
+                entry = parse_seed_entry(key, raw, "")
+            except ConfigurationError as exc:
+                files[key] = [{"file": None, "overrides": [], "error": str(exc)}]
+                continue
+            references: list[tuple[str | None, str | None]] = (
+                list(entry.files.items()) if entry.selected else [(None, entry.file_spec)]
+            )
+            rows: list[dict[str, Any]] = []
+            for value, spec in references:
+                row: dict[str, Any]
+                try:
+                    found = resolve_seed_file(spec or "", folders)
+                    row = {
+                        "file": label(found.path),
+                        "overrides": [label(p) for p in found.overrides],
+                    }
+                except (SeedFileError, ValueError) as exc:
+                    row = {"file": None, "overrides": [], "error": str(exc)}
+                if value is not None:
+                    row["value"] = value
+                rows.append(row)
+            files[key] = rows
+        return files
 
     @staticmethod
     def _seed_namespace_keys(context_scope: dict[str, Any]) -> list[str]:
@@ -592,6 +651,31 @@ class ContextCommand(BaseInspectCommand):
                     + f"-> {_escape_markup(file)}",
                     soft_wrap=True,
                 )
+
+        seed_files = context_data.get("seed_files", {})
+        if seed_files:
+            self.console.print("\n  [bold]Seed files:[/bold]")
+            key_width = max(len(key) for key in seed_files) + 2
+            for key, rows in seed_files.items():
+                for row in rows:
+                    value = (
+                        f"[dim]{_escape_markup(str(row['value']))} ->[/dim] "
+                        if "value" in row
+                        else ""
+                    )
+                    if row.get("file"):
+                        where = _escape_markup(row["file"])
+                        if row.get("overrides"):
+                            where += f"  [dim](overrides {_escape_markup(', '.join(row['overrides']))})[/dim]"
+                    else:
+                        where = f"[red]{_escape_markup(row.get('error', 'not found'))}[/red]"
+                    self.console.print(
+                        f"    [bright_blue]{_escape_markup(key)}[/bright_blue]"
+                        + " " * (key_width - len(key))
+                        + value
+                        + where,
+                        soft_wrap=True,
+                    )
 
         # Copy-paste snippet. Walk user namespaces first so the picker
         # prefers action-specific fields over framework ones like `workflow.name`.

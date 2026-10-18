@@ -86,10 +86,12 @@ Key Functions
 | `PathManager.get_project_root` | `agent_actions.yml` | Reads | — |
 | `PathManager.get_standard_path` | `agent_io/target/{action}/` | Reads | — |
 | `PathManager.clean_path` | `agent_io/target/{action}/` | Writes | — |
-| `load_project_config` | `agent_actions.yml` | Reads | `project_name`, `schema_path`, `tool_path`, `seed_data_path` |
+| `load_project_config` | `agent_actions.yml` | Reads | `project_name`, `schema_path`, `tool_path`, `seed_data_path`, `seed_data_paths` |
 | `get_tool_dirs` | `agent_actions.yml` | Reads | `tool_path` |
 | `get_schema_path` | `agent_actions.yml` | Reads | `schema_path` |
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |
+| `get_seed_data_paths` | `agent_actions.yml` | Reads, refuses a missing or outside folder | `seed_data_paths` |
+| `seed_search_folders`, `resolve_seed_file` | `seed_data/`, `<seed_data_paths>/` | Reads; the one search the loader, preflight, the editor and `inspect` share | `seed_data_path`, `seed_data_paths` |
 | `get_project_name` | `agent_actions.yml` | Reads | `project_name` |
 | `warn_unread_project_keys` | `agent_actions.yml` | Validates | `output_storage` |
 | `ProjectInitializer.init_project` | `agent_actions.yml` | Writes | `project_name`, `default_agent_config`, `schema_path`, `tool_path`, `seed_data_path` |
