@@ -166,6 +166,13 @@ The `@udf_tool` decorator (from `utils/udf_management/registry.py`) registers fu
 The `process_initial_stage()` function is the entry point for all first-stage data processing. It reads a file, prepares records, saves source data, and dispatches to either batch or online processing.
 
 ```
+The walk (workflow/runner_file_processing.process_directory_files) first runs
+precheck_staged_file() on EVERY staged file it will process -- steps 1-3 below with
+no storage backend, so nothing is claimed, stored or sent -- and a file the first
+stage would refuse stops the run there, before any file is processed. A file limit
+does not shorten that pass, and a file that cannot be read or parsed is left to the
+walk, which records the loss. Then, per file:
+
 process_initial_stage(InitialStageContext)
   |
   1. FileReader.read() -- raw content + file_type

@@ -3,7 +3,7 @@
 import logging
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -208,11 +208,26 @@ def _read_staged_file(ctx: InitialStageContext) -> tuple[Any, str]:
     return file_reader.read(), file_reader.file_type
 
 
-def process_initial_stage(ctx: InitialStageContext):
-    """Process input files through the initial stage pipeline. Returns output file path."""
-    content, file_type = _read_staged_file(ctx)
-    run_mode = ctx.agent_config.get("run_mode")
+@dataclass
+class StagedFile:
+    """A staged file read, prepared and checked, before anything of it is stored or sent."""
 
+    content: Any
+    file_type: str
+    run_mode: Any
+    relative_path: str
+    data_chunk: Any
+    src_text: Any
+
+
+def _check_and_prepare(ctx: InitialStageContext, content: Any, file_type: str) -> StagedFile:
+    """Prepare one staged file's records as the run mode does, and run every check.
+
+    The document rule, the reserved-name check, the seed-selector check on every
+    prepared row for every action, and the first-record template render, in that
+    order. Nothing is stored or sent here; the caller decides what happens next.
+    """
+    run_mode = ctx.agent_config.get("run_mode")
     logger.info(
         "Staging loader run_mode check: mode=%s, agent=%s, file=%s",
         run_mode,
@@ -282,6 +297,32 @@ def process_initial_stage(ctx: InitialStageContext):
         action_configs=ctx.action_configs,
         workflow_metadata=ctx.workflow_metadata,
     )
+
+    return StagedFile(content, file_type, run_mode, relative_path, data_chunk, src_text)
+
+
+def precheck_staged_file(ctx: InitialStageContext) -> None:
+    """Run every check the first stage runs on one staged file, storing and sending nothing.
+
+    The walk calls this for every staged file before it processes the first, so a
+    file the first stage would refuse stops the run before any record of any file
+    is stored or sent. Records are prepared with no storage backend, so no identity
+    is claimed and nothing is written. A file that cannot be read or parsed is not
+    a refusal: the walk reads it again and records the loss as it always has.
+    """
+    try:
+        content, file_type = _read_staged_file(ctx)
+    except (OSError, AgentActionsError) as exc:
+        logger.debug("Left %s to the walk, which records the loss: %s", ctx.file_path, exc)
+        return
+    _check_and_prepare(replace(ctx, storage_backend=None), content, file_type)
+
+
+def process_initial_stage(ctx: InitialStageContext):
+    """Process input files through the initial stage pipeline. Returns output file path."""
+    content, file_type = _read_staged_file(ctx)
+    staged = _check_and_prepare(ctx, content, file_type)
+    run_mode, data_chunk, src_text = staged.run_mode, staged.data_chunk, staged.src_text
 
     # The records a repair leaves out are what let the disposition gate tell a
     # stored row of this action's own making from one minted upstream.

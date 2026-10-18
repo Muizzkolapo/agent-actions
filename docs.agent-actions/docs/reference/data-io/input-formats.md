@@ -103,6 +103,16 @@ The check that runs before any record is sent renders the first chunk, so a
 reference to a field a chunk does not have, such as `source.page_content`, stops
 the run there and names `source.content`.
 
+## Staging Checks
+
+Before the first action processes any file, every staged file it will process is read, its records prepared, and the checks the first stage runs are applied to each: the document rule (a JSON file is an array of objects), reserved field names, a value for every [seed chosen per record](../context/seed-data#choosing-a-seed-file-per-record) in every action, and a render of the first record against the prompt. A file that fails stops the run there, with the file and the record named, and nothing of any file is stored or sent:
+
+```
+Seed 'syllabus' in action 'label_page': record value 'snowflak' for 'source.exam' is not in the file map. Known values: dbt, snowflake. (staging/b_pages.json, record 1)
+```
+
+The pass covers every file the run would process, so a `file_limit` or `record_limit` does not hide a bad file beyond the limit. A file that cannot be read or parsed is not a refusal: the run reads it again and reports it as a lost file, as before. The check prepares records with no store, so a refused run leaves the store as it found it.
+
 ## Accessing Source Data
 
 Reference source fields in prompts using `{{ source.field }}`:

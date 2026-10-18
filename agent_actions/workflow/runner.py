@@ -318,29 +318,37 @@ class ActionRunner:
             output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
 
-    def _process_single_file(self, params: SingleFileProcessParams):
-        """Process a single file with the strategy."""
+    def _strategy_params(
+        self, params: SingleFileProcessParams, *, storage_backend: Any
+    ) -> StrategyExecutionParams:
         relative_path = params.locations.item.relative_to(params.locations.input_path)
         output_file_path = params.locations.output_path / relative_path
-        if self.storage_backend is None:
-            output_file_path.parent.mkdir(parents=True, exist_ok=True)
-        params.strategy.execute(
-            StrategyExecutionParams(
-                action_config=cast("ActionConfigDict", params.action_config),
-                action_name=params.action_name,
-                file_path=str(params.locations.item),
-                base_directory=str(params.locations.input_directory),
-                output_directory=str(output_file_path.parent),
-                idx=params.idx,
-                action_configs=self.action_configs,
-                storage_backend=self.storage_backend,
-                source_relative_path=params.source_relative_path,
-                data=params.data,
-                workflow_metadata=self.workflow_metadata,
-                retried_records=self.retried_records,
-                file_type_filter=params.file_type_filter,
-            )
+        return StrategyExecutionParams(
+            action_config=cast("ActionConfigDict", params.action_config),
+            action_name=params.action_name,
+            file_path=str(params.locations.item),
+            base_directory=str(params.locations.input_directory),
+            output_directory=str(output_file_path.parent),
+            idx=params.idx,
+            action_configs=self.action_configs,
+            storage_backend=storage_backend,
+            source_relative_path=params.source_relative_path,
+            data=params.data,
+            workflow_metadata=self.workflow_metadata,
+            retried_records=self.retried_records,
+            file_type_filter=params.file_type_filter,
         )
+
+    def _precheck_single_file(self, params: SingleFileProcessParams) -> None:
+        """Run the first stage's checks on one staged file, with no store to write to."""
+        params.strategy.precheck(self._strategy_params(params, storage_backend=None))
+
+    def _process_single_file(self, params: SingleFileProcessParams):
+        """Process a single file with the strategy."""
+        if self.storage_backend is None:
+            relative_path = params.locations.item.relative_to(params.locations.input_path)
+            (params.locations.output_path / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        params.strategy.execute(self._strategy_params(params, storage_backend=self.storage_backend))
 
     def process_and_generate_for_action(self, params: ProcessGenerateParams) -> str:
         """Process and generate data for an action using the provided strategy."""
