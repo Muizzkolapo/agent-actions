@@ -47,35 +47,38 @@ class SourceNamespaceBuilder:
     """Build the 'source' namespace from input data."""
 
     @staticmethod
+    def fields(source_content: Any | None) -> dict:
+        """The record's source fields, from an envelope or a flat dict; empty when none."""
+        if not source_content or not isinstance(source_content, dict):
+            return {}
+        if "content" in source_content and isinstance(source_content["content"], dict):
+            # Record envelope ({content: {source: ..., action1: ...}, source_guid: ...}).
+            # Extract the "source" sub-namespace from the content dict so
+            # references like source.page_content resolve correctly.
+            inner = source_content["content"]
+            if "source" in inner and isinstance(inner["source"], dict):
+                return inner["source"]
+            return dict(inner)
+        return dict(source_content)
+
+    @staticmethod
     def build(source_content: Any | None, agent_name: str) -> dict | None:
         """Return source namespace dict, or None if no source data.
 
         Handles both wrapped (``{"content": {...}}``) and flat dict formats.
         Fires ContextNamespaceLoadedEvent on success.
         """
-        source_namespace: dict = {}
-        if source_content and isinstance(source_content, dict):
-            if "content" in source_content and isinstance(source_content["content"], dict):
-                # Record envelope ({content: {source: ..., action1: ...}, source_guid: ...}).
-                # Extract the "source" sub-namespace from the content dict so
-                # references like source.page_content resolve correctly.
-                inner = source_content["content"]
-                if "source" in inner and isinstance(inner["source"], dict):
-                    source_namespace = inner["source"]
-                else:
-                    # No "source" sub-namespace — use full content as source
-                    logger.debug(
-                        "Action '%s': no 'source' in content envelope "
-                        "(keys: %s) — using full content as source namespace",
-                        agent_name,
-                        sorted(inner.keys()),
-                    )
-                    source_namespace = dict(inner)
-            else:
-                source_namespace = dict(source_content)
-
+        source_namespace = SourceNamespaceBuilder.fields(source_content)
         if not source_namespace:
             return None
+        inner = source_content.get("content") if isinstance(source_content, dict) else None
+        if isinstance(inner, dict) and not isinstance(inner.get("source"), dict):
+            logger.debug(
+                "Action '%s': no 'source' in content envelope "
+                "(keys: %s) — using full content as source namespace",
+                agent_name,
+                sorted(inner.keys()),
+            )
 
         logger.debug("Added 'source' namespace with %s fields", len(source_namespace))
         fire_event(

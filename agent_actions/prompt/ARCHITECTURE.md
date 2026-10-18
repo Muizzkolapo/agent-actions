@@ -374,11 +374,16 @@ context_scope:
   seed:
     rubric: "grading_rubric.json"
     examples: "few_shot_examples.yml"
+    syllabus:                       # one file per value of a staged record field
+      select_by: source.exam
+      files: {dbt: "dbt.json", snowflake: "snowflake.json"}
 
 StaticDataLoader(static_data_dir=Path("seed_data/"))
-  .load_static_data({"rubric": "grading_rubric.json", ...})
+  .load_static_data({"rubric": "grading_rubric.json", ...}, source=record_fields)
     |
-    For each field_name, file_spec:
+    For each seed key (seed_entry.parse_seed_entry):
+      0. A string names one file; a mapping picks the file by the record's
+         value of `select_by` (missing, unknown or non-scalar value: error)
       1. Parse path: strip "$file:" prefix if present
       2. Resolve path relative to seed_data/ directory
       3. SECURITY: reject absolute paths, reject path traversal (../../etc/passwd)

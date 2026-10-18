@@ -112,7 +112,11 @@ def build_guard_context(
     # only reads, and hands a UDF a read-only view), so each file is parsed once.
     if _guard_can_read_seed(agent_config):
         seed = PromptPreparationService.load_seed_data(
-            agent_config, agent_config.get("context_scope") or {}, agent_name, shared=True
+            agent_config,
+            agent_config.get("context_scope") or {},
+            agent_name,
+            source=field_context.get("source"),
+            shared=True,
         )
         if seed:
             field_context["seed"] = seed

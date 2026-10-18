@@ -32,8 +32,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Staged formats whose content is a list of records by the time it is validated.
-_RECORD_FILE_TYPES = frozenset({".json", ".csv", ".tsv", ".xlsx"})
 _DELIMITED_FILE_TYPES = frozenset({".csv", ".tsv"})
 # Staged formats read as text and split into chunks, each staged as {"content": <chunk>}.
 _TEXT_FILE_TYPES = frozenset({".txt", ".md", ".pdf", ".docx", ".html"})
@@ -119,7 +117,7 @@ def _first_stage_workflow_metadata(
 
 
 def _validate_staged_data(
-    raw_content: Any,
+    records: list[Any],
     file_type: str,
     agent_config: dict[str, Any],
     agent_name: str,
@@ -129,17 +127,19 @@ def _validate_staged_data(
     action_configs: dict[str, Any] | None = None,
     workflow_metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Validate input context against prompt template requirements before LLM execution.
+    """Render a file's first prepared record against the prompt before any is stored or sent.
 
-    Renders with the version and workflow metadata the records are prepared with, so a
-    prompt that reads `version.*` or `workflow.*` is not refused here.
+    The record is the one the run prepared, whatever the file type, so the render
+    sees the fields a prompt will. Renders with the version and workflow metadata
+    the records are prepared with, so a prompt that reads `version.*` or
+    `workflow.*` is not refused here.
     """
     from agent_actions.prompt.service import (
         PromptPreparationService,
     )
     from agent_actions.workflow.pipeline import ProcessingPipeline
 
-    if not raw_content:
+    if not records:
         return
 
     try:
@@ -150,18 +150,8 @@ def _validate_staged_data(
     if not raw_prompt:
         return
 
-    if file_type in _RECORD_FILE_TYPES:
-        # Rows of records by the time they reach here, as staging will envelope them;
-        # the document rule runs before this for JSON and refuses anything else.
-        first_item = raw_content[0]
-        source_content = first_item
-    elif file_type in _TEXT_FILE_TYPES:
-        chunks = _text_chunk_payloads(str(raw_content), agent_config)
-        if not chunks:
-            return
-        first_item = source_content = chunks[0]
-    else:
-        return
+    first_item = records[0]
+    source_content = first_item
 
     agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
         cast("ActionConfigDict", agent_config), action_configs
@@ -237,6 +227,7 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
     from agent_actions.input.preprocessing.staging.field_validation import (
+        validate_seed_selectors,
         validate_staging_field_names,
     )
 
@@ -251,17 +242,6 @@ def process_initial_stage(ctx: InitialStageContext):
         # a CSV column named like a namespace has always staged. Reading the file as
         # rows must not start refusing a workflow that runs.
         validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
-
-    _validate_staged_data(
-        raw_content=content,
-        file_type=file_type,
-        agent_config=ctx.agent_config,
-        agent_name=ctx.agent_name,
-        mode=run_mode or RunMode.ONLINE,
-        file_path=ctx.file_path,
-        action_configs=ctx.action_configs,
-        workflow_metadata=ctx.workflow_metadata,
-    )
 
     # Same formula _save_source_items_helper uses, so the identity claim below
     # is keyed by the relative_path this file's rows will actually be stored under.
@@ -282,6 +262,26 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk, src_text = _prepare_batch_data(prep_ctx)
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
+
+    # On the rows as prepared, whatever the file type, and before any is stored or sent.
+    validate_seed_selectors(
+        records=data_chunk,
+        file_path=ctx.file_path,
+        action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
+    )
+
+    # After the row check, so a row no seed covers is refused with its location
+    # rather than from this render of the first row.
+    _validate_staged_data(
+        records=data_chunk,
+        file_type=file_type,
+        agent_config=ctx.agent_config,
+        agent_name=ctx.agent_name,
+        mode=run_mode or RunMode.ONLINE,
+        file_path=ctx.file_path,
+        action_configs=ctx.action_configs,
+        workflow_metadata=ctx.workflow_metadata,
+    )
 
     # The records a repair leaves out are what let the disposition gate tell a
     # stored row of this action's own making from one minted upstream.

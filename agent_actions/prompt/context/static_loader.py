@@ -8,19 +8,21 @@ import csv
 import json
 import logging
 import threading
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from agent_actions.config.defaults import SeedDataDefaults
-from agent_actions.errors import FileSystemError
+from agent_actions.errors import ConfigurationError, FileSystemError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
     CacheHitEvent,
     CacheInvalidationEvent,
     CacheMissEvent,
 )
+from agent_actions.prompt.context.seed_entry import SeedSelectionError, parse_seed_entry
 
 logger = logging.getLogger(__name__)
 
@@ -62,17 +64,28 @@ class StaticDataLoader:
 
         logger.debug("StaticDataLoader initialized with directory: %s", self.static_data_dir)
 
-    def load_static_data(self, static_data_config: dict[str, str]) -> dict[str, Any]:
-        """Load all static data files specified in context_scope.seed."""
+    def load_static_data(
+        self,
+        static_data_config: Mapping[str, Any],
+        *,
+        source: Mapping[str, Any] | None = None,
+        action_name: str = "",
+    ) -> dict[str, Any]:
+        """Load the seed files of ``context_scope.seed`` for one record.
+
+        ``source`` is the record's own fields; an entry that selects its file by one
+        of them reads it here, so the selector never has to appear in the prompt.
+        """
         if not static_data_config:
             logger.debug("No static data config provided, skipping load")
             return {}
 
         loaded_data = {}
 
-        for field_name, file_spec in static_data_config.items():
+        for field_name, raw_entry in static_data_config.items():
             try:
-                # Parse file path from specification
+                entry = parse_seed_entry(field_name, raw_entry, action_name)
+                file_spec = entry.file_for(source, action_name)
                 file_path = self._parse_file_path(file_spec, field_name)
 
                 # Resolve and validate path
@@ -104,8 +117,17 @@ class StaticDataLoader:
                         "Loaded static data field '%s' from %s", field_name, resolved_path.name
                     )
 
-            except StaticDataLoadError:
-                # Re-raise StaticDataLoadError as-is
+            except SeedSelectionError as e:
+                raise StaticDataLoadError(
+                    str(e),
+                    context={
+                        "field_name": field_name,
+                        "select_by": entry.select_by,
+                        "error_type": "seed_value_not_selectable",
+                    },
+                    cause=e,
+                ) from e
+            except (StaticDataLoadError, ConfigurationError):
                 raise
             except Exception as e:
                 # Wrap unexpected errors
@@ -114,7 +136,7 @@ class StaticDataLoader:
                     f"Failed to load static data field '{field_name}': {str(e)}",
                     context={
                         "field_name": field_name,
-                        "file_spec": file_spec,
+                        "file_spec": str(raw_entry),
                         "error_type": "unexpected_error",
                     },
                     cause=e,

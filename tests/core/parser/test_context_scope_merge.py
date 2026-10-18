@@ -247,3 +247,27 @@ class TestContextScopeMergeInActionExpander:
 
         # Should not have context_scope
         assert "context_scope" not in result
+
+
+class TestASelectedSeedSurvivesTheMerge:
+    def test_an_action_replaces_one_selected_key_and_keeps_the_rest(self):
+        """A seed entry that picks its file by a record field merges as one whole value."""
+        defaults_scope = {
+            "seed": {
+                "rules": "$file:rules.json",
+                "syllabus": {
+                    "select_by": "source.exam",
+                    "files": {"dbt": "$file:dbt.json", "snowflake": "$file:snowflake.json"},
+                },
+            }
+        }
+        action_scope = {
+            "seed": {"syllabus": {"select_by": "source.track", "files": {"a": "$file:a.json"}}}
+        }
+
+        result = deep_merge_context_scope(defaults_scope, action_scope)
+
+        assert result["seed"] == {
+            "rules": "$file:rules.json",
+            "syllabus": {"select_by": "source.track", "files": {"a": "$file:a.json"}},
+        }
