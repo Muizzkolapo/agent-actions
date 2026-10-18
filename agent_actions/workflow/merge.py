@@ -390,8 +390,9 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     def made_by(key: str) -> list[str]:
         return sorted({str(r["aggregated_by"]) for _, r in groups[key] if r.get("aggregated_by")})
 
-    # A split of an aggregate is judged with it. One taking a source as its anchor holds
-    # that only because an aggregate is built over its file's first record.
+    # A split of an aggregate is judged with it. One whose anchor is a source holds that
+    # only because an aggregate is built over its file's first record: it pairs with no
+    # one, as a split group is held by one branch alone.
     every = {branch for members in groups.values() for branch, _ in members}
     for key in groups:
         makers = made_by(key)
@@ -401,7 +402,7 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
         if split_of is not None and made_by(split_of):
             continue
         held = branches(key) | (below(key) if split_of is None else set())
-        if split_of is not None or held != every:
+        if held != every:
             raise _aggregate_unpaired(key, sorted(held), makers, sorted(every - held))
 
     # Under each source no record holds, the branches holding a record of it, and those
