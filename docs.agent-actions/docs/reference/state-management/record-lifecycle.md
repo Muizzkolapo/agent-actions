@@ -69,11 +69,11 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 | `success` | Action completed successfully |
 | `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
 | `skipped` | WHERE clause excluded the record from this action |
-| `filtered` | Guard condition was false; record excluded from output |
+| `filtered` | Guard condition was false; record excluded from output. In a batch run it is written when the batch is submitted, since the record is sent nothing |
 | `unprocessed` | Not answered: a dependency didn't produce output (cascade casualty), or a guard skipped it |
 | `deferred` | In-flight HITL/batch awaiting resolution. A batch record still `deferred` once its batch is collected, because the store refused its outcome, gets the outcome its stored row stands for from the next `agac run` or `agac retry` |
 | `exhausted` | All repair iterations failed |
-| `failed` | Unrecoverable error |
+| `failed` | Unrecoverable error. Online, a `failed` or `exhausted` the store refuses to record fails the action with the store error, so `agac retry` still reaches the record |
 
 ### `reason` column
 

@@ -912,6 +912,8 @@ class ProcessingPipeline:
             self.config.storage_backend.clear_checkpoint_records(
                 self.config.action_name, context.target_relative_path
             )
+        if context.failure_not_stored is not None:
+            raise context.failure_not_stored
         if failure is not None:
             raise failure
 

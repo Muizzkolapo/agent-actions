@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  Online, an action fails when the store refuses to record that one of its records failed
+  or exhausted its retries, with the store error in its status and the run history, and
+  `agac retry` re-runs it once the store answers. Before, the run went on: the record held
+  no disposition at all, the action read `completed`, the run exited 0, and `agac retry`
+  said "Nothing to retry", so the failure was never repaired. This holds for the first
+  action and for every action below it (#1534).
+time: 2026-10-18T17:00:00Z

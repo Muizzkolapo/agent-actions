@@ -544,6 +544,8 @@ run_mode == BATCH and not tool/HITL?
     output_handler.save_main_output()
     write_dispositions(context.kept_dispositions)   ← only after the file
     clear_checkpoint_records(action, target_relative_path)
+    raise context.failure_not_stored, if any  ← the store refused a record's
+                                                failure: fatal to the action
     raise the terminal failure held back for the write, if any
 ```
 
@@ -558,7 +560,8 @@ Run 1: Submit
     → store the context map and recorded inputs (only once the provider
       has taken the batch)
     → write .batch_registry.json
-    → DISPOSITION_DEFERRED for all records
+    → DISPOSITION_DEFERRED for every record sent, DISPOSITION_FILTERED for
+      every record the guard filtered (sent nothing, so known already)
     → action status → BATCH_SUBMITTED
     → workflow pauses
     A batch the provider refuses fails the action once every file has

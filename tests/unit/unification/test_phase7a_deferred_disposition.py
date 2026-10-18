@@ -12,7 +12,7 @@ from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
-from agent_actions.storage.backend import DISPOSITION_DEFERRED
+from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FILTERED
 
 
 def _make_submission_service(
@@ -205,3 +205,31 @@ class TestDeferredStampedOnSubmit:
         call = backend.set_disposition.call_args
         assert call.args[1] == "sg-included"
         assert call.args[2] == DISPOSITION_DEFERRED
+
+
+class TestFilteredStampedAtSubmit:
+    """A record the guard filtered is recorded FILTERED when its batch is submitted (1534).
+
+    It is stamped no DEFERRED, so a FILTERED the collect pass alone wrote, refused by the
+    store, left it holding no disposition.
+    """
+
+    def test_only_filtered_records_with_an_identity_are_stamped_filtered(self):
+        backend = MagicMock()
+        service = _make_submission_service(storage_backend=backend)
+        context_map: dict[str, Any] = {}
+        for status in (FilterStatus.INCLUDED, FilterStatus.SKIPPED, FilterStatus.FILTERED):
+            entry = {"source_guid": f"sg-{status.value}", "content": {"text": "x"}}
+            BatchContextMetadata.set_filter_status(entry, status)
+            context_map[f"t-{status.value}"] = entry
+        BatchContextMetadata.set_skip_reason(context_map["t-filtered"], "guard_filter")
+        no_identity: dict[str, Any] = {"content": {"text": "x"}}
+        BatchContextMetadata.set_filter_status(no_identity, FilterStatus.FILTERED)
+        context_map["t-none"] = no_identity
+
+        service._stamp_filtered(context_map, "test_action")
+
+        assert backend.set_disposition.call_count == 1
+        call = backend.set_disposition.call_args
+        assert call.args == ("test_action", "sg-filtered", DISPOSITION_FILTERED)
+        assert call.kwargs["reason"] == "guard_filter"

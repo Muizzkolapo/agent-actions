@@ -43,3 +43,12 @@ class EmptyOutputError(ProcessingError):
     """Raised when an action produces empty output and on_empty=error."""
 
     pass
+
+
+class DispositionsNotStoredError(ProcessingError):
+    """Raised when the store refused the failure dispositions of an online run's records.
+
+    Without them `agac retry` cannot find those records, so the action fails instead.
+    """
+
+    pass

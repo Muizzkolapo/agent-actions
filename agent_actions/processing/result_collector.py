@@ -5,7 +5,12 @@ import logging
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.errors import AgentActionsError, mark_every_record_failed
+from agent_actions.errors import (
+    AgentActionsError,
+    DispositionsNotStoredError,
+    mark_action_fatal,
+    mark_every_record_failed,
+)
 from agent_actions.errors import terminal_failure as build_terminal_failure
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -37,6 +42,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
+    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
     DispositionRow,
 )
@@ -368,18 +374,47 @@ def write_dispositions(
 
     Returns False only when the store refused them, so none of them is stored.
     """
+    return _refusal_of(storage_backend, rows, action_name) is None
+
+
+def _refusal_of(
+    storage_backend: Optional["StorageBackend"],
+    rows: list[DispositionRow],
+    action_name: str,
+) -> Exception | None:
+    """Write *rows* in one transaction, returning the error the store refused them with."""
     if not storage_backend or not rows:
-        return True
+        return None
     try:
         storage_backend.set_dispositions_batch(rows)
-    except Exception:
+    except Exception as refused:
         logger.exception(
             "Failed to batch-write %d dispositions for %s",
             len(rows),
             action_name,
         )
-        return False
-    return True
+        return refused
+    return None
+
+
+def failures_not_stored(
+    action_name: str, record_ids: list[str], refused: Exception
+) -> DispositionsNotStoredError:
+    """The error that fails an action whose records' failures the store would not hold.
+
+    Fatal to the action, not to the file: the walk would otherwise carry on past it and
+    complete the action with those records holding nothing.
+    """
+    shown = ", ".join(record_ids[:3]) + (" ..." if len(record_ids) > 3 else "")
+    error = DispositionsNotStoredError(
+        f"The store refused the failure of {len(record_ids)} record(s) ({shown}): "
+        f"{refused}. Unrecorded, `agac retry` could not find them, "
+        "so the action is failed; once the store answers, `agac retry` re-runs it.",
+        context={"action_name": action_name, "record_ids": record_ids},
+        cause=refused,
+    )
+    mark_action_fatal(error)
+    return error
 
 
 def write_node_level_disposition(
@@ -897,9 +932,14 @@ def collect_results_from_processing_results(
         pending_dispositions = [
             row for row in pending_dispositions if row[2] not in _CARRIED_FROM_THE_STORED_FILE
         ]
-    if not write_dispositions(storage_backend, pending_dispositions, action_name):
-        if context is not None:
-            context.dispositions_not_stored.update(row[1] for row in pending_dispositions)
+    refused = _refusal_of(storage_backend, pending_dispositions, action_name)
+    if refused is not None and context is not None:
+        context.dispositions_not_stored.update(row[1] for row in pending_dispositions)
+        failures = sorted(
+            {row[1] for row in pending_dispositions if row[2] in FAILURE_DISPOSITIONS}
+        )
+        if failures and context.failure_not_stored is None:
+            context.failure_not_stored = failures_not_stored(action_name, failures, refused)
 
     guard_config = effective_config.get("guard", {})
     guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""

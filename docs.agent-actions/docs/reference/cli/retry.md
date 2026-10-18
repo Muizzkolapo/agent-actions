@@ -218,7 +218,10 @@ it is asked again, since what the reviewer decided on is gone.
 Some failures belong to an action rather than to any record of it: its input could
 not be read, or the store did not answer as its work began — counting the rows it
 held, or setting it running — as it counted those rows before checking a batch it had
-submitted, or as the rows it wrote were counted once it had run. A
+submitted, or as the rows it wrote were counted once it had run. Online, the store
+refusing to record a record's failure fails the action too: no disposition says the
+record failed, so the action's own failure is what the retry finds (see
+[`run`](./run#parallel-execution)). A
 store error ends the run (see [`run`](./run#parallel-execution)), and the action is
 failed even where it had stored its rows, so nothing reads them before it runs again.
 Either way the action reads `failed`, and the status file
@@ -433,7 +436,13 @@ completed. Its answer, or its failure, is in the row the run stored.
 
 The next `agac run` or `agac retry` writes the outcome that row stands for — `success`
 for an answer, `failed` or `exhausted` for a failure, with the reason the run gave it —
-and submits nothing again. Each does it only once every batch of the action is
+and submits nothing again. An exhausted record reads as collection writes it,
+`exhausted_after_{N}_attempts` with the error as its detail, wherever its row holds the
+attempt count.
+
+A record the guard filtered is sent nothing and waits as no `deferred`: it is recorded
+`filtered` when its batch is submitted, so a store that refuses the collect pass's
+writes does not leave it holding nothing. Each does it only once every batch of the action is
 collected, and only for a record whose row is stored. A failure written this way is
 then retried like any other: `retry` finds it in the same command, and an action whose
 batch is settled with a failure reads `completed_with_failures`. `--dry-run` writes

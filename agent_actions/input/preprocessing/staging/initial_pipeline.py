@@ -927,6 +927,8 @@ def _process_online_mode_with_record_processor(
                 ctx.storage_backend, ctx.agent_name, processing_context.target_relative_path
             ),
         )
+    if processing_context.failure_not_stored is not None:
+        raise processing_context.failure_not_stored
     if failure is not None:
         raise failure
 

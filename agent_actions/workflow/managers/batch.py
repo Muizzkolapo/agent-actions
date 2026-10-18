@@ -452,12 +452,43 @@ def _outcome_of(
     if state == RecordState.FAILED.value:
         return (DISPOSITION_FAILED, reason or "processing_error", detail or reason)
     if state == RecordState.EXHAUSTED.value:
-        return (DISPOSITION_EXHAUSTED, reason, detail)
+        return _exhaustion_of(rows[0], reason) or (DISPOSITION_EXHAUSTED, reason, detail)
     if state == RecordState.GUARD_SKIPPED.value and reason == EMPTY_OUTPUT:
         return (DISPOSITION_PASSTHROUGH, reason, None)
     if state in (RecordState.GUARD_SKIPPED.value, RecordState.CASCADE_SKIPPED.value):
         return (DISPOSITION_UNPROCESSED, reason or UNPROCESSED, None)
     return None
+
+
+def _exhaustion_of(
+    row: dict[str, Any], reason: str | None
+) -> tuple[str, str | None, str | None] | None:
+    """The EXHAUSTED disposition collection wrote, read from *row*'s recovery metadata.
+
+    None when the row does not hold the attempt count the reason is built from.
+    """
+    from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+    from agent_actions.processing.types import RecoveryMetadata
+    from agent_actions.record.reasons import EXPECTATIONS_EXHAUSTED
+
+    recovery = row.get("_recovery")
+    if not isinstance(recovery, dict):
+        return None
+    try:
+        metadata = RecoveryMetadata.from_dict(recovery)
+    except (TypeError, KeyError):
+        return None
+    if metadata.retry is not None:
+        attempts = metadata.retry.attempts
+    elif metadata.expectations is not None:
+        attempts = metadata.expectations.attempts
+    else:
+        return None
+    if reason == EXPECTATIONS_EXHAUSTED and metadata.expectations is not None:
+        error, _ = ExhaustedRecordBuilder.expectations_exhaustion(metadata.expectations)
+    else:
+        error = f"Retry exhausted after {attempts} attempts"
+    return (DISPOSITION_EXHAUSTED, f"exhausted_after_{attempts}_attempts", error)
 
 
 def _last_entry(row: dict[str, Any], action_name: str, state: Any) -> dict[str, Any] | None:
