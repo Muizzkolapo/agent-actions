@@ -252,9 +252,16 @@ class PromptPreparationService:
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
         context_scope = agent_config.get("context_scope", {})
 
-        static_data = PromptPreparationService._load_seed_data(
-            agent_config, context_scope, agent_name
-        )
+        # `build_guard_context` has already loaded the declared seed for the guard: the
+        # prompt reads that one load instead of a second. A copy, as a `seed.*` drop
+        # clears the dict it is handed.
+        if "seed" in field_context:
+            static_data = dict(field_context["seed"])
+            field_context = {k: v for k, v in field_context.items() if k != "seed"}
+        else:
+            static_data = PromptPreparationService.load_seed_data(
+                agent_config, context_scope, agent_name
+            )
 
         if not context_scope:
             PromptPreparationService._raise_missing_context_scope(agent_config, agent_name)
@@ -337,7 +344,7 @@ class PromptPreparationService:
         field_context_metadata: dict[str, Any] = field_context.pop("_dependency_metadata", {})
         logger.debug("Built field context with %d top-level keys", len(field_context))
 
-        static_data = PromptPreparationService._load_seed_data(
+        static_data = PromptPreparationService.load_seed_data(
             request.agent_config, context_scope, request.agent_name
         )
 
@@ -632,10 +639,13 @@ class PromptPreparationService:
             ) from e
 
     @staticmethod
-    def _load_seed_data(
+    def load_seed_data(
         agent_config: dict[str, Any], context_scope: dict[str, Any], agent_name: str
     ) -> dict[str, Any]:
-        """Load seed data files if configured, returning empty dict otherwise."""
+        """Load the seed files `context_scope.seed` declares; `{}` when it declares none.
+
+        The prompt and the guard context (`build_guard_context`) both load through here.
+        """
         seed_config = context_scope.get("seed") if context_scope else None
         if not seed_config:
             return {}

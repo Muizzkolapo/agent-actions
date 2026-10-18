@@ -537,6 +537,47 @@ class TestExistingChecksUnchanged:
         dir_errors = [e for e in result.errors if "Seed data directory not found" in e.message]
         assert len(dir_errors) == 1
 
+    def test_seed_data_dir_missing_a_declared_key_is_not_called_undeclared(self, tmp_path):
+        agent_config = tmp_path / "project" / "agent_config"
+        agent_config.mkdir(parents=True)
+
+        svc = WorkflowResolutionService(
+            action_configs={
+                "loader": {
+                    "context_scope": {"seed": {"field1": "$file:data.json"}},
+                    "guard": {"clause": "seed.field1.x == 1", "behavior": "filter"},
+                },
+            },
+            workflow_config_path=str(agent_config / "workflow.yml"),
+        )
+        messages = [e.message for e in svc.resolve_all().errors]
+
+        assert not [m for m in messages if "not declared" in m], messages
+
+    def test_no_seed_anywhere_a_guard_reading_seed_is_refused(self, tmp_path):
+        """With no seed directory and nothing declared, `seed.x` names no key (1525)."""
+        agent_config = tmp_path / "project" / "agent_config"
+        agent_config.mkdir(parents=True)
+
+        svc = WorkflowResolutionService(
+            action_configs={
+                "loader": {
+                    "context_scope": {"observe": ["source.x"]},
+                    "guard": {"clause": "seed.conf.mode == 'on'", "behavior": "filter"},
+                },
+            },
+            workflow_config_path=str(agent_config / "workflow.yml"),
+        )
+        errors = svc.resolve_all().errors
+
+        assert [(e.message, e.location.config_field) for e in errors] == [
+            (
+                "Action 'loader' references seed.conf but 'conf' is not declared in "
+                "context_scope.seed",
+                "guard",
+            )
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Deduplication

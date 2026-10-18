@@ -188,13 +188,20 @@ this check, such a guard would filter every record while the run reported succes
 action is read by its branch names, `vote_1.vote` and `vote_2.vote`. Its base name `vote` is on
 no record, so preflight refuses it and names the branches. Some fields cannot be checked: those of
 an action with no schema, and those its schema admits with `additionalProperties` without listing
-them. Preflight warns about these instead of refusing. `source.*`, `workflow.*`, version params
+them. Preflight warns about these instead of refusing. `source.*`, `seed.*`, `workflow.*`, version params
 and a dependency's `output_field` are not action names, and are not checked as actions.
 
 | Source | Syntax |
 |--------|--------|
 | Upstream action field | `extract_facts.count` |
 | A dependency's field, whether or not the action observes it | `group_by_similarity.num_similar_facts` |
+| The action's declared [seed data](../context/seed-data.md) | `seed.thresholds.min_score` |
+
+A guard reads the seed data its action declares under `context_scope.seed`, the same data
+the action's prompt reads, so `seed.thresholds.min_score <= score_review.score` compares a
+record against a reference file. Every declared seed key is visible to the guard, including
+one the action `drop`s. Preflight refuses a guard that reads a seed key its action does not
+declare, as it refuses a prompt that reads one.
 
 `context_scope` describes what the action is handed once the guard has let the record through.
 It does not decide the verdict: a field the action `drop`s still answers a clause, and the
