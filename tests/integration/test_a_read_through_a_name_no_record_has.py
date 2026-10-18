@@ -93,11 +93,13 @@ def _project(
     *,
     observe: str = "producer.severity",
     guard: str = "",
+    extra: str = "",
 ) -> Path:
     root = tmp_path / "project"
     workflow = root / "agent_workflow" / WORKFLOW
     (workflow / "agent_config").mkdir(parents=True)
     guard_yaml = f'    guard: {{ condition: "{guard}", on_false: filter }}\n' if guard else ""
+    guard_yaml += extra
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(
         _WORKFLOW.format(mode=mode, observe=observe, guard=guard_yaml)
     )
@@ -254,3 +256,26 @@ def test_the_documented_spelling_still_runs(tmp_path, mode):
     )
     assert [" ".join(p.split()) for (p,) in sent] == ["severity=high"]
     assert _consumer_dispositions(project) == ["filtered", "success"]
+
+
+@pytest.mark.parametrize("mode", ["online", "batch"])
+def test_a_version_param_named_schema_is_still_read(tmp_path, mode):
+    """`versions: {param: schema}` puts `schema` on the record, so `{{ schema }}` renders."""
+    project = _project(
+        tmp_path,
+        mode,
+        "round={{ schema }} severity={{ producer.severity }}",
+        extra="    versions: { param: schema, range: [1, 2] }\n",
+    )
+
+    _run_to_the_end(project)
+
+    sent = _store_rows(
+        project, "select compiled_prompt from prompt_trace where action_name like 'consumer_%'"
+    )
+    assert sorted(" ".join(text.split()) for (text,) in sent) == [
+        "round=1 severity=high",
+        "round=1 severity=low",
+        "round=2 severity=high",
+        "round=2 severity=low",
+    ]

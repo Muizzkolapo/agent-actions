@@ -58,6 +58,15 @@ class TestTheExtractorReportsTheNameAsWritten:
 
         assert refs == {("action", "producer.severity", "context_scope.observe")}
 
+    def test_a_version_param_of_that_name_is_on_the_record(self):
+        """`versions: {param: schema}` promotes `schema` to a top-level name."""
+        config = {
+            "prompt": "Round {{ schema }} of {{ action }}",
+            "_version_context": {"i": 1, "idx": 0, "length": 2, "schema": 1},
+        }
+
+        assert {(s, f) for s, f, _ in _refs(config)} == {("action", "")}
+
     @pytest.mark.parametrize(
         "prompt",
         [
