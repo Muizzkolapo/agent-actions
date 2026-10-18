@@ -880,7 +880,8 @@ def _process_online_mode_with_record_processor(
             target_relative_path(output_file_path, str(output_directory)),
         )
     ):
-        raise failure
+        # A refused failure write is fatal to the action; the breaker is per file.
+        raise processing_context.failure_not_stored or failure
 
     # Tool actions that return empty output should be treated as failures
     # rather than silently succeeding (mirrors pipeline.py check).

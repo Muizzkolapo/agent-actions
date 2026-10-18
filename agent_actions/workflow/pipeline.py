@@ -850,7 +850,8 @@ class ProcessingPipeline:
                 target_relative_path(output_file_path, output_directory),
             )
         ):
-            raise failure
+            # A refused failure write is fatal to the action; the breaker is per file.
+            raise context.failure_not_stored or failure
 
         # What the actions below hold for a file replaced whole was computed from the rows
         # it held, so each of them answers it again, whatever records a repair names.

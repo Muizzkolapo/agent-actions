@@ -540,7 +540,9 @@ run_mode == BATCH and not tool/HITL?
          ▼
     stats.terminal_failure()         ← nothing succeeded: raise without writing,
                                        unless a reset took back the answers
-                                       stored for the file (stored_answers_stand)
+                                       stored for the file (stored_answers_stand);
+                                       context.failure_not_stored is raised in its
+                                       place when set
     output_handler.save_main_output()
     write_dispositions(context.kept_dispositions)   ← only after the file
     clear_checkpoint_records(action, target_relative_path)

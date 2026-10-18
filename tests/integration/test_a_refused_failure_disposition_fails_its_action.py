@@ -92,11 +92,31 @@ def _final(project: Path) -> list[str]:
     )
 
 
-@pytest.fixture(params=["flatten", "roll_up"], ids=["first-action", "below-the-first"])
+@pytest.fixture(
+    params=[
+        ("flatten", False),
+        ("roll_up", False),
+        ("flatten", True),
+        ("roll_up", True),
+    ],
+    ids=[
+        "first-action",
+        "below-the-first",
+        "first-action-every-record-of-a-file-failed",
+        "below-the-first-every-record-of-a-file-failed",
+    ],
+)
 def refused(request, tmp_path):
-    """Alpha fails at the action, and the store refuses that action's dispositions."""
-    action = request.param
+    """Alpha fails at the action, and the store refuses that action's dispositions.
+
+    With every record of a file failed, the file is not stored and its breaker is
+    raised before the file would be, so the refusal must be raised there too.
+    """
+    action, alpha_alone = request.param
     project = _project(tmp_path, "tool")
+    if alpha_alone:
+        staging = project / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
+        staging.joinpath("pages1.json").write_text(json.dumps([{"page_content": "Page alpha."}]))
     site = project.parent / "refusing_store_site"
     site.mkdir()
     (site / "sitecustomize.py").write_text(STAND_IN)
@@ -105,11 +125,11 @@ def refused(request, tmp_path):
     code, output = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     (project / FAULT).unlink()
     (project / "FAIL_AT").unlink()
-    return project, action, code, output
+    return project, action, code, output, alpha_alone
 
 
 def test_the_run_fails_the_action_with_the_store_error(refused):
-    project, action, code, output = refused
+    project, action, code, output, alpha_alone = refused
 
     assert code == 1, output
     status = _status(project)
@@ -119,7 +139,7 @@ def test_the_run_fails_the_action_with_the_store_error(refused):
 
 
 def test_the_run_history_records_the_action_failed_with_the_store_error(refused):
-    project, action, code, output = refused
+    project, action, code, output, alpha_alone = refused
 
     run = _last_run(project)
     entry = run["actions"].get(action, {})
@@ -128,7 +148,7 @@ def test_the_run_history_records_the_action_failed_with_the_store_error(refused)
 
 
 def test_a_retry_repairs_the_record_the_store_could_not_mark(refused):
-    project, action, code, output = refused
+    project, action, code, output, alpha_alone = refused
 
     planned, plan = _agac(project, "retry", "-a", WORKFLOW, "--dry-run")
     assert planned == 0, plan
@@ -138,9 +158,10 @@ def test_a_retry_repairs_the_record_the_store_could_not_mark(refused):
 
     assert code == 0, output
     assert set(_dispositions(project, action).values()) == {"success"}, output
-    assert len(_dispositions(project, action)) == 4, output
+    assert len(_dispositions(project, action)) == (3 if alpha_alone else 4), output
+    answered = ALL_FINAL[:2] if alpha_alone else ALL_FINAL
     assert _final(project) == sorted(
-        ALL_FINAL
+        answered
         + ["FINAL[Page gamma. #1]", "FINAL[Page gamma. #2]"]
         + ["FINAL[Page delta. #1]", "FINAL[Page delta. #2]"]
     ), output
