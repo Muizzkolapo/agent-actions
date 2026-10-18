@@ -43,6 +43,70 @@ def _admits_unlisted(output_schema: OutputSchema) -> bool:
     )
 
 
+_NON_OBJECT_TYPES = frozenset({"string", "integer", "number", "boolean", "null", "array"})
+
+
+def _root_field_definition(schema: object, root: str) -> dict | None:
+    """The schema of top-level field *root*, in any shape the analyzer holds a schema."""
+    if not isinstance(schema, dict):
+        return None
+    fields = schema.get("fields")
+    if isinstance(fields, list):
+        for entry in fields:
+            if isinstance(entry, dict) and (entry.get("id") or entry.get("name")) == root:
+                return entry
+        return None
+    for part in (schema, schema.get("items")):
+        if isinstance(part, dict) and isinstance(part.get("properties"), dict):
+            definition = part["properties"].get(root)
+            if isinstance(definition, dict):
+                return definition
+    return None
+
+
+def _nested_path_problem(schema: object, field_path: str) -> str | None:
+    """Why the keys after the first in *field_path* provably find nothing, or None.
+
+    The runtime walks the path through dicts only (`get_nested_value`), so a key under a
+    scalar or a list finds nothing, and so does one a closed object does not list. An
+    object that sets `additionalProperties`, or a field whose schema says nothing more, is
+    left alone.
+    """
+    root, *rest = field_path.split(".")
+    definition = _root_field_definition(schema, root)
+    walked = root
+    for key in rest:
+        if not isinstance(definition, dict) or key == "*":
+            return None
+        declared = definition.get("type")
+        types = set(declared) if isinstance(declared, list) else {declared}
+        if declared is not None and types <= _NON_OBJECT_TYPES:
+            shown = "/".join(sorted(t for t in types if isinstance(t, str)))
+            if "array" in types:
+                return (
+                    f"reads '{key}' under '{walked}', which is {shown} in the schema; "
+                    "a list is never indexed, so every record would miss it."
+                )
+            return (
+                f"reads '{key}' under '{walked}', which is {shown} in the schema and holds "
+                "no keys, so every record would miss it."
+            )
+        properties = definition.get("properties")
+        if not isinstance(properties, dict):
+            return None
+        if key not in properties:
+            if definition.get("additionalProperties") not in (None, False):
+                return None
+            listed = ", ".join(sorted(properties)) or "none"
+            return (
+                f"reads '{key}' under '{walked}', whose schema does not list it "
+                f"(it lists: {listed}), so every record would miss it."
+            )
+        definition = properties[key]
+        walked = f"{walked}.{key}"
+    return None
+
+
 class StaticTypeChecker:
     """Performs static type checking on workflow data flow graph."""
 
@@ -185,8 +249,9 @@ class StaticTypeChecker:
             )
             return
 
-        # "*" is a wildcard directive (observe/passthrough all), not a field name
-        if root_field == "*" or root_field.isdigit():
+        # "*" is a wildcard directive (observe/passthrough all), not a field name. A
+        # context_scope entry is a key path, so a digit there is a key like any other.
+        if root_field == "*" or (root_field.isdigit() and not is_scope_read):
             return
 
         if output_schema.is_schemaless and root_field == output_schema.output_field:
@@ -296,6 +361,22 @@ class StaticTypeChecker:
                         referenced_field=field_path,
                         available_fields=available,
                         hint=hint,
+                    )
+                )
+            return
+
+        if is_scope_read and "." in field_path and field_path not in available:
+            path_problem = _nested_path_problem(output_schema.json_schema, field_path)
+            if path_problem:
+                result.add_error(
+                    StaticTypeError(
+                        message=f"Action '{node.name}' {requirement.location} entry "
+                        f"'{requirement.raw_reference}' {path_problem}",
+                        location=location,
+                        referenced_agent=source_agent,
+                        referenced_field=field_path,
+                        hint="A context_scope entry is read as a path of keys through "
+                        "nested objects; it never indexes a list or reads into a scalar.",
                     )
                 )
 
