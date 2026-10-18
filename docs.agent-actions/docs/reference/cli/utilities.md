@@ -202,6 +202,8 @@ You can run docs commands from any subdirectory within your project.
 
 Check the execution status of a specific agentic workflow. This shows which actions are running, completed, or failed.
 
+When an action has failed as a whole and its status holds the error (`error_message` in `agent_io/.agent_status.json`), an **Error** column shows that error's first line beside it, cut to 200 characters. The column appears only when some failed action has one. Failures of single records are not listed here; see [`agac dispositions`](./dispositions) or [`agac retry --dry-run`](./retry).
+
 ```bash
 agac status -a <workflow-name> [options]
 ```

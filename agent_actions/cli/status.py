@@ -38,18 +38,33 @@ class StatusCommand:
             raise click.ClickException(
                 f"Status file has unexpected format (expected JSON object): {status_file}"
             )
+        rows = [
+            (agent, details.get("status", "N/A"), _failure_of(details))
+            if isinstance(details, dict)
+            else (agent, "N/A", "")
+            for agent, details in status_data.items()
+        ]
         table = Table(title=f"Workflow Status for {self.agent_name}")
         table.add_column("Agent Name", justify="left", style="green")
         table.add_column("Status", justify="center", style="yellow")
-        for agent, details in status_data.items():
-            if details is None:
-                workflow_status = "N/A"
-            elif isinstance(details, dict):
-                workflow_status = details.get("status", "N/A")
-            else:
-                workflow_status = "N/A"
-            table.add_row(agent, workflow_status)
+        with_errors = any(error for *_, error in rows)
+        if with_errors:
+            table.add_column("Error", justify="left", style="red", overflow="fold")
+        for agent, workflow_status, error in rows:
+            table.add_row(agent, workflow_status, *([error] if with_errors else []))
         self.console.print(table)
+
+
+_ERROR_SHOWN = 200
+
+
+def _failure_of(details: dict) -> str:
+    """The first line of a failed action's ``error_message``, cut short; else nothing."""
+    message = details.get("error_message")
+    if details.get("status") != "failed" or not isinstance(message, str) or not message.strip():
+        return ""
+    first = message.strip().splitlines()[0]
+    return first if len(first) <= _ERROR_SHOWN else first[: _ERROR_SHOWN - 1] + "…"
 
 
 @click.command()

@@ -90,7 +90,7 @@
 | `skills` | Function | Manage AI coding assistant skills (Claude Code / OpenAI Codex). | - |
 | `install` | Function | Install bundled skills to your project. | - |
 | `list_skills` | Function | List available bundled skills. | - |
-| `status.py` | Module | Status command for the Agent Actions CLI. | `cli`, `validation` |
+| `status.py` | Module | Status command for the Agent Actions CLI. Shows each action's status from `.agent_status.json`, and an Error column (the first line of `error_message`, cut to 200 characters) when a failed action holds one. | `cli`, `validation` |
 | `StatusCommand` | Class | Implementation of the status command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the status command. | - |
 | `status` | Function | Display the status of an agent workflow. | - |
