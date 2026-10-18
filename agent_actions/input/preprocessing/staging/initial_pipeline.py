@@ -145,9 +145,10 @@ def _validate_staged_data(
 
     if file_type == ".json":
         # A JSON document is rows of records by the time it reaches here; the
-        # document rule runs before this and refuses anything else.
+        # document rule runs before this and refuses anything else. Enveloped
+        # as the run envelopes it, so a row field named `content` is a field.
         first_item = raw_content[0]
-        source_content = first_item
+        source_content = _envelope_row(first_item)
     else:
         source_content = {"page_content": str(raw_content)[:1000]}
         first_item = {"page_content": source_content["page_content"]}
@@ -205,17 +206,6 @@ def process_initial_stage(ctx: InitialStageContext):
 
     validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
 
-    _validate_staged_data(
-        raw_content=content,
-        file_type=file_type,
-        agent_config=ctx.agent_config,
-        agent_name=ctx.agent_name,
-        mode=run_mode or RunMode.ONLINE,
-        file_path=ctx.file_path,
-        action_configs=ctx.action_configs,
-        workflow_metadata=ctx.workflow_metadata,
-    )
-
     # Same formula _save_source_items_helper uses, so the identity claim below
     # is keyed by the relative_path this file's rows will actually be stored under.
     relative_path = str(Path(ctx.file_path).relative_to(ctx.base_directory).with_suffix(""))
@@ -241,6 +231,19 @@ def process_initial_stage(ctx: InitialStageContext):
         records=data_chunk,
         file_path=ctx.file_path,
         action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
+    )
+
+    # After the row check, so a row no seed covers is refused with its location
+    # rather than from this render of the first row.
+    _validate_staged_data(
+        raw_content=content,
+        file_type=file_type,
+        agent_config=ctx.agent_config,
+        agent_name=ctx.agent_name,
+        mode=run_mode or RunMode.ONLINE,
+        file_path=ctx.file_path,
+        action_configs=ctx.action_configs,
+        workflow_metadata=ctx.workflow_metadata,
     )
 
     # The records a repair leaves out are what let the disposition gate tell a
