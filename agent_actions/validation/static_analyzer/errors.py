@@ -1,5 +1,6 @@
 """Error classes for static type checking."""
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -211,3 +212,36 @@ class StaticValidationResult:
                 for w in self.warnings
             ],
         }
+
+
+def read_through_reserved_name(
+    name: str, written: str, field_path: str, action_names: Collection[str]
+) -> tuple[str, str]:
+    """What is wrong with a read through a name in ``RESERVED_NAMES_NO_RECORD_HAS``, and the fix.
+
+    ``field_path`` is what follows the name; empty or ``*`` when the name is read whole.
+    `action.<name>.<field>` drops the prefix; `action.<field>` copies the docs'
+    placeholder, so the fix names the action in its place.
+    """
+    if name == "action":
+        problem = f"reads '{written}', but there is no 'action' namespace"
+        head, _, rest = field_path.partition(".")
+        if head in action_names or (rest and head != "*"):
+            fix = (
+                f"Write '{written.replace('action.', '', 1)}': an upstream action's fields "
+                f"are read under that action's own name."
+            )
+        elif head and head != "*":
+            fix = (
+                f"Write '{written.replace('action.', '<action name>.', 1)}', naming the "
+                f"upstream action whose field it reads."
+            )
+        else:
+            fix = "Read an upstream action's fields under that action's own name: producer.field."
+        return problem, fix
+    problem = f"reads '{written}', but '{name}' is a reserved name, not a namespace"
+    fix = (
+        "Read an upstream action's fields under that action's own name (producer.field), "
+        "the input record under 'source' and seed data under 'seed'."
+    )
+    return problem, fix

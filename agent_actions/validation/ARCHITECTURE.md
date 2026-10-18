@@ -120,6 +120,7 @@ WorkflowStaticAnalyzer.analyze()
   |          - dynamic/schemaless schemas -> left as *
   |
   Step 3:  StaticTypeChecker.check_all()
+  |          - no read through action/prompt/schema (no record has them)
   |          - referenced actions exist
   |          - referenced actions are in dependencies
   |          - referenced fields exist in upstream output schema

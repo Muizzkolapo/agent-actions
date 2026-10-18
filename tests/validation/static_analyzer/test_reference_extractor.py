@@ -23,7 +23,7 @@ class TestReferenceExtractor:
         """Test extracting basic Jinja2 references."""
         config = {
             "name": "test_agent",
-            "prompt": "The result is {{ action.extractor.summary }}",
+            "prompt": "The result is {{ extractor.summary }}",
         }
         refs = self.extractor.extract_from_agent(config)
 
@@ -35,7 +35,7 @@ class TestReferenceExtractor:
         """Test extracting nested field references."""
         config = {
             "name": "test_agent",
-            "prompt": "Score: {{ action.analyzer.metadata.score }}",
+            "prompt": "Score: {{ analyzer.metadata.score }}",
         }
         refs = self.extractor.extract_from_agent(config)
 
@@ -48,9 +48,9 @@ class TestReferenceExtractor:
         config = {
             "name": "test_agent",
             "prompt": """
-            Name: {{ action.user_info.name }}
-            Age: {{ action.user_info.age }}
-            City: {{ action.location.city }}
+            Name: {{ user_info.name }}
+            Age: {{ user_info.age }}
+            City: {{ location.city }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -88,7 +88,7 @@ class TestReferenceExtractor:
         """Test extracting references from agent config prompt."""
         config = {
             "name": "summarizer",
-            "prompt": "Summarize: {{ action.extractor.text }}",
+            "prompt": "Summarize: {{ extractor.text }}",
         }
         refs = self.extractor.extract_from_agent(config)
 
@@ -111,38 +111,6 @@ class TestReferenceExtractor:
         assert guard_refs[0].source_agent == "analyzer"
         assert guard_refs[0].field_path == "confidence"
 
-    def test_extract_from_guard_with_action_prefix(self):
-        """Test extracting references from guard expressions with action prefix."""
-        config = {
-            "name": "conditional_agent",
-            "prompt": "Process",
-            "guard": "action.analyzer.confidence > 0.8",
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        guard_refs = [r for r in refs if r.location == "guard"]
-        assert len(guard_refs) == 1
-        assert guard_refs[0].source_agent == "analyzer"
-        assert guard_refs[0].field_path == "confidence"
-
-    def test_extract_from_dict_guard_with_action_prefix(self):
-        """Test extracting references from dict guard with action prefix."""
-        config = {
-            "name": "conditional_agent",
-            "prompt": "Process",
-            "guard": {
-                "field": "action.analyzer.confidence",
-                "operator": ">",
-                "value": 0.8,
-            },
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        guard_refs = [r for r in refs if r.location == "guard.field"]
-        assert len(guard_refs) == 1
-        assert guard_refs[0].source_agent == "analyzer"
-        assert guard_refs[0].field_path == "confidence"
-
     def test_extract_from_context_scope_observe(self):
         """Test extracting references from context_scope observe."""
         config = {
@@ -156,22 +124,6 @@ class TestReferenceExtractor:
 
         context_refs = [r for r in refs if r.location == "context_scope.observe"]
         assert len(context_refs) == 2
-
-    def test_extract_from_context_scope_with_action_prefix(self):
-        """Test extracting references from context_scope with action prefix."""
-        config = {
-            "name": "agent",
-            "prompt": "Process",
-            "context_scope": {
-                "observe": ["action.extractor.field1", "action.classifier.category"],
-            },
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        context_refs = [r for r in refs if r.location == "context_scope.observe"]
-        assert len(context_refs) == 2
-        agents = {r.source_agent for r in context_refs}
-        assert agents == {"extractor", "classifier"}
 
     def test_extract_from_context_scope_drop(self):
         """Test extracting references from context_scope drop."""
@@ -192,7 +144,7 @@ class TestReferenceExtractor:
         config = {
             "name": "test_agent",
             "prompt": """
-            Jinja2: {{ action.agent1.field }}
+            Jinja2: {{ agent1.field }}
             Simple: {action.agent2.result}
             """,
         }
@@ -256,9 +208,9 @@ class TestReferenceExtractor:
         config = {
             "name": "consumer",
             "prompt": """
-            {{ action.agent1.field1 }}
-            {{ action.agent1.field2 }}
-            {{ action.agent2.data }}
+            {{ agent1.field1 }}
+            {{ agent1.field2 }}
+            {{ agent2.data }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -270,7 +222,7 @@ class TestReferenceExtractor:
         """Test get_referenced_agents excludes special namespaces."""
         config = {
             "name": "agent",
-            "prompt": "{{ action.extractor.data }}",
+            "prompt": "{{ extractor.data }}",
             "guard": "source.field > 0",  # source is special
         }
         refs = self.extractor.extract_from_agent(config)
@@ -289,7 +241,7 @@ class TestReferenceExtractor:
                 },
                 {
                     "name": "agent2",
-                    "prompt": "Use: {{ action.agent1.data }}",
+                    "prompt": "Use: {{ agent1.data }}",
                 },
             ]
         }
@@ -334,7 +286,7 @@ class TestReferenceExtractor:
         """Test Jinja2 control keywords are not treated as agents."""
         config = {
             "name": "agent",
-            "prompt": "{% if condition %}{{ action.real_agent.data }}{% endif %}",
+            "prompt": "{% if condition %}{{ real_agent.data }}{% endif %}",
         }
         refs = self.extractor.extract_from_agent(config)
 
@@ -353,7 +305,7 @@ class TestReferenceExtractor:
             Objective: {{ ref.objective }}
             {% endfor %}
 
-            External: {{ action.extractor.data }}
+            External: {{ extractor.data }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -375,7 +327,7 @@ class TestReferenceExtractor:
             {% for resp in responsibilities %}
             Resp: {{ resp.description }}
             {% endfor %}
-            Real ref: {{ action.extractor.summary }}
+            Real ref: {{ extractor.summary }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -394,7 +346,7 @@ class TestReferenceExtractor:
             "prompt": """
             {% set summary = source.text %}
             Result: {{ summary.truncated }}
-            Real ref: {{ action.extractor.data }}
+            Real ref: {{ extractor.data }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -412,7 +364,7 @@ class TestReferenceExtractor:
             Name: {{ item.name }}
             Score: {{ item.score }}
             {% endmacro %}
-            Real ref: {{ action.extractor.data }}
+            Real ref: {{ extractor.data }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -429,7 +381,7 @@ class TestReferenceExtractor:
             {% for key, value in source.items %}
             {{ key.name }}: {{ value.data }}
             {% endfor %}
-            Real ref: {{ action.extractor.data }}
+            Real ref: {{ extractor.data }}
             """,
         }
         refs = self.extractor.extract_from_agent(config)
@@ -453,7 +405,7 @@ class TestADictMethodCallIsNotAFieldReference:
             "{% for k, v in producer.items() %}{{ k }}{% endfor %}",
             "{{ producer.keys() | list }}",
             "{{ producer.values() | list }}",
-            "{{ action.producer.items() | list }}",
+            "{{ producer.items() | list }}",
             "{{ producer.get(source.key) }}",
         ],
     )
@@ -515,7 +467,7 @@ class TestReferenceExtractorTemplateSyntaxError:
         try:
             config = {
                 "name": "agent",
-                "prompt": "{% if broken %} {{ action.extractor.data }}",
+                "prompt": "{% if broken %} {{ extractor.data }}",
             }
             with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
                 with pytest.raises(TemplateSyntaxError):
@@ -553,7 +505,7 @@ class TestReferenceExtractorTemplateSyntaxError:
         try:
             config = {
                 "name": "agent",
-                "prompt": "{{ action.extractor.data }}",
+                "prompt": "{{ extractor.data }}",
             }
             with caplog.at_level(logging.WARNING, logger=_LOGGER_NAME):
                 self.extractor.extract_from_agent(config)
@@ -597,7 +549,7 @@ class TestAPresentButNullContextScope:
         prompt's references."""
         config = {
             "name": "a",
-            "prompt": "{{ action.extractor.summary }}",
+            "prompt": "{{ extractor.summary }}",
             "context_scope": None,
         }
 
@@ -644,7 +596,7 @@ class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
                     "schema": {"field": "string"},
                     "context_scope": {"observe": ["source.x"]},
                 },
-                {"name": "second", "prompt": "{{ action.first.field }}", "context_scope": scope},
+                {"name": "second", "prompt": "{{ first.field }}", "context_scope": scope},
             ],
         }
 
@@ -659,7 +611,7 @@ class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
 
         Asserting on `workflow_config` cannot see the coercion at all, because it copies
         rather than writing back. And asserting a requirement that the *prompt* also
-        supplies cannot see it either — `{{ action.first.field }}` yields the same
+        supplies cannot see it either — `{{ first.field }}` yields the same
         requirement whether or not the block survived. So the action here references
         nothing in its prompt, and `first.field` can only arrive via `observe`.
         """

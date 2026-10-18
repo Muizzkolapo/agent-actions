@@ -2,7 +2,7 @@
 
 import re
 
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
 
 from .data_flow_graph import DataFlowGraph, DataFlowNode, InputRequirement
 from .errors import (
@@ -10,6 +10,7 @@ from .errors import (
     StaticTypeError,
     StaticTypeWarning,
     StaticValidationResult,
+    read_through_reserved_name,
 )
 
 _CAMEL_RE = re.compile(r"([a-z0-9])([A-Z])")
@@ -75,6 +76,24 @@ class StaticTypeChecker:
             config_field=requirement.location,
             raw_reference=requirement.raw_reference,
         )
+
+        if source_agent in RESERVED_NAMES_NO_RECORD_HAS:
+            problem, fix = read_through_reserved_name(
+                source_agent,
+                requirement.raw_reference,
+                field_path,
+                self.graph.get_all_agent_names(),
+            )
+            result.add_error(
+                StaticTypeError(
+                    message=f"Action '{node.name}' {requirement.location} {problem}",
+                    location=location,
+                    referenced_agent=source_agent,
+                    referenced_field=field_path,
+                    hint=fix,
+                )
+            )
+            return
 
         if source_agent in SPECIAL_NAMESPACES:
             return

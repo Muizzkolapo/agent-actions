@@ -132,6 +132,14 @@ class TestTheStaticAnalyzerRefusesIt:
 
         assert any("there is no 'action' namespace" in e for e in errors), errors
 
+    def test_the_docs_placeholder_copied_as_written_names_the_action_to_put_there(self):
+        """`{{ action.field }}` is how the docs once wrote `{{ <action name>.field }}`."""
+        errors = _errors(_workflow(prompt="{{ producer.severity }} {{ action.severity }}"))
+
+        assert len(errors) == 1, errors
+        assert "there is no 'action' namespace" in errors[0]
+        assert "Write '{{ <action name>.severity }}'" in errors[0]
+
     @pytest.mark.parametrize("name", ["prompt", "schema"])
     def test_a_read_through_another_reserved_name_is_refused(self, name):
         errors = _errors(_workflow(prompt="{{ producer.severity }} {{ " + name + ".text }}"))
@@ -166,6 +174,7 @@ class TestTheGuardCheckRefusesIt:
                 "action.producer.tags",
                 "producer.tags",
             ),
+            ("action.severity == 'high'", "action.severity", "<action name>.severity"),
         ],
     )
     def test_a_read_through_action_names_the_spelling_to_write(self, clause, written, suggested):

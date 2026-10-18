@@ -1,0 +1,7 @@
+kind: Breaking Change
+body: >-
+  A guard that reads through `action`, `prompt` or `schema`, such as
+  `action.producer.severity == 'high'`, is now refused by pre-flight. It used to pass, filter
+  every record and report success. Write the upstream action's name without the prefix:
+  `producer.severity == 'high'` (#1512).
+time: 2026-10-18T07:00:00Z

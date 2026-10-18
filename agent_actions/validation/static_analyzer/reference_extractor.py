@@ -9,7 +9,7 @@ from jinja2.exceptions import TemplateSyntaxError
 
 logger = logging.getLogger(__name__)
 
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 from .data_flow_graph import InputRequirement
@@ -20,15 +20,19 @@ _MAPPING_METHODS = frozenset(name for name in dir(dict) if not name.startswith("
 
 
 class ReferenceExtractor:
-    """Extracts field references from action prompts, guards, and directives."""
+    """Extracts field references from action prompts, guards, and directives.
+
+    A reference is reported under the name it is written with. `action.producer.field`
+    reads a name called `action`, which no record carries, so it is reported as
+    `action` for the type checker to refuse, not as `producer.field`.
+    """
 
     # Matches {action.action_name.field} or {action_name.field} (simple brace style)
     SIMPLE_ACTION_PATTERN = re.compile(r"\{action\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
     SIMPLE_DIRECT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
 
-    # Matches dot notation in guards: action.field
+    # Matches dot notation in guards: producer.field
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
-    ACTION_DOT_PATTERN = re.compile(r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
 
     # Jinja2 builtins to skip — includes ``loop`` (the implicit loop variable
     # available inside ``{% for %}`` blocks) so that ``{{ loop.index }}`` is
@@ -215,12 +219,19 @@ class ReferenceExtractor:
             if ref:
                 source, field_path = ref
                 if source not in local_vars and source not in self.JINJA_BUILTINS:
-                    if source == "action" and "." in field_path:
-                        parts = field_path.split(".", 1)
-                        source = parts[0]
-                        field_path = parts[1]
                     raw_ref = f"{{{{ {source}.{field_path} }}}}"
                     references.append((source, field_path, raw_ref))
+            return
+
+        # A name no record carries, read whole (`{{ action }}`, `action['x']`): any other
+        # bare name is left alone here, as before.
+        if (
+            isinstance(node, nodes.Name)
+            and node.ctx == "load"
+            and node.name in RESERVED_NAMES_NO_RECORD_HAS
+            and node.name not in local_vars
+        ):
+            references.append((node.name, "", f"{{{{ {node.name} }}}}"))
             return
 
         for child in node.iter_child_nodes():
@@ -245,21 +256,27 @@ class ReferenceExtractor:
         elif (
             isinstance(receiver, nodes.Getattr)
             and isinstance(receiver.node, nodes.Name)
-            and receiver.node.name == "action"
+            and receiver.node.name in RESERVED_NAMES_NO_RECORD_HAS
         ):
-            root, namespace = "action", receiver.attr
+            root, namespace = receiver.node.name, receiver.attr
         else:
             root = namespace = ""
         if not namespace:
             self._walk_ast(receiver, references, local_vars)
         elif root not in local_vars and root not in self.JINJA_BUILTINS:
             key = call.args[0] if method.attr == "get" and call.args else None
+            written = namespace if root == namespace else f"{root}.{namespace}"
             if isinstance(key, nodes.Const) and isinstance(key.value, str):
-                references.append(
-                    (namespace, key.value, f"{{{{ {namespace}.get({key.value!r}) }}}}")
-                )
+                raw = f"{{{{ {written}.get({key.value!r}) }}}}"
+                field = key.value
             else:
-                references.append((namespace, "*", f"{{{{ {namespace}.{method.attr}() }}}}"))
+                raw = f"{{{{ {written}.{method.attr}() }}}}"
+                field = "*"
+            if root != namespace:
+                # `action.producer.items()`: the read is through `action`, of `producer`.
+                references.append((root, namespace, raw))
+            else:
+                references.append((namespace, field, raw))
         for arg in (*call.args, *call.kwargs, call.dyn_args, call.dyn_kwargs):
             if arg is not None:
                 self._walk_ast(arg, references, local_vars)
@@ -291,26 +308,7 @@ class ReferenceExtractor:
 
         if isinstance(guard, str):
             seen: set[str] = set()
-            action_spans = []
-            for match in self.ACTION_DOT_PATTERN.finditer(guard):
-                source = match.group(1)
-                field = match.group(2)
-                ref_key = f"{source}.{field}"
-                if ref_key not in seen:
-                    seen.add(ref_key)
-                    requirements.append(
-                        InputRequirement(
-                            source_agent=source,
-                            field_path=field,
-                            raw_reference=match.group(0),
-                            location=location,
-                        )
-                    )
-                action_spans.append(match.span())
-
             for match in self.DOT_PATTERN.finditer(guard):
-                if any(start <= match.start() < end for start, end in action_spans):
-                    continue
                 source = match.group(1)
                 field = match.group(2)
                 ref_key = f"{source}.{field}"
@@ -331,8 +329,6 @@ class ReferenceExtractor:
         elif isinstance(guard, dict):
             field = guard.get("field", "")
             field_value = str(field)
-            if field_value.startswith("action."):
-                field_value = field_value[len("action.") :]
             if "." in field_value:
                 parts = field_value.split(".", 1)
                 if len(parts) >= 2:
@@ -362,8 +358,6 @@ class ReferenceExtractor:
 
             if "." in ref:
                 original_ref = ref
-                if ref.startswith("action."):
-                    ref = ref[len("action.") :]
                 parts = ref.split(".", 1)
                 if len(parts) >= 2:
                     source = parts[0]

@@ -71,7 +71,7 @@ class TestWorkflowSchemaService:
                     "name": "consumer",
                     "model_vendor": "openai",
                     "dependencies": ["extractor"],
-                    "prompt": "{{ action.extractor.nonexistent }}",
+                    "prompt": "{{ extractor.nonexistent }}",
                 },
             ]
         )

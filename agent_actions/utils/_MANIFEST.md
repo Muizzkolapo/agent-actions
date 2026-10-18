@@ -63,6 +63,7 @@ pathways.
 | `contains_dangerous_pattern()` | `agent_config/{workflow}.yml` | Validates | `guard`, `where` |
 | `get_nested_value()` | `agent_io/staging/` | Reads | — |
 | `constants.RESERVED_AGENT_NAMES` | `agent_config/{workflow}.yml` | Validates | `name` |
+| `constants.RESERVED_NAMES_NO_RECORD_HAS` | `agent_config/{workflow}.yml`, `prompt_store/{workflow}.md` | Validates | `prompt`, `guard`, `context_scope` |
 | `constants.DANGEROUS_PATTERNS` | `agent_config/{workflow}.yml` | Validates | `guard`, `where` |
 
 ## Dependencies
