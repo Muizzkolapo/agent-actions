@@ -31,6 +31,8 @@ class OutputSchema:
     json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_schemaless: bool = False
+    # A plain-text (json_mode: false) action stores its answer under this name alone.
+    output_field: str | None = None
     load_error: str | None = None
 
     @property

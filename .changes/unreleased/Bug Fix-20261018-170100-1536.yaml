@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  Pre-flight's static-analysis warnings now print when there is no error too: `agac run` and
+  `agac inspect` show them in one grouped block, each finding once, and the run goes on.
+  Before, they printed only beside an error. A misspelt `context_scope.observe` or
+  `passthrough` entry is reported once, no longer a second time by a check that measured it
+  against what the upstream forwards; a field the upstream only forwards names where it is
+  stored (`source.page_content`). Several warnings that would now have shown on valid
+  workflows were wrong and are fixed: a plain-text action's `output_field` is no longer
+  called unvalidatable, a wildcard on a schemaless upstream is not warned about, a field read
+  from an action upstream through `dependencies` is no longer called an implicit dependency,
+  and the guard-nullable warning is gone (a filtered record never reaches the actions below,
+  a skip is already reported on the same `observe` entry, and pre-flight makes the tool's
+  schema accept the null). The guard literal-type warning now reads a schema loaded by name;
+  it never fired for one (#1536).
+time: 2026-10-18T17:01:00Z

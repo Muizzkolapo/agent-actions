@@ -68,23 +68,7 @@ def test_a_literal_the_field_type_never_matches_is_warned_about():
     assert "'review.approved' is declared 'string'" in messages[0]
 
 
-def test_the_nullable_warning_names_the_clause_and_behavior():
-    messages = _warnings(
-        _llm("extract", ["insights"], guard=_expanded("source.score >= 6", "skip")),
-        _tool(
-            "format_output",
-            {"insights": "object"},
-            dependencies=["extract"],
-            observe=["extract.insights"],
-        ),
-        containing="may be None",
-    )
-
-    assert len(messages) == 1, messages
-    assert "(guard: source.score >= 6, on_false: skip)" in messages[0], messages
-
-
-def test_a_warn_guard_leaves_its_fields_set_so_no_nullable_warning():
+def test_a_warn_guard_leaves_its_fields_set_so_no_null_warning():
     messages = _warnings(
         _llm("extract", ["insights"], guard=_expanded("source.score >= 6", "warn")),
         _tool(
@@ -93,7 +77,7 @@ def test_a_warn_guard_leaves_its_fields_set_so_no_nullable_warning():
             dependencies=["extract"],
             observe=["extract.insights"],
         ),
-        containing="may be None",
+        containing="extract",
     )
 
     assert messages == []

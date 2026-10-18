@@ -22,7 +22,8 @@ _CAMEL_RE = re.compile(r"([a-z0-9])([A-Z])")
 
 # Besides a guard, the places that read an upstream's stored namespace. A `drop` names a
 # field on its way into the action's context and is checked as before.
-_NAMESPACE_READS = frozenset({"prompt", "context_scope.observe", "context_scope.passthrough"})
+_SCOPE_READS = frozenset({"context_scope.observe", "context_scope.passthrough"})
+_NAMESPACE_READS = _SCOPE_READS | {"prompt"}
 
 
 def _camel_to_snake(name: str) -> str:
@@ -122,6 +123,7 @@ class StaticTypeChecker:
         # A guard naming its own action, or one not upstream of it through its
         # dependencies, is refused by `find_reads_not_upstream` in words about the guard.
         is_guard = requirement.location == "guard"
+        is_scope_read = requirement.location in _SCOPE_READS
         if is_guard and source_agent == node.name:
             return
 
@@ -168,6 +170,27 @@ class StaticTypeChecker:
                 return
 
         output_schema = source_node.output_schema
+        root_field = field_path.split(".")[0]
+
+        if output_schema.is_dynamic and output_schema.load_error and is_scope_read:
+            result.add_error(
+                StaticTypeError(
+                    message=f"Cannot validate {requirement.location} field '{field_path}' "
+                    f"— {output_schema.load_error}",
+                    location=location,
+                    referenced_agent=source_agent,
+                    referenced_field=field_path,
+                    hint="Fix the schema file first, then re-run validation.",
+                )
+            )
+            return
+
+        # "*" is a wildcard directive (observe/passthrough all), not a field name
+        if root_field == "*" or root_field.isdigit():
+            return
+
+        if output_schema.is_schemaless and root_field == output_schema.output_field:
+            return
 
         if output_schema.is_schemaless:
             result.add_warning(
@@ -193,12 +216,6 @@ class StaticTypeChecker:
                     hint="Schema is loaded at runtime and cannot be statically analyzed",
                 )
             )
-            return
-
-        root_field = field_path.split(".")[0]
-
-        # "*" is a wildcard directive (observe/passthrough all), not a field name
-        if root_field == "*" or root_field.isdigit():
             return
 
         reads_namespace = is_guard or requirement.location in _NAMESPACE_READS
@@ -252,6 +269,24 @@ class StaticTypeChecker:
                 )
             else:
                 hint = self._suggest_similar_field(root_field, available)
+                origins = sorted(
+                    {
+                        namespace
+                        for namespace, name in output_schema.observe_refs
+                        | output_schema.passthrough_refs
+                        if namespace and name == root_field
+                    }
+                )
+                producers = self._actions_producing(root_field, exclude={source_agent, node.name})
+                if reads_namespace and origins:
+                    spellings = " or ".join(f"'{ns}.{root_field}'" for ns in origins)
+                    hint = (
+                        f"'{source_agent}' only forwards '{root_field}', which stays stored "
+                        f"under the namespace it came from. Did you mean {spellings}?"
+                    )
+                elif producers and not hint.startswith("Did you mean"):
+                    spellings = ", ".join(f"'{name}.{root_field}'" for name in producers)
+                    hint = f"Did you mean {spellings}?"
                 result.add_error(
                     StaticTypeError(
                         message=f"Field '{root_field}' not found in "
@@ -263,6 +298,16 @@ class StaticTypeChecker:
                         hint=hint,
                     )
                 )
+
+    def _actions_producing(self, field: str, exclude: set[str]) -> list[str]:
+        """The other actions whose schema lists *field*, for a wrong-action hint."""
+        return sorted(
+            name
+            for name, other in self.graph.nodes.items()
+            if name not in exclude
+            and not self.graph.is_special_namespace(name)
+            and field in other.output_schema.schema_fields
+        )
 
     def _suggest_similar_field(self, field: str, available: set) -> str:
         """Suggest similar field names for typo correction."""
@@ -314,44 +359,5 @@ class StaticTypeChecker:
                         hint=f"Either use fields from '{dep}' or remove it from dependencies",
                     )
                 )
-
-        return warnings
-
-    def check_missing_dependencies(self) -> list[StaticTypeWarning]:
-        """Find actions referenced but not declared in dependencies."""
-        warnings: list[StaticTypeWarning] = []
-
-        for action_name, node in self.graph.nodes.items():
-            if self.graph.is_special_namespace(action_name):
-                continue
-
-            referenced = set()
-            for req in node.input_requirements:
-                if req.source_agent not in SPECIAL_NAMESPACES:
-                    referenced.add(req.source_agent)
-
-            # An action that does not exist is refused by `_check_requirement`; it is no
-            # dependency to add.
-            implicit = {
-                agent for agent in referenced - node.dependencies if self.graph.get_node(agent)
-            }
-
-            for agent in sorted(implicit):
-                for req in node.input_requirements:
-                    if req.source_agent == agent:
-                        warnings.append(
-                            StaticTypeWarning(
-                                message=f"Implicit dependency on '{agent}' (not in dependencies)",
-                                location=FieldLocation(
-                                    agent_name=action_name,
-                                    config_field=req.location,
-                                    raw_reference=req.raw_reference,
-                                ),
-                                referenced_agent=agent,
-                                referenced_field=req.field_path,
-                                hint=f"Consider adding '{agent}' to dependencies for clarity",
-                            )
-                        )
-                        break
 
         return warnings

@@ -328,6 +328,7 @@ class SchemaExtractor:
             if not json_mode:
                 output.is_schemaless = True
                 output_field = config.get("output_field", get_default("output_field"))
+                output.output_field = output_field
                 output.schema_fields.add(output_field)
                 output.schema_fields.add("content")
                 return

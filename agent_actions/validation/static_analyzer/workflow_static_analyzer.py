@@ -41,7 +41,7 @@ from .schema_extractor import SchemaExtractor
 
 logger = logging.getLogger(__name__)
 from .schema_structure_validator import SchemaStructureValidator
-from .type_checker import StaticTypeChecker, _camel_to_snake
+from .type_checker import StaticTypeChecker
 
 
 def guard_clause_and_behavior(guard: Any) -> tuple[str, str] | None:
@@ -224,13 +224,6 @@ class WorkflowStaticAnalyzer:
         for error in self._check_template_scope_coverage():
             result.add_error(error)
 
-        # Step 2c: Validate context_scope field references
-        field_errors, field_warnings = self._check_context_scope_fields()
-        for error in field_errors:
-            result.add_error(error)
-        for warning in field_warnings:
-            result.add_warning(warning)
-
         # Step 2d: Catch seed_data/seed_path misuse in context_scope references
         for error in self._check_seed_reference_misuse():
             result.add_error(error)
@@ -250,10 +243,6 @@ class WorkflowStaticAnalyzer:
         for warning in drop_warnings:
             result.add_warning(warning)
 
-        # Step 2g: Detect guard-nullable fields flowing into tool schemas
-        for warning in self._check_guard_nullable_fields():
-            result.add_warning(warning)
-
         # Step 2h: Guard literals whose type can never match the field's schema type
         for warning in self._check_guard_literal_type_mismatch():
             result.add_warning(warning)
@@ -267,10 +256,8 @@ class WorkflowStaticAnalyzer:
         for warning in file_tool_collision_warnings:
             result.add_warning(warning)
 
-        # Step 3: Check for unused and missing dependencies (add as warnings)
+        # Step 3: Check for unused dependencies (add as warnings)
         for warning in checker.check_unused_dependencies():
-            result.add_warning(warning)
-        for warning in checker.check_missing_dependencies():
             result.add_warning(warning)
 
         # Step 3b: Check lineage reachability for observe/passthrough references
@@ -636,229 +623,6 @@ class WorkflowStaticAnalyzer:
                 )
 
         return errors
-
-    def _check_context_scope_fields(
-        self,
-    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning]]:
-        """Validate context_scope field references against dependency schemas.
-
-        Checks that fields referenced in context_scope.observe and context_scope.passthrough
-        actually exist in the dependency's output schema.  For schemaless or dynamic actions
-        where the schema cannot be verified, emits warnings instead of silently skipping.
-
-        Returns:
-            (errors, warnings) — errors block execution, warnings are informational.
-        """
-        from agent_actions.prompt.context.scope_parsing import (
-            extract_action_names_from_context_scope,
-        )
-
-        errors: list[StaticTypeError] = []
-        warnings: list[StaticTypeWarning] = []
-        actions = self.workflow_config.get("actions", [])
-
-        for action in actions:
-            if not isinstance(action, dict):
-                continue
-
-            action_name = action.get("name", "unknown")
-            context_scope = action.get("context_scope", {})
-
-            if not context_scope:
-                continue
-
-            # Get action's dependencies (explicit + context_scope-inferred).
-            # The runtime infers deps from context_scope refs, so validation must match.
-            deps_list = action.get("dependencies", [])
-            dependencies = set()
-            if isinstance(deps_list, list):
-                for dep in deps_list:
-                    if isinstance(dep, str):
-                        dependencies.add(dep)
-            inferred = extract_action_names_from_context_scope(context_scope)
-            dependencies |= {ns for ns in inferred if ns not in SPECIAL_NAMESPACES}
-
-            # Check observe and passthrough directives
-            for directive in ["observe", "passthrough"]:
-                field_refs = context_scope.get(directive, [])
-                if not isinstance(field_refs, list):
-                    continue
-
-                for field_ref in field_refs:
-                    if not isinstance(field_ref, str):
-                        continue
-
-                    # Parse field reference: "dep_name.field_name" or "dep_name.*"
-                    if "." not in field_ref:
-                        continue  # Skip malformed references
-
-                    parts = field_ref.split(".", 1)
-                    dep_name = parts[0]
-                    field_name = parts[1] if len(parts) > 1 else ""
-
-                    # Skip special namespaces and loop (runtime namespace
-                    # not in SPECIAL_NAMESPACES but valid in context_scope)
-                    if dep_name in SPECIAL_NAMESPACES or dep_name == "loop":
-                        continue
-
-                    # Check if dependency is declared
-                    if dep_name not in dependencies:
-                        errors.append(
-                            StaticTypeError(
-                                message=f"context_scope.{directive} references undeclared dependency '{dep_name}'",
-                                location=FieldLocation(
-                                    agent_name=action_name,
-                                    config_field=f"context_scope.{directive}",
-                                    raw_reference=field_ref,
-                                ),
-                                referenced_agent=dep_name,
-                                referenced_field=field_name,
-                                hint=f"Add '{dep_name}.*' to context_scope.observe, or remove this reference.",
-                            )
-                        )
-                        continue
-
-                    # Validate field exists in dependency's output schema
-                    dep_node = self.graph.get_node(dep_name)
-                    if not dep_node:
-                        errors.append(
-                            StaticTypeError(
-                                message=f"context_scope.{directive} references unknown action '{dep_name}'",
-                                location=FieldLocation(
-                                    agent_name=action_name,
-                                    config_field=f"context_scope.{directive}",
-                                    raw_reference=field_ref,
-                                ),
-                                referenced_agent=dep_name,
-                                referenced_field=field_name,
-                                hint=f"No action named '{dep_name}' exists in this workflow. Check for typos.",
-                            )
-                        )
-                        continue
-
-                    output_schema = dep_node.output_schema
-
-                    # Dynamic schema: load failed or runtime-resolved.
-                    if output_schema.is_dynamic:
-                        if output_schema.load_error:
-                            errors.append(
-                                StaticTypeError(
-                                    message=(
-                                        f"Cannot validate context_scope.{directive} "
-                                        f"field '{field_name}' — {output_schema.load_error}"
-                                    ),
-                                    location=FieldLocation(
-                                        agent_name=action_name,
-                                        config_field=f"context_scope.{directive}",
-                                        raw_reference=field_ref,
-                                    ),
-                                    referenced_agent=dep_name,
-                                    referenced_field=field_name,
-                                    hint="Fix the schema file first, then re-run validation.",
-                                )
-                            )
-                        elif field_name != "*":
-                            warnings.append(
-                                StaticTypeWarning(
-                                    message=(
-                                        f"Cannot verify field '{field_name}' on "
-                                        f"'{dep_name}' — action schema is dynamic"
-                                    ),
-                                    location=FieldLocation(
-                                        agent_name=action_name,
-                                        config_field=f"context_scope.{directive}",
-                                        raw_reference=field_ref,
-                                    ),
-                                    referenced_agent=dep_name,
-                                    referenced_field=field_name,
-                                    hint=(
-                                        f"Action '{dep_name}' has a dynamic schema. "
-                                        f"Verify the field name matches the action's "
-                                        f"runtime output."
-                                    ),
-                                )
-                            )
-                        continue
-
-                    # Schemaless: no output schema defined (common for tools).
-                    if output_schema.is_schemaless:
-                        if field_name != "*":
-                            warnings.append(
-                                StaticTypeWarning(
-                                    message=(
-                                        f"Cannot verify field '{field_name}' on "
-                                        f"'{dep_name}' — action has no output schema"
-                                    ),
-                                    location=FieldLocation(
-                                        agent_name=action_name,
-                                        config_field=f"context_scope.{directive}",
-                                        raw_reference=field_ref,
-                                    ),
-                                    referenced_agent=dep_name,
-                                    referenced_field=field_name,
-                                    hint=(
-                                        f"Add an output schema to '{dep_name}' to "
-                                        f"enable field-level validation, or verify "
-                                        f"the field name matches the action's "
-                                        f"runtime output."
-                                    ),
-                                )
-                            )
-                        continue
-
-                    available_fields = output_schema.available_fields
-                    if field_name not in available_fields:
-                        # Try camelCase → snake_case normalization (HITL
-                        # runtime converts field names to snake_case).
-                        snake_name = _camel_to_snake(field_name)
-                        if snake_name != field_name and snake_name in available_fields:
-                            continue
-
-                    if field_name not in available_fields:
-                        suggestions = self._find_field_in_other_actions(
-                            field_name, exclude={dep_name, action_name}
-                        )
-                        if suggestions:
-                            suggestion_refs = ", ".join(f"'{a}.{field_name}'" for a in suggestions)
-                            hint = f"Did you mean {suggestion_refs}?"
-                        else:
-                            hint = (
-                                f"Available fields in '{dep_name}': "
-                                f"{sorted(available_fields) if available_fields else '(none)'}."
-                            )
-                        errors.append(
-                            StaticTypeError(
-                                message=f"context_scope.{directive} references non-existent field '{field_name}' in '{dep_name}'",
-                                location=FieldLocation(
-                                    agent_name=action_name,
-                                    config_field=f"context_scope.{directive}",
-                                    raw_reference=field_ref,
-                                ),
-                                referenced_agent=dep_name,
-                                referenced_field=field_name,
-                                available_fields=available_fields,
-                                hint=hint,
-                            )
-                        )
-
-        return errors, warnings
-
-    def _find_field_in_other_actions(self, field_name: str, exclude: set[str]) -> list[str]:
-        """Find which workflow actions produce a given field.
-
-        Searches all actions' ``available_fields`` for *field_name*,
-        excluding actions in *exclude*.  Returns a sorted list of action
-        names that have this field, for use in "did you mean?" hints.
-        """
-        matches = []
-        for node in self.graph.nodes.values():
-            if node.name in exclude:
-                continue
-            if node.name in SPECIAL_NAMESPACES:
-                continue
-            if field_name in node.output_schema.available_fields:
-                matches.append(node.name)
-        return sorted(matches)
 
     def _check_seed_reference_misuse(self) -> list[StaticTypeError]:
         """Catch common misuse of seed_data/seed_path in context_scope references.
@@ -1336,152 +1100,6 @@ class WorkflowStaticAnalyzer:
 
         return warnings
 
-    def _check_guard_nullable_fields(self) -> list[StaticTypeWarning]:
-        """Detect fields that may be None due to upstream guard filtering.
-
-        When an action has ``guard.on_false`` set to ``"filter"`` or ``"skip"``,
-        its output fields will be ``None`` for records that fail the guard.  If a
-        downstream **tool** action observes those fields and its output schema
-        declares a non-nullable type (e.g. ``type: object``), the workflow will
-        crash at runtime with a schema validation error.
-
-        Covers both direct observation (tool observes ``guarded.field``) and
-        transitive passthrough (tool observes ``intermediate.field`` where
-        ``intermediate`` passthroughs from a guarded action).
-
-        This check is a **warning** (not an error) because:
-        - The tool implementation may handle ``None`` internally.
-        - The guard condition may never actually filter in practice.
-        - The field may be populated from a different source in the fan-in.
-        """
-        warnings: list[StaticTypeWarning] = []
-        actions = self.workflow_config.get("actions", [])
-
-        # Step 1: Identify guarded actions with filter/skip behavior and their fields.
-        guarded_actions: dict[str, dict[str, str]] = {}  # name -> {condition, behavior}
-        guarded_fields: dict[str, set[str]] = {}  # name -> output field names
-        for action in actions:
-            if not isinstance(action, dict):
-                continue
-            name = action.get("name", "")
-            read = guard_clause_and_behavior(action.get("guard"))
-            if read is None:
-                continue
-            condition, behavior = read
-
-            if behavior in ("filter", "skip"):
-                guarded_actions[name] = {"condition": condition, "behavior": behavior}
-                node = self.graph.get_node(name)
-                if node:
-                    guarded_fields[name] = node.output_schema.schema_fields.copy()
-
-        if not guarded_actions:
-            return warnings
-
-        # Step 2: For each downstream tool, trace observe refs back to guarded
-        #         actions — both direct and via passthrough intermediates.
-        for action in actions:
-            if not isinstance(action, dict):
-                continue
-
-            consumer_name = action.get("name", "unknown")
-            consumer_node = self.graph.get_node(consumer_name)
-            if not consumer_node:
-                continue
-
-            # Only tool actions have strict output schema validation.
-            if consumer_node.agent_kind != ActionKind.TOOL:
-                continue
-
-            context_scope = action.get("context_scope", {})
-            if not isinstance(context_scope, dict):
-                continue
-
-            observe_refs = context_scope.get("observe", [])
-            if not isinstance(observe_refs, list):
-                continue
-
-            # Build a map: guarded_source -> set of observed field names.
-            # Includes both direct refs and transitive passthrough refs.
-            observed_from_guarded: dict[str, set[str]] = {}
-            for ref in observe_refs:
-                if not isinstance(ref, str) or "." not in ref:
-                    continue
-                source_name, field_name = ref.split(".", 1)
-                if field_name == "*":
-                    continue
-
-                # Case 1: Direct observation of a guarded action.
-                if source_name in guarded_actions:
-                    observed_from_guarded.setdefault(source_name, set()).add(field_name)
-                    continue
-
-                # Case 2: Transitive — source is an intermediate that
-                # passthroughs from a guarded action.
-                source_node = self.graph.get_node(source_name)
-                if not source_node:
-                    continue
-                source_output = source_node.output_schema
-                for g_name in guarded_actions:
-                    if g_name not in source_node.dependencies:
-                        continue
-                    # Wildcard passthrough: "G.*" → all of G's fields flow through
-                    if g_name in source_output.passthrough_wildcard_sources:
-                        if field_name in guarded_fields.get(g_name, set()):
-                            observed_from_guarded.setdefault(g_name, set()).add(field_name)
-                    # Specific passthrough: field_name matches a guarded field
-                    elif field_name in source_output.passthrough_fields:
-                        if field_name in guarded_fields.get(g_name, set()):
-                            observed_from_guarded.setdefault(g_name, set()).add(field_name)
-
-            if not observed_from_guarded:
-                continue
-
-            # Look up the consumer's output schema to find field type declarations.
-            consumer_schema = consumer_node.output_schema.json_schema
-            if not consumer_schema:
-                continue
-
-            # Build field_name -> declared_type from the schema.
-            schema_field_types = self._extract_field_types_from_schema(consumer_schema)
-            if not schema_field_types:
-                continue
-
-            # Step 3: Emit warnings for non-nullable fields sourced from guarded actions.
-            for source_name, fields in observed_from_guarded.items():
-                guard_info = guarded_actions[source_name]
-                for field_name in sorted(fields):
-                    declared_type = schema_field_types.get(field_name)
-                    if declared_type is None:
-                        continue  # Field not declared in consumer schema — no risk.
-                    if self._type_allows_null(declared_type):
-                        continue
-
-                    warnings.append(
-                        StaticTypeWarning(
-                            message=(
-                                f"Field '{field_name}' in tool action '{consumer_name}' "
-                                f"may be None when guarded action '{source_name}' filters "
-                                f"(guard: {guard_info['condition']}, "
-                                f"on_false: {guard_info['behavior']}). "
-                                f"Schema declares type '{declared_type}' which rejects None."
-                            ),
-                            location=FieldLocation(
-                                agent_name=consumer_name,
-                                config_field="schema",
-                                raw_reference=f"{source_name}.{field_name}",
-                            ),
-                            referenced_agent=source_name,
-                            referenced_field=field_name,
-                            hint=(
-                                f"Either remove '{field_name}' from the schema, "
-                                f"or handle None in the tool implementation before returning."
-                            ),
-                        )
-                    )
-
-        return warnings
-
     def _check_guard_skipped_observe_refs(self) -> list[StaticTypeWarning]:
         """Warn when observe refs target specific fields from skip-guarded actions.
 
@@ -1537,9 +1155,7 @@ class WorkflowStaticAnalyzer:
                             f"'{source_name}.{field_name}' may be null at runtime. "
                             f"Action '{source_name}' has guard with on_false: \"skip\" "
                             f"— when the guard evaluates to false, the action's "
-                            f"namespace is null. Use wildcard '{source_name}.*' to "
-                            f"handle gracefully, or add null handling in the "
-                            f"downstream prompt/tool."
+                            f"namespace is null."
                         ),
                         location=FieldLocation(
                             agent_name=consumer_name,
@@ -1550,8 +1166,8 @@ class WorkflowStaticAnalyzer:
                         referenced_field=field_name,
                         hint=(
                             f"Use '{source_name}.*' instead of "
-                            f"'{source_name}.{field_name}' to handle the case "
-                            f"when the guard skips."
+                            f"'{source_name}.{field_name}', or handle null in the "
+                            f"downstream prompt or tool."
                         ),
                     )
                 )
@@ -1823,6 +1439,10 @@ class WorkflowStaticAnalyzer:
         """Extract {field_name: type_string} from a JSON schema or list-style schema."""
         result: dict[str, str] = {}
 
+        # A schema loaded by name is the schema file itself: `{name, fields: [...]}`.
+        if isinstance(schema, dict) and isinstance(schema.get("fields"), list):
+            schema = schema["fields"]
+
         if isinstance(schema, list):
             # List-style schema: [{"id": "field", "type": "object"}, ...]
             for item in schema:
@@ -1849,13 +1469,6 @@ class WorkflowStaticAnalyzer:
                             result[field_id] = field_type
 
         return result
-
-    @staticmethod
-    def _type_allows_null(declared_type: str | list) -> bool:
-        """Return True if the declared type explicitly allows null values."""
-        if isinstance(declared_type, list):
-            return "null" in declared_type
-        return declared_type == "null"
 
     def _check_lineage_reachability(self) -> list[StaticTypeWarning]:
         """Check that observe references to non-direct-dependencies are reachable.
@@ -2401,39 +2014,6 @@ def apply_guard_nullable_schema_fixes(
     if not guarded_actions:
         return fixes
 
-    # Step 1a: Extract schema field names for each guarded action.
-    # Used to verify wildcard passthrough fields actually belong to the guarded action.
-    guarded_fields: dict[str, set[str]] = {}
-    for g_name in guarded_actions:
-        g_config = action_configs[g_name]
-        schema = g_config.get("json_output_schema") or g_config.get("schema")
-        if schema:
-            field_types = WorkflowStaticAnalyzer._extract_field_types_from_schema(schema)
-            guarded_fields[g_name] = set(field_types.keys())
-
-    # Step 1b: Build passthrough map for transitive resolution.
-    # {action_name: {source_action: set_of_fields_or_wildcard}}
-    passthrough_map: dict[str, dict[str, set[str] | str]] = {}
-    for name, config in action_configs.items():
-        cs = config.get("context_scope")
-        if not isinstance(cs, dict):
-            continue
-        pt_refs = cs.get("passthrough", [])
-        if not isinstance(pt_refs, list):
-            continue
-        for ref in pt_refs:
-            if not isinstance(ref, str) or "." not in ref:
-                continue
-            pt_source, pt_field = ref.split(".", 1)
-            if pt_field == "*":
-                passthrough_map.setdefault(name, {})[pt_source] = "*"
-            else:
-                existing = passthrough_map.setdefault(name, {}).get(pt_source, set())
-                if existing != "*":  # wildcard supersedes specifics
-                    if isinstance(existing, set):
-                        existing.add(pt_field)
-                    passthrough_map[name][pt_source] = existing
-
     # Step 2: For each tool action, find observed fields from guarded upstreams.
     for consumer_name, consumer_config in action_configs.items():
         if consumer_config.get("model_vendor") != "tool":
@@ -2459,23 +2039,8 @@ def apply_guard_nullable_schema_fixes(
             if field == "*":
                 continue
 
-            # Case 1: Direct observation of a guarded action.
             if source in guarded_actions:
                 guard_nullable_fields.add(field)
-                continue
-
-            # Case 2: Transitive — source passthroughs from a guarded action.
-            source_pts = passthrough_map.get(source, {})
-            for g_name in guarded_actions:
-                pt_fields = source_pts.get(g_name)
-                if pt_fields is None:
-                    continue
-                if pt_fields == "*":
-                    # Wildcard: only if the field is actually produced by the guarded action
-                    if field in guarded_fields.get(g_name, set()):
-                        guard_nullable_fields.add(field)
-                elif isinstance(pt_fields, set) and field in pt_fields:
-                    guard_nullable_fields.add(field)
 
         if not guard_nullable_fields:
             continue

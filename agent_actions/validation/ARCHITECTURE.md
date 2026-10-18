@@ -125,20 +125,24 @@ WorkflowStaticAnalyzer.analyze()
   |          - referenced actions are in dependencies
   |          - referenced fields exist in upstream output schema
   |          - forwarded fields not dropped from output
+  |          - context_scope observe/passthrough entries (the only check of them)
   |          - unused dependency warnings
   |
   Step 3+: Additional checks
              - reserved action name validation
              - template namespace coverage
-             - context_scope field references
              - seed_data/seed_path/static_data misuse
              - schema structure validation
              - drop directive targeting
-             - guard-nullable field detection
              - lineage reachability
              - expect: block defects
              - json_mode vs schema mismatch
 ```
+
+`PreflightService.validate` (`services/preflight_service.py`) refuses the run on any error, with
+the full report, warnings included. Without an error it prints the warnings itself, one grouped
+`Pre-flight: static analysis` block with each distinct finding once, so `agac run` and
+`agac inspect` show them; before 1536 they printed only beside an error.
 
 ### DataFlowGraph
 
@@ -198,11 +202,14 @@ WorkflowResolutionService.resolve_all()
 
 Guard conditions are validated in the static analyzer through several checks:
 
-- `_check_guard_nullable_fields()` -- detects fields that may be None at runtime due to upstream guard filtering, warns when downstream tool schemas reject null
 - `_check_guard_skipped_observe_refs()` -- warns when observe refs target specific fields from skip-guarded actions (the entire namespace is None)
 - `_check_filter_fanin_observe_hazard()` -- warns about guard-filter + fan-in observe combinations
 
 These checks run **before** wildcard expansion to avoid false positives from expanded wildcards.
+
+There is no separate guard-nullable warning: a filter removes the record from every action
+below it, a skip is reported on the same entry by the skip-observe check, and
+`apply_guard_nullable_schema_fixes` makes a tool's schema accept the null (1536).
 
 They, the literal-type check (`_check_guard_literal_type_mismatch`) and
 `apply_guard_nullable_schema_fixes` read a guard through `guard_clause_and_behavior`, which takes
@@ -233,7 +240,9 @@ A module-level function (not a method on the analyzer) that **mutates `json_outp
 apply_guard_nullable_schema_fixes(action_configs)
   |
   1. Find guarded actions with filter/skip behavior
-  2. For each downstream action that observes guarded fields:
+  2. For each downstream tool that observes a guarded action's field directly
+     (a field another action passes through stays under the guarded action's
+     namespace, so a read under the forwarding action is not one):
      - If the field's schema type rejects null (e.g., "string")
      - Mutate the type to ["string", "null"] or add null to anyOf
   3. Return list of fixed field paths (e.g., ["consumer.field"])
