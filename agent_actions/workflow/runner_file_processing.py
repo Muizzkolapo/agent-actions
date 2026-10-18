@@ -595,6 +595,7 @@ def _refuse_staged_files_the_first_stage_would(
     input_directory: str,
     params: FileProcessParams,
     processed_paths: set,
+    staged_suffixes: Callable[[], tuple[str, ...]],
 ) -> None:
     """Check every staged file the walk will process before it processes the first.
 
@@ -614,7 +615,14 @@ def _refuse_staged_files_the_first_stage_would(
         except OSError:
             continue
         runner._precheck_single_file(
-            _build_file_params(params, item, input_path, output_path, input_directory)
+            _build_file_params(
+                params,
+                item,
+                input_path,
+                output_path,
+                input_directory,
+                staged_suffixes=staged_suffixes,
+            )
         )
 
 
@@ -657,7 +665,14 @@ def process_directory_files(
         items, input_path, processed_paths, params.file_type_filter
     )
     _refuse_staged_files_the_first_stage_would(
-        runner, items, input_path, output_path, input_directory, params, processed_paths
+        runner,
+        items,
+        input_path,
+        output_path,
+        input_directory,
+        params,
+        processed_paths,
+        staged_suffixes,
     )
     unreadable.sort(key=lambda pair: pair[0])
     for directory, error in unreadable:
