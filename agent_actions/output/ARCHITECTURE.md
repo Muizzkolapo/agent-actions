@@ -397,7 +397,6 @@ ResponseBuilder (static methods):
 | `response/expander_schema.py` | Schema processing and compile_output_schema |
 | `response/expander_action_types.py` | Guard, tool, and HITL action processing |
 | `response/expander_merge.py` | Config merging, context_scope deep merge, chunk config |
-| `response/expander_guard_validation.py` | Guard reference validation against upstream actions |
 
 ### Config models
 | File | Role |

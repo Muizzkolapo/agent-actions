@@ -9,7 +9,6 @@ Implementation details are split across focused submodules:
 - expander_schema: schema processing and compilation
 - expander_action_types: guard, tool, and HITL processing
 - expander_merge: config merging and initialization
-- expander_guard_validation: guard reference validation
 """
 
 import copy
