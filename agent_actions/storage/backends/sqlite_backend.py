@@ -407,6 +407,13 @@ class SQLiteBackend(StorageBackend):
                     """,
                     (action_name, relative_path, data_json, record_count),
                 )
+                # Left beside the file just written, a checkpoint row would read as an
+                # answer given after it, and a resume would put it in place of the row
+                # this write stored. Batch writes the file without the online pipeline.
+                cursor.execute(
+                    "DELETE FROM checkpoint_output WHERE action_name = ? AND relative_path = ?",
+                    (action_name, relative_path),
+                )
                 self.connection.commit()
                 logger.debug(
                     "Wrote %d target records: %s/%s",

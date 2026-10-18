@@ -1,6 +1,7 @@
 """Tests for SQLite storage backend."""
 
 import json
+import sqlite3
 
 import pytest
 
@@ -588,6 +589,41 @@ class TestCheckpointKeepsEveryRowOfARecord:
         backend.save_checkpoint_records("action_a", "other.json", [{"source_guid": "g3"}])
 
         assert backend.checkpointed_without_row_count("action_a", "output.json") == {"g1"}
+
+
+class TestWritingAFileClearsItsCheckpointRows:
+    """A checkpoint row left beside a file is read as an answer given after the file was
+    written, so whatever writes the file, online or batch, takes that file's rows with it."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_the_file_written_keeps_no_checkpoint_row_and_no_other_file_loses_one(self, backend):
+        backend.save_checkpoint_records("action_a", "output.json", [{"source_guid": "g1"}])
+        backend.save_checkpoint_records("action_a", "other.json", [{"source_guid": "g2"}])
+        backend.save_checkpoint_records("action_b", "output.json", [{"source_guid": "g3"}])
+
+        backend.write_target("action_a", "output.json", [{"source_guid": "g1", "content": {}}])
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == []
+        assert backend.read_checkpoint_records("action_a", "other.json") == [{"source_guid": "g2"}]
+        assert backend.read_checkpoint_records("action_b", "output.json") == [{"source_guid": "g3"}]
+
+    def test_a_write_that_fails_keeps_the_rows(self, backend):
+        """They hold the only copy of the answers the file was not written with."""
+        backend.save_checkpoint_records("action_a", "output.json", [{"source_guid": "g1"}])
+        backend.connection.execute("DROP TABLE target_data")
+        backend.connection.commit()
+
+        with pytest.raises(sqlite3.Error):
+            backend.write_target("action_a", "output.json", [{"source_guid": "g1"}])
+
+        assert backend.read_checkpoint_records("action_a", "output.json") == [{"source_guid": "g1"}]
 
 
 class TestPreviewTargetNullRecordCount:
