@@ -267,3 +267,67 @@ def test_a_prompt_reading_seed_with_none_declared_anywhere_is_refused(tmp_path):
 
     assert "references seed.conf but 'conf' is not declared in context_scope.seed" in output
     assert "Location: prompt" in output, output
+
+
+def _parses_in_process(project: Path, monkeypatch) -> int:
+    """Run the workflow to the end in this process, counting each seed file parse."""
+    from click.testing import CliRunner
+
+    from agent_actions.cli.main import cli
+    from agent_actions.prompt.context.static_loader import StaticDataLoader
+    from agent_actions.utils.path_utils import reset_path_manager
+
+    parses = []
+    real = StaticDataLoader._load_file
+
+    def counting(self, file_path, field_name):
+        parses.append(field_name)
+        return real(self, file_path, field_name)
+
+    monkeypatch.setattr(StaticDataLoader, "_load_file", counting)
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
+    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
+    monkeypatch.chdir(project)
+    reset_path_manager()
+    args = ["run", "-a", WORKFLOW, "--fresh"]
+    try:
+        for _ in range(4):
+            result = CliRunner().invoke(cli, args, catch_exceptions=False)
+            assert result.exit_code == 0, result.output
+            if "run again" not in result.output:
+                break
+            args = ["run", "-a", WORKFLOW]
+    finally:
+        reset_path_manager()
+    return len(parses)
+
+
+# What the prompt alone parses for two records, measured on the code before guards read
+# seed: one per record online; batch also renders the first record to check it.
+PROMPT_PARSES = {"online": 2, "batch": 3}
+
+
+@pytest.mark.parametrize("mode", ["online", "batch"])
+@pytest.mark.parametrize(
+    ("condition", "guard_parses"),
+    [
+        # A guard that does not read seed parses nothing.
+        ("source.page_content != ''", 0),
+        # One that does parses each file once for the process, not once per record.
+        ("seed.conf.mode == 'on'", 1),
+    ],
+)
+def test_a_guard_adds_at_most_one_seed_parse(tmp_path, monkeypatch, mode, condition, guard_parses):
+    project = _project(tmp_path, condition, mode, prompt_extra=" in {{ seed.conf.mode }}")
+
+    assert _parses_in_process(project, monkeypatch) == PROMPT_PARSES[mode] + guard_parses
+
+
+@pytest.mark.parametrize("mode", ["online", "batch"])
+@pytest.mark.parametrize(
+    ("condition", "parses"), [("source.page_content != ''", 0), ("seed.conf.mode == 'on'", 1)]
+)
+def test_a_file_tool_guard_parses_seed_once_at_most(tmp_path, monkeypatch, mode, condition, parses):
+    project = _project(tmp_path, condition, mode, file_tool=True)
+
+    assert _parses_in_process(project, monkeypatch) == parses

@@ -214,7 +214,7 @@ class StaticTypeChecker:
 
         # The record as stored also keeps a field an open schema (`additionalProperties`)
         # admits without listing it.
-        if is_guard and root_field not in available and _admits_unlisted(output_schema):
+        if reads_namespace and root_field not in available and _admits_unlisted(output_schema):
             result.add_warning(
                 StaticTypeWarning(
                     message=f"Cannot validate field '{field_path}' - "

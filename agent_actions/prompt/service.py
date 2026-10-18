@@ -40,6 +40,7 @@ from agent_actions.prompt.context.scope_builder import build_field_context_with_
 from agent_actions.prompt.context.static_loader import (
     StaticDataLoader,
     StaticDataLoadError,
+    shared_static_data_loader,
 )
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment, MissingFieldError
@@ -252,16 +253,13 @@ class PromptPreparationService:
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
         context_scope = agent_config.get("context_scope", {})
 
-        # `build_guard_context` has already loaded the declared seed for the guard: the
-        # prompt reads that one load instead of a second. A copy, as a `seed.*` drop
-        # clears the dict it is handed.
+        # A guard context may carry the seed, shared and read-only; the prompt loads its
+        # own, which `context_scope` drops then edit.
         if "seed" in field_context:
-            static_data = dict(field_context["seed"])
             field_context = {k: v for k, v in field_context.items() if k != "seed"}
-        else:
-            static_data = PromptPreparationService.load_seed_data(
-                agent_config, context_scope, agent_name, source=field_context.get("source")
-            )
+        static_data = PromptPreparationService.load_seed_data(
+            agent_config, context_scope, agent_name, source=field_context.get("source")
+        )
 
         if not context_scope:
             PromptPreparationService._raise_missing_context_scope(agent_config, agent_name)
@@ -647,12 +645,16 @@ class PromptPreparationService:
         context_scope: dict[str, Any],
         agent_name: str,
         source: Mapping[str, Any] | None = None,
+        *,
+        shared: bool = False,
     ) -> dict[str, Any]:
         """Load the seed files `context_scope.seed` declares for one record; `{}` when it declares none.
 
         The prompt and the guard context (`build_guard_context`) both load through here.
         ``source`` is the record's own fields, read by a seed entry that selects its file
-        by one of them.
+        by one of them. ``shared`` reads through one loader per seed directory, so each
+        file is parsed once for the process; its values are shared between callers and
+        must not be written to.
         """
         seed_config = context_scope.get("seed") if context_scope else None
         if not seed_config:
@@ -665,7 +667,11 @@ class PromptPreparationService:
             )
             logger.debug("[SEED_DATA_LOAD] Seed data directory: %s", static_data_dir)
 
-            static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
+            static_data_loader = (
+                shared_static_data_loader(static_data_dir)
+                if shared
+                else StaticDataLoader(static_data_dir=static_data_dir)
+            )
             static_data = static_data_loader.load_static_data(
                 seed_config, source=source, action_name=agent_name
             )

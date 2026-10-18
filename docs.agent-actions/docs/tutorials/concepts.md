@@ -256,7 +256,7 @@ context_scope:
     - source.id
 ```
 
-This configuration sends `product_name` to the LLM, excludes raw HTML from context entirely, and attaches the source ID directly to the action's output (enrichment without LLM processing).
+This configuration sends `product_name` to the LLM, excludes raw HTML from context entirely, and keeps the source ID on the action's output record without the LLM seeing it. The ID stays under its origin namespace, `source.id`, not under the action's own name, so a later action reads it as `source.id`.
 
 ## Execution Flow
 
