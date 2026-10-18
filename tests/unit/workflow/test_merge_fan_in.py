@@ -163,3 +163,36 @@ def test_a_branch_holding_a_source_and_a_split_of_its_split_raises():
                 ("right", [_split("right", "s1", "R1", "P")]),
             ]
         )
+
+
+def _aggregate(branch: str, value: str, made_by: str = "right") -> dict:
+    """A row a FILE tool returned with `source_index: None`: it belongs to no source."""
+    return {**_record(branch, "agg", value), "aggregated_by": made_by}
+
+
+def test_an_aggregate_one_branch_holds_raises_naming_the_branch_and_its_maker():
+    with pytest.raises(WorkflowError, match=r"right.*source_index"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", "P", "L")]),
+                ("right", [_record("right", "P", "R"), _aggregate("right", "total")]),
+            ]
+        )
+
+
+def test_an_aggregate_carried_below_its_maker_raises_naming_the_maker():
+    with pytest.raises(WorkflowError, match="tally"):
+        merge_fan_in(
+            [
+                ("left", [_record("left", "P", "L")]),
+                ("loud", [_record("loud", "P", "R"), _aggregate("loud", "TOTAL", "tally")]),
+            ]
+        )
+
+
+def test_an_aggregate_every_branch_reads_pairs_like_any_record():
+    merged = merge_fan_in(
+        [("left", [_aggregate("left", "L")]), ("right", [_aggregate("right", "R")])]
+    )
+
+    assert _values(merged) == [("L", "R")]
