@@ -52,7 +52,7 @@ The LSP understands agent-actions references and resolves them to file locations
 | **Schema** | `schema: question_schema` | `schema/question_schema.yml` (or `.yaml`/`.json`) |
 | **Action** | `dependencies: [extract_qa]` | Same file → `- name: extract_qa` |
 | **Workflow** | `workflow: other_workflow` | `agent_workflow/other_workflow/agent_config/*.yml` |
-| **Seed File** | `$file:exam_syllabus.json` | `seed_data/exam_syllabus.json` |
+| **Seed File** | `$file:exam_syllabus.json` | The file the run reads: the workflow's `seed_data/`, then the project's, then each folder of `seed_data_paths` |
 
 ## Installation
 
@@ -435,7 +435,7 @@ The LSP finds your project by walking up from the opened file until it finds `ag
 | `prompt_store/*.md` | Prompts (`{prompt X}`) |
 | `tools/**/*.py` | Tools (`@udf_tool def`) |
 | `schema/*.{yml,yaml,json}` | Schema files |
-| `seed_data/` | Seed files (`$file:X`) |
+| `seed_data/`, `<seed_data_paths>/` | Seed files (`$file:X`) |
 
 ### Re-indexing
 

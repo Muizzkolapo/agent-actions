@@ -110,19 +110,16 @@ what happened. Those are four layers, and a unit test sees one at a time.
 | Workflow | What it pins |
 |---|---|
 | `staging_namespace_collision` | Every record carries a field named `source`. The run must fail, name the field, and print the rename remedy. |
-| `partial_file_rejection` | One clean file, one rejected. Only the clean record persists — and the action still reports a clean success (see below). |
+| `partial_file_rejection` | One clean file, one rejected. Every staged file is checked before any is processed, so nothing persists, the action is not `completed`, and the run exits non-zero. |
+| `staging_precheck` | Two files, the second holding a row no seed file covers. The run names the file and the record and stores nothing of the first. |
 | `repair_exhaustion` | A rule that can never be satisfied. `on_exhausted: return_last` must keep the record and attach its last verdict. |
 
-### The known defect
+### Why the partial case is pinned
 
-`test_a_partially_rejected_action_is_not_reported_as_a_clean_success` is a
-strict `xfail`. A staging file rejected at load leaves no durable trace: the
-action records status `completed`, the run exits 0, and the only evidence is a
-log line. The same workflow with *every* file rejected exits 1 — the silence is
-specific to the partial case.
-
-It is strict so that fixing the defect fails the suite until the marker is
-removed.
+A staging file rejected at load used to leave no durable trace: the clean files ran,
+the action recorded `completed`, and the run exited 0. Every staged file is now checked
+before any is processed, so the two probes above pin that a bad file stops the whole
+first stage.
 
 ### Not ported
 

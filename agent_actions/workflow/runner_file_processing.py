@@ -587,6 +587,37 @@ def _refuse_inputs_sharing_a_stored_name(
     )
 
 
+def _refuse_staged_files_the_first_stage_would(
+    runner: ActionRunner,
+    items: list[Path],
+    input_path: Path,
+    output_path: Path,
+    input_directory: str,
+    params: FileProcessParams,
+    processed_paths: set,
+) -> None:
+    """Check every staged file the walk will process before it processes the first.
+
+    Only the first stage reads the staging folder, so only its strategy checks. A
+    file the first stage would refuse raises here, with its own text, before any
+    record of any file is stored or sent; a file limit does not shorten this pass.
+    A file that cannot be read or parsed is left to the walk, which records the loss.
+    """
+    from agent_actions.workflow.strategies import InitialStrategy
+
+    if not isinstance(params.strategy, InitialStrategy):
+        return
+    for item in items:
+        try:
+            if should_skip_item(item, input_path, processed_paths, params.file_type_filter):
+                continue
+        except OSError:
+            continue
+        runner._precheck_single_file(
+            _build_file_params(params, item, input_path, output_path, input_directory)
+        )
+
+
 def process_directory_files(
     runner: ActionRunner,
     input_path: Path,
@@ -624,6 +655,9 @@ def process_directory_files(
     # _MAX_TRACKED_ERRORS, so filesystem order would decide which losses are named.
     _refuse_inputs_sharing_a_stored_name(
         items, input_path, processed_paths, params.file_type_filter
+    )
+    _refuse_staged_files_the_first_stage_would(
+        runner, items, input_path, output_path, input_directory, params, processed_paths
     )
     unreadable.sort(key=lambda pair: pair[0])
     for directory, error in unreadable:

@@ -38,6 +38,7 @@ default_agent_config:
 schema_path: schema
 tool_path: ["tools"]
 seed_data_path: seed_data
+seed_data_paths: [shared_seeds]
 required_by_default: false
 ```
 
@@ -47,6 +48,7 @@ required_by_default: false
 | `schema_path` | Directory containing output schemas (default: `schema`) |
 | `tool_path` | Directories to scan for custom tools |
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
+| `seed_data_paths` | Shared seed folders, relative to the project root, searched after the workflow's and the project's own folder; see [Seed Data](../context/seed-data#shared-folders) |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required unless marked `optional: true`; when `false` (default) they are optional unless marked `required: true`. Applies project-wide; a schema declaring its own `required_by_default` overrides it. |
 
 ## Agentic Workflow Configuration
@@ -263,7 +265,7 @@ project/
         ├── agent_io/
         │   ├── staging/        # Input data (starting point)
         │   └── target/         # Output data
-        ├── seed_data/          # Static reference data (workflow-level)
+        ├── seed_data/          # This workflow's own reference data
         └── prompt_store/       # Domain-specific prompts (optional)
 ```
 
@@ -274,10 +276,10 @@ project/
 | **Schemas** | `schema/` | — | Always project-level; shared across workflows |
 | **Tools** | `tools/` | — | Always project-level; shared across workflows |
 | **Prompts** | `prompt_store/` | `workflow/prompt_store/` | Either or both; searched recursively |
-| **Seed Data** | — | `workflow/seed_data/` | Always workflow-level; domain-specific |
+| **Seed Data** | `seed_data/` and the folders of `seed_data_paths` | `workflow/seed_data/` | Searched in that order, workflow first; a shared file exists once — see [Seed Data](../context/seed-data#shared-folders) |
 | **Input/Output** | — | `workflow/agent_io/` | Always workflow-level |
 
-This structure keeps your agentic workflows organized while enabling reuse. Shared schemas ensure consistent data contracts; workflow-level seed data enables domain customization without touching shared assets.
+This structure keeps your agentic workflows organized while enabling reuse. Shared schemas ensure consistent data contracts; a workflow's own seed folder customizes it, and a shared seed folder holds what every workflow reads.
 
 ## See Also
 

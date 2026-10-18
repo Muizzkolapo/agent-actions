@@ -16,10 +16,15 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from agent_actions.config.path_config import (
+    SeedFileError,
+    SeedFolder,
+    resolve_seed_file,
+    seed_search_folders,
+)
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
-from agent_actions.utils.path_security import resolve_seed_path
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
     StaticTypeError,
@@ -266,32 +271,53 @@ class WorkflowResolutionService:
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
 
-        seed_data_dir, seed_dir_name = self._resolve_seed_data_dir()
-        if seed_data_dir is None:
-            # No seed directory anywhere — an error for any action that
+        declaring = [
+            (name, cfg["context_scope"]["seed"])
+            for name, cfg in self.action_configs.items()
+            if isinstance(cfg.get("context_scope"), dict)
+            and isinstance(cfg["context_scope"].get("seed"), dict)
+            and cfg["context_scope"]["seed"]
+        ]
+        try:
+            seed_folders = self._seed_folders()
+        except ConfigurationError as exc:
+            action_name = declaring[0][0] if declaring else next(iter(self.action_configs), "")
+            errors.append(
+                StaticTypeError(
+                    message=str(exc),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="seed_data_paths",
+                        raw_reference="agent_actions.yml",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="seed_data_paths",
+                    hint="List folders that exist inside the project root.",
+                )
+            )
+            return errors, warnings
+        if not seed_folders:
+            # No seed folder anywhere — an error for any action that
             # declares seed refs (the runtime loader would fail per record).
-            for action_name, action_config in self.action_configs.items():
-                context_scope = action_config.get("context_scope") or {}
-                seed_config = context_scope.get("seed", {})
-                if seed_config and isinstance(seed_config, dict):
-                    errors.append(
-                        StaticTypeError(
-                            message=(
-                                f"Seed data directory not found: create '{seed_dir_name}' at "
-                                "the workflow root (same level as agent_config/) or at the "
-                                "project root"
-                            ),
-                            location=FieldLocation(
-                                agent_name=action_name,
-                                config_field="context_scope.seed",
-                                raw_reference=seed_dir_name,
-                            ),
-                            referenced_agent=action_name,
-                            referenced_field="seed",
-                            hint=f"Declared seed fields: {', '.join(sorted(seed_config))}",
-                        )
+            for action_name, seed_config in declaring[:1]:
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            "Seed data directory not found: create 'seed_data' at "
+                            "the workflow root (same level as agent_config/) or at the "
+                            "project root, or list shared folders under seed_data_paths "
+                            "in agent_actions.yml"
+                        ),
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="context_scope.seed",
+                            raw_reference="seed_data",
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="seed",
+                        hint=f"Declared seed fields: {', '.join(sorted(seed_config))}",
                     )
-                    break
+                )
             # A read of a seed key its action does not declare is refused here as well.
             declared = {
                 name: set(seed)
@@ -342,7 +368,35 @@ class WorkflowResolutionService:
                 loaded: list[tuple[str, Any]] = []
                 for file_spec in entry.file_specs():
                     try:
-                        resolved = resolve_seed_path(file_spec, seed_data_dir)
+                        resolved = resolve_seed_file(file_spec, seed_folders).path
+                    except SeedFileError as e:
+                        available = sorted(
+                            {
+                                f.name
+                                for folder in seed_folders
+                                for f in folder.path.iterdir()
+                                if f.is_file()
+                            }
+                        )
+                        errors.append(
+                            StaticTypeError(
+                                message=str(e),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.seed.{field_name}",
+                                    raw_reference=file_spec,
+                                ),
+                                referenced_agent=action_name,
+                                referenced_field=field_name,
+                                available_fields=set(available),
+                                hint=(
+                                    f"Available files: {', '.join(available)}"
+                                    if available
+                                    else "(the seed folders are empty)"
+                                ),
+                            )
+                        )
+                        continue
                     except ValueError as e:
                         errors.append(
                             StaticTypeError(
@@ -355,35 +409,6 @@ class WorkflowResolutionService:
                                 referenced_agent=action_name,
                                 referenced_field=field_name,
                                 hint="Use relative paths within the seed_data/ directory.",
-                            )
-                        )
-                        continue
-
-                    if not resolved.exists():
-                        available: list[str] = []
-                        if seed_data_dir.exists():
-                            available = sorted(
-                                f.name for f in seed_data_dir.iterdir() if f.is_file()
-                            )
-
-                        errors.append(
-                            StaticTypeError(
-                                message=(
-                                    f"Seed file not found: {file_spec} (resolved to {resolved})"
-                                ),
-                                location=FieldLocation(
-                                    agent_name=action_name,
-                                    config_field=f"context_scope.seed.{field_name}",
-                                    raw_reference=file_spec,
-                                ),
-                                referenced_agent=action_name,
-                                referenced_field=field_name,
-                                available_fields=set(available),
-                                hint=(
-                                    f"Available files: {', '.join(available)}"
-                                    if available
-                                    else "(seed_data/ directory is empty)"
-                                ),
                             )
                         )
                         continue
@@ -608,15 +633,8 @@ class WorkflowResolutionService:
 
     # ── Helpers ────────────────────────────────────────────────────────
 
-    def _resolve_seed_data_dir(self) -> tuple[Path | None, str]:
-        """Resolve the seed data directory via the shared runtime resolver.
-
-        Preflight must consult the same folder the runtime loader will use
-        (workflow root first, then project root).
-        """
+    def _seed_folders(self) -> list[SeedFolder]:
+        """The folders the runtime loader searches, in its order, so the two agree."""
         if not self.workflow_config_path:
-            return None, "seed_data"
-
-        from agent_actions.config.path_config import resolve_seed_data_dir
-
-        return resolve_seed_data_dir(self.workflow_config_path)
+            return []
+        return seed_search_folders(self.workflow_config_path)

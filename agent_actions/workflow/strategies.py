@@ -1,5 +1,6 @@
 """Strategy classes for different action execution patterns."""
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -8,11 +9,14 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     InitialStageContext,
+    precheck_staged_file,
     process_initial_stage,
 )
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -50,6 +54,10 @@ class ActionStrategy(ABC):
     def execute(self, params: StrategyExecutionParams) -> str:
         """Execute the strategy and return the path to the generated output file."""
 
+    def precheck(self, params: StrategyExecutionParams) -> None:
+        """The checks to run on a file before any file is processed; only the first stage has them."""
+        logger.debug("%s reads no staged file, so it checks none ahead of the walk", self)
+
     def _execute_generate_target(self, params: StrategyExecutionParams) -> str:
         """Process data through pipeline and return path to the generated output file."""
         from agent_actions.workflow.pipeline import (
@@ -75,32 +83,39 @@ class ActionStrategy(ABC):
 
 
 class InitialStrategy(ActionStrategy):
-    """Strategy for the initial action in a workflow."""
+    """Strategy for the initial action in a workflow.
+
+    The only strategy that reads the staging folder, so the only one whose files
+    the walk checks, all of them, before it processes the first.
+    """
 
     def __eq__(self, other):
         return isinstance(other, InitialStrategy)
 
+    @staticmethod
+    def _context(params: StrategyExecutionParams) -> InitialStageContext:
+        return InitialStageContext(
+            agent_config=cast(dict[str, Any], params.action_config),
+            agent_name=params.action_name,
+            file_path=params.file_path,
+            base_directory=params.base_directory,
+            output_directory=params.output_directory,
+            idx=params.idx,
+            storage_backend=params.storage_backend,
+            action_configs=params.action_configs,
+            workflow_metadata=params.workflow_metadata,
+            retried_records=params.retried_records,
+            file_type_filter=params.file_type_filter,
+            staged_suffixes=params.staged_suffixes,
+        )
+
+    def precheck(self, params: StrategyExecutionParams) -> None:
+        """Run every check the first stage runs on one file; store and send nothing."""
+        precheck_staged_file(self._context(params))
+
     def execute(self, params: StrategyExecutionParams) -> str:
         """Execute the initial action strategy and return path to the generated output file."""
-        return cast(
-            str,
-            process_initial_stage(
-                InitialStageContext(
-                    agent_config=cast(dict[str, Any], params.action_config),
-                    agent_name=params.action_name,
-                    file_path=params.file_path,
-                    base_directory=params.base_directory,
-                    output_directory=params.output_directory,
-                    idx=params.idx,
-                    storage_backend=params.storage_backend,
-                    action_configs=params.action_configs,
-                    workflow_metadata=params.workflow_metadata,
-                    retried_records=params.retried_records,
-                    file_type_filter=params.file_type_filter,
-                    staged_suffixes=params.staged_suffixes,
-                )
-            ),
-        )
+        return cast(str, process_initial_stage(self._context(params)))
 
 
 class StandardStrategy(ActionStrategy):

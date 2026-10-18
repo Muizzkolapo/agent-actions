@@ -1,0 +1,25 @@
+name: staging_precheck
+description: "Two staging files; the second holds a row no seed file covers. Nothing of the first may be stored or sent."
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider
+  model_name: gpt-oss:120b-cloud
+  api_key: OLLAMA_API_KEY
+  context_scope:
+    seed:
+      syllabus:
+        select_by: source.exam
+        files:
+          dbt: $file:dbt.json
+          snowflake: $file:snowflake.json
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: label_page
+    intent: "Label one page with a topic and a difficulty"
+    schema: precheck_label
+    prompt: $p.Label_Page
+    context_scope:
+      observe: [source.title, source.page_content]
