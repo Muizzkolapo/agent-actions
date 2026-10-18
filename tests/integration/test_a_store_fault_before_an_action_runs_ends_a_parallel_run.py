@@ -74,11 +74,11 @@ SQLiteBackend.rows_collected = counting
 SQLiteBackend.clear_disposition = clearing
 """
 
-# What each route leaves the faulted action as: counting fails an action already
-# set running; a failed start never set it running.
+# What each route leaves the faulted action as: failed, whether or not its start
+# had set it running (1514).
 FAULTS = {
     "count": ("disk I/O error", "failed"),
-    "start": ("database is locked", "pending"),
+    "start": ("database is locked", "failed"),
 }
 
 
@@ -148,12 +148,6 @@ def test_once_the_fault_clears_a_run_answers_every_record(project, execution):
     (root / FAULT).write_text("count")
     _agac(root, stand_in, "run", "-a", WORKFLOW, "--fresh", "--execution-mode", execution)
     (root / FAULT).unlink()
-
-    # The faulted action failed with no failed record: retry has nothing to
-    # repair and says so, rather than reporting success.
-    refused = _agac(root, stand_in, "retry", "-a", WORKFLOW)
-    assert refused.returncode != 0, refused.stdout + refused.stderr
-    assert f"agac run -a {WORKFLOW}" in refused.stdout + refused.stderr
 
     result = _agac(root, stand_in, "run", "-a", WORKFLOW, "--execution-mode", execution)
     output = result.stdout + result.stderr

@@ -183,6 +183,24 @@ class TestWorkflowLevel:
         assert mgr.get_status("b") == ActionStatus.FAILED
         assert mgr.get_status("c") == ActionStatus.FAILED
 
+    def test_mark_running_as_failed_records_why_on_each_action_it_fails(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a", "b", "c"])
+        mgr.update_status("a", ActionStatus.RUNNING)
+        mgr.update_status("b", ActionStatus.CHECKING_BATCH)
+        mgr.update_status("c", ActionStatus.COMPLETED)
+
+        mgr.mark_running_as_failed("OperationalError: disk I/O error")
+
+        stored = ActionStateManager(status_file, ["a", "b", "c"])
+        assert stored.get_status_details("a")["error_message"] == (
+            "OperationalError: disk I/O error"
+        )
+        assert stored.get_status_details("b")["error_message"] == (
+            "OperationalError: disk I/O error"
+        )
+        assert "error_message" not in stored.get_status_details("c")
+
     def test_mark_running_as_failed_returns_empty_if_none_running(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
