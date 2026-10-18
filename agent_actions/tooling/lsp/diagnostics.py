@@ -150,7 +150,7 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                         )
                         matches = _dotted_suggestions(action, index, file_path, variable)
                         if not _named_upstreams(action):
-                            matches = [f"source.{variable}"]
+                            matches = [f"source.{variable}"] if variable != action.name else []
                         if matches:
                             message += f" Did you mean {', '.join(f'`{m}`' for m in matches)}?"
                     diagnostics.append(

@@ -147,6 +147,55 @@ class TestItRefusesWhatProvablyResolvesNowhere:
         assert len(errors) == 1, errors
         assert "Did you mean 'source.priority'?" in errors[0], errors[0]
 
+    def test_an_upstream_named_only_in_context_scope_is_no_first_action(self):
+        """`cons` observes `prep.*` with no dependencies: `prep.score` is the spelling."""
+        errors = _errors(
+            {
+                "prep": {},
+                "cons": {
+                    "context_scope": {"observe": ["prep.*"]},
+                    "guard": {"clause": "score > 0"},
+                },
+            }
+        )
+
+        assert len(errors) == 1, errors
+        assert "Did you mean 'prep.score'?" in errors[0], errors[0]
+        assert "source." not in errors[0], errors[0]
+
+    def test_an_upstream_namespace_named_only_in_context_scope_resolves(self):
+        """`prep IS NOT NULL` names the namespace; the reach is refused elsewhere."""
+        assert (
+            _errors(
+                {
+                    "prep": {},
+                    "cons": {
+                        "context_scope": {"observe": ["prep.*"]},
+                        "guard": {"clause": "prep IS NOT NULL"},
+                    },
+                }
+            )
+            == []
+        )
+
+    def test_a_framework_namespace_in_context_scope_names_no_upstream(self):
+        errors = _errors(
+            {
+                "cons": {
+                    "context_scope": {"observe": ["source.id", "seed.conf"]},
+                    "guard": {"clause": "id == 'a'"},
+                }
+            }
+        )
+
+        assert len(errors) == 1 and "Did you mean 'source.id'?" in errors[0], errors
+
+    def test_the_action_s_own_name_is_not_offered_under_source(self):
+        errors = _errors({"cons": {"guard": {"clause": "cons IS NOT NULL"}}})
+
+        assert len(errors) == 1, errors
+        assert "source.cons" not in errors[0], errors[0]
+
     def test_a_name_used_twice_in_one_clause_is_reported_once(self):
         errors = _errors({"b": {"guard": {"clause": "severity == 1 or severity == 2"}}})
 

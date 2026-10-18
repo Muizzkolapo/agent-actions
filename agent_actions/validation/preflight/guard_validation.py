@@ -14,7 +14,7 @@ from agent_actions.guards.bare_reference import (
 )
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
-from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS
+from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, RUNTIME_BUS_NAMESPACES
 from agent_actions.validation.static_analyzer.errors import read_through_reserved_name
 
 if TYPE_CHECKING:
@@ -181,13 +181,35 @@ def _version_params(config: dict) -> list[str]:
     return sorted(VersionNamespaceBuilder.promoted_names(version_context))
 
 
-def _suggest_dotted(variable: str, upstreams: list[str]) -> str:
+def _named_upstreams(config: dict) -> list[str]:
+    """Actions this one names, by dependency or by a context_scope reference.
+
+    `dependencies` alone is not the set: an action naming an upstream only in its
+    context_scope is no first action, and telling it to read `source` sends it the wrong
+    way. The editor diagnostic builds the same set (`tooling/lsp/diagnostics._named_upstreams`).
+    """
+    named = [d for d in config.get("dependencies") or [] if isinstance(d, str)]
+    scope = config.get("context_scope")
+    if isinstance(scope, dict):
+        for directive in ("observe", "passthrough", "drop"):
+            refs = scope.get(directive)
+            for ref in refs if isinstance(refs, list) else []:
+                if isinstance(ref, str) and "." in ref:
+                    namespace = ref.split(".", 1)[0]
+                    if namespace not in RUNTIME_BUS_NAMESPACES:
+                        named.append(namespace)
+    return list(dict.fromkeys(named))
+
+
+def _suggest_dotted(variable: str, upstreams: list[str], action_name: str) -> str:
     """Name the spelling that would resolve, the way the runtime's own error does."""
     if len(upstreams) == 1:
         return f" Did you mean '{upstreams[0]}.{variable}'?"
     if upstreams:
         options = ", ".join(f"'{name}.{variable}'" for name in sorted(upstreams)[:3])
         return f" Did you mean one of {options}?"
+    if variable == action_name:
+        return ""
     return f" A first action reads its staged row under 'source'. Did you mean 'source.{variable}'?"
 
 
@@ -202,7 +224,7 @@ def _check_bare_field_references(
     name resolves through several promotions and refusing all of them would reject
     configurations that work.
     """
-    upstreams = [d for d in config.get("dependencies") or [] if isinstance(d, str)]
+    upstreams = _named_upstreams(config)
     output_fields = {
         name: (action_configs[name].get("output_field") if name in action_configs else None)
         for name in upstreams
@@ -227,7 +249,7 @@ def _check_bare_field_references(
             f"Action '{action_name}': guard condition '{clause}' references field "
             f"'{variable}' without an action prefix. Content is namespaced, so this "
             f"resolves against nothing and every record is filtered at runtime."
-            f"{_suggest_dotted(variable, upstreams)}"
+            f"{_suggest_dotted(variable, upstreams, action_name)}"
         )
     return errors
 

@@ -71,12 +71,12 @@ fields:
 """
 
 
-def _project(tmp_path: Path, condition: str, mode: str = "online") -> Path:
+def _project(tmp_path: Path, condition: str, mode: str = "online", extra: str = "") -> Path:
     root = tmp_path / "project"
     workflow = root / "agent_workflow" / WORKFLOW
     (workflow / "agent_config").mkdir(parents=True)
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(
-        _WORKFLOW.format(mode=mode, condition=condition)
+        _WORKFLOW.format(mode=mode, condition=condition) + extra
     )
     (workflow / "agent_io" / "staging").mkdir(parents=True)
     (workflow / "agent_io" / "staging" / "pages.json").write_text(json.dumps(PAGES))
@@ -137,3 +137,34 @@ def test_the_spelling_it_names_runs_and_keeps_the_matching_record(tmp_path):
 
     assert result.returncode == 0, output
     assert _dispositions(project) == ["filtered", "success"], output
+
+
+_SCOPE_ONLY_CONSUMER = """\
+  - name: consumer
+    kind: tool
+    intent: "Consume"
+    schema: fix1535_produce_out
+    impl: fix1535_produce
+    context_scope: {{ observe: [produce.*] }}
+    guard: {{ condition: "{condition}", on_false: filter }}
+"""
+
+
+@pytest.mark.parametrize("condition", ["produce IS NOT NULL", "severity == 'high'"])
+def test_an_upstream_named_only_in_context_scope_is_not_told_to_read_source(tmp_path, condition):
+    """No dependencies, but `observe: [produce.*]`: this is no first action."""
+    project = _project(
+        tmp_path,
+        "source.page_content == 'two'",
+        extra=_SCOPE_ONLY_CONSUMER.format(condition=condition),
+    )
+
+    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
+    output = result.stdout + result.stderr
+
+    assert result.returncode != 0, output
+    assert "A first action reads its staged row" not in output, output
+    if condition.startswith("produce"):
+        assert "'produce' is not upstream of it through its dependencies" in output, output
+    else:
+        assert "Did you mean 'produce.severity'?" in output, output

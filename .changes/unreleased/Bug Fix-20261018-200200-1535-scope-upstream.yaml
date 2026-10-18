@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  An action with no `dependencies` that names an upstream in its `context_scope` is no
+  longer told its guard reads a staged row. `prep IS NOT NULL` is again refused for `prep` not
+  being upstream through its dependencies, and a bare `score > 0` suggests `prep.score`, not
+  `source.score`. A first action's own name is not suggested under `source` (#1535).
+time: 2026-10-18T20:02:00Z
