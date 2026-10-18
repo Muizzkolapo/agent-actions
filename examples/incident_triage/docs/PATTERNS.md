@@ -32,7 +32,7 @@ These workflows showcase **production-ready patterns** inspired by [Incident.io]
     pattern: merge
 ```
 
-**UDF Pattern**:
+**UDF Pattern** (its output schema, `schema/incident_triage/aggregate_severity.yml`, requires `final_severity`, `confidence_score`, `is_split_decision` and `vote_summary`, so the tool returns all four on every path):
 ```python
 @udf_tool()
 def aggregate_severity_votes(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -42,7 +42,8 @@ def aggregate_severity_votes(data: Dict[str, Any]) -> Dict[str, Any]:
         classifier_data = data.get(f'classify_severity_{i}', {})
         votes.append({
             'severity': classifier_data.get('severity'),
-            'confidence': classifier_data.get('confidence')
+            'confidence': classifier_data.get('confidence'),
+            'reasoning': classifier_data.get('reasoning', '')
         })
 
     # Weighted voting logic
@@ -51,7 +52,8 @@ def aggregate_severity_votes(data: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'final_severity': final_severity,
         'confidence_score': calculate_confidence(votes),
-        'is_split_decision': is_split(votes)
+        'is_split_decision': is_split(votes),
+        'vote_summary': '\n'.join(f"{v['severity']}: {v['reasoning']}" for v in votes)
     }
 ```
 
@@ -87,7 +89,7 @@ def aggregate_severity_votes(data: Dict[str, Any]) -> Dict[str, Any]:
       - assess_customer_impact.*     # Forward ALL impact fields
 ```
 
-**UDF Pattern**:
+**UDF Pattern** (its output schema, `schema/incident_triage/assign_response_team.yml`, requires `assigned_teams`, `primary_system`, `urgency_level` and `requires_executive_notification`):
 ```python
 @udf_tool()
 def assign_team_based_on_impact(data: Dict) -> Dict:
@@ -99,13 +101,16 @@ def assign_team_based_on_impact(data: Dict) -> Dict:
     affected = data['assess_system_impact']['affected_services']
 
     # Compute dynamic values
-    teams = route_to_teams(severity, affected)
+    primary_system = match_primary_system(affected)
+    teams = route_to_teams(severity, primary_system)
     urgency = calculate_urgency(severity)
 
     # Return ONLY new fields (passthrough forwards the rest)
     return {
         "assigned_teams": teams,
+        "primary_system": primary_system,
         "urgency_level": urgency,
+        "requires_executive_notification": severity in ["SEV1", "SEV2"],
         "response_message": generate_message(severity)
     }
 ```
@@ -236,7 +241,7 @@ version_consumption:
 
 **Use Case**: Transform workflow outputs into standardized formats
 
-**Implementation**:
+**Implementation** (the `format_triage_output` action runs this tool; its output schema, `schema/incident_triage/format_triage_output.yml`, requires `triage_id`, `incident`, `severity`, `teams`, `response` and `metadata`, so every record carries all six; the full tool is `tools/incident_triage/format_incident_triage.py`):
 ```python
 @udf_tool()
 def format_incident_triage(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -246,14 +251,29 @@ def format_incident_triage(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     details = data.get('extract_incident_details') or {}
     severity = data.get('aggregate_severity') or {}
     team = data.get('assign_response_team') or {}
+    plan = data.get('generate_response_plan') or {}
+    timestamp = (data.get('source') or {}).get('timestamp', '')
     result = {
+        "triage_id": f"triage-{timestamp}" if timestamp else "unknown",
         "incident": {
             "title": details.get('title'),
-            "severity": severity.get('final_severity')
+            "affected_systems": details.get('affected_systems', [])
+        },
+        "severity": {
+            "final_severity": severity.get('final_severity'),
+            "confidence_score": severity.get('confidence_score')
         },
         "teams": {
             "assigned_teams": team.get('assigned_teams'),
             "urgency_level": team.get('urgency_level')
+        },
+        "response": {
+            "immediate_actions": plan.get('immediate_actions', []),
+            "estimated_tte": plan.get('estimated_tte', 'TBD')
+        },
+        "metadata": {
+            "workflow_version": "1.0.0",
+            "triage_completed": True
         }
     }
 
