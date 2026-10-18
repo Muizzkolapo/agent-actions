@@ -210,6 +210,9 @@ class RetryCommand:
             )
 
         unwritten = restoring if self.args.dry_run else []
+        unwritten = unwritten + self._settle_lost_dispositions(
+            backend, state_mgr, execution_order, resumed
+        )
         failures = self._find_failures(backend, execution_order, unwritten)
 
         if not failures:
@@ -579,6 +582,58 @@ class RetryCommand:
         self.console.print(f"  Failed actions: {', '.join(failed)}")
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
+
+    def _settle_lost_dispositions(
+        self, backend, state_mgr, execution_order: list[str], resumed: set[str]
+    ) -> list[dict]:
+        """Write the dispositions a collect pass stored rows for but could not record.
+
+        Those records kept ``deferred``, which no retry starts from, so a failure among
+        them would never be found (``lost_dispositions``). Only completed actions hold
+        them; nothing is submitted again. A dry run writes nothing and returns them, to be
+        planned over as written.
+        """
+        from agent_actions.workflow.managers.batch import (
+            lost_dispositions,
+            settle_lost_dispositions,
+        )
+        from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+
+        unwritten: list[dict] = []
+        for action in execution_order:
+            if action in resumed or state_mgr.get_status(action) not in COMPLETED_STATUSES:
+                continue
+            settled = lost_dispositions(backend, action)
+            outcomes = [row for row in settled if row[2] != DISPOSITION_DEFERRED]
+            if not settled:
+                continue
+            if self.args.dry_run:
+                unwritten.extend(
+                    {
+                        "action_name": row[0],
+                        "record_id": row[1],
+                        "disposition": row[2],
+                        "reason": row[3],
+                        "detail": row[6],
+                    }
+                    for row in outcomes
+                )
+                self.console.print(
+                    f"[yellow]{action} holds {len(settled)} record(s) still deferred after "
+                    f"its batch was collected. A retry writes the disposition their stored "
+                    f"rows stand for first, and this plan counts them.[/yellow]"
+                )
+                continue
+            settle_lost_dispositions(backend, settled)
+            self.console.print(
+                f"[cyan]{action}: wrote the disposition of {len(settled)} record(s) left "
+                f"deferred after its batch was collected, from their stored rows.[/cyan]"
+            )
+            if any(row[2] in FAILURE_DISPOSITIONS for row in outcomes) and (
+                state_mgr.get_status(action) == ActionStatus.COMPLETED
+            ):
+                state_mgr.update_status(action, ActionStatus.COMPLETED_WITH_FAILURES)
+        return unwritten
 
     def _refused_below_a_stopped_retry(
         self, manifest: dict[str, Any] | None, unfinished: bool, execution_order: list[str]

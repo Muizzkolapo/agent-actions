@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  A batch record whose outcome the store refused to write as its batch was collected is
+  settled by the next `agac run` or `agac retry`, from the row the collecting run stored,
+  without submitting anything again. It kept `deferred` for good before: the run read the
+  action complete and the retry found nothing failed, so a record the provider left out,
+  whose failure was lost, was never retried, and the action read `completed` rather than
+  `completed_with_failures`. A failure settled this way is retried by the same `agac retry`
+  (#1524).
+time: 2026-10-18T12:02:00Z

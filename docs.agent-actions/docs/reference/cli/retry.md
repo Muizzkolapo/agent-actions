@@ -424,6 +424,21 @@ results are read: the action reads `failed`, the file's records are still waitin
 and the finished batch is still in the registry. `retry` does not call that nothing
 to retry. Run the workflow again to collect the batch, then retry what is still failed.
 
+### A record left deferred after its batch was collected
+
+A record waits as `deferred` while its batch is out. The run that collects the batch
+stores the record's row and then writes its outcome; if the store refuses that write,
+the record keeps `deferred` and the run warns that it is still deferred after the batch
+completed. Its answer, or its failure, is in the row the run stored.
+
+The next `agac run` or `agac retry` writes the outcome that row stands for — `success`
+for an answer, `failed` or `exhausted` for a failure, with the reason the run gave it —
+and submits nothing again. Each does it only once every batch of the action is
+collected, and only for a record whose row is stored. A failure written this way is
+then retried like any other: `retry` finds it in the same command, and an action whose
+batch is settled with a failure reads `completed_with_failures`. `--dry-run` writes
+nothing and counts those failures in its plan.
+
 ### When the batch cannot be collected
 
 Collecting is the way forward whenever the provider can still answer about the

@@ -45,6 +45,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
+    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
@@ -844,6 +845,8 @@ class ActionExecutor:
             )
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             return (False, None)
+        if should_skip:
+            self._settle_lost_dispositions(storage_backend, action_name)
         if (
             not should_skip
             and self.deps.state_manager.get_status(action_name) in COMPLETED_STATUSES
@@ -858,6 +861,43 @@ class ActionExecutor:
                 storage_backend.clear_prompt_traces(action_name)
             self.deps.state_manager.reopen([*readers, action_name])
         return (should_skip, result)
+
+    def _settle_lost_dispositions(self, storage_backend: Any, action_name: str) -> None:
+        """Write the dispositions a collect pass stored rows for but could not record.
+
+        Those records kept ``deferred``, which no run or retry acts on (``lost_dispositions``).
+        One settled as a failure leaves the action completed with failures, as it would
+        have been. A store that refuses again leaves them ``deferred``, with a warning.
+        """
+        from agent_actions.workflow.managers.batch import (
+            lost_dispositions,
+            settle_lost_dispositions,
+        )
+
+        try:
+            settled = lost_dispositions(storage_backend, action_name)
+            if not settled:
+                return
+            settle_lost_dispositions(storage_backend, settled)
+        except Exception as e:
+            logger.warning(
+                "Could not settle the records %s holds as deferred after its batch was "
+                "collected; they stay deferred: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
+            return
+        logger.info(
+            "Action '%s': wrote the disposition of %d record(s) its collected batch left "
+            "deferred, from the rows stored for them",
+            action_name,
+            len(settled),
+        )
+        if any(row[2] in FAILURE_DISPOSITIONS for row in settled) and (
+            self.deps.state_manager.get_status(action_name) == ActionStatus.COMPLETED
+        ):
+            self.deps.state_manager.update_status(action_name, ActionStatus.COMPLETED_WITH_FAILURES)
 
     def _check_prior_output(
         self, storage_backend: Any, action_name: str

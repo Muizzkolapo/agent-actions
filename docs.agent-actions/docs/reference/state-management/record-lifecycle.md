@@ -71,7 +71,7 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 | `skipped` | WHERE clause excluded the record from this action |
 | `filtered` | Guard condition was false; record excluded from output |
 | `unprocessed` | Not answered: a dependency didn't produce output (cascade casualty), or a guard skipped it |
-| `deferred` | In-flight HITL/batch awaiting resolution |
+| `deferred` | In-flight HITL/batch awaiting resolution. A batch record still `deferred` once its batch is collected, because the store refused its outcome, gets the outcome its stored row stands for from the next `agac run` or `agac retry` |
 | `exhausted` | All repair iterations failed |
 | `failed` | Unrecoverable error |
 
