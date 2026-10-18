@@ -174,16 +174,23 @@ How the branches' records pair:
 | One returns several records per input (a tool that splits a record), the others one | One merged record per split record, each with the other branches' record for its source |
 | One splits a record and another splits that branch's records again (it reads the first), the others one | One merged record per record of the second split, each with the first split's record it came from and the other branches' record for its source |
 | All read one earlier split (an action upstream of every branch returned several records per input) | One merged record per record of that split |
+| One splits a record and a `granularity: File` tool below it gathers every record of that split back into one | As if that branch had not split: the gathered record is the source's record |
 | Two or more each hold a split of the same source record of their own, or one splits a source beside branches that read an earlier split of it | Nothing: the action fails, naming the branches and the source record |
 
 A record of one split is not a record of another, so two splits of one source have no
 pairing that keeps every branch's fields: the action fails rather than run on records
 that hold one branch with the others' fields empty. It fails too when a branch splits a
 source and keeps one record of the split, for example behind a guard that filters the
-rest, and when a `granularity: File` tool gathers a split back into one record, since
-that record keeps the identity of a split record rather than the source's. To read two
-branches' records of each split, split the source once, in an action upstream of both,
-and have each branch read that action; otherwise let no more than one branch split it.
+rest. To read two branches' records of each split, split the source once, in an action
+upstream of both, and have each branch read that action; otherwise let no more than one
+branch split it, or gather a branch's split back into one record per source.
+
+A `granularity: File` tool gathers a split when one output names, in its `source_index`
+list, every record of its file split from one source and nothing else, and no other
+output names any of them. That output takes the source's identity (`source_guid`), as a
+record that was never split holds it, so it pairs like one. An output that gathers
+records of several sources, or only some records of a split, keeps the identity of the
+first record it names. See [Granularity](../execution/granularity.md#output-processing).
 
 ## Resolution Order
 
