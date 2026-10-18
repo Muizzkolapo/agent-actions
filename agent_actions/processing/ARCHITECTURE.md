@@ -314,18 +314,21 @@ Re-run:
       → clear_checkpoint_records(action, that file)
 ```
 
-A checkpoint row left beside a stored file is therefore a later answer than the row
-stored for that record: the run that gave it stopped before writing the file again,
-after an edit or an upstream change had reset the action. `answered_since_stored`
-names those records and the online path answers them again. The stored row is not
-the answer their disposition describes, and the checkpoint row is the strategy's
-output before enrichment, without lineage or metadata. Carrying checkpoint rows is
-kept for a file with nothing stored.
+Writing a file clears that file's checkpoint rows, in the store's own write
+(`_write_target_raw`), so a file batch stores leaves none behind either. A checkpoint row
+left beside a stored file is therefore a later answer than the row stored for that
+record: the run that gave it stopped before writing the file again, after an edit or an
+upstream change had reset the action. `answered_since_stored` names those records. Their
+stored rows are not the answers their dispositions describe and are never carried; the
+online path takes each one's checkpoint row in their place (`checkpointed_answers`), or
+answers the record again where that row cannot stand alone (below). Batch does not read
+checkpoint rows, so its submission sends such a record again.
 
-There a carried checkpoint row is still the strategy's output, saved before enrichment
-and collection, and what they made of it was never stored: the run stopped, or the store
-failed to write the file. So `UnifiedProcessor` puts it through both with the run's own
-results (`_answered_from_checkpoint`): the answer it was, not asked for again. It gets
+A carried checkpoint row, beside a stored file or with nothing stored, is the strategy's
+output, saved before enrichment and collection, and what they made of it was never
+stored: the run stopped, or the store failed to write the file. So `UnifiedProcessor`
+puts it through both with the run's own results (`_answered_from_checkpoint`): the
+answer it was, not asked for again. It gets
 its input's lineage, parent and root, metadata, and its action's transition in
 `_state_history`, and an answer that failed to parse is failed as collection fails any
 other. It is counted with the run's answers, so a run whose one answered record failed
@@ -349,8 +352,9 @@ before that write.
 
 A record answered with several rows is checkpointed with all of them, under the one
 `source_guid` they share: enrichment mints each row of an expansion an identity of its own,
-and the checkpoint is saved before it. With nothing stored, `build_carry_forward` reports
-that record missing rather than carry its rows, and the run answers it again. Carried,
+and the checkpoint is saved before it. `build_carry_forward` (with nothing stored) and
+`checkpointed_answers` (beside a stored file) leave that record out rather than carry its
+rows, and the run answers it again. Carried,
 they would keep that one identity, of which the carry keeps a single row. A record
 answered with one row is carried as before. A record an earlier version checkpointed is
 answered again as well: that version kept one row per `source_guid`, the last, and the
@@ -380,10 +384,10 @@ checkpoint_output table:
 `.json` output path). That is the file's path below the input root, so a file in a
 subdirectory is `sub/page.json` and a staged `page.csv` is `page.json`. Carry-forward,
 the carry of a repair, the checkpoint, `answered_since_stored` and the clear after a
-write all use it. A resume reads the stored file, answers again a record checkpointed
-beside it, and falls back to the checkpoint by that one name only where nothing is
-stored; a repair that cannot find the stored file has nothing to carry and rewrites it
-with only the records it named. Writing a file clears that name's checkpoint rows and no
+write all use it. A resume reads the stored file, takes a record checkpointed beside it from its
+checkpoint row, and falls back to the checkpoint by that one name where nothing is
+stored, or beside it for a record checkpointed after it; a repair that cannot find the
+stored file has nothing to carry and rewrites it with only the records it named. Writing a file clears that name's checkpoint rows and no
 other's, so a resume that saves one file still carries the checkpoint of a file it
 reaches after it.
 
@@ -393,7 +397,7 @@ Every path that resets action state also clears checkpoint records:
 
 | Path | When | Code |
 |------|------|------|
-| A file written | After its write, that file's rows only | `pipeline.py`, `initial_pipeline.py` |
+| A file written | In its write, that file's rows only, online or batch | `sqlite_backend.py` (`_write_target_raw`); `pipeline.py`, `initial_pipeline.py` |
 | An action reset to run again | `reopen_with_readers` | `executor.py` (`_forget_what_it_did`) |
 | `--fresh` | At workflow startup | `coordinator.py:285` |
 | `retry` command | Per downstream action | `cli/retry.py:201` |
@@ -419,7 +423,10 @@ On resume, `build_carry_forward()` reads prior output for carried records:
 
 ```
 answered_since_stored(action_name, path)        ← checkpointed after the file
-    → not carried: answered again                  was stored (online path)
+    → stored row never carried                     was stored (online path)
+    checkpointed_answers(...) → finished with the run's own; a record
+                                checkpointed with several rows, or by
+                                an earlier version, is answered again
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
@@ -893,7 +900,8 @@ writes it after the file:
     Still written before the file: SKIPPED for a record the context scope drops
     (pipeline.py), which the scope pass drops again before the gate; and, at
     record granularity, the checkpoint's SUCCESS, whose checkpoint row tells
-    answered_since_stored that the stored file is older.
+    answered_since_stored that the stored file is older, and is carried in
+    place of the stored row.
 
     A row the store refuses as a schema echo is given no SUCCESS: the store
     records it FAILED as it writes the file, and a SUCCESS written after the

@@ -38,6 +38,7 @@ READER = "read"
 ITEMS = ["a0", "a1", "a2", "a3"]
 STOP_AT = "AGAC_TEST_STOP_AT"
 ANSWER = "AGAC_TEST_ANSWER"
+TWICE = "AGAC_TEST_TWICE"
 
 HEAD = """name: map_reduce_fanin_check
 description: "An action tagging each staged item, and its reader"
@@ -107,21 +108,24 @@ from typing import Any
 from agent_actions import udf_tool
 
 
-def _tag(item: str) -> dict[str, Any]:
+def _tag(item: str) -> list[dict[str, Any]]:
     if os.environ.get("{STOP_AT}") == item:
         raise KeyboardInterrupt()
     with Path("asked.txt").open("a") as asked:
         asked.write(item + "\\n")
-    return {{"tag": f"{{item}}@{{os.environ.get('{ANSWER}', '')}}"}}
+    tag = f"{{item}}@{{os.environ.get('{ANSWER}', '')}}"
+    if os.environ.get("{TWICE}") == item:
+        return [{{"tag": f"{{tag}}-1"}}, {{"tag": f"{{tag}}-2"}}]
+    return [{{"tag": tag}}]
 
 
 @udf_tool()
-def tag_staged(data: dict[str, Any]) -> dict[str, Any]:
+def tag_staged(data: dict[str, Any]) -> list[dict[str, Any]]:
     return _tag(str((data.get("source") or {{}}).get("item_id", "")))
 
 
 @udf_tool()
-def tag_upstream(data: dict[str, Any]) -> dict[str, Any]:
+def tag_upstream(data: dict[str, Any]) -> list[dict[str, Any]]:
     return _tag(str((data.get("stage_items") or {{}}).get("item_id", "")))
 
 
@@ -155,6 +159,7 @@ def _project(tmp_path, monkeypatch, *, first_stage: bool, staged_as: str) -> Pat
     monkeypatch.chdir(root)
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
     monkeypatch.delenv(STOP_AT, raising=False)
+    monkeypatch.delenv(TWICE, raising=False)
     # A run installs a global path manager; left behind, it sends later tests' writes here.
     monkeypatch.setattr(path_utils, "_global_path_manager", path_utils._global_path_manager)
     return root
@@ -297,6 +302,25 @@ def test_a_record_carried_from_its_checkpoint_is_stored_as_one_the_run_answered(
     tags = {row["source_guid"]: row for row in rows.values()}
     for row in _rows(root, READER):
         assert row["lineage"] == [*tags[row["source_guid"]]["lineage"], row["node_id"]]
+
+
+@pytest.mark.parametrize("first_stage", [True, False], ids=["first-action", "below-the-first"])
+def test_a_record_the_stopped_run_answered_with_several_rows_is_asked_again(
+    tmp_path, monkeypatch, first_stage
+):
+    """Its checkpoint rows share its identity until enrichment gives each its own, so they
+    cannot stand as they are; its rows stored before the edit are not kept either."""
+    root = _project(tmp_path, monkeypatch, first_stage=first_stage, staged_as="items.json")
+    monkeypatch.setenv(TWICE, "a0")
+    _edited_then_stopped_at_a2(root, monkeypatch)
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _asked(root) == ["a0", "a2", "a3"]
+    tags = sorted(_field(row, ACTION, "tag") for row in _rows(root, ACTION))
+    assert tags == ["a0@after-1", "a0@after-2", "a1@after", "a2@after", "a3@after"]
+    assert sorted(_field(row, READER, "seen") for row in _rows(root, READER)) == tags
 
 
 def test_the_run_after_the_resume_asks_nothing(tmp_path, monkeypatch):

@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  An online run that was stopped partway through a file an earlier run had stored no longer
+  pays again, on the next run, for the records it had answered. This is the usual case after
+  an action is edited once it has completed: the run after the edit answers part of a file
+  and is stopped. Each record it answered is now kept from its checkpoint, with the same
+  lineage, metadata and state history as a record the run answers, in place of the row
+  stored before the edit. Switched to `run_mode: batch` instead, such a record is sent
+  again; it used to be called done and keep the row stored before the edit. Writing a file
+  now clears its checkpoint rows in batch as well as online, so a later online run does not
+  take an older online answer over what batch stored. (#1273)
+time: 2026-10-18T06:00:00Z

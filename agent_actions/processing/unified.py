@@ -217,20 +217,38 @@ class UnifiedProcessor:
                     from agent_actions.processing.disposition_gate import (
                         answered_since_stored,
                         build_carry_forward,
+                        checkpointed_answers,
                     )
 
-                    answer_again = gate_carry_ids & answered_since_stored(
+                    # Answered after the file was stored: its stored row is never carried.
+                    # Its checkpoint row is finished below as the answer it was, or, where
+                    # it cannot stand alone, the record is answered again. A FILE strategy
+                    # checkpoints nothing.
+                    answered_since = gate_carry_ids & answered_since_stored(
                         context.storage_backend, context.action_name, relative_path
                     )
+                    answered_from_checkpoint = (
+                        checkpointed_answers(
+                            context.storage_backend,
+                            context.action_name,
+                            relative_path,
+                            answered_since,
+                        )
+                        if raw_records is None
+                        else []
+                    )
+                    answer_again = answered_since - {
+                        row["source_guid"] for row in answered_from_checkpoint
+                    }
                     carry_data, missing_ids = build_carry_forward(
-                        carry_ids - answer_again,
+                        carry_ids - answered_since,
                         context.action_name,
                         relative_path,
                         context.storage_backend,
                         # Only the gate's ids name inputs; a repair's name stored rows.
-                        produced_by=gate_carry_ids - answer_again,
+                        produced_by=gate_carry_ids - answered_since,
                         rewriting=written_by_guard
-                        | answer_again
+                        | answered_since
                         | {rid for r in to_process if (rid := r.get("source_guid"))},
                     )
                     # A repair's carried records are not re-queued when their row is
@@ -259,6 +277,10 @@ class UnifiedProcessor:
                             carry_results.append(
                                 self._carried(record, file_mode=raw_records is not None)
                             )
+                    checkpointed_results.extend(
+                        self._answered_from_checkpoint(record)
+                        for record in answered_from_checkpoint
+                    )
                 else:
                     to_process = passing
             passing = to_process
