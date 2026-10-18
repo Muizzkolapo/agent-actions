@@ -1,0 +1,7 @@
+kind: Breaking Change
+body: >-
+  A record tool with an early `return` of a mapping that leaves out a field its output
+  schema requires is now refused by pre-flight, even when the branch never runs in
+  practice. It used to pass and fail each record that took that return. Return every
+  required field from that return too, or mark the field optional in the schema (#1519).
+time: 2026-10-18T09:01:00Z

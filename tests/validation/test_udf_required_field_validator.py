@@ -720,7 +720,8 @@ def test_an_early_return_of_the_dict_before_the_key_is_set_is_flagged():
         "    if data:\n        return {'options': [], 'answer': 1}\n"
         "    else:\n        return {'options': [], 'answer': 2}\n"
         "    return {'options': []}\n",
-        "    while True:\n        pass\n    return {'options': []}\n",
+        "    if data.get('serve'):\n        while True:\n            pass\n"
+        "        return {'options': []}\n",
     ],
     ids=[
         "none",

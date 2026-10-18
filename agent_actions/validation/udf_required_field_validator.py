@@ -1,4 +1,4 @@
-"""Static-AST check: a kind:tool UDF must unconditionally emit every required
+"""Static-AST check: every return of a kind:tool UDF must emit every required
 output-schema field, or `_validate_udf_output` crashes mid-run whenever a
 guard misses. Errs toward silence — unrecognised construction shapes yield
 no warning, so unconditionally-emitting tools stay clean."""
@@ -28,8 +28,8 @@ def _iter_own_returns(func: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[
     """Yield every ``Return`` belonging to ``func`` — never one from a nested function.
 
     A plain ``ast.walk`` descends into inner ``FunctionDef``/``AsyncFunctionDef``
-    / ``Lambda`` nodes and would pick their returns as candidates for the outer
-    tail return, silently misclassifying the outer's output shape.
+    / ``Lambda`` nodes and would pick their returns as the outer's, silently
+    misclassifying the outer's output shape.
     """
     stack: list[ast.AST] = list(func.body)
     while stack:
@@ -42,7 +42,7 @@ def _iter_own_returns(func: ast.FunctionDef | ast.AsyncFunctionDef) -> Iterator[
 
 
 def _last_return(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.Return | None:
-    """The tail return, chosen by source order — early guard returns must not shadow it."""
+    """The tail return, chosen by source order."""
     returns = list(_iter_own_returns(func))
     if not returns:
         return None
@@ -397,18 +397,19 @@ class _Loop:
 
 
 class _OutputFlow:
-    """Walks a UDF's body path by path, tracking the keys its returned name holds.
+    """Walks a UDF's body path by path, tracking the keys the name ``target`` holds.
 
-    A key counts only when every path that reaches the tail return holds it: an ``if``
-    keeps what both branches hold, a loop keeps what holds after any number of passes
-    (none included), and a ``try`` joins its body's end with each ``except`` that falls
-    through. A path that raises or returns elsewhere never reaches the tail.
+    A key counts at a ``return target`` only when every path that reaches it holds it:
+    an ``if`` keeps what both branches hold, a loop keeps what holds after any number
+    of passes (none included), and a ``try`` joins its body's end with each ``except``
+    that falls through. A path that raises or returns ends there. Every return a path
+    reaches is noted in ``reached``; with no ``target`` the walk notes only that.
     """
 
-    def __init__(self, target: str, tail: ast.Return) -> None:
+    def __init__(self, target: str = "") -> None:
         self.target = target
-        self.tail = tail
-        self.at_tail: list[_State] = []
+        self.at_return: dict[ast.Return, list[_State]] = {}
+        self.reached: set[ast.Return] = set()
         self.loops: list[_Loop] = []
         self.names: dict[str, str] = {}
 
@@ -432,10 +433,10 @@ class _OutputFlow:
         target = self.target
         state = _without(state, _header(stmt), target, self.names)
         if isinstance(stmt, ast.Return):
-            if stmt is self.tail:
-                if self.loops:
-                    raise _Decline
-                self.at_tail.append(state)
+            self.reached.add(stmt)
+            if target and _returned_name_of(stmt) == target:
+                # A return inside a loop is left unread: no claim is made about it.
+                self.at_return.setdefault(stmt, []).append(None if self.loops else state)
             return _UNREACHED
         if isinstance(stmt, ast.Raise):
             return _UNREACHED
@@ -537,13 +538,12 @@ class _OutputFlow:
         return state | added if isinstance(state, frozenset) else state
 
 
-def _returned_value(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.expr | None:
-    """What the tail return hands back; a one-element list stands for its element.
+def _value_of(ret: ast.Return | None) -> ast.expr | None:
+    """What ``ret`` hands back; a one-element list stands for its element.
 
     Each item of a returned list is validated on its own, so ``return [out]`` is
     checked exactly as ``return out``.
     """
-    ret = _last_return(func)
     if ret is None or ret.value is None:
         return None
     value = ret.value
@@ -554,41 +554,73 @@ def _returned_value(func: ast.FunctionDef | ast.AsyncFunctionDef) -> ast.expr | 
     return value
 
 
+def _returned_name_of(ret: ast.Return | None) -> str | None:
+    value = _value_of(ret)
+    return value.id if isinstance(value, ast.Name) else None
+
+
 def _returned_name(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    value = _returned_value(func)
-    if isinstance(value, ast.Name):
-        return value.id
-    return None
+    """The name the tail return hands back, if it hands back a name."""
+    return _returned_name_of(_last_return(func))
+
+
+def _return_readings(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[tuple[ast.Return, frozenset[str]]]:
+    """Each return some path reaches whose mapping's keys can be read, with those keys.
+
+    Every return hands back a record to validate, not only the last. One handing back
+    a mapping literal, or a name bound to one on every path to it, is read; one handing
+    back nothing, a parameter, a helper's result, a ``**spread``, a longer list, or a
+    name the walk cannot follow (a computed key, a return inside a loop) is left out,
+    so it neither refuses nor excuses a key.
+    """
+    returns = list(_iter_own_returns(func))
+    if not returns:
+        return []
+    reach = _OutputFlow()
+    try:
+        reach.block(func.body, None)
+    except _Decline:
+        return []
+    readings: list[tuple[ast.Return, frozenset[str]]] = []
+    by_name: dict[str, list[ast.Return]] = {}
+    for ret in returns:
+        if ret not in reach.reached:
+            continue
+        value = _value_of(ret)
+        if isinstance(value, ast.Name):
+            by_name.setdefault(value.id, []).append(ret)
+        elif value is not None and _is_mapping_literal(value):
+            keys = _mapping_literal_keys(value)
+            if keys is not None:
+                readings.append((ret, frozenset(keys)))
+    for name, named in by_name.items():
+        flow = _OutputFlow(name)
+        try:
+            flow.block(func.body, None)
+        except _Decline:
+            continue
+        for ret in named:
+            # Unknown when a path binds it to what a helper built, or never to a literal.
+            state = _merge(flow.at_return.get(ret, []))
+            if isinstance(state, frozenset):
+                readings.append((ret, state))
+    return sorted(readings, key=lambda reading: (reading[0].lineno, reading[0].col_offset))
 
 
 def _unconditional_output_keys(func: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None:
-    """The constant string keys the UDF's returned mapping holds on every path to its tail return.
+    """The constant string keys every readable return of the UDF hands back.
 
-    Returns None when the returned shape is unrecognisable (a scalar or longer list
-    return, a helper-call initialiser, a ``**spread``, a key removed by a computed
-    name, a tail return inside a loop, etc.). None means "decline to decide" — the
-    caller emits no warning.
+    Returns None when no return can be read (a scalar or longer list return, a
+    helper-call initialiser, a ``**spread``, a key removed by a computed name, a
+    return inside a loop, etc.). None means "decline to decide" — the caller emits no
+    warning.
     """
-    value = _returned_value(func)
-    if value is None:
+    readings = _return_readings(func)
+    if not readings:
         return None
-    if _is_mapping_literal(value):
-        return _mapping_literal_keys(value)
-    if not isinstance(value, ast.Name):
-        return None
-    tail = _last_return(func)
-    assert tail is not None
-    flow = _OutputFlow(value.id, tail)
-    try:
-        flow.block(func.body, None)
-    except _Decline:
-        return None
-    reached = _merge(flow.at_tail)
-    if not isinstance(reached, frozenset):
-        # Never bound to a literal on the way (e.g. `result = build(data)`), or the tail
-        # return sits in a loop: what it holds cannot be enumerated, so decline.
-        return None
-    return set(reached)
+    return set(frozenset.intersection(*(keys for _ret, keys in readings)))
 
 
 _BLOCK_NAMES: dict[type, str] = {
@@ -686,8 +718,8 @@ def unconditional_output_keys(source: str) -> set[str] | None:
 
 
 def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]:
-    """One finding per required schema field a kind:tool UDF cannot statically
-    be shown to emit unconditionally.
+    """One finding per required schema field some readable return of a kind:tool
+    UDF hands back without (see ``_return_readings``).
 
     Each action's info carries ``source`` and ``required``; ``file`` and
     ``first_line`` (the source's first line in that file), when given, let a
@@ -715,18 +747,34 @@ def find_conditional_required_field_risks(actions: dict[str, dict]) -> list[str]
         )
         if func is None:
             continue
-        emitted = _unconditional_output_keys(func)
-        if emitted is None:
-            continue
+        readings = _return_readings(func)
         for field in required:
-            if field not in emitted:
-                findings.append(_finding(name, func, field, info))
+            lacking = [ret for ret, keys in readings if field not in keys]
+            if lacking:
+                findings.append(_finding(name, func, field, info, lacking))
     return findings
 
 
 def _finding(
-    action: str, func: ast.FunctionDef | ast.AsyncFunctionDef, field: str, info: dict
+    action: str,
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    field: str,
+    info: dict,
+    lacking: list[ast.Return],
 ) -> str:
+    """The refusal for ``field``, which each return in ``lacking`` hands back without."""
+    tail = _last_return(func)
+    if tail not in lacking:
+        early = lacking[0]
+        block = next((block for stmt, block in _statements(func.body, None) if stmt is early), None)
+        how = f"returns without it at {_located(early.lineno, info)}" + (
+            f", inside {block}" if block else ""
+        )
+        return (
+            f"{action}: output schema requires '{field}' but the tool '{func.name}' {how}, "
+            f"so a record that takes that path fails output validation at run time. Make "
+            f"'{field}' optional in the schema, or set it on every path in the tool."
+        )
     dropped = _where_dropped(func, field)
     where = _where_set(func, field)
     if dropped is not None:
