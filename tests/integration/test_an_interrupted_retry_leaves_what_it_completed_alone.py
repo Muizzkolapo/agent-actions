@@ -128,13 +128,26 @@ def test_a_plain_run_after_a_dry_run_answers_nothing_twice(interrupted):
 
 
 def test_a_retry_that_stops_before_running_leaves_flatten_finished(interrupted):
-    """Nothing failed at `enrich`, so this retry stops once it has put the failures back.
+    """No such record failed, so this retry stops once it has put the failures back.
     A node-level failure among them would make `flatten` run again under the next plain run."""
+    result = _retry("--record", "no-such-record")
+
+    assert result.exit_code != 0 and "not found" in result.output, result.output
+    assert _disposition(interrupted, NODE_LEVEL_RECORD_ID) is None
+    with _counting_tool_calls() as calls:
+        assert _run().exit_code == 0
+    assert calls["flatten_pages"] == 0
+
+
+def test_a_retry_from_below_it_is_refused_before_anything_goes_back(interrupted):
+    """It would never reach the failures it put back at `flatten` (1524)."""
     result = _retry("--from", SECOND)
 
-    assert result.exit_code == 0, result.output
-    assert "Nothing to retry" in result.output, result.output
-    assert _disposition(interrupted, NODE_LEVEL_RECORD_ID) is None
+    assert result.exit_code != 0, result.output
+    assert "Nothing to retry" not in result.output, result.output
+    assert "Resume it first" in result.output, result.output
+    assert _manifest(interrupted).exists()
+    assert _dispositions(interrupted, ACTION) == {"success": RECORDS}
     with _counting_tool_calls() as calls:
         assert _run().exit_code == 0
     assert calls["flatten_pages"] == 0

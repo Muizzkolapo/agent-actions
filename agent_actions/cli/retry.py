@@ -178,6 +178,10 @@ class RetryCommand:
             _notes_path(manifest_file), (prior_manifest or {}).get("created_at")
         )
         never_run_since = self._not_run_since_an_interrupted_retry(resumed, state_mgr)
+        if self._refused_below_a_stopped_retry(
+            prior_manifest, bool(restoring or never_run_since), execution_order
+        ):
+            return
         if prior_manifest and self.args.dry_run:
             self.console.print(
                 "[yellow]Found incomplete retry manifest — prior retry was interrupted. "
@@ -199,7 +203,8 @@ class RetryCommand:
                     detail=row.get("detail"),
                     input_snapshot=row.get("input_snapshot"),
                 )
-            _delete_manifest(manifest_file)
+            # The manifest and its notes stay until this retry writes its own: one that
+            # stops short of that leaves the stopped retry for the next to resume.
             self.console.print(
                 f"[cyan]Restored {len(restoring)} disposition(s). Proceeding with retry.[/cyan]"
             )
@@ -574,6 +579,35 @@ class RetryCommand:
         self.console.print(f"  Failed actions: {', '.join(failed)}")
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
+
+    def _refused_below_a_stopped_retry(
+        self, manifest: dict[str, Any] | None, unfinished: bool, execution_order: list[str]
+    ) -> bool:
+        """Refuse a ``--from`` below where a stopped retry, still to be resumed, started.
+
+        The retry resuming it starts where it did, from the failures it puts back, and a
+        retry starting below never reaches them, so it would leave the stopped one's
+        records unanswered below what it re-ran. Refused before anything is put back.
+        True when a dry run has reported the refusal instead.
+        """
+        from_action = self.args.from_action
+        started = (manifest or {}).get("from_action")
+        if not (from_action and started and unfinished):
+            return False
+        if from_action not in execution_order or started not in execution_order:
+            return False
+        if execution_order.index(from_action) <= execution_order.index(started):
+            return False
+        reason = (
+            f"A retry from {started} was stopped before it finished, and a retry from "
+            f"{from_action} starts below it, so it would not answer what that one named. "
+            f"Resume it first — agac retry -a {self.agent_name} — then retry from "
+            f"{from_action} if anything is still failed there."
+        )
+        if self.args.dry_run:
+            self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
+            return True
+        raise click.ClickException(reason)
 
     @staticmethod
     def _left_by_an_interrupted_retry(manifest: dict[str, Any] | None, state_mgr) -> set[str]:

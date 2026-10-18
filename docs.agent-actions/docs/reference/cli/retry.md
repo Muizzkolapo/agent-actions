@@ -353,7 +353,20 @@ A retry writes down the failures it is about to clear before it clears them. If 
 is stopped before its run reaches the end, the next `retry` puts them back and
 starts where the stopped one did, so the records it named are answered again from
 there. It puts them back before anything else, so even a retry that is then refused
-has put them back.
+has put them back. It keeps its record of the stopped retry until it writes its own,
+so a retry that is refused, or finds nothing to do, leaves the stopped one for the next
+`retry` to resume.
+
+A retry with `--from` below the action the stopped one started from is refused before
+anything goes back, while the stopped retry is unfinished: it would never reach the
+failures it puts back, and would leave the records the stopped one named unanswered
+below what it re-ran.
+
+```
+A retry from extract_facts was stopped before it finished, and a retry from summarize
+starts below it, so it would not answer what that one named. Resume it first — agac
+retry -a my_workflow — then retry from summarize if anything is still failed there.
+```
 
 What has moved on since keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has
