@@ -139,6 +139,24 @@ class TestItRefusesWhatProvablyResolvesNowhere:
 
         assert len(errors) == 1 and "'n'" in errors[0], errors
 
+    def test_a_first_stage_staged_column_is_refused_and_source_is_named(self):
+        """A first action's record holds the staged row under `source`, never at top level,
+        so a bare staged column resolves against nothing and every record is filtered."""
+        errors = _errors({"b": {"guard": {"clause": "priority == 1"}}})
+
+        assert len(errors) == 1, errors
+        assert "Did you mean 'source.priority'?" in errors[0], errors[0]
+
+    def test_a_name_used_twice_in_one_clause_is_reported_once(self):
+        errors = _errors({"b": {"guard": {"clause": "severity == 1 or severity == 2"}}})
+
+        assert len(errors) == 1, errors
+
+    def test_a_first_stage_action_with_an_empty_dependency_list_is_refused(self):
+        errors = _errors({"b": {"dependencies": [], "guard": {"clause": "priority == 1"}}})
+
+        assert len(errors) == 1 and "'source.priority'" in errors[0], errors
+
 
 class TestItStaysSilentWhereTheNameResolves:
     def test_a_dotted_reference_is_never_refused(self):
@@ -165,9 +183,13 @@ class TestItStaysSilentWhereTheNameResolves:
             == []
         )
 
-    def test_a_first_stage_action_is_left_alone(self):
-        """Its content is the staging row, whose columns config cannot know."""
-        assert _errors({"b": {"guard": {"clause": "priority == 1"}}}) == []
+    def test_a_first_stage_staged_column_written_with_source_is_silent(self):
+        assert _errors({"b": {"guard": {"clause": "source.priority == 1"}}}) == []
+
+    def test_a_first_stage_framework_name_is_left_alone(self):
+        """The namespaces and promotions a first action's guard context holds."""
+        for name in ("source", "workflow", "source_guid", "i"):
+            assert _errors({"b": {"guard": {"clause": f"{name} IS NOT NULL"}}}) == [], name
 
     def test_a_record_envelope_field_is_left_alone(self):
         """_prepare_eval_context keeps every record key except `content`."""

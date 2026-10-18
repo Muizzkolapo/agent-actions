@@ -35,7 +35,11 @@ class TestValidateGuardConditions:
         """Well-formed guard clause → no errors."""
         configs = {
             "select_for_users": {
-                "guard": {"clause": "passes_filter == true", "scope": "item", "behavior": "filter"}
+                "guard": {
+                    "clause": "source.passes_filter == true",
+                    "scope": "item",
+                    "behavior": "filter",
+                }
             }
         }
         assert validate_guard_conditions(configs) == []
@@ -56,7 +60,7 @@ class TestValidateGuardConditions:
         """Multiple invalid guards → all errors collected, not stopped at first."""
         configs = {
             "action_a": {"guard": {"clause": "a ==", "scope": "item"}},
-            "action_b": {"guard": {"clause": "score > 0", "scope": "item"}},
+            "action_b": {"guard": {"clause": "source.score > 0", "scope": "item"}},
             "action_c": {"guard": {"clause": "b ==", "scope": "item"}},
         }
         errors = validate_guard_conditions(configs)

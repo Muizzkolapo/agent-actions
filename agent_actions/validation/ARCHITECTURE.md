@@ -219,6 +219,12 @@ version-merge tool (`WorkflowStaticAnalyzer._without_guard_promotions`). Reach â
 itself (at the first stage too), or one not upstream through `dependencies` â€” is left to
 `dep_observe_validator.find_reads_not_upstream`, which words it for a guard.
 
+A clause's bare (un-dotted) names are judged by `preflight/guard_validation.py` through
+`guards/bare_reference.bare_reference_is_unresolvable`, refused only when no promotion can
+answer them. A first action is no exception: its record holds the staged row under `source`,
+so a staged column bare (`page_content == 'two'`) resolves against nothing and filtered every
+record while the run exited 0. It is refused, naming `source.page_content` (1535).
+
 ### apply_guard_nullable_schema_fixes()
 
 A module-level function (not a method on the analyzer) that **mutates `json_output_schema` dicts in place**. Called after schema compilation and static validation but before workflow execution:

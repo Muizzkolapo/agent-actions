@@ -13,6 +13,7 @@ Only depends on `errors` and `utils.constants` (leaf packages).
 |------|------|-------------|---------|
 | `guard_parser.py` | Module | Guard expression parser for SQL-like and UDF conditions. | `GuardType`, `GuardExpression`, `GuardParser`, `parse_guard` |
 | `consolidated_guard.py` | Module | Guard configuration with behavior control (skip, filter, warn). | `GuardBehavior`, `GuardConfig`, `parse_guard_config`, `_UNSUPPORTED_GUARD_BEHAVIORS` |
+| `bare_reference.py` | Module | Whether a bare (un-dotted) guard name provably resolves against nothing: no record, version, namespace or `output_field` promotion answers it and no upstream spreads its output flat. A first action names no upstream and its record holds the staged row under `source`, so a bare staged column there is unresolvable (1535). Shared by pre-flight's guard validation. | `bare_reference_is_unresolvable`, `spreads_output_flat`, `PROMOTED_RECORD_FIELDS`, `PROMOTED_VERSION_KEYS` |
 
 ## Key Symbols
 
@@ -46,5 +47,7 @@ The original modules under `output/response/` are now re-export shims pointing h
 |---------|-----------|-----|
 | `errors` | outbound | Uses ValidationError and ConfigValidationError for parse/config failures |
 | `utils` | outbound | Reads DANGEROUS_PATTERNS constants for expression safety checks |
+| `record` | outbound | `bare_reference` reads `RECORD_FRAMEWORK_FIELDS` for the record keys a guard reads bare |
+| `validation` | inbound | Pre-flight guard validation asks `bare_reference` whether a bare name resolves |
 | `config` | inbound | Config schema imports GuardParser and parse_guard_config for guard expansion |
 | `output` | inbound | Response expander imports GuardBehavior, GuardParser, parse_guard_config for guard evaluation |

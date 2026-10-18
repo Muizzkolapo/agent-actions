@@ -188,7 +188,7 @@ def _suggest_dotted(variable: str, upstreams: list[str]) -> str:
     if upstreams:
         options = ", ".join(f"'{name}.{variable}'" for name in sorted(upstreams)[:3])
         return f" Did you mean one of {options}?"
-    return ""
+    return f" A first action reads its staged row under 'source'. Did you mean 'source.{variable}'?"
 
 
 def _check_bare_field_references(
@@ -214,7 +214,7 @@ def _check_bare_field_references(
     )
 
     errors: list[str] = []
-    for variable in _collect_field_nodes(ast_root):
+    for variable in dict.fromkeys(_collect_field_nodes(ast_root)):
         if not bare_reference_is_unresolvable(
             variable,
             upstreams=upstreams,

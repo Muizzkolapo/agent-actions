@@ -193,9 +193,14 @@ and a dependency's `output_field` are not action names, and are not checked as a
 
 | Source | Syntax |
 |--------|--------|
+| A staged column, on the first action | `source.page_content` |
 | Upstream action field | `extract_facts.count` |
 | A dependency's field, whether or not the action observes it | `group_by_similarity.num_similar_facts` |
 | The action's declared [seed data](../context/seed-data.md) | `seed.thresholds.min_score` |
+
+The first action's guard reads the staged row under `source`, as its prompt does. A staged
+column written without the prefix, `page_content == 'two'`, names no field the guard can read,
+so preflight refuses it and names `source.page_content`.
 
 A guard reads the seed data its action declares under `context_scope.seed`, the same data
 the action's prompt reads, so `seed.thresholds.min_score <= score_review.score` compares a

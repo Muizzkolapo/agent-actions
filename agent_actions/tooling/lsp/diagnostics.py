@@ -149,6 +149,8 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                             "prefix, which resolves against no upstream namespace."
                         )
                         matches = _dotted_suggestions(action, index, file_path, variable)
+                        if not _named_upstreams(action):
+                            matches = [f"source.{variable}"]
                         if matches:
                             message += f" Did you mean {', '.join(f'`{m}`' for m in matches)}?"
                     diagnostics.append(
@@ -232,8 +234,7 @@ def _guard_is_unresolvable(action, index: ProjectIndex, file_path: Path, variabl
 
     if not dot:
         # A bare name resolves through three promotions, so it is only wrong when none of
-        # them can apply. output_field and the version param are declared in this file; a
-        # first-stage action's staging columns are not knowable from it at all.
+        # them can apply. output_field and the version param are declared in this file.
         if variable in _VERSION_KEYS or variable in set(action.versions_params):
             return False
         if variable in _PROMOTED_RECORD_FIELDS:
@@ -249,10 +250,8 @@ def _guard_is_unresolvable(action, index: ProjectIndex, file_path: Path, variabl
             # Likewise an upstream's own namespace name: `assess IS NOT NULL` resolves,
             # because every dependency namespace is promoted to top level too.
             return False
-        if not upstreams:
-            # No upstream named at all: a first-stage action, whose content is the staging
-            # row. Its columns are not knowable from this file, so nothing here is provable.
-            return False
+        # No upstream named at all is a first-stage action: its record holds the staged row
+        # under `source`, so a staged column bare resolves against nothing.
         for dep_name in upstreams:
             dep = _resolve_upstream(index, file_path, dep_name)
             if dep is None or dep.output_field == variable or dep.spreads_output_flat:

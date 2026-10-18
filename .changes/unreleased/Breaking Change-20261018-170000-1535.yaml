@@ -1,0 +1,9 @@
+kind: Breaking Change
+body: >-
+  Pre-flight now refuses a first action's guard that names a staged column without the
+  `source.` prefix, such as `page_content == 'two'`. The first action's record holds the
+  staged row under `source`, so the bare name resolved against nothing: the guard filtered
+  every record and the run exited 0 with empty output. The refusal names the spelling that
+  works, `source.page_content`. `agac inspect` and the editor diagnostic report it too
+  (#1535).
+time: 2026-10-18T17:00:00Z
