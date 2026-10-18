@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  A record a `granularity: File` tool folds into another record's row (an output with
+  `source_index: [a, b]`) is no longer run half empty at a fan-in beside another branch.
+  The fan-in ran `b` with the folding branch's fields `None` and exited 0, or failed it on
+  a missing template variable at a model action. It now leaves `b` `unprocessed` with the
+  new reason `consumed_into_another_record`, online and batch, at a record, model or File
+  action; its tombstone names the row it went into as `metadata.consumed_into`, the run
+  logs a warning, and the actions below skip it. A folding row carries the records it
+  folded in a new tracking field, `folded_sources`, which the records built from it keep,
+  so a fan-in further down finds them too. Folding with no fan-in below is unchanged.
+  (#1523)
+time: 2026-10-18T12:00:00Z

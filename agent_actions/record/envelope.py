@@ -58,12 +58,16 @@ def _log_history_truncation_once(action_name: str, dropped: int) -> None:
 # aggregated_by names the FILE-tool action that returned the row, or the row it
 # descends from, with `source_index: None`: a record of no source, which a fan-in
 # can pair only with itself.
+# folded_sources maps each record a FILE tool folded into the row, through a
+# source_index list, to that action: the record has no row of its own below it, so a
+# fan-in beside another branch leaves it unprocessed rather than run it half empty.
 RECORD_TRACKING_FIELDS: frozenset[str] = frozenset(
     {
         "source_guid",
         "parent_source_guid",
         "version_correlation_id",
         "aggregated_by",
+        "folded_sources",
     }
 )
 

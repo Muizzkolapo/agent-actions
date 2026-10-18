@@ -20,6 +20,7 @@ _RECORD_METADATA_KEYS = frozenset(
         "producer_source_guids",
         "repeat_of_source_guid",
         "aggregated_by",
+        "folded_sources",
         "lineage",
         "node_id",
         "metadata",

@@ -38,6 +38,7 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "_delta_mode",
         "version_correlation_id",
         "aggregated_by",
+        "folded_sources",
     }
 )
 

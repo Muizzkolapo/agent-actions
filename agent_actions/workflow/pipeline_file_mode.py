@@ -135,6 +135,8 @@ def _reattach_source_guid(
 
     ``parent_source_guid`` is left as carried: it names the first ancestor, not the producer.
     A row mapped to no input is marked ``aggregated_by`` the action, a record of no source.
+    A row naming several inputs lists each but its parent in ``folded_sources``, unless it
+    gathers a whole split back into its source's record.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -144,6 +146,7 @@ def _reattach_source_guid(
     }
     claimed: Counter[int] = Counter(idx for idx in parents.values() if idx is not None)
     gathered = _gathered_sources(source_mapping, original_data)
+    inputs_by_guid = {r["source_guid"]: r for r in original_data if r.get("source_guid")}
 
     for i in inheriting:
         item = structured_data[i]
@@ -166,6 +169,7 @@ def _reattach_source_guid(
         source_idx = parents[i]
         parent = original_data[source_idx] if source_idx is not None else None
         parent_guid = parent.get("source_guid") if parent else None
+        _record_folded(item, consumed, parent, inputs_by_guid, action_name or version_base_name)
 
         if parent is not None and parent_guid and claimed[cast(int, source_idx)] == 1:
             if parent.get("parent_source_guid") and not item.get("parent_source_guid"):
@@ -192,6 +196,31 @@ def _reattach_source_guid(
         inherited_correlation = item.get("version_correlation_id")
         if inherited_correlation:
             item["version_correlation_id"] = f"{inherited_correlation}#{version_base_name}#{i}"
+
+
+def _record_folded(
+    item: dict[str, Any],
+    consumed: list[str],
+    parent: dict[str, Any] | None,
+    inputs_by_guid: dict[str, dict[str, Any]],
+    action: str,
+) -> None:
+    """Note on the row each consumed input other than its parent, folded into it here.
+
+    Such an input has no row of its own below this action. What its inputs had folded
+    in already is kept, so a fold of a fold still names the first record.
+    """
+    folded: dict[str, str] = {}
+    for record in (parent, *(inputs_by_guid.get(guid) for guid in consumed)):
+        earlier = record.get("folded_sources") if record else None
+        if isinstance(earlier, dict):
+            folded.update(earlier)
+    parent_guid = parent.get("source_guid") if parent else None
+    folded.update({guid: action for guid in consumed if guid != parent_guid})
+    if folded:
+        item["folded_sources"] = folded
+    else:
+        item.pop("folded_sources", None)
 
 
 def _record_producers(item: dict[str, Any], consumed: list[str]) -> None:

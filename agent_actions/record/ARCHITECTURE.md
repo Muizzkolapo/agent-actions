@@ -75,10 +75,17 @@ RECORD_TRACKING_FIELDS (stable identity — set once, carried forward)
 ├── source_guid
 ├── parent_source_guid
 ├── version_correlation_id
-└── aggregated_by        ← the FILE-tool action that returned this row, or the
-                           row it was built from, with source_index: None. A
-                           record of no source: a fan-in pairs it only where
-                           every branch holds it
+├── aggregated_by        ← the FILE-tool action that returned this row, or the
+│                          row it was built from, with source_index: None. A
+│                          record of no source: a fan-in pairs it only where
+│                          every branch holds it
+└── folded_sources       ← {source_guid: action} for each record a FILE tool
+                           folded into this row (or the row it was built from)
+                           through a source_index list. Such a record has no row
+                           of its own below that action, so a fan-in beside
+                           another branch leaves it unprocessed, reason
+                           consumed_into_another_record. Accumulates: what the
+                           inputs had folded in already is kept
 
 RECORD_LIFECYCLE_FIELDS (carried forward; _state_history is appended to)
 ├── _state_history
