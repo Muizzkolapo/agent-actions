@@ -276,9 +276,9 @@ class ActionLevelOrchestrator:
     def _end_level_on(self, raised: list[tuple[str, BaseException]]) -> None:
         """Raise what escaped an action's run, so it ends the run as in sequential mode.
 
-        An exception here never reached the handler that fails an action, so the
-        action is still ``running`` (or never left ``pending``) and nothing marks it
-        failed or skips its readers. The run's error handler sweeps it to failed.
+        An exception here never reached the handler that fails an action and skips
+        its readers. One raised as the action's work began has marked it failed with
+        that error; the run's error handler sweeps any other left ``running`` to failed.
         An interrupt goes first: it is not an error of the action beside it.
         """
         self.in_flight = [action for action, _ in raised]

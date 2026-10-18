@@ -149,14 +149,16 @@ class TestRetryDoesNotCallAnOwedBatchOrAFailedActionDone:
         assert [r["record_id"] for r in result[ACTION]] == ["sg-1"]
         assert result[ACTION][0]["disposition"] == DISPOSITION_FAILED
 
-    def test_a_collected_batch_owes_nothing_so_the_failed_action_is_named_instead(
+    def test_a_collected_batch_owes_nothing_so_the_failed_action_is_rerun_in_full(
         self, backend, state_manager
     ):
         _owe_a_finished_batch(backend, collected_at="2026-10-16T10:00:00+00:00")
-        state_manager.update_status(ACTION, ActionStatus.FAILED)
+        state_manager.update_status(ACTION, ActionStatus.FAILED, error_message="boom")
 
-        with pytest.raises(click.ClickException, match=ACTION):
-            _command()._failures_when_none_is_recorded(backend, state_manager, [ACTION], [])
+        result = _command()._failures_when_none_is_recorded(backend, state_manager, [ACTION], [])
+
+        assert result is not None
+        assert [r["record_id"] for r in result[ACTION]] == [NODE_LEVEL_RECORD_ID]
 
     def test_a_batch_waiting_to_be_collected_is_not_a_failure_when_nothing_failed(
         self, backend, state_manager
@@ -168,13 +170,41 @@ class TestRetryDoesNotCallAnOwedBatchOrAFailedActionDone:
 
         assert result == {}
 
-    def test_a_failed_action_with_no_failed_record_and_no_batch_is_named(
+    def test_a_failed_action_with_no_failed_record_and_no_batch_fails_as_a_whole(
+        self, backend, state_manager
+    ):
+        state_manager.update_status(ACTION, ActionStatus.FAILED, error_message="disk I/O error")
+
+        result = _command()._failures_when_none_is_recorded(backend, state_manager, [ACTION], [])
+
+        # The failure its run could not store, as its own handler stores one.
+        assert result == RetryCommand._find_failures(backend, [ACTION])
+        assert result is not None
+        [row] = result[ACTION]
+        assert row["record_id"] == NODE_LEVEL_RECORD_ID
+        assert row["disposition"] == DISPOSITION_FAILED
+        assert row["reason"] == "disk I/O error"
+
+    def test_a_dry_run_plans_over_that_failure_and_stores_nothing(self, backend, state_manager):
+        state_manager.update_status(ACTION, ActionStatus.FAILED, error_message="disk I/O error")
+
+        result = _command(dry_run=True)._failures_when_none_is_recorded(
+            backend, state_manager, [ACTION], []
+        )
+
+        assert result is not None
+        assert [r["reason"] for r in result[ACTION]] == ["disk I/O error"]
+        assert backend.get_disposition(ACTION) == []
+
+    def test_a_failure_with_no_message_is_still_named_as_the_actions_own(
         self, backend, state_manager
     ):
         state_manager.update_status(ACTION, ActionStatus.FAILED)
 
-        with pytest.raises(click.ClickException, match=ACTION):
-            _command()._failures_when_none_is_recorded(backend, state_manager, [ACTION], [])
+        result = _command()._failures_when_none_is_recorded(backend, state_manager, [ACTION], [])
+
+        assert result is not None
+        assert "failed before any of its records" in result[ACTION][0]["reason"]
 
     def test_a_clean_workflow_still_has_nothing_to_retry(self, backend, state_manager):
         state_manager.update_status(ACTION, ActionStatus.COMPLETED)

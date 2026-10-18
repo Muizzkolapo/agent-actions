@@ -145,9 +145,7 @@ def test_the_action_that_raised_is_recorded_failed_with_its_error(project, execu
 
 @pytest.mark.parametrize("fault", sorted(FAULTS))
 @pytest.mark.parametrize("execution", ["parallel", "sequential"])
-def test_once_the_fault_clears_a_retry_reruns_the_action_and_its_readers(
-    project, execution, fault
-):
+def test_once_the_fault_clears_a_retry_reruns_the_action_and_its_readers(project, execution, fault):
     root, stand_in = project
     _fail_the_run(root, stand_in, execution, fault)
 

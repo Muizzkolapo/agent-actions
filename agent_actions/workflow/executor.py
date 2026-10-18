@@ -2067,16 +2067,47 @@ class ActionExecutor:
         )
         self._track_action_start(params)
 
+    def _begin(self, params: ActionRunParams) -> int:
+        """Start the action's work and return its row count before it runs.
+
+        An error here ends the run, since the store is not answering. The action is
+        marked failed with that error first, which the store cannot be asked to hold:
+        its status then says why, and ``agac retry`` re-runs it as a failure of the
+        action's own.
+        """
+        try:
+            self._start_work(params)
+            return self._count_records_for_action(params.action_name)
+        except Exception as error:
+            self._record_failed_start(params, error)
+            raise
+
+    def _record_failed_start(self, params: ActionRunParams, error: Exception) -> None:
+        """Mark the action failed with *error*, never replacing it with an error of its own."""
+        duration = (datetime.now() - params.start_time).total_seconds()
+        try:
+            self.deps.state_manager.update_status(
+                params.action_name,
+                ActionStatus.FAILED,
+                execution_time=duration,
+                error_message=str(error),
+            )
+        except Exception as unrecorded:
+            logger.warning(
+                "Could not record %s as failed (%s); the run still ends on: %s",
+                params.action_name,
+                unrecorded,
+                error,
+            )
+
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
-        self._start_work(params)
-
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
         # except clause below: only failures of the action's own work (reading
         # its input, a version merge's correlation included, and running it)
         # are funneled through _handle_run_failure.
-        pre_run_count = self._count_records_for_action(params.action_name)
+        pre_run_count = self._begin(params)
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
@@ -2106,10 +2137,8 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
-        self._start_work(params)
-
         # See sync counterpart for the rationale on snapshot placement.
-        pre_run_count = self._count_records_for_action(params.action_name)
+        pre_run_count = self._begin(params)
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)

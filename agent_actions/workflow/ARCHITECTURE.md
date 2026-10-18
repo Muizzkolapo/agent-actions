@@ -215,12 +215,15 @@ recorded failed, the circuit breaker skips its readers, and independent branches
 carry on, in either mode. An exception that escapes `execute_action_async` never
 reached that handler — a store error from `_start_work` or the pre-run
 `_count_records_for_action` snapshot, which `_execute_action_run` keeps outside it on
-purpose. Sequential mode ends the run on it. Parallel mode matches: `gather` collects
+purpose. `_begin` marks the action failed with that error (`error_message`) before
+re-raising it, set running or not, since the store cannot be asked to hold a failure
+row. Sequential mode ends the run on it. Parallel mode matches: `gather` collects
 it with the other tasks' results, and `_end_level_on` re-raises it after the step's
 other actions have finished (an interrupt before an error), setting `in_flight` to
-the actions that raised. The coordinator's error handler then sweeps the action from
-`running` to failed and the run exits non-zero; an action whose `_start_work` failed
-before it was set running stays `pending`, as in sequential mode.
+the actions that raised. The coordinator's error handler then sweeps any action
+still `running` to failed, recording the run's error on it, and the run exits
+non-zero. `agac retry` writes the node-level failure such an action could not store
+and re-runs it in full, as for any failure of the action's own.
 
 Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. True I/O overlap is between different actions only; within a single action, processing is synchronous.
 
