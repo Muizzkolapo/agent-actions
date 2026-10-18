@@ -10,7 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.reasons import RETRY_EXHAUSTED, UPSTREAM_UNPROCESSED
+from agent_actions.record.reasons import (
+    CONSUMED_INTO_ANOTHER_RECORD,
+    RETRY_EXHAUSTED,
+    UPSTREAM_UNPROCESSED,
+)
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import is_version_merge, merge_version_content
 
@@ -26,6 +30,19 @@ CARRY_FORWARD_FIELDS: tuple[str, ...] = (
 )
 
 UPSTREAM_CAUSE_FIELDS: tuple[str, ...] = ("upstream_action", "upstream_state", "upstream_reason")
+
+# Metadata a fan-in sets on a record one branch folded into another record's row, naming
+# that row. Only the merged record carries it: its tombstone names the row as
+# ``consumed_into``, so an action further down reads the cascade as any other.
+FAN_IN_CONSUMED_INTO = "fan_in_consumed_into"
+
+
+def quarantine_reason(record: dict[str, Any] | None) -> str:
+    """The reason an action leaves a cascade-blocked *record* unprocessed."""
+    metadata = record.get("metadata") if isinstance(record, dict) else None
+    if isinstance(metadata, dict) and metadata.get(FAN_IN_CONSUMED_INTO):
+        return CONSUMED_INTO_ANOTHER_RECORD
+    return UPSTREAM_UNPROCESSED
 
 
 def upstream_cause(record: dict[str, Any] | None) -> dict[str, Any]:
@@ -71,8 +88,9 @@ def build_tombstone(
     marker (``action_name: None``) while preserving upstream content.
 
     Always sets ``metadata.reason`` and ``metadata.agent_type = "tombstone"``.
-    Carries ``target_id`` from *input_record*. An ``upstream_unprocessed``
-    tombstone also names its cause (:func:`upstream_cause`).
+    Carries ``target_id`` from *input_record*. An ``upstream_unprocessed`` or
+    ``consumed_into_another_record`` tombstone also names its cause
+    (:func:`upstream_cause`); the latter names the row it went into as ``consumed_into``.
 
     For retry-exhausted records that need empty content under the
     namespace (not null), use :func:`build_exhausted_tombstone` instead.
@@ -80,8 +98,12 @@ def build_tombstone(
     item = RecordEnvelope.build_skipped(action_name, input_record)
     item["source_guid"] = source_guid
     item["metadata"] = {"reason": reason, "agent_type": "tombstone"}
-    if reason == UPSTREAM_UNPROCESSED:
+    if reason in (UPSTREAM_UNPROCESSED, CONSUMED_INTO_ANOTHER_RECORD):
         item["metadata"].update(upstream_cause(input_record))
+    if reason == CONSUMED_INTO_ANOTHER_RECORD and isinstance(input_record, dict):
+        consumed_into = (input_record.get("metadata") or {}).get(FAN_IN_CONSUMED_INTO)
+        if consumed_into:
+            item["metadata"]["consumed_into"] = consumed_into
     if extra_metadata:
         item["metadata"].update(extra_metadata)
     item["_tombstone"] = True

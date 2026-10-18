@@ -14,9 +14,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent_actions.processing.record_helpers import build_tombstone
+from agent_actions.processing.record_helpers import build_tombstone, quarantine_reason
 from agent_actions.processing.types import ProcessingResult
-from agent_actions.record.reasons import UPSTREAM_UNPROCESSED
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 
 logger = logging.getLogger(__name__)
@@ -50,16 +49,17 @@ def partition_cascade_records(
         state = record.get("_state")
         if state in CASCADE_BLOCKING_VALUES:
             source_guid = record.get("source_guid")
+            reason = quarantine_reason(record)
             tombstone = build_tombstone(
                 action_name,
                 record,
-                UPSTREAM_UNPROCESSED,
+                reason,
                 source_guid=source_guid,
             )
             quarantined.append(
                 ProcessingResult.unprocessed(
                     data=[tombstone],
-                    reason=UPSTREAM_UNPROCESSED,
+                    reason=reason,
                     source_guid=source_guid,
                     input_record=record,
                 )

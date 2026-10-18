@@ -48,7 +48,7 @@ The `observe` directive selects which upstream namespaces and fields are visible
       - canonicalize_facts.candidate_facts_list
       - cluster_list.semantic_unique_id
       - group_by_similarity.num_similar_facts
-      - source.page_content  # Can include source data
+      - source.content  # Can include source data
 ```
 
 ## Drop Directive
@@ -82,6 +82,8 @@ The `passthrough` directive forwards fields directly to the action output **with
 `passthrough` keeps a field in **this action's own output record** (for lineage or export). It does **not** make that field available to later actions _through_ this action. A downstream action that needs the value must `observe` it from its **original producing action** (for example `observe: [source.url]`), not from the action that passed it through.
 
 In particular, `observe: [some_action.*]` expands only to `some_action`'s own output fields — it does **not** pull in fields that `some_action` merely passed through. Relying on an upstream `passthrough` to satisfy a downstream `observe` can make the field resolve **empty at runtime**, silently, because the field is still declared on the consumer's schema.
+
+A passed-through field is stored under the namespace it came from, not under the action that passed it through: after `passthrough: [source.url]` on `summarize`, the field is `source.url`. Pre-flight refuses a prompt, `observe` or `passthrough` that reads `summarize.url`, or a field `summarize` only observes, the same way it refuses a field the action's schema does not list.
 :::
 
 ## Seed Data
@@ -177,6 +179,7 @@ How the branches' records pair:
 | One splits a record and a `granularity: File` tool below it gathers every record of that split back into one | As if that branch had not split: the gathered record is the source's record |
 | Two or more each hold a split of the same source record of their own, or one splits a source beside branches that read an earlier split of it | Nothing: the action fails, naming the branches and the source record |
 | One holds a record a `granularity: File` tool returned with `source_index: None` (an aggregate, marked `aggregated_by`) that another branch does not read | Nothing: the action fails, naming the branches and the tool's action. Where every branch reads the aggregate, it pairs like any record |
+| One lacks a record because its `granularity: File` tool folded it into another record's row (a `source_index` list such as `[a, b]`; the row lists `b` under `folded_sources`) | One merged record for `b`, `unprocessed` with reason `consumed_into_another_record`; its tombstone names the row it went into as `metadata.consumed_into`. `a` merges with the folded row as usual |
 | One holds a tombstone for a source, for example a record its `granularity: File` tool returned no row for | One merged record for that source, `unprocessed`: the action below skips it |
 
 A record of one split is not a record of another, so two splits of one source have no

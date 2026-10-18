@@ -8,10 +8,10 @@ Single authority for record content assembly. Every action type, granularity, an
 
 | Name | Type | Exports | Signals |
 |------|------|---------|---------|
-| `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError` | - |
+| `envelope.py` | Module | `RecordEnvelope`, `RecordEnvelopeError`. Tracking fields carried forward include `aggregated_by` and `folded_sources` (the records a FILE tool folded into the row, by action). | - |
 | `tracking.py` | Module | `TrackedItem`, `is_input_position` | - |
 | `state.py` | Module | `RecordState`, `PROCESSABLE_STATES`, `RESETTABLE_DOWNSTREAM_STATES`, `CASCADE_BLOCKING_STATES`, `CASCADE_BLOCKING_VALUES` | - |
-| `reasons.py` | Module | Canonical reason string constants for disposition writes, tombstones, and telemetry (`SUCCESS`, `GUARD_SKIP`, `OBSERVE_FIELD_MISSING`, `SOURCE_UNRESOLVED`, ...). The exhaustion family names which recovery layer gave up: `RETRY_EXHAUSTED`, `EXPECTATIONS_EXHAUSTED`. Action-level skip reasons: `GUARD_FILTERED_ALL`, `NO_INPUT_FILES`. Node-level failure details: `HALTED_ON_EXHAUSTED`, and `EVERY_INPUT_FAILED` for an action that reached all of its input and failed on every part of it. | - |
+| `reasons.py` | Module | Canonical reason string constants for disposition writes, tombstones, and telemetry (`SUCCESS`, `GUARD_SKIP`, `OBSERVE_FIELD_MISSING`, `SOURCE_UNRESOLVED`, ...). The exhaustion family names which recovery layer gave up: `RETRY_EXHAUSTED`, `EXPECTATIONS_EXHAUSTED`. Action-level skip reasons: `GUARD_FILTERED_ALL`, `NO_INPUT_FILES`. Node-level failure details: `HALTED_ON_EXHAUSTED`, and `EVERY_INPUT_FAILED` for an action that reached all of its input and failed on every part of it. `CONSUMED_INTO_ANOTHER_RECORD`: a fan-in's reason for a record one branch folded into another record's row. | - |
 | `__init__.py` | Re-export | `RecordState` | - |
 
 ## Project Surface

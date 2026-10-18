@@ -20,10 +20,11 @@ from agent_actions.llm.batch.core.batch_models import (
     PreparedBatchTasks,
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
+from agent_actions.processing.record_helpers import quarantine_reason
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.reasons import GUARD_SKIP, UPSTREAM_UNPROCESSED
+from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
 from agent_actions.utils.constants import JSON_MODE_KEY
@@ -283,7 +284,7 @@ class BatchTaskPreparator:
                 context_map_builder[custom_id], FilterStatus.SKIPPED
             )
             BatchContextMetadata.set_skip_reason(
-                context_map_builder[custom_id], UPSTREAM_UNPROCESSED
+                context_map_builder[custom_id], quarantine_reason(row)
             )
             stats.skipped_items += 1
             logger.debug("Upstream unprocessed item %s", custom_id)

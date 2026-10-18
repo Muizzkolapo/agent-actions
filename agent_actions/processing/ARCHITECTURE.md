@@ -967,6 +967,13 @@ If upstream writes a tombstone without _state (or with wrong _state):
 If you add a new RecordState value that should block downstream:
     Add it to CASCADE_BLOCKING_VALUES in record/state.py.
     If you forget, downstream actions will try to process failed records.
+
+The reason a quarantined record is written with comes from
+record_helpers.quarantine_reason, on every path that quarantines (this filter,
+online_llm, batch preparation): consumed_into_another_record where merge_fan_in
+found a branch folded the record into another record's row (metadata
+fan_in_consumed_into), else upstream_unprocessed. A path that hard-codes
+upstream_unprocessed loses that reason at the fan-in.
 ```
 
 ### Every reset path must clear checkpoint records

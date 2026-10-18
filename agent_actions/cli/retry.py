@@ -178,6 +178,10 @@ class RetryCommand:
             _notes_path(manifest_file), (prior_manifest or {}).get("created_at")
         )
         never_run_since = self._not_run_since_an_interrupted_retry(resumed, state_mgr)
+        if self._refused_below_a_stopped_retry(
+            prior_manifest, bool(restoring or never_run_since), execution_order
+        ):
+            return
         if prior_manifest and self.args.dry_run:
             self.console.print(
                 "[yellow]Found incomplete retry manifest — prior retry was interrupted. "
@@ -199,12 +203,16 @@ class RetryCommand:
                     detail=row.get("detail"),
                     input_snapshot=row.get("input_snapshot"),
                 )
-            _delete_manifest(manifest_file)
+            # The manifest and its notes stay until this retry writes its own: one that
+            # stops short of that leaves the stopped retry for the next to resume.
             self.console.print(
                 f"[cyan]Restored {len(restoring)} disposition(s). Proceeding with retry.[/cyan]"
             )
 
         unwritten = restoring if self.args.dry_run else []
+        unwritten = unwritten + self._settle_lost_dispositions(
+            backend, state_mgr, execution_order, resumed
+        )
         failures = self._find_failures(backend, execution_order, unwritten)
 
         if not failures:
@@ -574,6 +582,87 @@ class RetryCommand:
         self.console.print(f"  Failed actions: {', '.join(failed)}")
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
+
+    def _settle_lost_dispositions(
+        self, backend, state_mgr, execution_order: list[str], resumed: set[str]
+    ) -> list[dict]:
+        """Write the dispositions a collect pass stored rows for but could not record.
+
+        Those records kept ``deferred``, which no retry starts from, so a failure among
+        them would never be found (``lost_dispositions``). Only completed actions hold
+        them; nothing is submitted again. A dry run writes nothing and returns them, to be
+        planned over as written.
+        """
+        from agent_actions.workflow.managers.batch import (
+            lost_dispositions,
+            settle_lost_dispositions,
+        )
+        from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+
+        unwritten: list[dict] = []
+        for action in execution_order:
+            if action in resumed or state_mgr.get_status(action) not in COMPLETED_STATUSES:
+                continue
+            settled = lost_dispositions(backend, action)
+            outcomes = [row for row in settled if row[2] != DISPOSITION_DEFERRED]
+            if not settled:
+                continue
+            if self.args.dry_run:
+                unwritten.extend(
+                    {
+                        "action_name": row[0],
+                        "record_id": row[1],
+                        "disposition": row[2],
+                        "reason": row[3],
+                        "detail": row[6],
+                    }
+                    for row in outcomes
+                )
+                self.console.print(
+                    f"[yellow]{action} holds {len(settled)} record(s) still deferred after "
+                    f"its batch was collected. A retry writes the disposition their stored "
+                    f"rows stand for first, and this plan counts them.[/yellow]"
+                )
+                continue
+            settle_lost_dispositions(backend, settled)
+            self.console.print(
+                f"[cyan]{action}: wrote the disposition of {len(settled)} record(s) left "
+                f"deferred after its batch was collected, from their stored rows.[/cyan]"
+            )
+            if any(row[2] in FAILURE_DISPOSITIONS for row in outcomes) and (
+                state_mgr.get_status(action) == ActionStatus.COMPLETED
+            ):
+                state_mgr.update_status(action, ActionStatus.COMPLETED_WITH_FAILURES)
+        return unwritten
+
+    def _refused_below_a_stopped_retry(
+        self, manifest: dict[str, Any] | None, unfinished: bool, execution_order: list[str]
+    ) -> bool:
+        """Refuse a ``--from`` below where a stopped retry, still to be resumed, started.
+
+        The retry resuming it starts where it did, from the failures it puts back, and a
+        retry starting below never reaches them, so it would leave the stopped one's
+        records unanswered below what it re-ran. Refused before anything is put back.
+        True when a dry run has reported the refusal instead.
+        """
+        from_action = self.args.from_action
+        started = (manifest or {}).get("from_action")
+        if not (from_action and started and unfinished):
+            return False
+        if from_action not in execution_order or started not in execution_order:
+            return False
+        if execution_order.index(from_action) <= execution_order.index(started):
+            return False
+        reason = (
+            f"A retry from {started} was stopped before it finished, and a retry from "
+            f"{from_action} starts below it, so it would not answer what that one named. "
+            f"Resume it first — agac retry -a {self.agent_name} — then retry from "
+            f"{from_action} if anything is still failed there."
+        )
+        if self.args.dry_run:
+            self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
+            return True
+        raise click.ClickException(reason)
 
     @staticmethod
     def _left_by_an_interrupted_retry(manifest: dict[str, Any] | None, state_mgr) -> set[str]:

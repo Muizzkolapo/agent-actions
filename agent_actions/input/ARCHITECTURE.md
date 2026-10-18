@@ -105,7 +105,7 @@ FileReader(file_path)
   +-- .html  --> BeautifulSoup      --> str (text content)
 ```
 
-Note that CSV returns raw rows (list of lists), not dicts, and `FileReader` has no `.tsv` handler. The first stage does not read a delimited staged file through `FileReader`: `_read_staged_file` reads `.csv` and `.tsv` with `TabularLoader` into `list[dict]` before anything validates them, and preparation reads the file with the same loader, so the first-record template check (`_validate_staged_data`) renders a row the run envelopes. The reserved-name check is not applied to a delimited file, which it always skipped. XLSX returns `list[dict]` directly via pandas.
+Note that CSV returns raw rows (list of lists), not dicts, and `FileReader` has no `.tsv` handler. The first stage does not read a delimited staged file through `FileReader`: `_read_staged_file` reads `.csv` and `.tsv` with `TabularLoader` into `list[dict]` before anything validates them, and preparation reads the file with the same loader, so the first-record template check (`_validate_staged_data`) renders a row the run envelopes. `TabularLoader` reads the file with `newline=""` and `utf-8-sig`, so a quoted cell keeps its line breaks and a byte order mark is not part of the first column name. The reserved-name check is not applied to a delimited file, which it always skipped. XLSX returns `list[dict]` directly via pandas.
 
 ### SourceDataLoader -- storage backend reads
 
@@ -171,7 +171,10 @@ process_initial_stage(InitialStageContext)
   1. FileReader.read() -- raw content + file_type
   2. validate_staging_field_names() -- reject reserved names
   3. _validate_staged_data() -- prompt template compatibility, rendered with the
-     version and workflow metadata the records are prepared with
+     version and workflow metadata the records are prepared with, against the
+     first record staging makes: a row of a record format, or the first
+     {"content": <chunk>} of a text format (_text_chunk_payloads, the helper
+     both modes stage text chunks with)
   4. Branch on run_mode:
   |
   +-- BATCH: _prepare_batch_data()

@@ -38,6 +38,9 @@ TOOL_MISSING_RECORD = "tool_missing_record"
 # split across rows each minted an identity. Names neither direction: the flag at the
 # write site compares batch lengths, so it cannot be read per input.
 CONSUMED_INTO_OUTPUT = "consumed_into_output"
+# At a fan-in, a record one branch folded into another record's row: that branch holds
+# no row of it, so the fan-in leaves it unprocessed rather than run it half empty.
+CONSUMED_INTO_ANOTHER_RECORD = "consumed_into_another_record"
 
 # -- Empty output ------------------------------------------------------------
 EMPTY_OUTPUT = "empty_output"

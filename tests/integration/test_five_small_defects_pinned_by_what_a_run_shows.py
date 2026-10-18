@@ -213,8 +213,12 @@ def test_a_guard_on_an_action_whose_name_contains_its_own_still_runs(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_a_first_stage_guard_on_a_staging_column_named_like_its_action_still_runs(tmp_path):
-    """A first-stage record is the staging row, so `customer.tier` can resolve there."""
+def test_a_first_stage_guard_naming_its_own_action_is_refused(tmp_path):
+    """Even beside a staging column of that name: the staged row is held under `source`.
+
+    `customer.tier == 'gold'` on the row `{"customer": {"tier": "gold"}}` filtered the
+    record and the run exited 0; `source.customer.tier` is the read that resolves (1526).
+    """
     config = f"""\
 name: {SELF_GUARD}
 description: "A first-stage guard on a staging column"
@@ -239,7 +243,9 @@ actions:
 
     result = _agac_run(root, SELF_GUARD)
 
-    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode != 0, output
+    assert "customer: its guard names 'customer', its own action." in output, output
 
 
 # 1356 -------------------------------------------------------------------

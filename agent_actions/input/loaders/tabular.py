@@ -2,6 +2,7 @@
 
 # Similar loader pattern is intentional across different file type loaders
 import csv
+import io
 import logging
 from typing import Any
 
@@ -17,10 +18,15 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
     def process(self, content: Any, file_path: str | None = None) -> list[dict[str, Any]]:
         """Load and return tabular content from a CSV/TSV file or in-memory content."""
         try:
+            delimiter = "\t" if (file_path and file_path.lower().endswith(".tsv")) else ","
             if file_path:
-                content_str = self.load_file(file_path)
+                # newline="" lets the csv module see a line break inside a quoted cell;
+                # utf-8-sig drops a byte order mark so it is not part of the first column.
+                with open(file_path, encoding="utf-8-sig", newline="") as handle:
+                    return list(csv.DictReader(handle, delimiter=delimiter))
             elif content:
-                content_str = content
+                text = io.StringIO(str(content).removeprefix("\ufeff"), newline="")
+                return list(csv.DictReader(text, delimiter=delimiter))
             else:
                 error_context: dict[str, Any] = {
                     "agent_name": self.agent_name,
@@ -37,9 +43,6 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
                     "Either file_path or content must be provided for tabular processing",
                     context=error_context,
                 )
-            delimiter = "\t" if (file_path and file_path.lower().endswith(".tsv")) else ","
-            rows = list(csv.DictReader(content_str.splitlines(), delimiter=delimiter))
-            return rows
         except csv.Error as e:
             operation = f"parsing CSV from {file_path or 'content string'}"
             self.handle_processing_error(e, operation)

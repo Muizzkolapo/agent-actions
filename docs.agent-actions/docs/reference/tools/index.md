@@ -159,6 +159,7 @@ def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
 |---|---|
 | An item you received | Extends parent lineage — downstream `observe` can load ancestor data |
 | `FileUDFResult` output whose `source_index` list names every record of the file split from one source, and only those, with no other output naming any of them | Takes that source's `source_guid`, as an unsplit record holds it, so a fan-in pairs it with other branches' records of the source. Any other many-to-one output keeps its first input's identity |
+| `FileUDFResult` output whose `source_index` list names several inputs, such as `[a, b]` (a fold) | Keeps the first input's identity, so `b` has no row of its own below the tool: its disposition there is `success` with reason `consumed_into_output` (none when any output declares `source_index: None`), and the row lists it under `folded_sources`. With no fan-in below, the actions below run on the row alone. Beside another branch, a [fan-in](../context/context-scope.md) does not run `b` with this branch's fields empty: it leaves `b` `unprocessed`, reason `consumed_into_another_record`, and its tombstone names the row it went into as `consumed_into` |
 | `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`, and `aggregated_by` names the action. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. A [fan-in](../context/context-scope.md) pairs it only where every branch reads it; beside a branch that does not, the fan-in fails |
 | No output naming an input | The input was dropped: it is stored as a tombstone, `unprocessed` with reason `tool_missing_record`, and the actions below skip it, including a fan-in beside another branch. Not when any output declares `source_index: None`, which may have consumed it: then the input gets no row |
 
@@ -293,8 +294,8 @@ the workflow when it can see this:
 ```python
 @udf_tool()
 def produce(data: dict, **kwargs) -> dict:
-    out: dict = {"label": data["source"]["page_content"]}
-    if data["source"]["page_content"] == "has items":
+    out: dict = {"label": data["source"]["text"]}
+    if data["source"]["text"] == "has items":
         out["items"] = "apple, pear"  # 'items' is required by the schema
     return out
 ```
@@ -333,7 +334,7 @@ refuses the workflow when it leaves out a required field:
 ```python
 @udf_tool()
 def produce(data: dict, **kwargs) -> dict:
-    content = data["source"]["page_content"]
+    content = data["source"]["text"]
     if not content:
         return {"label": ""}  # 'items' is required by the schema
     return {"label": content, "items": content.upper()}

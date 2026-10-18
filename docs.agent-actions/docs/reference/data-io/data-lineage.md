@@ -201,6 +201,7 @@ FILE-mode tools receive all records at once. The framework tracks each record's 
 4. Matched outputs extend the parent's lineage chain
 5. Outputs declaring `source_index: None` (aggregation results) get fresh lineage
 6. An output gathering every record of the file split from one source, and only those, takes that source's `source_guid` (see [Output Processing](../execution/granularity.md#output-processing))
+7. Any other output naming several inputs keeps the first one's identity and lists the rest under `folded_sources`: they have no row of their own below the tool, and a fan-in beside another branch leaves them `unprocessed` with reason `consumed_into_another_record`
 
 ```
 Input records:                        Tool output:                     After enrichment:

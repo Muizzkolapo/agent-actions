@@ -40,6 +40,7 @@ from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
     carry_framework_fields,
+    quarantine_reason,
 )
 from agent_actions.processing.result_collector import _safe_set_disposition
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
@@ -58,7 +59,6 @@ from agent_actions.record.reasons import (
     LLM_LAYER_GUARD_SKIP,
     PREP_FAILED,
     RETRY_EXHAUSTED,
-    UPSTREAM_UNPROCESSED,
 )
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
@@ -429,15 +429,16 @@ class OnlineLLMStrategy:
 
         # Upstream unprocessed — passthrough as tombstone
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
+            reason = quarantine_reason(input_record)
             tombstone = build_tombstone(
                 context.action_name,
                 input_record,
-                UPSTREAM_UNPROCESSED,
+                reason,
                 source_guid=source_guid,
             )
             return ProcessingResult.unprocessed(
                 data=[tombstone],
-                reason=UPSTREAM_UNPROCESSED,
+                reason=reason,
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,
                 input_record=input_record,

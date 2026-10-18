@@ -44,6 +44,27 @@ from .schema_structure_validator import SchemaStructureValidator
 from .type_checker import StaticTypeChecker, _camel_to_snake
 
 
+def guard_clause_and_behavior(guard: Any) -> tuple[str, str] | None:
+    """A guard's clause and its `on_false` behavior, or None when it has no clause.
+
+    An expanded config holds them as `clause` and `behavior`, a raw one as `condition` and
+    `on_false`. A bare SQL clause, and a dict that names no behavior, filters; a raw UDF
+    condition that names none skips.
+    """
+    if isinstance(guard, str):
+        return (guard, GuardBehavior.FILTER.value) if guard.strip() else None
+    if not isinstance(guard, dict):
+        return None
+    clause = guard.get("clause") or guard.get("condition")
+    if not isinstance(clause, str) or not clause.strip():
+        return None
+    behavior = guard.get("behavior") or guard.get("on_false")
+    if not behavior:
+        is_udf = clause.strip().startswith("udf:")
+        behavior = GuardBehavior.SKIP if is_udf else GuardBehavior.FILTER
+    return clause, str(behavior)
+
+
 class WorkflowStaticAnalyzer:
     """Static analyzer for workflow type checking.
 
@@ -1023,15 +1044,10 @@ class WorkflowStaticAnalyzer:
             if not isinstance(action, dict):
                 continue
             consumer_name = action.get("name", "unknown")
-            guard = action.get("guard")
-            if isinstance(guard, dict):
-                condition = guard.get("condition")
-            elif isinstance(guard, str):
-                condition = guard
-            else:
-                condition = None
-            if not condition or not isinstance(condition, str):
+            read = guard_clause_and_behavior(action.get("guard"))
+            if read is None:
                 continue
+            condition = read[0]
             if condition.strip().startswith("udf:"):
                 continue
 
@@ -1348,18 +1364,10 @@ class WorkflowStaticAnalyzer:
             if not isinstance(action, dict):
                 continue
             name = action.get("name", "")
-            guard = action.get("guard")
-            if not guard:
+            read = guard_clause_and_behavior(action.get("guard"))
+            if read is None:
                 continue
-
-            if isinstance(guard, dict):
-                condition = guard.get("condition", str(guard))
-                behavior = guard.get("on_false", "filter")
-            elif isinstance(guard, str):
-                condition = guard
-                behavior = "filter"  # string guards default to filter
-            else:
-                continue
+            condition, behavior = read
 
             if behavior in ("filter", "skip"):
                 guarded_actions[name] = {"condition": condition, "behavior": behavior}
@@ -1494,16 +1502,10 @@ class WorkflowStaticAnalyzer:
             if not isinstance(action, dict):
                 continue
             name = action.get("name", "")
-            guard = action.get("guard")
-            if not guard:
+            read = guard_clause_and_behavior(action.get("guard"))
+            if read is None:
                 continue
-            if isinstance(guard, dict):
-                behavior = guard.get("on_false", GuardBehavior.FILTER)
-            elif isinstance(guard, str):
-                behavior = GuardBehavior.FILTER
-            else:
-                continue
-            if behavior == GuardBehavior.SKIP:
+            if read[1] == GuardBehavior.SKIP:
                 skip_guarded.add(name)
 
         if not skip_guarded:
@@ -1579,16 +1581,10 @@ class WorkflowStaticAnalyzer:
             if not isinstance(action, dict):
                 continue
             name = action.get("name", "")
-            guard = action.get("guard")
-            if not guard:
+            read = guard_clause_and_behavior(action.get("guard"))
+            if read is None:
                 continue
-            if isinstance(guard, dict):
-                behavior = guard.get("on_false", GuardBehavior.FILTER)
-            elif isinstance(guard, str):
-                behavior = GuardBehavior.FILTER  # string guards default to filter
-            else:
-                continue
-            if behavior == GuardBehavior.FILTER:
+            if read[1] == GuardBehavior.FILTER:
                 filter_guarded.add(name)
 
         if not filter_guarded:
@@ -2398,17 +2394,8 @@ def apply_guard_nullable_schema_fixes(
     # Step 1: Identify guarded actions with filter/skip behavior.
     guarded_actions: set[str] = set()
     for name, config in action_configs.items():
-        guard = config.get("guard")
-        if not guard:
-            continue
-        if isinstance(guard, dict):
-            # Post-expansion configs use "behavior"; raw configs use "on_false".
-            behavior = guard.get("behavior", guard.get("on_false", "filter"))
-        elif isinstance(guard, str):
-            behavior = "filter"  # string guards default to filter
-        else:
-            continue
-        if behavior in ("filter", "skip"):
+        read = guard_clause_and_behavior(config.get("guard"))
+        if read is not None and read[1] in ("filter", "skip"):
             guarded_actions.add(name)
 
     if not guarded_actions:

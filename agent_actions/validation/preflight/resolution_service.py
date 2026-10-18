@@ -279,6 +279,14 @@ class WorkflowResolutionService:
                         )
                     )
                     break
+            # A read of a seed key its action does not declare is refused here as well.
+            declared = {
+                name: set(seed)
+                for name, cfg in self.action_configs.items()
+                if isinstance(cfg.get("context_scope"), dict)
+                and isinstance(seed := cfg["context_scope"].get("seed"), dict)
+            }
+            self._validate_seed_field_references({}, declared, errors, warnings)
             return errors, warnings
 
         # Phase 1: validate file existence and load seed data
