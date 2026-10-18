@@ -283,7 +283,8 @@ class TestHandleWorkflowError:
         ):
             event_logger.handle_workflow_error(error)
 
-        mock_services.core.state_manager.mark_running_as_failed.assert_called_once()
+        # The run's error is recorded on each action it fails.
+        mock_services.core.state_manager.mark_running_as_failed.assert_called_once_with("detail")
 
     def test_sets_already_displayed(self, event_logger):
         error = RuntimeError("boom")
