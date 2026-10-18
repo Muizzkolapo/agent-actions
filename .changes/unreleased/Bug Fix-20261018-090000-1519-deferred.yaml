@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  A batch record whose terminal disposition the store failed to write keeps its `deferred`
+  disposition, and the run warns of it as still deferred after the batch completed. It used
+  to be cleared anyway, leaving the record with no disposition at all. This holds for the
+  collected outcome, a guard-filtered record's FILTERED, and the FAILED a file whose
+  processing raised writes for its records (#1519).
+time: 2026-10-18T09:00:00Z
