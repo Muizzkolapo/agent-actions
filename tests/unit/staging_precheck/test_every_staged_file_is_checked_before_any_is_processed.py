@@ -70,6 +70,9 @@ def _runner(config, *, storage_backend=None, retried=frozenset()):
     runner._process_single_file.side_effect = lambda fp: runner.processed.append(
         fp.locations.item.name
     )
+    runner._strategy_params.side_effect = lambda fp, storage_backend=None: (
+        ActionRunner._strategy_params(runner, fp, storage_backend=storage_backend)
+    )
     runner._precheck_single_file.side_effect = lambda fp: ActionRunner._precheck_single_file(
         runner, fp
     )

@@ -31,6 +31,11 @@ class Run:
     output: str
 
     @property
+    def flat(self) -> str:
+        """The output on one line, since the run summary wraps long messages."""
+        return " ".join(self.output.split())
+
+    @property
     def records(self) -> list[dict]:
         """Every record persisted to the store, flattened. Empty if no store exists."""
         store = self.project / "agent_workflow" / self.workflow / "agent_io" / "store"
@@ -72,9 +77,9 @@ class TestReservedNamespaceCollision:
         r = run("staging_namespace_collision")
 
         assert r.returncode != 0, f"expected a failing run, got 0\n{r.output}"
-        assert "'source'" in r.output
-        assert "collide with reserved namespace names" in r.output
-        assert RESERVED_REMEDY in r.output
+        assert "'source'" in r.flat
+        assert "collide with reserved namespace names" in r.flat
+        assert RESERVED_REMEDY in r.flat
 
     def test_the_rejected_file_persists_nothing(self, run):
         assert run("staging_namespace_collision").records == []
@@ -86,8 +91,8 @@ class TestPartialFileRejection:
     def test_the_rejection_is_reported(self, run):
         r = run("partial_file_rejection")
 
-        assert "b_reserved.json" in r.output
-        assert "collide with reserved namespace names" in r.output
+        assert "b_reserved.json" in r.flat
+        assert "collide with reserved namespace names" in r.flat
 
     def test_no_file_produces_a_record(self, run):
         assert run("partial_file_rejection").records == []
@@ -109,7 +114,7 @@ class TestEveryStagedFileIsCheckedFirst:
         assert (
             "record value 'snowflak' for 'source.exam' is not in the file map. "
             "Known values: dbt, snowflake. (staging/b_uncovered.json, record 1)"
-        ) in r.output.replace("\n", " ")
+        ) in r.flat
 
     def test_nothing_of_the_clean_file_is_stored(self, run):
         r = run("staging_precheck")
