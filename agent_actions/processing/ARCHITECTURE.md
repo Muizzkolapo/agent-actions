@@ -512,7 +512,10 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   record in the same run, the repair names the rows the split wrote and takes out of the
   file, before it is sent, every stored row built on the rows the split replaced
   (`repair_lineage.drop_rows_built_on_rows_gone_above`), so nothing recorded or not lets
-  such a row be carried at collection.
+  such a row be carried at collection. A retry keeps those notes in a file as they are
+  made; one stopped before the actions below ran leaves them, and the retry resuming it
+  notes them again for each action the stopped one never completed, since its own re-run
+  of the split sees only the rows the stopped one wrote go.
 - **A run in which something failed and nothing was answered replaces no answer the
   action still calls answered.** Online leaves the file unwritten when nothing succeeded
   and nothing carried holds an answer (`terminal_failure`) while the answers stored for it

@@ -28,6 +28,7 @@ from agent_actions.processing.disposition_gate import (
     found_by_repair,
     note_cleared_by_repair,
 )
+from agent_actions.processing.repair_lineage import keep_notes_at, notes_kept_at, resume_notes
 from agent_actions.record.reasons import BATCH_ABANDONED, HALTED_ON_EXHAUSTED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
@@ -44,11 +45,17 @@ from agent_actions.utils.atomic_write import atomic_json_write
 logger = logging.getLogger(__name__)
 
 _RETRY_MANIFEST_NAME = "_retry_manifest.json"
+# What the retry the manifest names noted below each split it re-ran (repair_lineage).
+_REPAIR_NOTES_NAME = "_retry_repair_notes.json"
 
 
 def _manifest_path(store_dir: Path) -> Path:
     """Return the retry manifest file path within the workflow store directory."""
     return store_dir / _RETRY_MANIFEST_NAME
+
+
+def _notes_path(manifest_file: Path) -> Path:
+    return manifest_file.with_name(_REPAIR_NOTES_NAME)
 
 
 def _write_manifest(
@@ -124,11 +131,13 @@ def _halted_among(failures: dict[str, list[dict]], actions: list[str]) -> list[s
 
 
 def _delete_manifest(path: Path) -> None:
-    """Delete the retry manifest once the re-run has reached the end, failed or not."""
-    try:
-        path.unlink(missing_ok=True)
-    except OSError as e:
-        logger.warning("Could not delete retry manifest %s: %s", path, e)
+    """Delete the retry manifest and its repair notes once the re-run has reached the end,
+    failed or not."""
+    for kept in (path, _notes_path(path)):
+        try:
+            kept.unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning("Could not delete retry manifest %s: %s", kept, e)
 
 
 class RetryCommand:
@@ -164,6 +173,11 @@ class RetryCommand:
 
         resumed = self._left_by_an_interrupted_retry(prior_manifest, state_mgr)
         restoring = self._snapshot_to_restore(prior_manifest, resumed, state_mgr)
+        # Read before the restore deletes them with the manifest.
+        notes_to_resume = notes_kept_at(
+            _notes_path(manifest_file), (prior_manifest or {}).get("created_at")
+        )
+        never_run_since = self._not_run_since_an_interrupted_retry(resumed, state_mgr)
         if prior_manifest and self.args.dry_run:
             self.console.print(
                 "[yellow]Found incomplete retry manifest — prior retry was interrupted. "
@@ -295,10 +309,10 @@ class RetryCommand:
         )
 
         workflow.set_retried_records(repairing)
-        note_cleared_by_repair(
-            workflow.services.core.action_runner.storage_backend,
-            record_ids - {NODE_LEVEL_RECORD_ID},
-        )
+        runner_backend = workflow.services.core.action_runner.storage_backend
+        note_cleared_by_repair(runner_backend, record_ids - {NODE_LEVEL_RECORD_ID})
+        resume_notes(runner_backend, notes_to_resume, never_run_since)
+        keep_notes_at(runner_backend, _notes_path(manifest_file), created_at)
 
         cleared = self._clear_for_the_rerun(backend, downstream_actions, record_ids, repairing)
 
@@ -577,6 +591,20 @@ class RetryCommand:
             action
             for action in manifest.get("downstream_actions", [])
             if state_mgr.get_status_details(action).get(REPAIRED_BY) == manifest["created_at"]
+        }
+
+    @staticmethod
+    def _not_run_since_an_interrupted_retry(resumed: set[str], state_mgr) -> set[str]:
+        """The actions an interrupted retry put back to pending and never completed.
+
+        What that retry noted for them below a split it re-ran is still to be taken out
+        of them: a retry resuming it re-runs the split over the rows that one wrote, and
+        sees only those taken away.
+        """
+        from agent_actions.workflow.managers.state import COMPLETED_STATUSES
+
+        return {
+            action for action in resumed if state_mgr.get_status(action) not in COMPLETED_STATUSES
         }
 
     @staticmethod

@@ -362,6 +362,15 @@ decided them again. And an action the stopped retry completed never gets back a
 failure recorded against the action as a whole, which would make the next
 `agac run` run it again.
 
+A retry stopped after an action that [splits records](#a-retry-runs-the-records-it-named-and-only-those)
+wrote, but before the actions below it ran, has not yet taken out of those actions
+what they held for the rows the split replaced, such as the record's tombstone. The
+next `retry` re-runs the split over the rows the stopped one wrote, so it cannot see
+those rows go. The stopped retry keeps a note of them beside its record of the
+failures (`_retry_repair_notes.json` in the workflow's store folder), and the next
+`retry` takes them out of each action the stopped one never completed, as the stopped
+one would have.
+
 `--dry-run` puts nothing back and leaves the record of the stopped retry where it
 is. The plan it shows counts what a retry would put back.
 
