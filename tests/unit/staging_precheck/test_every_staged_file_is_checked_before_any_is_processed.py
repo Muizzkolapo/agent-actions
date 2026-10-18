@@ -204,6 +204,16 @@ class TestOnlyTheFilesTheRunWouldProcessAreChecked:
         assert runner._precheck_single_file.call_count == 0
         assert runner.processed == ["a.json", "b.json"]
 
+    def test_a_file_that_does_not_parse_is_left_to_the_walk(self, tmp_path):
+        """A loss, which the walk records and tolerates, is not a refusal."""
+        workflow, config = _workflow(tmp_path)
+        _stage(workflow, {"a.json": GOOD, "b.json": "{not json at all"})
+        runner = _runner(config)
+
+        _walk(workflow, config, runner)
+
+        assert runner.processed == ["a.json", "b.json"]
+
     @pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
     def test_an_unreadable_file_is_left_to_the_walk(self, tmp_path):
         workflow, config = _workflow(tmp_path)
