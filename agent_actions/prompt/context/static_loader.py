@@ -197,7 +197,14 @@ class StaticDataLoader:
         return resolved
 
     def _load_file(self, file_path: Path, field_name: str) -> Any:
-        """Load file content based on file extension."""
+        return self.parse_file(file_path, field_name)
+
+    @classmethod
+    def parse_file(cls, file_path: Path, field_name: str) -> Any:
+        """Parse one seed file by its extension, as the run reads it.
+
+        Pre-flight calls this too, so the two cannot disagree on what a seed file holds.
+        """
         # Check if file exists
         if not file_path.exists():
             raise StaticDataLoadError(
@@ -211,15 +218,15 @@ class StaticDataLoader:
 
         # Check file size
         file_size = file_path.stat().st_size
-        if file_size > self.MAX_FILE_SIZE_BYTES:
+        if file_size > cls.MAX_FILE_SIZE_BYTES:
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': File too large "
-                f"({file_size / 1024 / 1024:.2f}MB, max {self.MAX_FILE_SIZE_BYTES / 1024 / 1024}MB)",
+                f"({file_size / 1024 / 1024:.2f}MB, max {cls.MAX_FILE_SIZE_BYTES / 1024 / 1024}MB)",
                 context={
                     "field_name": field_name,
                     "file_path": str(file_path),
                     "file_size_bytes": file_size,
-                    "max_size_bytes": self.MAX_FILE_SIZE_BYTES,
+                    "max_size_bytes": cls.MAX_FILE_SIZE_BYTES,
                     "error_type": "file_too_large",
                 },
             )
@@ -228,13 +235,13 @@ class StaticDataLoader:
         suffix = file_path.suffix.lower()
 
         if suffix == ".json":
-            return self._load_json(file_path, field_name)
+            return cls._load_json(file_path, field_name)
         elif suffix in {".yml", ".yaml"}:
-            return self._load_yaml(file_path, field_name)
+            return cls._load_yaml(file_path, field_name)
         elif suffix in {".md", ".txt"}:
-            return self._load_text(file_path, field_name)
+            return cls._load_text(file_path, field_name)
         elif suffix == ".csv":
-            return self._load_csv(file_path, field_name)
+            return cls._load_csv(file_path, field_name)
         else:
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Unsupported file type '{suffix}'",
@@ -242,12 +249,13 @@ class StaticDataLoader:
                     "field_name": field_name,
                     "file_path": str(file_path),
                     "file_type": suffix,
-                    "supported_types": list(self.SUPPORTED_EXTENSIONS),
+                    "supported_types": list(cls.SUPPORTED_EXTENSIONS),
                     "error_type": "unsupported_format",
                 },
             )
 
-    def _load_json(self, file_path: Path, field_name: str) -> Any:
+    @staticmethod
+    def _load_json(file_path: Path, field_name: str) -> Any:
         """Load and parse JSON file."""
         try:
             with open(file_path, encoding="utf-8") as f:
@@ -279,7 +287,8 @@ class StaticDataLoader:
                 cause=e,
             ) from e
 
-    def _load_yaml(self, file_path: Path, field_name: str) -> Any:
+    @staticmethod
+    def _load_yaml(file_path: Path, field_name: str) -> Any:
         """Load and parse YAML file."""
         try:
             with open(file_path, encoding="utf-8") as f:
@@ -309,7 +318,8 @@ class StaticDataLoader:
                 cause=e,
             ) from e
 
-    def _load_text(self, file_path: Path, field_name: str) -> str:
+    @staticmethod
+    def _load_text(file_path: Path, field_name: str) -> str:
         """Load plain text or Markdown file."""
         try:
             with open(file_path, encoding="utf-8") as f:
@@ -327,10 +337,13 @@ class StaticDataLoader:
                 cause=e,
             ) from e
 
-    def _load_csv(self, file_path: Path, field_name: str) -> list:
+    @staticmethod
+    def _load_csv(file_path: Path, field_name: str) -> list:
         """Load CSV file as list of dictionaries with headers as keys."""
         try:
-            with open(file_path, encoding="utf-8") as f:
+            # utf-8-sig keeps a byte order mark out of the first key; newline="" keeps
+            # a quoted \r\n as written.
+            with open(file_path, encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f)
                 return list(reader)
         except csv.Error as e:

@@ -390,11 +390,11 @@ StaticDataLoader(static_data_dir=Path("seed_data/"))
          --> Delegates to resolve_seed_path() which validates resolved path
              stays within static_data_dir
       4. Check file size (configurable max, prevents memory exhaustion)
-      5. Load by extension:
+      5. Load by extension (StaticDataLoader.parse_file, which pre-flight also calls):
            .json --> json.load()
            .yml/.yaml --> yaml.safe_load()
            .md/.txt --> raw text string
-           .csv --> list of dicts (DictReader)
+           .csv --> list of dicts (DictReader, utf-8-sig, newline="")
       6. Cache by resolved path (in-memory, per-loader instance)
     |
     Returns: {"rubric": {...}, "examples": [...]}
@@ -440,7 +440,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 | `context/scope_parsing.py` | `parse_field_reference()` -- parses "action.field" references. `extract_action_names_from_template()` -- AST-based Jinja2 dependency extraction. |
 | `context/scope_namespace.py` | Namespace enrichment, field filtering, allowed-fields-per-dependency extraction. |
 | `context/null_namespace.py` | `NullNamespace` sentinel and `is_null_namespace()` for guard-skipped/filtered upstream actions. |
-| `context/static_loader.py` | `StaticDataLoader` -- loads seed data files (JSON, YAML, CSV, text) with path traversal prevention and caching. |
+| `context/static_loader.py` | `StaticDataLoader` -- loads seed data files (JSON, YAML, CSV, text) with path traversal prevention and caching. `parse_file` is the one parser for a seed file; pre-flight uses it too. |
 | `context/builder.py` | `LLMContextBuilder` -- merges observe fields into LLM context, applies seed drop rules. Shared implementation for batch and online. |
 
 ### Rendering and utilities
