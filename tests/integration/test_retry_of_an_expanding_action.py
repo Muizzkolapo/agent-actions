@@ -418,13 +418,15 @@ class TestAtFileGranularity:
         assert "cannot be attributed" not in result.output
 
 
+# A basename no other fixture writes: tool discovery imports by module name, so
+# two fixtures writing one basename serve the second the first one's module.
 SPLIT_AGAIN_TOOL = """from typing import Any
 
 from agent_actions import udf_tool
 
 
 @udf_tool
-def split_again(data: Any, *args) -> list[dict]:
+def split_each_split_row(data: Any, *args) -> list[dict]:
     summary = str((data or {}).get("summary", ""))
     return [{"summary": f"{summary} ~{half}", "exam_density": "low"} for half in (1, 2)]
 """
@@ -434,7 +436,7 @@ SPLIT_AGAIN_ACTION = """  - name: split2
     dependencies: [split]
     intent: "Split again"
     schema: tool_action_output
-    impl: split_again
+    impl: split_each_split_row
     context_scope: { observe: [split.summary] }
     expect: { repair: none }
 """
@@ -480,7 +482,7 @@ def split_of_a_split(expanding, monkeypatch):
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     config = expanding / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(config.read_text().rstrip("\n") + "\n" + SPLIT_AGAIN_ACTION + AFTER_ACTION)
-    (expanding / "tools" / WORKFLOW / "split_again.py").write_text(SPLIT_AGAIN_TOOL)
+    (expanding / "tools" / WORKFLOW / "split_each_split_row.py").write_text(SPLIT_AGAIN_TOOL)
     (expanding / "prompt_store" / f"{WORKFLOW}.md").write_text(AFTER_PROMPT)
     _invoke("run", "-a", WORKFLOW, "--fresh")
     assert len(_rows(expanding, "after")) == RECORDS * 4
