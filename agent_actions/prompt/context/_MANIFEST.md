@@ -19,7 +19,7 @@ loaders for cataloging prompts at documentation time.
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. `_extract_content_data` subtracts `_RECORD_METADATA_KEYS` from a record with no `content` envelope; that guess is why a pool row is required to carry one before it reaches here. The branch remains for the record being processed, whose namespaces are the framework's either way. | `preprocessing` |
 | `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces via composable builder classes (`SourceNamespaceBuilder`, `DependencyNamespaceBuilder`, `VersionNamespaceBuilder`, `WorkflowMetadataBuilder`). Convergence point for source data validation (see design note). | `preprocessing`, `staging.field_validation` |
 | ~~`scope_file_mode.py`~~ | Deleted | FILE-mode observe merged into `scope_application.py:apply_context_scope_for_records`. | — |
-| `static_loader.py` | Module | Static prompt loader used during docs generation to read prompt store files. | `tooling.docs`, `file_io` |
+| `static_loader.py` | Module | `StaticDataLoader` loads `context_scope.seed` files, caching each by path, size and mtime. `shared_static_data_loader` gives one loader per seed directory for the process, so a file is parsed once; what it returns is shared and must not be written to (the guard context's seed, 1525). | `tooling.docs`, `file_io` |
 
 ## Design Notes
 
