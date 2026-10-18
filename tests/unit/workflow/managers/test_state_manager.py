@@ -201,6 +201,19 @@ class TestWorkflowLevel:
         )
         assert "error_message" not in stored.get_status_details("c")
 
+    def test_an_action_set_on_again_no_longer_carries_the_error_it_failed_with(self, tmp_path):
+        status_file = tmp_path / "status.json"
+        mgr = ActionStateManager(status_file, ["a", "b"])
+        mgr.update_status("a", ActionStatus.FAILED, error_message="disk I/O error")
+        mgr.update_status("b", ActionStatus.FAILED, error_message="disk I/O error")
+
+        mgr.update_status("a", ActionStatus.RUNNING)
+        mgr.update_status("b", ActionStatus.FAILED, error_message="database is locked")
+
+        stored = ActionStateManager(status_file, ["a", "b"])
+        assert "error_message" not in stored.get_status_details("a")
+        assert stored.get_status_details("b")["error_message"] == "database is locked"
+
     def test_mark_running_as_failed_returns_empty_if_none_running(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])

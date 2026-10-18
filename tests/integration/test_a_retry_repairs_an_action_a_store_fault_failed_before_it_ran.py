@@ -158,6 +158,8 @@ def test_once_the_fault_clears_a_retry_reruns_the_action_and_its_readers(
     assert FAULTED in output and FAULTS[fault] in output, output
     assert "Nothing to retry" not in output, output
     assert set(_statuses(root).values()) == {"completed"}, (_statuses(root), output)
+    # The error was why it failed; completed, it no longer says it failed.
+    assert "error_message" not in _status_file(root)[FAULTED]
     assert len(_rows(root, FAULTED)) == 3
     read = _rows(root, READER)
     assert len(read) == 3
