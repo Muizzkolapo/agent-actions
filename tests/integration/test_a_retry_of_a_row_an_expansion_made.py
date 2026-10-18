@@ -170,19 +170,24 @@ def batch_below(two_mints, monkeypatch):
 def test_a_batch_action_below_leaves_the_replacement_as_online_does(batch_below):
     """The same retry in a workflow that runs a batch action below the second mint.
 
-    Whether that action answers the replaced rows is #1375's, not pinned here: it holds
-    no row of the split row the retry names, so it neither grows nor shrinks.
+    That action answers the rows that replaced the stale ones (#1375): the retry sends
+    them, and the run that collects the batch stores their answers in place of the
+    answers built on the stale rows.
     """
     selected = _rows(batch_below, "split")[0]["source_guid"]
     stale = _made_by(_rows(batch_below, "split2"), selected)
     _fail(batch_below, selected, "split")
 
     result = _retry(batch_below, "--record", selected)
+    collected = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+    assert collected.exit_code == 0, collected.output
 
     after = _rows(batch_below, "split2")
     assert len(after) == RECORDS * 4
     assert stale.isdisjoint(r["source_guid"] for r in after)
-    assert len(_rows(batch_below, "publish")) == RECORDS * 4
+    published = _rows(batch_below, "publish")
+    assert {r["source_guid"] for r in published} == {r["source_guid"] for r in after}
+    assert [r["_state"] for r in published] == ["processed"] * RECORDS * 4
     assert WARNING not in result.output
 
 

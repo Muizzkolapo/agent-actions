@@ -780,7 +780,7 @@ def _process_online_mode_with_record_processor(
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
 
     from agent_actions.processing.disposition_gate import DispositionGate
-    from agent_actions.workflow.pipeline import ProcessingPipeline
+    from agent_actions.workflow.pipeline import ProcessingPipeline, _stored_rows
 
     agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
         cast("ActionConfigDict", ctx.agent_config),
@@ -808,6 +808,12 @@ def _process_online_mode_with_record_processor(
         defer_kept_dispositions=True,
     )
 
+    # What a repair leaves this file holding is compared with this, for the actions below.
+    stored_before = (
+        _stored_rows(ctx.storage_backend, ctx.agent_name, processing_context.target_relative_path)
+        if ctx.retried_records and processing_context.target_relative_path
+        else []
+    )
     processed_items, stats = processor.process(
         data_chunk, processing_context, strategy, repair_inputs=offered_to_repair
     )
@@ -858,6 +864,18 @@ def _process_online_mode_with_record_processor(
     ctx.storage_backend.clear_checkpoint_records(
         ctx.agent_name, processing_context.target_relative_path
     )
+    if ctx.retried_records and processing_context.target_relative_path:
+        from agent_actions.processing.repair_lineage import note_rewritten_by_repair
+        from agent_actions.workflow.pipeline import _actions_below
+
+        note_rewritten_by_repair(
+            ctx.storage_backend,
+            _actions_below(ctx.storage_backend, ctx.agent_name),
+            stored_before,
+            _stored_rows(
+                ctx.storage_backend, ctx.agent_name, processing_context.target_relative_path
+            ),
+        )
     if failure is not None:
         raise failure
 

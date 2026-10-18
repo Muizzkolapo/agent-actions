@@ -507,7 +507,11 @@ Two kinds of run carry more than their inputs' rows, each because online does:
   repair's submission removes any recording an earlier run left, so that does not rest on
   who cleared batch state first. A file a FILE tool above replaced whole in the same run is
   not repaired here: it is sent as a plain run sends it, its inputs recorded, so no row it
-  held from before the replacement is carried.
+  held from before the replacement is carried. Below an action that split a repaired
+  record in the same run, the repair names the rows the split wrote and takes out of the
+  file, before it is sent, every stored row built on the rows the split replaced
+  (`repair_lineage.drop_rows_built_on_rows_gone_above`), so nothing recorded or not lets
+  such a row be carried at collection.
 - **A run in which something failed and nothing was answered replaces no answer the
   action still calls answered.** Online leaves the file unwritten when nothing succeeded
   and nothing carried holds an answer (`terminal_failure`) while the answers stored for it

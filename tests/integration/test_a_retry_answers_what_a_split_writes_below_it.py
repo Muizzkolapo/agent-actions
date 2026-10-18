@@ -176,7 +176,7 @@ def _agac(project: Path, *args: str) -> str:
 
 def _run(project: Path, *args: str) -> str:
     output = _agac(project, "run", "-a", WORKFLOW, *args)
-    if "Run again" in output:
+    if "run again" in output.lower():
         output += _agac(project, "run", "-a", WORKFLOW)
     return output
 

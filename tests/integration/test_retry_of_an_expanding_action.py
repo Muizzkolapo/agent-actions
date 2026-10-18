@@ -272,8 +272,11 @@ class TestARecordTheLimitDropped:
     """
 
     def test_no_row_is_deleted_under_a_limit(self, diamond, monkeypatch):
+        """Only the rows built on the split rows the repair replaced go, and each is
+        built again: the combine stays the size it was."""
         selected = _record_ids(diamond, ACTION)[0]
-        before = {r["source_guid"] for r in _rows(diamond, "combine")}
+        replaced = _split_rows_of(diamond, selected)
+        before = {r["source_guid"] for r in _rows(diamond, "combine") if not _built_on(r, replaced)}
         assert before
         _fail(diamond, selected, ACTION)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
@@ -283,6 +286,7 @@ class TestARecordTheLimitDropped:
         assert result.exit_code == 0, result.output
         after = {r["source_guid"] for r in _rows(diamond, "combine")}
         assert not (before - after), f"rows deleted under a limit: {sorted(before - after)}"
+        assert len(after) == RECORDS * 2 * 2
 
     def test_no_row_is_deleted_under_a_limit_at_the_expansion(self, expanding, monkeypatch):
         """The same at an action with one mint rather than a diamond."""
@@ -461,7 +465,7 @@ def _invoke(*args):
     result = CliRunner().invoke(cli, list(args))
     assert result.exit_code == 0, result.output
     output = result.output
-    if "Run again" in output:
+    if "run again" in output.lower():
         again = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
         assert again.exit_code == 0, again.output
         output += again.output

@@ -13,6 +13,7 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchCl
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
     batch_file_identity,
+    batch_output_name,
     held_by_a_dependency,
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
@@ -26,6 +27,11 @@ from agent_actions.processing.disposition_gate import (
     positions_named_by_repair,
     replaced_above,
     stored_answers_stand,
+)
+from agent_actions.processing.repair_lineage import (
+    drop_rows_built_on_rows_gone_above,
+    note_rewritten_by_repair,
+    written_above,
 )
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
@@ -231,6 +237,9 @@ class ProcessParams:
 class ProcessingPipeline:
     """Orchestrates data processing through configured agents in batch and online modes."""
 
+    # Whether this run repairs records, kept when a file replaced above runs un-narrowed.
+    _repairing: bool = False
+
     def __init__(self, config: PipelineConfig):
         """
         Initialize the processing pipeline.
@@ -250,6 +259,13 @@ class ProcessingPipeline:
                 context={"action_name": config.action_name, "idx": config.idx},
             )
 
+        # A repair names, at every action below a split it re-runs, the rows the split
+        # wrote: they are what this action is handed for the records it names.
+        self._repairing = bool(config.retried_records)
+        if self._repairing:
+            above = written_above(config.storage_backend, config.action_name)
+            if not above <= config.retried_records:
+                config = replace(config, retried_records=config.retried_records | above)
         self.config = config
         self.model_vendor = str(config.action_config.get(MODEL_VENDOR_KEY) or "").lower()
         self.action_kind = str(config.action_config.get("kind") or "").lower()
@@ -392,6 +408,14 @@ class ProcessingPipeline:
             ),
             registry=registry_manager_factory,
         )
+        if disposition_gate is not None and disposition_gate.repairing:
+            drop_rows_built_on_rows_gone_above(
+                params.storage_backend,
+                params.pipeline_action_name,
+                batch_output_name(batch_name),
+                run_inputs,
+                disposition_gate.repairing,
+            )
 
         # A run with nothing to send writes its file there; one that sends is marked in
         # flight by the batch_jobs table, so no placeholder is needed on disk.
@@ -667,6 +691,20 @@ class ProcessingPipeline:
         # run reaches goes to it whole, and what the file held is replaced whole.
         whole_file = self.granularity == "file" and self.is_tool_action
         output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
+        run_mode = self.config.action_config.get("run_mode")
+        in_batch = run_mode == RunMode.BATCH and not (self.is_tool_action or self.is_hitl_action)
+        # The batch path drops them under the name its batch stores the file by.
+        stored_before = (
+            drop_rows_built_on_rows_gone_above(
+                self.config.storage_backend,
+                self.config.action_name,
+                target_relative_path(output_file_path, output_directory),
+                offered_to_repair,
+                self.config.retried_records,
+            )
+            if self._repairing and not in_batch
+            else []
+        )
         stored_here = (
             _stored_rows(
                 self.config.storage_backend,
@@ -715,8 +753,7 @@ class ProcessingPipeline:
 
         # ── batch/online fork ──────────────────────────────────────────────
         # Everything above this point is shared. Below here, paths diverge.
-        run_mode = self.config.action_config.get("run_mode")
-        if run_mode == RunMode.BATCH and not (self.is_tool_action or self.is_hitl_action):
+        if in_batch:
             self._handle_batch_mode(
                 data,
                 file_path,
@@ -854,6 +891,21 @@ class ProcessingPipeline:
                 )
 
         note_replaced_above(self.config.storage_backend, below, context.target_relative_path)
+        if (
+            self._repairing
+            and self.config.storage_backend is not None
+            and context.target_relative_path
+        ):
+            note_rewritten_by_repair(
+                self.config.storage_backend,
+                below or _actions_below(self.config.storage_backend, self.config.action_name),
+                stored_before,
+                _stored_rows(
+                    self.config.storage_backend,
+                    self.config.action_name,
+                    context.target_relative_path,
+                ),
+            )
 
         # This file's only: another file's checkpoint rows are answers not stored yet.
         if self.config.storage_backend:

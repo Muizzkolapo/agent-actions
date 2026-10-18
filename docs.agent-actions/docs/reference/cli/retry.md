@@ -100,6 +100,17 @@ where no *other* input of that action names the same record as its own parent.
 Every other row is carried. So repairing a record whose row was split in two
 replaces both halves rather than adding two more beside them.
 
+The rows such an action writes for a record the retry repairs are what every
+action below it is handed for that record, so the retry names them there too:
+each action below answers each of them, online or in batch mode, and through any
+number of further splits. They are taken from what the action wrote in this run,
+not from the record a row names as its parent. What an action below held for
+the rows they replaced — the record's tombstone from the run that failed it, or
+rows it built from the split rows that are gone — is taken out of its file with
+their dispositions before it runs, rather than carried beside the new answers.
+So after the retry, the actions below hold an answer for each new row and
+nothing else for that record, and the next `agac run` has nothing left to do.
+
 The producer list is what places a row whose parent says nothing useful. A row
 names the *original* staged record it descends from, not the record that
 produced it directly, so where one such action feeds another the rows of the
@@ -124,7 +135,8 @@ the same way and not reported.
 Dispositions are cleared by the ids the retry was given, at every action it
 re-runs, and the re-run decides them again wherever it reaches the record. An id
 that names no input of an action is simply not found there — nothing at that
-action is re-run.
+action is re-run — except below an action that split the record in this run,
+where its new rows are found in its place, as above.
 
 A record the re-run never repairs at the action it starts from is reached
 nowhere: a failure an earlier release recorded under a batch record's target id,
