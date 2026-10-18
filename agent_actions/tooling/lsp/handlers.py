@@ -64,7 +64,7 @@ def build_hover_content(reference, index: ProjectIndex, current_file=None) -> st
             return f"**Action**: `{reference.value}`\n\nDefined at line {location.line + 1}"
 
     elif reference.type == ReferenceType.SEED_FILE:
-        return _build_seed_file_hover(reference, index)
+        return _build_seed_file_hover(reference, index, current_file)
 
     return None
 
@@ -107,21 +107,35 @@ def _build_action_hover(meta) -> str:
     return "\n".join(lines)
 
 
-def _build_seed_file_hover(reference, index: ProjectIndex) -> str | None:
+def _build_seed_file_hover(reference, index: ProjectIndex, current_file=None) -> str | None:
     """Build a data-card style hover for a seed file reference.
 
-    Attempts to read the first record from the referenced JSON file and
-    render it as a card-formatted markdown preview.
+    The file is the one the run reads: the same search over the workflow folder
+    and the shared folders. Reads its first record and renders it as a
+    card-formatted markdown preview.
     """
+    from agent_actions.config.path_config import (
+        SeedFileError,
+        resolve_seed_file,
+        seed_search_folders,
+    )
+    from agent_actions.errors import ConfigurationError
+
     file_path = reference.value
-    # Resolve relative to project root
-    if index.root:
-        resolved = index.root / file_path
-    else:
+    if not index.root:
         return f"**Seed file**: `{file_path}`"
 
-    if not resolved.is_file():
-        return f"**Seed file**: `{file_path}`\n\n_File not found_"
+    try:
+        folders = seed_search_folders(
+            str(current_file) if current_file else None, project_root=index.root
+        )
+        resolved = resolve_seed_file(file_path, folders).path
+    except SeedFileError as exc:
+        return f"**Seed file**: `{file_path}`\n\n_File not found. {exc}_"
+    except ConfigurationError as exc:
+        return f"**Seed file**: `{file_path}`\n\n_{exc}_"
+    except ValueError:
+        return f"**Seed file**: `{file_path}`\n\n_File path escapes the seed folder_"
 
     try:
         with open(resolved, encoding="utf-8") as f:

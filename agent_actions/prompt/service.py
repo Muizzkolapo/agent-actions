@@ -6,12 +6,12 @@ import sys
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from jinja2 import StrictUndefined, TemplateSyntaxError
 
 if TYPE_CHECKING:
+    from agent_actions.config.path_config import SeedFolder
     from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.config.types import RunMode
@@ -662,15 +662,13 @@ class PromptPreparationService:
 
         try:
             logger.debug("[SEED_DATA_LOAD] Starting seed data loading...")
-            static_data_dir = PromptPreparationService._determine_static_data_dir(
+            folders = PromptPreparationService._seed_folders(
                 agent_config.get("workflow_config_path")
             )
-            logger.debug("[SEED_DATA_LOAD] Seed data directory: %s", static_data_dir)
+            logger.debug("[SEED_DATA_LOAD] Seed folders: %s", [f.label for f in folders])
 
             static_data_loader = (
-                shared_static_data_loader(static_data_dir)
-                if shared
-                else StaticDataLoader(static_data_dir=static_data_dir)
+                shared_static_data_loader(folders) if shared else StaticDataLoader(folders)
             )
             static_data = static_data_loader.load_static_data(
                 seed_config, source=source, action_name=agent_name
@@ -784,22 +782,24 @@ class PromptPreparationService:
         )
 
     @staticmethod
-    def _determine_static_data_dir(workflow_config_path: str | None) -> Path:
-        """Resolve the seed data directory (workflow root first, then project root).
+    def _seed_folders(workflow_config_path: str | None) -> list["SeedFolder"]:
+        """The folders a seed reference is looked for in; none at all is an error here.
 
         Raises:
-            StaticDataLoadError: If no seed data folder exists at either level.
+            StaticDataLoadError: If no seed folder exists at the workflow root, the
+                project root, or under ``seed_data_paths``.
         """
-        from agent_actions.config.path_config import resolve_seed_data_dir
+        from agent_actions.config.path_config import seed_search_folders
 
-        seed_dir, seed_dir_name = resolve_seed_data_dir(workflow_config_path)
-        if seed_dir is not None:
-            return seed_dir
+        folders = seed_search_folders(workflow_config_path)
+        if folders:
+            return folders
 
         raise StaticDataLoadError(
-            f"Seed data directory not found. Create '{seed_dir_name}' folder "
+            "Seed data directory not found. Create a 'seed_data' folder "
             "at workflow root (same level as agent_config/, schema/, prompt_store/) "
-            "to store static reference data files.",
+            "to store static reference data files, or list shared folders under "
+            "seed_data_paths in agent_actions.yml.",
             context={
                 "workflow_config_path": str(workflow_config_path),
                 "error_type": "missing_seed_data_directory",

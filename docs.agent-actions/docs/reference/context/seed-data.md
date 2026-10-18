@@ -33,16 +33,43 @@ The seed data directory defaults to `seed_data/`. You can change it in `agent_ac
 seed_data_path: reference_data   # defaults to "seed_data" if omitted
 ```
 
+### Shared Folders
+
+A file several workflows read lives once, in a shared folder. List shared folders in `agent_actions.yml`, relative to the project root:
+
+```yaml
+seed_data_paths: [shared_seeds]
+```
+
+Each `$file:` reference is looked for in this order, and resolves to the first folder that holds it:
+
+1. the workflow's own folder (`agent_workflow/<workflow>/seed_data/`)
+2. the project folder (`seed_data/` at the project root, or the `seed_data_path` name)
+3. each folder of `seed_data_paths`, in order
+
+So a workflow can keep its own `syllabus.json` and read `question_design_rules.json` from `shared_seeds/` with no copy. Rules:
+
+- The workflow's file wins over a shared file of the same name. `agac inspect context` shows the shared file it hides.
+- A name held by two shared folders (the project folder counts as one) is an error that names both. There is no silent pick: keep the file in one folder.
+- A listed folder that does not exist, or that is outside the project root, is a configuration error.
+- A file found nowhere is an error that lists every folder searched.
+
+The editor's go-to-definition on a `$file:` reference opens the same file the run reads.
+
 ## Directory Structure
 
 ```
-my_workflow/
-├── agent_config/
-│   └── my_workflow.yml
-├── agent_io/
-└── seed_data/           # Seed data files here (or your custom name)
-    ├── syllabus.json
-    └── rubric.yaml
+my_project/
+├── agent_actions.yml                # seed_data_paths: [shared_seeds]
+├── shared_seeds/
+│   └── question_design_rules.json   # read by every workflow that names it
+└── agent_workflow/my_workflow/
+    ├── agent_config/
+    │   └── my_workflow.yml
+    ├── agent_io/
+    └── seed_data/                   # this workflow's own files (or your custom name)
+        ├── syllabus.json
+        └── rubric.yaml
 ```
 
 ## Accessing Seed Data
