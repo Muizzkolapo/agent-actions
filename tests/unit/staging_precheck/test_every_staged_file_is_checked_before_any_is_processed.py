@@ -120,6 +120,7 @@ class TestABadRowInALaterFileStopsTheWalkBeforeAnyFile:
         workflow, config = _workflow(tmp_path)
         _stage(workflow, {"a.json": GOOD, "b.json": BAD})
         backend = MagicMock()
+        backend.claim_source_guid_for_run.return_value = False
         runner = _runner(config, storage_backend=backend)
 
         with pytest.raises(ConfigValidationError):
@@ -150,7 +151,7 @@ class TestAWalkWhoseFilesAreAllValidIsUnchanged:
         assert (found, processed) == (2, 2)
         assert runner.processed == ["a.json", "b.json"]
 
-    def test_each_file_is_checked_once_and_one_at_a_time(self, tmp_path):
+    def test_each_file_is_checked_once_in_walk_order(self, tmp_path):
         workflow, config = _workflow(tmp_path)
         _stage(workflow, {"a.json": GOOD, "b.json": GOOD, "c.json": GOOD})
         runner = _runner(config)
@@ -228,14 +229,25 @@ class TestOnlyTheFilesTheRunWouldProcessAreChecked:
         assert runner.processed == ["a.json", "b.json"]
 
 
+REFUSALS = {
+    "document rule": ({"exam": "dbt", "title": "a"}, "A staged input must be rows"),
+    "reserved name": ([{"exam": "dbt", "title": "a", "source": "x"}], "collide with reserved"),
+    "seed selector": (BAD, BAD_TEXT),
+    "first-record render": ([{"exam": "dbt", "subject": "a"}], "source.title"),
+}
+
+
 class TestTheCheckIsTheOneTheFirstStageRuns:
-    def test_the_same_bad_file_is_refused_the_same_way_by_both(self, tmp_path):
+    @pytest.mark.parametrize("kind", sorted(REFUSALS))
+    def test_every_refusal_is_raised_the_same_way_by_both(self, tmp_path, kind):
+        from agent_actions.errors import AgentActionsError
         from agent_actions.input.preprocessing.staging.initial_pipeline import (
             precheck_staged_file,
         )
 
+        rows, fragment = REFUSALS[kind]
         workflow, config = _workflow(tmp_path)
-        staging = _stage(workflow, {"b.json": BAD})
+        staging = _stage(workflow, {"b.json": rows})
         ctx = InitialStageContext(
             agent_config=config,
             agent_name="label",
@@ -245,12 +257,14 @@ class TestTheCheckIsTheOneTheFirstStageRuns:
             action_configs={"label": config},
         )
 
-        with pytest.raises(ConfigValidationError) as first:
+        with pytest.raises(AgentActionsError) as first:
             precheck_staged_file(ctx)
-        with pytest.raises(ConfigValidationError) as second:
+        with pytest.raises(AgentActionsError) as second:
             process_initial_stage(ctx)
 
-        assert str(first.value) == str(second.value) == BAD_TEXT
+        assert type(first.value) is type(second.value)
+        assert str(first.value) == str(second.value)
+        assert fragment in str(first.value)
 
     def test_the_check_prepares_with_no_backend(self, tmp_path):
         from agent_actions.input.preprocessing.staging.initial_pipeline import (
@@ -260,6 +274,7 @@ class TestTheCheckIsTheOneTheFirstStageRuns:
         workflow, config = _workflow(tmp_path)
         staging = _stage(workflow, {"a.json": GOOD})
         backend = MagicMock()
+        backend.claim_source_guid_for_run.return_value = False
         ctx = InitialStageContext(
             agent_config=config,
             agent_name="label",
