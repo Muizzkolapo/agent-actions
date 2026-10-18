@@ -5,6 +5,7 @@ it without dragging in the runtime stack via a circular import."""
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import TYPE_CHECKING
 
 from agent_actions.guards.bare_reference import (
@@ -13,6 +14,8 @@ from agent_actions.guards.bare_reference import (
 )
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS
+from agent_actions.validation.static_analyzer.errors import read_through_reserved_name
 
 if TYPE_CHECKING:
     from agent_actions.input.preprocessing.parsing.ast_nodes import (
@@ -144,6 +147,27 @@ def _check_function_calls(ast_root: ASTNode, clause: str, action_name: str) -> l
     return errors
 
 
+def _check_reserved_name_reads(
+    ast_root: ASTNode, clause: str, action_name: str, action_names: Collection[str]
+) -> list[str]:
+    """Refuse a clause reading through `action`, `prompt` or `schema`.
+
+    No record carries those names, so the field is missing on every record and every
+    record is filtered while the run reports success.
+    """
+    errors: list[str] = []
+    for path in dict.fromkeys(_collect_field_nodes(ast_root)):
+        name, _, rest = path.partition(".")
+        if not rest or name not in RESERVED_NAMES_NO_RECORD_HAS:
+            continue
+        problem, fix = read_through_reserved_name(name, path, rest, action_names)
+        errors.append(
+            f"Action '{action_name}': guard condition '{clause}' {problem}, so every "
+            f"record would be filtered. {fix}"
+        )
+    return errors
+
+
 def _version_params(config: dict) -> list[str]:
     """The version names a guard clause may use bare, read from the expanded config.
 
@@ -233,6 +257,11 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
         if parse_result.ast is not None:
             errors.extend(_check_bare_identifier_rhs(parse_result.ast.root, clause, action_name))
             errors.extend(_check_function_calls(parse_result.ast.root, clause, action_name))
+            errors.extend(
+                _check_reserved_name_reads(
+                    parse_result.ast.root, clause, action_name, action_configs
+                )
+            )
             errors.extend(
                 _check_bare_field_references(
                     parse_result.ast.root, clause, action_name, config, action_configs

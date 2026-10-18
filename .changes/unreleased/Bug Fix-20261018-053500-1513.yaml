@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  The tool code in the incident_triage example's `docs/PATTERNS.md` returns every field the
+  example's schemas require, so a copy passes pre-flight. `format_incident_triage` returned
+  only `incident` and `teams`, which `format_triage_output` pairs with `triage_id`,
+  `severity`, `response` and `metadata`; `aggregate_severity_votes` left out `vote_summary`;
+  and `assign_team_based_on_impact` left out `primary_system` and
+  `requires_executive_notification`. Each block now names the schema it goes with. A test
+  pairs every tool function the docs, the examples and the skill show with the schema an
+  action running it names, on the same page or in the example's workflow, and puts it to
+  pre-flight's required-key check. (#1513)
+time: 2026-10-18T05:35:00Z

@@ -764,20 +764,51 @@ class RetryCommand:
         action that is not failed has nothing to retry, whatever batch it waits on.
         Abandoning the batch strands its waiting records as failed, and those are
         then the failures. None when a dry run has already reported the refusal.
+
+        A failed action owing no batch failed as a whole where the store could not
+        record it, as when the store errs before the action's work begins: its
+        failure is the action's own, and the retry re-runs it in full.
         """
         failed = state_mgr.get_failed_actions(execution_order)
         if not failed:
             return {}
         owed = self._batches_owed(backend, failed)
         if not owed:
-            raise click.ClickException(
-                f"No failed record is recorded, but {', '.join(failed)} read as failed. "
-                f"Run 'agac run -a {self.agent_name}' to run it again."
-            )
+            return self._record_failures_of_the_actions(backend, state_mgr, failed)
         self._settle_batches_in_flight(backend, owed)
         if self.args.dry_run:
             return None
         return self._find_failures(backend, execution_order, unwritten)
+
+    def _record_failures_of_the_actions(
+        self, backend, state_mgr, failed: list[str]
+    ) -> dict[str, list[dict]]:
+        """Give each failed action the node-level failure its run could not store.
+
+        That row is what an action failing in its own handler stores, so the retry
+        plans, snapshots and clears it as it does that one. Its reason is the error
+        in the action's status. A dry run writes nothing and plans over the rows.
+        """
+        failures: dict[str, list[dict]] = {}
+        for action in failed:
+            reason = state_mgr.get_status_details(action).get("error_message") or (
+                "the action failed before any of its records held a failure"
+            )
+            if not self.args.dry_run:
+                backend.set_disposition(
+                    action, NODE_LEVEL_RECORD_ID, DISPOSITION_FAILED, reason=reason
+                )
+            failures[action] = [
+                {
+                    "action_name": action,
+                    "record_id": NODE_LEVEL_RECORD_ID,
+                    "disposition": DISPOSITION_FAILED,
+                    "reason": reason,
+                }
+            ]
+        if self.args.dry_run:
+            return failures
+        return self._find_failures(backend, failed)
 
     def _batches_owed(self, backend, actions: list[str]) -> list[tuple[str, str, str, str]]:
         """Every batch nobody has collected that this repair would lose, as

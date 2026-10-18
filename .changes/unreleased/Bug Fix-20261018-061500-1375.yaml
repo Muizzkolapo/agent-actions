@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  `agac retry` now answers, at every action below a split it re-runs, the rows the split
+  writes for the record it repairs, online and in batch mode and through further splits. Those
+  actions used to be handed none of the new rows: they kept the record's tombstone from the
+  failed run, or rows built on the split rows that were replaced, read complete, and no later
+  run answered the rows. What they held for the replaced rows is now taken out with its
+  dispositions before they run. (#1375)
+time: 2026-10-18T06:15:00Z

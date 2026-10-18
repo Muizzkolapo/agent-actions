@@ -2,6 +2,7 @@
 
 import pytest
 
+from agent_actions.validation.dep_observe_validator import find_reads_not_upstream
 from agent_actions.validation.static_analyzer import (
     StaticValidationResult,
     WorkflowStaticAnalyzer,
@@ -28,7 +29,7 @@ class TestWorkflowStaticAnalyzer:
                 {
                     "name": "summarizer",
                     "dependencies": ["extractor"],
-                    "prompt": "Use: {{ action.extractor.nonexistent_field }}",
+                    "prompt": "Use: {{ extractor.nonexistent_field }}",
                     "schema": {
                         "type": "object",
                         "properties": {
@@ -62,7 +63,7 @@ class TestWorkflowStaticAnalyzer:
                 {
                     "name": "summarizer",
                     # No explicit dependencies - implicit via reference
-                    "prompt": "Use: {{ action.extractor.text }}",
+                    "prompt": "Use: {{ extractor.text }}",
                     "schema": {
                         "type": "object",
                         "properties": {
@@ -73,11 +74,15 @@ class TestWorkflowStaticAnalyzer:
             ]
         }
 
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        result = analyzer.analyze()
+        # The analyzer counts a name the prompt reads as a dependency; the pre-flight
+        # check that a read is upstream through `dependencies` is what refuses this.
+        # (The `action.extractor.text` spelling this used made the analyzer see no read
+        # of `extractor` at all, which is why it once reported "not reachable" (1512).)
+        actions = {action["name"]: action for action in workflow_config["actions"]}
 
-        assert not result.is_valid
-        assert any("not reachable" in e.message for e in result.errors)
+        findings = find_reads_not_upstream(actions)
+
+        assert any("'extractor' is not upstream of it" in f for f in findings), findings
 
     def test_analyze_detects_nonexistent_agent(self):
         """Test analyzer detects reference to non-existent agent."""
@@ -86,7 +91,7 @@ class TestWorkflowStaticAnalyzer:
                 {
                     "name": "summarizer",
                     "dependencies": ["nonexistent"],
-                    "prompt": "Use: {{ action.nonexistent.text }}",
+                    "prompt": "Use: {{ nonexistent.text }}",
                 },
             ]
         }
@@ -225,7 +230,7 @@ class TestAnalyzeWorkflowFunction:
                 {
                     "name": "consumer",
                     "dependencies": ["schemaless_agent"],
-                    "prompt": "{{ action.schemaless_agent.field }}",
+                    "prompt": "{{ schemaless_agent.field }}",
                 },
             ]
         }
@@ -503,7 +508,7 @@ class TestComplexWorkflows:
                     "name": "branch_a",
                     "dependencies": ["source_agent"],
                     "context_scope": {"observe": ["source_agent.*"]},
-                    "prompt": "{{ action.source_agent.data }}",
+                    "prompt": "{{ source_agent.data }}",
                     "schema": {
                         "type": "object",
                         "properties": {"result_a": {"type": "string"}},
@@ -513,7 +518,7 @@ class TestComplexWorkflows:
                     "name": "branch_b",
                     "dependencies": ["source_agent"],
                     "context_scope": {"observe": ["source_agent.*"]},
-                    "prompt": "{{ action.source_agent.data }}",
+                    "prompt": "{{ source_agent.data }}",
                     "schema": {
                         "type": "object",
                         "properties": {"result_b": {"type": "string"}},
@@ -523,7 +528,7 @@ class TestComplexWorkflows:
                     "name": "merger",
                     "dependencies": ["branch_a", "branch_b"],
                     "context_scope": {"observe": ["branch_a.*", "branch_b.*"]},
-                    "prompt": "Merge: {{ action.branch_a.result_a }} and {{ action.branch_b.result_b }}",
+                    "prompt": "Merge: {{ branch_a.result_a }} and {{ branch_b.result_b }}",
                     "schema": {
                         "type": "object",
                         "properties": {"merged": {"type": "string"}},
@@ -545,7 +550,7 @@ class TestComplexWorkflows:
                     "context_scope": {"observe": [f"agent_{i - 1}.*"]}
                     if i > 0
                     else {"observe": ["source.*"]},
-                    "prompt": f"{{{{ action.agent_{i - 1}.output }}}}" if i > 0 else "Start",
+                    "prompt": f"{{{{ agent_{i - 1}.output }}}}" if i > 0 else "Start",
                     "schema": {
                         "type": "object",
                         "properties": {"output": {"type": "string"}},
@@ -579,9 +584,9 @@ class TestComplexWorkflows:
                     "dependencies": ["data_provider"],
                     "context_scope": {"observe": ["data_provider.*"]},
                     "prompt": """
-                        Field1: {{ action.data_provider.field1 }}
-                        Field2: {{ action.data_provider.field2 }}
-                        Field3: {{ action.data_provider.field3 }}
+                        Field1: {{ data_provider.field1 }}
+                        Field2: {{ data_provider.field2 }}
+                        Field3: {{ data_provider.field3 }}
                     """,
                 },
             ]
@@ -890,7 +895,7 @@ class TestContextScopeValidation:
                     "name": "route",
                     "dependencies": ["classify"],
                     "context_scope": {"observe": ["classify.issue_type"]},
-                    "prompt": "Route based on {{ action.classify.issue_type }}",
+                    "prompt": "Route based on {{ classify.issue_type }}",
                     "schema": {
                         "type": "object",
                         "properties": {"team": {"type": "string"}},
@@ -933,7 +938,7 @@ class TestFanInValidation:
                     "name": "fan_in_action",
                     "dependencies": ["dep_A", "dep_B", "dep_C"],
                     "context_scope": {"observe": ["dep_A.*", "dep_B.*", "dep_C.*"]},
-                    "prompt": "Process: {{ action.dep_A.field1 }} {{ action.dep_B.field2 }} {{ action.dep_C.field3 }}",
+                    "prompt": "Process: {{ dep_A.field1 }} {{ dep_B.field2 }} {{ dep_C.field3 }}",
                     "schema": {"type": "object", "properties": {"result": {"type": "string"}}},
                 },
             ]
@@ -962,19 +967,18 @@ class TestFanInValidation:
                 {
                     "name": "action_bad_context",
                     "dependencies": ["dep_A"],  # Only declares dep_A
-                    "prompt": "Process: {{ action.dep_A.field1 }} {{ action.dep_B.field2 }}",
+                    "prompt": "Process: {{ dep_A.field1 }} {{ dep_B.field2 }}",
                     "schema": {"type": "object"},
                 },
             ]
         }
 
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        result = analyzer.analyze()
+        actions = {action["name"]: action for action in workflow_config["actions"]}
+
+        findings = find_reads_not_upstream(actions)
 
         # Should fail - dep_B referenced in prompt but not in dependencies
-        assert not result.is_valid
-        errors = [e for e in result.errors if "dep_B" in e.message and "not reachable" in e.message]
-        assert len(errors) >= 1
+        assert any("'dep_B' is not upstream of it" in f for f in findings), findings
 
 
 class TestPreflightFieldValidation:

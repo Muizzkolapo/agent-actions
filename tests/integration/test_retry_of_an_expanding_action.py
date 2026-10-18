@@ -195,11 +195,12 @@ def test_the_diamond_really_puts_a_record_beside_its_own_descendant(diamond):
     )
 
 
-def test_repairing_a_record_does_not_delete_its_descendants_rows(diamond):
+def test_repairing_a_record_deletes_no_row_of_another_record(diamond):
     """A descendant's rows name the repaired record too, so attributing by that
     name alone hands them to the rewrite, which drops them."""
     selected = _record_ids(diamond, ACTION)[0]
-    before = {r["source_guid"] for r in _rows(diamond, "combine")}
+    replaced = _split_rows_of(diamond, selected)
+    before = {r["source_guid"] for r in _rows(diamond, "combine") if not _built_on(r, replaced)}
     _fail(diamond, selected, ACTION)
 
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
@@ -207,6 +208,40 @@ def test_repairing_a_record_does_not_delete_its_descendants_rows(diamond):
     assert result.exit_code == 0, result.output
     after = {r["source_guid"] for r in _rows(diamond, "combine")}
     assert not (before - after), f"rows deleted by the repair: {sorted(before - after)}"
+
+
+def test_the_rows_built_on_the_split_rows_a_repair_replaced_are_built_again(diamond):
+    """`split` writes new rows for the repaired record, so `combine` answers each of
+    them and keeps none of the rows it built from the ones they replaced (#1375)."""
+    selected = _record_ids(diamond, ACTION)[0]
+    replaced = _split_rows_of(diamond, selected)
+    _fail(diamond, selected, ACTION)
+
+    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
+
+    assert result.exit_code == 0, result.output
+    rows = _rows(diamond, "combine")
+    assert not [r for r in rows if _built_on(r, replaced)], "rows built on replaced split rows"
+    built_on_new = [r for r in rows if _built_on(r, _split_rows_of(diamond, selected))]
+    assert len(built_on_new) == 2 * 2, result.output
+    assert "cannot be attributed" not in result.output
+
+
+def _split_rows_of(project, record):  # noqa: F811
+    return {
+        r["source_guid"] for r in _rows(project, "split") if r.get("parent_source_guid") == record
+    }
+
+
+def _built_on(row, guids):
+    return bool(
+        {
+            row.get("source_guid"),
+            row.get("parent_source_guid"),
+            *row.get("producer_source_guids", ()),
+        }
+        & guids
+    )
 
 
 def test_a_retry_leaves_the_diamond_the_size_it_was(diamond):
@@ -237,8 +272,11 @@ class TestARecordTheLimitDropped:
     """
 
     def test_no_row_is_deleted_under_a_limit(self, diamond, monkeypatch):
+        """Only the rows built on the split rows the repair replaced go, and each is
+        built again: the combine stays the size it was."""
         selected = _record_ids(diamond, ACTION)[0]
-        before = {r["source_guid"] for r in _rows(diamond, "combine")}
+        replaced = _split_rows_of(diamond, selected)
+        before = {r["source_guid"] for r in _rows(diamond, "combine") if not _built_on(r, replaced)}
         assert before
         _fail(diamond, selected, ACTION)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
@@ -248,6 +286,7 @@ class TestARecordTheLimitDropped:
         assert result.exit_code == 0, result.output
         after = {r["source_guid"] for r in _rows(diamond, "combine")}
         assert not (before - after), f"rows deleted under a limit: {sorted(before - after)}"
+        assert len(after) == RECORDS * 2 * 2
 
     def test_no_row_is_deleted_under_a_limit_at_the_expansion(self, expanding, monkeypatch):
         """The same at an action with one mint rather than a diamond."""
@@ -377,3 +416,170 @@ class TestAtFileGranularity:
         )
         assert before.isdisjoint(r["source_guid"] for r in after)
         assert "cannot be attributed" not in result.output
+
+
+# A basename no other fixture writes: tool discovery imports by module name, so
+# two fixtures writing one basename serve the second the first one's module.
+SPLIT_AGAIN_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def split_each_split_row(data: Any, *args) -> list[dict]:
+    summary = str((data or {}).get("summary", ""))
+    return [{"summary": f"{summary} ~{half}", "exam_density": "low"} for half in (1, 2)]
+"""
+
+SPLIT_AGAIN_ACTION = """  - name: split2
+    kind: tool
+    dependencies: [split]
+    intent: "Split again"
+    schema: tool_action_output
+    impl: split_each_split_row
+    context_scope: { observe: [split.summary] }
+    expect: { repair: none }
+"""
+
+AFTER_ACTION = """  - name: after
+    dependencies: [split2]
+    intent: "Restate"
+    schema: tool_action_output
+    model_vendor: agac-provider
+    run_mode: batch
+    prompt: $tool_action.Restate
+    context_scope: { observe: [split2.summary] }
+"""
+
+AFTER_PROMPT = """{prompt Restate}
+Restate this summary verbatim.
+## SUMMARY
+{{ split2.summary }}
+```json
+{"summary": "...", "exam_density": "high|medium|low"}
+```
+{end_prompt}
+"""
+
+
+def _invoke(*args):
+    """Run agac in-process, and once more when it leaves a batch to collect."""
+    result = CliRunner().invoke(cli, list(args))
+    assert result.exit_code == 0, result.output
+    output = result.output
+    if "run again" in output.lower():
+        again = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+        assert again.exit_code == 0, again.output
+        output += again.output
+    return output
+
+
+@pytest.fixture
+def split_of_a_split(expanding, monkeypatch):
+    """`split2` turns each `split` row into two more, and `after`, a batch action,
+    answers each of those: 6 records, 12 `split` rows, 24 `split2` and `after` rows."""
+    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
+    config = expanding / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + SPLIT_AGAIN_ACTION + AFTER_ACTION)
+    (expanding / "tools" / WORKFLOW / "split_each_split_row.py").write_text(SPLIT_AGAIN_TOOL)
+    (expanding / "prompt_store" / f"{WORKFLOW}.md").write_text(AFTER_PROMPT)
+    _invoke("run", "-a", WORKFLOW, "--fresh")
+    assert len(_rows(expanding, "after")) == RECORDS * 4
+    return expanding
+
+
+class TestASplitOfASplit:
+    """`retry --record <staged record>` re-runs `split` for it, so `split2` and the
+    actions below it answer the rows `split` wrote again, not the ones it replaced."""
+
+    def _retried(self, project):  # noqa: F811
+        selected = _record_ids(project, ACTION)[0]
+        replaced = _split_rows_of(project, selected)
+        _fail(project, selected, ACTION)
+        output = _invoke("retry", "-a", WORKFLOW, "--record", selected)
+        return selected, replaced, output
+
+    def test_split2_answers_the_new_split_rows_and_keeps_none_built_on_the_old(
+        self, split_of_a_split
+    ):
+        selected, replaced, output = self._retried(split_of_a_split)
+
+        rows = _rows(split_of_a_split, "split2")
+        assert len(rows) == RECORDS * 4, output
+        assert not [r for r in rows if _built_on(r, replaced)], output
+        new = _split_rows_of(split_of_a_split, selected)
+        assert len([r for r in rows if _built_on(r, new)]) == 2 * 2, output
+
+    def test_the_batch_action_below_answers_the_new_rows(self, split_of_a_split):
+        selected = _record_ids(split_of_a_split, ACTION)[0]
+        replaced = _split_rows_of(split_of_a_split, selected)
+        stale = {
+            r["source_guid"] for r in _rows(split_of_a_split, "split2") if _built_on(r, replaced)
+        }
+        assert len(stale) == 2 * 2
+
+        _, _, output = self._retried(split_of_a_split)
+
+        split2 = {r["source_guid"] for r in _rows(split_of_a_split, "split2")}
+        after = _rows(split_of_a_split, "after")
+        assert {r["source_guid"] for r in after} == split2, output
+        assert stale.isdisjoint(split2), output
+        assert [r["_state"] for r in after] == ["processed"] * RECORDS * 4
+
+    def test_the_next_run_has_nothing_left_to_answer(self, split_of_a_split):
+        self._retried(split_of_a_split)
+        before = {a: _rows(split_of_a_split, a) for a in ("split2", "after")}
+
+        output = _invoke("run", "-a", WORKFLOW)
+
+        assert output.count("already complete") == 4, output
+        assert {a: _rows(split_of_a_split, a) for a in before} == before
+
+
+ENRICH_ACTION = """  - name: enrich
+    kind: tool
+    dependencies: [fsplit]
+    intent: "Restate"
+    schema: tool_action_output
+    impl: restate_one
+    context_scope: { observe: [fsplit.summary] }
+    expect: { repair: none }
+  - name: last
+    kind: tool
+    dependencies: [enrich]
+    intent: "Restate again"
+    schema: tool_action_output
+    impl: restate_one
+    context_scope: { observe: [enrich.summary] }
+    expect: { repair: none }
+"""
+
+RESTATE_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def restate_one(data: Any, *args) -> list[dict]:
+    return [{"summary": str((data or {}).get("summary", "")), "exam_density": "low"}]
+"""
+
+
+def test_two_actions_below_a_file_split_answer_the_rows_it_replaced(file_granularity):
+    """A FILE tool a retry reaches replaces its file whole, with new identities. The
+    action reading it answers that file again, and so must the one reading that."""
+    config = file_granularity / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().rstrip("\n") + "\n" + ENRICH_ACTION)
+    (file_granularity / "tools" / WORKFLOW / "restate.py").write_text(RESTATE_TOOL)
+    _invoke("run", "-a", WORKFLOW, "--fresh")
+    selected = _record_ids(file_granularity, ACTION)[0]
+    _fail(file_granularity, selected, ACTION)
+
+    output = _invoke("retry", "-a", WORKFLOW, "--record", selected)
+
+    fsplit = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
+    for action in ("enrich", "last"):
+        rows = _rows(file_granularity, action)
+        assert {r["source_guid"] for r in rows} == fsplit, f"{action}: {output}"
+        assert [r["_state"] for r in rows] == ["processed"] * RECORDS * 2

@@ -8,6 +8,7 @@ which is where the rows and the fields that attribute them round-trip.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -17,9 +18,10 @@ import pytest
 from agent_actions.config.types import RunMode
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.result_collector import write_record_dispositions
+from agent_actions.processing.result_collector import collect_results_from_processing_results
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.record.reasons import GUARD_SKIP, UPSTREAM_UNPROCESSED
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 ACTION = "expand_page"
@@ -49,6 +51,45 @@ def _failed(input_guid: str) -> dict[str, Any]:
     }
 
 
+_RESULT_FOR_STATE = {
+    "processed": lambda guid, rows: ProcessingResult.success(data=rows, source_guid=guid),
+    "failed": lambda guid, rows: ProcessingResult(
+        status=ProcessingStatus.FAILED,
+        data=rows,
+        source_guid=guid,
+        error=rows[0].get("error") or "processing_error",
+    ),
+    "exhausted": lambda guid, rows: ProcessingResult.exhausted(
+        error="retry_exhausted", data=rows, source_guid=guid
+    ),
+    "cascade_skipped": lambda guid, rows: ProcessingResult.unprocessed(
+        data=rows, reason=UPSTREAM_UNPROCESSED, source_guid=guid
+    ),
+    "guard_skipped": lambda guid, rows: ProcessingResult.unprocessed(
+        data=rows, reason=GUARD_SKIP, source_guid=guid
+    ),
+}
+
+
+def _record_as_collection_does(backend: SQLiteBackend, produced: list[dict]) -> None:
+    """Write the dispositions batch collection writes for *produced*.
+
+    Collection keys each record's disposition on the input its result answered, which
+    a minted row names as its producer, and writes it through the shared collector.
+    Copies go through it, so the rows handed to the merge are the ones given.
+    """
+    by_input: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for row in produced:
+        state = row.get("_state")
+        if state not in _RESULT_FOR_STATE:
+            # No collected row arrives without a state; nothing would be written for it.
+            continue
+        producers = row.get("producer_source_guids") or [row["source_guid"]]
+        by_input.setdefault((producers[0], state), []).append(copy.deepcopy(row))
+    results = [_RESULT_FOR_STATE[state](guid, rows) for (guid, state), rows in by_input.items()]
+    collect_results_from_processing_results(results, ACTION, storage_backend=backend)
+
+
 def _rerun(
     tmp_path: Path, stored: list[dict], produced: list[dict], *, reset: bool = False
 ) -> list[dict]:
@@ -67,7 +108,7 @@ def _rerun(
             if row["_state"] == "processed":
                 for guid in row.get("producer_source_guids") or [row["source_guid"]]:
                     backend.set_disposition(ACTION, guid, "success")
-    write_record_dispositions(backend, list(produced), ACTION)
+    _record_as_collection_does(backend, produced)
 
     service = BatchProcessingService(
         client_resolver=MagicMock(),

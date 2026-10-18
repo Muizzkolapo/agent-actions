@@ -89,3 +89,28 @@ class TestUDFRegistrySysModulesSync:
         sys.modules[module_name] = fake_mod2
         udf_tool(my_udf3)
         assert "my_udf3" in UDF_REGISTRY
+
+
+def test_a_tool_folder_discovered_again_after_a_clear_registers_its_tools_again(tmp_path):
+    """Discovery files a tool module under a prefixed name; a clear must evict that
+    name too, or the next discovery of the folder skips the module and its tool is
+    reported as not found."""
+    from agent_actions.input.loaders.udf import discover_udfs
+
+    folder = tmp_path / "tools" / "wf"
+    folder.mkdir(parents=True)
+    (folder / "probe_after_clear.py").write_text(
+        "from agent_actions import udf_tool\n\n\n"
+        "@udf_tool\n"
+        "def probe_after_clear(data, *args):\n"
+        "    return {}\n"
+    )
+    clear_registry()
+    try:
+        discover_udfs(folder.parent)
+        assert "probe_after_clear" in UDF_REGISTRY
+        clear_registry()
+        discover_udfs(folder.parent)
+        assert "probe_after_clear" in UDF_REGISTRY
+    finally:
+        clear_registry()

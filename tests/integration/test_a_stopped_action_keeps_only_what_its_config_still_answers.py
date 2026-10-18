@@ -688,7 +688,8 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its
 ):
     """The run after the edit answers both pages of the first file, but the first page's
     checkpoint row is not stored, and the run is stopped as it stores the file. Collecting
-    the file must not mark that page answered while the stored file holds its old answer."""
+    the file must not mark that page answered while the stored file holds its old answer.
+    The second page's checkpoint row stands as its answer (1273)."""
     provider.answers()
     assert _run("--fresh").exit_code == 0
     before_the_edit = _stored(online)
@@ -705,7 +706,7 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its
 
     assert result.exit_code == 0, result.output
     assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
-    assert provider.pages() == EVERY_PAGE
+    assert provider.pages() == ["Page alpha.", "Page delta.", "Page gamma."]
 
 
 def test_a_first_stage_file_stored_before_the_run_stopped_keeps_a_record_whose_checkpoint_row_failed(

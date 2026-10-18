@@ -550,9 +550,9 @@ def answered_since_stored(
 
     Writing a file clears its checkpoint rows, so one beside a stored file is a later
     answer than the row stored for that record: the run that gave it stopped before
-    writing the file again, after an edit or an upstream change reset the action. Neither
-    row is fit to carry. The stored one is not the answer the record's disposition
-    describes, and the checkpoint one lacks what enrichment adds, lineage among it.
+    writing the file again, after an edit or an upstream change reset the action. The
+    stored row is not the answer the record's disposition describes, so it is never
+    carried; the checkpoint row stands in for it where ``checkpointed_answers`` finds one.
     """
     checkpointed = {
         guid
@@ -567,6 +567,31 @@ def answered_since_stored(
         # Nothing stored to be older than them: the checkpoint rows are what is carried.
         return set()
     return checkpointed
+
+
+def checkpointed_answers(
+    storage_backend: StorageBackend,
+    action_name: str,
+    relative_path: str,
+    record_ids: Collection[str],
+) -> list[dict[str, Any]]:
+    """The checkpoint row of each of *record_ids* that can stand as its answer, if any.
+
+    One row per record, the strategy's output before enrichment and collection: the
+    caller finishes it as the answer it was. A record with none is to be answered again,
+    as is one ``build_carry_forward`` would not carry from its checkpoint either: one
+    checkpointed with several rows (an expansion's, sharing their input's identity until
+    enrichment), or by an earlier version, which kept only the last of its rows.
+    """
+    wanted = frozenset(record_ids)
+    if not wanted:
+        return []
+    rows = storage_backend.read_checkpoint_records(action_name, relative_path)
+    rows_per_record = Counter(row.get("source_guid") for row in rows)
+    left_out: set[str] = {guid for guid, count in rows_per_record.items() if guid and count > 1}
+    left_out.update(storage_backend.checkpointed_without_row_count(action_name, relative_path))
+    answerable = wanted - left_out
+    return [row for row in rows if row.get("source_guid") in answerable]
 
 
 def build_carry_forward(

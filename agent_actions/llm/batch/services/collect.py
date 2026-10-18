@@ -306,7 +306,11 @@ def filtered_inputs(context_map: dict[str, Any]) -> set[str]:
 def write_filtered_dispositions(
     storage_backend: StorageBackend, action_name: str, context_map: dict[str, Any]
 ) -> None:
-    """Write FILTERED for each record the guard filtered, as online's collector does."""
+    """Write FILTERED for each record the guard filtered, as online's collector does.
+
+    FILTERED is written before DEFERRED is cleared, so dying between the two leaves
+    the record's outcome queryable.
+    """
     for entry in context_map.values():
         if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
             continue
@@ -314,7 +318,6 @@ def write_filtered_dispositions(
         if not source_guid:
             continue
         reason = BatchContextMetadata.get_skip_reason(entry) or GUARD_FILTER
-        _try_clear_deferred(storage_backend, action_name, source_guid)
         try:
             storage_backend.set_disposition(
                 action_name, source_guid, DISPOSITION_FILTERED, reason=reason
@@ -326,6 +329,7 @@ def write_filtered_dispositions(
                 source_guid,
                 exc_info=True,
             )
+        _try_clear_deferred(storage_backend, action_name, source_guid)
 
 
 def update_prompt_trace_responses(

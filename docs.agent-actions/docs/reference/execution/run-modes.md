@@ -188,6 +188,11 @@ batch run sends those records again with the rest of the file, so each is answer
 for, a second time. Resumed online instead, the action keeps those answers and sends only
 the records it had not finished.
 
+This holds when an earlier run stored the file too, as when the action was edited after it
+completed and the run after the edit was stopped: resumed online, each record that run
+answered keeps that answer in place of the row stored before the edit; switched to batch,
+it is sent again. The row stored before the edit is kept for neither.
+
 ## See Also
 
 - [batch Commands](../cli/batch) - CLI reference for batch operations

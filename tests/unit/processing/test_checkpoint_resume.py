@@ -8,7 +8,11 @@ are carried forward by the DispositionGate when target_data is missing
 import logging
 from unittest.mock import MagicMock
 
-from agent_actions.processing.disposition_gate import answered_since_stored, build_carry_forward
+from agent_actions.processing.disposition_gate import (
+    answered_since_stored,
+    build_carry_forward,
+    checkpointed_answers,
+)
 
 
 def _make_record(guid: str) -> dict:
@@ -126,7 +130,7 @@ class TestAnsweredSinceStored:
     """A file's checkpoint rows are cleared when it is written, so the ones left are
     answers its stored rows do not hold."""
 
-    def test_a_record_checkpointed_beside_its_stored_file_is_answered_again(self):
+    def test_a_record_checkpointed_beside_its_stored_file_is_named(self):
         backend = MagicMock()
         backend.read_target_for_rewrite.return_value = [_make_record("r0"), _make_record("r1")]
         backend.read_checkpoint_records.return_value = [_make_record("r1")]
@@ -139,3 +143,27 @@ class TestAnsweredSinceStored:
         backend.read_checkpoint_records.return_value = [_make_record("r0")]
 
         assert answered_since_stored(backend, "action_a", "output.json") == set()
+
+
+class TestCheckpointedAnswers:
+    """The checkpoint rows that stand as the answers of the records named, one per record."""
+
+    def test_only_the_records_named_with_one_row_of_this_version_are_answered(self):
+        rows = checkpointed_answers(
+            _two_rows_one_older_one_carried(), "action_a", "output.json", {"r0", "r1", "r2"}
+        )
+
+        assert rows == [_make_record("r2")]
+
+    def test_a_record_not_named_is_not_answered(self):
+        rows = checkpointed_answers(
+            _two_rows_one_older_one_carried(), "action_a", "output.json", {"r9"}
+        )
+
+        assert rows == []
+
+    def test_naming_nothing_reads_nothing(self):
+        backend = MagicMock()
+
+        assert checkpointed_answers(backend, "action_a", "output.json", set()) == []
+        backend.read_checkpoint_records.assert_not_called()

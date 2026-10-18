@@ -60,8 +60,9 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 `--record`. Those are the records it processes at every action it re-runs, and
 they are the only ones. The exceptions are a
 [file-granularity tool](#a-file-tool-runs-over-the-whole-file), which is handed
-the whole of a file the retry reaches, as is every action below it, and a retry
-that [resumes a halted action](#a-retry-resumes-a-halted-action-in-full).
+the whole of a file the retry reaches, as is every action below it, a retry
+that [resumes a halted action](#a-retry-resumes-a-halted-action-in-full), and an
+action that [failed as a whole](#an-action-that-failed-as-a-whole).
 
 Nothing else in the input joins them. A record limit —
 [`record_limit`](../configuration/defaults) or
@@ -99,6 +100,17 @@ where no *other* input of that action names the same record as its own parent.
 Every other row is carried. So repairing a record whose row was split in two
 replaces both halves rather than adding two more beside them.
 
+The rows such an action writes for a record the retry repairs are what every
+action below it is handed for that record, so the retry names them there too:
+each action below answers each of them, online or in batch mode, and through any
+number of further splits. They are taken from what the action wrote in this run,
+not from the record a row names as its parent. What an action below held for
+the rows they replaced — the record's tombstone from the run that failed it, or
+rows it built from the split rows that are gone — is taken out of its file with
+their dispositions before it runs, rather than carried beside the new answers.
+So after the retry, the actions below hold an answer for each new row and
+nothing else for that record, and the next `agac run` has nothing left to do.
+
 The producer list is what places a row whose parent says nothing useful. A row
 names the *original* staged record it descends from, not the record that
 produced it directly, so where one such action feeds another the rows of the
@@ -123,7 +135,8 @@ the same way and not reported.
 Dispositions are cleared by the ids the retry was given, at every action it
 re-runs, and the re-run decides them again wherever it reaches the record. An id
 that names no input of an action is simply not found there — nothing at that
-action is re-run.
+action is re-run — except below an action that split the record in this run,
+where its new rows are found in its place, as above.
 
 A record the re-run never repairs at the action it starts from is reached
 nowhere: a failure an earlier release recorded under a batch record's target id,
@@ -199,6 +212,37 @@ records it names. A review's row belongs to the record reviewed, and the other
 records of the file already hold a reviewer's decision, so they keep it rather
 than being asked again. Below a FILE tool that rewrote the file, every record of
 it is asked again, since what the reviewer decided on is gone.
+
+## An action that failed as a whole
+
+Some failures belong to an action rather than to any record of it: its input could
+not be read, or the store did not answer as its work began — counting the rows it
+held, or setting it running. The second ends the run (see
+[`run`](./run#parallel-execution)). Either way the action reads `failed`, and the
+status file (`agent_io/.agent_status.json`) records the error under its
+`error_message`. An action that runs again, and does not fail, no longer carries it.
+
+`retry` re-runs such an action in full, and every action after it: no record of
+it failed, so there are none to narrow it to. Its plan names the error and says so:
+
+```
+Retry Plan
+  From action: note_direct
+  Actions to re-run: note_direct → merge_direct → fanin_consumer → fanin_asymmetric → reduce_summary
+  Action status: failed — disk I/O error
+  Records to retry: 0
+  The failure is note_direct's own, so the retry re-runs it without narrowing it to
+  particular records.
+```
+
+That is the same work `agac run` does to resume it, and either finishes the
+workflow; fix the error first. Where the store could not be asked to hold the
+failure when it happened, the retry writes it down before it re-runs the action, as
+the action would have, with the error from its status. `--dry-run` shows the plan
+and writes nothing.
+
+An action whose batch is still owed is the exception: the retry is refused until
+the batch is collected, [below](#retrying-an-action-that-runs-in-batch-mode).
 
 ## A retry needs every action it runs to hold an answer for every record
 

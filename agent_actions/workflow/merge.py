@@ -300,7 +300,9 @@ def _two_branches_split(
         "of that source of its own. A fan-in pairs a branch's records one to one with the "
         "others' record for the same source, and a record of one split is no record of "
         "another. Split the source once, in an action upstream of every branch, so the "
-        "branches read the same records; or let no more than one of them split it.",
+        "branches read the same records; let no more than one of them split it; or "
+        "gather a branch's split back into one record per source, with a granularity: "
+        "File tool naming every record of the split in one output's source_index.",
         context={"source": source, "branches": split_branches, "unpaired": alone},
     )
 

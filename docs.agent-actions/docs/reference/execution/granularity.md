@@ -152,6 +152,8 @@ After a FILE tool returns, the framework:
 
 Lineage follows `source_index`; the framework assigns `source_guid` itself, and a value a tool sets on a record it returns is dropped.
 
+An output naming several inputs takes the identity of the first one, with one exception: an output that gathers a split back together. When it names every record of its file that an action above split from one source, and only those, and no other output names any of them, it takes that source's `source_guid`, as the record would hold had it never been split. A [fan-in](../context/context-scope.md) then pairs it with other branches' records of that source.
+
 ### When a FILE Tool Fails
 
 A FILE tool answers its whole file at once, so a failure is recorded against the records it was handed:

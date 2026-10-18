@@ -390,7 +390,7 @@ class TestBatchIsExpansion:
 class TestBatchErrorDataStructure:
     def test_error_result_via_build_error_result(self):
         """T9: _build_error_result() produces the data structure
-        write_record_dispositions() depends on."""
+        the collector reads a failed batch record from."""
         custom_id = "rec_err"
         original_row = {"source_guid": "sg-err", "content": {"data": "x"}}
         ctx = _make_batch_ctx(custom_id=custom_id, original_row=original_row)

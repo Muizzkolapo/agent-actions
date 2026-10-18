@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  Pre-flight now refuses a prompt, guard or `context_scope` entry that reads through
+  `action`, `prompt` or `schema`, such as `{{ action.producer.field }}`,
+  `action.producer.items()` or `{{ prompt.text }}`. No record carries those names: an
+  upstream action's fields are read under the action's own name, `{{ producer.field }}`.
+  Pre-flight used to read `action.producer.field` as `producer.field` and let `prompt` and
+  `schema` through as built-in namespaces, so the run started and every record failed with
+  "'action' is undefined", in either run mode; a guard written that way filtered every
+  record while the run reported success. The refusal names the spelling to write. A version
+  param of that name (`versions: {param: schema}`) is on the record and is still read. The docs'
+  `{{ action.field }}` placeholder now reads `{{ action_name.field }}` (1512).
+time: 2026-10-18T07:00:00Z

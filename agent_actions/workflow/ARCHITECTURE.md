@@ -215,12 +215,15 @@ recorded failed, the circuit breaker skips its readers, and independent branches
 carry on, in either mode. An exception that escapes `execute_action_async` never
 reached that handler — a store error from `_start_work` or the pre-run
 `_count_records_for_action` snapshot, which `_execute_action_run` keeps outside it on
-purpose. Sequential mode ends the run on it. Parallel mode matches: `gather` collects
+purpose. `_begin` marks the action failed with that error (`error_message`) before
+re-raising it, set running or not, since the store cannot be asked to hold a failure
+row. Sequential mode ends the run on it. Parallel mode matches: `gather` collects
 it with the other tasks' results, and `_end_level_on` re-raises it after the step's
 other actions have finished (an interrupt before an error), setting `in_flight` to
-the actions that raised. The coordinator's error handler then sweeps the action from
-`running` to failed and the run exits non-zero; an action whose `_start_work` failed
-before it was set running stays `pending`, as in sequential mode.
+the actions that raised. The coordinator's error handler then sweeps any action
+still `running` to failed, recording the run's error on it, and the run exits
+non-zero. `agac retry` writes the node-level failure such an action could not store
+and re-runs it in full, as for any failure of the action's own.
 
 Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. True I/O overlap is between different actions only; within a single action, processing is synchronous.
 
@@ -797,7 +800,15 @@ run repeats the reset.
 ```
 _compute_action_config_hash() covers:
     prompt, schema, guard clause, guard behavior
-    (model_name and model_vendor are compared from the stamp beside it)
+Stamped beside it, each compared on its own (_edits_since):
+    model_name, model_vendor
+    context_scope_hash   (_compute_context_scope_hash: observe/passthrough/
+                          drop as sets, seed as written)
+    dependencies_hash    (_compute_dependencies_hash: in declared order)
+
+Never add a key to _compute_action_config_hash: every stored digest would
+change and every completed action of every workflow would re-run once.
+Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
 
 If you change one of these fields and re-run WITHOUT --fresh:
     The executor detects the hash mismatch, resets the action to PENDING,
@@ -813,8 +824,7 @@ it read, taken as its work began). A different set on a later run resets
 it and every reader the same way. A stamp without the key never differs;
 an API data source is not fingerprinted, since resolving it can fetch.
 
-If you add a new config field that affects output but don't add it
-to the hash computation:
+If you add a new config field that affects output but don't stamp it:
     Stale output from a prior config is silently reused. The user
     must manually --fresh to get updated results.
 ```

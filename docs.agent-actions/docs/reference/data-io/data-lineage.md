@@ -200,6 +200,7 @@ FILE-mode tools receive all records at once. The framework tracks each record's 
 3. The framework matches each output to its input by `source_index`
 4. Matched outputs extend the parent's lineage chain
 5. Outputs declaring `source_index: None` (aggregation results) get fresh lineage
+6. An output gathering every record of the file split from one source, and only those, takes that source's `source_guid` (see [Output Processing](../execution/granularity.md#output-processing))
 
 ```
 Input records:                        Tool output:                     After enrichment:

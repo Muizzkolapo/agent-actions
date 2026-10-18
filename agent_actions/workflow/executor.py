@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -97,6 +98,49 @@ def _compute_action_config_hash(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
 
 
+# Lists of field references: their order and repeats change nothing an action reads.
+_SCOPE_LIST_DIRECTIVES = frozenset({"observe", "passthrough", "drop"})
+
+
+def _digest(value: Any) -> str:
+    serialized = json.dumps(value, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
+
+
+def _compute_context_scope_hash(action_config: ActionConfigDict) -> str:
+    """A digest of what ``context_scope`` lets the action read.
+
+    Apart from ``config_hash`` so that recording it changed no digest already stored.
+    """
+    scope: Any = action_config.get("context_scope") or {}
+    if not isinstance(scope, dict):
+        return _digest(scope)
+    return _digest(
+        {
+            key: sorted({json.dumps(ref, sort_keys=True, default=str) for ref in value})
+            if key in _SCOPE_LIST_DIRECTIVES and isinstance(value, list)
+            else value
+            for key, value in scope.items()
+        }
+    )
+
+
+def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
+    """A digest of ``dependencies`` in declared order, the order a fan-in merges them in."""
+    dependencies: Any = action_config.get("dependencies") or []
+    if isinstance(dependencies, str):
+        dependencies = [dependencies]
+    return _digest(dependencies)
+
+
+# What an action reads, each stamped under its own key and named by its label when
+# a reset is logged.
+_READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str]], ...] = (
+    ("context_scope_hash", "context scope", _compute_context_scope_hash),
+    ("dependencies_hash", "dependencies", _compute_dependencies_hash),
+)
+
+
 def _as_record_count(value: Any) -> int | None:
     """*value* as a count of records, or None if it is not one.
 
@@ -120,6 +164,8 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "model_name",
         "model_vendor",
         "config_hash",
+        "context_scope_hash",
+        "dependencies_hash",
         "records_processed",
         "truncated",
         "max_records",
@@ -137,23 +183,32 @@ ANSWERED_UNDER = "answered_under"
 INPUT_AT_START = "staged_input_at_start"
 
 
-def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> tuple[bool, bool]:
-    """Whether the semantic config, then the model, differ from what *stamp* recorded.
+MODEL_EDIT = "model"
+CONFIG_EDIT = "action config (prompt/schema/guard)"
+
+
+def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:
+    """What differs from the config *stamp* recorded, by label; empty when nothing does.
 
     A key the stamp holds no value for never differs, so state written before a key
     was recorded is left alone.
     """
+    edits: list[str] = []
     # The hash reads a "model" key and configs write model_name/model_vendor; adding
     # them would change every stored digest and re-run every workflow.
-    model_changed = any(
+    if any(
         stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
         for key in ("model_name", "model_vendor")
-    )
+    ):
+        edits.append(MODEL_EDIT)
     stored_hash = stamp.get("config_hash")
-    config_changed = stored_hash is not None and stored_hash != _compute_action_config_hash(
-        action_config
-    )
-    return config_changed, model_changed
+    if stored_hash is not None and stored_hash != _compute_action_config_hash(action_config):
+        edits.append(CONFIG_EDIT)
+    for key, label, compute in _READS_STAMPS:
+        stored = stamp.get(key)
+        if stored is not None and stored != compute(action_config):
+            edits.append(label)
+    return edits
 
 
 def edited_since_its_work_began(
@@ -167,7 +222,7 @@ def edited_since_its_work_began(
     stamp = details.get(ANSWERED_UNDER)
     if not isinstance(stamp, dict) or stamp.get("config_hash") is None or action_config is None:
         return None
-    return any(_edits_since(stamp, action_config))
+    return bool(_edits_since(stamp, action_config))
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -426,6 +481,7 @@ class ActionExecutor:
             "config_hash": _compute_action_config_hash(action_config),
             "model_name": cfg.get("model_name"),
             "model_vendor": cfg.get("model_vendor"),
+            **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
         }
         return {
             key: self._held_to_earlier_answers(action_name, key, value)
@@ -487,6 +543,10 @@ class ActionExecutor:
             "config_hash": self._held_to_earlier_answers(
                 action_name, "config_hash", _compute_action_config_hash(action_config)
             ),
+            **{
+                key: self._held_to_earlier_answers(action_name, key, compute(action_config))
+                for key, _, compute in _READS_STAMPS
+            },
             # What the run did, not what it was asked for: the limit alone
             # cannot tell one that truncated from one too large to have bitten.
             "records_processed": records_processed,
@@ -525,7 +585,9 @@ class ActionExecutor:
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
-        config_changed, model_changed = _edits_since(details, action_config)
+        edits = _edits_since(details, action_config)
+        model_changed = MODEL_EDIT in edits
+        config_changed = any(edit != MODEL_EDIT for edit in edits)
 
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
@@ -586,7 +648,7 @@ class ActionExecutor:
                 if model_changed
                 else "a cap recorded by the run that completed it"
                 if was_truncated
-                else "action config (prompt/schema/guard)"
+                else " and ".join(edits)
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
             if file_limit is not None and (config_changed or model_changed):
@@ -2067,16 +2129,47 @@ class ActionExecutor:
         )
         self._track_action_start(params)
 
+    def _begin(self, params: ActionRunParams) -> int:
+        """Start the action's work and return its row count before it runs.
+
+        An error here ends the run, since the store is not answering. The action is
+        marked failed with that error first, which the store cannot be asked to hold:
+        its status then says why, and ``agac retry`` re-runs it as a failure of the
+        action's own.
+        """
+        try:
+            self._start_work(params)
+            return self._count_records_for_action(params.action_name)
+        except Exception as error:
+            self._record_failed_start(params, error)
+            raise
+
+    def _record_failed_start(self, params: ActionRunParams, error: Exception) -> None:
+        """Mark the action failed with *error*, never replacing it with an error of its own."""
+        duration = (datetime.now() - params.start_time).total_seconds()
+        try:
+            self.deps.state_manager.update_status(
+                params.action_name,
+                ActionStatus.FAILED,
+                execution_time=duration,
+                error_message=str(error),
+            )
+        except Exception as unrecorded:
+            logger.warning(
+                "Could not record %s as failed (%s); the run still ends on: %s",
+                params.action_name,
+                unrecorded,
+                error,
+            )
+
     def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (synchronous)."""
-        self._start_work(params)
-
         # Snapshot must surface storage errors loudly (no silent 0 fallback).
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
         # except clause below: only failures of the action's own work (reading
         # its input, a version merge's correlation included, and running it)
         # are funneled through _handle_run_failure.
-        pre_run_count = self._count_records_for_action(params.action_name)
+        pre_run_count = self._begin(params)
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
@@ -2106,10 +2199,8 @@ class ActionExecutor:
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
         """Execute action run (asynchronous)."""
-        self._start_work(params)
-
         # See sync counterpart for the rationale on snapshot placement.
-        pre_run_count = self._count_records_for_action(params.action_name)
+        pre_run_count = self._begin(params)
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)

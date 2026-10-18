@@ -116,12 +116,17 @@ class ActionStateManager:
         atomic_json_write(self.status_file, self.action_status, indent=4)
 
     def update_status(self, action_name: str, status: ActionStatus, **metadata):
-        """Update action status and persist to file."""
+        """Update action status and persist to file.
+
+        An ``error_message`` says why the action failed, so any other status drops it.
+        """
         with self._lock:
             if action_name not in self.action_status:
                 self.action_status[action_name] = {}
 
             self.action_status[action_name]["status"] = status
+            if status != ActionStatus.FAILED:
+                self.action_status[action_name].pop("error_message", None)
 
             for key, value in metadata.items():
                 self.action_status[action_name][key] = value
@@ -236,6 +241,7 @@ class ActionStateManager:
         from_statuses: frozenset[ActionStatus] | set[ActionStatus],
         to_status: ActionStatus,
         exclude: Container[str] = (),
+        **metadata: Any,
     ) -> list[str]:
         """Transition all actions matching *from_statuses* to *to_status*.
 
@@ -250,21 +256,30 @@ class ActionStateManager:
             ]
             for name in affected:
                 self.action_status[name]["status"] = to_status
+                self.action_status[name].update(metadata)
             if affected:
                 self._save_status()
         return affected
 
-    def _mark_running_as(self, status: ActionStatus) -> list[str]:
+    def _mark_running_as(self, status: ActionStatus, **metadata: Any) -> list[str]:
         """Transition in-flight actions to *status*, returning the names swept.
 
         BATCH_SUBMITTED is deliberately excluded: that work continues in the
         provider's queue after this process exits, so it is not in flight here.
         """
-        return self._bulk_transition({ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status)
+        return self._bulk_transition(
+            {ActionStatus.RUNNING, ActionStatus.CHECKING_BATCH}, status, **metadata
+        )
 
-    def mark_running_as_failed(self) -> list[str]:
-        """Mark all actions in 'running' or 'checking_batch' status as failed."""
-        return self._mark_running_as(ActionStatus.FAILED)
+    def mark_running_as_failed(self, error_message: str | None = None) -> list[str]:
+        """Mark all actions in 'running' or 'checking_batch' status as failed.
+
+        *error_message* is the error that ended the run, recorded on each action
+        swept, as a failure the action's own handler caught records it.
+        """
+        if error_message is None:
+            return self._mark_running_as(ActionStatus.FAILED)
+        return self._mark_running_as(ActionStatus.FAILED, error_message=error_message)
 
     def mark_running_as_interrupted(self) -> list[str]:
         """Mark in-flight actions as interrupted when the run is killed.

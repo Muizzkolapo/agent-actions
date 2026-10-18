@@ -53,8 +53,8 @@ they describe are replaced:
 - `agac run --fresh` clears every action's traces.
 - An action that runs again over every record clears its own traces, and those
   of every action reading it that runs again with it. That happens when its
-  prompt, schema, guard or model was edited, when its stored output is gone, and
-  when it failed or was stopped and then edited.
+  prompt, schema, guard, model, context scope or dependencies was edited, when
+  its stored output is gone, and when it failed or was stopped and then edited.
 - A failed or skipped action that runs again from the start clears its traces.
 
 Otherwise, storage maintenance keeps the traces of the most recent

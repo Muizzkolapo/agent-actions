@@ -79,6 +79,45 @@ def _consumed_guids(
     return guids
 
 
+def _gathered_sources(
+    source_mapping: dict[int, int | list[int] | None] | None,
+    original_data: list[dict],
+) -> dict[int, str]:
+    """Outputs that gather a whole split back into one row, and the source each is of.
+
+    An output is its source's row when it names, as several inputs, exactly the records
+    of the file split from that source (their ``parent_source_guid``), no other output
+    names any of them, and the file holds no record under the source's own identity.
+    """
+    named: dict[int, set[int]] = {}
+    for output, src in (source_mapping or {}).items():
+        indices: Sequence[int | None] = src if isinstance(src, list) else (src,)
+        named[output] = {idx for idx in indices if is_input_position(idx, len(original_data))}
+
+    claims = Counter(idx for positions in named.values() for idx in positions)
+    held = {record.get("source_guid") for record in original_data}
+    split_from: dict[str, set[int]] = {}
+    for idx, record in enumerate(original_data):
+        source = record.get("parent_source_guid")
+        if source and source != record.get("source_guid"):
+            split_from.setdefault(source, set()).add(idx)
+
+    gathered: dict[int, str] = {}
+    for output, positions in named.items():
+        if not isinstance((source_mapping or {}).get(output), list) or len(positions) < 2:
+            continue
+        sources = {original_data[idx].get("parent_source_guid") for idx in positions}
+        if len(sources) != 1:
+            continue
+        (source,) = sources
+        if not source or source in held or split_from.get(source) != positions:
+            continue
+        if any(claims[idx] > 1 for idx in positions):
+            continue
+        gathered[output] = source
+    return gathered
+
+
 def _reattach_source_guid(
     structured_data: list[dict],
     source_mapping: dict[int, int | list[int] | None] | None,
@@ -102,6 +141,7 @@ def _reattach_source_guid(
         i: _parent_index(i, structured_data, source_mapping, original_data) for i in inheriting
     }
     claimed: Counter[int] = Counter(idx for idx in parents.values() if idx is not None)
+    gathered = _gathered_sources(source_mapping, original_data)
 
     for i in inheriting:
         item = structured_data[i]
@@ -109,6 +149,16 @@ def _reattach_source_guid(
         # later run resolves those inputs from here; parent_source_guid cannot serve,
         # being the pool ancestor once an input was itself expanded.
         consumed = _consumed_guids(i, structured_data, source_mapping, original_data)
+
+        if i in gathered:
+            # The split undone: the row is its source's, as an unsplit record would be,
+            # so a fan-in pairs it with other branches' records of that source. Its
+            # identity is no input's, so it lists them all and is stored whole.
+            item["source_guid"] = gathered[i]
+            item.pop("parent_source_guid", None)
+            _record_producers(item, consumed)
+            item["_delta_mode"] = "full"
+            continue
         source_idx = parents[i]
         parent = original_data[source_idx] if source_idx is not None else None
         parent_guid = parent.get("source_guid") if parent else None

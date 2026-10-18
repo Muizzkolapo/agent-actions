@@ -28,7 +28,6 @@ from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_an
     ECHO_TOOL,
     EVERY_PAGE,
     FILE_READER,
-    PAGES,
     READER,
     READER_ACTION,
     WORKFLOW,
@@ -111,7 +110,8 @@ def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_
     fault,
 ):
     """The file still holds what the prompt answered before the edit, and the file the
-    store did write holds the new answers, so only the first is asked for again."""
+    store did write holds the new answers. The first file's are held by its checkpoint
+    rows, which stand as its answers (1273), so nothing is asked for again."""
     assert _run("--fresh").exit_code == 0
     before_the_edit = _stored(online)
 
@@ -125,7 +125,7 @@ def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_
 
     assert result.exit_code == 0, result.output
     assert _status(online) == "completed"
-    assert provider.pages() == sorted(PAGES[NOT_STORED])
+    assert provider.pages() == []
     after = _stored(online)
     assert sorted(after) == sorted(before_the_edit)
     assert _still_holding(before_the_edit, after) == [], "an answer from before the edit"

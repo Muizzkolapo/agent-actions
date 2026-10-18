@@ -59,6 +59,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `raise_if_invalid` | Method | Raise exception if validation failed. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `merge` | Method | Merge another result into this one. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert result to dictionary for JSON serialization. | - |
+| `read_through_reserved_name` | Function | The problem and fix text for a read through `action`, `prompt` or `schema`, shared by the type checker and the guard check: `action.<name>.<field>` drops the prefix, `action.<field>` (the docs' old placeholder) names `<action name>` in its place. | - |
 | `field_flow_analyzer.py` | Module | Field flow analyzer for workflow data lineage tracking. | - |
 | `FieldConsumer` | Class | A consumer of a field. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for JSON serialization. | - |
@@ -81,7 +82,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert full analysis to dictionary for JSON serialization. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `filter_to_field` | Method | Filter analysis to a specific field. | - |
 | `reference_extractor.py` | Module | Extract field references from agent configurations. | - |
-| `ReferenceExtractor` | Class | Extracts field references from agent prompts, guards, and directives. A prompt call of a dict method on a namespace (`ns.items()`, `ns.keys()`) references the namespace whole (`*`), not a field named after the method; `ns.get('f', ...)` with a literal key references `f`. A bare `ns.items` is still the field `items`. | - |
+| `ReferenceExtractor` | Class | Extracts field references from agent prompts, guards, and directives. A prompt call of a dict method on a namespace (`ns.items()`, `ns.keys()`) references the namespace whole (`*`), not a field named after the method; `ns.get('f', ...)` with a literal key references `f`. A bare `ns.items` is still the field `items`. A reference is reported under the name it is written with: `action.producer.field`, `action.producer.items()` and a whole `{{ action }}` (likewise `prompt`, `schema`) report the source `action`, for the type checker to refuse, never `producer.field` (1512). A version param of that name (`versions: {param: schema}`) is on the record, so a prompt reading it is not reported; single-brace text names nothing. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_agent` | Method | Extract all field references from an agent configuration. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_referenced_agents` | Method | Get set of all agents referenced (excluding special namespaces). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_workflow` | Method | Extract references from all agents in a workflow. | - |
@@ -92,7 +93,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_fields_from_json_schema` | Method | Extract top-level field names from a JSON schema dict. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_workflow` | Method | Extract schemas from all agents in a workflow. | - |
 | `type_checker.py` | Module | Static type checker for workflow field references. | - |
-| `StaticTypeChecker` | Class | Performs static type checking on workflow data flow graph. | - |
+| `StaticTypeChecker` | Class | Performs static type checking on workflow data flow graph. A reference through a name in `RESERVED_NAMES_NO_RECORD_HAS` (`action`, `prompt`, `schema`) is an error naming the spelling to write, checked before the built-in namespaces are let through (1512). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `check_all` | Method | Run all static type checks on the graph. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `check_unused_dependencies` | Method | Find declared dependencies that are never referenced. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `check_missing_dependencies` | Method | Find agents that are referenced but not declared in dependencies. | - |

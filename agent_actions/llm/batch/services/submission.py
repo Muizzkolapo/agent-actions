@@ -199,12 +199,14 @@ class BatchSubmissionService:
     ) -> set[str]:
         """The inputs the gate carried that online would not simply carry.
 
-        Two kinds. An input the guard filtered, which has no row by design: online's
+        Three kinds. An input the guard filtered, which has no row by design: online's
         guard runs above its gate and judges it afresh every run, where the gate here
         would call it done for good. Sent on, the guard filters it again at no cost, or
-        it now passes and is answered. And an input holding no stored row though its
+        it now passes and is answered. An input holding no stored row though its
         disposition says it should: finalize carries a row only for an input of the run,
-        so one that left and returned has lost its row, and online re-queues it.
+        so one that left and returned has lost its row, and online re-queues it. And an
+        input answered online after its file was stored, whose answer is held only by a
+        checkpoint row finalize does not read, beside a stored row from before it.
         """
         if not carry_ids or self._storage_backend is None:
             return set()
@@ -225,8 +227,16 @@ class BatchSubmissionService:
             )
         except FileNotFoundError:
             return filtered | holding
-        from agent_actions.processing.disposition_gate import build_carry_forward
+        from agent_actions.processing.disposition_gate import (
+            answered_since_stored,
+            build_carry_forward,
+        )
 
+        # Answered online after the file was stored, so its stored row is older than
+        # its answer; and finalize does not read the checkpoint row that holds it.
+        answered_since = holding & answered_since_stored(
+            self._storage_backend, action_name, batch_output_name(batch_name)
+        )
         _found, missing = build_carry_forward(
             holding,
             action_name,
@@ -235,7 +245,7 @@ class BatchSubmissionService:
             produced_by=holding,
             rewriting={guid for record in to_process if (guid := record.get("source_guid"))},
         )
-        return filtered | missing
+        return filtered | missing | answered_since
 
     def submit_batch_job(
         self,

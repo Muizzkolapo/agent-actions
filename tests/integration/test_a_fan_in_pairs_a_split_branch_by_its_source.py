@@ -15,7 +15,8 @@ from tests._support.agac_cli import run_agac
 
 WORKFLOW = "fanin_probe"
 
-TOOLS = """from typing import Any
+TOOLS = """import os
+from typing import Any
 
 from agent_actions import FileUDFResult, udf_tool
 from agent_actions.config.schema import Granularity
@@ -83,6 +84,8 @@ def mid_of_part(data: Any, *args) -> list[dict]:
 
 @udf_tool(granularity=Granularity.FILE)
 def gather_right(data: list[dict], **kwargs) -> FileUDFResult:
+    if os.environ.get("GATHER_FAILS"):
+        raise RuntimeError("gather is down")
     by_item: dict[str, list[int]] = {}
     for position, record in enumerate(data):
         by_item.setdefault(str(record["right_tag"]).split("-")[1], []).append(position)
@@ -415,17 +418,78 @@ GATHER = """  - name: gather
 """
 
 
-def test_a_split_gathered_into_one_record_beside_another_split_fails(tmp_path):
-    """`gather` folds `right`'s split of each source into one record, which keeps the
-    identity of a split record, not the source's; `left` split the source too."""
-    config = _config("left, right", left_impl="split_left")
+def _gathered(left_impl: str) -> str:
+    """`gather` folds `right`'s split of each source into one record; `left` beside it."""
+    config = _config("left, right", left_impl=left_impl)
     config = config.replace("  - name: join\n", GATHER + "  - name: join\n")
     config = config.replace("dependencies: [left, right]", "dependencies: [left, gather]")
-    config = config.replace(
+    return config.replace(
         "observe: [left.left_tag, right.right_tag]", "observe: [left.left_tag, gather.right_tag]"
     )
-    root = _project(tmp_path, config)
+
+
+GATHERED_BESIDE_A_SPLIT = sorted(
+    f"L-{item}-{n}|R-{item}-1+R-{item}-2" for item in ("a", "b", "c") for n in (1, 2)
+)
+
+
+def test_a_split_gathered_into_one_record_pairs_with_another_split_of_its_source(tmp_path):
+    """`gather` holds one record per source, built from every record `right` split from
+    it, so it is that source's record: each of `left`'s split records pairs with it."""
+    root = _project(tmp_path, _gathered("split_left"))
 
     result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
 
-    _assert_refused(result, root, "left", "gather")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _joined(root) == GATHERED_BESIDE_A_SPLIT
+
+
+def _stored(root: Path, action: str) -> list[dict]:
+    db = root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / f"{WORKFLOW}.db"
+    with sqlite3.connect(db) as conn:
+        found = conn.execute(
+            "select data from target_data where action_name = ?", (action,)
+        ).fetchall()
+    return [record for (data,) in found for record in json.loads(data)]
+
+
+def test_a_split_gathered_into_one_record_carries_the_identity_of_its_source(tmp_path):
+    root = _project(tmp_path, _gathered("tag_left"))
+
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    by_item = {
+        row["content"]["left"]["left_tag"][2:]: row["source_guid"] for row in _stored(root, "left")
+    }
+    assert {
+        row["content"]["gather"]["right_tag"][2]: row["source_guid"]
+        for row in _stored(root, "gather")
+    } == by_item
+    assert _joined(root) == sorted(f"L-{item}|R-{item}-1+R-{item}-2" for item in ("a", "b", "c"))
+
+
+def test_a_retry_of_a_failed_gather_pairs_it_with_the_other_split(tmp_path):
+    root = _project(tmp_path, _gathered("split_left"))
+    failed = run_agac(root, "run", "-a", WORKFLOW, "--fresh", env={"GATHER_FAILS": "1"})
+    assert _joined(root) == [], failed.stdout + failed.stderr
+
+    result = run_agac(root, "retry", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(_stored(root, "gather")) == 3
+    assert _joined(root) == GATHERED_BESIDE_A_SPLIT
+
+
+def test_a_retry_of_one_split_record_rewrites_the_gather_in_place(tmp_path):
+    """A FILE tool is handed the whole file again; nothing lands beside the old rows."""
+    root = _project(tmp_path, _gathered("split_left"))
+    run_agac(root, "run", "-a", WORKFLOW, "--fresh", env={"GATHER_FAILS": "1"})
+    record = next(row["source_guid"] for row in _stored(root, "right"))
+
+    result = run_agac(root, "retry", "-a", WORKFLOW, "--from", "gather", "--record", record)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(_stored(root, "gather")) == 3
+    assert len({row["source_guid"] for row in _stored(root, "gather")}) == 3
+    assert _joined(root) == GATHERED_BESIDE_A_SPLIT

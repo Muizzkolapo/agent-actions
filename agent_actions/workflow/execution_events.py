@@ -207,9 +207,10 @@ class WorkflowEventLogger:
         self, error: Exception, elapsed_time: float = 0.0, failed_action: str = ""
     ):
         """Handle workflow execution error with structured output."""
+        detail = get_error_detail(error)
         self._mark_run_terminal(
-            get_error_detail(error),
-            self.services.core.state_manager.mark_running_as_failed,
+            detail,
+            lambda: self.services.core.state_manager.mark_running_as_failed(detail),
             ActionStatus.FAILED,
         )
 

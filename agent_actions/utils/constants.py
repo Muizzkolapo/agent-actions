@@ -100,6 +100,13 @@ SCHEMA_FILE_GLOBS = tuple(f"*{s}" for s in SCHEMA_SUFFIXES)
 # - Context scope processor
 SPECIAL_NAMESPACES = RESERVED_AGENT_NAMES - {"context_scope"}
 
+# Reserved names no record carries, so no prompt, guard or context_scope can read
+# through one: an upstream action's fields are read under the action's own name
+# (`producer.field`, never `action.producer.field`), and `prompt` / `schema` are
+# config words. Pre-flight refuses a read through one instead of passing it as a
+# built-in namespace.
+RESERVED_NAMES_NO_RECORD_HAS = frozenset({"action", "prompt", "schema"})
+
 # Framework-injected keys that the runtime actually writes into a tool UDF's
 # `data` bus, alongside per-dependency action-name namespaces. Populated by
 # build_field_context_with_history (source/version/workflow) + scope_application
