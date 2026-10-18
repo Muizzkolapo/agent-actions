@@ -215,8 +215,10 @@ recorded failed, the circuit breaker skips its readers, and independent branches
 carry on, in either mode. An exception that escapes `execute_action_async` never
 reached that handler — a store error from `_start_work` or the pre-run
 `_count_records_for_action` snapshot, which `_execute_action_run` keeps outside it on
-purpose, or from the post-run count (`_count_after_the_run`), taken before the action
-is marked complete, online and when a batch is collected. Each marks the action failed
+purpose, the count taken before a submitted batch is checked
+(`_count_before_the_check`), or from the post-run count (`_count_after_the_run`), taken
+before the action is marked complete, online and when a batch is collected. Each marks
+the action failed
 with that error (`error_message`, and a failed entry in the run history) through
 `_record_store_failure` before re-raising it, set running or not, since the store
 cannot be asked to hold a failure row. Sequential mode ends the run on it. Parallel mode matches: `gather` collects

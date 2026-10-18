@@ -1888,7 +1888,9 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_records_for_action(action_name)
+        pre_run_count = self._count_before_the_check(
+            action_name, action_idx, action_config, start_time
+        )
         try:
             output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
                 action_name,
@@ -1923,7 +1925,9 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_records_for_action(action_name)
+        pre_run_count = self._count_before_the_check(
+            action_name, action_idx, action_config, start_time
+        )
         try:
             output_folder, batch_status = await asyncio.to_thread(
                 self.deps.batch_manager.handle_batch_agent,
@@ -1947,6 +1951,31 @@ class ActionExecutor:
             duration,
             pre_run_count,
         )
+
+    def _count_before_the_check(
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
+    ) -> int:
+        """The action's row count before its batch is checked, as ``_begin`` counts it.
+
+        An error here ends the run (see ``_record_store_failure``); the check never
+        tracked a start, so the failure is recorded with one.
+        """
+        try:
+            return self._count_records_for_action(action_name)
+        except Exception as error:
+            params = ActionRunParams(
+                action_name=action_name,
+                action_idx=action_idx,
+                action_config=action_config,
+                is_last_action=False,
+                start_time=start_time,
+            )
+            self._record_store_failure(action_name, _elapsed(params), error, start=params)
+            raise
 
     def _batch_output_directory(self, action_name: str) -> str:
         """Resolve the target output directory for a batch action."""

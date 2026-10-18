@@ -217,7 +217,8 @@ it is asked again, since what the reviewer decided on is gone.
 
 Some failures belong to an action rather than to any record of it: its input could
 not be read, or the store did not answer as its work began — counting the rows it
-held, or setting it running — or as the rows it wrote were counted once it had run. A
+held, or setting it running — as it counted those rows before checking a batch it had
+submitted, or as the rows it wrote were counted once it had run. A
 store error ends the run (see [`run`](./run#parallel-execution)), and the action is
 failed even where it had stored its rows, so nothing reads them before it runs again.
 Either way the action reads `failed`, and the status file
