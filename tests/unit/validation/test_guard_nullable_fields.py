@@ -490,8 +490,83 @@ class TestApplyGuardNullableSchemaFixes:
         # The original schema object should be modified
         assert schema["properties"]["insights"]["type"] == ["object", "null"]
 
-    def test_a_read_under_a_forwarding_action_is_not_fixed(self):
-        """A field passed through stays under the guarded action's namespace (1536)."""
+    def test_a_tool_relaying_a_skipped_field_carries_the_null_forward(self):
+        """`mid` returns `g.text` as its own `text`, so `cons` reading `mid.text` may get null.
+
+        Measured: without the carry, the record `g` skipped failed `cons`'s output schema
+        ("at text: None") and was lost, with or without `mid` passing `g.text` through.
+        """
+        for scope in (
+            {"observe": ["g.text"], "passthrough": ["g.text"]},
+            {"observe": ["g.text"]},
+        ):
+            action_configs = dict(
+                [
+                    _tool_config(
+                        "g",
+                        json_output_schema={
+                            "type": "object",
+                            "properties": {"text": {"type": "string"}},
+                        },
+                        observe=["prep.text"],
+                        guard={"condition": "prep.id == 'a'", "on_false": "skip"},
+                    ),
+                    (
+                        "cons",
+                        {
+                            "model_vendor": "tool",
+                            "json_output_schema": {
+                                "type": "object",
+                                "properties": {"text": {"type": "string"}},
+                            },
+                            "context_scope": {"observe": ["mid.text"]},
+                        },
+                    ),
+                    (
+                        "mid",
+                        {
+                            "model_vendor": "tool",
+                            "json_output_schema": {
+                                "type": "object",
+                                "properties": {"text": {"type": "string"}},
+                            },
+                            "context_scope": scope,
+                        },
+                    ),
+                ]
+            )
+
+            fixes = apply_guard_nullable_schema_fixes(action_configs)
+
+            assert sorted(fixes) == ["cons.text", "mid.text"], (scope, fixes)
+
+    def test_a_tool_returning_another_name_carries_nothing(self):
+        action_configs = dict(
+            [
+                _guarded_llm_config("g", guard={"condition": "ok == true", "on_false": "skip"}),
+                _tool_config(
+                    "mid",
+                    json_output_schema={
+                        "type": "object",
+                        "properties": {"text": {"type": "string"}, "label": {"type": "string"}},
+                    },
+                    observe=["g.text"],
+                ),
+                _tool_config(
+                    "cons",
+                    json_output_schema={
+                        "type": "object",
+                        "properties": {"label": {"type": "string"}},
+                    },
+                    observe=["mid.label"],
+                ),
+            ]
+        )
+
+        assert apply_guard_nullable_schema_fixes(action_configs) == ["mid.text"]
+
+    def test_a_read_under_a_forwarding_model_action_is_not_fixed(self):
+        """A model action's output is its own answer, never a relay of the skipped field."""
         for passthrough in (["guarded.*"], ["guarded.data"]):
             action_configs = dict(
                 [

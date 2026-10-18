@@ -1996,6 +1996,11 @@ def apply_guard_nullable_schema_fixes(
     ``None`` at runtime.  This function modifies ``json_output_schema`` **in
     place** so that ``jsonschema.validate()`` accepts ``null`` for those fields.
 
+    The null is carried forward: a tool that observes a field which may be null, and
+    returns a field of the same name, may return null there too (a relay of a skipped
+    action's field), so a tool observing that one is fixed as well. Carried through each
+    such tool until nothing changes, so the order of ``action_configs`` does not matter.
+
     Call this after schema compilation and static validation but before
     workflow execution.
 
@@ -2004,50 +2009,58 @@ def apply_guard_nullable_schema_fixes(
     """
     fixes: list[str] = []
 
-    # Step 1: Identify guarded actions with filter/skip behavior.
-    guarded_actions: set[str] = set()
+    # Fields each action may leave null; None means every field (a guarded action).
+    may_be_null: dict[str, set[str] | None] = {}
     for name, config in action_configs.items():
         read = guard_clause_and_behavior(config.get("guard"))
         if read is not None and read[1] in ("filter", "skip"):
-            guarded_actions.add(name)
+            may_be_null[name] = None
 
-    if not guarded_actions:
+    if not may_be_null:
         return fixes
 
-    # Step 2: For each tool action, find observed fields from guarded upstreams.
+    consumers: list[tuple[str, dict[str, Any], list[tuple[str, str]]]] = []
     for consumer_name, consumer_config in action_configs.items():
         if consumer_config.get("model_vendor") != "tool":
             continue
-
         json_schema = consumer_config.get("json_output_schema")
-        if not json_schema or not isinstance(json_schema, dict):
-            continue
-
         context_scope = consumer_config.get("context_scope")
-        if not isinstance(context_scope, dict):
+        if not isinstance(json_schema, dict) or not isinstance(context_scope, dict):
             continue
-
         observe_refs = context_scope.get("observe", [])
         if not isinstance(observe_refs, list):
             continue
+        reads = [
+            (source, field)
+            for source, _, field in (
+                ref.partition(".") for ref in observe_refs if isinstance(ref, str) and "." in ref
+            )
+            if field != "*"
+        ]
+        if reads:
+            consumers.append((consumer_name, json_schema, reads))
 
-        guard_nullable_fields: set[str] = set()
-        for ref in observe_refs:
-            if not isinstance(ref, str) or "." not in ref:
+    changed = True
+    while changed:
+        changed = False
+        for consumer_name, json_schema, reads in consumers:
+            nullable_reads = set()
+            for source, field in reads:
+                if source not in may_be_null:
+                    continue
+                fields = may_be_null[source]
+                if fields is None or field in fields:
+                    nullable_reads.add(field)
+            for field_name in sorted(nullable_reads):
+                if _make_schema_field_nullable(json_schema, field_name):
+                    fixes.append(f"{consumer_name}.{field_name}")
+            if may_be_null.get(consumer_name, set()) is None:
                 continue
-            source, field = ref.split(".", 1)
-            if field == "*":
-                continue
-
-            if source in guarded_actions:
-                guard_nullable_fields.add(field)
-
-        if not guard_nullable_fields:
-            continue
-
-        # Step 3: Make those fields nullable in json_output_schema.
-        for field_name in sorted(guard_nullable_fields):
-            if _make_schema_field_nullable(json_schema, field_name):
-                fixes.append(f"{consumer_name}.{field_name}")
+            returned = set(WorkflowStaticAnalyzer._extract_field_types_from_schema(json_schema))
+            carried = nullable_reads & returned
+            known = may_be_null.setdefault(consumer_name, set())
+            if known is not None and not carried <= known:
+                known |= carried
+                changed = True
 
     return fixes

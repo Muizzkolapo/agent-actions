@@ -240,13 +240,19 @@ A module-level function (not a method on the analyzer) that **mutates `json_outp
 apply_guard_nullable_schema_fixes(action_configs)
   |
   1. Find guarded actions with filter/skip behavior
-  2. For each downstream tool that observes a guarded action's field directly
-     (a field another action passes through stays under the guarded action's
-     namespace, so a read under the forwarding action is not one):
+  2. For each tool that observes a field which may be null (any field of a
+     guarded action, or one carried forward in step 3):
      - If the field's schema type rejects null (e.g., "string")
      - Mutate the type to ["string", "null"] or add null to anyOf
-  3. Return list of fixed field paths (e.g., ["consumer.field"])
+  3. A tool that returns a field named like one it read that may be null may
+     return null there too (a relay), so that field of the tool may be null
+     for the tools reading it. Repeat 2-3 until nothing changes.
+  4. Return list of fixed field paths (e.g., ["consumer.field"])
 ```
+
+The carry follows what a tool returns, not what it passes through: a passed-through field
+stays under the namespace it came from. Without it, `cons` reading `mid.text`, where `mid`
+returns the skipped `g.text`, failed its output schema on the skipped record (1536).
 
 This mutation is necessary because guarded actions produce None for filtered records, but JSON Schema would reject null by default.
 
