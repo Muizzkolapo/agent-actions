@@ -136,7 +136,8 @@ Input records (from staging or upstream action)
 │  │  1. Strip framework fields (TrackedItem)        │ │
 │  │  2. Call UDF tool with full record array        │ │
 │  │  3. reconcile_outputs() — match by source_index │ │
-│  │  4. Build tombstones for missing records        │ │
+│  │  4. Build tombstones for inputs no row names    │ │
+│  │     (none beside a source_index: None row)      │ │
 │  └─────────────────────────────────────────────────┘ │
 │                                                      │
 │  ┌─────────────────────────────────────────────────┐ │

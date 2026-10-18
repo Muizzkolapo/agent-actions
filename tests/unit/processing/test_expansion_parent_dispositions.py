@@ -198,7 +198,7 @@ class TestAnExpansionThatNamesOnlySomeOfItsInputs:
         first = run(_records("r0", "r1"), self._splits_only_the_first)
         second = run(_records("r0", "r1"), self._splits_only_the_first)
 
-        assert len(second) == len(first) == 3
+        assert len(second) == len(first) == 4, "three rows of r0 and the tombstone of r1"
 
     def test_the_unnamed_input_is_not_marked_failed(self, run, backend):
         run(_records("r0", "r1"), self._splits_only_the_first)
@@ -228,7 +228,9 @@ class TestAnInputAnExpansionNamesInNoRow:
 
         assert _by_id(backend)["r1"]["disposition"] == "unprocessed"
         assert _by_id(backend)["r1"]["reason"] == "tool_missing_record"
-        assert [o["_state"] for o in output if o.get("source_guid") == "r1"] == ["cascade_skipped"]
+        assert [
+            (o.get("content") or {}).get(ACTION) for o in output if o["source_guid"] == "r1"
+        ] == [None], "one tombstone row, holding nothing of this action"
 
     def test_it_stays_tombstoned_on_a_rerun_and_is_never_failed(self, run, backend):
         run(_records("r0", "r1"), self.SPLITS_R0)

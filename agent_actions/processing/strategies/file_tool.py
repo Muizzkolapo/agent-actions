@@ -70,7 +70,7 @@ def _unnamed_inputs(
     source_mapping: dict[int, int | list[int] | None] | None,
     records: list[dict[str, Any]],
 ) -> list[str]:
-    """Inputs no output row names. A tool may expand while naming only some of them."""
+    """Inputs no output row names."""
     accounted = _accounted_source_guids(structured_data, source_mapping, records)
     return [
         guid for record in records if (guid := record.get("source_guid")) and guid not in accounted
@@ -294,7 +294,10 @@ class FileToolStrategy:
 
             has_synthetic = source_mapping and any(v is None for v in source_mapping.values())
             missing_results: list[ProcessingResult] = []
-            if not is_expansion and not has_synthetic:
+            # An input no row names was dropped, however many rows the others became: a
+            # row consuming several inputs names each in a source_index list. A row naming
+            # no input may have consumed any of them, so beside one nothing is claimed.
+            if not has_synthetic:
                 output_guids = _accounted_source_guids(structured_data, source_mapping, records)
                 for input_record in answered:
                     rid = input_record.get("source_guid")
