@@ -171,15 +171,41 @@ def _validate_staged_data(
             file_path=file_path,
         )
     except AgentActionsError as e:
-        if file_type not in _TEXT_FILE_TYPES or not _reads_a_source_field(e):
+        hint = _text_chunk_hint(file_type)
+        if hint is None or not _reads_a_source_field(e):
             raise
         raise ConfigValidationError(
-            f"{str(e).rstrip('.')}. A staged {file_type} file is split into chunks, and "
-            f"each record holds its chunk's text in one field, '{_TEXT_CHUNK_FIELD}': "
-            f"read it as source.{_TEXT_CHUNK_FIELD}.",
+            f"{str(e).rstrip('.')}. {hint}",
             context=e.context,
             cause=e,
         ) from e
+
+
+def _text_chunk_hint(file_type: str) -> str | None:
+    """How a staged text file's records hold its text, for a read of another field."""
+    if file_type not in _TEXT_FILE_TYPES:
+        return None
+    return (
+        f"A staged {file_type} file is split into chunks, and each record holds its "
+        f"chunk's text in one field, '{_TEXT_CHUNK_FIELD}': read it as "
+        f"source.{_TEXT_CHUNK_FIELD}."
+    )
+
+
+def _rows_hold_every_staged_source(ctx: InitialStageContext, file_type: str) -> bool:
+    """Whether this file's rows hold every `source` field any staged file can give.
+
+    True when the walk stages this file alone, or only text files, whose records all
+    hold one field. Otherwise another staged file may hold a field these rows lack.
+    """
+    from agent_actions.workflow.runner_file_processing import staged_input_fingerprint
+
+    staged = staged_input_fingerprint([Path(ctx.base_directory)], ctx.file_type_filter)
+    if len(staged) <= 1:
+        return True
+    return file_type in _TEXT_FILE_TYPES and all(
+        Path(name).suffix.lower() in _TEXT_FILE_TYPES for name in staged
+    )
 
 
 def _reads_a_source_field(error: AgentActionsError) -> bool:
@@ -228,6 +254,7 @@ def process_initial_stage(ctx: InitialStageContext):
 
     from agent_actions.input.preprocessing.staging.field_validation import (
         validate_seed_selectors,
+        validate_source_reads_below,
         validate_staging_field_names,
     )
 
@@ -281,6 +308,14 @@ def process_initial_stage(ctx: InitialStageContext):
         file_path=ctx.file_path,
         action_configs=ctx.action_configs,
         workflow_metadata=ctx.workflow_metadata,
+    )
+    validate_source_reads_below(
+        records=data_chunk,
+        file_path=ctx.file_path,
+        first_action=ctx.agent_name,
+        action_configs=ctx.action_configs or {},
+        conclusive=_rows_hold_every_staged_source(ctx, file_type),
+        hint=_text_chunk_hint(file_type),
     )
 
     # The records a repair leaves out are what let the disposition gate tell a
