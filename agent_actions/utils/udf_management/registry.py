@@ -188,4 +188,6 @@ def clear_registry() -> None:
         UDF_REGISTRY.clear()
         for module_name in _registered_modules:
             sys.modules.pop(module_name, None)
+            # Discovery files a tool module under this prefixed name too.
+            sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
         _registered_modules.clear()
