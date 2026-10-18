@@ -800,7 +800,15 @@ run repeats the reset.
 ```
 _compute_action_config_hash() covers:
     prompt, schema, guard clause, guard behavior
-    (model_name and model_vendor are compared from the stamp beside it)
+Stamped beside it, each compared on its own (_edits_since):
+    model_name, model_vendor
+    context_scope_hash   (_compute_context_scope_hash: observe/passthrough/
+                          drop as sets, seed as written)
+    dependencies_hash    (_compute_dependencies_hash: in declared order)
+
+Never add a key to _compute_action_config_hash: every stored digest would
+change and every completed action of every workflow would re-run once.
+Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
 
 If you change one of these fields and re-run WITHOUT --fresh:
     The executor detects the hash mismatch, resets the action to PENDING,
@@ -816,8 +824,7 @@ it read, taken as its work began). A different set on a later run resets
 it and every reader the same way. A stamp without the key never differs;
 an API data source is not fingerprinted, since resolving it can fetch.
 
-If you add a new config field that affects output but don't add it
-to the hash computation:
+If you add a new config field that affects output but don't stamp it:
     Stale output from a prior config is silently reused. The user
     must manually --fresh to get updated results.
 ```

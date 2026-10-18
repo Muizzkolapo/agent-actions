@@ -986,7 +986,8 @@ When _reset_retryable_actions resets action statuses to PENDING:
                     Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED,
                     and the prompt traces of what it keeps
 
-  Stopped partway, edited since (prompt, schema, guard, model)
+  Stopped partway, edited since (prompt, schema, guard, model, context
+  scope, dependencies)
                  → it and every action reading it are forgotten, prompt
                    traces too, and answer everything again
                    (ActionExecutor.reopen_with_readers)

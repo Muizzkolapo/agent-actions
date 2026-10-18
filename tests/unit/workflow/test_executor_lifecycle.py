@@ -326,6 +326,8 @@ class TestHandleRunSuccess:
             model_name=None,
             model_vendor=None,
             config_hash=ANY,
+            context_scope_hash=ANY,
+            dependencies_hash=ANY,
             records_processed=None,
             truncated=None,
             staged_input=None,
@@ -631,6 +633,8 @@ class TestHandleAgentSkip:
             model_name=None,
             model_vendor=None,
             config_hash=ANY,
+            context_scope_hash=ANY,
+            dependencies_hash=ANY,
             # A WHERE-skip never slices, so it has no count to report.
             records_processed=None,
             truncated=None,

@@ -183,18 +183,24 @@ def _edit(root, old, new):
 
 
 def _agac(root, *args):
-    """Run the command, then run again for each batch it leaves out, as a user does."""
+    """Run the command, then run again for each batch it leaves out, as a user does.
+
+    The last run's result, with what every run printed.
+    """
     env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
     result = run_agac(root, *args, env=env)
+    printed = result.stdout + result.stderr
     for _ in range(3):
         if "run again" not in result.stdout + result.stderr:
             break
         result = run_agac(root, "run", "-a", WORKFLOW, env=env)
+        printed += result.stdout + result.stderr
+    result.printed = printed
     return result
 
 
 def _output(result):
-    return result.stdout + result.stderr
+    return result.printed
 
 
 def _ran(root):
