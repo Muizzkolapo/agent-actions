@@ -290,6 +290,10 @@ class ActionRunParams:
     start_time: datetime
 
 
+def _elapsed(params: ActionRunParams) -> float:
+    return (datetime.now() - params.start_time).total_seconds()
+
+
 @dataclass
 class ActionExecutionResult:
     """Result of action execution."""
@@ -1037,6 +1041,8 @@ class ActionExecutor:
                 not in self.deps.action_runner.input_left_unreached,
             )
 
+        record_count = self._count_after_the_run(params.action_name, duration, pre_run_count)
+
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
                 params.action_name,
@@ -1051,10 +1057,7 @@ class ActionExecutor:
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(
-                    duration=duration,
-                    record_count=self._records_written_this_run(params.action_name, pre_run_count),
-                ),
+                metrics=ExecutionMetrics(duration=duration, record_count=record_count),
             )
 
         self.deps.state_manager.update_status(
@@ -1076,7 +1079,7 @@ class ActionExecutor:
                 model_vendor=params.action_config.get("model_vendor"),
                 model_name=params.action_config.get("model_name"),
                 files_processed=0,
-                record_count=self._records_written_this_run(params.action_name, pre_run_count),
+                record_count=record_count,
             ),
         )
 
@@ -2029,6 +2032,7 @@ class ActionExecutor:
                     execution_mode="batch",
                 )
 
+            record_count = self._count_after_the_run(action_name, wall_clock, pre_run_count)
             self.deps.state_manager.update_status(
                 action_name,
                 final_status,
@@ -2044,10 +2048,7 @@ class ActionExecutor:
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(
-                    duration=wall_clock,
-                    record_count=self._records_written_this_run(action_name, pre_run_count),
-                ),
+                metrics=ExecutionMetrics(duration=wall_clock, record_count=record_count),
             )
 
         if batch_status == "in_progress":
@@ -2132,24 +2133,51 @@ class ActionExecutor:
     def _begin(self, params: ActionRunParams) -> int:
         """Start the action's work and return its row count before it runs.
 
-        An error here ends the run, since the store is not answering. The action is
-        marked failed with that error first, which the store cannot be asked to hold:
-        its status then says why, and ``agac retry`` re-runs it as a failure of the
-        action's own.
+        An error here ends the run, since the store is not answering (see
+        ``_record_store_failure``).
         """
         try:
             self._start_work(params)
+        except Exception as error:
+            self._record_store_failure(params.action_name, _elapsed(params), error, start=params)
+            raise
+        try:
             return self._count_records_for_action(params.action_name)
         except Exception as error:
-            self._record_failed_start(params, error)
+            self._record_store_failure(params.action_name, _elapsed(params), error)
             raise
 
-    def _record_failed_start(self, params: ActionRunParams, error: Exception) -> None:
-        """Mark the action failed with *error*, never replacing it with an error of its own."""
-        duration = (datetime.now() - params.start_time).total_seconds()
+    def _count_after_the_run(self, action_name: str, duration: float, pre_run_count: int) -> int:
+        """Rows this execution produced, counted before the action is marked complete.
+
+        An error here ends the run (see ``_record_store_failure``). Counted after the
+        action was marked complete, it left the action complete with its readers
+        never run, and nothing for ``agac retry`` to repair.
+        """
+        try:
+            return self._records_written_this_run(action_name, pre_run_count)
+        except Exception as error:
+            self._record_store_failure(action_name, duration, error)
+            raise
+
+    def _record_store_failure(
+        self,
+        action_name: str,
+        duration: float,
+        error: Exception,
+        *,
+        start: ActionRunParams | None = None,
+    ) -> None:
+        """Mark the action failed with a store *error* that ends the run outside its handler.
+
+        The store cannot be asked to hold a failure row, so the status and the run
+        history say why, and ``agac retry`` re-runs the action as a failure of its own.
+        Recording never replaces *error* with an error of its own. *start* is given
+        when the action's start was never tracked, so the run history has an entry.
+        """
         try:
             self.deps.state_manager.update_status(
-                params.action_name,
+                action_name,
                 ActionStatus.FAILED,
                 execution_time=duration,
                 error_message=str(error),
@@ -2157,7 +2185,28 @@ class ActionExecutor:
         except Exception as unrecorded:
             logger.warning(
                 "Could not record %s as failed (%s); the run still ends on: %s",
-                params.action_name,
+                action_name,
+                unrecorded,
+                error,
+            )
+        if self.run_tracker is None or self.run_id is None:
+            return
+        try:
+            if start is not None:
+                self._track_action_start(start)
+            self.run_tracker.record_action_complete(
+                config=ActionCompleteConfig(
+                    run_id=self.run_id,
+                    action_name=action_name,
+                    status="failed",
+                    duration_seconds=duration,
+                    error=get_error_detail(error),
+                )
+            )
+        except Exception as unrecorded:
+            logger.warning(
+                "Could not add %s's failure to the run history (%s); the run still ends on: %s",
+                action_name,
                 unrecorded,
                 error,
             )
@@ -2168,7 +2217,8 @@ class ActionExecutor:
         # Both pre-run and post-run snapshots are intentionally OUTSIDE the
         # except clause below: only failures of the action's own work (reading
         # its input, a version merge's correlation included, and running it)
-        # are funneled through _handle_run_failure.
+        # are funneled through _handle_run_failure. A store error in either
+        # ends the run with the action failed (_record_store_failure).
         pre_run_count = self._begin(params)
 
         try:

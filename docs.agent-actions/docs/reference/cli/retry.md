@@ -217,10 +217,12 @@ it is asked again, since what the reviewer decided on is gone.
 
 Some failures belong to an action rather than to any record of it: its input could
 not be read, or the store did not answer as its work began — counting the rows it
-held, or setting it running. The second ends the run (see
-[`run`](./run#parallel-execution)). Either way the action reads `failed`, and the
-status file (`agent_io/.agent_status.json`) records the error under its
-`error_message`. An action that runs again, and does not fail, no longer carries it.
+held, or setting it running — or as the rows it wrote were counted once it had run. A
+store error ends the run (see [`run`](./run#parallel-execution)), and the action is
+failed even where it had stored its rows, so nothing reads them before it runs again.
+Either way the action reads `failed`, and the status file
+(`agent_io/.agent_status.json`) records the error under its `error_message`, which
+[`agac status`](./utilities#status) shows. An action that runs again, and does not fail, no longer carries it.
 
 `retry` re-runs such an action in full, and every action after it: no record of
 it failed, so there are none to narrow it to. Its plan names the error and says so:
