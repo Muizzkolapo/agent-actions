@@ -196,3 +196,23 @@ def test_an_aggregate_every_branch_reads_pairs_like_any_record():
     )
 
     assert _values(merged) == [("L", "R")]
+
+
+def test_an_aggregate_over_split_records_does_not_pair_with_their_source():
+    """Built over its file's first record, the aggregate carries that record's
+    `parent_source_guid`; it is still no record of that source."""
+    over_a_split = {**_aggregate("right", "total"), "parent_source_guid": "P"}
+    with pytest.raises(WorkflowError, match="source_index"):
+        merge_fan_in([("left", [_record("left", "P", "L")]), ("right", [over_a_split])])
+
+
+def test_a_split_of_an_aggregate_pairs_with_the_aggregate():
+    split = [
+        {**_record("again", f"t{n}", f"A{n}", "agg"), "aggregated_by": "right"} for n in (1, 2)
+    ]
+    merged = merge_fan_in([("right", [_aggregate("right", "R")]), ("again", split)])
+
+    assert sorted((r["content"]["right"]["v"], r["content"]["again"]["v"]) for r in merged) == [
+        ("R", "A1"),
+        ("R", "A2"),
+    ]

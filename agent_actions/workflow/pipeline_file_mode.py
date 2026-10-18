@@ -123,6 +123,7 @@ def _reattach_source_guid(
     source_mapping: dict[int, int | list[int] | None] | None,
     original_data: list[dict],
     version_base_name: str,
+    action_name: str | None = None,
 ) -> None:
     """Give every output item a source_guid: inherit the parent's, else born at the producer.
 
@@ -133,6 +134,7 @@ def _reattach_source_guid(
     distinct per row, equal across version branches.
 
     ``parent_source_guid`` is left as carried: it names the first ancestor, not the producer.
+    A row mapped to no input is marked ``aggregated_by`` the action, a record of no source.
     """
     from agent_actions.utils.id_generation import IDGenerator
 
@@ -145,6 +147,8 @@ def _reattach_source_guid(
 
     for i in inheriting:
         item = structured_data[i]
+        if source_mapping is not None and source_mapping.get(i, False) is None:
+            item["aggregated_by"] = action_name or version_base_name
         # Which inputs this row consumed, minus the one its own guid will carry. A
         # later run resolves those inputs from here; parent_source_guid cannot serve,
         # being the pool ancestor once an input was itself expanded.
@@ -339,7 +343,11 @@ def reconcile_outputs(
         )
 
     _reattach_source_guid(
-        structured_data, source_mapping, original_data, version_base_name or action_name
+        structured_data,
+        source_mapping,
+        original_data,
+        version_base_name or action_name,
+        action_name,
     )
     return structured_data, source_mapping
 

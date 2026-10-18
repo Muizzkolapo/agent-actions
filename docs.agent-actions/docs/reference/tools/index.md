@@ -159,7 +159,8 @@ def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
 |---|---|
 | An item you received | Extends parent lineage — downstream `observe` can load ancestor data |
 | `FileUDFResult` output whose `source_index` list names every record of the file split from one source, and only those, with no other output naming any of them | Takes that source's `source_guid`, as an unsplit record holds it, so a fan-in pairs it with other branches' records of the source. Any other many-to-one output keeps its first input's identity |
-| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. |
+| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`, and `aggregated_by` names the action. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. A [fan-in](../context/context-scope.md) pairs it only where every branch reads it; beside a branch that does not, the fan-in fails |
+| No output naming an input | The input was dropped: it is stored as a tombstone, `unprocessed` with reason `tool_missing_record`, and the actions below skip it, including a fan-in beside another branch. Not when any output declares `source_index: None`, which may have consumed it: then the input gets no row |
 
 ## Tool Discovery
 

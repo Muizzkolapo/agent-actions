@@ -97,6 +97,7 @@ The following fields are metadata and are automatically excluded when extracting
 - `parent_source_guid`
 - `producer_source_guids`
 - `repeat_of_source_guid`
+- `aggregated_by`
 - `node_id`
 - `target_id`
 - `parent_target_id`
