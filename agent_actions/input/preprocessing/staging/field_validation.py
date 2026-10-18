@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -75,16 +75,16 @@ def validate_source_reads_below(
     first_action: str,
     action_configs: Mapping[str, Mapping[str, Any]],
     *,
-    conclusive: bool,
+    conclusive: Callable[[], bool],
     hint: str | None = None,
 ) -> None:
     """Refuse an action below *first_action* reading a `source` field no staged record holds.
 
     Below the first stage a record's `source` is the row staged for it, which no action
     adds to, so these records are every `source` the actions below can read from this
-    file. When they are not *conclusive* (other staged files may hold the field), when
-    the read may not fail a record, or when the action's own guard reads the field
-    first, the read is logged as a warning instead.
+    file. When they are not *conclusive* (other staged files may hold the field; asked
+    only once a read is missing), when the read may not fail a record, or when the
+    action's own guard reads the field first, the read is logged as a warning instead.
     """
     if not records:
         return
@@ -99,6 +99,13 @@ def validate_source_reads_below(
 
     where = f"{Path(file_path).parent.name}/{Path(file_path).name}"
     refusals: list[str] = []
+    answer: list[bool] = []
+
+    def rows_are_conclusive() -> bool:
+        if not answer:
+            answer.append(conclusive())
+        return answer[0]
+
     for action_name in _actions_below(first_action, action_configs):
         reads = _source_reads(action_configs[action_name])
         # The guard runs first and decides what a record without the field does.
@@ -111,7 +118,11 @@ def validate_source_reads_below(
                 f"Action '{action_name}' {verb} source.{field}, but no record staged from "
                 f"{where} holds '{field}'"
             )
-            if conclusive and location in _READS_EVERY_RECORD_NEEDS and field not in guarded:
+            if (
+                location in _READS_EVERY_RECORD_NEEDS
+                and field not in guarded
+                and rows_are_conclusive()
+            ):
                 refusals.append(message)
             else:
                 logger.warning("%s. Records from that file will not have it.", message)

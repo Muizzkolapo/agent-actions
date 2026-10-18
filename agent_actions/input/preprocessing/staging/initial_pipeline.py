@@ -55,6 +55,8 @@ class InitialStageContext:
     retried_records: frozenset[str] = frozenset()
     # The start node's file types: the staged files the walk processes.
     file_type_filter: set[str] | None = None
+    # The suffix of every file the walk stages, which the walk lists once; None: unlisted.
+    staged_suffixes: Callable[[], tuple[str, ...]] | None = None
 
 
 @dataclass
@@ -198,14 +200,16 @@ def _rows_hold_every_staged_source(ctx: InitialStageContext, file_type: str) -> 
     True when the walk stages this file alone, or only text files, whose records all
     hold one field. Otherwise another staged file may hold a field these rows lack.
     """
-    from agent_actions.workflow.runner_file_processing import staged_input_fingerprint
+    if ctx.staged_suffixes is not None:
+        suffixes = ctx.staged_suffixes()
+    else:
+        from agent_actions.workflow.runner_file_processing import staged_input_fingerprint
 
-    staged = staged_input_fingerprint([Path(ctx.base_directory)], ctx.file_type_filter)
-    if len(staged) <= 1:
+        staged = staged_input_fingerprint([Path(ctx.base_directory)], ctx.file_type_filter)
+        suffixes = tuple(Path(name).suffix.lower() for name in staged)
+    if len(suffixes) <= 1:
         return True
-    return file_type in _TEXT_FILE_TYPES and all(
-        Path(name).suffix.lower() in _TEXT_FILE_TYPES for name in staged
-    )
+    return file_type in _TEXT_FILE_TYPES and all(s in _TEXT_FILE_TYPES for s in suffixes)
 
 
 def _reads_a_source_field(error: AgentActionsError) -> bool:
@@ -314,7 +318,7 @@ def process_initial_stage(ctx: InitialStageContext):
         file_path=ctx.file_path,
         first_action=ctx.agent_name,
         action_configs=ctx.action_configs or {},
-        conclusive=_rows_hold_every_staged_source(ctx, file_type),
+        conclusive=lambda: _rows_hold_every_staged_source(ctx, file_type),
         hint=_text_chunk_hint(file_type),
     )
 
