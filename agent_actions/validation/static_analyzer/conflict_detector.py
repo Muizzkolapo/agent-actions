@@ -212,9 +212,7 @@ class ConflictDetector:
                 affected = self._find_field_references(field_name)
 
                 producer_names = [p.action for p in producers]
-                qualified_refs = " or ".join(
-                    f"{{{{ action.{p}.{field_name} }}}}" for p in producer_names
-                )
+                qualified_refs = " or ".join(f"{{{{ {p}.{field_name} }}}}" for p in producer_names)
 
                 conflicts.append(
                     Conflict(
@@ -249,7 +247,7 @@ class ConflictDetector:
 
                     if req.source_agent in ("source", "seed", "loop"):
                         qualified_refs = " or ".join(
-                            f"{{{{ action.{p}.{req.field_path} }}}}" for p in producer_names
+                            f"{{{{ {p}.{req.field_path} }}}}" for p in producer_names
                         )
 
                         conflicts.append(

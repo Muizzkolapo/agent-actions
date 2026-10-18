@@ -366,7 +366,7 @@ class ContextFieldNotFoundEvent(BaseEvent):
                 f"Available namespaces: {available_str}. A prompt reads those namespaces "
                 f"and the names it sets itself; nothing supplies '{self.field_ref}'. "
                 f"To read an upstream action's output, add one of its fields "
-                f"(action.field) to context_scope.observe."
+                f"(<action name>.<field>) to context_scope.observe."
             )
         else:
             self.message = (
