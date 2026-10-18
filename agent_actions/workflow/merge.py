@@ -307,6 +307,22 @@ def _two_branches_split(
     )
 
 
+def _aggregate_unpaired(
+    record: str, holders: list[str], made_by: list[str], without: list[str]
+) -> Exception:
+    from agent_actions.errors import WorkflowError
+
+    return WorkflowError(
+        f"Branches {holders} of a fan-in hold a record of no source ({record}): "
+        f"{made_by} returned it from a granularity: File tool with source_index: None, "
+        f"so branches {without} hold no record to pair it with: a fan-in pairs each "
+        "branch's records with the others' records of the same source. Read the "
+        "aggregate in an action that depends on the branch that made it alone, or have "
+        "every branch of the fan-in read it.",
+        context={"record": record, "branches": holders, "aggregated_by": made_by},
+    )
+
+
 def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     """Merge the records of a fan-in's branches, one record per logical record.
 
@@ -318,6 +334,8 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     branches split from the same record cannot be paired one to one, nor can a branch's
     records of a source beside other branches' when it shares no record of that source
     with any of them; both raise rather than run on records that hold one branch alone.
+    So does a record ``aggregated_by`` a FILE tool that not every branch holds: it is of
+    no source, and pairs with nothing but itself.
     """
     tagged: list[tuple[str, Any]] = []
     for branch, data in sources:
@@ -347,6 +365,7 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     # branches are ordered, and that record is paired in turn with the one it came from.
     splits: dict[str, dict[str, list[str]]] = {}
     is_split: set[str] = set()
+    anchor_of: dict[str, str] = {}
     for key in groups:
         if len(branches(key)) != 1:
             continue
@@ -356,6 +375,7 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
             if anchor_key in groups and anchor_key != key and branches(anchor_key) - {branch}:
                 splits.setdefault(anchor_key, {}).setdefault(branch, []).append(key)
                 is_split.add(key)
+                anchor_of[key] = anchor_key
                 break
 
     def below(key: str) -> set[str]:
@@ -366,6 +386,24 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
             for split_key in keys:
                 held |= below(split_key)
         return held
+
+    def made_by(key: str) -> list[str]:
+        return sorted({str(r["aggregated_by"]) for _, r in groups[key] if r.get("aggregated_by")})
+
+    # A split of an aggregate is judged with it. One whose anchor is a source holds that
+    # only because an aggregate is built over its file's first record: it pairs with no
+    # one, as a split group is held by one branch alone.
+    every = {branch for members in groups.values() for branch, _ in members}
+    for key in groups:
+        makers = made_by(key)
+        if not makers:
+            continue
+        split_of = anchor_of.get(key)
+        if split_of is not None and made_by(split_of):
+            continue
+        held = branches(key) | (below(key) if split_of is None else set())
+        if held != every:
+            raise _aggregate_unpaired(key, sorted(held), makers, sorted(every - held))
 
     # Under each source no record holds, the branches holding a record of it, and those
     # among them sharing a record of it with another branch. A branch that shares none

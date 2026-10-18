@@ -358,6 +358,10 @@ class ProcessingContext:
     defer_kept_dispositions: bool = False
     kept_dispositions: list["DispositionRow"] = field(default_factory=list)
 
+    # Records whose disposition the collector could not store. Batch keeps their
+    # `deferred` mark, which would otherwise be cleared to leave them holding nothing.
+    dispositions_not_stored: set[str] = field(default_factory=set)
+
     # Set by a FILE tool's run that carried nothing stored, so what it returns is the
     # file's whole answer and every row the actions below hold for the file is stale.
     replaces_file_whole: bool = False

@@ -171,11 +171,12 @@ class TestTheParentIsNotRedone:
 
 
 class TestAnExpansionThatNamesOnlySomeOfItsInputs:
-    """A tool may expand while naming only part of what it consumed. The un-named input
-    is deliberately not tombstoned, so it stays offerable — which means crediting the
-    inputs the result DOES name narrows the next run to exactly the inputs this tool
-    emits nothing for. An empty response from a non-empty input is the empty-output
-    failure, so the second run of an unchanged workflow fails the action.
+    """A tool that expands one input and names another in no row dropped it, as a tool
+    that writes no more rows than it was handed does: the dropped input is tombstoned
+    `unprocessed`, which is not terminal, so the gate offers it again. Crediting the
+    inputs the result DOES name would narrow the next run to exactly the dropped input,
+    and an empty response from a non-empty input is the empty-output failure — so the
+    credit is withheld and the next run hands the tool the whole input again.
     """
 
     @staticmethod
@@ -197,7 +198,7 @@ class TestAnExpansionThatNamesOnlySomeOfItsInputs:
         first = run(_records("r0", "r1"), self._splits_only_the_first)
         second = run(_records("r0", "r1"), self._splits_only_the_first)
 
-        assert len(second) == len(first) == 3
+        assert len(second) == len(first) == 4, "three rows of r0 and the tombstone of r1"
 
     def test_the_unnamed_input_is_not_marked_failed(self, run, backend):
         run(_records("r0", "r1"), self._splits_only_the_first)
@@ -207,28 +208,47 @@ class TestAnExpansionThatNamesOnlySomeOfItsInputs:
         assert rows.get("r1", {}).get("disposition") != "failed"
 
 
-class TestWhatMustNotChangeWhileClosingThis:
-    """A guard on the behaviour closing the gap above must leave alone. An attempt
-    that ungated the missing-record sweep for expansions broke exactly this."""
+class TestAnInputAnExpansionNamesInNoRow:
+    """An expanding tool that names an input in no row dropped it (#1517).
 
-    def test_an_input_the_tool_did_not_name_is_left_alone(self, run, backend):
-        """A tool may expand while naming only some of what it consumed. The
-        framework cannot tell that from a drop, so it claims neither way.
+    This once held the opposite: "a tool may expand while naming only some of what it
+    consumed; the framework cannot tell that from a drop, so it claims neither way".
+    That left the input with no row and no disposition, and a fan-in beside another
+    branch ran it with this branch's fields None. The same ambiguity at matching row
+    counts was already read as a drop (`TestTheSameGapReachedWithMatchingCounts`), and
+    the documented way to say a row consumed several inputs is a `source_index` list
+    naming each of them. A row declaring `source_index: None` is the exception: it may
+    have consumed any input, so beside one nothing is claimed either way.
+    """
 
-        Both halves are asserted on what a tombstone would create, not on whether
-        the input returns: `unprocessed` is not in `TERMINAL_DISPOSITIONS`, so the
-        gate re-offers the input with or without one and asserting its return
-        could not fail. The harm is the `CASCADE_SKIPPED` state a tombstone row
-        carries, which is not resettable downstream.
-        """
+    SPLITS_R0 = [{"source_index": 0, "data": {"part": i}} for i in range(3)]
+
+    def test_it_is_tombstoned_as_a_missing_record(self, run, backend):
+        output = run(_records("r0", "r1"), self.SPLITS_R0)
+
+        assert _by_id(backend)["r1"]["disposition"] == "unprocessed"
+        assert _by_id(backend)["r1"]["reason"] == "tool_missing_record"
+        assert [
+            (o.get("content") or {}).get(ACTION) for o in output if o["source_guid"] == "r1"
+        ] == [None], "one tombstone row, holding nothing of this action"
+
+    def test_it_stays_tombstoned_on_a_rerun_and_is_never_failed(self, run, backend):
+        run(_records("r0", "r1"), self.SPLITS_R0)
+        run(_records("r0", "r1"), self.SPLITS_R0)
+
+        assert [r["disposition"] for r in _rows(backend) if r["record_id"] == "r1"] == [
+            "unprocessed"
+        ]
+
+    def test_beside_a_row_that_names_no_input_it_is_left_alone(self, run, backend):
+        """The aggregate may have consumed r1, so r1 is neither tombstoned nor credited."""
         output = run(
-            _records("r0", "r1"), [{"source_index": 0, "data": {"part": i}} for i in range(3)]
+            _records("r0", "r1"),
+            [*self.SPLITS_R0, {"source_index": None, "data": {"part": "total"}}],
         )
 
-        assert "r1" not in _by_id(backend), "an unnamed input must not be claimed as consumed"
-        assert all(o.get("source_guid") != "r1" for o in output), (
-            "an unnamed input must not gain a tombstone row of its own"
-        )
+        assert "r1" not in _by_id(backend)
+        assert all(o.get("source_guid") != "r1" for o in output)
 
 
 class TestTheReasonAnAccountedInputCarries:

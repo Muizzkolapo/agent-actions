@@ -677,3 +677,42 @@ class TestAGraphBuiltWithoutAnalyzeStillHandlesABadContextScope:
         WorkflowStaticAnalyzer(config).get_graph()
 
         assert config["actions"][1]["context_scope"] == "observe"
+
+
+class TestAnExpandedGuardClause:
+    """An expanded guard carries its clause under `clause`; its references are read (1516)."""
+
+    @staticmethod
+    def _guard_refs(guard, **config):
+        refs = ReferenceExtractor().extract_from_agent({"name": "a", "guard": guard, **config})
+        return [(r.source_agent, r.field_path) for r in refs if r.location == "guard"]
+
+    def test_the_namespaced_fields_of_the_clause_are_read(self):
+        guard = {"clause": "up.score > 1 and LENGTH(up.tags) > 0 or other.x IS NULL"}
+
+        assert self._guard_refs(guard) == [("up", "score"), ("up", "tags"), ("other", "x")]
+
+    def test_a_raw_condition_is_read_too(self):
+        assert self._guard_refs({"condition": "up.score > 1"}) == [("up", "score")]
+
+    def test_a_dot_inside_a_quoted_literal_is_not_a_reference(self):
+        assert self._guard_refs({"clause": "up.name == 'not.a.ref'"}) == [("up", "name")]
+
+    def test_a_udf_guard_and_an_unparseable_clause_read_nothing(self):
+        assert self._guard_refs({"condition": "udf:check.thing"}) == []
+        assert self._guard_refs({"clause": "up.score >"}) == []
+
+    def test_names_the_guard_context_promotes_are_not_actions(self):
+        guard = {"clause": "persona.tone == 'x' and metadata.reason == 'y' and up.z == 1"}
+
+        refs = self._guard_refs(guard, _version_context={"persona": {"tone": "x"}, "i": 0})
+
+        assert refs == [("up", "z")]
+
+    def test_a_read_through_a_reserved_name_is_reported_as_written(self):
+        assert self._guard_refs({"clause": "action.up.score > 1"}) == [("action", "up.score")]
+
+    def test_a_version_param_named_like_a_reserved_name_is_on_the_record(self):
+        refs = self._guard_refs({"clause": "schema.x == 1"}, _version_context={"schema": "s"})
+
+        assert refs == []

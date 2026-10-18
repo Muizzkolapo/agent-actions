@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  Pre-flight's required-key check reads every `return` of a record tool, not only its last.
+  An early `return {"a": 1}` before the required `b` is set, or an early `return out` before
+  `out["b"]` is, passed pre-flight and then failed output validation for each record that
+  took it; it is now refused, naming the line of that return. An early return of nothing
+  (`return`, `None`, `[]`), of the tool's input or of what the check cannot read, and a
+  branch that only raises, are not refused. The incident_triage example's
+  `aggregate_severity_votes` returns every field its schema requires when it receives no
+  votes too (#1519).
+time: 2026-10-18T09:01:00Z

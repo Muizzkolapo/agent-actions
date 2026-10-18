@@ -32,6 +32,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Staged formats whose content is a list of records by the time it is validated.
+_RECORD_FILE_TYPES = frozenset({".json", ".csv", ".tsv", ".xlsx"})
+_DELIMITED_FILE_TYPES = frozenset({".csv", ".tsv"})
+
 
 @dataclass
 class InitialStageContext:
@@ -143,9 +147,9 @@ def _validate_staged_data(
     if not raw_prompt:
         return
 
-    if file_type == ".json":
-        # A JSON document is rows of records by the time it reaches here; the
-        # document rule runs before this and refuses anything else.
+    if file_type in _RECORD_FILE_TYPES:
+        # Rows of records by the time they reach here, as staging will envelope them;
+        # the document rule runs before this for JSON and refuses anything else.
         first_item = raw_content[0]
         source_content = first_item
     else:
@@ -170,13 +174,26 @@ def _validate_staged_data(
     )
 
 
+def _read_staged_file(ctx: InitialStageContext) -> tuple[Any, str]:
+    """The staged file's content and type, a delimited file read as its rows.
+
+    The template check renders the first of these rows, so it reads a column under the
+    name the run's records carry it under; preparation reads the file with the same loader.
+    """
+    from agent_actions.input.loaders.file_reader import FileReader
+    from agent_actions.input.loaders.tabular import TabularLoader
+
+    file_type = Path(ctx.file_path).suffix.lower()
+    if file_type in _DELIMITED_FILE_TYPES:
+        loader = TabularLoader(ctx.agent_config, ctx.agent_name)
+        return loader.process(content=None, file_path=ctx.file_path), file_type
+    file_reader = FileReader(ctx.file_path)
+    return file_reader.read(), file_reader.file_type
+
+
 def process_initial_stage(ctx: InitialStageContext):
     """Process input files through the initial stage pipeline. Returns output file path."""
-    from agent_actions.input.loaders.file_reader import FileReader
-
-    file_reader = FileReader(ctx.file_path)
-    content = file_reader.read()
-    file_type = file_reader.file_type
+    content, file_type = _read_staged_file(ctx)
     run_mode = ctx.agent_config.get("run_mode")
 
     logger.info(
@@ -202,7 +219,11 @@ def process_initial_stage(ctx: InitialStageContext):
         # not records at all, and the reader would fix those and still be here.
         _refuse_rows_that_are_not_records(content, ctx.file_path, ctx.agent_name)
 
-    validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
+    if file_type not in _DELIMITED_FILE_TYPES:
+        # A delimited file reached this check as lists of cells, which it skips, so
+        # a CSV column named like a namespace has always staged. Reading the file as
+        # rows must not start refusing a workflow that runs.
+        validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
 
     _validate_staged_data(
         raw_content=content,

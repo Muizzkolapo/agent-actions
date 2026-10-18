@@ -176,7 +176,7 @@ The response plan only needs the impact level -- not the full breakdown of estim
   intent: "Generate executive summary for high-severity incidents"
   guard:
     condition: 'aggregate_severity.final_severity == "SEV1" or aggregate_severity.final_severity == "SEV2"'
-    on_false: "filter"
+    on_false: "skip"
   schema: generate_executive_summary
   prompt: $incident_triage.Generate_Executive_Summary
   context_scope:
@@ -186,9 +186,9 @@ The response plan only needs the impact level -- not the full breakdown of estim
       - generate_response_plan.*
 ```
 
-This action only runs for SEV1 and SEV2 incidents. The `guard` block evaluates a condition against runtime context. SEV3 or lower? The action gets filtered -- skipped entirely -- saving LLM cost and avoiding unnecessary leadership notifications.
+This action only runs for SEV1 and SEV2 incidents. The `guard` block evaluates a condition against runtime context. SEV3 or lower? The action is skipped for that incident -- no model call -- saving LLM cost and avoiding unnecessary leadership notifications.
 
-With `"filter"`, the action is silently skipped and downstream actions proceed without its output. `"block"` would halt the entire pipeline instead. The final formatting stage still needs to run for lower-severity incidents, so `"filter"` is correct here.
+With `"skip"`, the incident continues to the actions below without this action's output. `"filter"` would remove the incident from everything downstream instead: no action below would see it, and an action whose records are all filtered is skipped along with every action that depends on it. The final formatting stage still needs to run for lower-severity incidents, so `"skip"` is correct here.
 
 ### Stage 8: format_triage_output (Tool)
 
@@ -211,7 +211,7 @@ With `"filter"`, the action is silently skipped and downstream actions proceed w
       - source.timestamp
 ```
 
-The final tool action assembles all upstream outputs into a single structured triage record. It observes every prior action's output. When the executive summary was filtered (SEV3+), `generate_executive_summary.*` is simply absent from context -- the tool handles that gracefully.
+The final tool action assembles all upstream outputs into a single structured triage record. It observes every prior action's output. When the executive summary was skipped (SEV3+), the tool finds `generate_executive_summary` as `None` and writes an empty `executive_summary`.
 
 ## Key Patterns Explained
 
@@ -259,12 +259,12 @@ Guards let you skip actions based on runtime values:
 ```yaml
 guard:
   condition: 'aggregate_severity.final_severity == "SEV1" or aggregate_severity.final_severity == "SEV2"'
-  on_false: "filter"
+  on_false: "skip"
 ```
 
 The `condition` is evaluated against the accumulated context. If it returns false, `on_false` determines the behavior:
-- `"filter"` -- skip this action silently; downstream actions still run
-- `"block"` -- halt the pipeline at this point
+- `"skip"` -- skip this action for the record; the record still reaches downstream actions
+- `"filter"` -- drop the record from this action's output; downstream actions never see it
 
 This avoids wasting LLM calls on low-severity incidents that don't need executive attention.
 

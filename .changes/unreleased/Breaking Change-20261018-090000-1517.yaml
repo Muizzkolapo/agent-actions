@@ -1,0 +1,11 @@
+kind: Breaking Change
+body: >-
+  A fan-in now fails when one branch holds a row a `granularity: File` tool returned with
+  `source_index: None` (an aggregate) and another branch does not read it. It used to run
+  the aggregate with the other branches' fields empty, and any record the tool consumed into
+  it with the tool branch's fields empty, and report success. The error names the branches
+  and the tool's action. Read the aggregate in an action that depends on its branch alone,
+  or have every branch of the fan-in read it. Such rows now carry `aggregated_by`, the
+  action's name, a framework field excluded from what an action reads; rows stored before
+  this release lack it until the tool runs again (#1517).
+time: 2026-10-18T09:00:00Z

@@ -75,7 +75,9 @@ class ReferenceExtractor:
 
         guard = agent_config.get("guard")
         if guard:
-            requirements.extend(self._extract_from_guard(guard, agent_name))
+            requirements.extend(self._extract_from_guard_clause(guard, agent_config))
+            if isinstance(guard, dict):
+                requirements.extend(self._extract_from_guard(guard, agent_name))
 
         # By shape, not falsiness: `context_scope:` null and a scalar are the same user
         # error, and `or {}` left the second one raising. The graph builder coerces this
@@ -317,6 +319,69 @@ class ReferenceExtractor:
             return (root, ".".join(attrs))
 
         return None
+
+    @staticmethod
+    def _guard_names_not_actions(agent_config: dict[str, Any]) -> set[str]:
+        """Top-level names a guard can read that are not action namespaces.
+
+        The guard context promotes these (see `guards/bare_reference.py`). A read through
+        a reserved name no record has is still reported, for the type checker to refuse,
+        unless a version param of that name puts it on the record.
+        """
+        from agent_actions.guards.bare_reference import (
+            PROMOTED_RECORD_FIELDS,
+            PROMOTED_VERSION_KEYS,
+        )
+        from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
+
+        version_context = agent_config.get("_version_context")
+        promoted = VersionNamespaceBuilder.promoted_names(
+            version_context if isinstance(version_context, dict) else None
+        )
+        return set(PROMOTED_RECORD_FIELDS) | set(PROMOTED_VERSION_KEYS) | promoted
+
+    def _extract_from_guard_clause(
+        self, guard: Any, agent_config: dict[str, Any]
+    ) -> list[InputRequirement]:
+        """The `namespace.field` paths a SQL guard clause reads.
+
+        Read from the parsed clause, so a dot inside a quoted literal is not a reference.
+        An expanded config carries the clause under `clause`, a raw one under
+        `condition`. A UDF guard, or a clause that does not parse, yields nothing: the
+        guard check reports the parse failure.
+        """
+        if isinstance(guard, str):
+            clause: Any = guard
+        elif isinstance(guard, dict):
+            clause = guard.get("clause") or guard.get("condition")
+        else:
+            return []
+        if not isinstance(clause, str) or not clause.strip():
+            return []
+        if clause.strip().lower().startswith("udf:"):
+            return []
+
+        from agent_actions.expectations.expression import referenced_field_paths
+        from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+
+        parsed = WhereClauseParser().parse_cached(clause)
+        if not parsed.success or parsed.ast is None:
+            return []
+        not_actions = self._guard_names_not_actions(agent_config)
+        requirements: list[InputRequirement] = []
+        for path in referenced_field_paths(parsed.ast.root):
+            source, _, field = path.partition(".")
+            if not field or source in not_actions:
+                continue
+            requirements.append(
+                InputRequirement(
+                    source_agent=source,
+                    field_path=field,
+                    raw_reference=path,
+                    location="guard",
+                )
+            )
+        return requirements
 
     def _extract_from_guard(
         self,

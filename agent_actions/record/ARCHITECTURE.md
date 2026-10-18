@@ -74,7 +74,11 @@ The module defines four frozen sets that classify every framework field. These s
 RECORD_TRACKING_FIELDS (stable identity — set once, carried forward)
 ├── source_guid
 ├── parent_source_guid
-└── version_correlation_id
+├── version_correlation_id
+└── aggregated_by        ← the FILE-tool action that returned this row, or the
+                           row it was built from, with source_index: None. A
+                           record of no source: a fan-in pairs it only where
+                           every branch holds it
 
 RECORD_LIFECYCLE_FIELDS (carried forward; _state_history is appended to)
 ├── _state_history

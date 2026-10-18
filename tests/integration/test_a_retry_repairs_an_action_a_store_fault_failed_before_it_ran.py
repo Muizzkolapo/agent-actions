@@ -11,6 +11,11 @@ An action that failed as a whole is what a retry re-runs in full, so once the fa
 clears ``agac retry`` re-runs it and every action after it, as it does for any failure
 that is the action's own.
 
+Counting its rows once it has run sits outside that handler too. A store error there left
+the action ``completed`` with its readers pending, so ``agac retry`` said "Nothing to
+retry" and exited 0 (1519). It is now failed with its error, as a fault before it ran is.
+Each route's failure is in the run history and in ``agac status`` as well.
+
 Every run is its own ``agac`` process. Only the fault is stood in for: the store raising
 for one action of a level that runs four.
 """
@@ -39,6 +44,7 @@ from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 rows_collected = SQLiteBackend.rows_collected
 clear_disposition = SQLiteBackend.clear_disposition
+_counted = {{}}
 
 
 def _faulted(action_name, route):
@@ -47,8 +53,11 @@ def _faulted(action_name, route):
 
 
 def counting(self, action_name):
+    _counted[action_name] = _counted.get(action_name, 0) + 1
     if _faulted(action_name, "count"):
         raise sqlite3.OperationalError("disk I/O error")
+    if _faulted(action_name, "after") and _counted[action_name] > 1:
+        raise sqlite3.OperationalError("database or disk is full")
     return rows_collected(self, action_name)
 
 
@@ -62,9 +71,10 @@ SQLiteBackend.rows_collected = counting
 SQLiteBackend.clear_disposition = clearing
 """
 
-# The error each route raises: counting the action's rows before it runs, and
-# clearing its node-level disposition as its work starts.
+# The error each route raises: counting the action's rows before it runs, clearing its
+# node-level disposition as its work starts, and counting its rows once it has run.
 FAULTS = {
+    "after": "database or disk is full",
     "count": "disk I/O error",
     "start": "database is locked",
 }
@@ -180,3 +190,44 @@ def test_a_dry_run_names_the_action_and_its_error_and_changes_nothing(project, e
     assert "Dry run" in output, output
     assert _status_file(root) == before
     assert _dispositions(root, FAULTED) == []
+
+
+@pytest.mark.parametrize("execution", ["parallel", "sequential"])
+def test_after_a_fault_counting_its_rows_nothing_reads_what_it_stored(project, execution):
+    """Failed, the action is re-run by the retry before any action reads it."""
+    root, stand_in = project
+    output = _fail_the_run(root, stand_in, execution, "after")
+
+    statuses = _statuses(root)
+    assert statuses[FAULTED] == "failed", (statuses, output)
+    assert statuses[READER] == "pending", (statuses, output)
+
+
+def _last_run(root):
+    return json.loads((root / "artefact" / "runs.json").read_text())["executions"][-1]
+
+
+@pytest.mark.parametrize("fault", sorted(FAULTS))
+@pytest.mark.parametrize("execution", ["parallel", "sequential"])
+def test_the_run_history_records_the_action_failed_with_its_error(project, execution, fault):
+    root, stand_in = project
+    output = _fail_the_run(root, stand_in, execution, fault)
+
+    run = _last_run(root)
+    entry = run["actions"].get(FAULTED, {})
+    assert entry.get("status") == "failed", (run, output)
+    assert FAULTS[fault] in entry.get("error", ""), (run, output)
+    assert run["failed_actions"] == 1, run
+
+
+@pytest.mark.parametrize("fault", sorted(FAULTS))
+def test_status_shows_the_failed_action_with_its_error(project, fault):
+    root, stand_in = project
+    _fail_the_run(root, stand_in, "parallel", fault)
+
+    result = _agac(root, stand_in, "status", "-a", WORKFLOW)
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 0, output
+    (line,) = [line for line in output.splitlines() if f" {FAULTED} " in line]
+    assert "failed" in line and FAULTS[fault] in line, output

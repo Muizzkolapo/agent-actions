@@ -54,7 +54,7 @@ Pre-flight: dag-fit — 1 required output field(s) a tool's code does not return
 
 Return the field, or make it optional in the schema (`optional: true` on a `fields:` entry). If the tool does return it in a way the check cannot read, list it under `defaults:` on the action. A tool whose output the check cannot read at all, such as one built by a helper or in a loop, is not checked.
 
-A record tool whose returned dict starts as a literal is held to more than a warning: a required field it never sets, or sets only inside a branch, refuses the workflow. See [Required Output Field Set Only in a Branch](#required-output-field-set-only-in-a-branch).
+A record tool whose returned dict starts as a literal is held to more than a warning: a required field it never sets, sets only inside a branch, or leaves out of an early return, refuses the workflow. See [Required Output Field Set Only in a Branch](#required-output-field-set-only-in-a-branch).
 
 ### Minimal Decorator
 
@@ -159,7 +159,8 @@ def aggregate_tool(data: list[dict], **kwargs) -> FileUDFResult:
 |---|---|
 | An item you received | Extends parent lineage — downstream `observe` can load ancestor data |
 | `FileUDFResult` output whose `source_index` list names every record of the file split from one source, and only those, with no other output naming any of them | Takes that source's `source_guid`, as an unsplit record holds it, so a fan-in pairs it with other branches' records of the source. Any other many-to-one output keeps its first input's identity |
-| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. |
+| `FileUDFResult` output with `source_index: None` | Creates new root — fresh lineage and a fresh `source_guid`, and `aggregated_by` names the action. That identity matches nothing upstream, so the row is stored whole rather than as a delta against it, and keeps the namespaces its file carried. A [fan-in](../context/context-scope.md) pairs it only where every branch reads it; beside a branch that does not, the fan-in fails |
+| No output naming an input | The input was dropped: it is stored as a tombstone, `unprocessed` with reason `tool_missing_record`, and the actions below skip it, including a fan-in beside another branch. Not when any output declares `source_index: None`, which may have consumed it: then the input gets no row |
 
 ## Tool Discovery
 
@@ -325,9 +326,33 @@ in the literal, or with `out["key"] = ...`, `out |= {...}`,
   they run on, and binding `out` to a new literal keeps only that literal's
   keys.
 
-The refusal names the line that sets the field only in a branch, or the line
-that removes it. A tool whose output it cannot read this way is not refused,
-and its records are still checked one by one at run time. That covers:
+Every `return` is checked, not only the last: each one hands back a record to
+validate. An early return of a literal, or of `out` before the key is set,
+refuses the workflow when it leaves out a required field:
+
+```python
+@udf_tool()
+def produce(data: dict, **kwargs) -> dict:
+    content = data["source"]["page_content"]
+    if not content:
+        return {"label": ""}  # 'items' is required by the schema
+    return {"label": content, "items": content.upper()}
+```
+
+```
+producer: output schema requires 'items' but the tool 'produce' returns without
+it at line 5 of produce.py, inside an `if`, so a record that takes that path fails
+output validation at run time. Make 'items' optional in the schema, or set it on
+every path in the tool.
+```
+
+An early return of nothing (`return`, `return None`, `return []`) hands back no
+record and is not checked, and neither is a branch that only raises.
+
+The refusal names the line that sets the field only in a branch, the line that
+removes it, or the early return that leaves it out. A return whose output it
+cannot read this way is not refused, and its records are still checked one by
+one at run time. That covers:
 
 - a dict a helper function builds, or that any path binds to something other
   than a literal;
@@ -335,7 +360,9 @@ and its records are still checked one by one at run time. That covers:
   `out.update(build(data))` or `out |= extra`;
 - a key set or removed by a name the check cannot know, as in
   `for field in FIELDS: out[field] = ...`;
-- a return inside a loop.
+- a return inside a loop, other than of a literal;
+- a return of the tool's input, of a helper's result, of a `{**spread}`, or of a
+  list of more than one item.
 
 ### Function Not Found
 

@@ -1,10 +1,15 @@
 """Static type checker for workflow field references."""
 
+import difflib
 import re
 
-from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
+from agent_actions.utils.constants import (
+    RESERVED_NAMES_NO_RECORD_HAS,
+    SPECIAL_NAMESPACES,
+    VERDICT_KEY,
+)
 
-from .data_flow_graph import DataFlowGraph, DataFlowNode, InputRequirement
+from .data_flow_graph import DataFlowGraph, DataFlowNode, InputRequirement, OutputSchema
 from .errors import (
     FieldLocation,
     StaticTypeError,
@@ -19,6 +24,18 @@ _CAMEL_RE = re.compile(r"([a-z0-9])([A-Z])")
 def _camel_to_snake(name: str) -> str:
     """Convert camelCase to snake_case (e.g. ``hitlStatus`` → ``hitl_status``)."""
     return _CAMEL_RE.sub(r"\1_\2", name).lower()
+
+
+def _admits_unlisted(output_schema: OutputSchema) -> bool:
+    """Whether the schema, or the schema of each of its items, sets `additionalProperties`."""
+    schema = output_schema.json_schema
+    if not isinstance(schema, dict):
+        return False
+    items = schema.get("items")
+    return any(
+        isinstance(part, dict) and part.get("additionalProperties") not in (None, False)
+        for part in (schema, items)
+    )
 
 
 class StaticTypeChecker:
@@ -98,23 +115,35 @@ class StaticTypeChecker:
         if source_agent in SPECIAL_NAMESPACES:
             return
 
+        # A guard naming its own action, or one not upstream of it through its
+        # dependencies, is refused by `find_reads_not_upstream` in words about the guard.
+        is_guard = requirement.location == "guard"
+        if is_guard and source_agent == node.name:
+            return
+
         source_node = self.graph.get_node(source_agent)
         if not source_node:
             available_agents = sorted(self.graph.get_all_agent_names())
+            closest = sorted(difflib.get_close_matches(source_agent, available_agents, n=3))
+            hint = (
+                f"Available actions: {', '.join(available_agents)}"
+                if available_agents
+                else "No actions found in workflow"
+            )
+            if closest:
+                hint = f"Did you mean {' or '.join(repr(n) for n in closest)}? {hint}"
             result.add_error(
                 StaticTypeError(
                     message=f"Referenced action '{source_agent}' does not exist in workflow",
                     location=location,
                     referenced_agent=source_agent,
                     referenced_field=field_path,
-                    hint=f"Available actions: {', '.join(available_agents)}"
-                    if available_agents
-                    else "No actions found in workflow",
+                    hint=hint,
                 )
             )
             return
 
-        if source_agent != node.name:
+        if source_agent != node.name and not is_guard:
             reachable = self.graph.get_reachable_upstream_names(node.name)
             if source_agent not in reachable:
                 result.add_error(
@@ -168,7 +197,30 @@ class StaticTypeChecker:
         if root_field == "*" or root_field.isdigit():
             return
 
-        available = output_schema.available_fields
+        if is_guard:
+            # A guard reads the action's namespace as stored: what it produced and the
+            # verdict its expectations attach, never what it observed or passed through.
+            if root_field == VERDICT_KEY:
+                return
+            available = output_schema.schema_fields
+        else:
+            available = output_schema.available_fields
+
+        # The record as stored also keeps a field an open schema (`additionalProperties`)
+        # admits without listing it.
+        if is_guard and root_field not in available and _admits_unlisted(output_schema):
+            result.add_warning(
+                StaticTypeWarning(
+                    message=f"Cannot validate field '{field_path}' - "
+                    f"action '{source_agent}' has a schema that allows fields it does not list",
+                    location=location,
+                    referenced_agent=source_agent,
+                    referenced_field=field_path,
+                    hint=f"List '{root_field}' in the schema of '{source_agent}' "
+                    "for it to be checked",
+                )
+            )
+            return
 
         if root_field not in available:
             # Try camelCase → snake_case normalization.  The HITL runtime
@@ -179,7 +231,7 @@ class StaticTypeChecker:
             if snake_field != root_field and snake_field in available:
                 return  # Accepted — runtime will normalize
 
-            if output_schema.drops_field(root_field):
+            if not is_guard and output_schema.drops_field(root_field):
                 result.add_error(
                     StaticTypeError(
                         message=f"Field '{root_field}' has been dropped from "

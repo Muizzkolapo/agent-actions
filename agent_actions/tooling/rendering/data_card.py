@@ -37,6 +37,7 @@ METADATA_KEYS: frozenset[str] = frozenset(
         # test_no_framework_field_would_render_as_business_data.
         "_delta_mode",
         "version_correlation_id",
+        "aggregated_by",
     }
 )
 

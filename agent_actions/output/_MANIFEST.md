@@ -67,7 +67,7 @@ This prevents file collisions when multiple files share the same name but live i
 | `ActionExpander.expand_actions_to_agents()` | `agent_config/{workflow}.yml` | Transforms | `actions`, `defaults`, `versions` |
 | `ResponseSchemaCompiler.compile()` | `schema/{workflow}/{action}.yml` | Reads | `schema`, `schema_name` |
 
-**Internal only**: `compile_unified_schema`, `_convert_json_schema_to_unified`, `compile_field`, `_inject_functions_into_schema`, `_resolve_dispatch_in_schema`, `_prepare_context_data_str`, `config_fields`, `config_schema`, `expander_validation`, `expander_schema`, `expander_action_types`, `expander_merge`, `expander_guard_validation`, `schema_conversion`, `vendor_compilation`, `dispatch_injection`, `context_data` -- no direct project surface.
+**Internal only**: `compile_unified_schema`, `_convert_json_schema_to_unified`, `compile_field`, `_inject_functions_into_schema`, `_resolve_dispatch_in_schema`, `_prepare_context_data_str`, `config_fields`, `config_schema`, `expander_validation`, `expander_schema`, `expander_action_types`, `expander_merge`, `schema_conversion`, `vendor_compilation`, `dispatch_injection`, `context_data` -- no direct project surface.
 
 ## Dependencies
 
