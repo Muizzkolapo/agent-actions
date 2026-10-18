@@ -112,8 +112,7 @@ def _first_stage_workflow_metadata(
 
 
 def _validate_staged_data(
-    raw_content: Any,
-    file_type: str,
+    records: list[Any],
     agent_config: dict[str, Any],
     agent_name: str,
     mode: str,
@@ -122,17 +121,19 @@ def _validate_staged_data(
     action_configs: dict[str, Any] | None = None,
     workflow_metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Validate input context against prompt template requirements before LLM execution.
+    """Render a file's first prepared record against the prompt before any is stored or sent.
 
-    Renders with the version and workflow metadata the records are prepared with, so a
-    prompt that reads `version.*` or `workflow.*` is not refused here.
+    The record is the one the run prepared, whatever the file type, so the render
+    sees the fields a prompt will. Renders with the version and workflow metadata
+    the records are prepared with, so a prompt that reads `version.*` or
+    `workflow.*` is not refused here.
     """
     from agent_actions.prompt.service import (
         PromptPreparationService,
     )
     from agent_actions.workflow.pipeline import ProcessingPipeline
 
-    if not raw_content:
+    if not records:
         return
 
     try:
@@ -143,15 +144,8 @@ def _validate_staged_data(
     if not raw_prompt:
         return
 
-    if file_type == ".json":
-        # A JSON document is rows of records by the time it reaches here; the
-        # document rule runs before this and refuses anything else. Enveloped
-        # as the run envelopes it, so a row field named `content` is a field.
-        first_item = raw_content[0]
-        source_content = _envelope_row(first_item)
-    else:
-        source_content = {"page_content": str(raw_content)[:1000]}
-        first_item = {"page_content": source_content["page_content"]}
+    first_item = records[0]
+    source_content = first_item
 
     agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
         cast("ActionConfigDict", agent_config), action_configs
@@ -236,8 +230,7 @@ def process_initial_stage(ctx: InitialStageContext):
     # After the row check, so a row no seed covers is refused with its location
     # rather than from this render of the first row.
     _validate_staged_data(
-        raw_content=content,
-        file_type=file_type,
+        records=data_chunk,
         agent_config=ctx.agent_config,
         agent_name=ctx.agent_name,
         mode=run_mode or RunMode.ONLINE,
