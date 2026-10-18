@@ -105,6 +105,7 @@ class TestTheDryRunReadsTheFirstRowAsTheRunWill:
 
         _validate_staged_data(
             records=[_envelope_row({"exam": "dbt", "content": {"body": "x"}, "title": "a"})],
+            file_type=".json",
             agent_config=action,
             agent_name="label",
             mode="online",

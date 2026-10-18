@@ -25,7 +25,7 @@ There are none, as far as your templates are concerned. Both batch and online st
 ```json
 {
   "source": {
-    "page_content": "Document text...",
+    "content": "Document text...",
     "url": "https://example.com"
   },
   "seed": { "exam_syllabus": {...} }
@@ -33,7 +33,7 @@ There are none, as far as your templates are concerned. Both batch and online st
 ```
 
 ```jinja2
-Analyze: {{ source.page_content }}
+Analyze: {{ source.content }}
 ```
 
 ### Batch Mode
@@ -41,7 +41,7 @@ Analyze: {{ source.page_content }}
 ```json
 {
   "source": {
-    "page_content": "Document text...",
+    "content": "Document text...",
     "url": "https://example.com"
   },
   "seed": { "exam_syllabus": {...} }
@@ -49,7 +49,7 @@ Analyze: {{ source.page_content }}
 ```
 
 ```jinja2
-Analyze: {{ source.page_content }}
+Analyze: {{ source.content }}
 ```
 
 **Use `{{ source.field }}` in both batch and online prompts.** The framework injects each record's input under the `source` namespace before rendering, so `{{ source.field }}` resolves to the per-record value identically in both modes.
@@ -57,7 +57,7 @@ Analyze: {{ source.page_content }}
 **Do not** use bare `{{ field }}`. `base` is empty before rendering, so `field` is undefined and rendering the template fails (Jinja `StrictUndefined`) — in either mode.
 
 :::warning Common pitfall
-Earlier revisions of this guide described batch mode as accepting unwrapped variables — for example, `{{ page_content }}` instead of `{{ source.page_content }}`. That was wrong. If you have prompts of the form `{{ passage }}`, migrate them to `{{ source.passage }}`; the change is safe in both modes and is the only pattern that has ever worked end-to-end.
+Earlier revisions of this guide described batch mode as accepting unwrapped variables — for example, `{{ content }}` instead of `{{ source.content }}`. That was wrong. If you have prompts of the form `{{ passage }}`, migrate them to `{{ source.passage }}`; the change is safe in both modes and is the only pattern that has ever worked end-to-end.
 :::
 
 ## Mode-Agnostic Templates
@@ -65,7 +65,7 @@ Earlier revisions of this guide described batch mode as accepting unwrapped vari
 There is no longer a need for `{% if source is defined %}` conditionals or other mode-detection scaffolding. Templates are mode-agnostic by construction:
 
 ```jinja2
-Content: {{ source.page_content }}
+Content: {{ source.content }}
 ```
 
 This renders the same way under `agac run -w my_workflow` and `agac run -w my_workflow --mode batch`.
@@ -90,7 +90,7 @@ actions:
     dependencies: [prev_action]
     context_scope:
       observe:
-        - source.page_content
+        - source.content
         - seed.exam_syllabus
         - prev_action.result
       drop:

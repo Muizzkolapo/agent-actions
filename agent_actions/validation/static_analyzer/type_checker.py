@@ -20,6 +20,10 @@ from .errors import (
 
 _CAMEL_RE = re.compile(r"([a-z0-9])([A-Z])")
 
+# Besides a guard, the places that read an upstream's stored namespace. A `drop` names a
+# field on its way into the action's context and is checked as before.
+_NAMESPACE_READS = frozenset({"prompt", "context_scope.observe", "context_scope.passthrough"})
+
 
 def _camel_to_snake(name: str) -> str:
     """Convert camelCase to snake_case (e.g. ``hitlStatus`` → ``hitl_status``)."""
@@ -197,9 +201,11 @@ class StaticTypeChecker:
         if root_field == "*" or root_field.isdigit():
             return
 
-        if is_guard:
-            # A guard reads the action's namespace as stored: what it produced and the
-            # verdict its expectations attach, never what it observed or passed through.
+        reads_namespace = is_guard or requirement.location in _NAMESPACE_READS
+        if reads_namespace:
+            # A read of the action's namespace finds it as stored: what it produced and the
+            # verdict its expectations attach, never what it observed or passed through
+            # (a passed-through field is stored under the namespace it came from).
             if root_field == VERDICT_KEY:
                 return
             available = output_schema.schema_fields
@@ -231,7 +237,7 @@ class StaticTypeChecker:
             if snake_field != root_field and snake_field in available:
                 return  # Accepted — runtime will normalize
 
-            if not is_guard and output_schema.drops_field(root_field):
+            if not reads_namespace and output_schema.drops_field(root_field):
                 result.add_error(
                     StaticTypeError(
                         message=f"Field '{root_field}' has been dropped from "
@@ -324,9 +330,13 @@ class StaticTypeChecker:
                 if req.source_agent not in SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
-            implicit = referenced - node.dependencies
+            # An action that does not exist is refused by `_check_requirement`; it is no
+            # dependency to add.
+            implicit = {
+                agent for agent in referenced - node.dependencies if self.graph.get_node(agent)
+            }
 
-            for agent in implicit:
+            for agent in sorted(implicit):
                 for req in node.input_requirements:
                     if req.source_agent == agent:
                         warnings.append(

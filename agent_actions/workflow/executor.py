@@ -45,6 +45,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
+    FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
@@ -844,6 +845,8 @@ class ActionExecutor:
             )
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             return (False, None)
+        if should_skip:
+            self._settle_lost_dispositions(storage_backend, action_name)
         if (
             not should_skip
             and self.deps.state_manager.get_status(action_name) in COMPLETED_STATUSES
@@ -858,6 +861,43 @@ class ActionExecutor:
                 storage_backend.clear_prompt_traces(action_name)
             self.deps.state_manager.reopen([*readers, action_name])
         return (should_skip, result)
+
+    def _settle_lost_dispositions(self, storage_backend: Any, action_name: str) -> None:
+        """Write the dispositions a collect pass stored rows for but could not record.
+
+        Those records kept ``deferred``, which no run or retry acts on (``lost_dispositions``).
+        One settled as a failure leaves the action completed with failures, as it would
+        have been. A store that refuses again leaves them ``deferred``, with a warning.
+        """
+        from agent_actions.workflow.managers.batch import (
+            lost_dispositions,
+            settle_lost_dispositions,
+        )
+
+        try:
+            settled = lost_dispositions(storage_backend, action_name)
+            if not settled:
+                return
+            settle_lost_dispositions(storage_backend, settled)
+        except Exception as e:
+            logger.warning(
+                "Could not settle the records %s holds as deferred after its batch was "
+                "collected; they stay deferred: %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
+            return
+        logger.info(
+            "Action '%s': wrote the disposition of %d record(s) its collected batch left "
+            "deferred, from the rows stored for them",
+            action_name,
+            len(settled),
+        )
+        if any(row[2] in FAILURE_DISPOSITIONS for row in settled) and (
+            self.deps.state_manager.get_status(action_name) == ActionStatus.COMPLETED
+        ):
+            self.deps.state_manager.update_status(action_name, ActionStatus.COMPLETED_WITH_FAILURES)
 
     def _check_prior_output(
         self, storage_backend: Any, action_name: str
@@ -1888,7 +1928,9 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_records_for_action(action_name)
+        pre_run_count = self._count_before_the_check(
+            action_name, action_idx, action_config, start_time
+        )
         try:
             output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
                 action_name,
@@ -1923,7 +1965,9 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_records_for_action(action_name)
+        pre_run_count = self._count_before_the_check(
+            action_name, action_idx, action_config, start_time
+        )
         try:
             output_folder, batch_status = await asyncio.to_thread(
                 self.deps.batch_manager.handle_batch_agent,
@@ -1947,6 +1991,31 @@ class ActionExecutor:
             duration,
             pre_run_count,
         )
+
+    def _count_before_the_check(
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
+    ) -> int:
+        """The action's row count before its batch is checked, as ``_begin`` counts it.
+
+        An error here ends the run (see ``_record_store_failure``); the check never
+        tracked a start, so the failure is recorded with one.
+        """
+        try:
+            return self._count_records_for_action(action_name)
+        except Exception as error:
+            params = ActionRunParams(
+                action_name=action_name,
+                action_idx=action_idx,
+                action_config=action_config,
+                is_last_action=False,
+                start_time=start_time,
+            )
+            self._record_store_failure(action_name, _elapsed(params), error, start=params)
+            raise
 
     def _batch_output_directory(self, action_name: str) -> str:
         """Resolve the target output directory for a batch action."""

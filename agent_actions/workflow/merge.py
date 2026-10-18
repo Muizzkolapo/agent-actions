@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.logging.diagnostics import DIAGNOSTIC
-from agent_actions.processing.record_helpers import upstream_cause
+from agent_actions.processing.record_helpers import FAN_IN_CONSUMED_INTO, upstream_cause
+from agent_actions.record.reasons import CONSUMED_INTO_OUTPUT
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES, RecordState
 from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
@@ -335,7 +336,9 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     records of a source beside other branches' when it shares no record of that source
     with any of them; both raise rather than run on records that hold one branch alone.
     So does a record ``aggregated_by`` a FILE tool that not every branch holds: it is of
-    no source, and pairs with nothing but itself.
+    no source, and pairs with nothing but itself. A record a branch holds no record of
+    because a FILE tool there folded it into another record's row (``folded_sources``) is
+    merged ``cascade_skipped``, naming that row, so the action leaves it unprocessed.
     """
     tagged: list[tuple[str, Any]] = []
     for branch, data in sources:
@@ -446,8 +449,72 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
         ]
         return [lead + unit for lead in leads for unit in units]
 
-    merged = [_merge_group(group) for key in roots for group in to_merge(key, set(), False)]
+    # Which branch folded each record into which of its rows, and with what action.
+    folded_into: dict[str, dict[str, tuple[str, dict[str, Any]]]] = {}
+    for branch, record in tagged:
+        folded = record.get("folded_sources") if isinstance(record, dict) else None
+        if isinstance(folded, dict) and record.get("source_guid"):
+            for guid, action in folded.items():
+                folded_into.setdefault(branch, {}).setdefault(str(guid), (str(action), record))
+
+    def consumed(key: str) -> tuple[str, str, dict[str, Any]] | None:
+        """``(branch, action, row)`` where a branch lacking *key* folded it into a row."""
+        guids = {str(r["source_guid"]) for _, r in groups[key] if r.get("source_guid")}
+        for branch in sorted(every - branches(key) - below(key)):
+            for guid in sorted(guids):
+                if guid in folded_into.get(branch, {}):
+                    return (branch, *folded_into[branch][guid])
+        return None
+
+    merged: list[Any] = []
+    skipped: dict[tuple[str, str, str], list[str]] = {}
+    for key in roots:
+        into = consumed(key)
+        for group in to_merge(key, set(), False):
+            record = _merge_group(group)
+            if into is not None and record.get("_state") not in CASCADE_BLOCKING_VALUES:
+                branch, action, row = into
+                record = _consumed_into_another(record, action=action, row=row)
+                where = (branch, action, str(row["source_guid"]))
+                skipped.setdefault(where, []).append(str(record.get("source_guid")))
+            merged.append(record)
+    for (branch, action, row_guid), guids in skipped.items():
+        logger.warning(
+            "Fan-in: %d record(s) %s were consumed into another record's output (%s) by "
+            "'%s' in branch '%s', which holds no record of them; they are left unprocessed "
+            "here with reason consumed_into_another_record",
+            len(guids),
+            guids[:10],
+            row_guid,
+            action,
+            branch,
+        )
     return merged + without_key
+
+
+def _consumed_into_another(
+    record: dict[str, Any], *, action: str, row: dict[str, Any]
+) -> dict[str, Any]:
+    """*record* blocked at the fan-in: *action* folded it into *row*'s output.
+
+    The namespaces *row*'s branch holds and *record* lacks are null, as on a tombstone:
+    the record is present for that branch, with nothing of its own there.
+    """
+    content = dict(get_existing_content(record))
+    for namespace in get_existing_content(row):
+        content.setdefault(namespace, None)
+    metadata = record.get("metadata")
+    return {
+        **record,
+        "content": content,
+        "_state": RecordState.CASCADE_SKIPPED.value,
+        "metadata": {
+            **(metadata if isinstance(metadata, dict) else {}),
+            "upstream_action": action,
+            "upstream_reason": CONSUMED_INTO_OUTPUT,
+            FAN_IN_CONSUMED_INTO: str(row["source_guid"]),
+        },
+    }
 
 
 def _propagate_cascade_blocking(merged: dict[str, Any], group: list[dict[str, Any]]) -> None:

@@ -71,7 +71,7 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 | `skipped` | WHERE clause excluded the record from this action |
 | `filtered` | Guard condition was false; record excluded from output |
 | `unprocessed` | Not answered: a dependency didn't produce output (cascade casualty), or a guard skipped it |
-| `deferred` | In-flight HITL/batch awaiting resolution |
+| `deferred` | In-flight HITL/batch awaiting resolution. A batch record still `deferred` once its batch is collected, because the store refused its outcome, gets the outcome its stored row stands for from the next `agac run` or `agac retry` |
 | `exhausted` | All repair iterations failed |
 | `failed` | Unrecoverable error |
 
@@ -81,7 +81,9 @@ A free-form canonical reason string giving the specific cause (see
 `agent_actions/record/reasons.py`). Common values include `success`, `guard_filter`,
 `guard_skip`, `guard_prefilter_skip`, `upstream_unprocessed`, `tool_missing_record`,
 `prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`,
-`expectations_exhausted`, `consumed_into_output`, and `batch_not_returned` (a `failed`
+`expectations_exhausted`, `consumed_into_output`, `consumed_into_another_record` (an
+`unprocessed` record at a fan-in that one branch's `granularity: File` tool folded into another
+record's row), and `batch_not_returned` (a `failed`
 record a batch provider left out of its results, which no retry will send again).
 
 > **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
@@ -113,6 +115,12 @@ record it did not answer for a reason of its own, such as `batch_not_returned`),
 `upstream_reason` is that action's reason. Below a fan-in, it names the branch that
 blocked the merged record. When nothing on the record names the action, only
 `upstream_state` is there.
+
+A fan-in's tombstone for a record one branch folded into another record's row has reason
+`consumed_into_another_record`, `upstream_action` naming the `granularity: File` tool that
+folded it, `upstream_reason: consumed_into_output`, and `consumed_into`, the `source_guid` of
+the row it went into. It has no `upstream_state`: the tool answered the record. The actions
+below the fan-in skip it as `upstream_unprocessed`, naming the same cause.
 
 ## Version Correlation
 

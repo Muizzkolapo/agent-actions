@@ -30,7 +30,7 @@ class TestSeedDirectiveLoads:
         agent_config = {"workflow_config_path": config_path}
         context_scope = {"seed": {"exam_syllabus": "$file:refs.json"}}
 
-        loaded = PromptPreparationService._load_seed_data(agent_config, context_scope, "act")
+        loaded = PromptPreparationService.load_seed_data(agent_config, context_scope, "act")
 
         assert loaded == {"exam_syllabus": {"exam_name": "Q"}}
 
@@ -39,7 +39,7 @@ class TestSeedDirectiveLoads:
         config_path = _workflow_with_seed_file(tmp_path)
         agent_config = {"workflow_config_path": config_path}
 
-        assert PromptPreparationService._load_seed_data(agent_config, {"observe": []}, "act") == {}
+        assert PromptPreparationService.load_seed_data(agent_config, {"observe": []}, "act") == {}
 
 
 class TestRemovedDirectivesFailLoud:

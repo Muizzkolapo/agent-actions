@@ -49,7 +49,7 @@ def build_guard_context(
         dependency_configs: Per-dependency config (for output_field promotion).
 
     Returns:
-        Full field_context dict with source, dependency, version, and workflow
+        Full field_context dict with source, dependency, seed, version, and workflow
         namespaces — identical to what TaskPreparer.prepare() provides.
     """
     from agent_actions.processing.source_resolution import (
@@ -57,6 +57,7 @@ def build_guard_context(
         resolve_source_content,
     )
     from agent_actions.prompt.context.scope_builder import build_field_context_with_history
+    from agent_actions.prompt.service import PromptPreparationService
 
     if source_content is not None:
         resolved_source = source_content
@@ -81,6 +82,18 @@ def build_guard_context(
         context_scope=agent_config.get("context_scope"),
     )
     field_context.pop("_dependency_metadata", None)
+
+    # The declared seed, loaded as the prompt loads it. Every declared key, as a guard
+    # reads the record whole: `context_scope` decides what the action is handed, not
+    # what its guard sees.
+    seed = PromptPreparationService.load_seed_data(
+        agent_config,
+        agent_config.get("context_scope") or {},
+        agent_name,
+        source=field_context.get("source"),
+    )
+    if seed:
+        field_context["seed"] = seed
 
     # Promote output_field values to top-level so guards can reference them
     # directly (e.g., "severity" instead of "assess.severity").

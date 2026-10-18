@@ -216,3 +216,68 @@ def test_a_split_of_an_aggregate_pairs_with_the_aggregate():
         ("R", "A1"),
         ("R", "A2"),
     ]
+
+
+def _folded_into(branch: str, guid: str, value: str, folded: dict[str, str]) -> dict:
+    """A row a FILE tool returned naming several inputs: it carries the first one's id."""
+    return {**_record(branch, guid, value), "folded_sources": folded}
+
+
+def test_a_record_folded_into_another_row_is_merged_blocked_naming_that_row():
+    merged = merge_fan_in(
+        [
+            ("left", [_record("left", "A", "LA"), _record("left", "B", "LB")]),
+            ("right", [_folded_into("right", "A", "RAB", {"B": "fold"})]),
+        ]
+    )
+
+    by_guid = {r["source_guid"]: r for r in merged}
+    assert by_guid["A"]["content"]["right"]["v"] == "RAB"
+    assert "_state" not in by_guid["A"]
+    blocked = by_guid["B"]
+    assert blocked["_state"] == "cascade_skipped"
+    assert blocked["metadata"]["fan_in_consumed_into"] == "A"
+    assert blocked["metadata"]["upstream_action"] == "fold"
+    assert blocked["metadata"]["upstream_reason"] == "consumed_into_output"
+    assert blocked["content"]["right"] is None
+    assert blocked["content"]["left"] == {"v": "LB"}
+
+
+def test_a_record_a_branch_lacks_without_folding_it_runs_as_before():
+    merged = merge_fan_in(
+        [
+            ("left", [_record("left", "A", "LA"), _record("left", "B", "LB")]),
+            ("right", [_folded_into("right", "A", "RA", {"C": "fold"})]),
+        ]
+    )
+
+    assert all("_state" not in r for r in merged)
+
+
+def test_a_folded_record_every_branch_still_holds_pairs_as_before():
+    merged = merge_fan_in(
+        [
+            ("left", [_record("left", "A", "LA"), _record("left", "B", "LB")]),
+            (
+                "right",
+                [_folded_into("right", "A", "RAB", {"B": "fold"}), _record("right", "B", "RB")],
+            ),
+        ]
+    )
+
+    assert _values(merged) == [("LA", "RAB"), ("LB", "RB")]
+    assert all("_state" not in r for r in merged)
+
+
+def test_a_folded_record_already_blocked_keeps_its_own_cause():
+    failed = {**_record("left", "B", "LB"), "_state": "failed"}
+    merged = merge_fan_in(
+        [
+            ("left", [_record("left", "A", "LA"), failed]),
+            ("right", [_folded_into("right", "A", "RAB", {"B": "fold"})]),
+        ]
+    )
+
+    blocked = next(r for r in merged if r["source_guid"] == "B")
+    assert blocked["_state"] == "failed"
+    assert "fan_in_consumed_into" not in (blocked.get("metadata") or {})

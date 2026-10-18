@@ -57,6 +57,17 @@ prompt: |
   {% endfor %}
 ```
 
+A [guard](../execution/guards.md#context-access) reads the same seed data, so a condition can
+compare a record against a reference file:
+
+```yaml
+guard:
+  condition: 'score_review.score >= seed.thresholds.min_score'
+  on_false: filter
+```
+
+A prompt or guard that reads a seed key its action does not declare is refused before the run.
+
 ## Multiple Seed Files
 
 ```yaml

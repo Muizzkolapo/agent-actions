@@ -203,13 +203,19 @@ Guard conditions are validated in the static analyzer through several checks:
 
 These checks run **before** wildcard expansion to avoid false positives from expanded wildcards.
 
+They, the literal-type check (`_check_guard_literal_type_mismatch`) and
+`apply_guard_nullable_schema_fixes` read a guard through `guard_clause_and_behavior`, which takes
+an expanded guard's `clause` and `behavior` or a raw one's `condition` and `on_false`. Pre-flight
+analyzes the expanded config, so reading only the raw keys left the literal-type check silent and
+took every guard for a filter.
+
 A guard clause's own `namespace.field` reads are type checked like a prompt's: `ReferenceExtractor`
 parses the clause (`clause` once expanded) and reports each path at location `guard`, and
-`StaticTypeChecker` refuses an action that does not exist or a field its schema does not list. A guard's field is checked against what the action produces plus the `expect` verdict: a stored namespace never holds what the action observed or passed through.
+`StaticTypeChecker` refuses an action that does not exist or a field its schema does not list. A guard's field is checked against what the action produces plus the `expect` verdict: a stored namespace never holds what the action observed or passed through. A prompt's reference, and an `observe` or `passthrough` entry, is checked the same way, since each reads the same stored namespace; a `drop` entry is still checked against what the action forwards.
 Names the guard context promotes are not reported as actions: record fields, version keys and
 params (extractor), a direct dependency's `output_field`, and anything below a flat-spreading
 version-merge tool (`WorkflowStaticAnalyzer._without_guard_promotions`). Reach — the guarded action
-itself, or one not upstream through `dependencies` — is left to
+itself (at the first stage too), or one not upstream through `dependencies` — is left to
 `dep_observe_validator.find_reads_not_upstream`, which words it for a guard.
 
 ### apply_guard_nullable_schema_fixes()

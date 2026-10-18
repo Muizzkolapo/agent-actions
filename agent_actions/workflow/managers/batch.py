@@ -25,6 +25,9 @@ from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
+    DISPOSITION_UNPROCESSED,
+    NODE_LEVEL_RECORD_ID,
+    DispositionRow,
 )
 
 # Dispositions that indicate a record reached a terminal outcome.
@@ -236,7 +239,8 @@ class BatchLifecycleManager:
                 sample = sorted(orphan_ids)[:10]
                 logger.warning(
                     "[%s] %d record(s) still in DEFERRED state after batch completion "
-                    "— possible orphans: %s",
+                    "— possible orphans: %s. The next run or retry writes the outcome "
+                    "of each one whose row is stored",
                     agent_name,
                     len(orphan_ids),
                     sample,
@@ -336,3 +340,132 @@ class BatchLifecycleManager:
             # Output dir exists but no batch registry or passthrough
             return "no_batches"
         return None
+
+
+_QUEUED_PREFIX = "batch_queued:batch_id="
+
+
+def lost_dispositions(storage_backend: "StorageBackend", action_name: str) -> list[DispositionRow]:
+    """The disposition each record of a collected batch lost, read from its stored row.
+
+    The collect pass stores a record's row and then writes its disposition; when the store
+    refuses that write, the record keeps the ``deferred`` its submission stamped. Once every
+    batch of the action is collected, the row stands for what the lost disposition said.
+    Only a ``deferred`` naming a collected batch is answered, and only from a row whose
+    state names one outcome; a record with no row, or a row in no settled state, is left
+    ``deferred``. One that already holds another disposition only loses the stale mark,
+    returned as its ``deferred`` row.
+    """
+    deferred = [
+        row
+        for row in storage_backend.get_disposition(action_name, disposition=DISPOSITION_DEFERRED)
+        if row.get("record_id") and row["record_id"] != NODE_LEVEL_RECORD_ID
+    ]
+    if not deferred:
+        return []
+
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    jobs = BatchRegistryManager(storage_backend, action_name).get_all_jobs()
+    # A batch not yet collected, a recovery round's included, still answers its records.
+    if not jobs or any(entry.collected_at is None for entry in jobs.values()):
+        return []
+    collected = {entry.batch_id for entry in jobs.values() if entry.batch_id}
+
+    held: dict[str, set[str]] = {}
+    for row in storage_backend.get_disposition(action_name):
+        held.setdefault(row.get("record_id") or "", set()).add(row.get("disposition") or "")
+    rows_of = _stored_rows_by_record(storage_backend, action_name)
+
+    settled: list[DispositionRow] = []
+    for row in deferred:
+        record_id = row["record_id"]
+        reason = row.get("reason") or ""
+        if not reason.startswith(_QUEUED_PREFIX) or reason[len(_QUEUED_PREFIX) :] not in collected:
+            continue
+        if held.get(record_id, set()) - {DISPOSITION_DEFERRED}:
+            settled.append((action_name, record_id, DISPOSITION_DEFERRED, None, None, None, None))
+            continue
+        outcome = _outcome_of(rows_of.get(record_id, []), action_name)
+        if outcome is not None:
+            disposition, why, detail = outcome
+            settled.append((action_name, record_id, disposition, why, None, None, detail))
+    return settled
+
+
+def settle_lost_dispositions(
+    storage_backend: "StorageBackend", settled: list[DispositionRow]
+) -> None:
+    """Write what ``lost_dispositions`` read, then clear each record's ``deferred``."""
+    storage_backend.set_dispositions_batch(
+        [row for row in settled if row[2] != DISPOSITION_DEFERRED]
+    )
+    for action_name, record_id, *_ in settled:
+        storage_backend.clear_disposition(
+            action_name, disposition=DISPOSITION_DEFERRED, record_id=record_id
+        )
+
+
+def _stored_rows_by_record(
+    storage_backend: "StorageBackend", action_name: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Each stored row of *action_name*, under its identity and each input that produced it."""
+    rows_of: dict[str, list[dict[str, Any]]] = {}
+    for relative_path in storage_backend.list_target_files(action_name):
+        try:
+            stored = storage_backend.read_target_for_rewrite(action_name, relative_path)
+        except FileNotFoundError:
+            continue
+        for stored_row in stored:
+            names = {
+                stored_row.get("source_guid"),
+                *(stored_row.get("producer_source_guids") or ()),
+            }
+            for name in names - {None, ""}:
+                rows_of.setdefault(str(name), []).append(stored_row)
+    return rows_of
+
+
+def _outcome_of(
+    rows: list[dict[str, Any]], action_name: str
+) -> tuple[str, str | None, str | None] | None:
+    """(disposition, reason, detail) the collect pass wrote for a record holding *rows*.
+
+    A record answered with any row is ``success``, as a split's rows are. Otherwise its
+    row's state and the reason this action gave it say what the collect pass wrote; an
+    answer kept empty (``on_empty: skip``) is ``passthrough``.
+    """
+    from agent_actions.record.reasons import EMPTY_OUTPUT, UNPROCESSED
+    from agent_actions.record.state import RecordState
+
+    if not rows:
+        return None
+    states = {row.get("_state") for row in rows}
+    if RecordState.PROCESSED.value in states:
+        return (DISPOSITION_SUCCESS, None, None)
+    if len(states) != 1:
+        return None
+    (state,) = states
+    entry = _last_entry(rows[0], action_name, state)
+    reason = entry.get("reason") if entry else None
+    detail = entry.get("detail") if entry else None
+    if state == RecordState.FAILED.value:
+        return (DISPOSITION_FAILED, reason or "processing_error", detail or reason)
+    if state == RecordState.EXHAUSTED.value:
+        return (DISPOSITION_EXHAUSTED, reason, detail)
+    if state == RecordState.GUARD_SKIPPED.value and reason == EMPTY_OUTPUT:
+        return (DISPOSITION_PASSTHROUGH, reason, None)
+    if state in (RecordState.GUARD_SKIPPED.value, RecordState.CASCADE_SKIPPED.value):
+        return (DISPOSITION_UNPROCESSED, reason or UNPROCESSED, None)
+    return None
+
+
+def _last_entry(row: dict[str, Any], action_name: str, state: Any) -> dict[str, Any] | None:
+    """The latest history entry in which *action_name* moved *row* to *state*."""
+    history = row.get("_state_history")
+    if not isinstance(history, list):
+        return None
+    for entry in reversed(history):
+        if isinstance(entry, dict) and entry.get("action") == action_name:
+            return entry if entry.get("to") == state else None
+    return None

@@ -107,17 +107,17 @@ class TestADropOnlyBindsTheNamespaceItNames:
                 },
                 "schema": {"note": "string"},
             },
-            "report": {
-                "prompt": "{{ carry.score }}",
-                "dependencies": ["carry"],
-                "context_scope": {"observe": ["carry.score"]},
-                "schema": {"final": "string"},
-            },
         }
         result = analyze_workflow(_as_workflow(configs))
 
         messages = [getattr(e, "message", str(e)) for e in result.errors]
         assert messages == [], messages
+        # Forwarded, not produced: `carry` still lists it, and a reader finds it under
+        # `left`, where the passed-through field is stored (1526).
+        schema = WorkflowSchemaService.from_action_configs("dropscope", configs)
+        carry = schema.get_action_schema("carry")
+        assert carry is not None
+        assert "score" in carry.available_outputs, carry.available_outputs
 
     def test_a_drop_the_runtime_refuses_withholds_nothing(self):
         """`drop: [verdict]` has no namespace; the runtime logs it and forwards on."""
@@ -137,17 +137,15 @@ class TestADropOnlyBindsTheNamespaceItNames:
                 },
                 "schema": {"note": "string"},
             },
-            "report": {
-                "prompt": "{{ carry.verdict }}",
-                "dependencies": ["carry"],
-                "context_scope": {"observe": ["carry.verdict"]},
-                "schema": {"final": "string"},
-            },
         }
         result = analyze_workflow(_as_workflow(configs))
 
         messages = [getattr(e, "message", str(e)) for e in result.errors]
         assert messages == [], messages
+        schema = WorkflowSchemaService.from_action_configs("dropscope", configs)
+        carry = schema.get_action_schema("carry")
+        assert carry is not None
+        assert "verdict" in carry.available_outputs, carry.available_outputs
 
     def test_a_schemaless_action_still_gets_the_namespace_rule(self):
         """The invariant must not rest on schema_fields, which a tool leaves empty."""

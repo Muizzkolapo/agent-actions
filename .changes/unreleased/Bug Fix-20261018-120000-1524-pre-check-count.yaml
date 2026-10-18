@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  A store error counting a batch action's rows before its submitted batch is checked
+  records the action failed with that error in the run history as well as in its status,
+  as the same error before an online action runs does. Only the run's own error handler
+  recorded it before, which left the run history with no entry for the action (#1524).
+time: 2026-10-18T12:00:00Z

@@ -155,6 +155,8 @@ Lineage follows `source_index`; the framework assigns `source_guid` itself, and 
 
 An output naming several inputs takes the identity of the first one, with one exception: an output that gathers a split back together. When it names every record of its file that an action above split from one source, and only those, and no other output names any of them, it takes that source's `source_guid`, as the record would hold had it never been split. A [fan-in](../context/context-scope.md) then pairs it with other branches' records of that source.
 
+Any other output naming several inputs folds the rest into the first: with `source_index: [a, b]`, `b` has no row of its own below the tool. Its disposition at the tool is `success` with reason `consumed_into_output` (none when any output declares `source_index: None`), and the row lists it, with the action, under `folded_sources`, which the records built from the row keep. Actions below that read only this branch run on the row. A fan-in beside another branch holds `b` from the other branch alone, so it leaves `b` `unprocessed`, reason `consumed_into_another_record`, rather than run it with this branch's fields empty: its tombstone at the fan-in names the row it went into as `metadata.consumed_into`, the run logs a warning naming both, and `agac dispositions` counts it under Unprocessed.
+
 ### When a FILE Tool Fails
 
 A FILE tool answers its whole file at once, so a failure is recorded against the records it was handed:

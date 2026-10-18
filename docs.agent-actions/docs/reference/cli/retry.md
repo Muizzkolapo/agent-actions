@@ -217,7 +217,8 @@ it is asked again, since what the reviewer decided on is gone.
 
 Some failures belong to an action rather than to any record of it: its input could
 not be read, or the store did not answer as its work began — counting the rows it
-held, or setting it running — or as the rows it wrote were counted once it had run. A
+held, or setting it running — as it counted those rows before checking a batch it had
+submitted, or as the rows it wrote were counted once it had run. A
 store error ends the run (see [`run`](./run#parallel-execution)), and the action is
 failed even where it had stored its rows, so nothing reads them before it runs again.
 Either way the action reads `failed`, and the status file
@@ -352,7 +353,20 @@ A retry writes down the failures it is about to clear before it clears them. If 
 is stopped before its run reaches the end, the next `retry` puts them back and
 starts where the stopped one did, so the records it named are answered again from
 there. It puts them back before anything else, so even a retry that is then refused
-has put them back.
+has put them back. It keeps its record of the stopped retry until it writes its own,
+so a retry that is refused, or finds nothing to do, leaves the stopped one for the next
+`retry` to resume.
+
+A retry with `--from` below the action the stopped one started from is refused before
+anything goes back, while the stopped retry is unfinished: it would never reach the
+failures it puts back, and would leave the records the stopped one named unanswered
+below what it re-ran.
+
+```
+A retry from extract_facts was stopped before it finished, and a retry from summarize
+starts below it, so it would not answer what that one named. Resume it first — agac
+retry -a my_workflow — then retry from summarize if anything is still failed there.
+```
 
 What has moved on since keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has
@@ -409,6 +423,21 @@ it stops on an error, such as the provider dropping the connection while a file'
 results are read: the action reads `failed`, the file's records are still waiting,
 and the finished batch is still in the registry. `retry` does not call that nothing
 to retry. Run the workflow again to collect the batch, then retry what is still failed.
+
+### A record left deferred after its batch was collected
+
+A record waits as `deferred` while its batch is out. The run that collects the batch
+stores the record's row and then writes its outcome; if the store refuses that write,
+the record keeps `deferred` and the run warns that it is still deferred after the batch
+completed. Its answer, or its failure, is in the row the run stored.
+
+The next `agac run` or `agac retry` writes the outcome that row stands for — `success`
+for an answer, `failed` or `exhausted` for a failure, with the reason the run gave it —
+and submits nothing again. Each does it only once every batch of the action is
+collected, and only for a record whose row is stored. A failure written this way is
+then retried like any other: `retry` finds it in the same command, and an action whose
+batch is settled with a failure reads `completed_with_failures`. `--dry-run` writes
+nothing and counts those failures in its plan.
 
 ### When the batch cannot be collected
 

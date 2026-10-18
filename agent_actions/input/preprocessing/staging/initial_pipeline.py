@@ -33,6 +33,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _DELIMITED_FILE_TYPES = frozenset({".csv", ".tsv"})
+# Staged formats read as text and split into chunks, each staged as {"content": <chunk>}.
+_TEXT_FILE_TYPES = frozenset({".txt", ".md", ".pdf", ".docx", ".html"})
+_TEXT_CHUNK_FIELD = "content"
 
 
 @dataclass
@@ -115,6 +118,7 @@ def _first_stage_workflow_metadata(
 
 def _validate_staged_data(
     records: list[Any],
+    file_type: str,
     agent_config: dict[str, Any],
     agent_name: str,
     mode: str,
@@ -152,18 +156,38 @@ def _validate_staged_data(
     agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
         cast("ActionConfigDict", agent_config), action_configs
     )
-    PromptPreparationService.prepare_prompt_with_context(
-        agent_config=agent_config,
-        agent_name=agent_name,
-        contents=source_content if isinstance(source_content, dict) else {},
-        mode=RunMode.BATCH if mode == RunMode.BATCH else RunMode.ONLINE,
-        agent_indices=agent_indices,
-        dependency_configs=dependency_configs,
-        source_content=source_content,
-        version_context=version_context,
-        workflow_metadata=_first_stage_workflow_metadata(workflow_metadata, file_path),
-        current_item=first_item,
-        file_path=file_path,
+    try:
+        PromptPreparationService.prepare_prompt_with_context(
+            agent_config=agent_config,
+            agent_name=agent_name,
+            contents=source_content if isinstance(source_content, dict) else {},
+            mode=RunMode.BATCH if mode == RunMode.BATCH else RunMode.ONLINE,
+            agent_indices=agent_indices,
+            dependency_configs=dependency_configs,
+            source_content=source_content,
+            version_context=version_context,
+            workflow_metadata=_first_stage_workflow_metadata(workflow_metadata, file_path),
+            current_item=first_item,
+            file_path=file_path,
+        )
+    except AgentActionsError as e:
+        if file_type not in _TEXT_FILE_TYPES or not _reads_a_source_field(e):
+            raise
+        raise ConfigValidationError(
+            f"{str(e).rstrip('.')}. A staged {file_type} file is split into chunks, and "
+            f"each record holds its chunk's text in one field, '{_TEXT_CHUNK_FIELD}': "
+            f"read it as source.{_TEXT_CHUNK_FIELD}.",
+            context=e.context,
+            cause=e,
+        ) from e
+
+
+def _reads_a_source_field(error: AgentActionsError) -> bool:
+    """Whether *error* is the check failing to find a field of the `source` namespace."""
+    field_ref = str(error.context.get("field_ref", ""))
+    missing = getattr(error, "missing_variables", None) or []
+    return field_ref.startswith("source.") or any(
+        str(name) == "source" or str(name).startswith("source.") for name in missing
     )
 
 
@@ -250,6 +274,7 @@ def process_initial_stage(ctx: InitialStageContext):
     # rather than from this render of the first row.
     _validate_staged_data(
         records=data_chunk,
+        file_type=file_type,
         agent_config=ctx.agent_config,
         agent_name=ctx.agent_name,
         mode=run_mode or RunMode.ONLINE,
@@ -436,6 +461,19 @@ def _chunk_settings(agent_config: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
     )
 
 
+def _text_chunk_payloads(content: str, agent_config: dict[str, Any]) -> list[dict[str, Any]]:
+    """The payload of each record a staged text file becomes, before its envelope."""
+    chunk_size, chunk_overlap, tokenizer_model, split_method = _chunk_settings(agent_config)
+    chunks = Tokenizer.split_text_content(
+        content,
+        chunk_size,
+        chunk_overlap,
+        tokenizer_model=tokenizer_model,
+        split_method=split_method,
+    )
+    return [{_TEXT_CHUNK_FIELD: chunk} for chunk in chunks]
+
+
 def _prepare_text_chunks_batch(
     content: str,
     agent_config: dict[str, Any],
@@ -445,16 +483,12 @@ def _prepare_text_chunks_batch(
     relative_path: str = "",
 ) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
-    chunk_size, chunk_overlap, tokenizer_model, split_method = _chunk_settings(agent_config)
-    chunks = Tokenizer.split_text_content(
-        content,
-        chunk_size,
-        chunk_overlap,
-        tokenizer_model=tokenizer_model,
-        split_method=split_method,
-    )
     return _add_batch_metadata(
-        [{"content": chunk} for chunk in chunks], batch_id, node_id, storage_backend, relative_path
+        _text_chunk_payloads(content, agent_config),
+        batch_id,
+        node_id,
+        storage_backend,
+        relative_path,
     )
 
 
@@ -539,7 +573,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     data_chunk: list[dict[str, Any]]
     src_text: list[dict[str, Any]]
 
-    if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
+    if ctx.file_type in _TEXT_FILE_TYPES:
         data_chunk = _prepare_text_chunks_batch(
             ctx.content,
             ctx.agent_config,
@@ -633,17 +667,11 @@ def _prepare_online_data(ctx: DataPreparationContext):
     data_chunk: Any
     src_text: Any
 
-    if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
-        chunk_size, chunk_overlap, tokenizer_model, split_method = _chunk_settings(ctx.agent_config)
-        chunks = Tokenizer.split_text_content(
-            ctx.content,
-            chunk_size,
-            chunk_overlap,
-            tokenizer_model=tokenizer_model,
-            split_method=split_method,
-        )
+    if ctx.file_type in _TEXT_FILE_TYPES:
         data_chunk = src_text = _wrap_online_rows(
-            [{"content": text} for text in chunks], ctx.storage_backend, ctx.relative_path
+            _text_chunk_payloads(ctx.content, ctx.agent_config),
+            ctx.storage_backend,
+            ctx.relative_path,
         )
 
     elif ctx.file_type == ".json":
