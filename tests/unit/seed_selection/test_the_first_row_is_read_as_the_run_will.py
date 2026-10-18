@@ -5,8 +5,10 @@ import json
 import pytest
 
 from agent_actions.errors import ConfigValidationError
+from agent_actions.input.preprocessing.staging import initial_pipeline
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     InitialStageContext,
+    _envelope_row,
     _validate_staged_data,
     process_initial_stage,
 )
@@ -102,12 +104,47 @@ class TestTheDryRunReadsTheFirstRowAsTheRunWill:
         )
 
         _validate_staged_data(
-            raw_content=[{"exam": "dbt", "content": {"body": "x"}, "title": "a"}],
-            file_type=".json",
+            records=[_envelope_row({"exam": "dbt", "content": {"body": "x"}, "title": "a"})],
             agent_config=action,
             agent_name="label",
             mode="online",
             file_path=str(workflow / "agent_io" / "staging" / "pages.json"),
+        )
+
+
+class TestATabularFileIsRenderedAsTheRowsTheRunPrepares:
+    @pytest.mark.parametrize("run_mode", ["online", "batch"])
+    def test_a_csv_whose_rows_are_all_covered_passes_every_check(
+        self, tmp_path, run_mode, monkeypatch
+    ):
+        workflow = _workflow(tmp_path)
+        action = _action(
+            workflow,
+            {"syllabus": SYLLABUS},
+            "{{ seed.syllabus.label }}",
+            ["source.title"],
+            run_mode,
+        )
+
+        def reached_the_save(*args, **kwargs):
+            raise RuntimeError("every check passed")
+
+        monkeypatch.setattr(initial_pipeline, "_save_source_data", reached_the_save)
+
+        with pytest.raises(RuntimeError, match="every check passed"):
+            _stage(tmp_path, "pages.csv", "exam,title\ndbt,a\nsnowflake,b\n", action, action)
+
+    def test_a_csv_with_a_bad_row_is_refused_with_its_location(self, tmp_path):
+        workflow = _workflow(tmp_path)
+        action = _action(
+            workflow, {"syllabus": SYLLABUS}, "{{ seed.syllabus.label }}", ["source.title"]
+        )
+
+        with pytest.raises(ConfigValidationError) as excinfo:
+            _stage(tmp_path, "pages.csv", "exam,title\ndbt,a\nsnowflak,b\n", action, action)
+
+        assert str(excinfo.value).endswith(
+            "Known values: dbt, snowflake. (staging/pages.csv, record 1)"
         )
 
 
