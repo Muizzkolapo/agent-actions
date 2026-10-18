@@ -103,6 +103,7 @@ def _project(
     observe: str = "produce.*",
     mode: str = "online",
     produce_guard: str | None = None,
+    open_schema: bool = False,
 ) -> Path:
     root = tmp_path / "project"
     workflow = root / "agent_workflow" / WORKFLOW
@@ -120,10 +121,18 @@ def _project(
     (root / "prompt_store").mkdir()
     (root / "prompt_store" / f"{WORKFLOW}.md").write_text(_PROMPT.format(text=prompt))
     (root / "schema" / WORKFLOW).mkdir(parents=True)
-    (root / "schema" / WORKFLOW / "fix1526_produce_out.yml").write_text(_PRODUCE_SCHEMA)
+    (root / "schema" / WORKFLOW / "fix1526_produce_out.yml").write_text(
+        _PRODUCE_SCHEMA + ("additionalProperties: true\n" if open_schema else "")
+    )
     (root / "schema" / WORKFLOW / "fix1526_consumer_out.yml").write_text(_CONSUMER_SCHEMA)
     (root / "tools" / WORKFLOW).mkdir(parents=True)
-    (root / "tools" / WORKFLOW / "fix1526_produce.py").write_text(_TOOL)
+    tool = _TOOL
+    if open_schema:
+        tool = tool.replace(
+            '[{"severity": "high"}]',
+            '[{"severity": "high", "page_content": data["source"]["page_content"]}]',
+        )
+    (root / "tools" / WORKFLOW / "fix1526_produce.py").write_text(tool)
     (root / "agent_actions.yml").write_text(_PROJECT)
     (root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
     return root
@@ -200,6 +209,34 @@ def test_a_passthrough_of_a_field_the_upstream_only_forwards_is_refused(tmp_path
 
     assert "Field 'page_id' not found in action 'produce' output schema" in output, output
     assert "Location: context_scope.passthrough" in output, output
+
+
+@pytest.mark.parametrize("mode", ["online", "batch"])
+@pytest.mark.parametrize(
+    ("prompt", "observe"),
+    [
+        ("Say hi", "produce.page_content, produce.severity"),
+        ("Say {{ produce.page_content }}", "produce.*"),
+    ],
+)
+def test_a_field_an_open_schema_admits_unlisted_still_runs(tmp_path, mode, prompt, observe):
+    """`produce` observes `page_content` and also returns it; its schema admits it unlisted.
+
+    The stored namespace holds it, so pre-flight warns that it cannot check the field
+    instead of refusing it, as it does for a guard.
+    """
+    project = _project(tmp_path, prompt=prompt, observe=observe, mode=mode, open_schema=True)
+
+    _run_to_the_end(project)
+
+    assert _dispositions(project, "consumer") == ["success", "success"]
+    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        traces = [c for (c,) in con.execute("select llm_context from prompt_trace")]
+    finally:
+        con.close()
+    assert any('"produce": {' in c and '"page_content": "two"' in c for c in traces), traces
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])
