@@ -450,12 +450,10 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
         return [lead + unit for lead in leads for unit in units]
 
     # Which branch folded each record into which of its rows, and with what action.
-    folded_into: dict[str, dict[str, tuple[str, dict[str, Any]]]] = {}
+    by_branch: dict[str, list[Any]] = {}
     for branch, record in tagged:
-        folded = record.get("folded_sources") if isinstance(record, dict) else None
-        if isinstance(folded, dict) and record.get("source_guid"):
-            for guid, action in folded.items():
-                folded_into.setdefault(branch, {}).setdefault(str(guid), (str(action), record))
+        by_branch.setdefault(branch, []).append(record)
+    folded_into = {branch: rows_folded_into(rows) for branch, rows in by_branch.items()}
 
     def consumed(key: str) -> tuple[str, str, dict[str, Any]] | None:
         """``(branch, action, row)`` where a branch lacking *key* folded it into a row."""
@@ -474,7 +472,7 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
             record = _merge_group(group)
             if into is not None and record.get("_state") not in CASCADE_BLOCKING_VALUES:
                 branch, action, row = into
-                record = _consumed_into_another(record, action=action, row=row)
+                record = consumed_into_another(record, action=action, row=row)
                 where = (branch, action, str(row["source_guid"]))
                 skipped.setdefault(where, []).append(str(record.get("source_guid")))
             merged.append(record)
@@ -492,7 +490,18 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     return merged + without_key
 
 
-def _consumed_into_another(
+def rows_folded_into(rows: list[Any]) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Each record folded into one of *rows* (``folded_sources``): its action and that row."""
+    folded_into: dict[str, tuple[str, dict[str, Any]]] = {}
+    for row in rows:
+        folded = row.get("folded_sources") if isinstance(row, dict) else None
+        if isinstance(folded, dict) and row.get("source_guid"):
+            for guid, action in folded.items():
+                folded_into.setdefault(str(guid), (str(action), row))
+    return folded_into
+
+
+def consumed_into_another(
     record: dict[str, Any], *, action: str, row: dict[str, Any]
 ) -> dict[str, Any]:
     """*record* blocked at the fan-in: *action* folded it into *row*'s output.

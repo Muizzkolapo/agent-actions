@@ -9,10 +9,15 @@ from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import AgentActionsError, ConfigurationError, DataValidationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.limits import forget_slice_observation
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
-from agent_actions.workflow.merge import merge_branch_records
+from agent_actions.workflow.merge import (
+    consumed_into_another,
+    merge_branch_records,
+    rows_folded_into,
+)
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -280,12 +285,45 @@ class VersionOutputCorrelator:
     ) -> list[dict[str, Any]]:
         """Correlate version outputs by source record ID using merge pattern."""
         correlation_groups = self._build_correlation_groups(version_outputs)
+        folded_into = {version: rows_folded_into(rows) for version, rows in version_outputs.items()}
         correlated_records = []
         for agent_records in correlation_groups.values():
             if agent_records:
                 merged_record = self._create_merged_record(agent_records, version_outputs)
-                correlated_records.append(merged_record)
+                correlated_records.append(
+                    _left_for_the_version_that_folded_it(merged_record, agent_records, folded_into)
+                )
         return correlated_records
+
+
+def _left_for_the_version_that_folded_it(
+    merged: dict[str, Any],
+    agent_records: dict[str, dict[str, Any]],
+    folded_into: dict[str, dict[str, tuple[str, dict[str, Any]]]],
+) -> dict[str, Any]:
+    """*merged* blocked when a version holding no record of it folded it into another row.
+
+    As a fan-in leaves such a record (``merge_fan_in``), so the merge action leaves it
+    unprocessed with reason ``consumed_into_another_record`` rather than run it without
+    that version's output.
+    """
+    if merged.get("_state") in CASCADE_BLOCKING_VALUES:
+        return merged
+    guids = sorted({str(r["source_guid"]) for r in agent_records.values() if r.get("source_guid")})
+    for version in sorted(folded_into.keys() - agent_records.keys()):
+        for guid in guids:
+            if guid in folded_into[version]:
+                action, row = folded_into[version][guid]
+                logger.warning(
+                    "Version merge: record %s was consumed into another record's output (%s) "
+                    "by '%s', which holds no record of it; it is left unprocessed here with "
+                    "reason consumed_into_another_record",
+                    guid,
+                    row.get("source_guid"),
+                    action,
+                )
+                return consumed_into_another(merged, action=action, row=row)
+    return merged
 
 
 __all__ = ["VersionOutputCorrelator"]

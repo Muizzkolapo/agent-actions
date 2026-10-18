@@ -310,7 +310,12 @@ one, so the merge writes that file empty as any reader would. The merge's other
 dependencies, those that are not the versions it merges (`_resolve_dependencies_besides_versions`),
 are read from the store in those same files and paired with the merged versions by
 `merge_fan_in`, as any fan-in pairs its branches, so a namespace it observes from a
-sibling branch reaches it. Its input is never stored:
+sibling branch reaches it. The versions themselves are correlated by
+`version_correlation_id`, not through `merge_fan_in`, so the correlator applies the fan-in's
+rule for a folded record itself: a record a version holds no row of because that version's
+FILE tool folded it into another row (`folded_sources`, read by `merge.rows_folded_into`) is
+merged `cascade_skipped` through `merge.consumed_into_another`, and the merge leaves it
+`unprocessed` with reason `consumed_into_another_record`. Its input is never stored:
 its own target holds its answers, which a re-run carries records from. The correlator
 also deletes, before the walk, each stored file of the merge that no version source
 lists, under a file limit and a repair too: it lists every file its version sources hold,

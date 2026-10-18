@@ -120,7 +120,9 @@ A fan-in's tombstone for a record one branch folded into another record's row ha
 `consumed_into_another_record`, `upstream_action` naming the `granularity: File` tool that
 folded it, `upstream_reason: consumed_into_output`, and `consumed_into`, the `source_guid` of
 the row it went into. It has no `upstream_state`: the tool answered the record. The actions
-below the fan-in skip it as `upstream_unprocessed`, naming the same cause.
+below the fan-in skip it as `upstream_unprocessed`, naming the same cause. A version merge
+(`version_consumption`) leaves the same tombstone for a record one version of a versioned
+`granularity: File` tool folded into another record's row while another version kept it.
 
 ## Version Correlation
 
