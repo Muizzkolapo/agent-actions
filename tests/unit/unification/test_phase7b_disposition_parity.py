@@ -1,14 +1,14 @@
 """Phase 7b: Batch retrieve dispositions must match online collector rules.
 
-U-3.2a: write_record_dispositions must produce the same disposition types,
-reasons, and auxiliary fields (input_snapshot, detail) as ResultCollector.
-collect_results() does for equivalent records.
+U-3.2a: FILTERED records get the disposition and reason online writes. The
+SUCCESS, FAILED and EXHAUSTED parity, with input snapshots and details, is
+pinned on the path finalize runs in
+tests/unit/llm/batch/test_batch_collect_writes_dispositions.py.
 
 U-3.5a: Prompt trace responses must only be written for SUCCESS records,
 not for tombstones/passthroughs.
 """
 
-import json
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -18,13 +18,9 @@ from agent_actions.llm.batch.services.collect import (
     update_prompt_trace_responses,
     write_filtered_dispositions,
 )
-from agent_actions.processing.result_collector import write_record_dispositions
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import (
-    DISPOSITION_EXHAUSTED,
-    DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
-    DISPOSITION_SUCCESS,
 )
 
 
@@ -34,67 +30,6 @@ def _make_storage_backend() -> MagicMock:
     backend.set_disposition = MagicMock()
     backend.clear_disposition = MagicMock()
     return backend
-
-
-class TestSuccessDisposition:
-    """U-3.2a: SUCCESS records must get DISPOSITION_SUCCESS like online."""
-
-    def test_success_record_gets_success_disposition(self):
-        """Batch SUCCESS record (_state=processed) must write DISPOSITION_SUCCESS."""
-        backend = _make_storage_backend()
-
-        items = [
-            {
-                "target_id": "t-001",
-                "source_guid": "sg-001",
-                "_state": RecordState.PROCESSED.value,
-                "content": {"result": "LLM output"},
-                "metadata": {},
-            },
-        ]
-
-        write_record_dispositions(backend, items, "test_action")
-
-        # Verify DISPOSITION_SUCCESS was written
-        success_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if _get_disposition_arg(c) == DISPOSITION_SUCCESS
-        ]
-        assert len(success_calls) == 1, (
-            f"Expected 1 SUCCESS disposition write, got {len(success_calls)}. "
-            f"All calls: {backend.set_disposition.call_args_list}"
-        )
-        assert _get_record_id_arg(success_calls[0]) == "sg-001"
-
-    def test_multiple_success_records(self):
-        """Each SUCCESS record gets its own DISPOSITION_SUCCESS write."""
-        backend = _make_storage_backend()
-
-        items = [
-            {
-                "source_guid": "sg-001",
-                "_state": RecordState.PROCESSED.value,
-                "content": {"result": "output 1"},
-                "metadata": {},
-            },
-            {
-                "source_guid": "sg-002",
-                "_state": RecordState.PROCESSED.value,
-                "content": {"result": "output 2"},
-                "metadata": {},
-            },
-        ]
-
-        write_record_dispositions(backend, items, "test_action")
-
-        success_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if _get_disposition_arg(c) == DISPOSITION_SUCCESS
-        ]
-        stamped_ids = {_get_record_id_arg(c) for c in success_calls}
-        assert stamped_ids == {"sg-001", "sg-002"}
 
 
 class TestFilteredDisposition:
@@ -110,7 +45,7 @@ class TestFilteredDisposition:
         backend = _make_storage_backend()
 
         # FILTERED records are excluded from workflow output items, so they
-        # must be handled separately from write_record_dispositions.
+        # are dispositioned from the context map.
         context_map: dict[str, Any] = {}
         filtered_entry = {"source_guid": "sg-filtered", "content": {"text": "data"}}
         BatchContextMetadata.set_filter_status(filtered_entry, FilterStatus.FILTERED)
@@ -155,98 +90,6 @@ class TestFilteredDisposition:
         assert len(filtered_calls) == 1
         reason = _get_kwarg(filtered_calls[0], "reason")
         assert reason == "guard_filter"
-
-
-class TestExhaustedInputSnapshot:
-    """U-3.2a: EXHAUSTED disposition must include input_snapshot like online."""
-
-    def test_exhausted_includes_input_snapshot(self):
-        """Batch EXHAUSTED disposition must write input_snapshot for forensics."""
-        backend = _make_storage_backend()
-
-        items = [
-            {
-                "target_id": "t-001",
-                "source_guid": "sg-001",
-                "_state": RecordState.EXHAUSTED.value,
-                "content": {"text": "original input"},
-                "metadata": {"retry_exhausted": True},
-                "_recovery": {},
-            },
-        ]
-
-        write_record_dispositions(backend, items, "test_action")
-
-        exhausted_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if _get_disposition_arg(c) == DISPOSITION_EXHAUSTED
-        ]
-        assert len(exhausted_calls) == 1
-        input_snapshot = _get_kwarg(exhausted_calls[0], "input_snapshot")
-        assert input_snapshot is not None, (
-            "EXHAUSTED disposition must include input_snapshot for debugging"
-        )
-        # Snapshot should be valid JSON containing the record content
-        parsed = json.loads(input_snapshot)
-        assert "source_guid" in parsed or "content" in parsed
-
-
-class TestFailedInputSnapshot:
-    """U-3.2a: FAILED disposition must include input_snapshot and detail like online."""
-
-    def test_failed_includes_input_snapshot(self):
-        """Batch FAILED disposition must write input_snapshot for debugging."""
-        backend = _make_storage_backend()
-
-        items = [
-            {
-                "target_id": "t-001",
-                "source_guid": "sg-001",
-                "_state": RecordState.FAILED.value,
-                "content": {"text": "input data"},
-                "metadata": {},
-                "error": "provider returned 500 error",
-            },
-        ]
-
-        write_record_dispositions(backend, items, "test_action")
-
-        failed_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if _get_disposition_arg(c) == DISPOSITION_FAILED
-        ]
-        assert len(failed_calls) == 1
-        input_snapshot = _get_kwarg(failed_calls[0], "input_snapshot")
-        assert input_snapshot is not None, "FAILED disposition must include input_snapshot"
-
-    def test_failed_includes_detail(self):
-        """Batch FAILED disposition must write detail field like online."""
-        backend = _make_storage_backend()
-
-        items = [
-            {
-                "target_id": "t-001",
-                "source_guid": "sg-001",
-                "_state": RecordState.FAILED.value,
-                "content": {"text": "input"},
-                "metadata": {},
-                "error": "model timeout after 30s",
-            },
-        ]
-
-        write_record_dispositions(backend, items, "test_action")
-
-        failed_calls = [
-            c
-            for c in backend.set_disposition.call_args_list
-            if _get_disposition_arg(c) == DISPOSITION_FAILED
-        ]
-        assert len(failed_calls) == 1
-        detail = _get_kwarg(failed_calls[0], "detail")
-        assert detail is not None, "FAILED disposition must include detail"
-        assert "model timeout" in detail
 
 
 class TestPromptTraceOnlyForSuccess:

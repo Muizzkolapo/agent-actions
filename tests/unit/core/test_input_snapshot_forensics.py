@@ -403,7 +403,7 @@ class TestBatchErrorResultSnapshot:
         assert result.status == ProcessingStatus.FAILED
         assert result.executed is False  # Factory sets this
 
-    def test_data_still_set_for_write_record_dispositions(self):
+    def test_data_carries_the_failed_row_the_collector_stores(self):
         strategy, ctx = self._make_strategy_and_ctx()
         result = strategy._build_error_result(ctx, "cid-1", "err", metadata={"k": "v"})
         assert len(result.data) == 1

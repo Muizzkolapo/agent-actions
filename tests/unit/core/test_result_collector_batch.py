@@ -167,34 +167,6 @@ class TestBatchDispositionFlush:
         backend.set_disposition.assert_not_called()
 
 
-class TestWriteRecordDispositionsWarning:
-    """write_record_dispositions logs a warning when batch items lack source_guid."""
-
-    def test_missing_source_guid_logs_warning(self, caplog):
-        """Batch items without source_guid log a warning instead of silent skip."""
-        from agent_actions.processing.result_collector import write_record_dispositions
-
-        backend = _mock_backend()
-        items = [
-            {"metadata": {}, "content": {"v": 1}},
-        ]
-        with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
-            write_record_dispositions(backend, items, "action_A")
-        assert any("missing source_guid" in r.message for r in caplog.records)
-        backend.set_disposition.assert_not_called()
-
-    def test_items_with_source_guid_still_work(self):
-        """Batch items with source_guid are processed normally."""
-        from agent_actions.processing.result_collector import write_record_dispositions
-
-        backend = _mock_backend()
-        items = [
-            {"source_guid": "sg-1", "metadata": {}, "_state": "processed"},
-        ]
-        write_record_dispositions(backend, items, "action_A")
-        backend.set_disposition.assert_called_once()
-
-
 class TestPerItemDispositionFallback:
     """When result.source_guid is None but data items carry their own source_guid,
     dispositions must be written per-item to prevent infinite reprocessing."""
