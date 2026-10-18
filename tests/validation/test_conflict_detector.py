@@ -131,6 +131,10 @@ class TestConflictDetector:
         assert len(shadowing_conflicts) == 1
         assert shadowing_conflicts[0].field_name == "shared_field"
         assert shadowing_conflicts[0].severity == ConflictSeverity.WARNING
+        # A template reads an action under its own name; there is no `action.` (1512).
+        assert shadowing_conflicts[0].resolution == (
+            "Use qualified reference: {{ action1.shared_field }} or {{ action2.shared_field }}"
+        )
 
     def test_detect_ambiguous_reference(self):
         """Test detection of ambiguous references."""
@@ -183,6 +187,9 @@ class TestConflictDetector:
         ]
         assert len(ambiguous_conflicts) == 1
         assert ambiguous_conflicts[0].severity == ConflictSeverity.ERROR
+        assert ambiguous_conflicts[0].resolution == (
+            "Use qualified reference: {{ action1.ambiguous }} or {{ action2.ambiguous }}"
+        )
 
     def test_detect_reserved_names(self):
         """Test detection of reserved name usage."""
