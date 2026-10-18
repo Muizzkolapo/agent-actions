@@ -77,11 +77,13 @@ class TestEveryActionIsChecked:
 class TestEveryInputShapeIsChecked:
     def test_a_single_record_file_is_record_zero(self):
         with pytest.raises(ConfigValidationError, match=r"record 0\)$"):
-            _check({"title": "a"}, _actions(generate={"exam_syllabus": SYLLABUS}))
+            _check([{"title": "a"}], _actions(generate={"exam_syllabus": SYLLABUS}))
 
-    def test_a_text_file_has_no_field_to_select_by(self):
+    def test_a_text_chunk_has_no_field_to_select_by(self):
         with pytest.raises(ConfigValidationError) as excinfo:
-            _check("# a page of prose", _actions(generate={"exam_syllabus": SYLLABUS}))
+            _check(
+                [{"content": "# a page of prose"}], _actions(generate={"exam_syllabus": SYLLABUS})
+            )
 
         assert str(excinfo.value) == (
             "Seed 'exam_syllabus' in action 'generate': record has no value for "

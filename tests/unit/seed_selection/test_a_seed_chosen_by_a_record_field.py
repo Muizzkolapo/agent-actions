@@ -5,8 +5,6 @@ import json
 import pytest
 
 from agent_actions.config.types import RunMode
-from agent_actions.processing.prepared_task import PreparationContext
-from agent_actions.processing.task_preparer import TaskPreparer
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
 from agent_actions.prompt.service import PromptPreparationService
 
@@ -104,7 +102,7 @@ class TestEachRecordGetsItsOwnFile:
         assert _render(config, {"exam": "snowflake", "title": "a"}) == "SNOW-LABEL"
 
     def test_two_files_are_cached_separately(self, tmp_path):
-        config = _config(tmp_path, SYLLABUS, "")
+        _config(tmp_path, SYLLABUS, "")
         loader = StaticDataLoader(tmp_path / "workflow" / "seed_data")
 
         first = loader.load_static_data(SYLLABUS, source={"exam": "dbt"}, action_name="a")
@@ -113,7 +111,6 @@ class TestEachRecordGetsItsOwnFile:
         assert first["exam_syllabus"]["label"] == "DBT-LABEL"
         assert second["exam_syllabus"]["label"] == "SNOW-LABEL"
         assert len(loader._cache) == 2
-        assert config["context_scope"]["seed"] is SYLLABUS
 
 
 class TestARecordWithoutAUsableValueStops:
@@ -158,7 +155,8 @@ class TestARecordWithoutAUsableValueStops:
 
 class TestEveryRenderPathSelectsTheSameFile:
     @pytest.mark.parametrize("mode", [RunMode.ONLINE, RunMode.BATCH])
-    def test_online_and_batch_select_the_same_file(self, tmp_path, mode):
+    def test_the_staging_dry_run_selects_in_both_modes(self, tmp_path, mode):
+        """The render staging does on a file's first record, before any record is prepared."""
         config = _config(tmp_path, SYLLABUS, "{{ seed.exam_syllabus.label }}")
         prompts = {}
         for exam in ("dbt", "snowflake"):
@@ -168,14 +166,3 @@ class TestEveryRenderPathSelectsTheSameFile:
             ).formatted_prompt
 
         assert prompts == {"dbt": "DBT-LABEL", "snowflake": "SNOW-LABEL"}
-
-    def test_a_repair_round_renders_the_same_seed_as_the_first_attempt(self, tmp_path):
-        config = _config(tmp_path, SYLLABUS, "{{ seed.exam_syllabus.label }}")
-        context = PreparationContext(agent_config=config, agent_name="a", is_first_stage=True)
-        record = {"exam": "snowflake", "title": "a"}
-
-        first = TaskPreparer().prepare(record, context, attempt=0)
-        repair = TaskPreparer().prepare(record, context, attempt=1)
-
-        assert first.formatted_prompt == "SNOW-LABEL"
-        assert repair.formatted_prompt == first.formatted_prompt

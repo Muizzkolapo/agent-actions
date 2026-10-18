@@ -55,6 +55,12 @@ class SeedEntry:
         head = f"Seed '{self.key}' in action '{action_name}': "
         known = ", ".join(self.files)
         value = source.get(field_name) if isinstance(source, Mapping) else None
+        # A spreadsheet hands a blank cell over as NaN and widens a whole-number
+        # column to float; read both as the operator wrote them.
+        if isinstance(value, float) and value != value:
+            value = None
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
         if value is None:
             raise SeedSelectionError(
                 f"{head}record has no value for '{self.select_by}'. Known values: {known}."

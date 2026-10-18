@@ -15,23 +15,30 @@ logger = logging.getLogger(__name__)
 
 
 def validate_seed_selectors(
-    raw_content: Any, file_path: str, action_configs: Mapping[str, Mapping[str, Any]]
+    records: list[Any], file_path: str, action_configs: Mapping[str, Mapping[str, Any]]
 ) -> None:
-    """Refuse a staged file with a row that no file of a selected seed covers.
+    """Refuse a staged file with a record that no file of a selected seed covers.
 
-    Every row and every action of the workflow is checked here, before any
-    record is prepared, so a bad value stops the run instead of surfacing from
-    the first action that renders the row.
+    ``records`` are the first-stage rows as the run prepared them, read through
+    the same source resolution a prompt uses. Every record and every action of
+    the workflow is checked before any record is sent, so a bad value stops the
+    run instead of surfacing from the first action that renders the record.
     """
     entries = selected_seed_entries(action_configs)
     if not entries:
         return
 
+    from agent_actions.processing.source_resolution import resolve_first_stage_source
+    from agent_actions.prompt.context.scope_builder import SourceNamespaceBuilder
+
     where = f"{Path(file_path).parent.name}/{Path(file_path).name}"
-    for index, row in _rows(raw_content):
+    for index, record in enumerate(records):
+        if not isinstance(record, Mapping):
+            continue
+        source = SourceNamespaceBuilder.fields(resolve_first_stage_source(record))
         for action_name, entry in entries:
             try:
-                entry.file_for(row, action_name)
+                entry.file_for(source, action_name)
             except SeedSelectionError as exc:
                 raise ConfigValidationError(
                     f"{exc} ({where}, record {index})",
@@ -44,17 +51,6 @@ def validate_seed_selectors(
                     },
                     cause=exc,
                 ) from exc
-
-
-def _rows(raw_content: Any) -> list[tuple[int, Mapping[str, Any]]]:
-    """The records a staged file holds, as a prompt reads them, with their positions."""
-    if isinstance(raw_content, list):
-        return [(i, row) for i, row in enumerate(raw_content) if isinstance(row, Mapping)]
-    if isinstance(raw_content, Mapping):
-        return [(0, raw_content)]
-    if raw_content:
-        return [(0, {"page_content": raw_content})]
-    return []
 
 
 def validate_staging_field_names(raw_content: Any, file_path: str) -> None:

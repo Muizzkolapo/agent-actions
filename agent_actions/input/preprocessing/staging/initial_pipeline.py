@@ -204,11 +204,6 @@ def process_initial_stage(ctx: InitialStageContext):
         _refuse_rows_that_are_not_records(content, ctx.file_path, ctx.agent_name)
 
     validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
-    validate_seed_selectors(
-        raw_content=content,
-        file_path=ctx.file_path,
-        action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
-    )
 
     _validate_staged_data(
         raw_content=content,
@@ -240,6 +235,13 @@ def process_initial_stage(ctx: InitialStageContext):
         data_chunk, src_text = _prepare_batch_data(prep_ctx)
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
+
+    # On the rows as prepared, whatever the file type, and before any is stored or sent.
+    validate_seed_selectors(
+        records=data_chunk,
+        file_path=ctx.file_path,
+        action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
+    )
 
     # The records a repair leaves out are what let the disposition gate tell a
     # stored row of this action's own making from one minted upstream.
