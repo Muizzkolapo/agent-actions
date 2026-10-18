@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Field References
 
-Field references access data from upstream actions using `{{ action.field }}` syntax.
+Field references access data from upstream actions using `{{ action_name.field }}` syntax, where `action_name` is the name of the upstream action: `{{ extract_facts.candidate_facts_list }}`.
 
 ## Syntax
 
@@ -52,6 +52,8 @@ Action names cannot use reserved namespaces. The following names are disallowed:
 - `source`
 - `version`
 - `workflow`
+
+`action`, `prompt` and `schema` are reserved words, not namespaces: no record carries them. Write `{{ extract_facts.count }}`, not `{{ action.extract_facts.count }}`. Pre-flight refuses a prompt, guard or `context_scope` entry that reads through one of them, and names the spelling to write.
 
 ### Nested Field Access
 
@@ -144,8 +146,8 @@ Explicit `dependencies` are required for correct execution ordering:
 ## Best Practices
 
 1. **Use explicit dependencies** - Required for all referenced actions
-2. **Use Jinja2 syntax** - `{{ action.field }}` for prompts
-3. **Use selector syntax** - `action.field` for guards and context_scope
+2. **Use Jinja2 syntax** - `{{ action_name.field }}` for prompts
+3. **Use selector syntax** - `action_name.field` for guards and context_scope
 4. **Use schema command** - Run `agac schema -a workflow` to analyze field dependencies
 
 ## Version Field Patterns
