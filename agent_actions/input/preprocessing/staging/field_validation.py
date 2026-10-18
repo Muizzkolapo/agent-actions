@@ -82,8 +82,9 @@ def validate_source_reads_below(
 
     Below the first stage a record's `source` is the row staged for it, which no action
     adds to, so these records are every `source` the actions below can read from this
-    file. When they are not *conclusive* (other staged files may hold the field), or the
-    read only leaves the field out, the read is logged as a warning instead.
+    file. When they are not *conclusive* (other staged files may hold the field), when
+    the read may not fail a record, or when the action's own guard reads the field
+    first, the read is logged as a warning instead.
     """
     if not records:
         return
@@ -99,7 +100,10 @@ def validate_source_reads_below(
     where = f"{Path(file_path).parent.name}/{Path(file_path).name}"
     refusals: list[str] = []
     for action_name in _actions_below(first_action, action_configs):
-        for location, field in _source_reads(action_configs[action_name]):
+        reads = _source_reads(action_configs[action_name])
+        # The guard runs first and decides what a record without the field does.
+        guarded = {field for location, field in reads if location.startswith("guard")}
+        for location, field in reads:
             if field in held:
                 continue
             verb = _READS_EVERY_RECORD_NEEDS.get(location) or _READS_A_RECORD_MAY_LACK[location]
@@ -107,7 +111,7 @@ def validate_source_reads_below(
                 f"Action '{action_name}' {verb} source.{field}, but no record staged from "
                 f"{where} holds '{field}'"
             )
-            if conclusive and location in _READS_EVERY_RECORD_NEEDS:
+            if conclusive and location in _READS_EVERY_RECORD_NEEDS and field not in guarded:
                 refusals.append(message)
             else:
                 logger.warning("%s. Records from that file will not have it.", message)
@@ -177,9 +181,10 @@ def _source_reads(config: Mapping[str, Any]) -> list[tuple[str, str]]:
 def _source_fields_every_render_reads(template: str) -> set[str]:
     """The `source` fields every render of *template* reads, whatever the record holds.
 
-    Not one read only under an `if` or in a loop's body, nor one hedged by a `default`, a
-    test (`is defined`) or a conditional expression: those may not be read, or not fail,
-    when the field is missing. An `if`'s own test and a loop's iterable are read.
+    Not one read only under an `if` or in a loop's body, on the right of `and`/`or`, bound
+    by `set` or `with` (read lazily, where the name is used), nor one hedged by a
+    `default`, a test (`is defined`) or a conditional expression: those may not be read,
+    or not fail, when the field is missing. An `if`'s own test and a loop's iterable are.
     """
     from jinja2 import Environment, nodes
     from jinja2.exceptions import TemplateSyntaxError
@@ -200,7 +205,16 @@ def _source_fields_every_render_reads(template: str) -> set[str]:
             for child in [*node.body, *node.else_, *getattr(node, "elif_", [])]:
                 walk(child, True)
             return
-        if isinstance(node, nodes.Macro | nodes.CondExpr | nodes.Test):
+        if isinstance(node, nodes.And | nodes.Or):
+            walk(node.left, conditional)
+            walk(node.right, True)  # Short-circuited by the left operand.
+            return
+        if isinstance(node, nodes.With):
+            # Like `set`, a read bound to a name is evaluated lazily, where the name is used.
+            for child in node.body:
+                walk(child, conditional)
+            return
+        if isinstance(node, nodes.Macro | nodes.CondExpr | nodes.Test | nodes.Assign):
             return
         if isinstance(node, nodes.Filter) and node.name in ("default", "d"):
             return

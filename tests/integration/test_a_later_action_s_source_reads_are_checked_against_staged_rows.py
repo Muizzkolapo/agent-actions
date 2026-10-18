@@ -311,8 +311,14 @@ def test_a_guard_on_a_field_no_row_holds_warns_and_runs(tmp_path, clause, passed
         "{{ source.page_content | default(source.content) }}",
         "{% if source.page_content is defined %}{{ source.page_content }}{% endif %}",
         "{{ source.page_content if source.page_content is defined else source.content }}",
+        "{% if source.page_content is defined and source.page_content %}x{% endif %}"
+        "{{ source.content }}",
+        "{% if 'page_content' in source and source.page_content %}x{% endif %}{{ source.content }}",
+        "{{ source.content or source.page_content }}",
+        "{% set t = source.page_content %}{{ t | default(source.content) }}",
+        "{% with t = source.page_content %}{{ t | default(source.content) }}{% endwith %}",
     ],
-    ids=["get", "default", "if-defined", "is-defined"],
+    ids=["get", "default", "if-defined", "is-defined", "and", "in-and", "or", "set", "with"],
 )
 def test_a_prompt_reading_a_field_conditionally_warns_and_runs(tmp_path, prompt):
     root = _project(tmp_path, _later_llm("", prompt=prompt))
@@ -323,6 +329,30 @@ def test_a_prompt_reading_a_field_conditionally_warns_and_runs(tmp_path, prompt)
     assert result.returncode == 0, output
     assert "reads conditionally in its prompt source.page_content" in output, output
     assert len(_stored(root, "second")) == 1, output
+
+
+@pytest.mark.parametrize("on_false", ["skip", "filter"])
+@pytest.mark.parametrize(
+    ("observe", "prompt"),
+    [("source.*", "{{ source.page_content }}"), ("source.page_content", "hello")],
+    ids=["prompt", "observe"],
+)
+def test_an_action_guarding_on_the_field_it_reads_warns_and_runs(
+    tmp_path, on_false, observe, prompt
+):
+    """Its guard decides first whether a record without the field reaches the read."""
+    guard = f'    guard: {{ condition: "source.page_content != null", on_false: {on_false} }}\n'
+    later = _later_llm("", observe=f"first.got, {observe}", prompt=prompt).replace(
+        "    dependencies: [first]\n", "    dependencies: [first]\n" + guard
+    )
+    root = _project(tmp_path, later)
+
+    result = _run(root)
+
+    output = _output(result)
+    assert result.returncode == 0, output
+    assert "Action 'second'" in output and "source.page_content" in output, output
+    assert len(_stored(root, "first")) == 1, output
 
 
 def test_a_column_only_some_rows_hold_is_not_refused(tmp_path):

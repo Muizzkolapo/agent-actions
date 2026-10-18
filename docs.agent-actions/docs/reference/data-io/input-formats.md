@@ -135,8 +135,11 @@ record is stored or sent:
 - These are logged as a warning, and the run goes on: a `passthrough` (it leaves the
   field out, as for the first action), a guard (`source.x IS NULL` passes a record
   without `x`; a comparison filters it), and a prompt reference under an `if` body or
-  a loop, behind `| default(...)`, `is defined`, a conditional expression or
-  `source.get('x', ...)`.
+  a loop, on the right of `and`/`or`, bound with `{% set %}` or `{% with %}` (read only
+  where the name is used), behind `| default(...)`, `is defined`, a conditional
+  expression or `source.get('x', ...)`.
+- An `observe` or prompt read of a field the action's own guard reads is a warning
+  too: the guard decides first what a record without the field does.
 
 An API source is checked against the rows it fetched, the same way. An empty
 staging folder stages nothing and checks nothing.
