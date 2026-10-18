@@ -1,0 +1,13 @@
+kind: Bug Fix
+body: >-
+  `agac retry` naming a row that an expansion made no longer duplicates the rows an
+  expansion below it made of that row. Those rows name the staged record as their
+  parent, which is no input of the action below, so the retry carried them and wrote
+  two new rows beside them: 24 rows became 26, exit 0, with only a "cannot be
+  attributed" warning. The same happened where an action reads both a record and an
+  expansion over it. A row minted from records the retry named, and from no other, is
+  now placed by the inputs it lists as its producers and replaced. A row keeping an
+  input's own identity is never placed this way. Rows that list no producer, or were
+  made from a named record together with others, are still carried and reported.
+  (#1505)
+time: 2026-10-17T18:30:00Z

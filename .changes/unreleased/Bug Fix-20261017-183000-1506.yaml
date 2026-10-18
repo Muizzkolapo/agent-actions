@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  Pre-flight no longer refuses a prompt that calls a dictionary method on an upstream
+  action. The prompt-store docs' `{% for key, value in merge_alternatives.items() %}`
+  example, and `ns.keys()` or `ns.values()`, were refused with "Field 'items' not found
+  in action ... output schema" when the schema had no field of that name. Such a call
+  now names no field. `ns.get('field', default)` is checked against the action's schema
+  as `field`, as `ns.field` is, so a misspelt field is still refused before the run. A
+  bare `ns.items` is still read as the field `items` (1506).
+time: 2026-10-17T18:30:00Z

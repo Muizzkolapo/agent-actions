@@ -1,7 +1,7 @@
 """Edges of the repair's duplication warning that the first tests left open.
 
 The rule: a row the repair cannot place is reported when it lists a named record among
-its producers, or lists none. These pin the places a plausible wrong version differs.
+its producers, or lists none. One listing named records alone is placed, not reported. These pin the places a plausible wrong version differs.
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ class TestAProducerListedAnywhereInTheRow:
 
 
 class TestTheCountIsRows:
-    def test_two_rows_made_by_the_one_named_record_count_as_two(self, caplog):
-        rows = [_row("u1", ["i1"]), _row("u2", ["i1"]), _row("u3", ["i2"])]
+    def test_two_rows_the_one_named_record_may_have_made_count_as_two(self, caplog):
+        rows = [_row("u1", ["i1", "i2"]), _row("u2"), _row("u3", ["i2"])]
 
         _, text = _run(rows, ["i1", "i2"], {"i1"}, caplog)
 
@@ -67,7 +67,7 @@ class TestWhatIsCarried:
 
 class TestAWarningThatFiresCitesNothingClosed:
     def test_it_is_emitted_and_names_no_issue_number(self, caplog):
-        _, text = _run([_row("u1", ["i1"])], ["i1"], {"i1"}, caplog)
+        _, text = _run([_row("u1")], ["i1"], {"i1"}, caplog)
 
         assert "cannot be attributed" in text
         assert "issue #" not in text

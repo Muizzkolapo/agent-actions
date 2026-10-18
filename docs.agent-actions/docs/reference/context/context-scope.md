@@ -172,6 +172,7 @@ How the branches' records pair:
 |----------|-----------------------------|
 | Each returns one record per input | One merged record per source record |
 | One returns several records per input (a tool that splits a record), the others one | One merged record per split record, each with the other branches' record for its source |
+| One splits a record and another splits that branch's records again (it reads the first), the others one | One merged record per record of the second split, each with the first split's record it came from and the other branches' record for its source |
 | All read one earlier split (an action upstream of every branch returned several records per input) | One merged record per record of that split |
 | Two or more each hold a split of the same source record of their own, or one splits a source beside branches that read an earlier split of it | Nothing: the action fails, naming the branches and the source record |
 

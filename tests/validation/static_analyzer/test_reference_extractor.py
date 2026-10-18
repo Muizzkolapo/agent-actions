@@ -440,6 +440,61 @@ class TestReferenceExtractor:
         assert "extractor" in agent_names
 
 
+class TestADictMethodCallIsNotAFieldReference:
+    """`ns.items()` reads the namespace, not a field named `items` (1506)."""
+
+    def _refs(self, prompt: str) -> set[tuple[str, str]]:
+        refs = ReferenceExtractor().extract_from_agent({"name": "agent", "prompt": prompt})
+        return {(r.source_agent, r.field_path) for r in refs}
+
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            "{% for k, v in producer.items() %}{{ k }}{% endfor %}",
+            "{{ producer.keys() | list }}",
+            "{{ producer.values() | list }}",
+            "{{ action.producer.items() | list }}",
+            "{{ producer.get(source.key) }}",
+        ],
+    )
+    def test_a_call_on_the_namespace_references_the_whole_namespace(self, prompt):
+        assert self._refs(prompt) - {("source", "key")} == {("producer", "*")}
+
+    @pytest.mark.parametrize(
+        "prompt", ["{{ producer.get('items') }}", "{{ producer.get('items', 'none') }}"]
+    )
+    def test_get_with_a_literal_key_references_that_field(self, prompt):
+        assert self._refs(prompt) == {("producer", "items")}
+
+    def test_a_call_on_a_field_references_that_field(self):
+        assert self._refs("{{ producer.meta.get('x') }}") == {("producer", "meta")}
+
+    def test_the_call_arguments_are_still_read(self):
+        assert self._refs("{{ producer.keys() | select('in', other.fallback) }}") == {
+            ("producer", "*"),
+            ("other", "fallback"),
+        }
+        assert self._refs("{{ producer.get('x', other.fallback) }}") == {
+            ("producer", "x"),
+            ("other", "fallback"),
+        }
+
+    @pytest.mark.parametrize(
+        ("prompt", "field"),
+        [
+            ("{{ producer.items }}", "items"),
+            ("{{ producer.itmes() }}", "itmes"),
+            ("{{ producer.items.x }}", "items.x"),
+        ],
+    )
+    def test_a_read_or_a_call_of_no_dict_method_is_still_a_field(self, prompt, field):
+        assert self._refs(prompt) == {("producer", field)}
+
+    def test_a_call_on_a_loop_variable_references_nothing(self):
+        prompt = "{% for r in producer.rows %}{{ r.get('x') }}{% endfor %}"
+        assert self._refs(prompt) == {("producer", "rows")}
+
+
 class TestReferenceExtractorTemplateSyntaxError:
     """TemplateSyntaxError must raise, not return empty refs."""
 

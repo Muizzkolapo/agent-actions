@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  Pre-flight no longer refuses a RECORD tool that sets a required output field on every path
+  that returns. A key set in a `try` whose `except` always re-raises, in both branches of an
+  `if`, in every case of a `match` with a `case _:`, in a `finally`, before the `break` of a
+  `while True:`, or by a loop over a literal list of names now counts as set. Such tools used
+  to be refused although every record they return has the field. A tool whose dict is filled
+  in a way pre-flight cannot follow, such as `out.update(build(data))` or
+  `for field in FIELDS: out[field] = ...`, is no longer refused either; its records are
+  checked at run time. dag-fit reads a tool's output the same way. (#1510)
+time: 2026-10-17T21:30:00Z
