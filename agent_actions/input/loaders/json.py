@@ -22,11 +22,14 @@ class JsonLoader(BaseLoader[dict[str, Any] | list[dict[str, Any]]]):
         if isinstance(content, (dict, list)):
             return content
         try:
+            # A byte order mark is not part of the document, as FileReader reads it.
             if file_path:
-                content_str = self.load_file(file_path)
+                content_str = self.load_file(file_path).removeprefix("\ufeff")
                 result: dict[str, Any] | list[dict[str, Any]] = deep_json.loads(content_str)
                 return result
             if content:
+                if isinstance(content, str):
+                    content = content.removeprefix("\ufeff")
                 result = deep_json.loads(content)
                 return result
 

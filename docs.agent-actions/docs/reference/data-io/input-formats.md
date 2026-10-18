@@ -40,6 +40,9 @@ element becomes one record.
 ]
 ```
 
+A file saved with a UTF-8 byte order mark (as some editors and Windows tools write
+it) is read without it, and its records stage as they would without the mark.
+
 A file holding one record is that same list with one element in it. A lone
 object at the top level is refused at staging, and the fix is to wrap it: `{...}`
 becomes `[{...}]`, which stages the record it always did.

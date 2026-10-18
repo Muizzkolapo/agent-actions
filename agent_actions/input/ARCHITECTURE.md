@@ -101,7 +101,7 @@ User data files (agent_io/staging/)
 ```
 FileReader(file_path)
   |
-  +-- .json  --> json.load()        --> dict | list[dict]
+  +-- .json  --> deep_json.loads    --> dict | list[dict]   (utf-8-sig: a BOM is dropped)
   +-- .csv   --> csv.reader()       --> list[list[str]]
   +-- .xlsx  --> pandas read_excel  --> list[dict]
   +-- .xml   --> defusedxml parse   --> (tree, root) tuple
