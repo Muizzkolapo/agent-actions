@@ -205,3 +205,30 @@ class TestEveryReaderGivesTheSameAnswer:
             assert json.loads(path.read_text())["label"] in hover[key]
             assert inspected[key][0]["file"] == path.relative_to(project).as_posix()
         assert inspected["rules"][0]["overrides"] == ["seed_data/rules.json"]
+
+
+class TestASharedLoaderTellsTheKindOfAFolder:
+    def test_the_same_paths_as_own_and_as_shared_are_two_loaders(self, tmp_path):
+        """A flat project's folder is its own from inside the workflow and shared from outside."""
+        from agent_actions.config.path_config import SeedFolder
+        from agent_actions.prompt.context.static_loader import shared_static_data_loader
+
+        project, _ = _flat_project(
+            tmp_path,
+            ["shared"],
+            own_files={"k.json": {"label": "OWN"}},
+            shared={"shared": {"k.json": {"label": "SHARED"}}},
+        )
+        own = project / "seed_data"
+        listed = project / "shared"
+        as_shared = [
+            SeedFolder(own, "project", "seed_data"),
+            SeedFolder(listed, "listed", "shared"),
+        ]
+        as_own = [SeedFolder(own, "workflow", "seed_data"), SeedFolder(listed, "listed", "shared")]
+
+        first = shared_static_data_loader(as_shared)
+        second = shared_static_data_loader(as_own)
+
+        assert first is not second
+        assert second.load_static_data({"k": "$file:k.json"}) == {"k": {"label": "OWN"}}

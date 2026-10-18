@@ -407,7 +407,7 @@ class StaticDataLoader:
         }
 
 
-_SHARED_LOADERS: dict[tuple[Path, ...], StaticDataLoader] = {}
+_SHARED_LOADERS: dict[tuple[tuple[Path, str], ...], StaticDataLoader] = {}
 _SHARED_LOADERS_LOCK = threading.Lock()
 
 
@@ -422,7 +422,9 @@ def shared_static_data_loader(static_data_dir: Path | Sequence[SeedFolder]) -> S
         folders: list[SeedFolder] = [SeedFolder(resolved, "workflow", resolved.name)]
     else:
         folders = list(static_data_dir)
-    key = tuple(folder.path for folder in folders)
+    # The kind is part of the key: the same folder is the workflow's own in one list and
+    # a shared one in another, and the resolver's rules differ between the two.
+    key = tuple((folder.path, folder.kind) for folder in folders)
     with _SHARED_LOADERS_LOCK:
         loader = _SHARED_LOADERS.get(key)
         if loader is None:
