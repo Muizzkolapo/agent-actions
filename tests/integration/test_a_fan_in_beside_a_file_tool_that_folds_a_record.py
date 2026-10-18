@@ -76,6 +76,15 @@ def fold_join_tags(data: Any, *args) -> list[dict]:
     left = _find(data, "left_tag")
     side = "None" if left is None else str(left) if str(left).startswith("L-") else "L"
     return [{"joined": f"{side}|{_find(data, 'right_tag')}"}]
+
+
+@udf_tool(granularity=Granularity.FILE)
+def fold_join_file(data: list[dict], **kwargs) -> list:
+    for item in data:
+        joined = f"{item.get('left_tag')}|{item.get('right_tag')}"
+        item.clear()
+        item["joined"] = joined
+    return data
 """
 
 PROMPTS = """{prompt Left}
@@ -96,7 +105,7 @@ Join these tags.
 """
 
 
-def _config(*, run_mode: str, left_llm: bool, join_llm: bool, shape: str) -> str:
+def _config(*, run_mode: str, left_llm: bool, join: str, shape: str) -> str:
     """*shape*: `beside` puts `left` beside the FILE tool `right`; `below` has the fan-in
     read `loud`, a record tool under `right`; `alone` has no fan-in, only `loud`."""
     left = (
@@ -125,17 +134,18 @@ def _config(*, run_mode: str, left_llm: bool, join_llm: bool, shape: str) -> str
         "    context_scope: { observe: [right.right_tag] }\n"
     )
     read = "loud" if shape == "below" else "right"
-    join_body = (
-        f"    schema: join_out\n    prompt: ${WORKFLOW}.Join\n"
-        if join_llm
-        else "    kind: tool\n    impl: fold_join_tags\n    schema: join_out\n"
-    )
-    join = (
+    join_body = {
+        "llm": f"    schema: join_out\n    prompt: ${WORKFLOW}.Join\n",
+        "tool": "    kind: tool\n    impl: fold_join_tags\n    schema: join_out\n",
+        "file": "    kind: tool\n    impl: fold_join_file\n    granularity: File\n"
+        "    schema: join_out\n",
+    }[join]
+    fan_in = (
         "  - name: join\n"
         '    intent: "fan-in"\n' + join_body + f"    dependencies: [left, {read}]\n"
         f"    context_scope: {{ observe: [left.left_tag, {read}.right_tag] }}\n"
     )
-    tail = loud if shape == "alone" else left + (loud if shape == "below" else "") + join
+    tail = loud if shape == "alone" else left + (loud if shape == "below" else "") + fan_in
     return (
         f"name: {WORKFLOW}\n"
         'description: "fan-in beside a FILE tool that folds a record"\n'
@@ -171,7 +181,7 @@ def _project(
     *,
     batch: bool = False,
     left_llm: bool | None = None,
-    join_llm: bool = False,
+    join: str = "tool",
     shape: str = "beside",
 ) -> Path:
     workflow = root / "agent_workflow" / WORKFLOW
@@ -189,7 +199,7 @@ def _project(
         _config(
             run_mode="batch" if batch else "online",
             left_llm=batch if left_llm is None else left_llm,
-            join_llm=join_llm,
+            join=join,
             shape=shape,
         )
     )
@@ -298,12 +308,22 @@ def test_a_folded_record_carried_below_the_tool_is_left_unprocessed(tmp_path):
 
 @pytest.mark.parametrize("batch", [False, True], ids=["online", "batch"])
 def test_a_model_action_at_the_fan_in_leaves_it_unprocessed_too(tmp_path, batch):
-    root = _project(tmp_path, batch=batch, left_llm=False, join_llm=True)
+    root = _project(tmp_path, batch=batch, left_llm=False, join="llm")
 
     result = _settle(root)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert len(_joined(root)) == 2
+    _assert_b_left_unprocessed(root)
+
+
+def test_a_file_tool_at_the_fan_in_leaves_it_unprocessed_too(tmp_path):
+    root = _project(tmp_path, join="file")
+
+    result = _run(root, "--fresh")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _joined(root) == ["L-a|R-ab", "L-c|R-c"]
     _assert_b_left_unprocessed(root)
 
 

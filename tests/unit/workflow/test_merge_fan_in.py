@@ -239,6 +239,8 @@ def test_a_record_folded_into_another_row_is_merged_blocked_naming_that_row():
     assert blocked["metadata"]["fan_in_consumed_into"] == "A"
     assert blocked["metadata"]["upstream_action"] == "fold"
     assert blocked["metadata"]["upstream_reason"] == "consumed_into_output"
+    assert blocked["content"]["right"] is None
+    assert blocked["content"]["left"] == {"v": "LB"}
 
 
 def test_a_record_a_branch_lacks_without_folding_it_runs_as_before():
