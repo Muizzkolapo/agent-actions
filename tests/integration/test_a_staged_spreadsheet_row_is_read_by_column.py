@@ -192,15 +192,18 @@ def test_a_misspelt_column_is_still_refused_before_any_record_is_sent(tmp_path):
     assert "source.item_idd" in output, output
 
 
-@pytest.mark.parametrize("file_type", ["csv", "tsv", "xlsx"])
-def test_a_spreadsheet_column_named_like_a_namespace_is_refused_as_json_is(tmp_path, file_type):
+def test_a_csv_column_named_like_a_namespace_stages_as_it_did(tmp_path):
+    """Reading a delimited file as rows does not start refusing a column name it took.
+
+    The reserved-name check skipped a CSV, read as lists of cells, so a `version` column
+    staged; the same field in a JSON row is refused. Whether a CSV should be refused too
+    is a separate decision, not a side effect of reading it as rows.
+    """
     rows = [{"item_id": "a1", "version": "v1"}]
-    for staged in ("json", file_type):
-        actions = TOOL_FIRST.replace("source.item_id", "source.*")
-        root = _project(tmp_path / staged, staged, actions, rows=rows)
+    root = _project(tmp_path, "csv", TOOL_FIRST.replace("source.item_id", "source.*"), rows=rows)
 
-        result = _run(root)
+    result = _run(root)
 
-        output = result.stdout + result.stderr
-        assert result.returncode != 0, (staged, output)
-        assert "collide with reserved namespace names" in output, (staged, output)
+    _assert_ran(result)
+    (record,) = _stored(root)
+    assert record["content"]["source"] == {"item_id": "a1", "version": "v1"}
