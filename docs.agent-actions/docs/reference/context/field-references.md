@@ -40,6 +40,8 @@ action_name.field_path
 | `action_name` | Name of the upstream action | `extract_facts` |
 | `field_path` | Path to the field (dot-separated for nested) | `response.data.count` |
 
+`action_name.field` reads what the action produced: the fields its schema lists, plus the `expect` verdict its expectations attach. A field the action only observes or passes through is not in its namespace, so pre-flight refuses a reference to it there. Read such a field from the action that produced it, such as `source.url`.
+
 ## Reserved Action Names
 
 Action names cannot use reserved namespaces. The following names are disallowed:

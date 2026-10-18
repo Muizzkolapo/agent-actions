@@ -152,8 +152,8 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
             where.setdefault(read, "context_scope or prompt")
         for read in _guard_namespaces(action_configs[name], parser):
             where.setdefault(read, "guard")
-            # A first-stage record is the staging row, whose columns the guard also reads.
-            if read == name and upstream[name]:
+            # At the first stage too: the record holds the staged row, not this action's output.
+            if read == name:
                 findings.append(
                     f"{name}: its guard names '{name}', its own action. A guard runs before "
                     f"the action, on the record the action is about to read, so it reads only "

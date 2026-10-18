@@ -172,7 +172,7 @@ class TestStaticTypeChecker:
         assert "not found" in result.errors[0].message
 
     def test_dropped_field_error(self):
-        """Test error when referencing dropped field."""
+        """A forwarded field is not in the action's stored namespace, dropped or not (1526)."""
         graph = self._create_graph_with_agents(
             [
                 {
@@ -197,7 +197,9 @@ class TestStaticTypeChecker:
 
         assert not result.is_valid
         assert len(result.errors) == 1
-        assert "dropped" in result.errors[0].message.lower()
+        assert result.errors[0].message == (
+            "Field 'metadata' not found in action 'extractor' output schema"
+        )
 
     def test_schemaless_agent_warning(self):
         """Test warning when referencing schemaless agent."""

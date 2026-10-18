@@ -82,6 +82,8 @@ The `passthrough` directive forwards fields directly to the action output **with
 `passthrough` keeps a field in **this action's own output record** (for lineage or export). It does **not** make that field available to later actions _through_ this action. A downstream action that needs the value must `observe` it from its **original producing action** (for example `observe: [source.url]`), not from the action that passed it through.
 
 In particular, `observe: [some_action.*]` expands only to `some_action`'s own output fields — it does **not** pull in fields that `some_action` merely passed through. Relying on an upstream `passthrough` to satisfy a downstream `observe` can make the field resolve **empty at runtime**, silently, because the field is still declared on the consumer's schema.
+
+A passed-through field is stored under the namespace it came from, not under the action that passed it through: after `passthrough: [source.url]` on `summarize`, the field is `source.url`. Pre-flight refuses a prompt, `observe` or `passthrough` that reads `summarize.url`, or a field `summarize` only observes, the same way it refuses a field the action's schema does not list.
 :::
 
 ## Seed Data
