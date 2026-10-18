@@ -30,7 +30,7 @@ element becomes one record.
 ```json
 [
   {
-    "page_content": "The text content to process...",
+    "content": "The text content to process...",
     "url": "https://source.example.com/doc",
     "metadata": {
       "author": "John Doe",
@@ -81,13 +81,35 @@ The same rule reaches `.xlsx` through the sheet rather than the file: a sheet is
 a list of records, each row becomes one record, and the header row names the
 fields. A one-row sheet is one record, not a record of its own shape.
 
+## Text Documents
+
+A `.txt`, `.md`, `.html`, `.pdf` or `.docx` file is read as text and split into
+chunks by the action's [`chunk_config`](./chunking.md). Each chunk becomes one
+record with a single field, `content`, holding the chunk's text:
+
+```yaml
+actions:
+  - name: summarize
+    intent: "Summarise each chunk"
+    prompt: |
+      Summarize this section:
+      {{ source.content }}
+    schema: { summary: string }
+    context_scope:
+      observe: [source.content]
+```
+
+The check that runs before any record is sent renders the first chunk, so a
+reference to a field a chunk does not have, such as `source.page_content`, stops
+the run there and names `source.content`.
+
 ## Accessing Source Data
 
 Reference source fields in prompts using `{{ source.field }}`:
 
 ```yaml
 prompt: |
-  Analyze this content: {{ source.page_content }}
+  Analyze this content: {{ source.content }}
   From: {{ source.url }}
   Author: {{ source.metadata.author }}
 ```

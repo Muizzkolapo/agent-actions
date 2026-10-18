@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  A first action reads a staged text file (`.txt`, `.md`, `.html`, `.pdf`, `.docx`)
+  as `source.content`, the one field each chunk is staged with. The check that renders
+  the first record before any is sent rendered a made-up `page_content` record, so
+  `observe: [source.content]` or `{{ source.content }}` was refused before the run,
+  while `source.page_content`, which the docs showed, passed the check and failed
+  every record at run time. The check now renders the first real chunk, under the
+  action's `chunk_config`, and `source.page_content` is refused before anything is
+  sent with a message naming `source.content`. The docs' examples read
+  `source.content`, and the input formats page describes text documents. (#1522)
+time: 2026-10-18T11:15:00Z

@@ -48,7 +48,7 @@ The `observe` directive selects which upstream namespaces and fields are visible
       - canonicalize_facts.candidate_facts_list
       - cluster_list.semantic_unique_id
       - group_by_similarity.num_similar_facts
-      - source.page_content  # Can include source data
+      - source.content  # Can include source data
 ```
 
 ## Drop Directive

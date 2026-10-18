@@ -15,7 +15,7 @@ The Prompt Store provides centralized management for reusable prompt templates. 
 {prompt Extract_Facts}
 Extract facts from the following content.
 
-Content: {{ source.page_content }}
+Content: {{ source.content }}
 
 Return JSON matching the schema.
 {end_prompt}
@@ -60,7 +60,7 @@ Extract facts relevant to the {{ seed.exam_syllabus.exam_name }} exam.
 {{ seed.exam_syllabus.audience_profile.description }}
 
 ## Source Content
-{{ source.page_content }}
+{{ source.content }}
 {end_prompt}
 ```
 
@@ -123,7 +123,7 @@ Use inline when prompt is specific to one action. Use prompt store when prompts 
 
 | Variable | Source | Example |
 |----------|--------|---------|
-| `{{ source.field }}` | Input record data | `{{ source.page_content }}` |
+| `{{ source.field }}` | Input record data | `{{ source.content }}` |
 | `{{ seed.name.field }}` | Seed data files | `{{ seed.exam_syllabus.exam_name }}` |
 | `{{ action_name.field }}` | Upstream action output | `{{ extract_facts.facts }}` |
 

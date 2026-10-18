@@ -14,7 +14,7 @@ Field references access data from upstream actions using `{{ action_name.field }
 ```yaml
 prompt: |
   Process these facts: {{ extract_facts.candidate_facts_list }}
-  Using context: {{ source.page_content }}
+  Using context: {{ source.content }}
 ```
 
 ### Selector Format (Guards and Context Scope)
@@ -81,7 +81,7 @@ The `source` reference accesses the input data for the current record:
 
 ```yaml
 prompt: |
-  Analyze this content: {{ source.page_content }}
+  Analyze this content: {{ source.content }}
   From URL: {{ source.url }}
 ```
 
@@ -110,7 +110,7 @@ actions:
   dependencies: [flatten_clusters]
   prompt: |
     Grouped Facts: {{ flatten_clusters.grouped_facts }}
-    Page Content: {{ source.page_content }}
+    Content: {{ source.content }}
 ```
 
 ### Guard with Field Reference

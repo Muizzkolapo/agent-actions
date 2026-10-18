@@ -293,8 +293,8 @@ the workflow when it can see this:
 ```python
 @udf_tool()
 def produce(data: dict, **kwargs) -> dict:
-    out: dict = {"label": data["source"]["page_content"]}
-    if data["source"]["page_content"] == "has items":
+    out: dict = {"label": data["source"]["text"]}
+    if data["source"]["text"] == "has items":
         out["items"] = "apple, pear"  # 'items' is required by the schema
     return out
 ```
@@ -333,7 +333,7 @@ refuses the workflow when it leaves out a required field:
 ```python
 @udf_tool()
 def produce(data: dict, **kwargs) -> dict:
-    content = data["source"]["page_content"]
+    content = data["source"]["text"]
     if not content:
         return {"label": ""}  # 'items' is required by the schema
     return {"label": content, "items": content.upper()}
