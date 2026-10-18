@@ -19,11 +19,15 @@ from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.record.reasons import HALTED_ON_EXHAUSTED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
+    DISPOSITION_UNPROCESSED,
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
 
 logger = logging.getLogger(__name__)
+
+# What --quarantined lists: the failures retry acts on, and the records no answer reached.
+QUARANTINED_DISPOSITIONS = FAILURE_DISPOSITIONS | {DISPOSITION_UNPROCESSED}
 
 
 class DispositionsCommand:
@@ -185,7 +189,7 @@ class DispositionsCommand:
             for row in rows:
                 if row.get("record_id") == NODE_LEVEL_RECORD_ID:
                     continue
-                if row.get("disposition") not in FAILURE_DISPOSITIONS:
+                if row.get("disposition") not in QUARANTINED_DISPOSITIONS:
                     continue
                 found += 1
                 table.add_row(
