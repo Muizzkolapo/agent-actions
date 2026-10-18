@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -490,14 +491,21 @@ def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
     return merged + without_key
 
 
-def rows_folded_into(rows: list[Any]) -> dict[str, tuple[str, dict[str, Any]]]:
-    """Each record folded into one of *rows* (``folded_sources``): its action and that row."""
+def rows_folded_into(
+    rows: list[Any], by: Collection[str] | None = None
+) -> dict[str, tuple[str, dict[str, Any]]]:
+    """Each record folded into one of *rows* (``folded_sources``): its action and that row.
+
+    ``folded_sources`` also holds what every action above folded, so *by* keeps only the
+    folds those actions made.
+    """
     folded_into: dict[str, tuple[str, dict[str, Any]]] = {}
     for row in rows:
         folded = row.get("folded_sources") if isinstance(row, dict) else None
         if isinstance(folded, dict) and row.get("source_guid"):
             for guid, action in folded.items():
-                folded_into.setdefault(str(guid), (str(action), row))
+                if by is None or str(action) in by:
+                    folded_into.setdefault(str(guid), (str(action), row))
     return folded_into
 
 

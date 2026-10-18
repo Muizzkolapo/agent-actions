@@ -285,7 +285,12 @@ class VersionOutputCorrelator:
     ) -> list[dict[str, Any]]:
         """Correlate version outputs by source record ID using merge pattern."""
         correlation_groups = self._build_correlation_groups(version_outputs)
-        folded_into = {version: rows_folded_into(rows) for version, rows in version_outputs.items()}
+        # A version's own folds only: one made above it is every version's, and a record a
+        # version lacks below it was filtered or dropped there, not folded.
+        folded_into = {
+            version: rows_folded_into(rows, by={version, version.rsplit("_", 1)[0]})
+            for version, rows in version_outputs.items()
+        }
         correlated_records = []
         for agent_records in correlation_groups.values():
             if agent_records:

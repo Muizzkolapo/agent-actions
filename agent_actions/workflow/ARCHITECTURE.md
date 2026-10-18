@@ -313,7 +313,8 @@ are read from the store in those same files and paired with the merged versions 
 sibling branch reaches it. The versions themselves are correlated by
 `version_correlation_id`, not through `merge_fan_in`, so the correlator applies the fan-in's
 rule for a folded record itself: a record a version holds no row of because that version's
-FILE tool folded it into another row (`folded_sources`, read by `merge.rows_folded_into`) is
+FILE tool folded it into another row (`folded_sources`, read by `merge.rows_folded_into` for the
+version's own folds only, since the field also lists the folds made above every version) is
 merged `cascade_skipped` through `merge.consumed_into_another`, and the merge leaves it
 `unprocessed` with reason `consumed_into_another_record`. Its input is never stored:
 its own target holds its answers, which a re-run carries records from. The correlator
