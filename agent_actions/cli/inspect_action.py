@@ -463,6 +463,7 @@ class ContextCommand(BaseInspectCommand):
                 "passthrough": context_scope.get("passthrough", []),
                 "drop": context_scope.get("drop", []),
             },
+            "seed_selection": self._seed_selection(context_scope),
             "total_template_variables": sum(len(fs) for fs in namespaces.values()),
         }
 
@@ -473,6 +474,30 @@ class ContextCommand(BaseInspectCommand):
         if not isinstance(seed_entries, dict):
             return []
         return list(dict.fromkeys(seed_entries.keys()))
+
+    @staticmethod
+    def _seed_selection(context_scope: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """For each seed key that picks its file by a record field: the field and the map."""
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
+
+        seed_entries = context_scope.get("seed")
+        if not isinstance(seed_entries, dict):
+            return {}
+        selection: dict[str, dict[str, Any]] = {}
+        for key, raw in seed_entries.items():
+            try:
+                entry = parse_seed_entry(key, raw, "")
+            except ConfigurationError as exc:
+                # Preflight reports the malformed entry; this view only shows what it can.
+                logger.debug("Seed entry '%s' is not shown: %s", key, exc)
+                continue
+            if entry.selected:
+                selection[key] = {
+                    "select_by": entry.select_by,
+                    "files": {v: strip_file_prefix(spec) for v, spec in entry.files.items()},
+                }
+        return selection
 
     @staticmethod
     def _group_refs_by_namespace(refs: list[Any]) -> dict[str, list[str]]:
@@ -551,6 +576,20 @@ class ContextCommand(BaseInspectCommand):
                     f"  [{colour}]{_escape_markup(ns)}[/{colour}]"
                     + " " * (ns_width - len(ns))
                     + f"{', '.join(_escape_markup(f) for f in fields)}{tag}",
+                    soft_wrap=True,
+                )
+
+        for key, selection in context_data.get("seed_selection", {}).items():
+            self.console.print(
+                f"  [bright_blue]seed.{_escape_markup(key)}[/bright_blue]   "
+                f"[dim]select_by[/dim] {_escape_markup(selection['select_by'])}"
+            )
+            value_width = max(len(v) for v in selection["files"]) + 2
+            for value, file in selection["files"].items():
+                self.console.print(
+                    f"    {_escape_markup(value)}"
+                    + " " * (value_width - len(value))
+                    + f"-> {_escape_markup(file)}",
                     soft_wrap=True,
                 )
 

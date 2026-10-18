@@ -17,6 +17,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from agent_actions.errors import ConfigurationError
+from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.utils.path_security import resolve_seed_path
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
@@ -296,71 +298,97 @@ class WorkflowResolutionService:
             action_seed_keys[action_name] = set(seed_config.keys())
             action_seed_data[action_name] = {}
 
-            for field_name, file_spec in seed_config.items():
-                if not isinstance(file_spec, str):
-                    continue
-
+            for field_name, raw_entry in seed_config.items():
                 try:
-                    resolved = resolve_seed_path(file_spec, seed_data_dir)
-                except ValueError as e:
+                    entry = parse_seed_entry(field_name, raw_entry, action_name)
+                except ConfigurationError as e:
                     errors.append(
                         StaticTypeError(
                             message=str(e),
                             location=FieldLocation(
                                 agent_name=action_name,
                                 config_field=f"context_scope.seed.{field_name}",
-                                raw_reference=file_spec,
+                                raw_reference=str(raw_entry),
                             ),
                             referenced_agent=action_name,
                             referenced_field=field_name,
-                            hint="Use relative paths within the seed_data/ directory.",
-                        )
-                    )
-                    continue
-
-                if not resolved.exists():
-                    available: list[str] = []
-                    if seed_data_dir.exists():
-                        available = sorted(f.name for f in seed_data_dir.iterdir() if f.is_file())
-
-                    errors.append(
-                        StaticTypeError(
-                            message=(f"Seed file not found: {file_spec} (resolved to {resolved})"),
-                            location=FieldLocation(
-                                agent_name=action_name,
-                                config_field=f"context_scope.seed.{field_name}",
-                                raw_reference=file_spec,
-                            ),
-                            referenced_agent=action_name,
-                            referenced_field=field_name,
-                            available_fields=set(available),
                             hint=(
-                                f"Available files: {', '.join(available)}"
-                                if available
-                                else "(seed_data/ directory is empty)"
+                                "Write a file path, or a mapping with "
+                                "select_by: source.<field> and files: {value: path}."
                             ),
                         )
                     )
                     continue
 
-                # Load JSON content for field validation
-                try:
-                    content = json.loads(resolved.read_text(encoding="utf-8"))
-                    action_seed_data[action_name][field_name] = content
-                except (OSError, json.JSONDecodeError) as e:
-                    errors.append(
-                        StaticTypeError(
-                            message=f"Seed file '{file_spec}' failed to parse: {e}",
-                            location=FieldLocation(
-                                agent_name=action_name,
-                                config_field=f"context_scope.seed.{field_name}",
-                                raw_reference=file_spec,
-                            ),
-                            referenced_agent=action_name,
-                            referenced_field=field_name,
-                            hint="Ensure the seed file contains valid JSON.",
+                loaded: list[tuple[str, Any]] = []
+                for file_spec in entry.file_specs():
+                    try:
+                        resolved = resolve_seed_path(file_spec, seed_data_dir)
+                    except ValueError as e:
+                        errors.append(
+                            StaticTypeError(
+                                message=str(e),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.seed.{field_name}",
+                                    raw_reference=file_spec,
+                                ),
+                                referenced_agent=action_name,
+                                referenced_field=field_name,
+                                hint="Use relative paths within the seed_data/ directory.",
+                            )
                         )
-                    )
+                        continue
+
+                    if not resolved.exists():
+                        available: list[str] = []
+                        if seed_data_dir.exists():
+                            available = sorted(
+                                f.name for f in seed_data_dir.iterdir() if f.is_file()
+                            )
+
+                        errors.append(
+                            StaticTypeError(
+                                message=(
+                                    f"Seed file not found: {file_spec} (resolved to {resolved})"
+                                ),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.seed.{field_name}",
+                                    raw_reference=file_spec,
+                                ),
+                                referenced_agent=action_name,
+                                referenced_field=field_name,
+                                available_fields=set(available),
+                                hint=(
+                                    f"Available files: {', '.join(available)}"
+                                    if available
+                                    else "(seed_data/ directory is empty)"
+                                ),
+                            )
+                        )
+                        continue
+
+                    # Load JSON content for field validation
+                    try:
+                        content = json.loads(resolved.read_text(encoding="utf-8"))
+                        loaded.append((file_spec, content))
+                    except (OSError, json.JSONDecodeError) as e:
+                        errors.append(
+                            StaticTypeError(
+                                message=f"Seed file '{file_spec}' failed to parse: {e}",
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.seed.{field_name}",
+                                    raw_reference=file_spec,
+                                ),
+                                referenced_agent=action_name,
+                                referenced_field=field_name,
+                                hint="Ensure the seed file contains valid JSON.",
+                            )
+                        )
+                if loaded:
+                    action_seed_data[action_name][field_name] = loaded
 
         # Phase 2: validate seed field references against loaded data
         self._validate_seed_field_references(action_seed_data, action_seed_keys, errors, warnings)
@@ -453,17 +481,25 @@ class WorkflowResolutionService:
                 if "*" in nested_path:
                     continue
 
-                content = loaded_data[seed_key]
-                if not _nested_key_exists(content, nested_path):
+                # A selected seed has one file per value; the path must exist in every one.
+                files = loaded_data[seed_key]
+                lacking = [spec for spec, c in files if not _nested_key_exists(c, nested_path)]
+                if lacking:
+                    content = next(c for spec, c in files if spec == lacking[0])
                     available = sorted(content.keys()) if isinstance(content, dict) else []
                     top_field = nested_path.split(".")[0]
                     suggestions = get_close_matches(top_field, available, n=1, cutoff=0.6)
+                    files_note = (
+                        f" (files: {', '.join(strip_file_prefix(spec) for spec in lacking)})"
+                        if len(files) > 1
+                        else ""
+                    )
                     warnings.append(
                         StaticTypeWarning(
                             message=(
                                 f"Seed field '{seed_key}.{nested_path}' referenced "
                                 f"in action '{action_name}' does not exist in "
-                                f"seed data"
+                                f"seed data{files_note}"
                             ),
                             location=FieldLocation(
                                 agent_name=action_name,

@@ -19,7 +19,8 @@ loaders for cataloging prompts at documentation time.
 | `scope_namespace.py` | Module | Namespace enrichment, field filtering, and allowed-fields extraction. `_extract_content_data` subtracts `_RECORD_METADATA_KEYS` from a record with no `content` envelope; that guess is why a pool row is required to carry one before it reaches here. The branch remains for the record being processed, whose namespaces are the framework's either way. | `preprocessing` |
 | `scope_builder.py` | Module | `build_field_context_with_history`: assembles source/dependency/version/workflow namespaces via composable builder classes (`SourceNamespaceBuilder`, `DependencyNamespaceBuilder`, `VersionNamespaceBuilder`, `WorkflowMetadataBuilder`). Convergence point for source data validation (see design note). | `preprocessing`, `staging.field_validation` |
 | ~~`scope_file_mode.py`~~ | Deleted | FILE-mode observe merged into `scope_application.py:apply_context_scope_for_records`. | — |
-| `static_loader.py` | Module | Static prompt loader used during docs generation to read prompt store files. | `tooling.docs`, `file_io` |
+| `seed_entry.py` | Module | One `context_scope.seed` entry: `parse_seed_entry` accepts a file path or a `{select_by: source.<field>, files: {value: path}}` mapping; `SeedEntry.file_for(record_fields)` picks the record's file and refuses a missing, unknown or non-scalar value (`SeedSelectionError`); `selected_seed_entries` lists every selected entry of a workflow. Shared by the loader, preflight, the staging check and `inspect context`. | `preprocessing`, `validation`, `cli` |
+| `static_loader.py` | Module | `StaticDataLoader`: loads seed files (JSON, YAML, CSV, text) for one record with path traversal prevention and a per-path cache; a selected entry's file is chosen from the record's `source` fields. | `prompt.service` |
 
 ## Design Notes
 

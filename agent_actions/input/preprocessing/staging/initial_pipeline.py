@@ -193,6 +193,7 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
     from agent_actions.input.preprocessing.staging.field_validation import (
+        validate_seed_selectors,
         validate_staging_field_names,
     )
 
@@ -203,6 +204,11 @@ def process_initial_stage(ctx: InitialStageContext):
         _refuse_rows_that_are_not_records(content, ctx.file_path, ctx.agent_name)
 
     validate_staging_field_names(raw_content=content, file_path=ctx.file_path)
+    validate_seed_selectors(
+        raw_content=content,
+        file_path=ctx.file_path,
+        action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
+    )
 
     _validate_staged_data(
         raw_content=content,

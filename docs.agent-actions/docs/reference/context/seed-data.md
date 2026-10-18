@@ -69,11 +69,48 @@ defaults:
 
 Access each with its assigned name: `{{ seed.syllabus.exam_name }}`, `{{ seed.rubric.criteria }}`.
 
+## Choosing a Seed File per Record
+
+A seed key can name one file per value of a staged record field. Each record then gets the file for its own value, and the prompt reads `{{ seed.syllabus }}` as before.
+
+```yaml
+defaults:
+  context_scope:
+    seed:
+      rules: $file:question_design_rules.json      # one file for every record
+      syllabus:
+        select_by: source.exam                     # a field of the staged record
+        files:
+          dbt: $file:dbt_syllabus.json
+          snowflake: $file:snowflake_syllabus.json
+```
+
+```json
+[
+  { "exam": "dbt",       "title": "Incremental models", "content": "..." },
+  { "exam": "snowflake", "title": "Micro-partitions",   "content": "..." }
+]
+```
+
+The first record renders with `dbt_syllabus.json` as `seed.syllabus`; the second with `snowflake_syllabus.json`. Both get `question_design_rules.json` as `seed.rules`. A seed key may select by any staged field (a customer, a language, a product line), and one action may have several selected keys, each with its own field.
+
+Rules:
+
+- `select_by` is `source.<field>`. The field does not have to be observed; selection reads the record before `observe`/`drop` apply.
+- The record's value must be a string or an integer. It is matched against the map keys as text, so `1` and `"1"` both pick the file under `1:`.
+- A record whose value is missing, null, of another type, or not in the map stops the run before any model call. Staging checks every row of every input file against every action's selected seeds; preflight checks that every file in the map exists and that template references such as `seed.syllabus.domains` exist in every one of them.
+
+```
+Seed 'syllabus' in action 'generate_question': record value 'snowflak' for 'source.exam' is not in the file map. Known values: dbt, snowflake. (staging/pages.json, record 3)
+```
+
+There is no default file: a value the map does not name is an error, never a silent fallback. `agac inspect context <workflow> <action>` shows which file each value gets.
+
 ## Seed Data vs Source Data
 
 | Aspect | Seed Data | Source Data |
 |--------|-----------|-------------|
-| **Scope** | Same for all records | Different per record |
+| **Scope** | Same for all records, or one file per value of a record field | Different per record |
 | **Loaded from** | `seed_data/` directory | `agent_io/staging/` directory |
 | **Reference** | `{{ seed.name.field }}` | `{{ source.field }}` |
 

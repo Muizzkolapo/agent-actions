@@ -253,7 +253,7 @@ class PromptPreparationService:
         context_scope = agent_config.get("context_scope", {})
 
         static_data = PromptPreparationService._load_seed_data(
-            agent_config, context_scope, agent_name
+            agent_config, context_scope, agent_name, source=field_context.get("source")
         )
 
         if not context_scope:
@@ -338,7 +338,10 @@ class PromptPreparationService:
         logger.debug("Built field context with %d top-level keys", len(field_context))
 
         static_data = PromptPreparationService._load_seed_data(
-            request.agent_config, context_scope, request.agent_name
+            request.agent_config,
+            context_scope,
+            request.agent_name,
+            source=field_context.get("source"),
         )
 
         if not context_scope:
@@ -633,9 +636,16 @@ class PromptPreparationService:
 
     @staticmethod
     def _load_seed_data(
-        agent_config: dict[str, Any], context_scope: dict[str, Any], agent_name: str
+        agent_config: dict[str, Any],
+        context_scope: dict[str, Any],
+        agent_name: str,
+        source: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Load seed data files if configured, returning empty dict otherwise."""
+        """Load the seed files for one record, or an empty dict when none are configured.
+
+        ``source`` is the record's own fields, read by a seed entry that selects
+        its file by one of them.
+        """
         seed_config = context_scope.get("seed") if context_scope else None
         if not seed_config:
             return {}
@@ -648,7 +658,9 @@ class PromptPreparationService:
             logger.debug("[SEED_DATA_LOAD] Seed data directory: %s", static_data_dir)
 
             static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
-            static_data = static_data_loader.load_static_data(seed_config)
+            static_data = static_data_loader.load_static_data(
+                seed_config, source=source, action_name=agent_name
+            )
 
             logger.debug(
                 "[SEED_DATA_LOAD] Loaded %d seed data files: %s",
@@ -659,6 +671,8 @@ class PromptPreparationService:
             return static_data
         except StaticDataLoadError as e:
             logger.exception("Failed to load static data: %s", e)
+            raise
+        except ConfigurationError:
             raise
         except Exception as e:
             logger.exception("Unexpected error loading static data: %s", e)
