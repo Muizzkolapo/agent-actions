@@ -87,7 +87,10 @@ def build_guard_context(
     # reads the record whole: `context_scope` decides what the action is handed, not
     # what its guard sees.
     seed = PromptPreparationService.load_seed_data(
-        agent_config, agent_config.get("context_scope") or {}, agent_name
+        agent_config,
+        agent_config.get("context_scope") or {},
+        agent_name,
+        source=field_context.get("source"),
     )
     if seed:
         field_context["seed"] = seed
