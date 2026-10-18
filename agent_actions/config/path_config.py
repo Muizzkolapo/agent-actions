@@ -427,18 +427,22 @@ def seed_search_folders(
 
     seed_dir_name = get_seed_data_path(root) if root is not None else "seed_data"
     folders: list[SeedFolder] = []
-    project_dir = (root / seed_dir_name).resolve() if root is not None else None
+    seen: set[Path] = set()
+
+    def add(path: Path, kind: str) -> None:
+        # One folder is searched once, however many ways it is named: the project
+        # folder listed again, a listed folder in two spellings, or the workflow
+        # folder of a flat project, which is the project folder and stays its own.
+        if path.is_dir() and path not in seen:
+            seen.add(path)
+            folders.append(SeedFolder(path, kind, _folder_label(path, root)))
 
     if workflow_config_path:
-        workflow_dir = (_workflow_root(Path(workflow_config_path)) / seed_dir_name).resolve()
-        if workflow_dir.is_dir() and workflow_dir != project_dir:
-            folders.append(SeedFolder(workflow_dir, "workflow", _folder_label(workflow_dir, root)))
-
-    if root is not None and project_dir is not None:
-        if project_dir.is_dir():
-            folders.append(SeedFolder(project_dir, "project", _folder_label(project_dir, root)))
+        add((_workflow_root(Path(workflow_config_path)) / seed_dir_name).resolve(), "workflow")
+    if root is not None:
+        add((root / seed_dir_name).resolve(), "project")
         for listed in get_seed_data_paths(root):
-            folders.append(SeedFolder(listed, "listed", _folder_label(listed, root)))
+            add(listed, "listed")
 
     return folders
 

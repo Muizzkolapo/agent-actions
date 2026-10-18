@@ -184,7 +184,8 @@ WorkflowResolutionService.resolve_all()
   |    - AA_SKIP_ENV_VALIDATION=1 skips key checks ONLY (not seed/vendor checks)
   |
   2. Seed file checks
-  |    - $file: reference existence and path security (resolve_seed_path)
+  |    - $file: reference existence across the workflow and shared seed folders
+  |      (resolve_seed_file; path security per folder via resolve_seed_path)
   |    - loads JSON content, validates seed field references in templates
   |    - namespace mismatch = error, nested field mismatch = warning
   |

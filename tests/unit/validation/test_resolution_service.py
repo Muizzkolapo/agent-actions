@@ -231,7 +231,7 @@ class TestSeedFileChecks:
     def test_malformed_template_records_error_not_crash(self, tmp_path, monkeypatch):
         """Malformed template in a seed-path action produces a StaticTypeError, not a crash."""
         monkeypatch.setenv("AA_SKIP_ENV_VALIDATION", "1")
-        # _resolve_seed_data_dir returns non-None only when seed_data/ exists on disk
+        # The seed folder search finds a folder only when seed_data/ exists on disk
         agent_config = tmp_path / "agent_config"
         agent_config.mkdir()
         (tmp_path / "seed_data").mkdir()

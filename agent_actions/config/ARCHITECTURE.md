@@ -262,7 +262,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 | File | Role |
 |------|------|
 | `paths.py` | `PathManager` — project root discovery with CWD-aware cache, standard path templates, boundary-guarded `clean_path()`, permission validation |
-| `path_config.py` | `find_project_root_dir()` (walk-up marker search), `load_project_config()` (YAML loader with search order), `resolve_project_root()`, `get_tool_dirs()`, `get_schema_path()`, `get_seed_data_path()` |
+| `path_config.py` | `find_project_root_dir()` (walk-up marker search), `load_project_config()` (YAML loader with search order), `resolve_project_root()`, `get_tool_dirs()`, `get_schema_path()`, `get_seed_data_path()`, `get_seed_data_paths()`, `seed_search_folders()`, `resolve_seed_file()` |
 | `project_paths.py` | `ProjectPathsFactory.create_project_paths()` — resolves all standard directories, validates required dirs, auto-creates optional dirs |
 
 ### Config Assembly

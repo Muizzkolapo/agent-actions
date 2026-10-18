@@ -367,7 +367,7 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
 
 ## Seed Data Loading
 
-`StaticDataLoader` loads reference data from the `seed_data/` directory for injection into prompts via the `seed` namespace.
+`StaticDataLoader` loads reference data for injection into prompts via the `seed` namespace, from an ordered list of folders: the workflow's `seed_data/`, the project's, then each folder of `seed_data_paths` (`config.path_config.seed_search_folders`).
 
 ```
 context_scope:
@@ -378,17 +378,19 @@ context_scope:
       select_by: source.exam
       files: {dbt: "dbt.json", snowflake: "snowflake.json"}
 
-StaticDataLoader(static_data_dir=Path("seed_data/"))
+StaticDataLoader(seed_search_folders(workflow_config_path))   # one Path is a list of one
   .load_static_data({"rubric": "grading_rubric.json", ...}, source=record_fields)
     |
     For each seed key (seed_entry.parse_seed_entry):
       0. A string names one file; a mapping picks the file by the record's
          value of `select_by` (missing, unknown or non-scalar value: error)
       1. Parse path: strip "$file:" prefix if present
-      2. Resolve path relative to seed_data/ directory
+      2. Resolve per file: the first folder that holds it (resolve_seed_file);
+         the workflow file wins over a shared one, a name in two shared folders
+         is refused, a file nowhere lists the folders searched
       3. SECURITY: reject absolute paths, reject path traversal (../../etc/passwd)
-         --> Delegates to resolve_seed_path() which validates resolved path
-             stays within static_data_dir
+         --> Each folder is checked with resolve_seed_path(), which validates
+             the resolved path stays within that folder
       4. Check file size (configurable max, prevents memory exhaustion)
       5. Load by extension:
            .json --> json.load()
@@ -475,6 +477,6 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 
 10. **Drop order matters for passthrough.** Passthrough fields are extracted from the pre-drop prompt_context, then drop is applied to both prompt_context and passthrough_fields. This means passthrough captures the value before drop, but drop still removes it. If the order were reversed (drop then passthrough), passthrough would never see the field. The current order ensures drop is the final word on what the declaring action forwards.
 
-11. **Seed data path traversal prevention is delegated.** `StaticDataLoader._resolve_path()` delegates to `resolve_seed_path()` from `utils/path_security.py`. This validates that the resolved path stays within `static_data_dir` after symlink resolution. The loader also rejects absolute paths as a first-pass check before delegation.
+11. **Seed data path traversal prevention is delegated.** `StaticDataLoader._resolve_path()` delegates to `resolve_seed_file()` from `config/path_config.py`, which checks each folder with `resolve_seed_path()` from `utils/path_security.py`. This validates that the resolved path stays within the folder it was found in after symlink resolution. The loader also rejects absolute paths as a first-pass check before delegation.
 
 12. **Token overflow is a heuristic.** `MessageBuilder` estimates tokens as `total_chars / 4` and compares against `_MODEL_CONTEXT_LIMITS`. This is within approximately 20% of actual tokenization for English text. The check raises `PromptTooLargeError` before the API call, saving latency and cost. Models not in the lookup table fall back to 128K tokens.

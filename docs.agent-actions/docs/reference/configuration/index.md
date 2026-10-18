@@ -265,7 +265,7 @@ project/
         ├── agent_io/
         │   ├── staging/        # Input data (starting point)
         │   └── target/         # Output data
-        ├── seed_data/          # Static reference data (workflow-level)
+        ├── seed_data/          # This workflow's own reference data
         └── prompt_store/       # Domain-specific prompts (optional)
 ```
 
@@ -276,10 +276,10 @@ project/
 | **Schemas** | `schema/` | — | Always project-level; shared across workflows |
 | **Tools** | `tools/` | — | Always project-level; shared across workflows |
 | **Prompts** | `prompt_store/` | `workflow/prompt_store/` | Either or both; searched recursively |
-| **Seed Data** | — | `workflow/seed_data/` | Always workflow-level; domain-specific |
+| **Seed Data** | `seed_data/` and the folders of `seed_data_paths` | `workflow/seed_data/` | Searched in that order, workflow first; a shared file exists once — see [Seed Data](../context/seed-data#shared-folders) |
 | **Input/Output** | — | `workflow/agent_io/` | Always workflow-level |
 
-This structure keeps your agentic workflows organized while enabling reuse. Shared schemas ensure consistent data contracts; workflow-level seed data enables domain customization without touching shared assets.
+This structure keeps your agentic workflows organized while enabling reuse. Shared schemas ensure consistent data contracts; a workflow's own seed folder customizes it, and a shared seed folder holds what every workflow reads.
 
 ## See Also
 
