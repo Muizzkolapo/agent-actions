@@ -38,9 +38,7 @@ def _errors(guard_clause: str, **upstream) -> list[str]:
 
 
 def test_an_unknown_action_and_an_unknown_field_are_errors():
-    assert _errors("nosuch.score > 1") == [
-        "Referenced action 'nosuch' does not exist in workflow"
-    ]
+    assert _errors("nosuch.score > 1") == ["Referenced action 'nosuch' does not exist in workflow"]
     assert _errors("up.scor > 1") == ["Field 'scor' not found in action 'up' output schema"]
 
 
@@ -51,7 +49,7 @@ def test_a_real_field_is_not_an_error():
 def test_reach_and_self_reads_are_left_to_the_upstream_check():
     """`find_reads_not_upstream` refuses these in words about the guard."""
     assert _errors("side.n > 1") == []
-    assert _errors("down.out == 'x'") == []
+    assert _errors("down.nothere == 'x'") == []
 
 
 def test_a_name_a_dependency_promotes_is_not_an_action():

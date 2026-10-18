@@ -65,8 +65,9 @@ decoders to schema validators and preflight checks.
 | `agent_actions/logging` | outbound | Fires validation events (`ValidationStartEvent`, `ValidationCompleteEvent`, etc.) via `fire_event`. |
 | `agent_actions/output` | outbound | Uses `config_fields.get_default` and `ActionExpander` via `ConfigManager`. |
 | `agent_actions/prompt` | outbound | Uses `PromptLoader` for prompt ID extraction, and `scope_inference` (`infer_dependencies`, `expand_version_base_names`) for what an action reads. |
-| `agent_actions/input` | outbound | `ValidateUDFsCommand` uses `discover_udfs` / `validate_udf_references`; `dep_observe_validator` parses guard clauses with `WhereClauseParser`. |
-| `agent_actions/expectations` | outbound | `expectations_validator` builds and checks suites; `dep_observe_validator` uses `referenced_field_paths` for the names a guard clause reads. |
+| `agent_actions/input` | outbound | `ValidateUDFsCommand` uses `discover_udfs` / `validate_udf_references`; `dep_observe_validator` and `static_analyzer.reference_extractor` parse guard clauses with `WhereClauseParser`. |
+| `agent_actions/expectations` | outbound | `expectations_validator` builds and checks suites; `dep_observe_validator` and `static_analyzer.reference_extractor` use `referenced_field_paths` for the names a guard clause reads. |
+| `agent_actions/guards` | outbound | `guard_validation` and the static analyzer use `bare_reference` (`spreads_output_flat`, the promoted record and version names) for the names a guard reads that are not actions. |
 | `agent_actions/utils` | outbound | Uses `FileHandler`, `constants`, `udf_management.registry`. |
 | `agent_actions/workflow` | inbound | Workflow execution calls validators before running actions. |
 | `agent_actions/cli` | inbound | CLI commands invoke validators for pre-flight checks. |

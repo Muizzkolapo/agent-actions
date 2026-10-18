@@ -709,5 +709,10 @@ class TestAnExpandedGuardClause:
 
         assert refs == [("up", "z")]
 
-    def test_a_reserved_name_is_left_to_the_guard_check(self):
-        assert self._guard_refs({"clause": "action.up.score > 1"}) == []
+    def test_a_read_through_a_reserved_name_is_reported_as_written(self):
+        assert self._guard_refs({"clause": "action.up.score > 1"}) == [("action", "up.score")]
+
+    def test_a_version_param_named_like_a_reserved_name_is_on_the_record(self):
+        refs = self._guard_refs({"clause": "schema.x == 1"}, _version_context={"schema": "s"})
+
+        assert refs == []
