@@ -9,7 +9,7 @@
 #   - Aggregation and consensus patterns
 #   - Dynamic content injection (team assignment)
 #   - Conditional escalation based on severity
-#   - Guard-based filtering
+#   - Guard-based skipping
 ################################################################################
 
 name: incident_triage
@@ -168,7 +168,9 @@ actions:
     intent: "Generate executive summary for high-severity incidents"
     guard:
       condition: 'aggregate_severity.final_severity == "SEV1" or aggregate_severity.final_severity == "SEV2"'
-      on_false: "filter"
+      # skip, not filter: a filtered record never reaches the actions below, and
+      # every incident still needs its triage output.
+      on_false: "skip"
     schema: generate_executive_summary
     prompt: $incident_triage.Generate_Executive_Summary
     context_scope:
@@ -181,11 +183,10 @@ actions:
   # STAGE 8: FORMAT FINAL TRIAGE OUTPUT
   # ==========================================================================
   # NOTE: generate_executive_summary is guarded (SEV1/SEV2 only). For lower
-  # severity records, the guard filters them so generate_executive_summary
-  # produces no output. AGAC handles guarded dependencies gracefully — when a
-  # dependency is filtered out, downstream actions still execute with whatever
-  # fields are available. format_triage_output will simply not receive
-  # generate_executive_summary.* fields for non-SEV1/SEV2 records.
+  # severity records its guard skips it (on_false: skip), so it calls no model
+  # and the record continues downstream. format_triage_output runs for every
+  # record and finds generate_executive_summary as None for non-SEV1/SEV2 ones.
+  # With on_false: filter those records would never reach it.
   - name: format_triage_output
     dependencies: [generate_response_plan, generate_executive_summary]
     kind: tool

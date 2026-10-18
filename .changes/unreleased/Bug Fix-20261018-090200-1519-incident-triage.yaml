@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  The incident_triage example formats every incident. Its executive-summary guard used
+  `on_false: filter`, which removes a non-SEV1/SEV2 incident from every action below, so
+  `format_triage_output` held only high-severity incidents, and was skipped outright when
+  the guard turned every incident away, as under the mock provider. The guard now uses
+  `on_false: skip`, as the workflow's comment and README meant: the summary is skipped for
+  that incident and the triage output still carries it. The comment and README no longer
+  say that a filtered record still reaches the actions below (#1519).
+time: 2026-10-18T09:02:00Z
