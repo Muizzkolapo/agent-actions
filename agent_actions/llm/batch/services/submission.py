@@ -46,6 +46,7 @@ from agent_actions.processing.result_collector import (
     _safe_set_disposition,
     write_node_level_disposition,
 )
+from agent_actions.record.reasons import GUARD_FILTER
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_FILTERED,
@@ -385,6 +386,7 @@ class BatchSubmissionService:
 
         if self._storage_backend and result.is_submitted:
             self._stamp_deferred(context_map, action_name, result.batch_id)
+            self._stamp_filtered(context_map, action_name)
 
         return result
 
@@ -586,6 +588,28 @@ class BatchSubmissionService:
                 record_id,
                 DISPOSITION_DEFERRED,
                 reason=f"batch_queued:batch_id={batch_id}",
+            )
+
+    def _stamp_filtered(self, context_map: dict[str, Any], action_name: str) -> None:
+        """Stamp FILTERED for every record the guard filtered, now its outcome is known.
+
+        Such a record is sent nothing and stamped no ``deferred``, so a FILTERED the
+        collect pass alone wrote, and the store refused, left it holding no disposition.
+        """
+        if not self._storage_backend:
+            return
+        for entry in context_map.values():
+            if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:
+                continue
+            record_id = entry.get("source_guid")
+            if not record_id:
+                continue
+            _safe_set_disposition(
+                self._storage_backend,
+                action_name,
+                record_id,
+                DISPOSITION_FILTERED,
+                reason=BatchContextMetadata.get_skip_reason(entry) or GUARD_FILTER,
             )
 
     def _submit_to_provider(

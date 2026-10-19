@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -39,6 +40,8 @@ class StrategyExecutionParams:
     retried_records: frozenset[str] = frozenset()
     # A start node's file types: the staged files the walk processes.
     file_type_filter: set[str] | None = None
+    # The suffix of every file the walk stages, asked once per walk and only when needed.
+    staged_suffixes: Callable[[], tuple[str, ...]] | None = None
 
 
 class ActionStrategy(ABC):
@@ -103,6 +106,7 @@ class InitialStrategy(ActionStrategy):
             workflow_metadata=params.workflow_metadata,
             retried_records=params.retried_records,
             file_type_filter=params.file_type_filter,
+            staged_suffixes=params.staged_suffixes,
         )
 
     def precheck(self, params: StrategyExecutionParams) -> None:

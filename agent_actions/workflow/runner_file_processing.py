@@ -8,6 +8,7 @@ in tests (e.g. test_runner_merge.py) continues to work.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import sqlite3
@@ -427,6 +428,7 @@ def _build_file_params(
     *,
     source_relative_path: str | None = None,
     data: Any = None,
+    staged_suffixes: Callable[[], tuple[str, ...]] | None = None,
 ) -> SingleFileProcessParams:
     """Build SingleFileProcessParams with shared fields from FileProcessParams."""
     from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
@@ -448,6 +450,8 @@ def _build_file_params(
         kwargs["source_relative_path"] = source_relative_path
     if data is not None:
         kwargs["data"] = data
+    if staged_suffixes is not None:
+        kwargs["staged_suffixes"] = staged_suffixes
     return SingleFileProcessParams(**kwargs)
 
 
@@ -591,6 +595,7 @@ def _refuse_staged_files_the_first_stage_would(
     input_directory: str,
     params: FileProcessParams,
     processed_paths: set,
+    staged_suffixes: Callable[[], tuple[str, ...]],
 ) -> None:
     """Check every staged file the walk will process before it processes the first.
 
@@ -610,7 +615,14 @@ def _refuse_staged_files_the_first_stage_would(
         except OSError:
             continue
         runner._precheck_single_file(
-            _build_file_params(params, item, input_path, output_path, input_directory)
+            _build_file_params(
+                params,
+                item,
+                input_path,
+                output_path,
+                input_directory,
+                staged_suffixes=staged_suffixes,
+            )
         )
 
 
@@ -632,16 +644,35 @@ def process_directory_files(
     # Sorted, not raw walk order: file_limit truncates this sequence, so an
     # unordered walk makes "the first N files" mean whatever the filesystem
     # happened to enumerate first.
-    items = _files_holding_retried_records(
-        runner, sorted(_walk_files(input_path, unreadable)), input_path
-    )
+    walked = sorted(_walk_files(input_path, unreadable))
+    items = _files_holding_retried_records(runner, walked, input_path)
+
+    @functools.cache
+    def staged_suffixes() -> tuple[str, ...]:
+        """Every file the walk stages, a repair's narrowing aside, by its suffix."""
+        suffixes = []
+        for item in walked:
+            try:
+                if not should_skip_item(item, input_path, set(), params.file_type_filter):
+                    suffixes.append(item.suffix.lower())
+            except OSError:
+                continue
+        return tuple(suffixes)
+
     # Same reason the walk above is sorted: `errors` keeps only the first
     # _MAX_TRACKED_ERRORS, so filesystem order would decide which losses are named.
     _refuse_inputs_sharing_a_stored_name(
         items, input_path, processed_paths, params.file_type_filter
     )
     _refuse_staged_files_the_first_stage_would(
-        runner, items, input_path, output_path, input_directory, params, processed_paths
+        runner,
+        items,
+        input_path,
+        output_path,
+        input_directory,
+        params,
+        processed_paths,
+        staged_suffixes,
     )
     unreadable.sort(key=lambda pair: pair[0])
     for directory, error in unreadable:
@@ -682,7 +713,14 @@ def process_directory_files(
 
         try:
             runner._process_single_file(
-                _build_file_params(params, item, input_path, output_path, input_directory)
+                _build_file_params(
+                    params,
+                    item,
+                    input_path,
+                    output_path,
+                    input_directory,
+                    staged_suffixes=staged_suffixes,
+                )
             )
             count += 1
         except Exception as e:

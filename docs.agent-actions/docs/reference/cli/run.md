@@ -145,6 +145,14 @@ Notice that `analyze` and `transform` both depend on `extract`, but not on each 
 
 When an action fails, the actions that read it are skipped and the rest of the workflow carries on, whichever mode runs it. An error that keeps an action from starting its work at all, such as the store not answering, ends the run instead, and so does the store failing as the rows an action wrote are counted once it has run: in parallel mode the actions already running beside it finish first, then the run stops with the error and a non-zero exit, and nothing below it runs. The action that raised reads `failed`, with the error as its `error_message` in `agent_io/.agent_status.json`; [`agac status`](./utilities#status) shows it, and the run history records the failure. Once the cause is fixed, run the workflow again, or [`agac retry`](./retry#an-action-that-failed-as-a-whole), which re-runs that action and every action after it.
 
+An online action also fails when the store refuses to record that one of its records
+failed or exhausted its retries. Unrecorded, the failure is one `agac retry` could not
+find, so the action is not left to complete without it: it reads `failed`, with the store
+error as its `error_message` and in the run history, the actions that read it are
+skipped, and the run exits non-zero. A batch action does not fail this way: its records
+keep the `deferred` mark they were submitted with, and the next run settles them (see
+[`retry`](./retry#a-record-left-deferred-after-its-batch-was-collected)).
+
 :::info Concurrency Limits
 The default concurrency limit is 5 actions. If your agentic workflow has many parallel actions and you're hitting rate limits, consider reducing this. If you have capacity, increase it up to 50.
 :::

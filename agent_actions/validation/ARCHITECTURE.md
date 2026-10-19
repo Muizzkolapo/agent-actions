@@ -125,20 +125,24 @@ WorkflowStaticAnalyzer.analyze()
   |          - referenced actions are in dependencies
   |          - referenced fields exist in upstream output schema
   |          - forwarded fields not dropped from output
+  |          - context_scope observe/passthrough entries (the only check of them)
   |          - unused dependency warnings
   |
   Step 3+: Additional checks
              - reserved action name validation
              - template namespace coverage
-             - context_scope field references
              - seed_data/seed_path/static_data misuse
              - schema structure validation
              - drop directive targeting
-             - guard-nullable field detection
              - lineage reachability
              - expect: block defects
              - json_mode vs schema mismatch
 ```
+
+`PreflightService.validate` (`services/preflight_service.py`) refuses the run on any error, with
+the full report, warnings included. Without an error it prints the warnings itself, one grouped
+`Pre-flight: static analysis` block with each distinct finding once, so `agac run` and
+`agac inspect` show them; before 1536 they printed only beside an error.
 
 ### DataFlowGraph
 
@@ -186,7 +190,8 @@ WorkflowResolutionService.resolve_all()
   2. Seed file checks
   |    - $file: reference existence across the workflow and shared seed folders
   |      (resolve_seed_file; path security per folder via resolve_seed_path)
-  |    - loads JSON content, validates seed field references in templates
+  |    - parses each file with StaticDataLoader.parse_file (the run's parser: JSON,
+  |      YAML, CSV, text), validates seed field references in templates
   |    - namespace mismatch = error, nested field mismatch = warning
   |
   3. Vendor run-mode compatibility
@@ -198,11 +203,14 @@ WorkflowResolutionService.resolve_all()
 
 Guard conditions are validated in the static analyzer through several checks:
 
-- `_check_guard_nullable_fields()` -- detects fields that may be None at runtime due to upstream guard filtering, warns when downstream tool schemas reject null
 - `_check_guard_skipped_observe_refs()` -- warns when observe refs target specific fields from skip-guarded actions (the entire namespace is None)
 - `_check_filter_fanin_observe_hazard()` -- warns about guard-filter + fan-in observe combinations
 
 These checks run **before** wildcard expansion to avoid false positives from expanded wildcards.
+
+There is no separate guard-nullable warning: a filter removes the record from every action
+below it, a skip is reported on the same entry by the skip-observe check, and
+`apply_guard_nullable_schema_fixes` makes a tool's schema accept the null (1536).
 
 They, the literal-type check (`_check_guard_literal_type_mismatch`) and
 `apply_guard_nullable_schema_fixes` read a guard through `guard_clause_and_behavior`, which takes
@@ -219,6 +227,12 @@ version-merge tool (`WorkflowStaticAnalyzer._without_guard_promotions`). Reach â
 itself (at the first stage too), or one not upstream through `dependencies` â€” is left to
 `dep_observe_validator.find_reads_not_upstream`, which words it for a guard.
 
+A clause's bare (un-dotted) names are judged by `preflight/guard_validation.py` through
+`guards/bare_reference.bare_reference_is_unresolvable`, refused only when no promotion can
+answer them. A first action is no exception: its record holds the staged row under `source`,
+so a staged column bare (`page_content == 'two'`) resolves against nothing and filtered every
+record while the run exited 0. It is refused, naming `source.page_content` (1535).
+
 ### apply_guard_nullable_schema_fixes()
 
 A module-level function (not a method on the analyzer) that **mutates `json_output_schema` dicts in place**. Called after schema compilation and static validation but before workflow execution:
@@ -227,11 +241,19 @@ A module-level function (not a method on the analyzer) that **mutates `json_outp
 apply_guard_nullable_schema_fixes(action_configs)
   |
   1. Find guarded actions with filter/skip behavior
-  2. For each downstream action that observes guarded fields:
+  2. For each tool that observes a field which may be null (any field of a
+     guarded action, or one carried forward in step 3):
      - If the field's schema type rejects null (e.g., "string")
      - Mutate the type to ["string", "null"] or add null to anyOf
-  3. Return list of fixed field paths (e.g., ["consumer.field"])
+  3. A tool that returns a field named like one it read that may be null may
+     return null there too (a relay), so that field of the tool may be null
+     for the tools reading it. Repeat 2-3 until nothing changes.
+  4. Return list of fixed field paths (e.g., ["consumer.field"])
 ```
+
+The carry follows what a tool returns, not what it passes through: a passed-through field
+stays under the namespace it came from. Without it, `cons` reading `mid.text`, where `mid`
+returns the skipped `g.text`, failed its output schema on the skipped record (1536).
 
 This mutation is necessary because guarded actions produce None for filtered records, but JSON Schema would reject null by default.
 

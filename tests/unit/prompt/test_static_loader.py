@@ -238,6 +238,12 @@ class TestLoadCsv:
         result = loader._load_csv(f, "field")
         assert result == []
 
+    def test_a_bom_and_a_quoted_crlf_are_read_as_written(self, loader, data_dir):
+        f = data_dir / "bom.csv"
+        f.write_bytes('﻿name,note\r\nAlice,"one\r\ntwo"\r\n'.encode())
+
+        assert loader._load_csv(f, "field") == [{"name": "Alice", "note": "one\r\ntwo"}]
+
 
 # ---------------------------------------------------------------------------
 # load_static_data -- full pipeline

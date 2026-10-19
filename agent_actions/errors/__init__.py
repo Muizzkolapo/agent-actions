@@ -74,6 +74,7 @@ from agent_actions.errors.preflight import (
 
 # Processing errors
 from agent_actions.errors.processing import (
+    DispositionsNotStoredError,
     EmptyOutputError,
     GenerationError,
     GuardNotAppliedError,
@@ -137,6 +138,7 @@ __all__ = [
     "AmbiguousAgentName",
     # Processing
     "ProcessingError",
+    "DispositionsNotStoredError",
     "TransformationError",
     "GenerationError",
     "GuardNotAppliedError",

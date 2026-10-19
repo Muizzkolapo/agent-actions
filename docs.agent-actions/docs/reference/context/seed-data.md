@@ -22,8 +22,16 @@ defaults:
 | Syntax | Description |
 |--------|-------------|
 | `$file:filename.json` | Load JSON file from the seed data directory |
-| `$file:filename.yaml` | Load YAML file from the seed data directory |
+| `$file:filename.yaml` | Load YAML file (`.yaml` or `.yml`) from the seed data directory |
+| `$file:filename.csv` | Load a CSV file as a list of rows, each a mapping of column name to text |
+| `$file:filename.md` | Load a Markdown or `.txt` file as one string |
 | `$file:path/to/file.json` | Load from subdirectory within the seed data directory |
+
+Preflight reads each seed file the way the run does, so a file that preflight accepts
+loads the same at run time, and a malformed one is refused before the run with its
+format's parse error. A CSV may start with a UTF-8 byte order mark, which is not part
+of the first column's name, and a quoted cell keeps its line breaks as written. Read a
+CSV row by position: `{{ seed.codes[0].code }}`.
 
 ### Custom Directory Name
 
@@ -94,6 +102,8 @@ guard:
 ```
 
 A prompt or guard that reads a seed key its action does not declare is refused before the run.
+Preflight also warns when a field such as `seed.rubric.criteria` is missing from a JSON or
+YAML mapping. It does not check past a list, such as the rows of a CSV or a JSON array.
 
 ## Multiple Seed Files
 

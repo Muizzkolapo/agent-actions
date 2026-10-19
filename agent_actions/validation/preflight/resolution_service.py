@@ -8,7 +8,6 @@ Performs a single comprehensive resolution pass across all actions:
 Uses the same resolution utilities that runtime uses, ensuring no divergence.
 """
 
-import json
 import logging
 import os
 from difflib import get_close_matches
@@ -25,6 +24,7 @@ from agent_actions.config.path_config import (
 )
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
+from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
     StaticTypeError,
@@ -87,6 +87,17 @@ def _get_api_key_env_name(vendor: str) -> str | None:
         return None
     default = field_info.default
     return str(default) if default is not None else None
+
+
+_SEED_FORMATS = {".json": "JSON", ".yml": "YAML", ".yaml": "YAML", ".csv": "CSV"}
+
+
+def _seed_parse_hint(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix not in StaticDataLoader.SUPPORTED_EXTENSIONS:
+        supported = ", ".join(sorted(StaticDataLoader.SUPPORTED_EXTENSIONS))
+        return f"Use a seed file of a supported type: {supported}."
+    return f"Ensure the seed file contains valid {_SEED_FORMATS.get(suffix, 'UTF-8 text')}."
 
 
 def _nested_key_exists(data: Any, path: str) -> bool:
@@ -402,14 +413,14 @@ class WorkflowResolutionService:
                         )
                         continue
 
-                    # Load JSON content for field validation
                     try:
-                        content = json.loads(resolved.read_text(encoding="utf-8"))
+                        content = StaticDataLoader.parse_file(resolved, field_name)
                         loaded.append((file_spec, content))
-                    except (OSError, json.JSONDecodeError) as e:
+                    except StaticDataLoadError as e:
+                        detail = e.context.get("parse_error") or e.context.get("error") or e
                         errors.append(
                             StaticTypeError(
-                                message=f"Seed file '{file_spec}' failed to parse: {e}",
+                                message=f"Seed file '{file_spec}' failed to parse: {detail}",
                                 location=FieldLocation(
                                     agent_name=action_name,
                                     config_field=f"context_scope.seed.{field_name}",
@@ -417,7 +428,7 @@ class WorkflowResolutionService:
                                 ),
                                 referenced_agent=action_name,
                                 referenced_field=field_name,
-                                hint="Ensure the seed file contains valid JSON.",
+                                hint=_seed_parse_hint(resolved),
                             )
                         )
                 if loaded:

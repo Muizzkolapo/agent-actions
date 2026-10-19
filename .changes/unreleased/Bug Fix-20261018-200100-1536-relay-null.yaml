@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  A tool that returns a skipped action's field under the same name, and a tool reading that
+  field from it, both accept null on the skipped record. The second tool failed its output
+  schema there ("at text: None") and the record was lost, with or without the first tool
+  passing the field through. Pre-flight now carries the null through every tool that relays
+  the field (#1536).
+time: 2026-10-18T20:01:00Z

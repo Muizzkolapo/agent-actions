@@ -626,7 +626,9 @@ class TestContextScopeValidation:
 
         result = analyze_workflow(workflow_config)
         # No context_scope errors
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field.startswith("context_scope")
+        ]
         assert len(context_errors) == 0
 
     def test_context_scope_infers_dependency(self):
@@ -683,7 +685,7 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        field_errors = [e for e in result.errors if "non-existent field" in e.message]
+        field_errors = [e for e in result.errors if "not found in action" in e.message]
         assert len(field_errors) >= 1
 
     def test_context_scope_unknown_action_caught(self):
@@ -703,7 +705,7 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        unknown_errors = [e for e in result.errors if "unknown action" in e.message]
+        unknown_errors = [e for e in result.errors if "does not exist in workflow" in e.message]
         assert len(unknown_errors) >= 1
         assert "typo_action" in unknown_errors[0].message
 
@@ -733,9 +735,11 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field.startswith("context_scope")
+        ]
         assert len(context_errors) >= 1
-        assert any("non-existent field" in e.message for e in context_errors)
+        assert any("not found in action" in e.message for e in context_errors)
         assert any("nonexistent_field" in e.message for e in context_errors)
 
     def test_wildcard_allowed_without_validation(self):
@@ -763,11 +767,13 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         # Wildcard should not cause context_scope errors
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field.startswith("context_scope")
+        ]
         assert len(context_errors) == 0
 
     def test_special_namespaces_allowed(self):
-        """Test that special namespaces (source, seed, loop, workflow) are always allowed."""
+        """Test that special namespaces (source, seed, workflow) are always allowed."""
         workflow_config = {
             "actions": [
                 {
@@ -776,7 +782,6 @@ class TestContextScopeValidation:
                         "observe": [
                             "source.title",
                             "seed.config",
-                            "loop.index",
                             "workflow.name",
                         ],
                     },
@@ -787,7 +792,9 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         # Special namespaces should not cause context_scope errors
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field.startswith("context_scope")
+        ]
         assert len(context_errors) == 0
 
     def test_passthrough_directive_validated(self):
@@ -814,7 +821,9 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        context_errors = [e for e in result.errors if "context_scope.passthrough" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field == "context_scope.passthrough"
+        ]
         assert len(context_errors) >= 1
 
     def test_multiple_errors_reported(self):
@@ -845,13 +854,15 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field.startswith("context_scope")
+        ]
         # Should have errors for: bad_field1, bad_field2 (non-existent fields),
         # and undeclared_dep (unknown action — no node in graph).
         assert len(context_errors) >= 3
-        field_errors = [e for e in context_errors if "non-existent field" in e.message]
+        field_errors = [e for e in context_errors if "not found in action" in e.message]
         assert len(field_errors) >= 2
-        unknown_errors = [e for e in context_errors if "unknown action" in e.message]
+        unknown_errors = [e for e in context_errors if "does not exist in workflow" in e.message]
         assert len(unknown_errors) >= 1
 
     def test_context_scope_reports_error_when_schema_load_fails(self):
@@ -875,7 +886,9 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        context_errors = [
+            e for e in result.errors if e.location.config_field.startswith("context_scope")
+        ]
         assert len(context_errors) >= 1
         assert any(
             "not found" in e.message or "could not be loaded" in e.message for e in context_errors
@@ -1008,12 +1021,14 @@ class TestPreflightFieldValidation:
 
         # Should NOT produce errors — schemaless can't prove field is wrong
         context_errors = [
-            e for e in result.errors if "context_scope" in e.message and "result_field" in e.message
+            e
+            for e in result.errors
+            if e.location.config_field.startswith("context_scope") and "result_field" in e.message
         ]
         assert len(context_errors) == 0
 
         # Should produce a warning about unverifiable field
-        schema_warnings = [w for w in result.warnings if "no output schema" in w.message]
+        schema_warnings = [w for w in result.warnings if "has no schema" in w.message]
         assert len(schema_warnings) >= 1
         assert "result_field" in schema_warnings[0].message
         assert "my_tool" in schema_warnings[0].message
@@ -1039,8 +1054,8 @@ class TestPreflightFieldValidation:
         result = analyze_workflow(workflow_config)
 
         # Wildcards on schemaless actions are handled by _expand_wildcards (dropped).
-        # No warning about "no output schema" for wildcards.
-        schema_warnings = [w for w in result.warnings if "no output schema" in w.message]
+        # No warning about "has no schema" for wildcards.
+        schema_warnings = [w for w in result.warnings if "has no schema" in w.message]
         assert len(schema_warnings) == 0
 
     def test_cross_action_suggestion_in_error(self):
@@ -1079,7 +1094,7 @@ class TestPreflightFieldValidation:
         field_errors = [
             e
             for e in result.errors
-            if "non-existent field" in e.message and "question_text" in e.message
+            if "not found in action" in e.message and "question_text" in e.message
         ]
         assert len(field_errors) >= 1
         assert "Did you mean" in field_errors[0].hint
@@ -1151,7 +1166,7 @@ class TestPreflightFieldValidation:
 
         # middle.* should expand to include both own_field and field_x (passthrough).
         # No errors about missing fields.
-        field_errors = [e for e in result.errors if "non-existent field" in e.message]
+        field_errors = [e for e in result.errors if "not found in action" in e.message]
         assert len(field_errors) == 0
 
     def test_known_schema_field_error_unchanged(self):
@@ -1181,7 +1196,7 @@ class TestPreflightFieldValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        context_errors = [e for e in result.errors if "non-existent field" in e.message]
+        context_errors = [e for e in result.errors if "not found in action" in e.message]
         assert len(context_errors) >= 1
         assert "nonexistent_field" in context_errors[0].message
 
@@ -1220,14 +1235,14 @@ class TestPreflightFieldValidation:
         field_errors = [
             e
             for e in result.errors
-            if "non-existent field" in e.message or "Cannot verify" in e.message
+            if "not found in action" in e.message or "Cannot validate" in e.message
         ]
         assert len(field_errors) == 0
 
         schema_warnings = [
             w
             for w in result.warnings
-            if "no output schema" in w.message or "Cannot verify" in w.message
+            if "has no schema" in w.message or "Cannot validate" in w.message
         ]
         assert len(schema_warnings) == 0
 
@@ -1255,11 +1270,11 @@ class TestPreflightFieldValidation:
 
         # Dynamic schema may produce either a load_error (error) or a
         # dynamic-without-load-error (warning). Either way, it should NOT
-        # produce a "non-existent field" error (false positive).
+        # produce a "not found in action" error (false positive).
         false_positive_errors = [
             e
             for e in result.errors
-            if "non-existent field" in e.message and "some_field" in e.message
+            if "not found in action" in e.message and "some_field" in e.message
         ]
         assert len(false_positive_errors) == 0
 
@@ -1267,8 +1282,7 @@ class TestPreflightFieldValidation:
         schema_issues = [
             issue
             for issue in result.errors + result.warnings
-            if "my_tool" in issue.message
-            and ("Cannot validate" in issue.message or "Cannot verify" in issue.message)
+            if "my_tool" in issue.message and "Cannot validate" in issue.message
         ]
         assert len(schema_issues) >= 1
 

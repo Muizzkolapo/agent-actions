@@ -42,9 +42,9 @@ def bare_reference_is_unresolvable(
     """True only when *variable* cannot resolve by any promotion the runtime performs.
 
     ``upstreams`` is the set of actions this one names. An empty set means a first-stage
-    action, whose content is the staging row: its columns are not knowable from config, so
-    nothing about it is provable. ``upstream_output_fields`` maps each upstream to its
-    declared ``output_field`` (``None`` when the action is unknown here, which is also
+    action, whose record holds the staged row under ``source``: a staged column resolves
+    only as ``source.<column>``, never bare. ``upstream_output_fields`` maps each upstream
+    to its declared ``output_field`` (``None`` when the action is unknown here, which is
     unprovable). ``any_upstream_spreads_flat`` is set when an upstream is a
     FILE-granularity version-merge tool, which spreads its output flat over record content
     so any bare name may be one of its fields.
@@ -59,8 +59,6 @@ def bare_reference_is_unresolvable(
         return False
 
     named = set(upstreams)
-    if not named:
-        return False
     if variable in named:
         # `assess IS NOT NULL` names the namespace itself, which is promoted to top level.
         return False

@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  A batch record the guard filtered is recorded `filtered` when its batch is submitted. It
+  waits under no `deferred`, so when the store refused the `filtered` the collecting run
+  wrote, it held no disposition for good and showed only in the counts. And a batch record
+  that exhausted its retries, settled from its stored row by the next run after the store
+  refused its outcome, reads as collection writes it: `exhausted_after_{N}_attempts` with
+  the error as its detail, not `retry_exhausted` with none (#1534).
+time: 2026-10-18T17:01:00Z

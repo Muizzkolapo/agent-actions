@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  An action below the first that observes, or reads in its prompt, a `source` field
+  no staged row holds, such as `source.page_content` over a text file, is now refused
+  when the first action stages the file, before any record is stored or sent. It passed
+  the pre-flight check and then failed every record, for every staged format. The
+  refusal names the action, the field and the staged file, with the `source.content`
+  hint for a text file or the fields the rows hold otherwise. A field only some rows
+  hold is not refused. A warning is logged instead when other staged files may hold the
+  field, and for a read that may not fail a record: a `passthrough`, a guard (which can
+  test for the field with `IS NULL`; a comparison filters every record), and a prompt
+  read under an `if` body or a loop, on the right of `and`/`or`, bound with `set` or
+  `with`, behind `| default`, `is defined`, a conditional expression or
+  `source.get(...)`, and a read of a field the action's own guard reads. An API source
+  is checked against the rows it fetched. (#1537)
+time: 2026-10-18T17:00:00Z

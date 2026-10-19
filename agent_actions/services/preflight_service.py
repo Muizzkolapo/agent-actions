@@ -37,6 +37,7 @@ from agent_actions.validation.preflight.resolution_service import (
 from agent_actions.validation.prompt_required_field_validator import (
     find_unguarded_required_refs,
 )
+from agent_actions.validation.static_analyzer.errors import StaticTypeWarning
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     apply_guard_nullable_schema_fixes,
 )
@@ -48,6 +49,14 @@ from agent_actions.validation.udf_required_field_validator import (
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
+
+
+def static_warning_lines(warnings: list[StaticTypeWarning]) -> list[str]:
+    """One line per distinct finding: a prompt and an observe entry often report the same one."""
+    lines = (
+        f"{w.location.agent_name}: {w.message}" + (f" {w.hint}" if w.hint else "") for w in warnings
+    )
+    return list(dict.fromkeys(lines))
 
 
 class PreflightService:
@@ -86,6 +95,8 @@ class PreflightService:
                 schema_result.format_report(),
                 hint="Fix the static type errors above before running the workflow.",
             )
+        # With an error they were in the report above; without one, nothing printed them.
+        self._warn_findings("static analysis", static_warning_lines(schema_result.warnings))
 
         # 2. Guard-nullable schema fixes (mutates action_configs)
         guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)

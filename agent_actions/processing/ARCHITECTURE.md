@@ -905,6 +905,15 @@ writes it after the file:
     authoritative), and a filtered record has no row to carry: the guard
     filters it again above the gate.
 
+    When the store refuses that write and it held a FAILED or EXHAUSTED,
+    the collector leaves a DispositionsNotStoredError, marked action-fatal,
+    in ProcessingContext.failure_not_stored, and both online pipelines raise
+    it once the file is stored. Online stamps no DEFERRED a later run could
+    settle the failure from (batch does: lost_dispositions in
+    workflow/managers/batch.py), so the action fails with the store error,
+    which agac retry finds, rather than completing with the record holding
+    nothing.
+
     Still written before the file: SKIPPED for a record the context scope drops
     (pipeline.py), which the scope pass drops again before the gate; and, at
     record granularity, the checkpoint's SUCCESS, whose checkpoint row tells

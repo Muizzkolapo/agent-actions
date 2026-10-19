@@ -232,8 +232,7 @@ class TestGuardSkippedObserveRefs:
     def test_llm_consumer_also_warns(self):
         """LLM (non-tool) consumer observing skip-guarded field also warns.
 
-        Unlike the existing _check_guard_nullable_fields which only checks tool
-        actions, this check applies to ALL downstream actions.
+        This check applies to every downstream action, tools or not.
         """
         workflow = _make_workflow(
             _llm_action(

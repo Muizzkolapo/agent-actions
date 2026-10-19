@@ -63,6 +63,7 @@
 | `SerializationError` | Class | Raised when serialization/deserialization fails. | - |
 | `GuardNotAppliedError` | Class | Raised when a guard could not be put to a record, so the record has no verdict and is not passed to the action. | - |
 | `EmptyOutputError` | Class | Raised when an action produces empty output and on_empty=error. | - |
+| `DispositionsNotStoredError` | Class | Raised, marked action-fatal, when the store refused the failure dispositions of an online run's records, so `agac retry` could not find them; the action fails with the store error instead. | - |
 | `resources.py` | Module | Resource-related errors (memory, dependencies, etc). | `errors` |
 | `ResourceError` | Class | Base exception for resource-related errors. | - |
 | `DependencyError` | Class | Raised when a required dependency is not provided or cannot be loaded. | - |
@@ -83,7 +84,7 @@ No direct project surface. Consumed internally by config, validation, workflow, 
 |---------|-----------|-----|
 | `agent_actions/config` | inbound | Config module raises `ConfigurationError`, `ConfigValidationError`, `FileSystemError`. |
 | `agent_actions/validation` | inbound | Validators raise `SchemaValidationError`, `ValidationError`, and preflight errors. |
-| `agent_actions/workflow` | inbound | Workflow execution raises `WorkflowError`, `AgentExecutionError`, `ProcessingError`. |
+| `agent_actions/workflow` | inbound | Workflow execution raises `WorkflowError`, `AgentExecutionError`, `ProcessingError`, and the online pipelines `DispositionsNotStoredError`. |
 | `agent_actions/llm` | inbound | LLM providers raise `VendorAPIError`, `AnthropicError`, `RateLimitError`, `NetworkError`. |
 | `agent_actions/prompt` | inbound | Prompt rendering raises `TemplateRenderingError`, `TemplateVariableError`. |
 | `agent_actions/input` | inbound | Loaders raise `FileLoadError`, `UDFLoadError`, `DuplicateFunctionError`. The guard evaluator raises `GuardNotAppliedError`. |

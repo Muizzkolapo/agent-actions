@@ -84,26 +84,29 @@ class TestValidateGuardConditions:
 
     def test_bare_identifier_returns_error(self):
         configs = {
+            "review": {},
             "my_action": {
+                "dependencies": ["review"],
                 "guard": {
-                    "clause": "hitl_status == approved",
+                    "clause": "review.hitl_status == approved",
                     "scope": "item",
                     "behavior": "filter",
-                }
-            }
+                },
+            },
         }
-        errors = validate_guard_conditions(configs)
+        errors = [e for e in validate_guard_conditions(configs) if "quote" in e.lower()]
         assert len(errors) == 1
         assert "approved" in errors[0]
-        assert "quote" in errors[0].lower()
 
     def test_all_example_conditions_pass(self):
         """All existing example guard conditions must pass validation."""
         configs = {
-            "incident": {"guard": {"clause": 'severity == "SEV1" or severity == "SEV2"'}},
-            "review": {"guard": {"clause": "consensus_score >= 6"}},
-            "product": {"guard": {"clause": "compliance_passed == true"}},
-            "support": {"guard": {"clause": 'severity != "low"'}},
+            "incident": {
+                "guard": {"clause": 'source.severity == "SEV1" or source.severity == "SEV2"'}
+            },
+            "review": {"guard": {"clause": "source.consensus_score >= 6"}},
+            "product": {"guard": {"clause": "source.compliance_passed == true"}},
+            "support": {"guard": {"clause": 'source.severity != "low"'}},
         }
         errors = validate_guard_conditions(configs)
         assert errors == [], f"Unexpected errors: {errors}"

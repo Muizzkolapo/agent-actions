@@ -310,7 +310,13 @@ one, so the merge writes that file empty as any reader would. The merge's other
 dependencies, those that are not the versions it merges (`_resolve_dependencies_besides_versions`),
 are read from the store in those same files and paired with the merged versions by
 `merge_fan_in`, as any fan-in pairs its branches, so a namespace it observes from a
-sibling branch reaches it. Its input is never stored:
+sibling branch reaches it. The versions themselves are correlated by
+`version_correlation_id`, not through `merge_fan_in`, so the correlator applies the fan-in's
+rule for a folded record itself: a record a version holds no row of because that version's
+FILE tool folded it into another row (`folded_sources`, read by `merge.rows_folded_into` for the
+version's own folds only, since the field also lists the folds made above every version) is
+merged `cascade_skipped` through `merge.consumed_into_another`, and the merge leaves it
+`unprocessed` with reason `consumed_into_another_record`. Its input is never stored:
 its own target holds its answers, which a re-run carries records from. The correlator
 also deletes, before the walk, each stored file of the merge that no version source
 lists, under a file limit and a repair too: it lists every file its version sources hold,
@@ -540,10 +546,14 @@ run_mode == BATCH and not tool/HITL?
          ▼
     stats.terminal_failure()         ← nothing succeeded: raise without writing,
                                        unless a reset took back the answers
-                                       stored for the file (stored_answers_stand)
+                                       stored for the file (stored_answers_stand);
+                                       context.failure_not_stored is raised in its
+                                       place when set
     output_handler.save_main_output()
     write_dispositions(context.kept_dispositions)   ← only after the file
     clear_checkpoint_records(action, target_relative_path)
+    raise context.failure_not_stored, if any  ← the store refused a record's
+                                                failure: fatal to the action
     raise the terminal failure held back for the write, if any
 ```
 
@@ -558,7 +568,8 @@ Run 1: Submit
     → store the context map and recorded inputs (only once the provider
       has taken the batch)
     → write .batch_registry.json
-    → DISPOSITION_DEFERRED for all records
+    → DISPOSITION_DEFERRED for every record sent, DISPOSITION_FILTERED for
+      every record the guard filtered (sent nothing, so known already)
     → action status → BATCH_SUBMITTED
     → workflow pauses
     A batch the provider refuses fails the action once every file has

@@ -339,6 +339,18 @@ class TestSeedJsonParseFailure:
         assert len(parse_errors) == 1
         assert "valid JSON" in parse_errors[0].hint
 
+    def test_a_seed_type_the_run_cannot_read_is_refused(self, tmp_path):
+        wf_path = _make_project(tmp_path, {"data.xml": '{"looks": "like json"}'})
+
+        svc = WorkflowResolutionService(
+            action_configs={"loader": {"context_scope": {"seed": {"data": "$file:data.xml"}}}},
+            workflow_config_path=wf_path,
+        )
+        (error,) = svc.resolve_all().errors
+
+        assert "Unsupported file type '.xml'" in error.message
+        assert ".yaml" in error.hint
+
 
 # ---------------------------------------------------------------------------
 # Multiple actions

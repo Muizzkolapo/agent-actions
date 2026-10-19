@@ -69,11 +69,11 @@ A fixed enum derived from the record's final `_state` (see `Disposition` in
 | `success` | Action completed successfully |
 | `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
 | `skipped` | WHERE clause excluded the record from this action |
-| `filtered` | Guard condition was false; record excluded from output |
+| `filtered` | Guard condition was false; record excluded from output. In a batch run it is written when the batch is submitted, since the record is sent nothing |
 | `unprocessed` | Not answered: a dependency didn't produce output (cascade casualty), or a guard skipped it |
 | `deferred` | In-flight HITL/batch awaiting resolution. A batch record still `deferred` once its batch is collected, because the store refused its outcome, gets the outcome its stored row stands for from the next `agac run` or `agac retry` |
 | `exhausted` | All repair iterations failed |
-| `failed` | Unrecoverable error |
+| `failed` | Unrecoverable error. Online, a `failed` or `exhausted` the store refuses to record fails the action with the store error, so `agac retry` still reaches the record |
 
 ### `reason` column
 
@@ -120,7 +120,9 @@ A fan-in's tombstone for a record one branch folded into another record's row ha
 `consumed_into_another_record`, `upstream_action` naming the `granularity: File` tool that
 folded it, `upstream_reason: consumed_into_output`, and `consumed_into`, the `source_guid` of
 the row it went into. It has no `upstream_state`: the tool answered the record. The actions
-below the fan-in skip it as `upstream_unprocessed`, naming the same cause.
+below the fan-in skip it as `upstream_unprocessed`, naming the same cause. A version merge
+(`version_consumption`) leaves the same tombstone for a record one version of a versioned
+`granularity: File` tool folded into another record's row while another version kept it.
 
 ## Version Correlation
 

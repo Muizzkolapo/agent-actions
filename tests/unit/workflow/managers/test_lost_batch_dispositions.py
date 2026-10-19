@@ -159,3 +159,42 @@ def test_settling_writes_the_outcome_and_clears_the_deferred(backend):
     held = {row["record_id"]: row["disposition"] for row in backend.get_disposition(ACTION)}
     assert held == {"g1": DISPOSITION_SUCCESS, "g2": DISPOSITION_FAILED}
     assert lost_dispositions(backend, ACTION) == []
+
+
+def _detail(backend, guid: str) -> tuple:
+    (row,) = [row for row in lost_dispositions(backend, ACTION) if row[1] == guid]
+    return row[2], row[3], row[6]
+
+
+def test_an_exhausted_record_reads_as_collection_writes_it(backend):
+    _register(backend)
+    _defer(backend, "g1")
+    recovery = {"retry": {"attempts": 3, "failures": 3, "succeeded": False, "reason": "missing"}}
+    _store(backend, _row("g1", "exhausted", "retry_exhausted", _recovery=recovery))
+
+    assert _detail(backend, "g1") == (
+        DISPOSITION_EXHAUSTED,
+        "exhausted_after_3_attempts",
+        "Retry exhausted after 3 attempts",
+    )
+
+
+def test_an_expectations_exhausted_record_names_the_expectations_that_failed(backend):
+    _register(backend)
+    _defer(backend, "g1")
+    recovery = {"expectations": {"attempts": 2, "failed": ["summary_not_empty"]}}
+    _store(backend, _row("g1", "exhausted", "expectations_exhausted", _recovery=recovery))
+
+    assert _detail(backend, "g1") == (
+        DISPOSITION_EXHAUSTED,
+        "exhausted_after_2_attempts",
+        "Expectations exhausted after 2 iteration(s) (failed: summary_not_empty)",
+    )
+
+
+def test_an_exhausted_row_without_an_attempt_count_keeps_its_reason(backend):
+    _register(backend)
+    _defer(backend, "g1")
+    _store(backend, _row("g1", "exhausted", "retry_exhausted"))
+
+    assert _detail(backend, "g1") == (DISPOSITION_EXHAUSTED, "retry_exhausted", None)

@@ -318,8 +318,9 @@ def write_filtered_dispositions(
 ) -> None:
     """Write FILTERED for each record the guard filtered, as online's collector does.
 
-    FILTERED is written before DEFERRED is cleared, so dying between the two leaves
-    the record's outcome queryable; a FILTERED the store refused keeps the DEFERRED.
+    Submission recorded it already; a record filtered is stamped no DEFERRED, so a
+    FILTERED refused here alone would leave it holding nothing. Written again here, for
+    a batch submitted before that was so, and before any DEFERRED is cleared.
     """
     for entry in context_map.values():
         if BatchContextMetadata.get_filter_status(entry) != FilterStatus.FILTERED:

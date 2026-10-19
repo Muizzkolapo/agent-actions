@@ -62,6 +62,13 @@ User data files (agent_io/staging/)
            |
            v
 +---------------------+
+| Source reads below  |     Each source.<field> a later action
+| (validate_source_   |     observes or always renders must be
+|  reads_below)       |     held by some staged row
++----------+----------+
+           |
+           v
++---------------------+
 | Data preparation    |     Batch: assign batch_id, source_guid,
 | (_prepare_batch_    |     target_id, node_id per record
 |  data /             |     Online: chunk text, wrap JSON items
@@ -94,7 +101,7 @@ User data files (agent_io/staging/)
 ```
 FileReader(file_path)
   |
-  +-- .json  --> json.load()        --> dict | list[dict]
+  +-- .json  --> deep_json.loads    --> dict | list[dict]   (utf-8-sig: a BOM is dropped)
   +-- .csv   --> csv.reader()       --> list[list[str]]
   +-- .xlsx  --> pandas read_excel  --> list[dict]
   +-- .xml   --> defusedxml parse   --> (tree, root) tuple
@@ -106,6 +113,8 @@ FileReader(file_path)
 ```
 
 Note that CSV returns raw rows (list of lists), not dicts, and `FileReader` has no `.tsv` handler. The first stage does not read a delimited staged file through `FileReader`: `_read_staged_file` reads `.csv` and `.tsv` with `TabularLoader` into `list[dict]` before anything validates them, and preparation reads the file with the same loader, so the first-record template check (`_validate_staged_data`) renders a row the run envelopes. `TabularLoader` reads the file with `newline=""` and `utf-8-sig`, so a quoted cell keeps its line breaks and a byte order mark is not part of the first column name. The reserved-name check is not applied to a delimited file, which it always skipped. XLSX returns `list[dict]` directly via pandas.
+
+The actions below the first stage read `source` from the row staged for their record, which no action adds to. So after the first-record template check, `validate_source_reads_below` checks each `source.<field>` they read in `observe`, `passthrough`, a prompt or a guard against the fields the file's prepared rows hold, and refuses an `observe` or an unconditional prompt read that no row holds, naming the action, the field and the file (with the `source.content` hint for a text format). It warns instead when the walk stages other files that may hold the field (unless every staged file is a text format), and for a read that may not fail a record: a `passthrough` only leaves a missing field out, a guard can test for it (`IS NULL`), a prompt read under an `if` body or a loop, on the right of `and`/`or`, bound by `set`/`with`, or under a `default`, a test, a conditional expression or `.get()` may never be made or has a fallback, and a field the action's own guard reads is decided by the guard first.
 
 ### SourceDataLoader -- storage backend reads
 

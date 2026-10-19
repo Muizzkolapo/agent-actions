@@ -48,6 +48,17 @@ schema lists. If any static check fails you get
 a `PreFlightValidationError` naming the exact YAML field instead of
 the list.
 
+A finding that does not stop the run is printed above the list as a
+warning, and the command still exits 0. `agac run` prints the same
+warnings before it starts. Each finding appears once, grouped by the
+check that found it:
+
+```text
+Pre-flight: static analysis — 1 warning(s)
+  └─ assign_team: Action 'assign_team': seed field 'routing_rules' is both in
+context_scope.observe and referenced in the prompt template ...
+```
+
 For structure, drill down with `inspect action <name>` (deps + prompt
 + schema + who reads this action) or `inspect context <name>`
 (template variables that are in scope).

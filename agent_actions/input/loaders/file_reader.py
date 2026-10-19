@@ -61,7 +61,7 @@ class FileReader(ProcessorErrorHandlerMixin):
             )
 
     def _read_json(self):
-        with open(self.file_path, encoding="utf-8") as file:
+        with open(self.file_path, encoding="utf-8-sig") as file:
             data = deep_json.loads(file.read())
             is_batch_placeholder = (
                 isinstance(data, dict)

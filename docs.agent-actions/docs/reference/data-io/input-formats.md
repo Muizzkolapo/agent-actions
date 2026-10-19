@@ -40,6 +40,9 @@ element becomes one record.
 ]
 ```
 
+A file saved with a UTF-8 byte order mark (as some editors and Windows tools write
+it) is read without it, and its records stage as they would without the mark.
+
 A file holding one record is that same list with one element in it. A lone
 object at the top level is refused at staging, and the fix is to wrap it: `{...}`
 becomes `[{...}]`, which stages the record it always did.
@@ -101,7 +104,8 @@ actions:
 
 The check that runs before any record is sent renders the first chunk, so a
 reference to a field a chunk does not have, such as `source.page_content`, stops
-the run there and names `source.content`.
+the run there and names `source.content`. An action below the first that reads
+such a field is stopped there too (see [Accessing Source Data](#accessing-source-data)).
 
 ## Staging Checks
 
@@ -123,6 +127,32 @@ prompt: |
   From: {{ source.url }}
   Author: {{ source.metadata.author }}
 ```
+
+### Checked Before Anything Runs
+
+Every action reads the `source` namespace of the staged row its record came from;
+no action adds a field to it. So when the first action stages a file, the fields an
+action below it reads from `source` are checked against that file's rows, before any
+record is stored or sent:
+
+- An `observe`, or a prompt reference every render reads, of a field that no row
+  of the file holds stops the run, naming the action, the field and the file. Each
+  would otherwise fail every record from that file. `{% if source.x %}` reads `x` too.
+- A field only some rows hold is not refused: those rows run as usual.
+- When the walk stages more than one file, another file may hold the field, so the
+  read is logged as a warning instead. Files that are all text documents are the
+  exception: their records all hold only `content`, so the read is still refused.
+- These are logged as a warning, and the run goes on: a `passthrough` (it leaves the
+  field out, as for the first action), a guard (`source.x IS NULL` passes a record
+  without `x`; a comparison filters it), and a prompt reference under an `if` body or
+  a loop, on the right of `and`/`or`, bound with `{% set %}` or `{% with %}` (read only
+  where the name is used), behind `| default(...)`, `is defined`, a conditional
+  expression or `source.get('x', ...)`.
+- An `observe` or prompt read of a field the action's own guard reads is a warning
+  too: the guard decides first what a record without the field does.
+
+An API source is checked against the rows it fetched, the same way. An empty
+staging folder stages nothing and checks nothing.
 
 ### Nested Fields
 

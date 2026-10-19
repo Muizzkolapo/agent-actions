@@ -65,7 +65,30 @@ class TestShowSummary:
 
 
 class TestShowQuarantined:
-    """DispositionsCommand._show_quarantined shows failed/exhausted details."""
+    """DispositionsCommand._show_quarantined shows failed/exhausted/unprocessed details."""
+
+    def test_quarantined_shows_unprocessed_records_and_no_others(self):
+        backend = make_mock_backend(
+            {
+                "join": [
+                    {"record_id": "r1", "disposition": "success", "reason": None},
+                    {
+                        "record_id": "r2",
+                        "disposition": "unprocessed",
+                        "reason": "consumed_into_another_record",
+                    },
+                    {"record_id": "r3", "disposition": "unprocessed", "reason": "tool_missing"},
+                    {"record_id": "r4", "disposition": "filtered", "reason": "guard_filter"},
+                    {"record_id": "r5", "disposition": "passthrough", "reason": "empty_output"},
+                ],
+            }
+        )
+        cmd, buf = _make_cmd(quarantined=True)
+        cmd._show_quarantined(backend, ["join"])
+        output = buf.getvalue()
+        assert "r2" in output and "consumed_into_another_record" in output
+        assert "r3" in output and "tool_missing" in output
+        assert not {"r1", "r4", "r5"} & set(output.split())
 
     def test_quarantined_shows_record_details(self):
         backend = make_mock_backend(

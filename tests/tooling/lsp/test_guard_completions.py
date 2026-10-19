@@ -338,11 +338,7 @@ class TestGuardDiagnostics:
         assert [d for d in collect_diagnostics(wf, idx) if "Guard condition" in d.message] == []
 
     def test_a_version_param_is_not_flagged(self, tmp_path: Path):
-        """The declared loop param is promoted, so a bare reference to it resolves.
-
-        `dependencies` is set deliberately: with none, the first-stage short-circuit returns
-        before `versions_params` is consulted and the test passes for the wrong reason.
-        """
+        """The declared loop param is promoted, so a bare reference to it resolves."""
         seed = ActionMetadata(name="seed", location=Location(file_path=tmp_path / "w.yml", line=0))
         action = ActionMetadata(
             name="voter",
@@ -607,14 +603,46 @@ class TestGuardDiagnostics:
             "that wording implies the action exists and merely lacks the field"
         )
 
-    def test_a_first_stage_action_is_not_flagged(self, tmp_path: Path):
-        """Its content is the staging row, whose columns this file does not know."""
+    def test_a_first_stage_staged_column_bare_is_flagged_naming_source(self, tmp_path: Path):
+        """Its record holds the staged row under `source`, so the bare column resolves nowhere."""
         action = ActionMetadata(
             name="triage",
             location=Location(file_path=tmp_path / "w.yml", line=0),
             guard_condition="priority == 'high'",
             guard_line=2,
             guard_variables=["priority"],
+        )
+        idx, wf = _make_index(tmp_path, {"triage": action})
+
+        messages = [
+            d.message for d in collect_diagnostics(wf, idx) if "Guard condition" in d.message
+        ]
+        assert len(messages) == 1, messages
+        assert "Did you mean `source.priority`?" in messages[0], messages[0]
+
+    def test_a_first_action_s_own_name_is_not_offered_under_source(self, tmp_path: Path):
+        action = ActionMetadata(
+            name="triage",
+            location=Location(file_path=tmp_path / "w.yml", line=0),
+            guard_condition="triage IS NOT NULL",
+            guard_line=2,
+            guard_variables=["triage"],
+        )
+        idx, wf = _make_index(tmp_path, {"triage": action})
+
+        messages = [
+            d.message for d in collect_diagnostics(wf, idx) if "Guard condition" in d.message
+        ]
+        assert len(messages) == 1, messages
+        assert "source.triage" not in messages[0], messages[0]
+
+    def test_a_first_stage_staged_column_under_source_is_not_flagged(self, tmp_path: Path):
+        action = ActionMetadata(
+            name="triage",
+            location=Location(file_path=tmp_path / "w.yml", line=0),
+            guard_condition="source.priority == 'high'",
+            guard_line=2,
+            guard_variables=["source.priority"],
         )
         idx, wf = _make_index(tmp_path, {"triage": action})
 

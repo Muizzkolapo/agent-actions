@@ -99,6 +99,12 @@ agac dispositions -a my_workflow --action extract_facts
 agac dispositions -a my_workflow --quarantined
 ```
 
+`retry` acts on the failed and exhausted ones. An unprocessed record is listed with the
+reason no answer reached it — an upstream failure (`upstream_unprocessed`), a guard skip
+(`guard_skip`), a record a `granularity: File` tool left out (`tool_missing_record`) or
+folded into another record's row (`consumed_into_another_record`) — which tells you
+where to look instead.
+
 When nothing is stuck it reports `No quarantined records found.`
 
 :::tip Run from Anywhere
