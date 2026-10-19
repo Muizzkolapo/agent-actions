@@ -343,3 +343,16 @@ class TestReclaimFreedPages:
 
         assert db_path.stat().st_size == before
         assert len(backend.get_prompt_traces("big")) == 200
+
+    def test_a_store_half_freed_is_reclaimed(self, backend, tmp_path):
+        db_path = tmp_path / "test.db"
+        _fill_traces(backend, "first", 100)
+        _fill_traces(backend, "second", 100)
+        backend.perform_maintenance()
+        high_water = _on_disk(db_path)
+
+        backend.clear_prompt_traces("first")
+        backend.perform_maintenance()
+
+        assert _on_disk(db_path) < high_water * 0.7
+        assert len(backend.get_prompt_traces("second")) == 100
