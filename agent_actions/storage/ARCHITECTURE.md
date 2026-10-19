@@ -392,7 +392,7 @@ Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added aft
 
 ## Maintenance Operations
 
-`perform_maintenance()` runs four idempotent cleanup operations after each workflow completes:
+`perform_maintenance()` runs five idempotent cleanup operations after each workflow completes:
 
 ### 1. WAL checkpoint (`_checkpoint_wal`)
 
@@ -409,6 +409,10 @@ Keeps traces from the N most recent calendar days (default: 10, from `StorageDef
 ### 4. Source data TTL (`_enforce_source_data_ttl`)
 
 Deletes `source_data` rows older than the configured TTL in days. Default is `None` (keep forever). Uses SQLite's `datetime('now', '-N days')` for the cutoff.
+
+### 5. Freed-page reclaim (`_reclaim_freed_pages`)
+
+A fresh run or a retry deletes most of a store, but SQLite keeps the freed pages inside the file, so it stays at its largest-ever size. When at least a quarter of the file is freed pages (`_VACUUM_FREE_FRACTION`), runs `VACUUM` and then a WAL checkpoint, because in WAL mode the rewrite lands in the log first. Runs last so it sees what the other four operations deleted. Non-fatal on failure (for example, another process holding a write lock).
 
 ---
 
@@ -467,6 +471,6 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 
 12. **read_target goes through a template method.** The public `read_target()` on `StorageBackend` calls `_read_target_raw()` (implemented by SQLiteBackend), then runs `validate_lifecycle_batch()` and `reset_for_downstream()`. This ensures lifecycle validation happens for every backend without each one reimplementing it.
 
-13. **Maintenance operations are non-fatal.** All four maintenance operations (`_checkpoint_wal`, `_cleanup_stale_dispositions`, `_enforce_prompt_trace_retention`, `_enforce_source_data_ttl`) catch `sqlite3.Error` and log warnings instead of raising. A maintenance failure does not block workflow completion.
+13. **Maintenance operations are non-fatal.** All five maintenance operations (`_checkpoint_wal`, `_cleanup_stale_dispositions`, `_enforce_prompt_trace_retention`, `_enforce_source_data_ttl`, `_reclaim_freed_pages`) catch `sqlite3.Error` and log warnings instead of raising. A maintenance failure does not block workflow completion.
 
 14. **The base class uses no-op defaults for optional methods.** `set_disposition()`, `write_prompt_trace()`, `save_checkpoint_records()`, and `clear_checkpoint_records()` are no-ops on `StorageBackend`. This means a backend that forgets to override them will silently drop data. The `# noqa: B027` comments acknowledge this intentional pattern.
