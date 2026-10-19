@@ -293,3 +293,53 @@ class TestPerformMaintenance:
         backend.perform_maintenance()
         backend.perform_maintenance()
         backend.perform_maintenance()
+
+
+def _on_disk(db_path) -> int:
+    """Bytes the store occupies: the main file plus any write-ahead log beside it."""
+    total = db_path.stat().st_size
+    wal = db_path.with_name(db_path.name + "-wal")
+    if wal.exists():
+        total += wal.stat().st_size
+    return total
+
+
+def _fill_traces(backend, action: str, rows: int) -> None:
+    for i in range(rows):
+        backend.write_prompt_trace(
+            action, f"r{i}", compiled_prompt="p" * 16_000, response_text="x" * 400
+        )
+
+
+class TestReclaimFreedPages:
+    """A store gives back the pages its deleted rows left behind."""
+
+    def test_a_store_shrinks_after_its_rows_are_cleared(self, backend, tmp_path):
+        db_path = tmp_path / "test.db"
+        _fill_traces(backend, "big", 200)
+        backend.write_prompt_trace("kept", "k1", compiled_prompt="still here")
+        high_water = _on_disk(db_path)
+        assert high_water > 3_000_000
+
+        backend.clear_prompt_traces("big")
+        # Deleting rows alone leaves the file at its largest-ever size.
+        assert _on_disk(db_path) >= high_water
+
+        backend.perform_maintenance()
+
+        assert _on_disk(db_path) < high_water / 4
+        kept = backend.get_prompt_traces("kept")
+        assert [t["compiled_prompt"] for t in kept] == ["still here"]
+
+    def test_a_store_with_few_freed_pages_is_left_as_is(self, backend, tmp_path):
+        db_path = tmp_path / "test.db"
+        _fill_traces(backend, "big", 200)
+        _fill_traces(backend, "small", 10)
+        backend.perform_maintenance()
+        before = db_path.stat().st_size
+
+        backend.clear_prompt_traces("small")
+        backend.perform_maintenance()
+
+        assert db_path.stat().st_size == before
+        assert len(backend.get_prompt_traces("big")) == 200
