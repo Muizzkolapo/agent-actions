@@ -1976,13 +1976,13 @@ class SQLiteBackend(StorageBackend):
                     extra={"workflow_name": self.workflow_name},
                 )
                 return
-            logger.info(
-                "Reclaimed %d of %d freed pages",
-                freelist_count,
-                page_count,
-                extra={"workflow_name": self.workflow_name},
-            )
         self._checkpoint_wal()
+        logger.info(
+            "Reclaimed %d of %d freed pages",
+            freelist_count,
+            page_count,
+            extra={"workflow_name": self.workflow_name},
+        )
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner."""

@@ -471,6 +471,6 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 
 12. **read_target goes through a template method.** The public `read_target()` on `StorageBackend` calls `_read_target_raw()` (implemented by SQLiteBackend), then runs `validate_lifecycle_batch()` and `reset_for_downstream()`. This ensures lifecycle validation happens for every backend without each one reimplementing it.
 
-13. **Maintenance operations are non-fatal.** All four maintenance operations (`_checkpoint_wal`, `_cleanup_stale_dispositions`, `_enforce_prompt_trace_retention`, `_enforce_source_data_ttl`) catch `sqlite3.Error` and log warnings instead of raising. A maintenance failure does not block workflow completion.
+13. **Maintenance operations are non-fatal.** All five maintenance operations (`_checkpoint_wal`, `_cleanup_stale_dispositions`, `_enforce_prompt_trace_retention`, `_enforce_source_data_ttl`, `_reclaim_freed_pages`) catch `sqlite3.Error` and log warnings instead of raising. A maintenance failure does not block workflow completion.
 
 14. **The base class uses no-op defaults for optional methods.** `set_disposition()`, `write_prompt_trace()`, `save_checkpoint_records()`, and `clear_checkpoint_records()` are no-ops on `StorageBackend`. This means a backend that forgets to override them will silently drop data. The `# noqa: B027` comments acknowledge this intentional pattern.
