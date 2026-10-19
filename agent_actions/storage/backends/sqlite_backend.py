@@ -137,6 +137,9 @@ class SQLiteBackend(StorageBackend):
 
     _MAX_TRACE_FIELD_SIZE = 1_048_576  # 1MB
 
+    # VACUUM rewrites the whole file, so it waits until this share of it is freed pages.
+    _VACUUM_FREE_FRACTION = 0.25
+
     # Required columns per table — missing ones are ALTER-added on open
     # (see _enforce_schema; tables are never dropped or rebuilt).
     _REQUIRED_COLUMNS: dict[str, set[str]] = {
@@ -1788,7 +1791,7 @@ class SQLiteBackend(StorageBackend):
         source_data_ttl_days: int | None = StorageDefaults.SOURCE_DATA_TTL_DAYS,
     ) -> None:
         """Run post-workflow maintenance: WAL checkpoint, disposition cleanup,
-        prompt trace retention, and source data TTL.
+        prompt trace retention, source data TTL, and freed-page reclaim.
 
         All operations are idempotent and safe to run concurrently.
         """
@@ -1797,6 +1800,7 @@ class SQLiteBackend(StorageBackend):
         self._enforce_prompt_trace_retention(prompt_trace_retention_runs)
         if source_data_ttl_days is not None:
             self._enforce_source_data_ttl(source_data_ttl_days)
+        self._reclaim_freed_pages()
 
     def _checkpoint_wal(self) -> None:
         """Checkpoint and truncate the WAL file to reclaim disk space."""
@@ -1949,6 +1953,36 @@ class SQLiteBackend(StorageBackend):
                     e,
                     extra={"workflow_name": self.workflow_name},
                 )
+
+    def _reclaim_freed_pages(self) -> None:
+        """Give back the pages deleted rows left behind.
+
+        A fresh run or a retry deletes most of a store, but SQLite keeps the
+        freed pages inside the file, so it stays at its largest-ever size.
+        VACUUM rewrites the file without them; in WAL mode the rewrite lands in
+        the log first, so a checkpoint follows to move it into the file.
+        """
+        with self._lock:
+            try:
+                page_count = self.connection.execute("PRAGMA page_count").fetchone()[0]
+                freelist_count = self.connection.execute("PRAGMA freelist_count").fetchone()[0]
+                if page_count == 0 or freelist_count / page_count < self._VACUUM_FREE_FRACTION:
+                    return
+                self.connection.execute("VACUUM")
+            except sqlite3.Error as e:
+                logger.warning(
+                    "Freed-page reclaim failed (non-fatal): %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                return
+            logger.info(
+                "Reclaimed %d of %d freed pages",
+                freelist_count,
+                page_count,
+                extra={"workflow_name": self.workflow_name},
+            )
+        self._checkpoint_wal()
 
     def scan_data(self, preview_limit: int = 20) -> dict[str, Any] | None:
         """Return stats and preview records for the docs scanner."""

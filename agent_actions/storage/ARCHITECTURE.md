@@ -392,7 +392,7 @@ Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added aft
 
 ## Maintenance Operations
 
-`perform_maintenance()` runs four idempotent cleanup operations after each workflow completes:
+`perform_maintenance()` runs five idempotent cleanup operations after each workflow completes:
 
 ### 1. WAL checkpoint (`_checkpoint_wal`)
 
@@ -409,6 +409,10 @@ Keeps traces from the N most recent calendar days (default: 10, from `StorageDef
 ### 4. Source data TTL (`_enforce_source_data_ttl`)
 
 Deletes `source_data` rows older than the configured TTL in days. Default is `None` (keep forever). Uses SQLite's `datetime('now', '-N days')` for the cutoff.
+
+### 5. Freed-page reclaim (`_reclaim_freed_pages`)
+
+A fresh run or a retry deletes most of a store, but SQLite keeps the freed pages inside the file, so it stays at its largest-ever size. When at least a quarter of the file is freed pages (`_VACUUM_FREE_FRACTION`), runs `VACUUM` and then a WAL checkpoint, because in WAL mode the rewrite lands in the log first. Runs last so it sees what the other four operations deleted. Non-fatal on failure (for example, another process holding a write lock).
 
 ---
 
