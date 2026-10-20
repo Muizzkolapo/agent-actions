@@ -1,7 +1,6 @@
 """Tests for AgentWorkflow sequential execution (_run_single_action, _run_workflow_with_context)."""
 
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -319,7 +318,8 @@ class TestClearForFreshRun:
         wf = _build_workflow(execution_order=["only_action"])
         wf.storage_backend = MagicMock()
         wf.services.core.state_manager = MagicMock()
-        wf.config.resolve_project_root.return_value = Path("/tmp/fake_project")
+        wf.services.core.action_runner = MagicMock()
+        wf.services.core.action_runner.get_action_folder.return_value = "/tmp/fake_project/agent_io"
 
         wf._clear_for_fresh_run()
 
@@ -333,7 +333,8 @@ class TestClearForFreshRun:
         wf.storage_backend = MagicMock()
         wf.storage_backend.clear_prompt_traces.side_effect = RuntimeError("DB locked")
         wf.services.core.state_manager = MagicMock()
-        wf.config.resolve_project_root.return_value = Path("/tmp/fake_project")
+        wf.services.core.action_runner = MagicMock()
+        wf.services.core.action_runner.get_action_folder.return_value = "/tmp/fake_project/agent_io"
 
         # Should not raise
         wf._clear_for_fresh_run()
