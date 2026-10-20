@@ -31,6 +31,9 @@ def _make_coordinator_stub(
 
     services = MagicMock()
     services.core.state_manager = state_manager
+    io_dir = tmp_path / "agent_workflow" / "wf" / "agent_io"
+    io_dir.mkdir(parents=True, exist_ok=True)
+    services.core.action_runner.get_action_folder.return_value = str(io_dir)
 
     runtime = MagicMock()
 
@@ -153,7 +156,7 @@ class TestFreshRunExistingBehavior:
         stub.services.core.state_manager.reset.assert_called_once()
 
     def test_event_log_files_cleared(self, tmp_path: Path):
-        logs_dir = tmp_path / "agent_io" / "logs"
+        logs_dir = tmp_path / "agent_workflow" / "wf" / "agent_io" / "logs"
         logs_dir.mkdir(parents=True)
         (logs_dir / "events.json").write_text("[]")
         (logs_dir / "errors.json").write_text("[]")
@@ -164,12 +167,26 @@ class TestFreshRunExistingBehavior:
         assert not (logs_dir / "events.json").exists()
         assert not (logs_dir / "errors.json").exists()
 
+    def test_logs_outside_the_workflow_folder_are_left(self, tmp_path: Path):
+        other = tmp_path / "agent_workflow" / "other_wf" / "agent_io" / "logs"
+        other.mkdir(parents=True)
+        (other / "events.json").write_text("[]")
+        own = tmp_path / "agent_workflow" / "wf" / "agent_io" / "logs"
+        own.mkdir(parents=True)
+        (own / "events.json").write_text("[]")
+
+        stub = _make_coordinator_stub(tmp_path, ["a1"])
+        stub._clear_for_fresh_run()
+
+        assert not (own / "events.json").exists()
+        assert (other / "events.json").read_text() == "[]"
+
 
 class TestFreshRunClearsBatchJsonlFiles:
     """--fresh must delete batch JSONL/JSON artifacts from target/{action}/batch/."""
 
     def test_jsonl_files_deleted(self, tmp_path: Path):
-        batch_dir = tmp_path / "agent_io" / "target" / "extract" / "batch"
+        batch_dir = tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "extract" / "batch"
         batch_dir.mkdir(parents=True)
         (batch_dir / "extract_openai_batch_input.jsonl").write_text("{}")
         (batch_dir / "batch_abc123_results.jsonl").write_text("{}")
@@ -182,7 +199,9 @@ class TestFreshRunClearsBatchJsonlFiles:
 
     def test_json_files_deleted(self, tmp_path: Path):
         """Anthropic writes .json input files, not .jsonl."""
-        batch_dir = tmp_path / "agent_io" / "target" / "classify" / "batch"
+        batch_dir = (
+            tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "classify" / "batch"
+        )
         batch_dir.mkdir(parents=True)
         (batch_dir / "classify_anthropic_batch_input.json").write_text("{}")
 
@@ -193,7 +212,7 @@ class TestFreshRunClearsBatchJsonlFiles:
 
     def test_non_json_files_preserved(self, tmp_path: Path):
         """Non-JSON/JSONL files in batch/ are not deleted."""
-        batch_dir = tmp_path / "agent_io" / "target" / "extract" / "batch"
+        batch_dir = tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "extract" / "batch"
         batch_dir.mkdir(parents=True)
         (batch_dir / "notes.txt").write_text("keep me")
 
@@ -209,7 +228,9 @@ class TestFreshRunClearsBatchJsonlFiles:
 
     def test_multiple_actions_cleaned(self, tmp_path: Path):
         for action in ("a1", "a2"):
-            batch_dir = tmp_path / "agent_io" / "target" / action / "batch"
+            batch_dir = (
+                tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / action / "batch"
+            )
             batch_dir.mkdir(parents=True)
             (batch_dir / f"{action}_input.jsonl").write_text("{}")
 
@@ -218,7 +239,14 @@ class TestFreshRunClearsBatchJsonlFiles:
 
         for action in ("a1", "a2"):
             assert not (
-                tmp_path / "agent_io" / "target" / action / "batch" / f"{action}_input.jsonl"
+                tmp_path
+                / "agent_workflow"
+                / "wf"
+                / "agent_io"
+                / "target"
+                / action
+                / "batch"
+                / f"{action}_input.jsonl"
             ).exists()
 
 
