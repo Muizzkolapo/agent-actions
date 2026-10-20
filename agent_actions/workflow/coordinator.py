@@ -7,6 +7,7 @@ import json
 import logging
 from collections.abc import Iterable
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 from rich.console import Console
@@ -116,9 +117,8 @@ class AgentWorkflow:
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
-        project_root = self.config.resolve_project_root()
-
-        target_dir = project_root / "agent_io" / "target"
+        io_dir = Path(self.services.core.action_runner.get_action_folder(self.agent_name))
+        target_dir = io_dir / "target"
         for action_name in self.execution_order:
             for op_name, op_call in [
                 ("target", lambda a=action_name: self.storage_backend.delete_target(a)),
@@ -180,13 +180,11 @@ class AgentWorkflow:
 
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
-        logs_dir = project_root / "agent_io" / "logs"
         for events_file in ("events.json", "errors.json"):
-            for search_dir in (logs_dir, target_dir):
-                try:
-                    (search_dir / events_file).unlink(missing_ok=True)
-                except OSError as e:
-                    logger.warning("Failed to clear %s: %s", events_file, e)
+            try:
+                (io_dir / "logs" / events_file).unlink(missing_ok=True)
+            except OSError as e:
+                logger.warning("Failed to clear %s: %s", events_file, e)
 
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
