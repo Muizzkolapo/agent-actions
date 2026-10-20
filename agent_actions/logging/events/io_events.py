@@ -179,6 +179,10 @@ class FileWriteFailedEvent(BaseEvent):
         return "FIO007"
 
 
+def _size(n: int) -> str:
+    return f"{n / 1_048_576:.1f} MB" if n >= 1_048_576 else f"{n:,} bytes"
+
+
 @dataclass
 class LogFileCapReachedEvent(BaseEvent):
     """Fired once per run file when DEBUG rows stop being written."""
@@ -190,7 +194,7 @@ class LogFileCapReachedEvent(BaseEvent):
         self.level = EventLevel.WARN
         self.category = EventCategories.FILE_IO
         self.message = (
-            f"{self.file_name} reached {self.max_bytes / 1_048_576:.1f} MB; further DEBUG "
+            f"{self.file_name} reached {_size(self.max_bytes)}; further DEBUG "
             "events for this run are not written. Set AGENT_ACTIONS_LOG_MAX_BYTES to raise "
             "the cap (0 = no cap)."
         )
