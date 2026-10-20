@@ -1,0 +1,14 @@
+kind: Breaking Change
+body: >-
+  `agent_io/logs/events.json` now holds one workflow run. When `agac run` or `agac retry` starts,
+  the previous run moves to `events.1.json`, the one before to `events.2.json`, and so on; the
+  last 5 runs are kept (`AGENT_ACTIONS_LOG_RETAIN_RUNS`). `errors.json` rotates the same way.
+  Other commands, such as `agac batch`, append to the current run's file. Past 50 MB
+  (`AGENT_ACTIONS_LOG_MAX_BYTES`, 0 for no cap) a run file stops taking DEBUG events and says so
+  once with `LogFileCapReachedEvent` (FIO008); INFO and above are always written.
+  `LLMResponseEvent` and `CacheMissEvent` are now INFO, so the docs site reports the current run's
+  tokens instead of a sum over every run in the file. `--fresh` now clears the workflow's own log
+  directory, rotations included; before, it cleared a project-root path the run never wrote to.
+  Readers that relied on the file accumulating should read `events*.json`. Event permalinks on
+  the docs site change when a run rotates out. (#1543)
+time: 2026-10-20T09:00:00Z

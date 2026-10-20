@@ -58,7 +58,7 @@ class LLMResponseEvent(BaseEvent):
     request_id: str = ""
 
     def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
+        self.level = EventLevel.INFO
         self.category = EventCategories.LLM
         self.message = f"LLM response: {self.total_tokens} tokens in {self.latency_ms:.0f}ms"
         self.data = {

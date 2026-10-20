@@ -213,11 +213,11 @@ Event types are spread across 8 source files in `events/`:
 | `llm_events.py` | LLM requests, responses, errors | 6 |
 | `validation_events.py` | Validation, recovery, guard | 9 |
 | `initialization_events.py` | CLI, config, project, UDF | 13 |
-| `io_events.py` | File I/O, schema, context | 14 |
+| `io_events.py` | File I/O, schema, context | 15 |
 | `data_pipeline_events.py` | Record processing, enrichment, results | 17 |
 | `cache_events.py` | Cache hit/miss/invalidation | 5 |
 
-All 83 event types are re-exported from `events/__init__.py`.
+All 84 event types are re-exported from `events/__init__.py`.
 
 ---
 
@@ -245,10 +245,12 @@ The `AgentActionsFormatter` has a dispatch table for 10 known event types (Workf
 ```
 Purpose:  Persistent NDJSON log of all events
 Instances: events.json (all levels, buffer=5) + errors.json (ERROR only, buffer=1)
-Filter:   min_level only
+Filter:   min_level; events.json also drops DEBUG past max_debug_bytes
+          (AGENT_ACTIONS_LOG_MAX_BYTES), announcing it once with LogFileCapReachedEvent
 Buffering: Accumulates events in memory, flushes to disk when buffer fills
            or when flush() is called (atexit, workflow complete, force re-init)
-Rotation:  Optional max_file_size with timestamp-based rotation
+Rotation:  Per run, not by size. rotate_run_logs() shifts events/errors.json to
+           .1.json ... .N.json when initialize(new_run=True) — agac run/retry only
 Thread:    Internal threading.Lock protects buffer and file handle
 ```
 
@@ -373,7 +375,7 @@ Each formatter implements `can_handle(exc, root_cause, message) -> bool` and `fo
 ### events/
 | File | Role |
 |------|------|
-| `events/__init__.py` | Re-exports all 83 event types + EventCategories + AgentActionsFormatter |
+| `events/__init__.py` | Re-exports all 84 event types + EventCategories + AgentActionsFormatter |
 | `events/types.py` | EventCategories constants + `_safe_value_repr()` |
 | `events/formatters.py` | AgentActionsFormatter -- dispatch table for console display |
 | `events/workflow_events.py` | W/A prefix events (workflow + action lifecycle) |

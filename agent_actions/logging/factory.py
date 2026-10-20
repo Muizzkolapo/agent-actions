@@ -59,8 +59,14 @@ class LoggerFactory:
         verbose: bool | None = None,
         quiet: bool | None = None,
         force: bool = False,
+        new_run: bool = False,
     ) -> EventManager:
-        """Initialize the unified logging system and return the EventManager."""
+        """Initialize the unified logging system and return the EventManager.
+
+        ``new_run`` marks the start of a workflow run: the run logs in *output_dir*
+        rotate first, so ``events.json`` holds this run only. Other commands that
+        log into the same directory append to the current run's file.
+        """
         if cls._initialized and not force:
             assert cls._event_manager is not None, (
                 "LoggerFactory._initialized is True but _event_manager is None"
@@ -104,6 +110,7 @@ class LoggerFactory:
                 invocation_id=invocation_id,
                 verbose=verbose,
                 console_level_str=console_level_str,
+                new_run=new_run,
             )
         except Exception:
             if previous_handlers is not None:
@@ -111,6 +118,11 @@ class LoggerFactory:
                 for handler in previous_handlers:
                     manager.register(handler)
             raise
+
+        for handler in previous_handlers or []:
+            close = getattr(handler, "close", None)
+            if close is not None:
+                close()
 
         cls._apply_logger_levels(cls._config)
         cls._setup_logging_bridge()
@@ -131,10 +143,12 @@ class LoggerFactory:
         invocation_id,
         verbose,
         console_level_str,
+        new_run,
     ) -> None:
         """Build and register all event handlers on the manager."""
         from agent_actions.logging.core.events import EventLevel
         from agent_actions.logging.core.handlers import JSONFileHandler, ProgressRenderer
+        from agent_actions.logging.core.handlers.json_file import rotate_run_logs
         from agent_actions.logging.events import AgentActionsFormatter
         from agent_actions.logging.events.handlers import RunResultsCollector
 
@@ -175,11 +189,14 @@ class LoggerFactory:
 
         if output_dir:
             output_path = Path(output_dir)
+            if new_run:
+                rotate_run_logs(output_path / "logs", config.file_handler.backup_count)
             log_file = output_path / "logs" / "events.json"
             json_handler = JSONFileHandler(
                 file_path=log_file,
                 min_level=EventLevel.DEBUG,
                 buffer_size=5,
+                max_debug_bytes=config.file_handler.max_bytes or None,
             )
             manager.register(json_handler)
 

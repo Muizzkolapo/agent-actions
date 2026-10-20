@@ -12,6 +12,27 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 VALID_LOG_LEVELS: frozenset[str] = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
+DEFAULT_LOG_MAX_BYTES = 52_428_800  # 50 MB
+DEFAULT_LOG_RETAIN_RUNS = 5
+
+
+def _env_int(name: str, default: int, minimum: int) -> int:
+    """Read an integer env var; report and use *default* when it is not an int >= *minimum*."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = minimum - 1
+    if value < minimum:
+        sys.stderr.write(
+            f"agent_actions: ignoring {name}={raw!r}: must be an integer >= {minimum}; "
+            f"using {default}\n"
+        )
+        return default
+    return value
+
 
 @dataclass
 class FileHandlerSettings:
@@ -20,8 +41,10 @@ class FileHandlerSettings:
     enabled: bool = True
     path: str | None = None
     level: LogLevel = "DEBUG"
-    max_bytes: int = 10_485_760  # 10MB
-    backup_count: int = 5
+    # Per run file: past this many bytes, DEBUG rows are no longer written. 0 = no cap.
+    max_bytes: int = DEFAULT_LOG_MAX_BYTES
+    # Earlier runs kept beside the current one, as events.1.json ... events.N.json.
+    backup_count: int = DEFAULT_LOG_RETAIN_RUNS
     format: Literal["human", "json"] = "human"
 
 
@@ -47,8 +70,8 @@ class LoggingConfig:
             enabled=file_config.get("enabled", True),
             path=file_config.get("path"),
             level=cls._validate_log_level(file_config.get("level", "DEBUG"), "DEBUG"),
-            max_bytes=file_config.get("max_bytes", 10_485_760),
-            backup_count=file_config.get("backup_count", 5),
+            max_bytes=file_config.get("max_bytes", DEFAULT_LOG_MAX_BYTES),
+            backup_count=file_config.get("backup_count", DEFAULT_LOG_RETAIN_RUNS),
             format=file_config.get("format", "human"),
         )
 
@@ -121,6 +144,8 @@ class LoggingConfig:
             enabled=file_enabled,
             path=file_path,
             level=file_level,
+            max_bytes=_env_int("AGENT_ACTIONS_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES, 0),
+            backup_count=_env_int("AGENT_ACTIONS_LOG_RETAIN_RUNS", DEFAULT_LOG_RETAIN_RUNS, 1),
             format=cast(Literal["human", "json"], log_format),
         )
 

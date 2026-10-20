@@ -31,8 +31,10 @@ project/
             ├── logs/
             │   ├── .manifest.json      # Workflow execution manifest
             │   ├── run_results.json    # Summary metrics and timing
-            │   ├── events.json         # Full event telemetry (JSON Lines)
-            │   └── errors.json         # Error-level events only (JSON Lines)
+            │   ├── events.json         # Event telemetry of the current run (JSON Lines)
+            │   ├── events.N.json       # Earlier runs; events.1.json is the newest
+            │   ├── errors.json         # Error-level events of the current run (JSON Lines)
+            │   └── errors.N.json       # Earlier runs' errors
             └── target/
                 └── {action_name}/      # Per-action output directories
 ```
@@ -275,14 +277,14 @@ The most recent 100 executions are kept; older entries roll off as new runs land
 
 **Path:** `agent_io/logs/events.json`
 
-Complete telemetry of all system events in JSON Lines format (one event per line):
+Telemetry of the current workflow run in JSON Lines format (one event per line). Earlier runs are in `events.1.json` (newest) to `events.N.json`:
 
 ```jsonl
 {"event_type": "WorkflowStartEvent", "code": "W001", "level": "info", "category": "workflow", "message": "Running workflow product_pipeline (4 actions)", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:00Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"workflow_name": "product_pipeline", "action_count": 4, "execution_mode": "parallel"}}
 {"event_type": "StepStartEvent", "code": "W004", "level": "info", "category": "workflow", "message": "Step 2/3: extract_data", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:01Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"step_index": 1, "total_steps": 3, "actions": ["extract_data"], "pending": ["extract_data"]}}
 {"event_type": "ActionStartEvent", "code": "A001", "level": "info", "category": "action", "message": "2/4 START extract_data", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:01Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "action_type": "llm", "input_path": "", "mode": "online"}}
 {"event_type": "LLMRequestEvent", "code": "L001", "level": "debug", "category": "llm", "message": "LLM request to openai/gpt-4o (412 prompt tokens)", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:02Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "request_id": ""}}
-{"event_type": "LLMResponseEvent", "code": "L002", "level": "debug", "category": "llm", "message": "LLM response: 500 tokens in 1840ms", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:03Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "completion_tokens": 88, "total_tokens": 500, "latency_ms": 1840.0, "request_id": ""}}
+{"event_type": "LLMResponseEvent", "code": "L002", "level": "info", "category": "llm", "message": "LLM response: 500 tokens in 1840ms", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:03Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"provider": "openai", "model": "gpt-4o", "action_name": "extract_data", "prompt_tokens": 412, "completion_tokens": 88, "total_tokens": 500, "latency_ms": 1840.0, "request_id": ""}}
 {"event_type": "ActionCompleteEvent", "code": "A002", "level": "info", "category": "action", "message": "2/4 OK extract_data in 2.10s", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:04Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"action_name": "extract_data", "action_index": 1, "total_actions": 4, "execution_time": 2.1, "output_path": "", "record_count": 23, "tokens": {}, "mode": "online", "model_vendor": "openai", "model_name": "gpt-4o", "kind": "llm"}}
 {"event_type": "StepCompleteEvent", "code": "W005", "level": "info", "category": "workflow", "message": "Step 2/3 complete in 2.10s", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:04Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"step_index": 1, "total_steps": 3, "elapsed_time": 2.1, "completed": 1, "partial": 0, "skipped": 0, "failed": 0, "unfinished": 0, "batch_pending": []}}
 ```
@@ -325,7 +327,7 @@ same string as `category`.
 | G | `guard` | `GuardEvaluationTimeoutEvent` (G001), `GuardEvaluationErrorEvent` (G002) |
 | R | `recovery` | `RetryExhaustedEvent` (R001) |
 | SO | `schema` | `SchemaConstructionStartedEvent` (SO001), `SchemaConstructionCompleteEvent` (SO002) |
-| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006), `FileWriteFailedEvent` (FIO007) |
+| FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006), `FileWriteFailedEvent` (FIO007), `LogFileCapReachedEvent` (FIO008) |
 | C | `cache` | `CacheHitEvent` (C001), `CacheMissEvent` (C002), `CacheInvalidationEvent` (C003) |
 | F | `configuration` | `ConfigLoadStartEvent` (F001), `ConfigLoadEvent` (F002) |
 | I | `initialization` | `CLIInitStartEvent` (I001), `WorkflowInitializationStartEvent` (I008), `ProjectInitializedEvent` (I013) |
@@ -340,7 +342,11 @@ A run whose records all succeed first time produces neither. This is by design �
 
 #### File Lifecycle
 
-Both `events.json` and `errors.json` accumulate across runs by default. When `--fresh` is passed, both files are **deleted before the run starts** and recreated on the first event write. File watchers must handle the file being absent between deletion and first event.
+`events.json` and `errors.json` hold one workflow run. When `agac run` or `agac retry` starts, each file moves one slot back: `events.json` becomes `events.1.json`, `events.1.json` becomes `events.2.json`, and so on. The last 5 runs are kept; set `AGENT_ACTIONS_LOG_RETAIN_RUNS` to keep a different number (an integer of 1 or more). Other commands that log into the workflow, such as `agac batch`, append to the current run's file and do not rotate it.
+
+A run file stops taking DEBUG events once it reaches 50 MB, and records `LogFileCapReachedEvent` (FIO008, WARN) once when it does. INFO, WARN and ERROR events are always written. Set `AGENT_ACTIONS_LOG_MAX_BYTES` to change the cap, or to `0` for no cap.
+
+When `--fresh` is passed, every `events*.json` and `errors*.json` file in the workflow's `agent_io/logs/` is **deleted before the run starts**; `events.json` is recreated on the first event write. File watchers must handle the file being absent between rotation or deletion and the first event.
 
 ### Errors Log (`errors.json`)
 

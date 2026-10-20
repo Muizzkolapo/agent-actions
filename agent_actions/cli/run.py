@@ -103,6 +103,7 @@ class RunCommand:
             workflow_name=self.agent_name,
             invocation_id=run_id,
             force=True,
+            new_run=True,
         )
 
         status = "FAILED"

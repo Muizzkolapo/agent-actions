@@ -549,7 +549,8 @@ Repair adds latency and token cost. For high-volume agentic workflows, consider 
 ### Log Location
 
 ```
-agent_io/logs/events.json
+agent_io/logs/events.json      # current run
+agent_io/logs/events.1.json    # previous run (up to events.5.json)
 ```
 
 ### Search Patterns

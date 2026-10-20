@@ -13,6 +13,7 @@ __all__ = [
     "FileWriteStartedEvent",
     "FileWriteCompleteEvent",
     "FileWriteFailedEvent",
+    "LogFileCapReachedEvent",
     "SchemaConstructionStartedEvent",
     "SchemaConstructionCompleteEvent",
     "ContextNamespaceLoadedEvent",
@@ -176,6 +177,28 @@ class FileWriteFailedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "FIO007"
+
+
+@dataclass
+class LogFileCapReachedEvent(BaseEvent):
+    """Fired once per run file when DEBUG rows stop being written."""
+
+    file_name: str = ""
+    max_bytes: int = 0
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.FILE_IO
+        self.message = (
+            f"{self.file_name} reached {self.max_bytes / 1_048_576:.1f} MB; further DEBUG "
+            "events for this run are not written. Set AGENT_ACTIONS_LOG_MAX_BYTES to raise "
+            "the cap (0 = no cap)."
+        )
+        self.data = {"file_name": self.file_name, "max_bytes": self.max_bytes}
+
+    @property
+    def code(self) -> str:
+        return "FIO008"
 
 
 @dataclass

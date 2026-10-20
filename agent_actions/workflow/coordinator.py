@@ -18,6 +18,7 @@ from agent_actions.llm.providers.local_batch_records import (
     discard_partial_batch_records,
     release_local_batch_record,
 )
+from agent_actions.logging.core.handlers.json_file import RUN_LOG_NAMES
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
@@ -180,11 +181,13 @@ class AgentWorkflow:
 
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
-        for events_file in ("events.json", "errors.json"):
+        logs_dir = io_dir / "logs"
+        stale_logs = [path for name in RUN_LOG_NAMES for path in logs_dir.glob(f"{name}.*json")]
+        for log_file in stale_logs:
             try:
-                (io_dir / "logs" / events_file).unlink(missing_ok=True)
+                log_file.unlink(missing_ok=True)
             except OSError as e:
-                logger.warning("Failed to clear %s: %s", events_file, e)
+                logger.warning("Failed to clear %s: %s", log_file, e)
 
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"
