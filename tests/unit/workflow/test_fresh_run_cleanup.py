@@ -181,6 +181,20 @@ class TestFreshRunExistingBehavior:
         assert not (own / "events.json").exists()
         assert (other / "events.json").read_text() == "[]"
 
+    def test_the_workflow_log_directory_and_its_rotations_are_cleared(self, tmp_path: Path):
+        io_dir = tmp_path / "agent_workflow" / "wf" / "agent_io"
+        logs_dir = io_dir / "logs"
+        logs_dir.mkdir(parents=True)
+        names = ["events.json", "events.1.json", "events.3.json", "errors.json", "errors.2.json"]
+        for name in names:
+            (logs_dir / name).write_text("{}\n")
+        (logs_dir / "run_results.json").write_text("{}")
+
+        stub = _make_coordinator_stub(tmp_path, ["a1"])
+        stub._clear_for_fresh_run()
+
+        assert sorted(p.name for p in logs_dir.iterdir()) == ["run_results.json"]
+
 
 class TestFreshRunClearsBatchJsonlFiles:
     """--fresh must delete batch JSONL/JSON artifacts from target/{action}/batch/."""

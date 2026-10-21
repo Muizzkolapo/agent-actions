@@ -47,7 +47,7 @@ class CacheMissEvent(BaseEvent):
     reason: str = ""
 
     def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
+        self.level = EventLevel.INFO
         self.category = EventCategories.CACHE
         reason_str = f" ({self.reason})" if self.reason else ""
         self.message = f"Cache miss: {self.cache_type}[{self.key}]{reason_str}"
