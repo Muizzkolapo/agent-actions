@@ -195,8 +195,10 @@ CREATE TABLE IF NOT EXISTS prompt_trace_dictionary (
 )
 ```
 
-Dictionary rows are insert-only and `AUTOINCREMENT` never reuses an id, so the
-dictionary a row names cannot change under it. `clear_prompt_traces` deletes an
+Dictionary rows are insert-only and `AUTOINCREMENT` never reuses a committed id, so
+the dictionary a row names cannot change under it. A rolled-back write does free its
+id, so the write path reads the dictionary from the store each time and only readers
+cache it. `clear_prompt_traces` deletes an
 action's dictionaries with its traces; retention pruning keeps them. A TEXT value is a
 row written before compression and reads back as it is, so older stores need no
 migration. Every backend reader decompresses (`decompress_trace_text`); a value that

@@ -110,7 +110,7 @@ class SQLiteBackend(StorageBackend):
             UNIQUE(action_name, record_id, attempt)
         )
     """
-    # Rows are insert-only and ids never reused, so a trace's dictionary cannot change under it.
+    # Rows are insert-only and committed ids never reused, so a trace's dictionary cannot change under it.
     TRACE_DICTIONARY_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS prompt_trace_dictionary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1397,19 +1397,21 @@ class SQLiteBackend(StorageBackend):
         if text is None:
             return None
         raw = text.encode("utf-8")
-        dictionary_id = 0
+        dictionary_id, dictionary = 0, b""
         if raw:
             cursor.execute(
                 "INSERT OR IGNORE INTO prompt_trace_dictionary (action_name, column_name, data)"
                 " VALUES (?, ?, ?)",
                 (action_name, column, raw[-self._TRACE_DICTIONARY_SIZE :]),
             )
+            # Not cached: a rolled-back write frees this id for reuse, so only committed
+            # dictionaries, which readers load, may be cached.
             cursor.execute(
-                "SELECT id FROM prompt_trace_dictionary WHERE action_name = ? AND column_name = ?",
+                "SELECT id, data FROM prompt_trace_dictionary"
+                " WHERE action_name = ? AND column_name = ?",
                 (action_name, column),
             )
-            dictionary_id = cursor.fetchone()[0]
-        dictionary = self._trace_dictionary(dictionary_id)
+            dictionary_id, dictionary = cursor.fetchone()
         compressor = zlib.compressobj(6, zdict=dictionary) if dictionary else zlib.compressobj(6)
         return dictionary_id.to_bytes(4, "big") + compressor.compress(raw) + compressor.flush()
 
