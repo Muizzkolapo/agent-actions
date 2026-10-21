@@ -54,7 +54,7 @@ class OpenAIClient(BaseClient):
         "supports_tools": True,
         "supports_vision": True,
         "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens"],
+        "optional_fields": ["api_key", "base_url", "temperature", "max_tokens"],
     }
 
     @staticmethod
@@ -67,7 +67,7 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, Any]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key)
+        client = get_or_create_client(OpenAI, api_key, base_url=agent_config.get("base_url"))
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "openai",
@@ -170,7 +170,7 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, str]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key)
+        client = get_or_create_client(OpenAI, api_key, base_url=agent_config.get("base_url"))
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
