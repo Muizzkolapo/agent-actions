@@ -127,6 +127,13 @@ class TestClientCache:
 
         assert first is second
 
+    def test_same_url_different_key_gets_a_separate_client(self):
+        first = get_or_create_client(_FakeOpenAI, "key-a", base_url=LOCAL_A)
+        second = get_or_create_client(_FakeOpenAI, "key-b", base_url=LOCAL_A)
+
+        assert first.api_key == "key-a"
+        assert second.api_key == "key-b"
+
     def test_url_and_no_url_are_different_clients(self):
         with_url = get_or_create_client(_FakeOpenAI, "shared-key", base_url=LOCAL_A)
         without_url = get_or_create_client(_FakeOpenAI, "shared-key")
@@ -154,3 +161,23 @@ class TestExpandedConfigShape:
 
         assert cloud["served_by"] == DEFAULT
         assert local["served_by"] == LOCAL_A
+
+
+class TestDefaultsInheritance:
+    """A base_url in the workflow defaults block reaches an openai action like any model field."""
+
+    def test_action_inherits_base_url_from_defaults(self):
+        from agent_actions.output.response.config_fields import inherit_simple_fields
+
+        agent = {"model_name": "local", "model_vendor": "openai"}
+        inherit_simple_fields(agent, {}, {"base_url": LOCAL_B})
+
+        assert _call_json(agent)["served_by"] == LOCAL_B
+
+    def test_action_base_url_wins_over_defaults(self):
+        from agent_actions.output.response.config_fields import inherit_simple_fields
+
+        agent = {"model_name": "local", "model_vendor": "openai"}
+        inherit_simple_fields(agent, {"base_url": LOCAL_A}, {"base_url": LOCAL_B})
+
+        assert _call_json(agent)["served_by"] == LOCAL_A

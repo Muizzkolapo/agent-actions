@@ -216,7 +216,7 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 
 ### OpenAI-compatible servers
 
-Set `base_url` on an `openai` action to send it to a server that speaks the OpenAI chat API, such as llamafile, LM Studio or vLLM. Each action uses its own `base_url`. Actions without one keep using the OpenAI endpoint, so one run can mix a local server and OpenAI:
+Set `base_url` on an `openai` action to send it to a server that speaks the OpenAI chat API, such as llamafile, LM Studio or vLLM. Each action uses its own `base_url`. An action with no `base_url` of its own inherits the one in the workflow `defaults:` block, if any, like every other model field. An action with neither keeps using the OpenAI endpoint, so one run can mix a local server and OpenAI:
 
 ```yaml
 actions:
@@ -229,6 +229,8 @@ actions:
     model_vendor: openai
     model_name: gpt-4o-mini
 ```
+
+`base_url` applies to `run_mode: online`. Do not combine it with `run_mode: batch`: the Batch API is served only by OpenAI.
 
 :::note
 Without a schema, the client asks for `response_format: json_object`. Some local servers do not enforce that format and return prose or wrongly typed values. Give the action a schema. Schema output uses the `json_schema` format, which llamafile 0.10.6 enforced in every measured run.
