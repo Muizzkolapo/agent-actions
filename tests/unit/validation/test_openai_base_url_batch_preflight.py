@@ -77,21 +77,38 @@ class TestPreflightRefusal:
     def test_only_the_base_url_action_is_named_in_a_mixed_run(self):
         errors = _batch_errors(
             {
+                "summarize_cloud": {
+                    "model_vendor": "openai",
+                    "model_name": "gpt-4o-mini",
+                    "run_mode": "batch",
+                },
                 "classify_local": {
                     "model_vendor": "openai",
                     "model_name": "local",
                     "base_url": LOCAL,
                     "run_mode": "batch",
                 },
-                "summarize_cloud": {
-                    "model_vendor": "openai",
-                    "model_name": "gpt-4o-mini",
-                    "run_mode": "batch",
-                },
             }
         )
 
+        assert [e.message for e in errors] == [REFUSAL]
         assert [e.location.agent_name for e in errors] == ["classify_local"]
+
+    def test_run_mode_enum_is_refused_like_the_string(self):
+        from agent_actions.config.types import RunMode
+
+        errors = _batch_errors(
+            {
+                "classify_local": {
+                    "model_vendor": "openai",
+                    "model_name": "local",
+                    "base_url": LOCAL,
+                    "run_mode": RunMode.BATCH,
+                }
+            }
+        )
+
+        assert [e.message for e in errors] == [REFUSAL]
 
 
 class TestBatchFactoryRefusal:
