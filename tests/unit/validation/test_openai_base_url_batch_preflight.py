@@ -105,3 +105,69 @@ class TestBatchFactoryRefusal:
         client = _create_openai({"api_key": "sk-cloud-key"})
 
         assert type(client).__name__ == "OpenAIBatchClient"
+
+
+class TestExpandedConfigShape:
+    """Every expanded action carries base_url, None when unset. None must not refuse."""
+
+    def test_batch_with_base_url_none_still_resolves(self):
+        errors = _batch_errors(
+            {
+                "summarize_cloud": {
+                    "model_vendor": "openai",
+                    "model_name": "gpt-4o-mini",
+                    "base_url": None,
+                    "run_mode": "batch",
+                }
+            }
+        )
+
+        assert errors == []
+
+    def test_factory_builds_the_batch_client_with_base_url_none(self):
+        client = _create_openai({"api_key": "sk-cloud-key", "base_url": None})
+
+        assert type(client).__name__ == "OpenAIBatchClient"
+
+
+class TestResolverForwardsTheUrl:
+    def test_resolver_refuses_an_openai_batch_action_with_base_url(self, monkeypatch):
+        from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
+            BatchClientResolver,
+        )
+
+        monkeypatch.setenv("LOCAL_KEY", "local-key")
+        resolver = BatchClientResolver()
+
+        with pytest.raises(ConfigurationError) as excinfo:
+            resolver.get_for_config(
+                {
+                    "agent_type": "classify_local",
+                    "model_vendor": "openai",
+                    "model_name": "local",
+                    "api_key": "LOCAL_KEY",
+                    "base_url": LOCAL,
+                }
+            )
+
+        assert LOCAL in str(excinfo.value)
+
+    def test_resolver_builds_the_batch_client_without_base_url(self, monkeypatch):
+        from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
+            BatchClientResolver,
+        )
+
+        monkeypatch.setenv("CLOUD_KEY", "sk-cloud-key")
+        resolver = BatchClientResolver()
+
+        client = resolver.get_for_config(
+            {
+                "agent_type": "summarize_cloud",
+                "model_vendor": "openai",
+                "model_name": "gpt-4o-mini",
+                "api_key": "CLOUD_KEY",
+                "base_url": None,
+            }
+        )
+
+        assert type(client).__name__ == "OpenAIBatchClient"
