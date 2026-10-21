@@ -83,9 +83,15 @@ def _run(*args):
 
 
 def _completions(root) -> dict[str, int]:
-    """The record_count of each action's last ActionCompleteEvent."""
-    log = root / "agent_workflow" / WORKFLOW / "agent_io" / "logs" / "events.json"
-    events = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+    """The record_count of each action's last ActionCompleteEvent across the kept run logs."""
+    logs = root / "agent_workflow" / WORKFLOW / "agent_io" / "logs"
+    rotated = sorted(logs.glob("events.*.json"), key=lambda p: -int(p.name.split(".")[1]))
+    events = [
+        json.loads(line)
+        for log in [*rotated, logs / "events.json"]
+        for line in log.read_text().splitlines()
+        if line.strip()
+    ]
     return {
         event["data"]["action_name"]: event["data"]["record_count"]
         for event in events
