@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
 PAGES = [
@@ -153,7 +154,7 @@ def _query(project: Path, sql: str) -> list[tuple]:
 
 
 def _sent(project: Path) -> list[str]:
-    rows = _query(
+    rows = trace_rows(
         project, "select compiled_prompt from prompt_trace where action_name = 'consumer'"
     )
     return sorted(" ".join(prompt.split()) for (prompt,) in rows)

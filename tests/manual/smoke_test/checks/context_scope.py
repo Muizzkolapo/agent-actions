@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from dataclasses import dataclass, field
 
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -49,9 +49,9 @@ class ContextScope(Check):
         # looked up as a literal key, never found, and the check passes having proved
         # nothing — the silent-pass shape this check was rewritten to remove.
 
-        with sqlite3.connect(str(ctx.db_path)) as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+        backend = SQLiteBackend.create_readonly(ctx.db_path)
+        try:
+            cursor = backend.connection.cursor()
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_trace'"
             )
@@ -65,7 +65,12 @@ class ContextScope(Check):
                 """,
                 (self.action, self.action),
             )
-            rows = cursor.fetchall()
+            rows = [
+                {**row, "llm_context": backend.decompress_trace_text(row["llm_context"])}
+                for row in map(dict, cursor.fetchall())
+            ]
+        finally:
+            backend.close()
 
         if not rows:
             # Not a pass: no trace means nothing was verified. A guard-filtered action is

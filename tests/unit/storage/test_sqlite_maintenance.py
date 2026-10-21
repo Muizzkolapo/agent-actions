@@ -1,5 +1,6 @@
 """Tests for SQLite storage backend maintenance operations (P4-2)."""
 
+import secrets
 from datetime import datetime, timedelta
 
 import pytest
@@ -305,9 +306,13 @@ def _on_disk(db_path) -> int:
 
 
 def _fill_traces(backend, action: str, rows: int) -> None:
+    """Random text, so each row keeps its size once the store compresses it."""
     for i in range(rows):
         backend.write_prompt_trace(
-            action, f"r{i}", compiled_prompt="p" * 16_000, response_text="x" * 400
+            action,
+            f"r{i}",
+            compiled_prompt=secrets.token_urlsafe(12_000),
+            response_text=secrets.token_urlsafe(300),
         )
 
 

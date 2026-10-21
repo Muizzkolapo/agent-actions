@@ -8,12 +8,12 @@ read back from the action's prompt traces.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "load_store"
 PAGES = [
@@ -124,15 +124,11 @@ def _run(project: Path) -> tuple[int, str]:
 
 
 def _prompts(project: Path) -> list[str]:
-    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        rows = con.execute(
-            "select compiled_prompt from prompt_trace where action_name = 'analyze' and attempt = 0"
-        )
-        return sorted(prompt for (prompt,) in rows)
-    finally:
-        con.close()
+    rows = trace_rows(
+        project,
+        "select compiled_prompt from prompt_trace where action_name = 'analyze' and attempt = 0",
+    )
+    return sorted(prompt for (prompt,) in rows)
 
 
 def _analysis(page: dict) -> str:

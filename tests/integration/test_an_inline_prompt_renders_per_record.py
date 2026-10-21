@@ -8,12 +8,12 @@ mock. What each record was sent is read back from the action's prompt traces.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "inline"
 PAGES = [
@@ -93,18 +93,9 @@ def _run_to_the_end(project: Path, *command: str) -> str:
     pytest.fail("the workflow never stopped asking to be run again:\n" + "\n".join(outputs))
 
 
-def _query(project: Path, sql: str, *params: object) -> list[tuple]:
-    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        return list(con.execute(sql, params))
-    finally:
-        con.close()
-
-
 def _prompts(project: Path, action: str) -> list[str]:
     """What each record of the action was sent, in no particular order."""
-    rows = _query(
+    rows = trace_rows(
         project,
         "select compiled_prompt from prompt_trace where action_name = ? and attempt = 0",
         action,
@@ -250,7 +241,7 @@ def test_a_setting_that_branches_on_the_version_takes_each_versions_branch(tmp_p
     _run_to_the_end(project)
 
     for i, model in ((1, "model-one"), (2, "model-two"), (3, "model-three")):
-        rows = _query(
+        rows = trace_rows(
             project,
             "select distinct model_name from prompt_trace where action_name = ?",
             f"model_comparison_{i}",

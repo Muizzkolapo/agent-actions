@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "bom_json"
 ROWS = [{"title": "first row"}, {"title": "second row"}]
@@ -104,13 +105,8 @@ def _stored(root: Path, action: str) -> list[dict]:
 
 
 def _prompts(root: Path) -> list[str]:
-    store = root / "agent_workflow" / WORKFLOW / "agent_io" / "store"
-    con = sqlite3.connect(f"file:{sorted(store.glob('*.db'))[0]}?mode=ro", uri=True)
-    try:
-        sql = "select compiled_prompt from prompt_trace where action_name = 'second'"
-        return [prompt for (prompt,) in con.execute(sql).fetchall()]
-    finally:
-        con.close()
+    sql = "select compiled_prompt from prompt_trace where action_name = 'second'"
+    return [prompt for (prompt,) in trace_rows(root, sql)]
 
 
 @pytest.mark.parametrize("run_mode", ["online", "batch"])

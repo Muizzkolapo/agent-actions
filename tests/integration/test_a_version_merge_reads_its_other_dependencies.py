@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 REPO = Path(__file__).resolve().parents[2]
 SOURCE = REPO / "examples" / "map_reduce_fanin_check"
@@ -234,12 +235,11 @@ def test_an_llm_merging_versions_is_prompted_with_its_sibling_dependency(tmp_pat
     if mode == "batch":
         _agac(root, "run")
 
-    with _db(root) as conn:
-        prompts = [
-            prompt
-            for (prompt,) in conn.execute(
-                "SELECT compiled_prompt FROM prompt_trace WHERE action_name = 'tally'"
-            )
-        ]
+    prompts = [
+        prompt
+        for (prompt,) in trace_rows(
+            root, "SELECT compiled_prompt FROM prompt_trace WHERE action_name = 'tally'"
+        )
+    ]
     assert sorted(set(prompts)) == [f"Votes keep keep NOTE=[direct-{item}]" for item in ITEMS]
     assert len(_tally_rows(root)) == len(ITEMS)

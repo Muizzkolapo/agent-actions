@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "sheet_columns"
 ROWS = [{"item_id": "a1", "text": "hello"}, {"item_id": "a2", "text": "world"}]
@@ -173,7 +174,7 @@ def test_a_first_prompt_renders_the_columns_of_each_row(tmp_path, file_type, run
     _assert_ran(result)
     prompts = sorted(
         prompt
-        for (prompt,) in _query(
+        for (prompt,) in trace_rows(
             root, "select compiled_prompt from prompt_trace where action_name = 'first'"
         )
     )
