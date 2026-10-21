@@ -97,6 +97,22 @@ class TestProbeTargetsFromConfig:
 
         assert sorted(t.base_url for t in targets) == [LOCAL, OTHER]
 
+    def test_only_the_openai_target_carries_a_base_url(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-key")
+        svc = WorkflowResolutionService(
+            action_configs={
+                "classify_local": {"model_vendor": "openai", "base_url": LOCAL},
+                "review": {"model_vendor": "anthropic", "base_url": LOCAL},
+            }
+        )
+
+        _errors, _warnings, targets = svc._check_api_keys()
+
+        assert {(t.vendor, t.base_url) for t in targets} == {
+            ("openai", LOCAL),
+            ("anthropic", None),
+        }
+
     def test_two_actions_on_the_same_server_become_one_target(self):
         svc = WorkflowResolutionService(
             action_configs={
