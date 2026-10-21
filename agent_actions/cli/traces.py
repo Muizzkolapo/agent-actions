@@ -42,18 +42,9 @@ def traces(
     as_json: bool,
     project_root: Path | None = None,
 ) -> None:
-    """
-    Print the prompt, context and response an action's records were run with.
+    """Print the prompt, context and response an action's records were run with.
 
     The store keeps this text compressed, so read it here rather than with sqlite3.
-
-    Examples:
-
-        agac traces -w my_workflow -a summarize
-
-        agac traces -w my_workflow -a summarize --record <record_id>
-
-        agac traces -w my_workflow -a summarize --json
     """
     workflow_name = Path(workflow).stem
     paths = ProjectPathsFactory.create_project_paths(
