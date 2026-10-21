@@ -138,3 +138,19 @@ class TestClientCache:
 class TestCapabilities:
     def test_base_url_is_a_declared_optional_field(self):
         assert "base_url" in OpenAIClient.CAPABILITIES["optional_fields"]
+
+
+class TestExpandedConfigShape:
+    """Config expansion writes base_url onto every action, None when unset."""
+
+    def test_base_url_none_uses_the_default_endpoint(self):
+        row = _call_json({"model_name": "gpt-4o-mini", "base_url": None})
+
+        assert row["served_by"] == DEFAULT
+
+    def test_base_url_none_and_a_local_action_share_nothing(self):
+        cloud = _call_json({"model_name": "gpt-4o-mini", "base_url": None})
+        local = _call_json({"model_name": "local", "base_url": LOCAL_A})
+
+        assert cloud["served_by"] == DEFAULT
+        assert local["served_by"] == LOCAL_A
