@@ -15,6 +15,15 @@ _PROBE_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)
+class ProbeTarget:
+    """One vendor endpoint to probe with one resolved key."""
+
+    vendor: str
+    api_key: str
+    base_url: str | None = None
+
+
+@dataclass(frozen=True)
 class ProbeResult:
     """Outcome of a single vendor key probe."""
 
@@ -22,10 +31,11 @@ class ProbeResult:
     ok: bool
     error: str | None = None
     skipped: bool = False
+    base_url: str | None = None
 
 
 # ── Per-vendor probe functions ────────────────────────────────────────
-# Each takes an API key string, makes one lightweight call, and returns
+# Each takes a ProbeTarget, makes one lightweight call, and returns
 # a ProbeResult.  SDK imports are lazy (inside the function body) to
 # avoid loading unused vendor SDKs.
 
@@ -47,11 +57,11 @@ def _classify_sdk_exception(
     return ProbeResult(vendor=vendor, ok=False, error=f"{_INFRA_ERROR_PREFIX}: {exc}")
 
 
-def _probe_openai(api_key: str) -> ProbeResult:
+def _probe_openai(target: ProbeTarget) -> ProbeResult:
     try:
         from openai import AuthenticationError, OpenAI
 
-        client = OpenAI(api_key=api_key, timeout=_PROBE_TIMEOUT_SECONDS)
+        client = OpenAI(api_key=target.api_key, timeout=_PROBE_TIMEOUT_SECONDS)
         client.models.list()
         return ProbeResult(vendor="openai", ok=True)
     except ImportError:
@@ -71,11 +81,11 @@ def _probe_openai(api_key: str) -> ProbeResult:
         )
 
 
-def _probe_anthropic(api_key: str) -> ProbeResult:
+def _probe_anthropic(target: ProbeTarget) -> ProbeResult:
     try:
         import anthropic
 
-        client = anthropic.Anthropic(api_key=api_key, timeout=_PROBE_TIMEOUT_SECONDS)
+        client = anthropic.Anthropic(api_key=target.api_key, timeout=_PROBE_TIMEOUT_SECONDS)
         client.models.list(limit=1)
         return ProbeResult(vendor="anthropic", ok=True)
     except ImportError:
@@ -95,11 +105,11 @@ def _probe_anthropic(api_key: str) -> ProbeResult:
         )
 
 
-def _probe_groq(api_key: str) -> ProbeResult:
+def _probe_groq(target: ProbeTarget) -> ProbeResult:
     try:
         from groq import AuthenticationError, Groq
 
-        client = Groq(api_key=api_key, timeout=_PROBE_TIMEOUT_SECONDS)
+        client = Groq(api_key=target.api_key, timeout=_PROBE_TIMEOUT_SECONDS)
         client.models.list()
         return ProbeResult(vendor="groq", ok=True)
     except ImportError:
@@ -116,11 +126,11 @@ def _probe_groq(api_key: str) -> ProbeResult:
         )
 
 
-def _probe_gemini(api_key: str) -> ProbeResult:
+def _probe_gemini(target: ProbeTarget) -> ProbeResult:
     try:
         from google import genai
 
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=target.api_key)
         next(iter(client.models.list(config={"page_size": 1})))
         return ProbeResult(vendor="gemini", ok=True)
     except ImportError:
@@ -152,7 +162,7 @@ def _probe_gemini(api_key: str) -> ProbeResult:
 
 # ── Registry ──────────────────────────────────────────────────────────
 
-_PROBE_REGISTRY: dict[str, Callable[[str], ProbeResult]] = {
+_PROBE_REGISTRY: dict[str, Callable[[ProbeTarget], ProbeResult]] = {
     "openai": _probe_openai,
     "anthropic": _probe_anthropic,
     "groq": _probe_groq,
@@ -164,54 +174,63 @@ _PROBE_REGISTRY: dict[str, Callable[[str], ProbeResult]] = {
 
 
 def verify_keys(
-    vendor_keys: dict[str, str],
+    targets: list[ProbeTarget],
 ) -> list[ProbeResult]:
-    """Probe each vendor+key pair in parallel.
+    """Probe each target in parallel.
 
-    Args:
-        vendor_keys: Mapping of vendor name → resolved API key value.
-            Should already be deduplicated by the caller.
-
-    Returns:
-        List of ProbeResult for vendors where a probe function exists.
-        Vendors without a registered probe are silently skipped.
+    Targets whose vendor has no registered probe are silently skipped.
+    Duplicate targets are probed once.
     """
-    tasks: dict[str, tuple[str, str]] = {}  # vendor → (vendor, key)
-    for vendor, key in vendor_keys.items():
-        if vendor in _PROBE_REGISTRY:
-            tasks[vendor] = (vendor, key)
+    tasks = [t for t in dict.fromkeys(targets) if t.vendor in _PROBE_REGISTRY]
 
     if not tasks:
         return []
 
     results: list[ProbeResult] = []
-    logger.info("Verifying API keys for %d vendor(s)...", len(tasks))
+    logger.info("Verifying API keys for %d endpoint(s)...", len(tasks))
 
     with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
-        futures: dict[Future[ProbeResult], str] = {
-            pool.submit(_PROBE_REGISTRY[vendor], key): vendor for vendor, (_, key) in tasks.items()
+        futures: dict[Future[ProbeResult], ProbeTarget] = {
+            pool.submit(_PROBE_REGISTRY[t.vendor], t): t for t in tasks
         }
-        seen: set[str] = set()
+        seen: set[ProbeTarget] = set()
         try:
             for future in as_completed(futures, timeout=_PROBE_TIMEOUT_SECONDS + 2):
-                vendor = futures[future]
-                seen.add(vendor)
+                target = futures[future]
+                seen.add(target)
                 try:
                     results.append(future.result())
                 except Exception as e:
-                    logger.warning("Could not verify %s key: %s (skipping verification)", vendor, e)
-                    results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
+                    logger.warning(
+                        "Could not verify %s key: %s (skipping verification)", target.vendor, e
+                    )
+                    results.append(
+                        ProbeResult(
+                            vendor=target.vendor, ok=True, skipped=True, base_url=target.base_url
+                        )
+                    )
         except TimeoutError:
-            for future, vendor in futures.items():
-                if vendor in seen:
+            for future, target in futures.items():
+                if target in seen:
                     continue
                 if future.done():
                     try:
                         results.append(future.result())
                     except Exception:
-                        results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
+                        results.append(
+                            ProbeResult(
+                                vendor=target.vendor,
+                                ok=True,
+                                skipped=True,
+                                base_url=target.base_url,
+                            )
+                        )
                 else:
-                    logger.warning("Key verification timed out for %s (skipping)", vendor)
-                    results.append(ProbeResult(vendor=vendor, ok=True, skipped=True))
+                    logger.warning("Key verification timed out for %s (skipping)", target.vendor)
+                    results.append(
+                        ProbeResult(
+                            vendor=target.vendor, ok=True, skipped=True, base_url=target.base_url
+                        )
+                    )
 
     return results
