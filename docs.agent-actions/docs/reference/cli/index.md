@@ -135,6 +135,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 | [`inspect`](./inspect) | Preflight + introspection — graph + validation with `dependencies` / `action` / `context` drill-downs |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
+| [`traces`](./traces) | Print the prompt, context and response an action's records were run with |
 | [`dispositions`](./dispositions) | Inspect record-level processing dispositions per action |
 | [`expect`](./expect) | Show the expectation rules each action would run, and report the verdicts a run stored |
 | [`retry`](./retry) | Retry failed/exhausted records from a specific action forward |

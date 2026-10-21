@@ -23,6 +23,7 @@ from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills
 from agent_actions.cli.status import status
+from agent_actions.cli.traces import traces
 from agent_actions.errors import ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
 from agent_actions.logging.config import LoggingConfig
@@ -87,6 +88,7 @@ class CLI:
         self.click_group.add_command(example)
         self.click_group.add_command(expect)
         self.click_group.add_command(skills)
+        self.click_group.add_command(traces)
 
     def _register_signal_handlers(self) -> None:
         try:

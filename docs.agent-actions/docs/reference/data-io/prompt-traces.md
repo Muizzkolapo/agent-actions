@@ -103,9 +103,24 @@ In JSON view, traces appear as a nested `_trace` field on each record:
 
 Traces are excluded from Table view by design — prompt text is unreadable in table cells. Use Card view or JSON view to inspect traces.
 
-## Querying Traces Directly
+## Reading a Trace
 
-You can query the `prompt_trace` table using SQLite:
+The store keeps the prompt, context and response text compressed. Read them with `agac traces`:
+
+```bash
+# Every trace of an action, as plain text
+agac traces -w <workflow> -a classify_issue
+
+# One record's traces (its target_id, or its parent_target_id if an expansion produced it)
+agac traces -w <workflow> -a classify_issue --record <target_id>
+
+# The same traces as a JSON list
+agac traces -w <workflow> -a classify_issue --json
+```
+
+## Querying Trace Metadata
+
+The other columns are plain values, so SQL still answers questions about traces:
 
 ```bash
 sqlite3 agent_io/store/<workflow>.db
@@ -118,17 +133,8 @@ SELECT DISTINCT action_name FROM prompt_trace;
 -- Count traces per action
 SELECT action_name, COUNT(*) FROM prompt_trace GROUP BY action_name;
 
--- View the prompt that produced a record on this run
-SELECT compiled_prompt, response_text, model_name
-FROM prompt_trace
-WHERE action_name = 'classify_issue'
-  AND record_id = '<target_id>'        -- or the record's parent_target_id, if it
-                                       -- was produced by an expansion
-ORDER BY attempt DESC
-LIMIT 1;
-
 -- Audit a record across runs, and against its disposition
-SELECT t.run_id, t.attempt, t.compiled_prompt, t.response_text, d.disposition
+SELECT t.run_id, t.attempt, t.record_id, t.prompt_length, t.response_length, d.disposition
 FROM prompt_trace t
 LEFT JOIN record_disposition d
   ON d.action_name = t.action_name AND d.record_id = t.source_guid
@@ -142,6 +148,8 @@ FROM prompt_trace
 GROUP BY action_name, record_id
 HAVING max_attempts > 0;
 ```
+
+`compiled_prompt`, `llm_context` and `response_text` read as blobs in `sqlite3`. A store written before compression keeps its older rows as text, and `agac traces` reads both.
 
 ## CLI Access
 

@@ -5,6 +5,7 @@ import logging
 import sqlite3
 import string
 import threading
+import zlib
 from collections.abc import Collection, Iterable
 from pathlib import Path
 from typing import Any
@@ -109,6 +110,16 @@ class SQLiteBackend(StorageBackend):
             UNIQUE(action_name, record_id, attempt)
         )
     """
+    # Rows are insert-only and ids never reused, so a trace's dictionary cannot change under it.
+    TRACE_DICTIONARY_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS prompt_trace_dictionary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_name TEXT NOT NULL,
+            column_name TEXT NOT NULL,
+            data BLOB NOT NULL,
+            UNIQUE(action_name, column_name)
+        )
+    """
     TRACE_INDEX_ACTION_SQL = """
         CREATE INDEX IF NOT EXISTS idx_trace_action ON prompt_trace(action_name)
     """
@@ -208,6 +219,7 @@ class SQLiteBackend(StorageBackend):
             threading.RLock()
         )  # Serialize write operations; RLock allows re-entry from connection property
         self._claimed_source_guids_this_run: dict[str, str] = {}
+        self._trace_dictionaries: dict[int, bytes] = {}
 
     @classmethod
     def create(cls, **kwargs) -> "SQLiteBackend":
@@ -331,6 +343,7 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.TRACE_INDEX_ACTION_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
                 cursor.execute(self.TRACE_INDEX_ACTION_SOURCE_SQL)
+                cursor.execute(self.TRACE_DICTIONARY_TABLE_SQL)
                 cursor.execute(self.CHECKPOINT_TABLE_SQL)
                 cursor.execute(self.CHECKPOINT_INDEX_SQL)
                 cursor.execute(self.METADATA_TABLE_SQL)
@@ -1371,6 +1384,67 @@ class SQLiteBackend(StorageBackend):
             return json.dumps({"__truncated__": True, "original_length": len(value)})
         return value
 
+    _TRACE_TEXT_COLUMNS = ("compiled_prompt", "llm_context", "response_text")
+    _TRACE_DICTIONARY_SIZE = 32768
+
+    def _compress_trace_text(
+        self, cursor: sqlite3.Cursor, action_name: str, column: str, text: str | None
+    ) -> bytes | None:
+        """Compress against the action's dictionary for this column, made from its first value.
+
+        Stored as a 4-byte dictionary id followed by a zlib stream; id 0 means no dictionary.
+        """
+        if text is None:
+            return None
+        raw = text.encode("utf-8")
+        dictionary_id = 0
+        if raw:
+            cursor.execute(
+                "INSERT OR IGNORE INTO prompt_trace_dictionary (action_name, column_name, data)"
+                " VALUES (?, ?, ?)",
+                (action_name, column, raw[-self._TRACE_DICTIONARY_SIZE :]),
+            )
+            cursor.execute(
+                "SELECT id FROM prompt_trace_dictionary WHERE action_name = ? AND column_name = ?",
+                (action_name, column),
+            )
+            dictionary_id = cursor.fetchone()[0]
+        dictionary = self._trace_dictionary(dictionary_id)
+        compressor = zlib.compressobj(6, zdict=dictionary) if dictionary else zlib.compressobj(6)
+        return dictionary_id.to_bytes(4, "big") + compressor.compress(raw) + compressor.flush()
+
+    def _trace_dictionary(self, dictionary_id: int) -> bytes:
+        if dictionary_id == 0:
+            return b""
+        if dictionary_id not in self._trace_dictionaries:
+            row = self.connection.execute(
+                "SELECT data FROM prompt_trace_dictionary WHERE id = ?", (dictionary_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(
+                    f"A compressed trace names dictionary {dictionary_id}, which the store does not hold"
+                )
+            self._trace_dictionaries[dictionary_id] = row[0]
+        return self._trace_dictionaries[dictionary_id]
+
+    def decompress_trace_text(self, value: Any) -> Any:
+        """Return trace text as written; a TEXT value is a row stored before compression."""
+        if not isinstance(value, bytes):
+            return value
+        dictionary = self._trace_dictionary(int.from_bytes(value[:4], "big"))
+        decompressor = zlib.decompressobj(zdict=dictionary) if dictionary else zlib.decompressobj()
+        try:
+            return (decompressor.decompress(value[4:]) + decompressor.flush()).decode("utf-8")
+        except (zlib.error, UnicodeDecodeError) as e:
+            raise ValueError(f"Unreadable compressed trace text: {e}") from e
+
+    def _decompress_trace_row(self, row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+        trace = dict(row)
+        for column in self._TRACE_TEXT_COLUMNS:
+            if column in trace:
+                trace[column] = self.decompress_trace_text(trace[column])
+        return trace
+
     def write_prompt_trace(
         self,
         action_name: str,
@@ -1408,6 +1482,14 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             try:
+                stored_prompt, stored_context, stored_response = (
+                    self._compress_trace_text(cursor, action_name, column, text)
+                    for column, text in zip(
+                        self._TRACE_TEXT_COLUMNS,
+                        (compiled_prompt, llm_context, response_text),
+                        strict=True,
+                    )
+                )
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO prompt_trace
@@ -1423,9 +1505,9 @@ class SQLiteBackend(StorageBackend):
                         source_guid,
                         run_id,
                         attempt,
-                        compiled_prompt,
-                        llm_context,
-                        response_text,
+                        stored_prompt,
+                        stored_context,
+                        stored_response,
                         model_name,
                         model_vendor,
                         run_mode,
@@ -1480,6 +1562,9 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             try:
+                stored_response = self._compress_trace_text(
+                    cursor, action_name, "response_text", response_text
+                )
                 cursor.execute(
                     """
                     UPDATE prompt_trace
@@ -1491,7 +1576,7 @@ class SQLiteBackend(StorageBackend):
                     )
                     """,
                     (
-                        response_text,
+                        stored_response,
                         response_length,
                         action_name,
                         record_id,
@@ -1578,7 +1663,7 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
+            return [self._decompress_trace_row(row) for row in cursor.fetchall()]
 
     def get_prompt_trace_summary(
         self,
@@ -1603,13 +1688,13 @@ class SQLiteBackend(StorageBackend):
                 (action_name,),
             )
             row = cursor.fetchone()
-
-        if row is None:
-            return None
+            if row is None:
+                return None
+            compiled_prompt = self.decompress_trace_text(row["compiled_prompt"])
 
         return {
             "action_name": action_name,
-            "compiled_prompt": row["compiled_prompt"],
+            "compiled_prompt": compiled_prompt,
             "model_name": row["model_name"],
             "model_vendor": row["model_vendor"],
             "trace_count": row["trace_count"],
@@ -1644,7 +1729,7 @@ class SQLiteBackend(StorageBackend):
                 " WHERE action_name = ? ORDER BY id LIMIT ? OFFSET ?",
                 (action_name, limit, offset),
             )
-            records = [dict(row) for row in cursor.fetchall()]
+            records = [self._decompress_trace_row(row) for row in cursor.fetchall()]
 
         return {
             "records": records,
@@ -1670,10 +1755,16 @@ class SQLiteBackend(StorageBackend):
                         "DELETE FROM prompt_trace WHERE action_name = ?",
                         (action_name,),
                     )
+                    deleted = cursor.rowcount
+                    cursor.execute(
+                        "DELETE FROM prompt_trace_dictionary WHERE action_name = ?",
+                        (action_name,),
+                    )
                 else:
                     cursor.execute("DELETE FROM prompt_trace")
+                    deleted = cursor.rowcount
+                    cursor.execute("DELETE FROM prompt_trace_dictionary")
                 self.connection.commit()
-                deleted = cursor.rowcount
                 logger.debug(
                     "Cleared %d prompt traces: action=%s",
                     deleted,
@@ -2064,9 +2155,15 @@ class SQLiteBackend(StorageBackend):
                             newest.setdefault(
                                 trace_row["record_id"],
                                 {
-                                    "compiled_prompt": trace_row["compiled_prompt"],
-                                    "llm_context": trace_row["llm_context"],
-                                    "response_text": trace_row["response_text"],
+                                    "compiled_prompt": self.decompress_trace_text(
+                                        trace_row["compiled_prompt"]
+                                    ),
+                                    "llm_context": self.decompress_trace_text(
+                                        trace_row["llm_context"]
+                                    ),
+                                    "response_text": self.decompress_trace_text(
+                                        trace_row["response_text"]
+                                    ),
                                     "model_name": trace_row["model_name"],
                                     "model_vendor": trace_row["model_vendor"],
                                     "run_mode": trace_row["run_mode"],

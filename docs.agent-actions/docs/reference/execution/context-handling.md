@@ -104,7 +104,7 @@ The same configuration works identically in both modes.
 1. **Always namespace fields in templates** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never bare `{{ field }}`.
 2. **Pick a mode for cost/latency reasons, not for templating reasons** — `--mode batch` changes when LLM calls happen, not what context the prompt sees.
 3. **Use seed data for static content** — works identically in both modes.
-4. **Inspect rendered prompts** — `sqlite3 agent_io/store/<workflow>.db "SELECT compiled_prompt FROM prompt_trace WHERE action_name = '<action>' LIMIT 1"` shows the exact text the LLM received.
+4. **Inspect rendered prompts** — `agac traces -w <workflow> -a <action>` shows the exact text the LLM received.
 
 ## See Also
 
