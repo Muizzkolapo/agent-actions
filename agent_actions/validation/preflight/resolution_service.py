@@ -164,23 +164,26 @@ class WorkflowResolutionService:
 
         for probe_result in verify_keys(targets):
             if not probe_result.ok:
+                where = f" at {probe_result.base_url}" if probe_result.base_url else ""
+                server = (
+                    f"The server at {probe_result.base_url}"
+                    if probe_result.base_url
+                    else f"The {probe_result.vendor} API"
+                )
                 result.add_error(
                     StaticTypeError(
                         message=(
-                            f"API key for vendor '{probe_result.vendor}' is invalid: "
+                            f"API key for vendor '{probe_result.vendor}'{where} is invalid: "
                             f"{probe_result.error}"
                         ),
                         location=FieldLocation(
                             agent_name="(workflow)",
                             config_field="api_key",
-                            raw_reference=probe_result.vendor,
+                            raw_reference=f"{probe_result.vendor}{where}",
                         ),
                         referenced_agent="(workflow)",
                         referenced_field="api_key",
-                        hint=(
-                            f"The {probe_result.vendor} API rejected the key. "
-                            f"Check that it is not expired or revoked."
-                        ),
+                        hint=f"{server} rejected the key. Check that it is not expired or revoked.",
                     )
                 )
 
@@ -197,8 +200,8 @@ class WorkflowResolutionService:
         """
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
-        # Deduplicated vendor → probe target (first seen wins).
-        targets: dict[str, ProbeTarget] = {}
+        # Deduplicated (vendor, base_url) → probe target (first seen wins).
+        targets: dict[tuple[str, str | None], ProbeTarget] = {}
 
         for action_name, config in self.action_configs.items():
             vendor = (config.get("model_vendor") or "").lower()
@@ -249,9 +252,13 @@ class WorkflowResolutionService:
                 )
                 continue
 
-            # Track for downstream probing (first vendor occurrence wins).
-            if vendor not in targets:
-                targets[vendor] = ProbeTarget(vendor=vendor, api_key=key_value)
+            # Only the openai client sends requests to a configured base_url,
+            # so only its probe target carries one.
+            base_url = config.get("base_url") if vendor == "openai" else None
+            if (vendor, base_url) not in targets:
+                targets[(vendor, base_url)] = ProbeTarget(
+                    vendor=vendor, api_key=key_value, base_url=base_url
+                )
 
         return errors, warnings, list(targets.values())
 

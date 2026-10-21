@@ -35,9 +35,7 @@ class ProbeResult:
 
 
 # ── Per-vendor probe functions ────────────────────────────────────────
-# Each takes a ProbeTarget, makes one lightweight call, and returns
-# a ProbeResult.  SDK imports are lazy (inside the function body) to
-# avoid loading unused vendor SDKs.
+# SDK imports stay inside each probe so unused vendor SDKs are never loaded.
 
 _INFRA_ERROR_PREFIX = "Infrastructure error during key verification"
 
@@ -47,28 +45,34 @@ def _classify_sdk_exception(
     exc: Exception,
     auth_types: tuple[type, ...],
     transient_types: tuple[type, ...],
+    base_url: str | None = None,
 ) -> ProbeResult:
     """Classify an SDK exception into auth failure, transient, or infrastructure error."""
     if isinstance(exc, auth_types):
-        return ProbeResult(vendor=vendor, ok=False, error=str(exc))
+        return ProbeResult(vendor=vendor, ok=False, error=str(exc), base_url=base_url)
     if isinstance(exc, transient_types):
         logger.warning("Could not verify %s key: %s (proceeding — transient)", vendor, exc)
-        return ProbeResult(vendor=vendor, ok=True)
-    return ProbeResult(vendor=vendor, ok=False, error=f"{_INFRA_ERROR_PREFIX}: {exc}")
+        return ProbeResult(vendor=vendor, ok=True, base_url=base_url)
+    return ProbeResult(
+        vendor=vendor, ok=False, error=f"{_INFRA_ERROR_PREFIX}: {exc}", base_url=base_url
+    )
 
 
 def _probe_openai(target: ProbeTarget) -> ProbeResult:
     try:
         from openai import AuthenticationError, OpenAI
 
-        client = OpenAI(api_key=target.api_key, timeout=_PROBE_TIMEOUT_SECONDS)
+        client = OpenAI(
+            api_key=target.api_key, base_url=target.base_url, timeout=_PROBE_TIMEOUT_SECONDS
+        )
         client.models.list()
-        return ProbeResult(vendor="openai", ok=True)
+        return ProbeResult(vendor="openai", ok=True, base_url=target.base_url)
     except ImportError:
         return ProbeResult(
             vendor="openai",
             ok=False,
             error="openai package not installed — run: pip install openai",
+            base_url=target.base_url,
         )
     except Exception as e:
         from openai import APIConnectionError, APITimeoutError, AuthenticationError, RateLimitError
@@ -78,6 +82,7 @@ def _probe_openai(target: ProbeTarget) -> ProbeResult:
             e,
             (AuthenticationError,),
             (APIConnectionError, APITimeoutError, RateLimitError),
+            base_url=target.base_url,
         )
 
 
