@@ -140,6 +140,7 @@ actions:
 | `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
 | `api_key` | string | Environment variable name for API key |
+| `base_url` | string | Server URL for `openai`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1` |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
@@ -212,6 +213,26 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Cohere | `cohere` | ❌ | command-r-plus |
 | Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
 | Ollama (cloud) | `ollama_cloud` | ✅ | gpt-oss:120b-cloud |
+
+### OpenAI-compatible servers
+
+Set `base_url` on an `openai` action to send it to a server that speaks the OpenAI chat API, such as llamafile, LM Studio or vLLM. Each action uses its own `base_url`. Actions without one keep using the OpenAI endpoint, so one run can mix a local server and OpenAI:
+
+```yaml
+actions:
+  - name: classify_local
+    model_vendor: openai
+    model_name: local
+    base_url: http://localhost:8080/v1
+    api_key: LOCAL_KEY        # the server may ignore it, but the env var must be set
+  - name: summarize_cloud
+    model_vendor: openai
+    model_name: gpt-4o-mini
+```
+
+:::note
+Without a schema, the client asks for `response_format: json_object`. Some local servers do not enforce that format and return prose or wrongly typed values. Give the action a schema. Schema output uses the `json_schema` format, which llamafile 0.10.6 enforced in every measured run.
+:::
 
 ## Environment Variables
 
