@@ -749,6 +749,82 @@ def roll_pages(data: list) -> FileUDFResult:
 """
 )
 
+# One row per record, refusing gamma's while `refuse_gamma` exists: the tool itself
+# fails one record of a file it is handed again.
+_PER_RECORD_REFUSING_GAMMA = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    refuse = (Path(os.environ["ROLL_DIR"]) / "refuse_gamma").exists()
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": i,
+                "data": {
+                    "summary": 7 if refuse and "gamma" in page else f"{page} (item)",
+                    "exam_density": "low",
+                },
+            }
+            for i, page in enumerate(pages)
+        ]
+    )
+"""
+)
+
+# A second FILE tool reading the first: one row per record, counted across the file,
+# logging the summaries it is handed.
+_COUNT_BELOW_TOOL = """\
+import json
+import os
+from pathlib import Path
+
+from agent_actions import FileUDFResult, udf_tool
+from agent_actions.config.schema import Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_count(data: list) -> FileUDFResult:
+    root = Path(os.environ["ROLL_DIR"])
+    summaries = [str(item.get("summary", "")) for item in data]
+    with open(root / "count_handed.jsonl", "a") as log:
+        log.write(json.dumps(summaries) + "\\n")
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": i,
+                "data": {"summary": f"{s} [{i + 1} of {len(summaries)}]", "exam_density": "low"},
+            }
+            for i, s in enumerate(summaries)
+        ]
+    )
+"""
+
+COUNT_BELOW = (
+    ONLINE
+    + """\
+  - name: roll_count
+    kind: tool
+    granularity: File
+    dependencies: [roll_up]
+    intent: "Count"
+    schema: file_roll_output
+    impl: roll_count
+    context_scope: { observe: [roll_up.summary] }
+"""
+)
+
+# A record tool splitting each record in two, above the FILE tool.
+_FLATTEN_SPLIT = _FLATTEN.replace(
+    '    return [{"summary": page, "exam_density": "low"}]',
+    "    return [\n"
+    '        {"summary": page + " #1", "exam_density": "low"},\n'
+    '        {"summary": page + " #2", "exam_density": "low"},\n'
+    "    ]",
+)
+
 # Reads what finalize wrote for one record, and logs each summary it is handed.
 _GRAND = """\
 import json
@@ -904,6 +980,54 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
         ]
         assert after[gamma]["target_id"] == before[gamma]["target_id"]
         assert _successes(project, "finalize") == set(after)
+
+    def test_a_file_tool_below_counts_the_file_again_when_the_tool_fails_a_record_anew(
+        self, tmp_path
+    ):
+        """Alpha still fails above, and the tool now refuses gamma: beta's row is as it
+        was, but the file below holds one record where it held two, so the FILE tool
+        below is handed it again rather than carrying a count of two."""
+        staged = {"pages1.json": ["Page alpha.", "Page beta.", "Page gamma."]}
+        project = _project(tmp_path, COUNT_BELOW, _PER_RECORD_REFUSING_GAMMA, staged)
+        (project / "tools" / WORKFLOW / "roll_count.py").write_text(_COUNT_BELOW_TOOL)
+        (project / "fail_alpha").touch()
+        _run(project, "--fresh")
+        assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
+            None,
+            "Page beta. (item) [1 of 2]",
+            "Page gamma. (item) [2 of 2]",
+        ]
+        (project / "count_handed.jsonl").unlink()
+        (project / "refuse_gamma").touch()
+
+        result = run_agac(project, "retry", "-a", WORKFLOW, env=_env(project))
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert _logged(project, "count_handed.jsonl") == [["Page beta. (item)"]]
+        assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
+            None,
+            "Page beta. (item) [1 of 1]",
+            None,
+        ]
+
+    def test_the_children_of_a_record_split_above_the_tool_are_carried_below(self, tmp_path):
+        """A record split in two above the tool names its ancestor as parent; each child's
+        row the tool writes again unchanged is carried below all the same."""
+        project = _project(tmp_path, TOOL_BELOW, _PER_RECORD)
+        (project / "tools" / WORKFLOW / "roll_flatten.py").write_text(_FLATTEN_SPLIT)
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        # The tool logs each record's source page, which a record's two children share.
+        assert _handed(project) == [["Page alpha.", "Page alpha.", "Page beta.", "Page beta."]]
+        assert _finalized(project) == ["Page alpha. (item)", "Page alpha. (item)"]
+        assert sorted(_summaries(_rows(project, "finalize")["pages1.json"], "finalize")) == [
+            "FINAL[Page alpha. (item)]",
+            "FINAL[Page alpha. (item)]",
+            "FINAL[Page beta. (item)]",
+            "FINAL[Page beta. (item)]",
+        ]
 
     def test_a_row_the_tool_writes_differently_is_answered_again_below(self, tmp_path):
         """The positive control: a count across the file changes beta's row too."""

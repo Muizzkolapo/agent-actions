@@ -226,6 +226,55 @@ class TestWhatIsForgottenBelow:
 
         assert backend.cleared == {"final": ["a"], "grand": ["a"]}
 
+    def test_a_row_naming_the_ancestor_its_unchanged_record_was_split_from_is_kept(self):
+        """A record split above the tool carries its first ancestor as parent; the row
+        below is built on the record's own row, which is unchanged, not on the ancestor."""
+        replaced = [
+            _row("a", "alpha", parent_source_guid="P"),
+            _row("b", "beta", parent_source_guid="P"),
+        ]
+        inputs = [
+            {"source_guid": "a", "parent_source_guid": "P"},
+            {"source_guid": "b", "parent_source_guid": "P"},
+        ]
+        backend = _Backend({"final": [_below("b", parent_source_guid="P")]})
+
+        _forget_answers_below(backend, ["final"], "p.json", replaced, inputs, frozenset({"b"}))
+
+        assert backend.cleared == {"final": ["P", "a"]}
+
+    def test_a_file_tool_below_keeps_nothing_of_a_file_that_changed_at_all(self):
+        """Its every row may depend on every record of the file, so beta's row there
+        was computed with alpha's, whatever it names."""
+        backend = _Backend({"final": [_below("b")]})
+
+        _forget_answers_below(
+            backend,
+            ["final"],
+            "p.json",
+            self.REPLACED,
+            self.INPUTS,
+            frozenset({"b"}),
+            whole_file_readers=frozenset({"final"}),
+        )
+
+        assert backend.cleared == {"final": ["a", "b"]}
+
+    def test_a_file_tool_below_keeps_what_it_holds_of_a_file_written_again_as_it_was(self):
+        backend = _Backend({"final": [_below("a"), _below("b")]})
+
+        _forget_answers_below(
+            backend,
+            ["final"],
+            "p.json",
+            self.REPLACED,
+            self.INPUTS,
+            frozenset({"a", "b"}),
+            whole_file_readers=frozenset({"final"}),
+        )
+
+        assert backend.cleared == {}
+
     def test_with_every_row_unchanged_nothing_is_cleared(self):
         backend = _Backend({"final": [_below("a"), _below("b")]})
 
