@@ -178,13 +178,14 @@ class TestWhatIsForgottenBelow:
         assert backend.cleared == {"final": ["a"]}
 
     def test_a_row_minted_from_a_changed_record_too_is_forgotten(self):
+        """Under every identity it names: what it holds of beta was computed with alpha."""
         backend = _Backend({"final": [_below("m1", producer_source_guids=["a", "b"])]})
 
         _forget_answers_below(
             backend, ["final"], "p.json", self.REPLACED, self.INPUTS, frozenset({"b"})
         )
 
-        assert backend.cleared == {"final": ["a", "m1"]}
+        assert backend.cleared == {"final": ["a", "b", "m1"]}
 
     def test_a_row_keeping_an_unchanged_identity_but_built_on_a_changed_record_is_forgotten(self):
         """A FILE tool below can keep one input's identity and name the others it consumed.
