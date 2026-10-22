@@ -10,6 +10,7 @@ from typing import Any
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import ConfigValidationError
+from agent_actions.llm.config.runtime_profiles import wire_vendor
 from agent_actions.utils.json_safety import ensure_json_safe
 
 from .schema_conversion import (
@@ -56,6 +57,7 @@ def compile_unified_schema(
         elif unified.get("type") == "object" and "properties" in unified:
             unified = _convert_json_schema_object_to_unified(unified)
 
+    target_system = wire_vendor(target_system)
     properties: dict[str, Any] = {}
     required: list[str] = []
     required_by_default = unified.get("required_by_default", False)

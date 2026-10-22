@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.llm.config.runtime_profiles import wire_vendor
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.schema_utils import is_compiled_schema
@@ -151,6 +152,7 @@ def _compile_schema_for_vendor(
     Returns:
         Compiled schema or None if vendor doesn't support schemas
     """
+    vendor = wire_vendor(vendor)
     if vendor.lower() not in SUPPORTED_VENDORS:
         logger.info(
             "Vendor '%s' does not support schema validation. Schema '%s' will be ignored.",

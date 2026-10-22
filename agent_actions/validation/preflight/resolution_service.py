@@ -23,8 +23,10 @@ from agent_actions.config.path_config import (
     seed_search_folders,
 )
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
+from agent_actions.utils.constants import SCHEMA_KEY
 from agent_actions.validation.preflight.key_verifier import ProbeTarget
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
@@ -151,6 +153,8 @@ class WorkflowResolutionService:
 
         for error in self._check_vendor_run_mode_compatibility():
             result.add_error(error)
+        for warning in self._check_runtime_json_object():
+            result.add_warning(warning)
 
         return result
 
@@ -206,6 +210,10 @@ class WorkflowResolutionService:
         for action_name, config in self.action_configs.items():
             vendor = (config.get("model_vendor") or "").lower()
             if not vendor:
+                continue
+
+            profile = RUNTIME_PROFILES.get(vendor)
+            if profile is not None and not profile.api_key_required:
                 continue
 
             # Resolve the expected env var name from vendor config
@@ -642,8 +650,8 @@ class WorkflowResolutionService:
                 errors.append(
                     StaticTypeError(
                         message=(
-                            f"Action '{action_name}' uses run_mode=batch with vendor "
-                            f"'{vendor}', but {vendor} does not support batch mode"
+                            f"Action '{action_name}': vendor '{vendor}' "
+                            "does not support run_mode: batch."
                         ),
                         location=FieldLocation(
                             agent_name=action_name,
@@ -652,11 +660,41 @@ class WorkflowResolutionService:
                         ),
                         referenced_agent=action_name,
                         referenced_field="run_mode",
-                        hint=f"Use run_mode: online for {vendor} actions, or choose a batch-capable vendor.",
+                        hint="Set run_mode: online.",
                     )
                 )
 
         return errors
+
+    def _check_runtime_json_object(self) -> list[StaticTypeWarning]:
+        """Warn on a JSON action with no schema on a runtime that ignores json_object.
+
+        The OpenAI client sends json_object exactly when json_mode is on and no
+        schema compiled, so this fires under that same condition.
+        """
+        warnings: list[StaticTypeWarning] = []
+        for action_name, config in self.action_configs.items():
+            vendor = (config.get("model_vendor") or "").lower()
+            profile = RUNTIME_PROFILES.get(vendor)
+            if profile is None or profile.enforces_json_object:
+                continue
+            if not config.get("json_mode", True):
+                continue
+            if config.get(SCHEMA_KEY) or config.get("schema_name"):
+                continue
+            warnings.append(
+                StaticTypeWarning(
+                    message=(
+                        f"Action '{action_name}': vendor '{vendor}' "
+                        "does not enforce json_object output."
+                    ),
+                    location=FieldLocation(agent_name=action_name, config_field="schema"),
+                    referenced_agent=action_name,
+                    referenced_field="schema",
+                    hint="Add a schema to this action.",
+                )
+            )
+        return warnings
 
     # ── Helpers ────────────────────────────────────────────────────────
 
