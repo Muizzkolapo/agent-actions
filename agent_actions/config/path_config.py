@@ -47,8 +47,6 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
             try:
                 with open(config_file, encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
-                fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
-                return config
             except yaml.YAMLError as e:
                 raise ConfigValidationError(
                     "path_config_yaml",
@@ -56,6 +54,15 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
                     context={"config_path": str(config_file), "operation": "load_config"},
                     cause=e,
                 ) from e
+            if not isinstance(config, dict):
+                raise ConfigValidationError(
+                    "path_config_yaml",
+                    f"Config file {config_file} must be a mapping at the top level, "
+                    f"got {type(config).__name__}",
+                    context={"config_path": str(config_file), "operation": "load_config"},
+                )
+            fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
+            return config
 
     return {}
 

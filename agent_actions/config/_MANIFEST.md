@@ -86,7 +86,7 @@ Key Functions
 | `PathManager.get_project_root` | `agent_actions.yml` | Reads | — |
 | `PathManager.get_standard_path` | `agent_io/target/{action}/` | Reads | — |
 | `PathManager.clean_path` | `agent_io/target/{action}/` | Writes | — |
-| `load_project_config` | `agent_actions.yml` | Reads | `project_name`, `schema_path`, `tool_path`, `seed_data_path`, `seed_data_paths` |
+| `load_project_config` | `agent_actions.yml` | Reads | `project_name`, `schema_path`, `tool_path`, `seed_data_path`, `seed_data_paths`, `logging` |
 | `get_tool_dirs` | `agent_actions.yml` | Reads | `tool_path` |
 | `get_schema_path` | `agent_actions.yml` | Reads | `schema_path` |
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |

@@ -25,7 +25,7 @@ from agent_actions.cli.skills import skills
 from agent_actions.cli.status import status
 from agent_actions.cli.traces import traces
 from agent_actions.config.path_config import find_project_root_dir, load_project_config
-from agent_actions.errors import ProjectNotFoundError
+from agent_actions.errors import ConfigValidationError, ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
 from agent_actions.logging.config import LoggingConfig
 from agent_actions.logging.core.manager import fire_event
@@ -132,9 +132,23 @@ class CLI:
 
     @staticmethod
     def _resolve_logging_base() -> LoggingConfig:
-        """The ``logging:`` block of the project at cwd, or the defaults outside one."""
+        """The ``logging:`` block of the project at cwd; the defaults outside one.
+
+        A project file that does not load is reported on stderr and the defaults
+        stand: the commands that read the project fail on it on their own, and
+        ``--help``, ``--version`` and ``agac init`` never read it.
+        """
         project_root = find_project_root_dir()
-        project_config = load_project_config(project_root) if project_root else {}
+        if project_root is None:
+            return LoggingConfig()
+        try:
+            project_config = load_project_config(project_root)
+        except ConfigValidationError as e:
+            sys.stderr.write(
+                f"agent_actions: logging: not read from the project config: "
+                f"{e.context['reason']}; using the default logging config\n"
+            )
+            return LoggingConfig()
         return LoggingConfig.from_project_config(project_config)
 
     def execute(self, argv: Sequence[str] | None = None) -> int:

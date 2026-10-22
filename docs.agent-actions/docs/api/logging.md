@@ -959,8 +959,8 @@ earlier runs are kept. The other four are populated from the
 / `AGENT_ACTIONS_FILE_LOG_LEVEL` env vars and read by nothing — whether a
 run-log file handler is registered, and where it writes, is decided entirely
 by the `output_dir` passed to `LoggerFactory.initialize()`. The matching
-`logging.file.*` project keys are therefore refused at boot with a stderr
-report rather than parsed (see the architecture doc's File Handler section).
+`logging.file.*` project keys are therefore reported on stderr at boot and
+ignored rather than parsed (see the architecture doc's File Handler section).
 
 ---
 

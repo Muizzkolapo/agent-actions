@@ -16,6 +16,8 @@ from agent_actions.cli.main import CLI
 SOURCE = Path(__file__).parent.parent / "integration" / "fixtures" / "expectation_authors"
 WORKFLOW = "tool_action"
 
+pytestmark = pytest.mark.usefixtures("isolated_user_tools")
+
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):

@@ -108,6 +108,7 @@
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `main_entrypoint()` | `.env` | Reads | — |
+| `CLI._resolve_logging_base()` | `agent_actions.yml` | Reads at boot, once per command; a file that does not load is reported on stderr and the defaults stand | `logging` |
 | `requires_project()` | `agent_actions.yml` | Reads | — |
 | `ExpectListCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `ExpectListCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema` |

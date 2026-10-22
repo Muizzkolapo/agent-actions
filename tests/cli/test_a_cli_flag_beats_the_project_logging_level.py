@@ -16,6 +16,8 @@ from agent_actions.cli.main import cli
 
 SOURCE = Path(__file__).parent.parent / "integration" / "fixtures" / "expectation_authors"
 WORKFLOW = "tool_action"
+
+pytestmark = pytest.mark.usefixtures("isolated_user_tools")
 PROGRESS_LINE = "Step 1/1 flatten"
 
 
