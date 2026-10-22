@@ -357,7 +357,7 @@ expect:                  # in defaults — applies to LLM actions only
 6. Is a large upstream field (e.g. full page content) polluting a downstream action? Check if a distilled field already carries what you need.
 
 **Tracing records across actions:**
-Records carry `version_correlation_id` — same ID across all actions for the same source record. Use `prompt_trace` table for rendered prompts and `target_data` for outputs. Correlate by `target_id` or `version_correlation_id`, not by array index.
+Records carry `version_correlation_id` — same ID across all actions for the same source record. Use `agac traces -w {workflow} -a {action}` for rendered prompts (the `prompt_trace` text columns are compressed, so `sqlite3` shows blobs) and `target_data` for outputs. Correlate by `target_id` or `version_correlation_id`, not by array index.
 
 **Inspecting an action's config, context, and schema:**
 

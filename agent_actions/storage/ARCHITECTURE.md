@@ -180,6 +180,31 @@ Indexes:
 - `idx_trace_action_record ON prompt_trace(action_name, record_id)`
 - `idx_trace_action_source ON prompt_trace(action_name, source_guid)`
 
+**Text compression.** `compiled_prompt`, `llm_context` and `response_text` are
+stored as BLOBs: a 4-byte dictionary id, then a zlib stream compressed against that
+dictionary (id 0 means none). Each action and column gets one dictionary, made from
+the first value written for it and kept in `prompt_trace_dictionary`:
+
+```sql
+CREATE TABLE IF NOT EXISTS prompt_trace_dictionary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    data BLOB NOT NULL,
+    UNIQUE(action_name, column_name)
+)
+```
+
+Dictionary rows are insert-only and `AUTOINCREMENT` never reuses a committed id, so
+the dictionary a row names cannot change under it. A rolled-back write does free its
+id, so the write path reads the dictionary from the store each time and only readers
+cache it. `clear_prompt_traces` deletes an
+action's dictionaries with its traces; retention pruning keeps them. A TEXT value is a
+row written before compression and reads back as it is, so older stores need no
+migration. Every backend reader decompresses (`decompress_trace_text`); a value that
+will not decompress raises `ValueError` rather than returning bytes. Outside the
+backend, read the text with `agac traces` — `sqlite3` shows these columns as blobs.
+
 **Identity contract.** The table is a bounded historical log; `target_data`
 holds the current view. Rows accumulate across runs (filter by `run_id` for
 "this run"; day-based retention prunes old ones). Each row therefore carries

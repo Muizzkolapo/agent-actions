@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
 PAGES = [
@@ -251,7 +252,7 @@ def test_the_documented_spelling_still_runs(tmp_path, mode):
 
     _run_to_the_end(project)
 
-    sent = _store_rows(
+    sent = trace_rows(
         project, "select compiled_prompt from prompt_trace where action_name = 'consumer'"
     )
     assert [" ".join(p.split()) for (p,) in sent] == ["severity=high"]
@@ -270,7 +271,7 @@ def test_a_version_param_named_schema_is_still_read(tmp_path, mode):
 
     _run_to_the_end(project)
 
-    sent = _store_rows(
+    sent = trace_rows(
         project, "select compiled_prompt from prompt_trace where action_name like 'consumer_%'"
     )
     assert sorted(" ".join(text.split()) for (text,) in sent) == [

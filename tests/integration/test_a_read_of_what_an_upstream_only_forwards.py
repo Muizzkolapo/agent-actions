@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
 PAGES = [
@@ -230,12 +231,7 @@ def test_a_field_an_open_schema_admits_unlisted_still_runs(tmp_path, mode, promp
     _run_to_the_end(project)
 
     assert _dispositions(project, "consumer") == ["success", "success"]
-    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        traces = [c for (c,) in con.execute("select llm_context from prompt_trace")]
-    finally:
-        con.close()
+    traces = [c for (c,) in trace_rows(project, "select llm_context from prompt_trace")]
     assert any('"produce": {' in c and '"page_content": "two"' in c for c in traces), traces
 
 

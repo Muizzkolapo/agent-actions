@@ -63,6 +63,7 @@ const sidebars: SidebarsConfig = {
             'reference/cli/inspect',
             'reference/cli/utilities',
             'reference/cli/preview',
+            'reference/cli/traces',
             'reference/cli/tools',
             'reference/cli/schema',
             'reference/cli/expect',

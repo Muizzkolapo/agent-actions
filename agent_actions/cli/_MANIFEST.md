@@ -4,7 +4,7 @@
 
 ## Conventions
 
-- **Read-only commands** (inspect, schema, status, preview) must pass `auto_create=False` to `ProjectPathsFactory.create_project_paths()` and omit `output_dir` from `ConfigRenderingService().render_and_load_config()` to avoid filesystem mutations.
+- **Read-only commands** (inspect, schema, status, preview, traces) must pass `auto_create=False` to `ProjectPathsFactory.create_project_paths()` and omit `output_dir` from `ConfigRenderingService().render_and_load_config()` to avoid filesystem mutations.
 - **Write commands** (run, init, compile) use the defaults (`auto_create=True`, explicit `output_dir`).
 
 ## Sub-Modules
@@ -100,6 +100,8 @@
 | `PreviewCommand` | Class | Implementation of the preview command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the preview command. | - |
 | `preview` | Function | Preview data stored in the SQLite storage backend. | - |
+| `traces.py` | Module | `agac traces`: prints an action's prompt traces (prompt, context, response) as plain text or JSON, through a read-only store; the store keeps that text compressed. | `cli`, `storage` |
+| `traces` | Function | Print the prompt traces of an action. | - |
 
 ## Project Surface
 

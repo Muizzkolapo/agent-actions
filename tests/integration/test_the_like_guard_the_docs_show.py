@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 from pathlib import Path
 
 import pytest
 import yaml
 
 from tests._support.agac_cli import REPO, run_agac
+from tests.helpers.trace_store import trace_rows
 
 PAGE = REPO / "docs.agent-actions" / "docs" / "reference" / "execution" / "guards.md"
 WORKFLOW = "like_guard"
@@ -99,14 +99,9 @@ def _sent(run_mode: str, condition: str, base: Path) -> list[str]:
         if "run again" not in output:
             break
         args = ["run", "-a", WORKFLOW]
-    (db,) = (workflow / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        rows = con.execute(
-            "select compiled_prompt from prompt_trace where action_name = 'publish'"
-        ).fetchall()
-    finally:
-        con.close()
+    rows = trace_rows(
+        root, "select compiled_prompt from prompt_trace where action_name = 'publish'"
+    )
     return sorted(" ".join(prompt.split()).removeprefix("publish ") for (prompt,) in rows)
 
 

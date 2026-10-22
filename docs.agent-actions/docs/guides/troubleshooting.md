@@ -312,13 +312,12 @@ Prompt traces only exist for **LLM actions**. Tool (UDF) actions do not generate
 - **Schema mismatch**: The LLM response doesn't match the expected JSON structure — consider adding an `expect:` block with a repair policy
 - **Model badge**: Check if the model name matches what you expected — a misconfigured provider can route to the wrong model
 
-### Querying Traces Directly
+### Reading Traces From the Command Line
 
-For bulk analysis across many records, you can query the storage backend directly. With the default SQLite backend:
+To read many records' traces at once, print them with `agac traces` (add `--record <target_id>` for one record, `--json` for a list):
 
 ```bash
-sqlite3 my_workflow/agent_io/store/my_workflow.db \
-  "SELECT record_id, response_text FROM prompt_trace WHERE action_name = 'classify_issue' LIMIT 10"
+agac traces -w my_workflow -a classify_issue
 ```
 
 See [Prompt Traces reference](../reference/data-io/prompt-traces.md) for the full table schema and query examples.

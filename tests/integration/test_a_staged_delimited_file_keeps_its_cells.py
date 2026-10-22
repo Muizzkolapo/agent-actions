@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import pytest
 
+from tests.helpers.trace_store import trace_rows
 from tests.integration.test_a_staged_spreadsheet_row_is_read_by_column import (
     LLM_PROMPT,
     TOOL_FIRST,
     _assert_ran,
     _project,
-    _query,
     _run,
     _stored,
 )
@@ -69,7 +69,7 @@ def test_a_prompt_renders_a_multi_line_cell_whole(tmp_path, file_type, run_mode)
     _assert_ran(result)
     (prompt,) = [
         p
-        for (p,) in _query(
+        for (p,) in trace_rows(
             root, "select compiled_prompt from prompt_trace where action_name = 'first'"
         )
     ]

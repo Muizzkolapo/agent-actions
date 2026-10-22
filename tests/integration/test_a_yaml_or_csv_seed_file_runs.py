@@ -9,10 +9,10 @@ a byte order mark out of the first key and a quoted `\\r\\n` as written.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
 PAGES = [
@@ -96,13 +96,8 @@ def _output(project: Path) -> str:
 
 
 def _prompts(project: Path) -> list[str]:
-    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        rows = con.execute("select compiled_prompt from prompt_trace")
-        return sorted(p.strip() for (p,) in rows if "Say " in p)
-    finally:
-        con.close()
+    rows = trace_rows(project, "select compiled_prompt from prompt_trace")
+    return sorted(p.strip() for (p,) in rows if "Say " in p)
 
 
 def test_a_yaml_seed_file_runs(tmp_path):

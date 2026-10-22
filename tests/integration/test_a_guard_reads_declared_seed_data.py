@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
 PAGES = [
@@ -229,14 +230,9 @@ def test_the_prompt_still_reads_the_seed_beside_a_guard_reading_it(tmp_path):
 
     _run_to_the_end(project)
 
-    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        prompts = [
-            p for (p,) in con.execute("select compiled_prompt from prompt_trace") if "Say " in p
-        ]
-    finally:
-        con.close()
+    prompts = [
+        p for (p,) in trace_rows(project, "select compiled_prompt from prompt_trace") if "Say " in p
+    ]
     assert prompts == ["Say high in on", "Say high in on"], prompts
 
 

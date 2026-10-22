@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -195,7 +196,7 @@ def _query(project: Path, sql: str, *params: object) -> list[tuple]:
 
 def _traces(project: Path, action: str) -> list[tuple[str, str | None]]:
     """The action's first-attempt prompts, with the run each was written by."""
-    return _query(
+    return trace_rows(
         project,
         "select compiled_prompt, run_id from prompt_trace where action_name = ? and attempt = 0",
         action,

@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "staged_text"
 TEXT = "Hello there. This is a short document.\n"
@@ -120,8 +121,11 @@ def _stored(root: Path) -> list[dict]:
 
 def _prompts(root: Path) -> list[str]:
     sql = "select compiled_prompt from prompt_trace where action_name = 'first'"
+    store = root / "agent_workflow" / WORKFLOW / "agent_io" / "store"
+    if not list(store.glob("*.db")):
+        return []
     try:
-        return [prompt for (prompt,) in _query(root, sql)]
+        return [prompt for (prompt,) in trace_rows(root, sql)]
     except sqlite3.OperationalError:
         return []
 
