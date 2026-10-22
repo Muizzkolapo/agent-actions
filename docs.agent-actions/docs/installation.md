@@ -100,6 +100,32 @@ ollama pull llama3.1
 # model: llama3.1
 ```
 
+## Local Models with an OpenAI-compatible Server
+
+**What if your local server speaks the OpenAI API instead?** llamafile, LM Studio and vLLM all serve the OpenAI chat API on a local port. Use the `openai` vendor and point the action at the server with `base_url`. Each action keeps its own `base_url`, so one workflow can send some actions to the local server and the rest to OpenAI.
+
+```bash
+# Start llamafile as a server (measured with llamafile 0.10.6)
+./llamafile -m model.gguf --server --port 8080 --api-key local-key
+
+# The openai vendor still needs an API key env var; the local server may ignore its value
+export LOCAL_KEY=local-key
+```
+
+```yaml
+actions:
+  - name: classify_local
+    model_vendor: openai
+    model_name: local
+    base_url: http://localhost:8080/v1
+    api_key: LOCAL_KEY
+  - name: summarize_cloud
+    model_vendor: openai
+    model_name: gpt-4o-mini
+```
+
+Two limits apply. A `base_url` action must use `run_mode: online`, because the Batch API is served only by OpenAI; preflight refuses the combination. And give every `base_url` action a schema: without one the client asks for `json_object` output, which some local servers do not enforce. See [OpenAI-compatible servers](reference/configuration/index.md#openai-compatible-servers) for the full reference.
+
 ## Upgrading
 
 ```bash
