@@ -78,8 +78,9 @@ Phase 1: CLI() constructor
   └─ logging.getLogger(__name__)        ← bare Python logger, no config yet
 
 Phase 2: CLI.execute() — before Click dispatch
-  └─ _configure_logging()              ← LoggerFactory.initialize() with env defaults
-     (LoggingConfig.from_environment() reads AGAC_LOG_LEVEL, AGAC_LOG_FORMAT, etc.)
+  └─ _configure_logging()              ← LoggerFactory.initialize() with project + env config
+     (LoggingConfig.from_project_config() reads the logging: block of agent_actions.yml;
+      from_environment(base) overlays AGENT_ACTIONS_LOG_LEVEL, AGENT_ACTIONS_DEBUG, etc.)
 
 Phase 3: Click group callback — after arg parsing
   └─ _configure_logging(debug=True)    ← re-initialize with --debug/--verbose/--quiet
@@ -87,7 +88,8 @@ Phase 3: Click group callback — after arg parsing
 
 Phase 4 (run command only): after workflow loads
   └─ LoggerFactory.initialize(output_dir=..., workflow_name=..., invocation_id=...)
-     (adds file handler in agent_io/target/ for run logs)
+     (adds file handler in agent_io/target/ for run logs; passes no config, so the
+      factory keeps the one Phase 3 resolved)
 ```
 
 Phase 1 events (CLIInitStartEvent) use a bare logger. If you add logging before Phase 2, messages may be lost or go to stderr with default formatting.

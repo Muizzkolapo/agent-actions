@@ -40,6 +40,14 @@ tool_path: ["tools"]
 seed_data_path: seed_data
 seed_data_paths: [shared_seeds]
 required_by_default: false
+
+logging:
+  level: WARNING            # console level; the run log keeps every level
+  module_levels:
+    httpx: INFO             # re-open a logger the framework clamps to WARNING
+  file:
+    max_bytes: 52428800     # per run file, DEBUG rows stop past this; 0 = no cap
+    backup_count: 5         # earlier runs kept as events.1.json ... events.N.json
 ```
 
 | Field | Description |
@@ -50,6 +58,7 @@ required_by_default: false
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
 | `seed_data_paths` | Shared seed folders, relative to the project root, searched after the workflow's and the project's own folder; see [Seed Data](../context/seed-data#shared-folders) |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required unless marked `optional: true`; when `false` (default) they are optional unless marked `required: true`. Applies project-wide; a schema declaring its own `required_by_default` overrides it. |
+| `logging` | Logging for every command run in the project. `level` is the console level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`; default `INFO`); `module_levels` maps Python logger names to levels, which is the only way to re-open a logger the framework clamps (`httpx`, `openai`, ...) or to quiet another; `file.max_bytes` and `file.backup_count` size and rotate the run log. Loaded when the CLI boots, before any command runs. An `AGENT_ACTIONS_*` variable that is set overrides the matching key, and `--debug` / `--verbose` / `--quiet` override both. A key under `logging:` that nothing reads (`file.path`, `file.enabled`, `file.level`, `file.format`, and any other) is reported on stderr at boot and configures nothing: the run log always writes to the workflow's `agent_io/logs/events.json`. See [Logging](../architecture/logging). |
 
 ## Agentic Workflow Configuration
 
@@ -265,7 +274,7 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENT_ACTIONS_LOG_LEVEL` | INFO | Log level (DEBUG, INFO, WARNING, ERROR) |
+| `AGENT_ACTIONS_LOG_LEVEL` | INFO | Console log level (DEBUG, INFO, WARNING, ERROR). Overrides `logging.level` in `agent_actions.yml` when set. |
 | `AGENT_ACTIONS_DEBUG` | 0 | Enable debug mode |
 | `AGAC_RECORD_LIMIT` | unset | Cap each action at this many records per input file, overriding a larger `record_limit` and applying to actions that set none. [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) takes precedence when both are set, and can raise this value as well as lower it. For running a project cheaply from outside it — a smoke check, a quick sanity pass. On a workflow you have already run it is not read-only: a limit smaller than what a completed action already processed differs from the one it stored, so it re-executes under this one and its output is rewritten to the smaller set. A value at or above what an untruncated run processed cannot cut anything and leaves the action alone. That needs a run able to say what it processed: one that completed before these counts existed, or one that lost an input file to an error, keeps the coarse rule and re-executes on any change. Unset it, or use a scratch project, when the stored output matters. An action that actually drops records logs a warning naming this variable, since a truncated run otherwise looks complete; an action that had nothing to drop stays quiet. A value below 1, or one that is not an integer, fails rather than being ignored — checked while the workflow is assembled, so it stops any command that loads one, read-only ones like [`agac inspect`](../cli/inspect) included. An empty or blank value reads as unset, since that is what a shell means by `AGAC_RECORD_LIMIT=`. Never excludes a record that [`agac retry`](../cli/retry) is re-running, since retry selects by id. |
 | `AGAC_FILE_LIMIT` | unset | Stop each action after this many input files, overriding a larger `file_limit` and applying to actions that set none. It counts files the action got through, so one that fails does not spend the budget. [`--file-limit`](../cli/run#running-a-project-smaller-than-it-is) takes precedence when both are set, and can raise this value as well as lower it. The other axis of the same job: `AGAC_RECORD_LIMIT` shrinks each file, this shrinks how many are read, and a run is proportional to both. On a workflow you have already run it is not read-only, for the same reason: the limit it applies differs from the one the completed actions stored, so they re-execute under it. Files the shorter walk does not reach keep the output the earlier run wrote there, so what you end up with is the old output with the walked files replaced rather than a smaller fresh copy. An action whose walk actually stops short logs a warning naming this variable; one that reached every file stays quiet. A value below 1, or one that is not an integer, fails rather than being ignored, and fails before any action starts — the walk does not consult a file limit until a file has been processed, so it is checked while the workflow is assembled, which also stops read-only commands like [`agac inspect`](../cli/inspect). An empty or blank value reads as unset. Never holds back [`agac retry`](../cli/retry), which walks every file holding a record it named. |

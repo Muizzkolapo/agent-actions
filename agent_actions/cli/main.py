@@ -24,6 +24,7 @@ from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills
 from agent_actions.cli.status import status
 from agent_actions.cli.traces import traces
+from agent_actions.config.path_config import find_project_root_dir, load_project_config
 from agent_actions.errors import ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
 from agent_actions.logging.config import LoggingConfig
@@ -45,6 +46,9 @@ class CLI:
     def __init__(self) -> None:
         fire_event(CLIInitStartEvent())
         self.logger = logging.getLogger(__name__)
+        # The project's logging: block, resolved once per execute() so the
+        # pre-dispatch init and the Click callback share it (and its reports).
+        self._logging_base: LoggingConfig | None = None
         self.click_group = self._create_click_group()
         self._register_commands()
         self._register_signal_handlers()
@@ -109,7 +113,8 @@ class CLI:
     def _configure_logging(
         self, debug: bool = False, verbose: bool = False, quiet: bool = False
     ) -> None:
-        config = LoggingConfig.from_environment()
+        base = self._logging_base or self._resolve_logging_base()
+        config = LoggingConfig.from_environment(base)
         if debug:
             config.default_level = "DEBUG"
         elif verbose:
@@ -125,10 +130,18 @@ class CLI:
         )
         self.logger = LoggerFactory.get_logger("cli")
 
+    @staticmethod
+    def _resolve_logging_base() -> LoggingConfig:
+        """The ``logging:`` block of the project at cwd, or the defaults outside one."""
+        project_root = find_project_root_dir()
+        project_config = load_project_config(project_root) if project_root else {}
+        return LoggingConfig.from_project_config(project_config)
+
     def execute(self, argv: Sequence[str] | None = None) -> int:
         try:
             if argv is None:
                 argv = sys.argv[1:]
+            self._logging_base = self._resolve_logging_base()
             # Initialize logging with defaults; Click callback overrides with flags
             self._configure_logging()
             self.logger.info(
@@ -187,6 +200,8 @@ class CLI:
                 self.logger.debug("Exception Chain:")
                 self.logger.debug("%s", format_exception_chain_for_debug(e))
             return 1
+        finally:
+            self._logging_base = None
 
 
 def _warn_shadowed_project_root(chosen: Path, shadowed: list[Path]) -> None:

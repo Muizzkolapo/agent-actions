@@ -1,0 +1,12 @@
+kind: Bug Fix
+body: >-
+  The `logging:` block in `agent_actions.yml` is loaded. `level`, `module_levels`,
+  `file.max_bytes` and `file.backup_count` configure every command run in the project,
+  with a set `AGENT_ACTIONS_*` variable overriding its own key and the `--debug` /
+  `--verbose` / `--quiet` flags overriding both; before, the block was accepted and
+  configured nothing. A key under it that nothing reads (`file.path`, `file.enabled`,
+  `file.level`, `file.format`) is reported on stderr at boot instead of being parsed
+  into a field no handler looks at. A run's re-initialisation of the logger factory
+  keeps the resolved config instead of rebuilding it from the environment, which would
+  have dropped the project block again. (#1553)
+time: 2026-10-22T09:00:00Z
