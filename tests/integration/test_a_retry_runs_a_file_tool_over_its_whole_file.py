@@ -724,6 +724,31 @@ def roll_pages(data: list) -> FileUDFResult:
 """
 )
 
+# One row per record, each computed from that record and the one before it: handed the
+# whole file again, the tool writes the row after a record that returned differently,
+# and every row further on as it was.
+_AFTER_PREVIOUS = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": i,
+                "data": {
+                    "summary": f"{page} after {pages[i - 1] if i else '-'}",
+                    "exam_density": "low",
+                },
+            }
+            for i, page in enumerate(pages)
+        ]
+    )
+"""
+)
+
 # Reads what finalize wrote for one record, and logs each summary it is handed.
 _GRAND = """\
 import json
@@ -843,6 +868,42 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
             "FINAL[Page alpha. (item)]",
             "FINAL[Page beta. (item)]",
         ]
+
+    def test_a_changed_row_of_a_record_the_retry_did_not_name_is_answered_again_below(
+        self, tmp_path
+    ):
+        """Alpha returning changes beta's row, which the retry did not name and which
+        holds a success below; gamma's row is as it was. Below, beta is answered again
+        with alpha, and gamma alone is carried."""
+        staged = {"pages1.json": ["Page alpha.", "Page beta.", "Page gamma."]}
+        project = _project(tmp_path, TOOL_BELOW, _AFTER_PREVIOUS, staged)
+        _failed_then_fixed(project)
+        before = _by_guid(_rows(project, "finalize", as_stored=True)["pages1.json"])
+        assert _summaries(list(before.values()), "finalize") == [
+            None,
+            "FINAL[Page beta. after -]",
+            "FINAL[Page gamma. after Page beta.]",
+        ]
+        (gamma,) = [
+            guid
+            for guid, row in before.items()
+            if _summaries([row], "finalize") == ["FINAL[Page gamma. after Page beta.]"]
+        ]
+
+        _retry(project)
+
+        assert sorted(_finalized(project)) == [
+            "Page alpha. after -",
+            "Page beta. after Page alpha.",
+        ]
+        after = _by_guid(_rows(project, "finalize", as_stored=True)["pages1.json"])
+        assert _summaries(list(after.values()), "finalize") == [
+            "FINAL[Page alpha. after -]",
+            "FINAL[Page beta. after Page alpha.]",
+            "FINAL[Page gamma. after Page beta.]",
+        ]
+        assert after[gamma]["target_id"] == before[gamma]["target_id"]
+        assert _successes(project, "finalize") == set(after)
 
     def test_a_row_the_tool_writes_differently_is_answered_again_below(self, tmp_path):
         """The positive control: a count across the file changes beta's row too."""

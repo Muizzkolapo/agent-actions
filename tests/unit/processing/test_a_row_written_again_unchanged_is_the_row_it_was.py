@@ -186,6 +186,17 @@ class TestWhatIsForgottenBelow:
 
         assert backend.cleared == {"final": ["a", "m1"]}
 
+    def test_a_row_keeping_an_unchanged_identity_but_built_on_a_changed_record_is_forgotten(self):
+        """A FILE tool below can keep one input's identity and name the others it consumed.
+        Its row for beta was computed from alpha too, so beta's answer there is gone."""
+        backend = _Backend({"final": [_below("b", producer_source_guids=["a"])]})
+
+        _forget_answers_below(
+            backend, ["final"], "p.json", self.REPLACED, self.INPUTS, frozenset({"b"})
+        )
+
+        assert backend.cleared == {"final": ["a", "b"]}
+
     def test_a_row_naming_an_unchanged_parent_is_kept(self):
         backend = _Backend({"final": [_below("m2", parent_source_guid="b")]})
 
