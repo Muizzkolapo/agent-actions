@@ -15,13 +15,15 @@ from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
 
 logger = logging.getLogger(__name__)
 
-# Cache SDK client instances by (class, api_key) to reuse connection pools.
-_client_cache: dict[tuple[type, str], Any] = {}
+# Cache SDK client instances by (class, api_key, constructor kwargs) to reuse
+# connection pools. Two actions with the same key but different kwargs, such
+# as base_url, must not share a client.
+_client_cache: dict[tuple[type, str, tuple[tuple[str, Any], ...]], Any] = {}
 
 
 def get_or_create_client(cls: type, api_key: str | None, **kwargs: Any) -> Any:
     """Return a cached SDK client instance, creating one if needed."""
-    cache_key = (cls, api_key or "")
+    cache_key = (cls, api_key or "", tuple(sorted(kwargs.items())))
     client = _client_cache.get(cache_key)
     if client is None:
         client = cls(api_key=api_key, **kwargs)
