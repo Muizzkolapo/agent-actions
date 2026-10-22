@@ -1004,10 +1004,11 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
 
         assert result.returncode == 0, result.stdout + result.stderr
         assert _logged(project, "count_handed.jsonl") == [["Page beta. (item)"]]
+        # Quarantined rows first, as FILE mode writes a file.
         assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
             None,
-            "Page beta. (item) [1 of 1]",
             None,
+            "Page beta. (item) [1 of 1]",
         ]
 
     def test_the_children_of_a_record_split_above_the_tool_are_carried_below(self, tmp_path):
