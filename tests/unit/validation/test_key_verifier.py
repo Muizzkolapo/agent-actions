@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from agent_actions.validation.preflight.key_verifier import (
     ProbeResult,
+    ProbeTarget,
     _probe_anthropic,
     _probe_groq,
     _probe_openai,
@@ -18,7 +19,7 @@ class TestProbeOpenai:
     def test_successful_probe(self):
         mock_client = MagicMock()
         with patch("openai.OpenAI", return_value=mock_client):
-            result = _probe_openai("sk-validkey12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-validkey12345678901234567890"))
         assert result.ok is True
         assert result.vendor == "openai"
         mock_client.models.list.assert_called_once()
@@ -33,7 +34,7 @@ class TestProbeOpenai:
             body=None,
         )
         with patch("openai.OpenAI", return_value=mock_client):
-            result = _probe_openai("sk-expired12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-expired12345678901234567890"))
         assert result.ok is False
         assert "Invalid API Key" in result.error
 
@@ -44,7 +45,7 @@ class TestProbeOpenai:
         mock_client = MagicMock()
         mock_client.models.list.side_effect = APITimeoutError(request=MagicMock())
         with patch("openai.OpenAI", return_value=mock_client):
-            result = _probe_openai("sk-validkey12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-validkey12345678901234567890"))
         assert result.ok is True
 
     def test_api_connection_error_treated_as_ok(self):
@@ -54,7 +55,7 @@ class TestProbeOpenai:
         mock_client = MagicMock()
         mock_client.models.list.side_effect = APIConnectionError(request=MagicMock())
         with patch("openai.OpenAI", return_value=mock_client):
-            result = _probe_openai("sk-validkey12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-validkey12345678901234567890"))
         assert result.ok is True
 
     def test_rate_limit_treated_as_ok(self):
@@ -68,7 +69,7 @@ class TestProbeOpenai:
             body=None,
         )
         with patch("openai.OpenAI", return_value=mock_client):
-            result = _probe_openai("sk-validkey12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-validkey12345678901234567890"))
         assert result.ok is True
 
     def test_ssl_error_fails(self):
@@ -76,14 +77,14 @@ class TestProbeOpenai:
         mock_client = MagicMock()
         mock_client.models.list.side_effect = ssl.SSLError("certificate verify failed")
         with patch("openai.OpenAI", return_value=mock_client):
-            result = _probe_openai("sk-validkey12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-validkey12345678901234567890"))
         assert result.ok is False
         assert "Infrastructure error" in result.error
 
     def test_import_error_fails(self):
         """Missing openai package must fail with install hint."""
         with patch.dict("sys.modules", {"openai": None}):
-            result = _probe_openai("sk-validkey12345678901234567890")
+            result = _probe_openai(ProbeTarget("openai", "sk-validkey12345678901234567890"))
         assert result.ok is False
         assert "not installed" in result.error
         assert "pip install openai" in result.error
@@ -95,7 +96,7 @@ class TestProbeAnthropic:
     def test_successful_probe(self):
         mock_client = MagicMock()
         with patch("anthropic.Anthropic", return_value=mock_client):
-            result = _probe_anthropic("sk-ant-validkey")
+            result = _probe_anthropic(ProbeTarget("anthropic", "sk-ant-validkey"))
         assert result.ok is True
         assert result.vendor == "anthropic"
 
@@ -109,7 +110,7 @@ class TestProbeAnthropic:
             body=None,
         )
         with patch("anthropic.Anthropic", return_value=mock_client):
-            result = _probe_anthropic("sk-ant-expired")
+            result = _probe_anthropic(ProbeTarget("anthropic", "sk-ant-expired"))
         assert result.ok is False
         assert "Invalid API Key" in result.error
 
@@ -123,20 +124,20 @@ class TestProbeAnthropic:
             body=None,
         )
         with patch("anthropic.Anthropic", return_value=mock_client):
-            result = _probe_anthropic("sk-ant-validkey")
+            result = _probe_anthropic(ProbeTarget("anthropic", "sk-ant-validkey"))
         assert result.ok is True
 
     def test_ssl_error_fails(self):
         mock_client = MagicMock()
         mock_client.models.list.side_effect = ssl.SSLError("certificate verify failed")
         with patch("anthropic.Anthropic", return_value=mock_client):
-            result = _probe_anthropic("sk-ant-validkey")
+            result = _probe_anthropic(ProbeTarget("anthropic", "sk-ant-validkey"))
         assert result.ok is False
         assert "Infrastructure error" in result.error
 
     def test_import_error_fails(self):
         with patch.dict("sys.modules", {"anthropic": None}):
-            result = _probe_anthropic("sk-ant-validkey")
+            result = _probe_anthropic(ProbeTarget("anthropic", "sk-ant-validkey"))
         assert result.ok is False
         assert "pip install anthropic" in result.error
 
@@ -147,7 +148,7 @@ class TestProbeGroq:
     def test_successful_probe(self):
         mock_client = MagicMock()
         with patch("groq.Groq", return_value=mock_client):
-            result = _probe_groq("gsk_validkey")
+            result = _probe_groq(ProbeTarget("groq", "gsk_validkey"))
         assert result.ok is True
         assert result.vendor == "groq"
 
@@ -161,7 +162,7 @@ class TestProbeGroq:
             body=None,
         )
         with patch("groq.Groq", return_value=mock_client):
-            result = _probe_groq("gsk_expired")
+            result = _probe_groq(ProbeTarget("groq", "gsk_expired"))
         assert result.ok is False
         assert "Invalid API Key" in result.error
 
@@ -169,13 +170,13 @@ class TestProbeGroq:
         mock_client = MagicMock()
         mock_client.models.list.side_effect = ssl.SSLError("certificate verify failed")
         with patch("groq.Groq", return_value=mock_client):
-            result = _probe_groq("gsk_validkey")
+            result = _probe_groq(ProbeTarget("groq", "gsk_validkey"))
         assert result.ok is False
         assert "Infrastructure error" in result.error
 
     def test_import_error_fails(self):
         with patch.dict("sys.modules", {"groq": None}):
-            result = _probe_groq("gsk_validkey")
+            result = _probe_groq(ProbeTarget("groq", "gsk_validkey"))
         assert result.ok is False
         assert "pip install groq" in result.error
 
@@ -191,14 +192,14 @@ class TestVerifyKeys:
         from agent_actions.validation.preflight import key_verifier
 
         original_registry = key_verifier._PROBE_REGISTRY.copy()
-        key_verifier._PROBE_REGISTRY["openai"] = lambda _key: ok_openai
-        key_verifier._PROBE_REGISTRY["groq"] = lambda _key: ok_groq
+        key_verifier._PROBE_REGISTRY["openai"] = lambda _target: ok_openai
+        key_verifier._PROBE_REGISTRY["groq"] = lambda _target: ok_groq
         try:
             results = verify_keys(
-                {
-                    "openai": "sk-validkey12345678901234567890",
-                    "groq": "gsk_validkey1234567890123456",
-                }
+                [
+                    ProbeTarget("openai", "sk-validkey12345678901234567890"),
+                    ProbeTarget("groq", "gsk_validkey1234567890123456"),
+                ]
             )
         finally:
             key_verifier._PROBE_REGISTRY.update(original_registry)
@@ -210,11 +211,11 @@ class TestVerifyKeys:
 
     def test_vendor_without_probe_skipped(self):
         """Vendors not in the registry are silently skipped."""
-        results = verify_keys({"cohere": "some-key-value"})
+        results = verify_keys([ProbeTarget("cohere", "some-key-value")])
         assert len(results) == 0
 
     def test_empty_input(self):
-        results = verify_keys({})
+        results = verify_keys([])
         assert len(results) == 0
 
     def test_auth_failure_propagated(self):
@@ -225,7 +226,7 @@ class TestVerifyKeys:
             "agent_actions.validation.preflight.key_verifier._probe_openai",
             return_value=fail,
         ):
-            results = verify_keys({"openai": "sk-badkey123456789012345678901"})
+            results = verify_keys([ProbeTarget("openai", "sk-badkey123456789012345678901")])
 
         assert len(results) == 1
         assert results[0].ok is False

@@ -25,6 +25,7 @@ from agent_actions.config.path_config import (
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
+from agent_actions.validation.preflight.key_verifier import ProbeTarget
 from agent_actions.validation.static_analyzer.errors import (
     FieldLocation,
     StaticTypeError,
@@ -132,15 +133,15 @@ class WorkflowResolutionService:
         result = StaticValidationResult()
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
-            errors, warnings, vendor_keys = self._check_api_keys()
+            errors, warnings, targets = self._check_api_keys()
             for error in errors:
                 result.add_error(error)
             for warning in warnings:
                 result.add_warning(warning)
 
             # Probe vendor endpoints when --verify-keys is set and keys exist.
-            if self.verify_keys and vendor_keys and not result.errors:
-                self._verify_api_keys(vendor_keys, result)
+            if self.verify_keys and targets and not result.errors:
+                self._verify_api_keys(targets, result)
 
         seed_errors, seed_warnings = self._check_seed_file_references()
         for error in seed_errors:
@@ -155,31 +156,34 @@ class WorkflowResolutionService:
 
     def _verify_api_keys(
         self,
-        vendor_keys: dict[str, str],
+        targets: list[ProbeTarget],
         result: StaticValidationResult,
     ) -> None:
         """Probe vendor endpoints to verify keys are valid (not just present)."""
         from agent_actions.validation.preflight.key_verifier import verify_keys
 
-        for probe_result in verify_keys(vendor_keys):
+        for probe_result in verify_keys(targets):
             if not probe_result.ok:
+                where = f" at {probe_result.base_url}" if probe_result.base_url else ""
+                server = (
+                    f"The server at {probe_result.base_url}"
+                    if probe_result.base_url
+                    else f"The {probe_result.vendor} API"
+                )
                 result.add_error(
                     StaticTypeError(
                         message=(
-                            f"API key for vendor '{probe_result.vendor}' is invalid: "
+                            f"API key for vendor '{probe_result.vendor}'{where} is invalid: "
                             f"{probe_result.error}"
                         ),
                         location=FieldLocation(
                             agent_name="(workflow)",
                             config_field="api_key",
-                            raw_reference=probe_result.vendor,
+                            raw_reference=f"{probe_result.vendor}{where}",
                         ),
                         referenced_agent="(workflow)",
                         referenced_field="api_key",
-                        hint=(
-                            f"The {probe_result.vendor} API rejected the key. "
-                            f"Check that it is not expired or revoked."
-                        ),
+                        hint=f"{server} rejected the key. Check that it is not expired or revoked.",
                     )
                 )
 
@@ -187,17 +191,17 @@ class WorkflowResolutionService:
 
     def _check_api_keys(
         self,
-    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning], dict[str, str]]:
+    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning], list[ProbeTarget]]:
         """Check that all required API key env vars are set.
 
-        Returns (errors, warnings, vendor_keys).  Missing keys are errors.
-        vendor_keys maps each resolved vendor to its key value (deduplicated)
+        Returns (errors, warnings, targets).  Missing keys are errors.
+        targets holds one probe target per resolved vendor (deduplicated)
         for optional downstream probing.
         """
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
-        # Deduplicated vendor → resolved key value (first seen wins).
-        vendor_keys: dict[str, str] = {}
+        # Deduplicated (vendor, base_url) → probe target (first seen wins).
+        targets: dict[tuple[str, str | None], ProbeTarget] = {}
 
         for action_name, config in self.action_configs.items():
             vendor = (config.get("model_vendor") or "").lower()
@@ -248,11 +252,15 @@ class WorkflowResolutionService:
                 )
                 continue
 
-            # Track for downstream probing (first vendor occurrence wins).
-            if vendor not in vendor_keys:
-                vendor_keys[vendor] = key_value
+            # Only the openai client sends requests to a configured base_url,
+            # so only its probe target carries one.
+            base_url = config.get("base_url") if vendor == "openai" else None
+            if (vendor, base_url) not in targets:
+                targets[(vendor, base_url)] = ProbeTarget(
+                    vendor=vendor, api_key=key_value, base_url=base_url
+                )
 
-        return errors, warnings, vendor_keys
+        return errors, warnings, list(targets.values())
 
     # ── Seed file checks ───────────────────────────────────────────────
 
