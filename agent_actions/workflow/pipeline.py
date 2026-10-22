@@ -26,6 +26,7 @@ from agent_actions.processing.disposition_gate import (
     note_replaced_above,
     positions_named_by_repair,
     replaced_above,
+    rows_written_again_unchanged,
     stored_answers_stand,
 )
 from agent_actions.processing.repair_lineage import (
@@ -166,16 +167,25 @@ def _forget_answers_below(
     relative_path: str,
     replaced_rows: list[dict[str, Any]],
     inputs: Any,
+    unchanged: frozenset[str] = frozenset(),
 ) -> None:
     """Clear what each action in *below* holds a disposition for in *relative_path*.
 
     Each of their rows there was computed from the rows being replaced, so none may be
-    carried by the gate. Cleared before the replacement is written: a run stopped in
-    between finds them unanswered rather than answered over rows that are gone.
+    carried by the gate, except one built on *unchanged* rows alone: those the
+    replacement holds as they were, so what was computed from them still answers.
+    Cleared before the replacement is written: a run stopped in between finds them
+    unanswered rather than answered over rows that are gone.
     """
-    stale = _identities_named(replaced_rows) | _identities_named(inputs)
+    held = _identities_named(replaced_rows) | _identities_named(inputs)
+    stale = held - unchanged
     for action in below:
-        stale |= _identities_named(_stored_rows(storage_backend, action, relative_path))
+        for row in _stored_rows(storage_backend, action, relative_path):
+            named = _identities_named([row])
+            built_on = named & held
+            if built_on and built_on <= unchanged:
+                continue
+            stale |= named - unchanged
     if not stale:
         return
     for action in below:
@@ -570,8 +580,8 @@ class ProcessingPipeline:
         if not replaced_above(self.config.storage_backend, self.config.action_name, relative_path):
             return
         logger.info(
-            "Action '%s': %s was replaced whole above, so every record of it is answered "
-            "again, not only those the repair names",
+            "Action '%s': %s was replaced whole above, so every record of it whose row "
+            "changed is answered again, not only those the repair names",
             self.config.action_name,
             relative_path,
         )
@@ -824,6 +834,11 @@ class ProcessingPipeline:
                 repair_inputs=offered_to_repair,
                 whole_file=whole_file,
             )
+            # A row the tool wrote again as it was is the row it was, and what reads it
+            # still answers for it.
+            unchanged: frozenset[str] = frozenset()
+            if whole_file and stored_here:
+                output, unchanged = rows_written_again_unchanged(output, stored_here)
             # A row the tool did not write again is gone with the file it was replaced
             # in, and so is what vouched for it. Not an input's own disposition, which
             # this run decides wherever it reaches the input.
@@ -834,6 +849,7 @@ class ProcessingPipeline:
                 if isinstance(record, dict)
             }
         else:
+            unchanged = frozenset()
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
             output, stats = self._unified_processor.process(
                 data, context, strategy, repair_inputs=offered_to_repair
@@ -854,7 +870,8 @@ class ProcessingPipeline:
             raise context.failure_not_stored or failure
 
         # What the actions below hold for a file replaced whole was computed from the rows
-        # it held, so each of them answers it again, whatever records a repair names.
+        # it held, so each of them answers again every record whose row changed, whatever
+        # records a repair names.
         below: list[str] = []
         if (
             context.replaces_file_whole
@@ -869,6 +886,7 @@ class ProcessingPipeline:
                     context.target_relative_path,
                     stored_here,
                     offered_to_repair,
+                    unchanged,
                 )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

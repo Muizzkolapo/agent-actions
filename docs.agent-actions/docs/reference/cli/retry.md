@@ -192,12 +192,28 @@ the file is decided again at that action, as a run decides it.
 A file the retry names no record of keeps what it holds, untouched. A record
 still failed upstream stays quarantined, as in a run.
 
-Every action below the tool answers a file the tool rewrote again, as a run
-answers it: each of its records, whether the retry named it or not, and nothing
-it held for the file before is kept. Each of those rows was computed from what
-the tool wrote before, and a roll-up's new row is one no record the retry names
-leads to. The plain `agac run` that finishes a retry stopped part-way through
-does the same.
+A row the tool writes again exactly as it was is the row it was: it keeps the
+identifiers it was stored under, and what the actions below hold for it stands.
+Every action below the tool answers a file the tool rewrote again as a run
+answers it, for each record whose row changed, whether the retry named it or
+not: those rows were computed from what the tool wrote before, and a roll-up's
+new row is one no record the retry names leads to. A record whose row the tool
+wrote again unchanged keeps its answer below, so a dedupe or a flatten that
+writes most of its rows as they were costs the actions below only the records
+that changed. The plain `agac run` that finishes a retry stopped part-way
+through does the same.
+
+The plan says so before anything is cleared. For each FILE tool the retry
+reaches it prints, after the records listed:
+
+```
+  Note: 'roll_up' is a File tool, so the retry hands it every record of each file holding a record listed above, and what reads it (finalize, grand) answers again every record whose row it writes differently.
+```
+
+A tool that writes every row from the whole file, a count across it or a
+roll-up, changes every row when one record changes, and the actions reading it
+answer the whole file again. Keep such a tool as early in the workflow as the
+data allows, above the actions that cost the most.
 
 A record limit admits what a run of the same config admits and the records the
 retry names, and with them every record a stored row of the file names, by its
@@ -210,8 +226,9 @@ hands the tool the whole file the same way.
 A HITL review takes a whole file too, but a retry shows the reviewer only the
 records it names. A review's row belongs to the record reviewed, and the other
 records of the file already hold a reviewer's decision, so they keep it rather
-than being asked again. Below a FILE tool that rewrote the file, every record of
-it is asked again, since what the reviewer decided on is gone.
+than being asked again. Below a FILE tool that rewrote the file, every record
+whose row the tool changed is asked again, since what the reviewer decided on
+is gone.
 
 ## An action that failed as a whole
 
