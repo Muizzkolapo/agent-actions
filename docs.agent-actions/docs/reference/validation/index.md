@@ -57,7 +57,7 @@ Feature support varies by vendor:
 
 | Vendor | JSON Mode | Batch | Tools | Vision |
 |--------|-----------|-------|-------|--------|
-| OpenAI | ✅ | ✅ | ✅ | ✅ |
+| OpenAI | ✅ | ✅ (not with `base_url`) | ✅ | ✅ |
 | Anthropic | ✅ | ✅ | ✅ | ✅ |
 | Google | ✅ | ✅ | ✅ | ✅ |
 | Groq | ✅ | ✅ | ✅ | ❌ |

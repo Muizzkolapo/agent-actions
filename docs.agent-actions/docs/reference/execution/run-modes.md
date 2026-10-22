@@ -63,7 +63,7 @@ defaults:
 
 | Provider | Batch API | Cost Savings |
 |----------|-----------|--------------|
-| OpenAI | Yes | ~50% |
+| OpenAI | Yes, except an action with `base_url` | ~50% |
 | Anthropic | Yes | ~50% |
 | Google Gemini | Yes | Varies |
 | Groq | Yes | Varies |

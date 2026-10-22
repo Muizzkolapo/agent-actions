@@ -126,6 +126,18 @@ def _resolve_api_key(config: dict[str, Any], hint_env_var: str) -> str:
 def _create_openai(config: dict[str, Any]) -> BaseBatchClient:
     from .openai.batch_client import OpenAIBatchClient
 
+    if config.get("base_url"):
+        from agent_actions.errors import ConfigurationError
+
+        raise ConfigurationError(
+            f"openai batch client does not support base_url {config['base_url']}",
+            context={
+                "hint": (
+                    "The OpenAI Batch API is served only by OpenAI. "
+                    "Set run_mode: online for this action."
+                ),
+            },
+        )
     api_key = _resolve_api_key(config, "OPENAI_API_KEY")
     return OpenAIBatchClient(api_key=api_key)
 

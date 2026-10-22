@@ -230,7 +230,14 @@ actions:
     model_name: gpt-4o-mini
 ```
 
-`base_url` applies to `run_mode: online`. Do not combine it with `run_mode: batch`: the Batch API is served only by OpenAI.
+:::caution
+An `openai` action with `base_url` must use `run_mode: online`. The Batch API is served only by OpenAI, and the local servers return HTTP 404 for `/v1/batches`. Preflight refuses the combination:
+
+```
+Action 'classify_local': vendor 'openai' with base_url does not support run_mode: batch.
+Set run_mode: online.
+```
+:::
 
 :::note
 Without a schema, the client asks for `response_format: json_object`. Some local servers do not enforce that format and return prose or wrongly typed values. Give the action a schema. Schema output uses the `json_schema` format, which llamafile 0.10.6 enforced in every measured run.

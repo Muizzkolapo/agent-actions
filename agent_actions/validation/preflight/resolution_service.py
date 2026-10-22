@@ -607,6 +607,25 @@ class WorkflowResolutionService:
             if run_mode != "batch":
                 continue
 
+            if vendor == "openai" and config.get("base_url"):
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"Action '{action_name}': vendor 'openai' with base_url "
+                            "does not support run_mode: batch."
+                        ),
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="run_mode",
+                            raw_reference=f"run_mode=batch, base_url={config['base_url']}",
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="run_mode",
+                        hint="Set run_mode: online.",
+                    )
+                )
+                continue
+
             capabilities = _resolve_capabilities(vendor)
             if capabilities is None:
                 continue
