@@ -173,7 +173,9 @@ def _forget_answers_below(
 
     Each of their rows there was computed from the rows being replaced, so none may be
     carried by the gate, except one built on *unchanged* rows alone: those the
-    replacement holds as they were, so what was computed from them still answers.
+    replacement holds as they were, so what was computed from them still answers. A row
+    built on a changed row as well is gone under every identity it names, the unchanged
+    one it may keep included: its row for that record was computed from the change.
     Cleared before the replacement is written: a run stopped in between finds them
     unanswered rather than answered over rows that are gone.
     """
@@ -185,7 +187,7 @@ def _forget_answers_below(
             built_on = named & held
             if built_on and built_on <= unchanged:
                 continue
-            stale |= named - unchanged
+            stale |= named
     if not stale:
         return
     for action in below:
@@ -567,9 +569,10 @@ class ProcessingPipeline:
     ) -> None:
         """Answer this file as a plain run would if an action above replaced it whole.
 
-        Every row this action holds for it was computed from rows that are gone, and a
-        row minted above is one no named record leads to. Its dispositions there were
-        cleared when the file above was replaced, so the gate carries none of them.
+        Every row this action holds for it was computed from rows that are gone, but
+        for those built on rows the replacement holds unchanged, and a row minted above
+        is one no named record leads to. The dispositions of the rest were cleared when
+        the file above was replaced, so the gate carries only what still answers.
         """
         if not self.config.retried_records:
             return

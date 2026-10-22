@@ -198,10 +198,14 @@ Every action below the tool answers a file the tool rewrote again as a run
 answers it, for each record whose row changed, whether the retry named it or
 not: those rows were computed from what the tool wrote before, and a roll-up's
 new row is one no record the retry names leads to. A record whose row the tool
-wrote again unchanged keeps its answer below, so a dedupe or a flatten that
-writes most of its rows as they were costs the actions below only the records
-that changed. The plain `agac run` that finishes a retry stopped part-way
-through does the same.
+wrote again unchanged keeps its answer below, so a dedupe, or a tool writing
+one row per record, that writes most of its rows as they were costs the actions
+below only the records that changed. A row is matched to the one it was by the
+record's identity, so this holds for a tool whose rows keep their records'
+identities (one row per record, or fewer). A tool that writes several rows for
+one record mints those rows an identity of their own each run, so they match
+nothing and are answered again below, as are a roll-up's. The plain `agac run`
+that finishes a retry stopped part-way through does the same.
 
 The plan says so before anything is cleared. For each FILE tool the retry
 reaches it prints, after the records listed:
