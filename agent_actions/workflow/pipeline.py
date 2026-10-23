@@ -29,6 +29,7 @@ from agent_actions.processing.disposition_gate import (
     rows_written_again_unchanged,
     stored_answers_stand,
 )
+from agent_actions.processing.helpers import replaces_its_file_whole
 from agent_actions.processing.repair_lineage import (
     drop_rows_built_on_rows_gone_above,
     note_rewritten_by_repair,
@@ -123,6 +124,15 @@ def _records_named_by(stored: list[dict[str, Any]], records: Any) -> frozenset[s
     return frozenset(_identities_named(stored) & inputs)
 
 
+def _own_identities(rows: Any) -> set[str]:
+    """The identity each of *rows* carries."""
+    return {
+        guid
+        for row in (rows if isinstance(rows, list) else [])
+        if isinstance(row, dict) and (guid := row.get("source_guid"))
+    }
+
+
 def _identities_named(rows: Any) -> set[str]:
     """Every identity *rows* carry or name as parent or producer."""
     named: set[str] = set()
@@ -168,23 +178,34 @@ def _forget_answers_below(
     replaced_rows: list[dict[str, Any]],
     inputs: Any,
     unchanged: frozenset[str] = frozenset(),
+    whole_file_readers: frozenset[str] = frozenset(),
 ) -> None:
     """Clear what each action in *below* holds a disposition for in *relative_path*.
 
     Each of their rows there was computed from the rows being replaced, so none may be
     carried by the gate, except one built on *unchanged* rows alone: those the
     replacement holds as they were, so what was computed from them still answers. A row
-    built on a changed row as well is gone under every identity it names, the unchanged
-    one it may keep included: its row for that record was computed from the change.
-    Cleared before the replacement is written: a run stopped in between finds them
-    unanswered rather than answered over rows that are gone.
+    is built on the rows of the file it carries the identity of or names as parent or
+    producer; an ancestor from above the file, which the file holds no row under, is not
+    one of them. A row built on a changed row as well is gone under every identity it
+    names, the unchanged one it may keep included: its row for that record was computed
+    from the change. A row of one of *whole_file_readers*, a FILE tool, may be computed
+    from every record of the file whatever it names, so it stands only for a file written
+    again entirely as it was. Cleared before the replacement is written: a run stopped in
+    between finds them unanswered rather than answered over rows that are gone.
     """
     held = _identities_named(replaced_rows) | _identities_named(inputs)
+    rows_held = _own_identities(replaced_rows) | _own_identities(inputs)
+    file_as_it_was = bool(rows_held) and rows_held <= unchanged
     stale = held - unchanged
     for action in below:
         for row in _stored_rows(storage_backend, action, relative_path):
             named = _identities_named([row])
-            built_on = named & held
+            if action in whole_file_readers:
+                if not file_as_it_was:
+                    stale |= named
+                continue
+            built_on = named & rows_held
             if built_on and built_on <= unchanged:
                 continue
             stale |= named
@@ -883,6 +904,7 @@ class ProcessingPipeline:
         ):
             below = _actions_below(self.config.storage_backend, self.config.action_name)
             if below:
+                configs = self.config.action_configs or {}
                 _forget_answers_below(
                     self.config.storage_backend,
                     below,
@@ -890,6 +912,11 @@ class ProcessingPipeline:
                     stored_here,
                     offered_to_repair,
                     unchanged,
+                    whole_file_readers=frozenset(
+                        action
+                        for action in below
+                        if replaces_its_file_whole(cast(dict[str, Any], configs.get(action) or {}))
+                    ),
                 )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

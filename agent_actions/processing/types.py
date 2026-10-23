@@ -366,7 +366,8 @@ class ProcessingContext:
     failure_not_stored: Exception | None = None
 
     # Set by a FILE tool's run that carried nothing stored, so what it returns is the
-    # file's whole answer and every row the actions below hold for the file is stale.
+    # file's whole answer, and what the actions below hold for the file is stale but for
+    # rows built on rows the tool wrote again unchanged.
     replaces_file_whole: bool = False
 
     @property

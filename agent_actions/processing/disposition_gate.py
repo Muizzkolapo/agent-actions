@@ -345,8 +345,9 @@ def note_replaced_above(
 def replaced_above(storage_backend: Any, action_name: str, relative_path: str | None) -> bool:
     """Whether an action above *action_name* replaced *relative_path* whole in this run.
 
-    A repair runs such a file as a plain run would: every row the action holds for it was
-    computed from rows that are gone, whichever records the repair names.
+    A repair runs such a file as a plain run would: what the action holds for it was
+    computed from rows that are gone, but for rows built on rows the replacement holds
+    unchanged, whichever records the repair names, and the gate carries only those.
     """
     if storage_backend is None or not relative_path:
         return False
