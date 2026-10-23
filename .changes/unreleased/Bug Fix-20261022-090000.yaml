@@ -1,0 +1,16 @@
+kind: Bug Fix
+body: >-
+  The `logging:` block in `agent_actions.yml` is loaded. `level`, `module_levels`,
+  `file.max_bytes` and `file.backup_count` configure every command run in the project,
+  with a set `AGENT_ACTIONS_*` variable overriding its own key and the `--debug` /
+  `--verbose` / `--quiet` flags overriding both; before, the block was accepted and
+  configured nothing. A key under it that nothing reads (`file.path`, `file.enabled`,
+  `file.level`, `file.format`) is reported on stderr at boot instead of being parsed
+  into a field no handler looks at. A run's re-initialisation of the logger factory
+  keeps the resolved config instead of rebuilding it from the environment, which would
+  have dropped the project block again. A project file the CLI cannot read at boot is
+  reported on stderr and the default logging config stands, so `--help`, `--version` and
+  `agac init` still run; the commands that read the project fail on it as before. A project
+  file whose top level is not a mapping is now refused by the loader with its type named,
+  instead of every reader failing on an AttributeError. (#1553)
+time: 2026-10-22T09:00:00Z

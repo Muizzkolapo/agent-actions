@@ -33,7 +33,7 @@ The module has **three packages** and **three top-level files**:
 | `events/` | Concrete event dataclasses organized by domain (workflow, batch, LLM, validation, etc.) plus the AgentActionsFormatter for console display |
 | `errors/` | ErrorTranslator with a chain of 10 formatter strategies that convert any Python exception into a structured UserError for CLI display |
 | `factory.py` | LoggerFactory -- the single entry point that initializes EventManager, registers handlers, and wires the stdlib logging bridge |
-| `config.py` | LoggingConfig and FileHandlerSettings dataclasses, built from `agent_actions.yml` or `AGENT_ACTIONS_*` env vars |
+| `config.py` | LoggingConfig and FileHandlerSettings dataclasses, built from the `logging:` block of `agent_actions.yml` with `AGENT_ACTIONS_*` env vars overlaid on it |
 | `filters.py` | RedactingFilter for the stdlib logging layer -- regex-based scrubbing of API keys, tokens, secrets |
 
 ---
@@ -45,7 +45,8 @@ Everything starts with `LoggerFactory.initialize()`, typically called by the CLI
 ```
 LoggerFactory.initialize(config, output_dir, workflow_name, verbose, quiet)
      |
-     +-- 1. Build LoggingConfig (from_environment() or from_project_config())
+     +-- 1. Build LoggingConfig: from_environment(from_project_config(project_config));
+     |      a re-init that passes no config keeps the one already resolved
      |
      +-- 2. Get EventManager singleton (EventManager.get())
      |

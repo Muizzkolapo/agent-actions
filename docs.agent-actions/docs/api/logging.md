@@ -904,7 +904,8 @@ LoggerFactory.initialize(config=config)
   Python logger names (e.g. `"httpx"`, `"my_module"`), values are level
   strings. Use this to re-enable a logger the framework clamps by default,
   or to silence one that's still too chatty.
-- `file_handler` (FileHandlerSettings): parsed but currently unused — see
+- `file_handler` (FileHandlerSettings): `max_bytes` and `backup_count` size and
+  rotate the run log; the other fields are read by nothing — see
   [File Handler](#filehandlersettings) below
 
 #### Third-party logger suppression
@@ -939,21 +940,27 @@ Overrides on `agent_actions` and any of its children are refused with a
 stderr warning — the framework root must stay at DEBUG so every event reaches
 `events.json`. Use `default_level` to set the CLI-visible level instead.
 
-> **Note:** `LoggingConfig.from_project_config()` parses `module_levels` from
-> a YAML mapping, but the CLI does not yet route project YAML through it —
-> see the manifest for the wiring status. For now, supply `module_levels`
-> programmatically.
+From the CLI, set the same thing under `logging.module_levels` in
+`agent_actions.yml`: the CLI builds its config with
+`LoggingConfig.from_environment(LoggingConfig.from_project_config(project_config))`
+at boot, so the project block is the base and a set `AGENT_ACTIONS_*` variable
+overrides only its own key. `module_levels` has no environment form. See
+[Configuration](../reference/configuration#project-configuration).
 
 #### FileHandlerSettings
 
-`LoggingConfig.file_handler` parses to a `FileHandlerSettings` (`enabled`,
-`path`, `level`, `max_bytes`, `backup_count`, `format`), populated from
-`logging.file.*` project config and the `AGENT_ACTIONS_NO_LOG_FILE` /
-`AGENT_ACTIONS_LOG_FILE` / `AGENT_ACTIONS_LOG_DIR` / `AGENT_ACTIONS_FILE_LOG_LEVEL`
-env vars. `LoggerFactory` does not currently read any of these fields —
-whether a run-log file handler is registered, and where it writes, is
-decided entirely by the `output_dir` passed to `LoggerFactory.initialize()`,
-not by this config (see the architecture doc's File Handler section).
+`LoggingConfig.file_handler` is a `FileHandlerSettings` (`enabled`, `path`,
+`level`, `max_bytes`, `backup_count`, `format`). `LoggerFactory` reads two of
+them: `max_bytes` (`logging.file.max_bytes` / `AGENT_ACTIONS_LOG_MAX_BYTES`)
+caps the DEBUG rows written per run file, and `backup_count`
+(`logging.file.backup_count` / `AGENT_ACTIONS_LOG_RETAIN_RUNS`) is how many
+earlier runs are kept. The other four are populated from the
+`AGENT_ACTIONS_NO_LOG_FILE` / `AGENT_ACTIONS_LOG_FILE` / `AGENT_ACTIONS_LOG_DIR`
+/ `AGENT_ACTIONS_FILE_LOG_LEVEL` env vars and read by nothing — whether a
+run-log file handler is registered, and where it writes, is decided entirely
+by the `output_dir` passed to `LoggerFactory.initialize()`. The matching
+`logging.file.*` project keys are therefore reported on stderr at boot and
+ignored rather than parsed (see the architecture doc's File Handler section).
 
 ---
 

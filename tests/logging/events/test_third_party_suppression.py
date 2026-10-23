@@ -239,3 +239,21 @@ class TestSuppressionIdempotency:
 
         # Without restore, my_custom_lib would still be ERROR from the prior config.
         assert logging.getLogger("my_custom_lib").level == logging.NOTSET
+
+    def test_force_reinit_without_a_config_keeps_the_resolved_one(self):
+        """A run attaching its file handlers passes no config; the CLI's module_levels must survive."""
+        LoggerFactory.initialize(config=LoggingConfig(module_levels={"httpx": "INFO"}))
+        assert logging.getLogger("httpx").level == logging.INFO
+
+        LoggerFactory.initialize(force=True)
+
+        assert logging.getLogger("httpx").level == logging.INFO
+
+    def test_reset_forgets_the_resolved_config(self):
+        """After reset() a bare initialize() builds from the environment again."""
+        LoggerFactory.initialize(config=LoggingConfig(module_levels={"httpx": "INFO"}))
+        LoggerFactory.reset()
+
+        LoggerFactory.initialize()
+
+        assert logging.getLogger("httpx").level == logging.WARNING

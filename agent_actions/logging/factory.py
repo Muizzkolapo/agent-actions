@@ -73,7 +73,9 @@ class LoggerFactory:
             )
             return cls._event_manager
 
-        cls._config = config or LoggingConfig.from_environment()
+        # A re-init that passes no config (a run attaching its file handlers)
+        # keeps the config the CLI resolved, not a fresh env-only one.
+        cls._config = config or cls._config or LoggingConfig.from_environment()
         if verbose is not None:
             cls._console_verbose = verbose
         if quiet is not None:
