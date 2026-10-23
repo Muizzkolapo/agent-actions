@@ -149,7 +149,7 @@ actions:
 | `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
 | `api_key` | string | Environment variable name for API key |
-| `base_url` | string | Server URL for `openai`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1` |
+| `base_url` | string | Server URL for `openai`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1`. Preflight refuses it on `anthropic`, `gemini`, `groq` and `cohere` actions |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
@@ -279,6 +279,17 @@ An `openai` action with `base_url` must use `run_mode: online`. The Batch API is
 Action 'classify_local': vendor 'openai' with base_url does not support run_mode: batch.
 Set run_mode: online.
 ```
+:::
+
+:::caution
+The `anthropic`, `gemini`, `groq` and `cohere` clients always call their vendor's own endpoint. Preflight refuses `base_url` on those actions:
+
+```
+Action 'summarize': vendor 'anthropic' does not send requests to base_url.
+Remove base_url, or set model_vendor: openai for an OpenAI-compatible server.
+```
+
+Tool and `hitl` actions send no request, so a `base_url` they inherit from `defaults:` is allowed.
 :::
 
 :::note
