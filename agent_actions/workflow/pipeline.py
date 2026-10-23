@@ -171,6 +171,20 @@ def _actions_below(storage_backend: "StorageBackend", action_name: str) -> list[
     ]
 
 
+def _whole_file_readers(below: list[str], action_configs: dict[str, Any] | None) -> frozenset[str]:
+    """Those of *below* that are FILE tools, and those whose config is not held.
+
+    An action in the stored graph with no config to read is taken for one, so what it
+    holds is cleared as it was before rows were put back, never carried on a guess.
+    """
+    configs = action_configs or {}
+    return frozenset(
+        action
+        for action in below
+        if action not in configs or replaces_its_file_whole(cast(dict[str, Any], configs[action]))
+    )
+
+
 def _forget_answers_below(
     storage_backend: "StorageBackend",
     below: list[str],
@@ -182,17 +196,13 @@ def _forget_answers_below(
 ) -> None:
     """Clear what each action in *below* holds a disposition for in *relative_path*.
 
-    Each of their rows there was computed from the rows being replaced, so none may be
-    carried by the gate, except one built on *unchanged* rows alone: those the
-    replacement holds as they were, so what was computed from them still answers. A row
-    is built on the rows of the file it carries the identity of or names as parent or
-    producer; an ancestor from above the file, which the file holds no row under, is not
-    one of them. A row built on a changed row as well is gone under every identity it
-    names, the unchanged one it may keep included: its row for that record was computed
-    from the change. A row of one of *whole_file_readers*, a FILE tool, may be computed
-    from every record of the file whatever it names, so it stands only for a file written
-    again entirely as it was. Cleared before the replacement is written: a run stopped in
-    between finds them unanswered rather than answered over rows that are gone.
+    Each row there was computed from the rows being replaced, except one built on
+    *unchanged* rows alone, which still answers. A row is built on the rows of the file it
+    carries the identity of or names as parent or producer, never on an ancestor above the
+    file; built on a changed row as well, it is gone under every identity it names. A row
+    of one of *whole_file_readers*, a FILE tool, may be computed from every record of the
+    file, so it stands only for a file written again entirely as it was. Cleared before
+    the replacement is written, so a run stopped in between finds them unanswered.
     """
     held = _identities_named(replaced_rows) | _identities_named(inputs)
     rows_held = _own_identities(replaced_rows) | _own_identities(inputs)
@@ -904,7 +914,6 @@ class ProcessingPipeline:
         ):
             below = _actions_below(self.config.storage_backend, self.config.action_name)
             if below:
-                configs = self.config.action_configs or {}
                 _forget_answers_below(
                     self.config.storage_backend,
                     below,
@@ -912,11 +921,7 @@ class ProcessingPipeline:
                     stored_here,
                     offered_to_repair,
                     unchanged,
-                    whole_file_readers=frozenset(
-                        action
-                        for action in below
-                        if replaces_its_file_whole(cast(dict[str, Any], configs.get(action) or {}))
-                    ),
+                    whole_file_readers=_whole_file_readers(below, self.config.action_configs),
                 )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

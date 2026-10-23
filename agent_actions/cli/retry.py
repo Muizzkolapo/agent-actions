@@ -41,6 +41,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.workflow.pipeline import _actions_below
 
 logger = logging.getLogger(__name__)
 
@@ -265,7 +266,7 @@ class RetryCommand:
         self._note_file_tools(
             downstream_actions,
             workflow.services.core.action_runner.action_configs or {},
-            workflow.services.core.action_executor.readers_of,
+            lambda action: _actions_below(backend, action),
         )
         record_ids = {r["record_id"] for r in target_records}
         repairing = self._records_this_repair_may_process(record_ids, downstream_actions, failures)
@@ -1230,16 +1231,19 @@ class RetryCommand:
         self,
         downstream: list[str],
         action_configs: dict[str, dict[str, Any]],
-        readers_of: Callable[[str], list[str]],
+        actions_below: Callable[[str], list[str]],
     ) -> None:
         """Say what each FILE tool the retry reaches costs: the whole file, and below it
-        every record whose row the tool writes differently."""
+        every record whose row the tool writes differently.
+
+        *actions_below* reads the stored dependency graph, which is what the run clears by.
+        """
         from agent_actions.processing.helpers import replaces_its_file_whole
 
         for action in downstream:
             if not replaces_its_file_whole(action_configs.get(action) or {}):
                 continue
-            readers = [a for a in downstream if a in set(readers_of(action))]
+            readers = [a for a in downstream if a in set(actions_below(action))]
             below = (
                 f"what reads it ({', '.join(readers)}) answers again every record whose "
                 f"row it writes differently"
