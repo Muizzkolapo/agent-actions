@@ -222,6 +222,39 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Cohere | `cohere` | ❌ | command-r-plus |
 | Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
 | Ollama (cloud) | `ollama_cloud` | ✅ | gpt-oss:120b-cloud |
+| llamafile | `llamafile` | ❌ | any GGUF model the server loads |
+
+### Named local runtimes
+
+`model_vendor: llamafile` sends the action to a llamafile server at `http://localhost:8080/v1` with no API key. Set `base_url` on the action to use another address. A `llamafile` action and an `openai` action can run in the same workflow; each reaches its own server.
+
+```yaml
+actions:
+  - name: classify_local
+    model_vendor: llamafile
+    model_name: local
+  - name: summarize_cloud
+    model_vendor: openai
+    model_name: gpt-4o-mini
+```
+
+A `llamafile` action sends no key, even when the project defaults set `api_key`. To reach a server started with `--api-key`, use `model_vendor: openai` with `base_url` (below).
+
+Preflight checks what the runtime can run. Batch mode is refused:
+
+```
+Action 'classify_local': vendor 'llamafile' does not support run_mode: batch.
+Set run_mode: online.
+```
+
+A JSON action with no schema gets a warning, because llamafile does not enforce `json_object` output. The run continues:
+
+```
+Action 'classify_local': vendor 'llamafile' does not enforce json_object output.
+Add a schema to this action.
+```
+
+The llamafile values were measured on llamafile 0.10.6.
 
 ### OpenAI-compatible servers
 

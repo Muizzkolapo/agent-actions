@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Any
 
+from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES, wire_vendor
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.hitl.client import HitlClient
 from agent_actions.llm.providers.tools.client import ToolClient
@@ -24,6 +25,9 @@ _VENDOR_PACKAGES: dict[str, str] = {
     "ollama_cloud": "ollama",
     "gemini": "google-genai",
 }
+_VENDOR_PACKAGES.update(
+    {vendor: _VENDOR_PACKAGES[wire_vendor(vendor)] for vendor in RUNTIME_PROFILES}
+)
 
 # Client registry — external SDK providers use lazy "module:Class" strings
 # so the CLI doesn't crash when an unused provider's SDK is absent or broken.
@@ -35,6 +39,10 @@ CLIENT_REGISTRY: dict[str, Any] = {
     "cohere": "agent_actions.llm.providers.cohere.client:CohereClient",
     "anthropic": "agent_actions.llm.providers.anthropic.client:AnthropicClient",
     "groq": "agent_actions.llm.providers.groq.client:GroqClient",
+    **{
+        vendor: f"agent_actions.llm.providers.openai.compatible:{vendor}"
+        for vendor in RUNTIME_PROFILES
+    },
     # Internal providers — no external SDK deps, safe to import eagerly.
     "tool": ToolClient,
     "agac-provider": AgacClient,

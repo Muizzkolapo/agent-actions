@@ -102,6 +102,14 @@ ollama pull llama3.1
 
 ## Local Models with an OpenAI-compatible Server
 
+**Running llamafile?** Start it as a server on port 8080 and set `model_vendor: llamafile`. No key and no `base_url` are needed:
+
+```bash
+./llamafile -m model.gguf --server --port 8080
+```
+
+See [Named local runtimes](reference/configuration/index.md#named-local-runtimes).
+
 **What if your local server speaks the OpenAI API instead?** llamafile, LM Studio and vLLM all serve the OpenAI chat API on a local port. Use the `openai` vendor and point the action at the server with `base_url`. Each action keeps its own `base_url`, so one workflow can send some actions to the local server and the rest to OpenAI.
 
 ```bash
