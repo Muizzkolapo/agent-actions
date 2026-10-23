@@ -149,7 +149,7 @@ actions:
 | `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
 | `api_key` | string | Environment variable name for API key |
-| `base_url` | string | Server URL for `openai`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1`. Preflight refuses it on `anthropic`, `gemini`, `groq` and `cohere` actions |
+| `base_url` | string | Server URL for `openai`, `llamafile`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1`. Preflight refuses it on `anthropic`, `gemini`, `groq` and `cohere` actions |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
