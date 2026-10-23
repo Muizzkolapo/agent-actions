@@ -11,6 +11,8 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+from pydantic import SecretStr
+
 from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,17 @@ def warn_schema_without_json_mode(agent_config: dict[str, Any]) -> None:
         "Set json_mode=true to enable schema enforcement.",
         action_name,
     )
+
+
+def api_key_env_name(api_key: SecretStr | str) -> str:
+    """Return the env var name an ``api_key`` config value refers to.
+
+    The value is always a name, never the key itself: ``NAME`` or ``${NAME}``.
+    """
+    name = api_key.get_secret_value() if isinstance(api_key, SecretStr) else api_key
+    if name.startswith("${") and name.endswith("}"):
+        return name[2:-1]
+    return name
 
 
 class BaseClient(ABC):
@@ -109,8 +122,6 @@ class BaseClient(ABC):
         Raises:
             ConfigurationError: If api_key is not configured or environment variable doesn't exist
         """
-        from pydantic import SecretStr
-
         from agent_actions.errors import ConfigurationError
 
         key_name = agent_config.get(API_KEY_KEY)
@@ -126,10 +137,7 @@ class BaseClient(ABC):
                     "hint": "Add api_key to agent_actions.yml, workflow defaults, or action config",
                 },
             )
-        if key_name.startswith("${") and key_name.endswith("}"):
-            env_var_name = key_name[2:-1]
-        else:
-            env_var_name = key_name
+        env_var_name = api_key_env_name(key_name)
         if env_var_name not in os.environ:
             raise ConfigurationError(
                 f"Environment variable '{env_var_name}' is not set",

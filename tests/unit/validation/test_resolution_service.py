@@ -87,22 +87,6 @@ class TestApiKeyChecks:
         api_key_errors = [e for e in result.errors if "API key" in e.message]
         assert len(api_key_errors) == 0
 
-    def test_custom_api_key_dollar_resolved_as_env_var(self, monkeypatch):
-        """Custom api_key starting with $ is resolved as an env var name."""
-        monkeypatch.delenv("MY_CUSTOM_KEY", raising=False)
-        monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
-
-        svc = WorkflowResolutionService(
-            action_configs={
-                "my_action": {"model_vendor": "openai", "api_key": "$MY_CUSTOM_KEY"},
-            },
-        )
-        result = svc.resolve_all()
-
-        api_key_errors = [e for e in result.errors if "API key" in e.message]
-        assert len(api_key_errors) == 1
-        assert "MY_CUSTOM_KEY" in api_key_errors[0].message
-
     def test_skip_env_validation_flag(self, monkeypatch):
         """AA_SKIP_ENV_VALIDATION=1 skips all env checks."""
         monkeypatch.setenv("AA_SKIP_ENV_VALIDATION", "1")

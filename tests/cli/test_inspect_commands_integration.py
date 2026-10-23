@@ -308,6 +308,7 @@ class TestInspectPromptRequiredEndToEnd:
     def test_unguarded_optional_ref_warns_but_inspect_succeeds(self, tmp_path, monkeypatch):
         wf = _build_prompt_ref_project(tmp_path, required_b=False)
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "not-used")
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code == 0, result.output
         assert "producer.b" in result.output
@@ -316,6 +317,7 @@ class TestInspectPromptRequiredEndToEnd:
     def test_required_ref_produces_no_warning(self, tmp_path, monkeypatch):
         wf = _build_prompt_ref_project(tmp_path, required_b=True)
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "not-used")
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code == 0, result.output
         assert "producer.b" not in result.output
@@ -436,12 +438,14 @@ class TestInspectExpectBlockEndToEnd:
     def test_valid_expect_block_passes_inspect(self, tmp_path, monkeypatch):
         wf = _build_expect_block_project(tmp_path, field_name="ideas")
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "not-used")
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code == 0, result.output
 
     def test_expect_block_naming_a_nonexistent_field_refuses_preflight(self, tmp_path, monkeypatch):
         wf = _build_expect_block_project(tmp_path, field_name="nonexistent_field")
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "not-used")
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code != 0
         assert "nonexistent_field" in result.output
@@ -512,6 +516,7 @@ class TestInspectDepObserveEndToEnd:
     def test_over_declared_dependency_fails_inspect(self, tmp_path, monkeypatch):
         wf = _build_over_declared_dep_project(tmp_path)
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "not-used")
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code != 0, result.output
         assert "'other'" in result.output
@@ -522,5 +527,6 @@ class TestInspectDepObserveEndToEnd:
         that a raw-string dependency check would wrongly reject."""
         wf = _build_versioned_merge_project(tmp_path)
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("OPENAI_API_KEY", "not-used")
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code == 0, result.output

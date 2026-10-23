@@ -58,6 +58,11 @@ REFUSED = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _provider_key(monkeypatch):
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
+
+
 def _preflight(author: str) -> None:
     WorkflowInspector(author, project_root=PROJECT).validate()
 

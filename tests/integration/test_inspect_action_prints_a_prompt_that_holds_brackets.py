@@ -32,6 +32,7 @@ def project(tmp_path, monkeypatch):
     config.write_text(text)
     monkeypatch.chdir(root)
     monkeypatch.setenv("COLUMNS", "200")
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     return root
 
 
