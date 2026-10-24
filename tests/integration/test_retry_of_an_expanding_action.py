@@ -435,6 +435,22 @@ class TestAtFileGranularity:
         _assert_only_the_named_records_rows_are_new(before, after, selected)
         assert "cannot be attributed" not in result.output
 
+    def test_every_answer_a_retry_leaves_names_a_row_the_file_holds_or_a_record(
+        self, file_granularity
+    ):
+        """A row put back under its stored identity is vouched for under it, not under
+        the identity the run minted it and threw away."""
+        ids = _record_ids(file_granularity, ACTION)
+        _fail(file_granularity, ids[0], ACTION)
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", ids[0]])
+
+        assert result.exit_code == 0, result.output
+        held = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
+        answered = set(_record_ids(file_granularity, "fsplit"))
+        assert held <= answered
+        assert answered - held <= set(ids), "an answer names a row no file holds"
+
 
 # A basename no other fixture writes: tool discovery imports by module name, so
 # two fixtures writing one basename serve the second the first one's module.
