@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Literal, cast
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -19,6 +18,26 @@ DEFAULT_LOG_RETAIN_RUNS = 5
 # under it is reported at boot rather than accepted silently.
 PROJECT_LOGGING_KEYS: frozenset[str] = frozenset({"level", "module_levels", "file"})
 PROJECT_LOGGING_FILE_KEYS: frozenset[str] = frozenset({"max_bytes", "backup_count"})
+
+# Env vars that once claimed to move, disable, re-level or re-format the run log. The run
+# log is always <output_dir>/logs/events.json at DEBUG, so these configure nothing.
+UNREAD_LOGGING_ENV_VARS: tuple[str, ...] = (
+    "AGENT_ACTIONS_LOG_FILE",
+    "AGENT_ACTIONS_LOG_DIR",
+    "AGENT_ACTIONS_NO_LOG_FILE",
+    "AGENT_ACTIONS_FILE_LOG_LEVEL",
+    "AGENT_ACTIONS_LOG_FORMAT",
+)
+
+
+def report_unread_env_vars() -> None:
+    """Name each set logging env var that nothing reads, so it is not silently accepted."""
+    for name in UNREAD_LOGGING_ENV_VARS:
+        if name in os.environ:
+            sys.stderr.write(
+                f"agent_actions: ignoring {name}: not read and configures nothing; unset it "
+                "(the run log is always <output_dir>/logs/events.json at DEBUG)\n"
+            )
 
 
 def _project_mapping(value: object, key: str) -> dict:
@@ -76,16 +95,12 @@ def _env_int(name: str, default: int, minimum: int) -> int:
 
 @dataclass
 class FileHandlerSettings:
-    """File handler configuration settings."""
+    """Size limits of the per-run log file."""
 
-    enabled: bool = True
-    path: str | None = None
-    level: LogLevel = "DEBUG"
     # Per run file: past this many bytes, DEBUG rows are no longer written. 0 = no cap.
     max_bytes: int = DEFAULT_LOG_MAX_BYTES
     # Earlier runs kept beside the current one, as events.1.json ... events.N.json.
     backup_count: int = DEFAULT_LOG_RETAIN_RUNS
-    format: Literal["human", "json"] = "human"
 
 
 @dataclass
@@ -96,8 +111,6 @@ class LoggingConfig:
     # Keys and values both validated at apply time by ``_apply_logger_levels``
     # — YAML can hand back non-string keys (numeric ids) and values.
     module_levels: dict[Any, Any] = field(default_factory=dict)
-    include_timestamps: bool = True
-    include_source_location: bool = False
     file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)
 
     @classmethod
@@ -168,42 +181,18 @@ class LoggingConfig:
 
         if debug_mode:
             level: LogLevel = "DEBUG"
-            include_source = True
         else:
             level = cls._validate_log_level(
                 os.environ.get("AGENT_ACTIONS_LOG_LEVEL", base.default_level), base.default_level
             )
-            include_source = base.include_source_location
-
-        log_format = os.environ.get("AGENT_ACTIONS_LOG_FORMAT", file_base.format).lower()
-        if log_format not in ("human", "json"):
-            log_format = file_base.format
-
-        no_log_file = os.environ.get("AGENT_ACTIONS_NO_LOG_FILE")
-        file_enabled = file_base.enabled if no_log_file is None else no_log_file != "1"
-
-        file_path = os.environ.get("AGENT_ACTIONS_LOG_FILE") or None
-        if not file_path:
-            log_dir = os.environ.get("AGENT_ACTIONS_LOG_DIR")
-            file_path = str(Path(log_dir) / "agent_actions.log") if log_dir else file_base.path
-
-        file_level = cls._validate_log_level(
-            os.environ.get("AGENT_ACTIONS_FILE_LOG_LEVEL", file_base.level), file_base.level
-        )
 
         file_settings = FileHandlerSettings(
-            enabled=file_enabled,
-            path=file_path,
-            level=file_level,
             max_bytes=_env_int("AGENT_ACTIONS_LOG_MAX_BYTES", file_base.max_bytes, 0),
             backup_count=_env_int("AGENT_ACTIONS_LOG_RETAIN_RUNS", file_base.backup_count, 1),
-            format=cast(Literal["human", "json"], log_format),
         )
 
         return cls(
             default_level=level,
             module_levels=dict(base.module_levels),
-            include_timestamps=base.include_timestamps,
-            include_source_location=include_source,
             file_handler=file_settings,
         )
