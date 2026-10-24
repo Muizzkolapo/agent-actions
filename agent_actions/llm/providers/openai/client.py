@@ -11,6 +11,7 @@ consistent retry handling across all providers.
 import logging
 import time
 import uuid
+from dataclasses import replace
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,10 @@ class OpenAIClient(BaseClient):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "base_url", "temperature", "max_tokens"],
     }
+
+    @classmethod
+    def _error_mapping(cls) -> VendorErrorMapping:
+        return replace(_ERROR_MAPPING, vendor_name=cls.VENDOR)
 
     @classmethod
     def call_json(
@@ -112,7 +117,7 @@ class OpenAIClient(BaseClient):
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
-            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+            raise wrap_vendor_error(e, model_name, cls._error_mapping(), request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
@@ -204,7 +209,7 @@ class OpenAIClient(BaseClient):
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
-            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+            raise wrap_vendor_error(e, model_name, cls._error_mapping(), request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
