@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.errors.processing import SerializationError
 from agent_actions.workflow.runner import (
     ActionRunner,
     FileLocationParams,
@@ -689,13 +690,13 @@ class TestProcessFromStorageBackend:
         assert found == 1
         assert processed == 0
 
-    def test_read_target_json_decode_error_skips_entry(self, runner_with_backend, tmp_path):
-        """json.JSONDecodeError from corrupt stored data → entry skipped."""
+    def test_read_target_that_cannot_be_decoded_skips_entry(self, runner_with_backend, tmp_path):
+        """SerializationError from a stored row the backend cannot read → entry counted lost."""
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["good.json", "bad.json"]
         backend.read_target.side_effect = [
             [{"id": 1}],
-            json.JSONDecodeError("Expecting value", "", 0),
+            SerializationError("target_data for action 'dep' file 'bad.json' cannot be read"),
         ]
         strategy = _make_strategy()
 

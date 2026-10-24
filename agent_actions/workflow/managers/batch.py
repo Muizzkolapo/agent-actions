@@ -213,7 +213,7 @@ class BatchLifecycleManager:
         try:
             # Fast path: query only DEFERRED (indexed). If none remain, done.
             deferred_rows = self.storage_backend.get_disposition(
-                agent_name, disposition=DISPOSITION_DEFERRED
+                agent_name, disposition=DISPOSITION_DEFERRED, snapshots=False
             )
             if not deferred_rows:
                 return
@@ -225,7 +225,9 @@ class BatchLifecycleManager:
             # Slow path: DEFERRED rows exist — check for terminal siblings.
             terminal_ids: set[str] = set()
             for disp in _TERMINAL_DISPOSITIONS:
-                for r in self.storage_backend.get_disposition(agent_name, disposition=disp):
+                for r in self.storage_backend.get_disposition(
+                    agent_name, disposition=disp, snapshots=False
+                ):
                     rid = r.get("record_id")
                     if rid and rid in deferred_ids:
                         terminal_ids.add(str(rid))
@@ -358,7 +360,9 @@ def lost_dispositions(storage_backend: "StorageBackend", action_name: str) -> li
     """
     deferred = [
         row
-        for row in storage_backend.get_disposition(action_name, disposition=DISPOSITION_DEFERRED)
+        for row in storage_backend.get_disposition(
+            action_name, disposition=DISPOSITION_DEFERRED, snapshots=False
+        )
         if row.get("record_id") and row["record_id"] != NODE_LEVEL_RECORD_ID
     ]
     if not deferred:
@@ -373,7 +377,7 @@ def lost_dispositions(storage_backend: "StorageBackend", action_name: str) -> li
     collected = {entry.batch_id for entry in jobs.values() if entry.batch_id}
 
     held: dict[str, set[str]] = {}
-    for row in storage_backend.get_disposition(action_name):
+    for row in storage_backend.get_disposition(action_name, snapshots=False):
         held.setdefault(row.get("record_id") or "", set()).add(row.get("disposition") or "")
     rows_of = _stored_rows_by_record(storage_backend, action_name)
 

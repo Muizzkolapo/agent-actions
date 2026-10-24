@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 
+from agent_actions.errors.processing import SerializationError
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -29,9 +32,9 @@ class PromptTraceCheck(Check):
             return results
 
         try:
-            with sqlite3.connect(str(db_path)) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
+            backend = SQLiteBackend.create_readonly(db_path)
+            with closing(backend):
+                cursor = backend.connection.cursor()
 
                 # Check if prompt_trace table exists
                 cursor.execute(
@@ -171,27 +174,32 @@ class PromptTraceCheck(Check):
                 # parent_source_guid for expansion children (their own guid is
                 # minted after the prompt ran). Traces predating that column
                 # carry NULL and are excluded, not reported as orphans.
-                cursor.execute(
-                    """
-                    SELECT td.action_name,
-                           json_extract(j.value, '$.source_guid') as guid
-                    FROM target_data td, json_each(td.data) j
-                    LEFT JOIN prompt_trace pt
-                        ON td.action_name = pt.action_name
-                        AND pt.source_guid = COALESCE(
-                            json_extract(j.value, '$.parent_source_guid'),
-                            json_extract(j.value, '$.source_guid')
-                        )
-                    WHERE pt.source_guid IS NULL
-                      AND json_extract(j.value, '$.source_guid') IS NOT NULL
-                      AND json_extract(j.value, '$.source_guid') != ''
-                      AND td.action_name IN (
-                          SELECT DISTINCT action_name FROM prompt_trace
-                          WHERE source_guid IS NOT NULL
-                      )
-                    """
-                )
-                orphans = cursor.fetchall()
+                traced = {
+                    (row["action_name"], row["source_guid"])
+                    for row in cursor.execute(
+                        "SELECT DISTINCT action_name, source_guid FROM prompt_trace"
+                        " WHERE source_guid IS NOT NULL"
+                    ).fetchall()
+                }
+                traced_actions = {action for action, _ in traced}
+                orphans = []
+                for row in cursor.execute(
+                    "SELECT action_name, relative_path, data FROM target_data ORDER BY action_name"
+                ).fetchall():
+                    action = row["action_name"]
+                    if action not in traced_actions:
+                        continue
+                    stored = backend.decode_payload(
+                        row["data"], table="target_data", where=f"{action}/{row['relative_path']}"
+                    )
+                    for record in stored if isinstance(stored, list) else [stored]:
+                        if not isinstance(record, dict):
+                            continue
+                        guid = record.get("source_guid")
+                        if not guid:
+                            continue
+                        if (action, record.get("parent_source_guid") or guid) not in traced:
+                            orphans.append({"action_name": action, "guid": guid})
                 if orphans:
                     orphan_list = [f"{r['action_name']}:{r['guid']}" for r in orphans]
                     results.append(
@@ -212,5 +220,7 @@ class PromptTraceCheck(Check):
 
         except sqlite3.Error as e:
             results.append(CheckResult(False, "prompt_trace", f"DB error: {e}"))
+        except SerializationError as e:
+            results.append(CheckResult(False, "prompt_trace", f"unreadable row: {e}"))
 
         return results

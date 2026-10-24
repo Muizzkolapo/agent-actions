@@ -1056,15 +1056,21 @@ class SQLiteBackend(StorageBackend):
         action_name: str,
         record_id: str | None = None,
         disposition: str | None = None,
+        *,
+        snapshots: bool = True,
     ) -> list[dict[str, Any]]:
-        """Query disposition records with optional filters."""
+        """Query disposition records with optional filters.
+
+        With ``snapshots`` False the rows carry no ``input_snapshot`` key and nothing is
+        decoded: a run path that reads only ids and dispositions must not fail on a
+        forensic column it never uses.
+        """
         action_name = self._validate_identifier(action_name, "action_name")
 
-        query = (
-            "SELECT action_name, record_id, disposition, reason, relative_path,"
-            " input_snapshot, detail, created_at"
-            " FROM record_disposition WHERE action_name = ?"
-        )
+        columns = "action_name, record_id, disposition, reason, relative_path, detail, created_at"
+        if snapshots:
+            columns += ", input_snapshot"
+        query = f"SELECT {columns} FROM record_disposition WHERE action_name = ?"
         params: list[str] = [action_name]
 
         if record_id is not None:
@@ -1081,12 +1087,13 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             cursor.execute(query, params)
             found = [dict(row) for row in cursor.fetchall()]
-        for row in found:
-            row["input_snapshot"] = self.payload_text(
-                row["input_snapshot"],
-                table="record_disposition",
-                where=f"action '{row['action_name']}' record '{row['record_id']}'",
-            )
+        if snapshots:
+            for row in found:
+                row["input_snapshot"] = self.payload_text(
+                    row["input_snapshot"],
+                    table="record_disposition",
+                    where=f"action '{row['action_name']}' record '{row['record_id']}'",
+                )
         return found
 
     def actions_with_dispositions(self) -> list[str]:
@@ -1502,6 +1509,12 @@ class SQLiteBackend(StorageBackend):
     _SNAPSHOT = "record_disposition.input_snapshot"
     _SOURCE_SCOPE = ""
     _DICTIONARY_SIZE = 32768
+    # A trace dictionary: keyed prompt_trace.<column>, or by the bare column name in a
+    # store written before the keys were qualified.
+    _TRACE_DICTIONARY_SQL = (
+        "(column_name LIKE 'prompt_trace.%'"
+        " OR column_name IN ('compiled_prompt', 'llm_context', 'response_text'))"
+    )
 
     def _compress(self, cursor: sqlite3.Cursor, scope: str, key: str, text: str) -> bytes:
         """Compress against the dictionary for (*scope*, *key*), made from its first value.
@@ -1552,16 +1565,19 @@ class SQLiteBackend(StorageBackend):
     def _dictionary(self, dictionary_id: int) -> bytes:
         if dictionary_id == 0:
             return b""
-        if dictionary_id not in self._dictionaries:
-            row = self.connection.execute(
-                "SELECT data FROM prompt_trace_dictionary WHERE id = ?", (dictionary_id,)
-            ).fetchone()
-            if row is None:
-                raise ValueError(
-                    f"the row names dictionary {dictionary_id}, which the store does not hold"
-                )
-            self._dictionaries[dictionary_id] = row[0]
-        return self._dictionaries[dictionary_id]
+        # Under the lock: readers decode after their own query released it, and parallel
+        # actions share this connection, so an unlocked SELECT here races their cursors.
+        with self._lock:
+            if dictionary_id not in self._dictionaries:
+                row = self.connection.execute(
+                    "SELECT data FROM prompt_trace_dictionary WHERE id = ?", (dictionary_id,)
+                ).fetchone()
+                if row is None:
+                    raise ValueError(
+                        f"the row names dictionary {dictionary_id}, which the store does not hold"
+                    )
+                self._dictionaries[dictionary_id] = row[0]
+            return self._dictionaries[dictionary_id]
 
     def _inflate(self, value: bytes) -> str:
         dictionary = self._dictionary(int.from_bytes(value[:4], "big"))
@@ -1923,15 +1939,15 @@ class SQLiteBackend(StorageBackend):
                     )
                     deleted = cursor.rowcount
                     cursor.execute(
-                        "DELETE FROM prompt_trace_dictionary"
-                        " WHERE action_name = ? AND column_name LIKE 'prompt_trace.%'",
+                        "DELETE FROM prompt_trace_dictionary WHERE action_name = ? AND "
+                        + self._TRACE_DICTIONARY_SQL,
                         (action_name,),
                     )
                 else:
                     cursor.execute("DELETE FROM prompt_trace")
                     deleted = cursor.rowcount
                     cursor.execute(
-                        "DELETE FROM prompt_trace_dictionary WHERE column_name LIKE 'prompt_trace.%'"
+                        "DELETE FROM prompt_trace_dictionary WHERE " + self._TRACE_DICTIONARY_SQL
                     )
                 self.connection.commit()
                 logger.debug(

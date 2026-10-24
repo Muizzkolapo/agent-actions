@@ -373,7 +373,10 @@ def _failed_as(storage_backend: Any, action_name: str, marker: str) -> bool:
         return False
     try:
         rows = storage_backend.get_disposition(
-            action_name, record_id=NODE_LEVEL_RECORD_ID, disposition=DISPOSITION_FAILED
+            action_name,
+            record_id=NODE_LEVEL_RECORD_ID,
+            disposition=DISPOSITION_FAILED,
+            snapshots=False,
         )
     except Exception as read_err:
         logger.warning("Could not read how %s failed: %s", action_name, read_err)

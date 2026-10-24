@@ -10,6 +10,9 @@ body: >-
   written before this stay as text and read back as before; `action_name`,
   `relative_path`, `record_count`, `disposition` and `reason` are unchanged, so metadata
   queries still work. A row that cannot be decoded stops the resume or retry that reads
-  it with an error naming the table, action and row, rather than reading as empty.
+  it with an error naming the table, action and row, rather than reading as empty; a
+  walk that meets one counts the file as lost, as it did a corrupt text row.
+  The storage format version is now 3: an older agent-actions refuses to read a store
+  this version has written to, with a message to upgrade, rather than misreading it.
   (#1546)
 time: 2026-10-24T12:00:00Z

@@ -80,7 +80,13 @@ def _mock_backend(terminal_ids: set[str]) -> MagicMock:
 
 
 def _dispositions(*, filtered: set[str]):
-    def _get(action_name: str, record_id: str | None = None, disposition: str | None = None):
+    def _get(
+        action_name: str,
+        record_id: str | None = None,
+        disposition: str | None = None,
+        *,
+        snapshots: bool = True,
+    ):
         if disposition != "filtered":
             return []
         return [{"record_id": guid} for guid in sorted(filtered)]

@@ -115,10 +115,17 @@ def records(
             found = _snapshots(backend, actions)
             if source_guid:
                 found = [row for row in found if row["record_id"] == source_guid]
+            if relative_path:
+                found = [row for row in found if row["relative_path"] == relative_path]
         else:
             actions = [action] if action else sorted(backend.get_storage_stats()["nodes"])
             if action and not backend.list_target_files(action):
                 raise click.ClickException(f"No stored records for action '{action}' in {db_path}")
+            if relative_path and not action:
+                # Across every action, a file is read where it is stored and skipped elsewhere.
+                actions = [
+                    name for name in actions if relative_path in backend.list_target_files(name)
+                ]
             found = [
                 record
                 for name in actions

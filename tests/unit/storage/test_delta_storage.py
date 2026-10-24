@@ -518,7 +518,7 @@ class TestFormatVersionCheck:
             is_first_action=True,
         )
         ver = backend.load_metadata("storage_format_version")
-        assert ver == "2"
+        assert ver == "3"
 
     def test_old_code_rejects_delta_db(self, backend, tmp_path):
         """Code with lower version raises ConfigurationError on delta DB."""

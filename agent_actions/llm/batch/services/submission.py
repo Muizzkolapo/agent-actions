@@ -214,7 +214,7 @@ class BatchSubmissionService:
         filtered = carry_ids & {
             row["record_id"]
             for row in self._storage_backend.get_disposition(
-                action_name, disposition=DISPOSITION_FILTERED
+                action_name, disposition=DISPOSITION_FILTERED, snapshots=False
             )
         }
         holding = carry_ids - filtered

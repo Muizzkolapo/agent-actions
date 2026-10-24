@@ -21,9 +21,9 @@ The store keeps these payloads compressed, so `sqlite3` shows `target_data.data`
 | `-w, --workflow TEXT` | Workflow configuration file name (required) |
 | `-a, --action TEXT` | Only this action's records. Every action with stored records when omitted. |
 | `--source-guid TEXT` | Only the records of this source record, in whichever actions hold one |
-| `--file TEXT` | Only the records of this stored file (its `relative_path`) |
+| `--file TEXT` | Only the records of this stored file (its `relative_path`). Without `-a`, every action that stores the file; with `--snapshots`, only the records failed in it. |
 | `--field TEXT` | Print one value per record instead of the record: a dotted path into it, such as `content.headline`. A path the record does not have prints `null`. |
-| `--snapshots` | Print the input each failed or exhausted record was processed with, instead of stored records |
+| `--snapshots` | Print the input each failed or exhausted record was processed with, instead of stored records. `-a`, `--source-guid` and `--file` narrow it. |
 
 Each record prints as stored, plus `_action` (the action that stored it) and `_file` (the file it is stored under). Both can be named by `--field`.
 

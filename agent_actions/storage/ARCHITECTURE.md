@@ -216,13 +216,20 @@ share one dictionary under an empty `action_name`. A write compresses inside its
 transaction, so a rolled-back write leaves no dictionary a reader could load.
 `delete_target(action)`, `clear_source_data()`, and `clear_checkpoint_records` or
 `clear_disposition` called for a whole action drop the dictionary with the last row
-it served; `clear_prompt_traces` drops only `prompt_trace.*` ones. The DDL column
+it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`, and
+the bare column names a store written before the keys were qualified holds). The DDL column
 type stays `TEXT`: SQLite stores the blob as given, and a row written as text before
 compression still reads back. Unlike a trace, these columns are read on the resume
 and retry paths, where empty data would pass for an answer, so every reader goes
 through `decode_payload`, which raises `SerializationError` naming the table, action
 and row for a value it cannot read — a corrupt stream, or a dictionary id the store
-does not hold. SQL that looked inside these columns is gone or guarded:
+does not hold. The two places that count a stored file the walk could not read as a
+lost file (`runner_file_processing.py`, `managers/output.py`) catch that error where
+they caught `json.JSONDecodeError`: the row is recorded and the action left incomplete,
+not read as empty. `get_disposition(snapshots=False)` leaves `input_snapshot` out and
+decodes nothing; every run path that reads only ids and dispositions asks for that,
+so a forensic column it never uses cannot fail it. SQL that looked inside these
+columns is gone or guarded:
 `has_target_rows` and `preview_target` fall back to `json_array_length(data)` only
 for a text row and measure a compressed row that lacks its count in Python (the
 writer always stores one; only a store edited from outside holds such a row),

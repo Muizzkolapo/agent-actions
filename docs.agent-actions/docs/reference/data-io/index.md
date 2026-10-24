@@ -76,7 +76,7 @@ CREATE TABLE target_data (
 )
 ```
 
-Each row stores every record an action produced for a given input file (`relative_path`) as a single JSON array in `data`. Fan it out with `json_each(data)` and pull fields with `json_extract`.
+Each row stores every record an action produced for a given input file (`relative_path`) as a single JSON array in `data`, stored compressed. Read the records with [`agac records`](../cli/records); `sqlite3` shows the column as a blob.
 
 ## Data Flow
 

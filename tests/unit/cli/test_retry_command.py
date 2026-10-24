@@ -289,7 +289,7 @@ class TestDeferredRecordsAreScopedToTheBatchesBeingAbandoned:
     def _backend(deferred_by_action):
         backend = MagicMock()
 
-        def get_disposition(action_name, record_id=None, disposition=None):
+        def get_disposition(action_name, record_id=None, disposition=None, *, snapshots=True):
             rows = [
                 {"action_name": action_name, "record_id": r, "disposition": "deferred"}
                 for r in deferred_by_action.get(action_name, [])
@@ -360,7 +360,7 @@ class TestAbandoningStrandsOnlyTheActionsHoldingABatch:
             else None
         )
         backend.get_disposition = MagicMock(
-            side_effect=lambda action, record_id=None, disposition=None: [
+            side_effect=lambda action, record_id=None, disposition=None, snapshots=True: [
                 {"record_id": f"{action}_r1", "disposition": "deferred"}
             ]
         )

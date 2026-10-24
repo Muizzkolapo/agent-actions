@@ -353,7 +353,7 @@ Extract key information from the error message. Agent Actions provides structure
 
 ### Step 2: Find the Source Record
 
-Use `source_guid` to trace the record. Each action's output is a JSON array stored in the `data` column of the `target_data` table, keyed by `action_name`. Use `json_each(data)` to scan records and `json_extract` to filter by `source_guid`:
+Use `source_guid` to trace the record. Each action's output is a JSON array stored compressed in the `data` column of the `target_data` table, keyed by `action_name`; `agac records --source-guid` finds the record in every action that holds it:
 
 ```bash
 # Find every action that produced a record with this source_guid

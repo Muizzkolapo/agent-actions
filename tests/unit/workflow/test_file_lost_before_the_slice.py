@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors.processing import SerializationError
 from agent_actions.utils.limits import record_indices_to_process, slice_observation
 from agent_actions.workflow.runner_file_processing import (
     process_directory_files,
@@ -53,7 +54,7 @@ class _Backend:
 
     def read_target(self, action_name, relative_path):
         if (action_name, relative_path) in self._read_errors:
-            raise self._read_exception or json.JSONDecodeError("bad blob", "", 0)
+            raise self._read_exception or SerializationError("bad blob")
         return self._by_action[action_name][relative_path]
 
     def load_metadata(self, _key):

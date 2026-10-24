@@ -394,7 +394,9 @@ def _answered_records(storage_backend: StorageBackend, action_name: str) -> set[
     """The records *action_name* holds ``success`` for."""
     return {
         row["record_id"]
-        for row in storage_backend.get_disposition(action_name, disposition=DISPOSITION_SUCCESS)
+        for row in storage_backend.get_disposition(
+            action_name, disposition=DISPOSITION_SUCCESS, snapshots=False
+        )
     }
 
 

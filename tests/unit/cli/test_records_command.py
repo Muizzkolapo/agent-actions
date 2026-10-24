@@ -51,7 +51,23 @@ def project(tmp_path, monkeypatch):
         relative_path="a.json",
         input_snapshot=json.dumps({"source_guid": "guid-9", "content": {"page": "nine"}}),
     )
+    backend.set_disposition(
+        ACTION,
+        "guid-8",
+        "exhausted",
+        reason="worn out",
+        relative_path="b.json",
+        input_snapshot=json.dumps({"source_guid": "guid-8", "content": {"page": "eight"}}),
+    )
     backend.set_disposition(ACTION, "guid-0", "success", relative_path="a.json")
+    backend.set_disposition(
+        "classify",
+        "guid-7",
+        "failed",
+        reason="bad label",
+        relative_path="a.json",
+        input_snapshot=json.dumps({"source_guid": "guid-7", "content": {"page": "seven"}}),
+    )
     backend.close()
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -101,6 +117,20 @@ def test_a_file_selects_that_files_records(project):
     assert [r["source_guid"] for r in json.loads(result.output)] == ["guid-2"]
 
 
+def test_a_file_without_an_action_reads_it_wherever_it_is_stored(project):
+    """classify stores no b.json; that skips classify rather than failing the command."""
+    result = _records("--file", "b.json")
+
+    assert result.exit_code == 0, result.output
+    assert [(r["_action"], r["source_guid"]) for r in json.loads(result.output)] == [
+        (ACTION, "guid-2")
+    ]
+
+    missing = _records("-a", "classify", "--file", "b.json")
+    assert missing.exit_code != 0
+    assert "File 'b.json' not found for node 'classify'" in missing.output
+
+
 def test_a_field_prints_one_value_per_record(project):
     result = _records("-a", ACTION, "--field", f"content.{ACTION}.summary")
 
@@ -122,16 +152,36 @@ def test_snapshots_print_the_input_each_failed_record_was_processed_with(project
     result = _records("--snapshots")
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == [
-        {
-            "_action": ACTION,
-            "record_id": "guid-9",
-            "disposition": "failed",
-            "reason": "boom",
-            "relative_path": "a.json",
-            "input_snapshot": {"source_guid": "guid-9", "content": {"page": "nine"}},
-        }
+    snapshots = json.loads(result.output)
+    assert [(s["_action"], s["record_id"], s["disposition"]) for s in snapshots] == [
+        ("classify", "guid-7", "failed"),
+        (ACTION, "guid-9", "failed"),
+        (ACTION, "guid-8", "exhausted"),
     ]
+    assert snapshots[1] == {
+        "_action": ACTION,
+        "record_id": "guid-9",
+        "disposition": "failed",
+        "reason": "boom",
+        "relative_path": "a.json",
+        "input_snapshot": {"source_guid": "guid-9", "content": {"page": "nine"}},
+    }
+
+
+def test_snapshots_narrow_to_a_file_or_a_record(project):
+    by_file = _records("--snapshots", "--file", "b.json")
+    assert by_file.exit_code == 0, by_file.output
+    assert [s["record_id"] for s in json.loads(by_file.output)] == ["guid-8"]
+
+    by_record = _records("--snapshots", "--source-guid", "guid-9")
+    assert [s["record_id"] for s in json.loads(by_record.output)] == ["guid-9"]
+
+    by_action = _records("--snapshots", "-a", "classify")
+    assert [s["record_id"] for s in json.loads(by_action.output)] == ["guid-7"]
+
+    none = _records("--snapshots", "--file", "nowhere.json")
+    assert none.exit_code == 0, none.output
+    assert json.loads(none.output) == []
 
 
 def test_an_action_with_no_records_says_so(project):
@@ -151,3 +201,25 @@ def test_a_workflow_that_has_not_run_says_so(project):
 
     assert result.exit_code != 0
     assert "No store for workflow 'other'" in result.output
+
+
+def test_every_record_past_the_first_thousand_prints(tmp_path, monkeypatch):
+    """The command replaces reading the store with sqlite3, so a page boundary must not cut it."""
+    (tmp_path / "agent_actions.yml").write_text("default_agent_config: {}\n")
+    workflow = tmp_path / "agent_workflow" / WORKFLOW
+    (workflow / "agent_config").mkdir(parents=True)
+    (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(f"name: {WORKFLOW}\nactions: []\n")
+    store = workflow / "agent_io" / "store"
+    store.mkdir(parents=True)
+    backend = SQLiteBackend(str(store / f"{WORKFLOW}.db"), workflow_name=WORKFLOW)
+    backend.initialize()
+    backend.write_target(ACTION, "a.json", [_record(n) for n in range(1001)], force_full=True)
+    backend.close()
+    monkeypatch.chdir(tmp_path)
+
+    result = _records("-a", ACTION)
+
+    assert result.exit_code == 0, result.output
+    records = json.loads(result.output)
+    assert len(records) == 1001
+    assert records[1000]["source_guid"] == "guid-1000"

@@ -17,7 +17,7 @@ def make_mock_backend(dispositions: dict[str, list[dict]] | None = None):
     # does — fails on the mock rather than on what the test is about.
     backend.load_metadata.return_value = None
 
-    def get_disposition(action_name, record_id=None, disposition=None):
+    def get_disposition(action_name, record_id=None, disposition=None, *, snapshots=True):
         rows = dispositions.get(action_name, [])
         if disposition:
             rows = [r for r in rows if r.get("disposition") == disposition]

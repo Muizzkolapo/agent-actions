@@ -1,6 +1,5 @@
 """Action output management for previous output loading and version correlation."""
 
-import json
 import logging
 import sqlite3
 import threading
@@ -9,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.errors.processing import SerializationError
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
@@ -99,6 +99,7 @@ class ActionOutputManager:
             prev_agent_name,
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_PASSTHROUGH,
+            snapshots=False,
         )
         if passthrough_rows:
             agent_output["passthrough"] = True
@@ -108,6 +109,7 @@ class ActionOutputManager:
             prev_agent_name,
             record_id=NODE_LEVEL_RECORD_ID,
             disposition=DISPOSITION_SKIPPED,
+            snapshots=False,
         )
         if skip_rows:
             agent_output["skipped"] = True
@@ -165,7 +167,7 @@ class ActionOutputManager:
                     outputs.extend(data)
                 else:
                     outputs.append(data)  # type: ignore[unreachable]
-            except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
+            except (OSError, sqlite3.Error, SerializationError) as e:
                 logger.warning(
                     "Failed to read backend target %s/%s: %s",
                     action_name,
