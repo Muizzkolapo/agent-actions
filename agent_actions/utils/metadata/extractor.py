@@ -3,6 +3,8 @@
 import time
 from typing import Any
 
+from agent_actions.llm.config.runtime_profiles import wire_vendor
+
 from .types import ResponseMetadata
 
 
@@ -194,7 +196,7 @@ class MetadataExtractor:
         """Extract provider-specific raw metadata."""
         raw: dict[str, Any] = {}
 
-        if provider == "openai":
+        if provider and wire_vendor(provider) == "openai":
             if "system_fingerprint" in response:
                 raw["system_fingerprint"] = response["system_fingerprint"]
             if "created" in response:
