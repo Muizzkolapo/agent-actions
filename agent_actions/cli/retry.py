@@ -1341,6 +1341,21 @@ class RetryCommand:
     default=False,
     help="Retry even though a batch has not been collected, giving up its results.",
 )
+@click.option(
+    "--filter",
+    "filters",
+    multiple=True,
+    metavar="ACTION:RECORD_ID",
+    callback=lambda _ctx, _param, values: [_parse_filter_target(v) for v in values],
+    help="Mark a failed record filtered at ACTION, so no retry selects it again and the "
+    "actions below treat it as absent. Repeatable; needs --reason. Only records the "
+    "exclusion and exits: nothing is re-run and no LLM is called.",
+)
+@click.option(
+    "--reason",
+    default=None,
+    help="Why the --filter records are filtered; stored as their disposition reason.",
+)
 @handles_user_errors("retry")
 @requires_project
 def retry(
@@ -1349,15 +1364,50 @@ def retry(
     record: str | None,
     dry_run: bool,
     abandon_in_flight: bool,
+    filters: list[tuple[str, str]],
+    reason: str | None,
     project_root: Path | None = None,
 ) -> None:
     """Retry failed/exhausted records from a specific action forward."""
+    if filters:
+        for given, flag in (
+            (from_action, "--from"),
+            (record, "--record"),
+            (abandon_in_flight, "--abandon-in-flight"),
+        ):
+            if given:
+                raise click.UsageError(
+                    f"--filter records an exclusion and retries nothing, so it takes no "
+                    f"{flag}. Filter first, then run the retry."
+                )
+        if not (reason or "").strip():
+            raise click.UsageError("--filter needs --reason, stored with each record it filters.")
+    elif reason is not None:
+        raise click.UsageError("--reason is the reason for --filter, which was not given.")
     args = RetryCommandArgs(
         agent=agent,
         from_action=from_action,
         record=record,
         dry_run=dry_run,
         abandon_in_flight=abandon_in_flight,
+        filters=filters,
+        reason=reason.strip() if reason else None,
     )
+    if filters:
+        # Deferred import: retry_filter imports this module.
+        from agent_actions.cli.retry_filter import RetryFilterCommand
+
+        RetryFilterCommand(args).execute(project_root=project_root)
+        return
     command = RetryCommand(args)
     command.execute(project_root=project_root)
+
+
+def _parse_filter_target(value: str) -> tuple[str, str]:
+    """Split ``<action>:<record_id>`` at its first colon."""
+    action, _, record_id = value.partition(":")
+    if not action.strip() or not record_id.strip():
+        raise click.BadParameter(
+            f"'{value}' is not <action>:<record_id>, e.g. extract:3f9a1c2e-..."
+        )
+    return action.strip(), record_id.strip()
