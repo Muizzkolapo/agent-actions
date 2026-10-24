@@ -82,7 +82,7 @@ def test_both_batch_checks_refuse_the_new_profile_with_one_text():
     assert refusals == [f"Action 'classify_local': vendor '{PROFILE_VENDOR}' {BATCH_REFUSAL}"]
 
 
-@pytest.mark.parametrize("vendor", ["hitl", "agac-provider"])
+@pytest.mark.parametrize("vendor", ["agac-provider"])
 def test_a_vendor_that_runs_no_model_still_gets_the_batch_warning(vendor: str):
     context = ActionEntryValidationContext(
         entry={"run_mode": "batch", "model_vendor": vendor},

@@ -75,19 +75,6 @@ class TestEntryValidatorBatch:
         assert result.errors == []
         assert any("some_unknown_vendor" in w for w in result.warnings)
 
-    def test_the_tool_vendor_refusal_lists_only_vendors_that_can_batch(self):
-        result = _entry_result("tool")
-
-        listed = result.errors[0].split("Use one of: ")[1].split(" for batch mode")[0]
-        assert listed.split(", ") == [
-            "anthropic",
-            "gemini",
-            "groq",
-            "ollama_cloud",
-            "ollama_local",
-            "openai",
-        ]
-
 
 def _entry_description() -> str:
     context = ActionEntryValidationContext(

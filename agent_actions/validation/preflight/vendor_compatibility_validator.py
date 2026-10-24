@@ -6,7 +6,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-from agent_actions.llm.config.vendor import NON_LLM_VENDORS
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.base_validator import BaseValidator
@@ -203,7 +203,12 @@ class VendorCompatibilityValidator(BaseValidator):
         """Return list of (feature_name, reason) tuples for unsupported features."""
         unsupported = []
 
-        if mode == "batch" and not capabilities.get("supports_batch"):
+        vendor = str(agent_config.get("model_vendor", "")).lower()
+        if (
+            mode == "batch"
+            and vendor not in ONLINE_ONLY_VENDORS
+            and not capabilities.get("supports_batch")
+        ):
             unsupported.append(("batch", "Vendor does not support batch processing"))
 
         json_mode = agent_config.get("json_mode", get_default("json_mode"))

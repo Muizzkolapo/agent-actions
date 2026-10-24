@@ -17,7 +17,7 @@ class ToolClient:
 
     CAPABILITIES: ClassVar[dict[str, Any]] = {
         "supports_json_mode": True,
-        "supports_batch": True,
+        "supports_batch": False,
         "supports_tools": False,
         "supports_vision": False,
         "required_fields": [],
