@@ -502,7 +502,6 @@ class ProcessingPipeline:
         Returns:
             Path to the generated output file
         """
-        run_mode = params.action_config.get("run_mode")
         if runs_in_batch(params.action_config):
             agent_indices, dependency_configs, version_context = (
                 ProcessingPipeline._build_pipeline_context(
@@ -525,13 +524,6 @@ class ProcessingPipeline:
                     version_context=version_context,
                     retried_records=params.retried_records,
                 )
-            )
-        if run_mode == RunMode.BATCH:
-            logger.warning(
-                "Action '%s' has run_mode=batch but kind '%s' requires synchronous "
-                "execution. Running in online mode.",
-                params.action_name,
-                params.action_config.get("kind", params.action_config.get("model_vendor")),
             )
         pipeline = create_processing_pipeline_from_params(
             action_config=params.action_config,
