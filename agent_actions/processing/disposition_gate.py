@@ -286,6 +286,51 @@ def answered_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]
     return _noted(_ANSWERED_BY_REPAIR, storage_backend, action_name)
 
 
+# What a run mints for a row whatever it holds: its identifiers, and the history's stamps.
+_MINTED_PER_RUN: frozenset[str] = frozenset(
+    {"target_id", "node_id", "lineage", "_state_history", "_delta_mode"}
+)
+
+
+def rows_written_again_unchanged(
+    produced: list[dict[str, Any]], stored: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], frozenset[str]]:
+    """*produced* with each row written again as it was stored put back as it was.
+
+    A FILE tool handed its whole file again writes every row of it again, and a row
+    it writes as it stands is the row it was: what reads it was computed from that
+    row and still answers for it. Such a row keeps the identifiers it was stored under,
+    so the rows below that name it still name it. Returns the rows to write and the
+    identities put back. Two rows are the same row when they match under one
+    identity in all but what a run mints for a row whatever it holds; an identity
+    either file holds several rows under is never one.
+    """
+    stored_per_guid = Counter(row.get("source_guid") or "" for row in stored)
+    was_stored = {
+        guid: row
+        for row in stored
+        if (guid := row.get("source_guid")) and stored_per_guid[guid] == 1
+    }
+    produced_per_guid = Counter(row.get("source_guid") or "" for row in produced)
+    unchanged: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for row in produced:
+        guid = row.get("source_guid")
+        was = was_stored.get(guid) if guid and produced_per_guid[guid] == 1 else None
+        if guid and was is not None and _holds_the_same(row, was):
+            out.append(was)
+            unchanged.add(guid)
+        else:
+            out.append(row)
+    return out, frozenset(unchanged)
+
+
+def _holds_the_same(row: dict[str, Any], other: dict[str, Any]) -> bool:
+    return {k: v for k, v in row.items() if k not in _MINTED_PER_RUN} == {
+        k: v for k, v in other.items() if k not in _MINTED_PER_RUN
+    }
+
+
 def note_replaced_above(
     storage_backend: Any, actions: Iterable[str], relative_path: str | None
 ) -> None:
@@ -300,8 +345,9 @@ def note_replaced_above(
 def replaced_above(storage_backend: Any, action_name: str, relative_path: str | None) -> bool:
     """Whether an action above *action_name* replaced *relative_path* whole in this run.
 
-    A repair runs such a file as a plain run would: every row the action holds for it was
-    computed from rows that are gone, whichever records the repair names.
+    A repair runs such a file as a plain run would: what the action holds for it was
+    computed from rows that are gone, but for rows built on rows the replacement holds
+    unchanged, whichever records the repair names, and the gate carries only those.
     """
     if storage_backend is None or not relative_path:
         return False

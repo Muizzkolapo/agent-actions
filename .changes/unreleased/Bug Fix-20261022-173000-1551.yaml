@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A retry that reaches a `granularity: File` tool hands it the whole file, and every
+  action below it answered every record of the file again, whether or not the tool
+  wrote the record's row differently: below a flatten or a merge, a few failed records
+  made every action reprocess the whole dataset. A row the tool writes again exactly as
+  it was is now the row it was, identifiers and all, and the actions below keep their
+  answers for it; only the records whose rows changed are answered again. The retry
+  plan names each FILE tool in its range, and the actions reading it that answer again
+  what the tool writes differently, before anything is cleared. (#1551)
+time: 2026-10-22T17:30:00Z

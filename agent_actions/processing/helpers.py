@@ -70,6 +70,19 @@ def _is_tool_action(agent_config: dict[str, Any]) -> bool:
     return agent_config.get("kind") == "tool" or agent_config.get("model_vendor") == "tool"
 
 
+def replaces_its_file_whole(agent_config: dict[str, Any]) -> bool:
+    """True when the action is a FILE tool: handed every record of a file at once.
+
+    Each row such a tool writes may depend on every record of the file, so a run that
+    reaches any record of a file hands the tool all of them and replaces what the file
+    held. A HITL action, though file granularity too, decides record by record.
+    """
+    kind = str(agent_config.get("kind") or "").lower()
+    vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+    granularity = str(agent_config.get("granularity") or "").lower()
+    return granularity == "file" and (kind == "tool" or vendor == "tool")
+
+
 def bypasses_expectations(agent_config: dict[str, Any]) -> bool:
     """True when the action's strategy never runs its ``expect:`` block.
 

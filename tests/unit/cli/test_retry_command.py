@@ -88,6 +88,69 @@ class TestFindFailures:
         assert "enrich" in failures
 
 
+class TestThePlanSaysWhatAFileToolCosts:
+    """A FILE tool the retry reaches is handed every record of each file holding a listed
+    record, and what reads it answers again every record whose row it writes differently."""
+
+    CONFIGS = {
+        "flatten": {"kind": "tool", "granularity": "Record"},
+        "roll_up": {"kind": "tool", "granularity": "File"},
+        "finalize": {"kind": "tool", "granularity": "Record"},
+        "grand": {"kind": "tool", "granularity": "Record"},
+    }
+    READERS = {"roll_up": ["finalize", "grand"], "finalize": ["grand"]}
+
+    def _said(self, downstream, configs=CONFIGS, readers=READERS) -> str:
+        from io import StringIO
+
+        from rich.console import Console
+
+        cmd = RetryCommand(RetryCommandArgs(agent="test_workflow"))
+        buf = StringIO()
+        cmd.console = Console(file=buf, force_terminal=False, width=60)
+        cmd._note_file_tools(downstream, configs, lambda a: readers.get(a, []))
+        return buf.getvalue()
+
+    def test_the_file_tool_and_what_reads_it_are_named(self):
+        said = self._said(["flatten", "roll_up", "finalize", "grand"])
+
+        assert "Note: 'roll_up' is a File tool" in said
+        assert "every record of each file holding a record listed above" in said
+        assert "what reads it (finalize, grand) answers again" in said
+        assert "every record whose row it writes differently" in said
+
+    def test_the_sentence_is_not_broken_across_lines(self):
+        """It is read back from a log, where a wrapped sentence greps as two."""
+        said = self._said(["flatten", "roll_up", "finalize", "grand"])
+
+        assert said.count("\n") == 1
+
+    def test_only_what_the_retry_runs_is_listed_as_reading_it(self):
+        said = self._said(["roll_up", "finalize"])
+
+        assert "what reads it (finalize) answers again" in said
+        assert "grand" not in said
+
+    def test_a_file_tool_above_the_retry_is_not_named(self):
+        said = self._said(["finalize", "grand"])
+
+        assert said == ""
+
+    def test_a_file_tool_nothing_reads_says_so(self):
+        said = self._said(["flatten", "roll_up"])
+
+        assert "'roll_up' is a File tool" in said
+        assert "nothing reads it" in said
+
+    def test_a_hitl_at_file_granularity_is_not_a_file_tool(self):
+        configs = {**self.CONFIGS, "roll_up": {"kind": "hitl", "granularity": "File"}}
+
+        assert self._said(["flatten", "roll_up", "finalize"], configs) == ""
+
+    def test_an_action_with_no_config_is_not_a_file_tool(self):
+        assert self._said(["flatten", "unknown"], self.CONFIGS) == ""
+
+
 class TestRetryPlan:
     """RetryCommand._display_retry_plan builds correct output."""
 

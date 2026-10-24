@@ -26,8 +26,10 @@ from agent_actions.processing.disposition_gate import (
     note_replaced_above,
     positions_named_by_repair,
     replaced_above,
+    rows_written_again_unchanged,
     stored_answers_stand,
 )
+from agent_actions.processing.helpers import replaces_its_file_whole
 from agent_actions.processing.repair_lineage import (
     drop_rows_built_on_rows_gone_above,
     note_rewritten_by_repair,
@@ -122,6 +124,15 @@ def _records_named_by(stored: list[dict[str, Any]], records: Any) -> frozenset[s
     return frozenset(_identities_named(stored) & inputs)
 
 
+def _own_identities(rows: Any) -> set[str]:
+    """The identity each of *rows* carries."""
+    return {
+        guid
+        for row in (rows if isinstance(rows, list) else [])
+        if isinstance(row, dict) and (guid := row.get("source_guid"))
+    }
+
+
 def _identities_named(rows: Any) -> set[str]:
     """Every identity *rows* carry or name as parent or producer."""
     named: set[str] = set()
@@ -160,22 +171,54 @@ def _actions_below(storage_backend: "StorageBackend", action_name: str) -> list[
     ]
 
 
+def _whole_file_readers(below: list[str], action_configs: dict[str, Any] | None) -> frozenset[str]:
+    """Those of *below* that are FILE tools, and those whose config is not held.
+
+    An action in the stored graph with no config to read is taken for one, so what it
+    holds is cleared as it was before rows were put back, never carried on a guess.
+    """
+    configs = action_configs or {}
+    return frozenset(
+        action
+        for action in below
+        if action not in configs or replaces_its_file_whole(cast(dict[str, Any], configs[action]))
+    )
+
+
 def _forget_answers_below(
     storage_backend: "StorageBackend",
     below: list[str],
     relative_path: str,
     replaced_rows: list[dict[str, Any]],
     inputs: Any,
+    unchanged: frozenset[str] = frozenset(),
+    whole_file_readers: frozenset[str] = frozenset(),
 ) -> None:
     """Clear what each action in *below* holds a disposition for in *relative_path*.
 
-    Each of their rows there was computed from the rows being replaced, so none may be
-    carried by the gate. Cleared before the replacement is written: a run stopped in
-    between finds them unanswered rather than answered over rows that are gone.
+    Each row there was computed from the rows being replaced, except one built on
+    *unchanged* rows alone, which still answers. A row is built on the rows of the file it
+    carries the identity of or names as parent or producer, never on an ancestor above the
+    file; built on a changed row as well, it is gone under every identity it names. A row
+    of one of *whole_file_readers*, a FILE tool, may be computed from every record of the
+    file, so it stands only for a file written again entirely as it was. Cleared before
+    the replacement is written, so a run stopped in between finds them unanswered.
     """
-    stale = _identities_named(replaced_rows) | _identities_named(inputs)
+    held = _identities_named(replaced_rows) | _identities_named(inputs)
+    rows_held = _own_identities(replaced_rows) | _own_identities(inputs)
+    file_as_it_was = bool(rows_held) and rows_held <= unchanged
+    stale = held - unchanged
     for action in below:
-        stale |= _identities_named(_stored_rows(storage_backend, action, relative_path))
+        for row in _stored_rows(storage_backend, action, relative_path):
+            named = _identities_named([row])
+            if action in whole_file_readers:
+                if not file_as_it_was:
+                    stale |= named
+                continue
+            built_on = named & rows_held
+            if built_on and built_on <= unchanged:
+                continue
+            stale |= named
     if not stale:
         return
     for action in below:
@@ -557,9 +600,10 @@ class ProcessingPipeline:
     ) -> None:
         """Answer this file as a plain run would if an action above replaced it whole.
 
-        Every row this action holds for it was computed from rows that are gone, and a
-        row minted above is one no named record leads to. Its dispositions there were
-        cleared when the file above was replaced, so the gate carries none of them.
+        Every row this action holds for it was computed from rows that are gone, but
+        for those built on rows the replacement holds unchanged, and a row minted above
+        is one no named record leads to. The dispositions of the rest were cleared when
+        the file above was replaced, so the gate carries only what still answers.
         """
         if not self.config.retried_records:
             return
@@ -570,8 +614,8 @@ class ProcessingPipeline:
         if not replaced_above(self.config.storage_backend, self.config.action_name, relative_path):
             return
         logger.info(
-            "Action '%s': %s was replaced whole above, so every record of it is answered "
-            "again, not only those the repair names",
+            "Action '%s': %s was replaced whole above, so every record of it whose row "
+            "changed is answered again, not only those the repair names",
             self.config.action_name,
             relative_path,
         )
@@ -824,6 +868,11 @@ class ProcessingPipeline:
                 repair_inputs=offered_to_repair,
                 whole_file=whole_file,
             )
+            # A row the tool wrote again as it was is the row it was, and what reads it
+            # still answers for it.
+            unchanged: frozenset[str] = frozenset()
+            if whole_file and stored_here:
+                output, unchanged = rows_written_again_unchanged(output, stored_here)
             # A row the tool did not write again is gone with the file it was replaced
             # in, and so is what vouched for it. Not an input's own disposition, which
             # this run decides wherever it reaches the input.
@@ -834,6 +883,7 @@ class ProcessingPipeline:
                 if isinstance(record, dict)
             }
         else:
+            unchanged = frozenset()
             # RECORD mode — UnifiedProcessor handles guard + invoke + enrich + collect
             output, stats = self._unified_processor.process(
                 data, context, strategy, repair_inputs=offered_to_repair
@@ -854,7 +904,8 @@ class ProcessingPipeline:
             raise context.failure_not_stored or failure
 
         # What the actions below hold for a file replaced whole was computed from the rows
-        # it held, so each of them answers it again, whatever records a repair names.
+        # it held, so each of them answers again every record whose row changed, whatever
+        # records a repair names.
         below: list[str] = []
         if (
             context.replaces_file_whole
@@ -869,6 +920,8 @@ class ProcessingPipeline:
                     context.target_relative_path,
                     stored_here,
                     offered_to_repair,
+                    unchanged,
+                    whole_file_readers=_whole_file_readers(below, self.config.action_configs),
                 )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

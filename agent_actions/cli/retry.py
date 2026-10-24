@@ -9,7 +9,7 @@ import datetime
 import json
 import logging
 import traceback
-from collections.abc import Container, Sequence
+from collections.abc import Callable, Container, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +41,7 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
+from agent_actions.workflow.pipeline import _actions_below
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +263,11 @@ class RetryCommand:
 
         from_idx = execution_order.index(from_action)
         downstream_actions = execution_order[from_idx:]
+        self._note_file_tools(
+            downstream_actions,
+            workflow.services.core.action_runner.action_configs or {},
+            lambda action: _actions_below(backend, action),
+        )
         record_ids = {r["record_id"] for r in target_records}
         repairing = self._records_this_repair_may_process(record_ids, downstream_actions, failures)
         owed = self._batches_owed(backend, downstream_actions)
@@ -1220,6 +1226,37 @@ class RetryCommand:
 
         self.console.print(table)
         self._note_other_failures(from_action, all_failures)
+
+    def _note_file_tools(
+        self,
+        downstream: list[str],
+        action_configs: dict[str, dict[str, Any]],
+        actions_below: Callable[[str], list[str]],
+    ) -> None:
+        """Say what each FILE tool the retry reaches costs: the whole file, and below it
+        every record whose row the tool writes differently.
+
+        *actions_below* reads the stored dependency graph, which is what the run clears by.
+        """
+        from agent_actions.processing.helpers import replaces_its_file_whole
+
+        for action in downstream:
+            if not replaces_its_file_whole(action_configs.get(action) or {}):
+                continue
+            readers = [a for a in downstream if a in set(actions_below(action))]
+            below = (
+                f"what reads it ({', '.join(readers)}) answers again every record whose "
+                f"row it writes differently"
+                if readers
+                else "nothing reads it"
+            )
+            # Soft-wrapped: one line in a log, where it is read back after the fact.
+            self.console.print(
+                f"  [dim]Note: '{action}' is a File tool, so the retry hands it every record "
+                f"of each file holding a record listed above, and {below}.[/dim]",
+                soft_wrap=True,
+                highlight=False,
+            )
 
     def _note_other_failures(self, from_action: str, all_failures: dict[str, list[dict]]) -> None:
         other_actions = [a for a in all_failures if a != from_action]

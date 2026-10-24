@@ -91,6 +91,8 @@ def roll_final(data: Any, *args) -> list[dict]:
         log.write(json.dumps(summary) + "\\n")
     if (root / "die_below").exists():
         os._exit(9)
+    if "alpha" in summary and (root / "fail_final").exists():
+        raise RuntimeError("alpha fails below while the flag exists")
     return [{"summary": f"FINAL[{summary}]", "exam_density": "low"}]
 """
 
@@ -702,3 +704,398 @@ def test_a_record_limit_on_the_roll_up_admits_what_a_run_admits(tmp_path):
 
     assert _handed(project) == [["Page alpha.", "Page beta."]]
     assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
+
+
+# One row per record, each computed from that record alone: handed the whole file again,
+# the tool writes every row it wrote before exactly as it was.
+_PER_RECORD = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    return FileUDFResult(
+        outputs=[
+            {"source_index": i, "data": {"summary": f"{page} (item)", "exam_density": "low"}}
+            for i, page in enumerate(pages)
+        ]
+    )
+"""
+)
+
+# One row per record, each computed from that record and the one before it: handed the
+# whole file again, the tool writes the row after a record that returned differently,
+# and every row further on as it was.
+_AFTER_PREVIOUS = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": i,
+                "data": {
+                    "summary": f"{page} after {pages[i - 1] if i else '-'}",
+                    "exam_density": "low",
+                },
+            }
+            for i, page in enumerate(pages)
+        ]
+    )
+"""
+)
+
+# One row per record, refusing gamma's while `refuse_gamma` exists: the tool itself
+# fails one record of a file it is handed again.
+_PER_RECORD_REFUSING_GAMMA = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    refuse = (Path(os.environ["ROLL_DIR"]) / "refuse_gamma").exists()
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": i,
+                "data": {
+                    "summary": 7 if refuse and "gamma" in page else f"{page} (item)",
+                    "exam_density": "low",
+                },
+            }
+            for i, page in enumerate(pages)
+        ]
+    )
+"""
+)
+
+# A second FILE tool reading the first: one row per record, counted across the file,
+# logging the summaries it is handed.
+_COUNT_BELOW_TOOL = """\
+import json
+import os
+from pathlib import Path
+
+from agent_actions import FileUDFResult, udf_tool
+from agent_actions.config.schema import Granularity
+
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_count(data: list) -> FileUDFResult:
+    root = Path(os.environ["ROLL_DIR"])
+    summaries = [str(item.get("summary", "")) for item in data]
+    with open(root / "count_handed.jsonl", "a") as log:
+        log.write(json.dumps(summaries) + "\\n")
+    return FileUDFResult(
+        outputs=[
+            {
+                "source_index": i,
+                "data": {"summary": f"{s} [{i + 1} of {len(summaries)}]", "exam_density": "low"},
+            }
+            for i, s in enumerate(summaries)
+        ]
+    )
+"""
+
+COUNT_BELOW = (
+    ONLINE
+    + """\
+  - name: roll_count
+    kind: tool
+    granularity: File
+    dependencies: [roll_up]
+    intent: "Count"
+    schema: file_roll_output
+    impl: roll_count
+    context_scope: { observe: [roll_up.summary] }
+"""
+)
+
+# A record tool splitting each record in two, above the FILE tool.
+_FLATTEN_SPLIT = _FLATTEN.replace(
+    '    return [{"summary": page, "exam_density": "low"}]',
+    "    return [\n"
+    '        {"summary": page + " #1", "exam_density": "low"},\n'
+    '        {"summary": page + " #2", "exam_density": "low"},\n'
+    "    ]",
+)
+
+# Reads what finalize wrote for one record, and logs each summary it is handed.
+_GRAND = """\
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def roll_grand(data: Any, *args) -> list[dict]:
+    root = Path(os.environ["ROLL_DIR"])
+    summary = str(((data or {}).get("finalize") or {}).get("summary", ""))
+    with open(root / "grand.jsonl", "a") as log:
+        log.write(json.dumps(summary) + "\\n")
+    return [{"summary": f"GRAND[{summary}]", "exam_density": "low"}]
+"""
+
+GRANDCHILD_BELOW = (
+    TOOL_BELOW
+    + """\
+  - name: grand
+    kind: tool
+    dependencies: [finalize]
+    intent: "Grand"
+    schema: file_roll_output
+    impl: roll_grand
+    context_scope: { observe: [finalize.summary] }
+"""
+)
+
+
+def _by_guid(rows: list[dict]) -> dict[str, dict]:
+    return {row["source_guid"]: row for row in rows if row.get("source_guid")}
+
+
+class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
+    """The tool is handed the whole file again, and writes beta's row exactly as it was.
+    What reads the tool holds an answer computed from that row, so it stands: only
+    alpha, whose row the tool wrote for the first time, is answered again below."""
+
+    @pytest.fixture
+    def project(self, tmp_path):
+        return _project(tmp_path, TOOL_BELOW, _PER_RECORD)
+
+    def test_the_premise_the_tool_is_handed_the_whole_file_again(self, project):
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        assert _handed(project) == [["Page alpha.", "Page beta."]]
+        assert _summaries(_rows(project)["pages1.json"]) == [
+            "Page alpha. (item)",
+            "Page beta. (item)",
+        ]
+
+    def test_only_the_record_whose_row_changed_is_answered_again_below(self, project):
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        assert _finalized(project) == ["Page alpha. (item)"]
+        assert _summaries(_rows(project, "finalize")["pages1.json"], "finalize") == [
+            "FINAL[Page alpha. (item)]",
+            "FINAL[Page beta. (item)]",
+        ]
+
+    def test_the_row_written_again_unchanged_is_the_row_it_was(self, project):
+        _failed_then_fixed(project)
+        before = _by_guid(_rows(project, as_stored=True)["pages1.json"])
+        (beta,) = [guid for guid, row in before.items() if row["_state"] == "processed"]
+
+        _retry(project)
+
+        after = _by_guid(_rows(project, as_stored=True)["pages1.json"])
+        assert after[beta]["target_id"] == before[beta]["target_id"]
+        assert after[beta]["node_id"] == before[beta]["node_id"]
+        assert after[beta]["content"] == before[beta]["content"]
+        alpha = next(guid for guid in after if guid != beta)
+        assert after[alpha]["_state"] == "processed"
+        assert after[alpha]["target_id"] != before[alpha]["target_id"]
+
+    def test_the_answer_below_still_names_the_row_it_was_computed_from(self, project):
+        _failed_then_fixed(project)
+        before = _by_guid(_rows(project, "finalize", as_stored=True)["pages1.json"])
+        (beta,) = [guid for guid, row in before.items() if row["_state"] == "processed"]
+
+        _retry(project)
+
+        roll_up = _by_guid(_rows(project, as_stored=True)["pages1.json"])
+        finalize = _by_guid(_rows(project, "finalize", as_stored=True)["pages1.json"])
+        assert finalize[beta]["target_id"] == before[beta]["target_id"]
+        assert finalize[beta]["parent_target_id"] == roll_up[beta]["target_id"]
+
+    def test_every_stored_row_below_is_vouched_for(self, project):
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        stored = {
+            row["source_guid"] for rows in _rows(project, "finalize").values() for row in rows
+        }
+        assert _successes(project, "finalize") == stored
+
+    def test_a_run_after_the_retry_finds_it_complete_and_whole(self, project):
+        _failed_then_fixed(project)
+        _retry(project)
+        (project / "handed.jsonl").unlink(missing_ok=True)
+        (project / "final.jsonl").unlink(missing_ok=True)
+
+        _run(project)
+
+        assert _handed(project) == []
+        assert _finalized(project) == []
+        assert _summaries(_rows(project, "finalize")["pages1.json"], "finalize") == [
+            "FINAL[Page alpha. (item)]",
+            "FINAL[Page beta. (item)]",
+        ]
+
+    def test_a_changed_row_of_a_record_the_retry_did_not_name_is_answered_again_below(
+        self, tmp_path
+    ):
+        """Alpha returning changes beta's row, which the retry did not name and which
+        holds a success below; gamma's row is as it was. Below, beta is answered again
+        with alpha, and gamma alone is carried."""
+        staged = {"pages1.json": ["Page alpha.", "Page beta.", "Page gamma."]}
+        project = _project(tmp_path, TOOL_BELOW, _AFTER_PREVIOUS, staged)
+        _failed_then_fixed(project)
+        before = _by_guid(_rows(project, "finalize", as_stored=True)["pages1.json"])
+        assert _summaries(list(before.values()), "finalize") == [
+            None,
+            "FINAL[Page beta. after -]",
+            "FINAL[Page gamma. after Page beta.]",
+        ]
+        (gamma,) = [
+            guid
+            for guid, row in before.items()
+            if _summaries([row], "finalize") == ["FINAL[Page gamma. after Page beta.]"]
+        ]
+
+        _retry(project)
+
+        assert sorted(_finalized(project)) == [
+            "Page alpha. after -",
+            "Page beta. after Page alpha.",
+        ]
+        after = _by_guid(_rows(project, "finalize", as_stored=True)["pages1.json"])
+        assert _summaries(list(after.values()), "finalize") == [
+            "FINAL[Page alpha. after -]",
+            "FINAL[Page beta. after Page alpha.]",
+            "FINAL[Page gamma. after Page beta.]",
+        ]
+        assert after[gamma]["target_id"] == before[gamma]["target_id"]
+        assert _successes(project, "finalize") == set(after)
+
+    def test_a_file_tool_below_counts_the_file_again_when_the_tool_fails_a_record_anew(
+        self, tmp_path
+    ):
+        """Alpha still fails above, and the tool now refuses gamma: beta's row is as it
+        was, but the file below holds one record where it held two, so the FILE tool
+        below is handed it again rather than carrying a count of two."""
+        staged = {"pages1.json": ["Page alpha.", "Page beta.", "Page gamma."]}
+        project = _project(tmp_path, COUNT_BELOW, _PER_RECORD_REFUSING_GAMMA, staged)
+        (project / "tools" / WORKFLOW / "roll_count.py").write_text(_COUNT_BELOW_TOOL)
+        (project / "fail_alpha").touch()
+        _run(project, "--fresh")
+        assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
+            None,
+            "Page beta. (item) [1 of 2]",
+            "Page gamma. (item) [2 of 2]",
+        ]
+        (project / "count_handed.jsonl").unlink()
+        (project / "refuse_gamma").touch()
+
+        result = run_agac(project, "retry", "-a", WORKFLOW, env=_env(project))
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert _logged(project, "count_handed.jsonl") == [["Page beta. (item)"]]
+        # Quarantined rows first, as FILE mode writes a file.
+        assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
+            None,
+            None,
+            "Page beta. (item) [1 of 1]",
+        ]
+
+    def test_the_children_of_a_record_split_above_the_tool_are_carried_below(self, tmp_path):
+        """A record split in two above the tool names its ancestor as parent; each child's
+        row the tool writes again unchanged is carried below all the same."""
+        project = _project(tmp_path, TOOL_BELOW, _PER_RECORD)
+        (project / "tools" / WORKFLOW / "roll_flatten.py").write_text(_FLATTEN_SPLIT)
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        # The tool logs each record's source page, which a record's two children share.
+        assert _handed(project) == [["Page alpha.", "Page alpha.", "Page beta.", "Page beta."]]
+        assert _finalized(project) == ["Page alpha. (item)", "Page alpha. (item)"]
+        assert sorted(_summaries(_rows(project, "finalize")["pages1.json"], "finalize")) == [
+            "FINAL[Page alpha. (item)]",
+            "FINAL[Page alpha. (item)]",
+            "FINAL[Page beta. (item)]",
+            "FINAL[Page beta. (item)]",
+        ]
+
+    def test_a_row_the_tool_writes_differently_is_answered_again_below(self, tmp_path):
+        """The positive control: a count across the file changes beta's row too."""
+        project = _project(tmp_path, TOOL_BELOW, _COUNT)
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        assert sorted(_finalized(project)) == ["Page alpha. (1 of 2)", "Page beta. (2 of 2)"]
+
+    def test_what_reads_the_file_further_below_carries_the_unchanged_record_too(self, tmp_path):
+        project = _project(tmp_path, GRANDCHILD_BELOW, _PER_RECORD)
+        (project / "tools" / WORKFLOW / "roll_grand.py").write_text(_GRAND)
+        _failed_then_fixed(project)
+        (project / "grand.jsonl").unlink(missing_ok=True)
+
+        _retry(project)
+
+        assert _finalized(project) == ["Page alpha. (item)"]
+        assert _logged(project, "grand.jsonl") == ["FINAL[Page alpha. (item)]"]
+        assert _summaries(_rows(project, "grand")["pages1.json"], "grand") == [
+            "GRAND[FINAL[Page alpha. (item)]]",
+            "GRAND[FINAL[Page beta. (item)]]",
+        ]
+
+    def test_a_batch_action_below_is_sent_only_the_record_whose_row_changed(self, tmp_path):
+        project = _project(tmp_path, BATCH_BELOW, _PER_RECORD)
+        _failed_then_fixed(project)
+        before = _by_guid(_rows(project, "restate", as_stored=True)["pages1.json"])
+        (beta,) = [guid for guid, row in before.items() if row["_state"] == "processed"]
+
+        output = _retry(project)
+        _run(project)
+
+        assert "submitted: 1 requests" in output, output
+        after = _by_guid(_rows(project, "restate", as_stored=True)["pages1.json"])
+        assert after[beta]["target_id"] == before[beta]["target_id"]
+        assert [row["_state"] for row in after.values()] == ["processed", "processed"]
+
+
+class TestThePlanSaysWhatAFileToolCosts:
+    """A retry reaching a FILE tool hands it the whole file, and what reads the tool may
+    answer the file again. The plan says so before anything is cleared."""
+
+    def test_the_plan_names_the_file_tool_and_what_reads_it(self, tmp_path):
+        project = _project(tmp_path, GRANDCHILD_BELOW, _PER_RECORD)
+        (project / "tools" / WORKFLOW / "roll_grand.py").write_text(_GRAND)
+        _failed_then_fixed(project)
+
+        result = run_agac(project, "retry", "-a", WORKFLOW, "--dry-run", env=_env(project))
+
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "Dry run" in output
+        assert "'roll_up' is a File tool" in output, output
+        assert "every record of each file holding a record listed above" in output, output
+        assert "what reads it (finalize, grand) answers again" in output, output
+        assert "every record whose row it writes differently" in output, output
+
+    def test_the_plan_says_nothing_of_a_file_tool_above_the_retry(self, tmp_path):
+        """A retry starting below the tool never reaches it."""
+        project = _project(tmp_path, TOOL_BELOW, _PER_RECORD)
+        _failed_then_fixed(project, flag="fail_final")
+
+        result = run_agac(project, "retry", "-a", WORKFLOW, "--dry-run", env=_env(project))
+
+        output = result.stdout + result.stderr
+        assert result.returncode == 0, output
+        assert "From action: finalize" in output, output
+        assert "File tool" not in output, output
