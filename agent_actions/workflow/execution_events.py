@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from agent_actions.errors import get_error_detail
+from agent_actions.llm.config.vendor import effective_run_mode
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import (
     ActionCompleteEvent,
@@ -127,7 +128,7 @@ class WorkflowEventLogger:
                 action_index=idx,
                 total_actions=total_actions,
                 action_type=action_config.get("kind", ""),
-                mode=action_config.get("run_mode", ""),
+                mode=effective_run_mode(action_config),
             )
         )
 

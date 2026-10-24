@@ -4,8 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.config.types import RunMode
-from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.expander_action_types import process_tool_action
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.result_collector import ProcessingStatus
@@ -37,23 +35,15 @@ class TestEnrichmentCompleteEventOnFailure:
         assert "EnricherExecutedEvent" in events_fired
 
 
-class TestToolActionBatchGuard:
-    """Tool actions must raise ConfigurationError when resolved run_mode is BATCH."""
-
-    def test_batch_mode_raises_configuration_error(self):
-        agent: dict = {"model_vendor": None, "model_name": None}
-        action = {"name": "my_tool", "kind": "tool", "impl": "mod.func"}
-
-        with pytest.raises(ConfigurationError, match="batch"):
-            process_tool_action(agent, action, RunMode.BATCH)
-
-    def test_online_mode_does_not_raise(self):
+class TestToolActionRouting:
+    def test_a_tool_action_routes_to_the_tool_vendor(self):
         agent: dict = {}
         action = {"name": "my_tool", "kind": "tool", "impl": "mod.func", "schema": {"f": "str"}}
 
-        # Should not raise
-        process_tool_action(agent, action, RunMode.ONLINE)
+        process_tool_action(agent, action)
+
         assert agent["model_vendor"] == "tool"
+        assert agent["model_name"] == "mod.func"
 
 
 class TestVersionIdGeneratorLRUEviction:

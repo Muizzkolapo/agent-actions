@@ -23,6 +23,7 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
@@ -994,7 +995,7 @@ class ActionExecutor:
                 action_index=action_idx,
                 total_actions=total_actions,
                 skip_reason=WHERE_SKIP_REASON,
-                mode=action_config.get("run_mode", ""),
+                mode=effective_run_mode(action_config),
             )
         )
 
@@ -1062,7 +1063,7 @@ class ActionExecutor:
 
         final_status = self._resolve_completion_status(params.action_name)
 
-        execution_mode = "batch" if params.action_config.get("run_mode") == RunMode.BATCH else None
+        execution_mode = "batch" if runs_in_batch(params.action_config) else None
 
         if final_status == ActionStatus.SKIPPED:
             return self._handle_guard_all_filtered(
@@ -1180,7 +1181,7 @@ class ActionExecutor:
                 action_index=action_idx,
                 total_actions=total_actions,
                 skip_reason=GUARD_FILTERED_ALL,
-                mode=action_config.get("run_mode", ""),
+                mode=effective_run_mode(action_config),
             )
         )
         self._track_action_complete(
@@ -1255,7 +1256,7 @@ class ActionExecutor:
                 action_index=params.action_idx,
                 total_actions=total_actions,
                 skip_reason=skip_reason,
-                mode=params.action_config.get("run_mode", ""),
+                mode=effective_run_mode(params.action_config),
             )
         )
         self._track_action_complete(
@@ -1718,7 +1719,7 @@ class ActionExecutor:
                 action_index=action_idx,
                 total_actions=total_actions,
                 skip_reason=reason,
-                mode=action_config.get("run_mode", ""),
+                mode=effective_run_mode(action_config),
             )
         )
 
@@ -2313,7 +2314,7 @@ class ActionExecutor:
         batch_status = self._check_batch_submission(
             params.action_name,
             params.action_idx,
-            configured_run_mode=params.action_config.get("run_mode"),
+            configured_run_mode=effective_run_mode(params.action_config),
         )
         return self._handle_run_success(
             params, output_folder, duration, batch_status, pre_run_count
@@ -2345,7 +2346,7 @@ class ActionExecutor:
         batch_status = self._check_batch_submission(
             params.action_name,
             params.action_idx,
-            configured_run_mode=params.action_config.get("run_mode"),
+            configured_run_mode=effective_run_mode(params.action_config),
         )
         return self._handle_run_success(
             params, output_folder, duration, batch_status, pre_run_count
