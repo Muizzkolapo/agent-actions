@@ -11,6 +11,8 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 VALID_LOG_LEVELS: frozenset[str] = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
+ROOT_LOGGER_NAME = "agent_actions"
+
 DEFAULT_LOG_MAX_BYTES = 52_428_800  # 50 MB
 DEFAULT_LOG_RETAIN_RUNS = 5
 
@@ -93,6 +95,31 @@ def _env_int(name: str, default: int, minimum: int) -> int:
     return value
 
 
+def valid_module_levels(module_levels: dict) -> dict[str, LogLevel]:
+    """Return the entries a logger can take, levels normalized; report each other one."""
+    valid: dict[str, LogLevel] = {}
+    for name, level in module_levels.items():
+        prefix = f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
+        if not isinstance(name, str):
+            sys.stderr.write(f"{prefix}keys must be str, got {type(name).__name__}\n")
+            continue
+        if name == ROOT_LOGGER_NAME or name.startswith(ROOT_LOGGER_NAME + "."):
+            sys.stderr.write(
+                f"{prefix}overrides on {ROOT_LOGGER_NAME!r} or its children would "
+                "break events.json; use logging.level for CLI-visible levels.\n"
+            )
+            continue
+        normalized = LoggingConfig.normalize_log_level(level)
+        if normalized is None:
+            sys.stderr.write(
+                f"{prefix}value must be one of {sorted(VALID_LOG_LEVELS)} "
+                f"(got {type(level).__name__})\n"
+            )
+            continue
+        valid[name] = normalized
+    return valid
+
+
 @dataclass
 class FileHandlerSettings:
     """Size limits of the per-run log file."""
@@ -108,8 +135,8 @@ class LoggingConfig:
     """Central logging configuration."""
 
     default_level: LogLevel = "INFO"
-    # Keys and values both validated at apply time by ``_apply_logger_levels``
-    # — YAML can hand back non-string keys (numeric ids) and values.
+    # Validated by ``valid_module_levels`` when applied; ``from_project_config``
+    # already drops the invalid entries, so the CLI reports them once.
     module_levels: dict[Any, Any] = field(default_factory=dict)
     file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)
 
@@ -145,7 +172,7 @@ class LoggingConfig:
 
         return cls(
             default_level=level or "INFO",
-            module_levels=raw_module_levels,
+            module_levels=valid_module_levels(raw_module_levels),
             file_handler=file_settings,
         )
 

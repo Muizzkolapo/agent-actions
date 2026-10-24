@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  An invalid `logging.module_levels` entry in `agent_actions.yml` (e.g. `httpx: LOUD`) was
+  reported on every logger init: twice on `agac inspect` and three times on `agac run`. It
+  is now checked when the CLI resolves the `logging:` block, reported there once and
+  dropped; the logger factory still reports a bad entry in a `LoggingConfig` built in code.
+  (#1568)
+time: 2026-10-24T11:00:00Z

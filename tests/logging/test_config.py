@@ -143,7 +143,7 @@ class TestLoggingConfigFromProjectConfig:
         assert capsys.readouterr().err == ""
 
     def test_module_levels_parsed_from_yaml(self):
-        """``module_levels`` mapping is parsed and preserved verbatim."""
+        """``module_levels`` mapping is parsed from YAML."""
         project_config = {
             "logging": {
                 "module_levels": {"httpx": "INFO", "transformers": "ERROR"},
@@ -162,11 +162,26 @@ class TestLoggingConfigFromProjectConfig:
         assert "module_levels" in err
         assert "dict" in err
 
-    def test_module_levels_preserves_non_string_values_for_runtime_validation(self):
-        """Non-string YAML values are preserved verbatim for apply-time validation."""
-        project_config = {"logging": {"module_levels": {"httpx": True, "transformers": 20}}}
+    def test_invalid_module_levels_are_reported_and_dropped_at_resolution(self, capsys):
+        """Each init re-applies the config, so a bad entry is reported here, once."""
+        project_config = {
+            "logging": {
+                "module_levels": {
+                    "httpx": True,
+                    "transformers": 20,
+                    42: "INFO",
+                    "agent_actions.llm": "ERROR",
+                    "my_custom_lib": "warn",
+                }
+            }
+        }
         config = LoggingConfig.from_project_config(project_config)
-        assert config.module_levels == {"httpx": True, "transformers": 20}
+        assert config.module_levels == {"my_custom_lib": "WARNING"}
+
+        err = capsys.readouterr().err
+        for name in ("'httpx'", "'transformers'", "42", "'agent_actions.llm'"):
+            assert f"ignoring logging.module_levels[{name}]" in err
+        assert "my_custom_lib" not in err
 
 
 class TestLoggingConfigEdgeCases:
