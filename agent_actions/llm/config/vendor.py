@@ -176,7 +176,7 @@ class AgacProviderConfig(BaseVendorConfig):
     """Configuration for Agac mock provider (testing/development)."""
 
     vendor_type: Literal[VendorType.AGAC_PROVIDER] = VendorType.AGAC_PROVIDER
-    api_key_env_name: str = "AGAC_API_KEY"
+    api_key_env_name: str = "AGAC_NO_KEY_REQUIRED"
     json_mode: bool = True
 
 

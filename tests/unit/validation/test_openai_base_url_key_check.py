@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from openai import AuthenticationError
+from pydantic import SecretStr
 
 from agent_actions.validation.preflight.key_verifier import ProbeTarget, _probe_openai
 from agent_actions.validation.preflight.resolution_service import WorkflowResolutionService
@@ -166,3 +167,25 @@ class TestVerifyKeysThroughPreflight:
 
         assert not result.is_valid
         assert LOCAL in result.errors[0].message
+
+
+class _ServerThatKnowsOnlyTheEnvKey:
+    def __init__(self, api_key=None, base_url=None, **_: object):
+        self.models = MagicMock()
+        if api_key != KEY:
+            self.models.list.side_effect = _rejection()
+
+
+@pytest.mark.parametrize("api_key", [SecretStr("OPENAI_API_KEY"), "OPENAI_API_KEY"])
+def test_the_probe_sends_the_value_of_the_env_var_api_key_names(monkeypatch, api_key):
+    monkeypatch.setenv("OPENAI_API_KEY", KEY)
+    monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
+    svc = WorkflowResolutionService(
+        action_configs={"summarize": {"model_vendor": "openai", "api_key": api_key}},
+        verify_keys=True,
+    )
+
+    with patch("openai.OpenAI", _ServerThatKnowsOnlyTheEnvKey):
+        result = svc.resolve_all()
+
+    assert result.is_valid, [e.message for e in result.errors]

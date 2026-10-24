@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  `agac run --verify-keys` reads `api_key` as the name of an environment variable, as a run
+  does, and probes with that variable's value. It no longer probes with the name itself, or
+  with `**********` when the value comes from configuration, and it reports an unset variable
+  as missing (#1563).
+time: 2026-10-23T09:00:00Z

@@ -82,6 +82,7 @@ def project(tmp_path_factory):
 @pytest.fixture(autouse=True)
 def _in_project(project, monkeypatch):
     monkeypatch.chdir(project)
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
 
 
 @pytest.mark.parametrize("author", ACCEPTED)

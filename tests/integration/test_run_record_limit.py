@@ -26,6 +26,7 @@ def project(tmp_path, monkeypatch):
     root = tmp_path / "project"
     shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
     monkeypatch.chdir(root)
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     return root
 
 
@@ -79,6 +80,7 @@ def _multi_action_project(tmp_path, monkeypatch):
         .replace("  - name: resummarize\n", "  - name: resummarize\n    record_limit: 100\n")
     )
     monkeypatch.chdir(root)
+    monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     paths = ProjectPathsFactory.create_project_paths(
         MULTI, MULTI, auto_create=True, project_root=root
     )

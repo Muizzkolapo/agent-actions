@@ -25,6 +25,7 @@ from agent_actions.config.path_config import (
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
 from agent_actions.llm.config.vendor import NON_LLM_VENDORS
+from agent_actions.llm.providers.client_base import api_key_env_name
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
 from agent_actions.utils.constants import SCHEMA_KEY
@@ -232,22 +233,10 @@ class WorkflowResolutionService:
             if any(sentinel in env_var_name for sentinel in _NO_KEY_SENTINELS):
                 continue
 
-            # If the action config specifies a custom api_key, use that
-            custom_key = config.get("api_key")
-            is_literal = False
-            if custom_key:
-                custom_str = str(custom_key)
-                if custom_str.startswith("$"):
-                    env_var_name = custom_str[1:]
-                else:
-                    is_literal = True
+            if config.get("api_key"):
+                env_var_name = api_key_env_name(config["api_key"])
+            key_value = os.environ.get(env_var_name, "")
 
-            if is_literal:
-                key_value = str(custom_key)
-            else:
-                key_value = os.environ.get(env_var_name, "")
-
-            # Presence check (errors) — literal keys are always "present".
             if not key_value:
                 errors.append(
                     StaticTypeError(

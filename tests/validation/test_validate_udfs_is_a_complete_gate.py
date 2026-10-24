@@ -50,6 +50,7 @@ def project(tmp_path, monkeypatch):
     root = tmp_path / "proj"
     shutil.copytree(EXAMPLE, root)
     monkeypatch.chdir(root)
+    monkeypatch.setenv("GEMINI_API_KEY", "not-used")
     return root
 
 
