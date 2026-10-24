@@ -146,7 +146,7 @@ actions:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud |
+| `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud, llamafile |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
 | `api_key` | string | Environment variable name for API key |
 | `base_url` | string | Server URL for `openai`, `llamafile`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1`. Preflight refuses it on `anthropic`, `gemini`, `groq` and `cohere` actions |
