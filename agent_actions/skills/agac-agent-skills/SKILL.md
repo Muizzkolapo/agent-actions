@@ -383,8 +383,6 @@ agac preview -w {workflow} -a {action_name} -f json # JSON format
 agac preview -w {workflow} --stats                  # storage stats
 ```
 
-> `agac preview` is currently broken ("Backend not initialized"). See `spec/cli_issues_agac.md`. Do not work around it with backend-specific raw queries — fix the CLI instead.
-
 **Resetting state:**
 
 ```bash
