@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 
 from agent_actions.processing.disposition_gate import rows_written_again_unchanged
-from agent_actions.workflow.pipeline import _forget_answers_below
+from agent_actions.processing.types import ProcessingContext
+from agent_actions.workflow.pipeline import (
+    _forget_answers_below,
+    _vouch_under_the_identity_put_back,
+)
 
 
 def _row(guid: str | None, summary: str, **extra: Any) -> dict[str, Any]:
@@ -125,6 +129,154 @@ class TestWhichRowsAreTheRowsTheyWere:
 
         assert unchanged == frozenset()
         assert all(r["target_id"] == "target-beta-2" for r in out)
+
+
+def _child(guid: str, summary: str, record: str = "b", **extra: Any) -> dict[str, Any]:
+    """A row an expanding tool wrote for *record*, minted an identity of its own."""
+    return _row(
+        guid,
+        summary,
+        parent_source_guid=record,
+        producer_source_guids=[record],
+        version_correlation_id=f"corr-{guid}",
+        **extra,
+    )
+
+
+class TestARowMintedAnIdentityIsMatchedByWhatItHolds:
+    def test_each_child_written_as_it_stands_is_put_back_under_its_stored_identity(self):
+        stored = [_child("s1", "beta part 1", run=1), _child("s2", "beta part 2", run=1)]
+        produced = [_child("n1", "beta part 1", run=2), _child("n2", "beta part 2", run=2)]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == {"s1", "s2"}
+        assert [row["source_guid"] for row in out] == ["s1", "s2"]
+        assert [row["target_id"] for row in out] == ["target-beta part 1-1", "target-beta part 2-1"]
+        assert [row["version_correlation_id"] for row in out] == ["corr-s1", "corr-s2"]
+
+    def test_a_child_written_differently_is_the_new_row(self):
+        stored = [_child("s1", "beta of 1")]
+        produced = [_child("n1", "beta of 2", run=2)]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+        assert out[0]["source_guid"] == "n1"
+
+    def test_a_child_of_another_record_is_not_the_row_it_was(self):
+        """The same words written for alpha are not beta's row."""
+        stored = [_child("s1", "part 1", record="b")]
+        produced = [_child("n1", "part 1", record="a", run=2)]
+
+        _, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+
+    @pytest.mark.parametrize("side", ["stored", "produced"])
+    def test_children_holding_the_same_are_never_matched(self, side):
+        """Which stored row each one was cannot be told, so neither is put back."""
+        twins = {
+            "stored": ([_child("s1", "same"), _child("s2", "same")], [_child("n1", "same")]),
+            "produced": ([_child("s1", "same")], [_child("n1", "same"), _child("n2", "same")]),
+        }
+        stored, produced = twins[side]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+        assert {row["source_guid"] for row in out} == {r["source_guid"] for r in produced}
+
+    def test_a_stored_row_whose_identity_is_written_again_is_never_taken_by_a_minted_one(self):
+        """Beta's row is written again, changed, under its identity: that is its row now."""
+        stored = [_row("b", "beta", producer_source_guids=["b"])]
+        produced = [
+            _row("b", "beta changed", run=2, producer_source_guids=["b"]),
+            _row("n1", "beta", run=2, producer_source_guids=["b"]),
+        ]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+        assert [row["source_guid"] for row in out] == ["b", "n1"]
+
+    def test_a_row_it_holds_the_identity_of_never_matches_by_what_it_holds(self):
+        """Only a row minted an identity no stored row holds is matched by content: a
+        record's own row is the row stored under its identity or none."""
+        stored = [_row("s1", "beta")]
+        produced = [_row("b", "beta", run=2)]
+        stored_b = [_row("b", "other"), *stored]
+
+        _, unchanged = rows_written_again_unchanged(produced, stored_b)
+
+        assert unchanged == frozenset()
+
+    def test_an_identity_several_stored_rows_hold_is_never_put_back_for_a_minted_row(self):
+        stored = [_child("s1", "part 1"), _child("s1", "part 2")]
+        produced = [_child("n1", "part 1", run=2)]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+        assert out[0]["source_guid"] == "n1"
+
+    def test_a_correlation_a_record_carries_is_still_what_it_holds(self):
+        """Only a row minted an identity is minted its correlation too."""
+        stored = [_row("b", "beta", version_correlation_id="c1")]
+        produced = [_row("b", "beta", run=2, version_correlation_id="c2")]
+
+        _, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+
+    def test_a_roll_up_written_as_it_stands_is_put_back(self):
+        stored = [_row("r1", "alpha + beta", producer_source_guids=["a", "b"])]
+        produced = [_row("r2", "alpha + beta", run=2, producer_source_guids=["a", "b"])]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == {"r1"}
+        assert out[0]["target_id"] == "target-alpha + beta-1"
+
+    def test_a_roll_up_over_records_it_did_not_hold_is_new(self):
+        stored = [_row("r1", "beta", producer_source_guids=["b"])]
+        produced = [_row("r2", "beta", run=2, producer_source_guids=["a", "b"])]
+
+        _, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+
+
+class TestWhatThisRunVouchesForARowPutBack:
+    def _context(self, kept: list[tuple]) -> ProcessingContext:
+        context = ProcessingContext(agent_config={}, agent_name="roll_up")
+        context.kept_dispositions.extend(kept)
+        return context
+
+    def test_a_minted_identity_put_back_is_vouched_for_under_the_stored_one(self):
+        produced = [_child("n1", "part 1"), _child("n2", "part 2")]
+        written = [_child("s1", "part 1"), produced[1]]
+        context = self._context(
+            [
+                ("roll_up", "n1", "success", None, None, None, None),
+                ("roll_up", "n2", "success", None, None, None, None),
+                ("roll_up", "b", "success", "consumed_into_output", None, None, None),
+            ]
+        )
+
+        _vouch_under_the_identity_put_back(context, produced, written)
+
+        assert [row[1] for row in context.kept_dispositions] == ["s1", "n2", "b"]
+        assert context.kept_dispositions[0][2:] == ("success", None, None, None, None)
+
+    def test_nothing_put_back_leaves_what_is_vouched_for_as_it_was(self):
+        produced = [_row("b", "beta")]
+        kept = [("roll_up", "b", "success", None, None, None, None)]
+        context = self._context(list(kept))
+
+        _vouch_under_the_identity_put_back(context, produced, produced)
+
+        assert context.kept_dispositions == kept
 
 
 class _Backend:
@@ -271,9 +423,81 @@ class TestWhatIsForgottenBelow:
             self.INPUTS,
             frozenset({"a", "b"}),
             whole_file_readers=frozenset({"final"}),
+            replacement=self.REPLACED,
         )
 
         assert backend.cleared == {}
+
+    def test_a_file_tool_below_an_expansion_keeps_what_it_holds_of_a_file_as_it_was(self):
+        """The children carry identities of their own; the records they came from are
+        inputs of the file, not rows of it, so they never stood to be unchanged."""
+        replaced = [_child("s1", "beta part 1"), _child("s2", "beta part 2")]
+        backend = _Backend({"final": [_below("s1"), _below("s2")]})
+
+        _forget_answers_below(
+            backend,
+            ["final"],
+            "p.json",
+            replaced,
+            [{"source_guid": "b"}],
+            frozenset({"s1", "s2"}),
+            whole_file_readers=frozenset({"final"}),
+            replacement=replaced,
+        )
+
+        # The record itself is cleared, which no row below carries the identity of.
+        assert backend.cleared == {"final": ["b"]}
+
+    def test_a_file_tool_below_keeps_nothing_of_a_file_holding_a_row_more(self):
+        """Every stored row is unchanged, but the file now holds alpha's row too."""
+        backend = _Backend({"final": [_below("b")]})
+
+        _forget_answers_below(
+            backend,
+            ["final"],
+            "p.json",
+            [_row("b", "beta")],
+            self.INPUTS,
+            frozenset({"b"}),
+            whole_file_readers=frozenset({"final"}),
+            replacement=[_row("a", "alpha"), _row("b", "beta")],
+        )
+
+        assert backend.cleared == {"final": ["a", "b"]}
+
+    def test_a_row_built_on_an_unchanged_child_and_naming_its_record_is_kept(self):
+        """An expanding tool's rows carry identities of their own and name the record as
+        parent. A row below is built on the child it carries the identity of; the record,
+        an input of the file, is no row of it to be unchanged or not."""
+        replaced = [_child("s1", "beta part 1"), _child("s2", "beta part 2")]
+        inputs = [{"source_guid": "b"}]
+        backend = _Backend(
+            {
+                "final": [
+                    _below("s1", parent_source_guid="b", producer_source_guids=["b"]),
+                    _below("s2", parent_source_guid="b", producer_source_guids=["b"]),
+                ]
+            }
+        )
+
+        _forget_answers_below(backend, ["final"], "p.json", replaced, inputs, frozenset({"s1"}))
+
+        assert backend.cleared == {"final": ["b", "s2"]}
+
+    def test_a_row_naming_only_an_input_the_file_holds_no_row_of_is_judged_by_it(self):
+        """A record the tool now drops left a row below naming it alone: nothing vouches."""
+        backend = _Backend({"final": [_below("x", parent_source_guid="b")]})
+
+        _forget_answers_below(
+            backend,
+            ["final"],
+            "p.json",
+            [_child("s1", "a1", record="a")],
+            [{"source_guid": "a"}, {"source_guid": "b"}],
+            frozenset({"s1"}),
+        )
+
+        assert sorted(backend.cleared["final"]) == ["a", "b", "x"]
 
     def test_with_every_row_unchanged_nothing_is_cleared(self):
         backend = _Backend({"final": [_below("a"), _below("b")]})

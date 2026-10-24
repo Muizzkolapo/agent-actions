@@ -1,9 +1,7 @@
 kind: Under the Hood
 body: >-
-  Follow-up to the `llamafile` vendor. Batch mode on a named runtime no longer gets the
-  per-action warning that the vendor "may not support batch processing" and that it is
-  safe to ignore, beside the preflight error that refuses it. Response metadata of a
-  named runtime keeps the OpenAI fields (`system_fingerprint`, `created`) the openai
-  vendor records. An `agac run` test pins that a `llamafile` action and an `openai`
-  action in one run each reach their own server. (#1555)
+  Follow-up to the `llamafile` vendor. Response metadata of a named runtime keeps the
+  OpenAI fields (`system_fingerprint`, `created`) the openai vendor records. An `agac run`
+  test pins that a `llamafile` action and an `openai` action in one run each reach their
+  own server. (#1555)
 time: 2026-10-24T09:00:00Z

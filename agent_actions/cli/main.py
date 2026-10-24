@@ -27,7 +27,7 @@ from agent_actions.cli.traces import traces
 from agent_actions.config.path_config import find_project_root_dir, load_project_config
 from agent_actions.errors import ConfigValidationError, ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
-from agent_actions.logging.config import LoggingConfig
+from agent_actions.logging.config import LoggingConfig, report_unread_env_vars
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import (
@@ -138,6 +138,7 @@ class CLI:
         stand: the commands that read the project fail on it on their own, and
         ``--help``, ``--version`` and ``agac init`` never read it.
         """
+        report_unread_env_vars()
         project_root = find_project_root_dir()
         if project_root is None:
             return LoggingConfig()

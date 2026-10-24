@@ -8,72 +8,40 @@ import pytest
 from agent_actions.logging.config import (
     DEFAULT_LOG_MAX_BYTES,
     DEFAULT_LOG_RETAIN_RUNS,
+    UNREAD_LOGGING_ENV_VARS,
     FileHandlerSettings,
     LoggingConfig,
+    report_unread_env_vars,
 )
 
 
-class TestLoggingConfigFromEnvironment:
-    """Tests for LoggingConfig.from_environment()."""
+class TestUnreadEnvVarsAreReported:
+    """``report_unread_env_vars``: a set logging variable nothing reads is named on stderr."""
 
-    def test_default_file_handler_enabled_from_env(self):
-        """Test that file handler is enabled by default from environment."""
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.enabled is True
+    @pytest.mark.parametrize("name", UNREAD_LOGGING_ENV_VARS)
+    def test_a_set_unread_variable_is_named(self, name, capsys):
+        with patch.dict(os.environ, {name: "1"}, clear=True):
+            report_unread_env_vars()
+        err = capsys.readouterr().err
+        assert err.count("agent_actions: ignoring ") == 1
+        assert f"ignoring {name}: not read and configures nothing; unset it" in err
 
-    def test_disable_file_handler_via_env_var(self, monkeypatch):
-        """Test disabling file handler via AGENT_ACTIONS_NO_LOG_FILE."""
-        monkeypatch.setenv("AGENT_ACTIONS_NO_LOG_FILE", "1")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.enabled is False
+    def test_a_set_but_empty_unread_variable_is_still_named(self, capsys):
+        with patch.dict(os.environ, {"AGENT_ACTIONS_LOG_FILE": ""}, clear=True):
+            report_unread_env_vars()
+        assert "ignoring AGENT_ACTIONS_LOG_FILE:" in capsys.readouterr().err
 
-    def test_enable_file_handler_with_zero(self, monkeypatch):
-        """Test that AGENT_ACTIONS_NO_LOG_FILE=0 keeps file handler enabled."""
-        monkeypatch.setenv("AGENT_ACTIONS_NO_LOG_FILE", "0")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.enabled is True
+    def test_read_and_unset_variables_are_not_named(self, capsys):
+        env = {"AGENT_ACTIONS_LOG_RETAIN_RUNS": "2", "AGENT_ACTIONS_LOG_LEVEL": "INFO"}
+        with patch.dict(os.environ, env, clear=True):
+            report_unread_env_vars()
+        assert capsys.readouterr().err == ""
 
-    def test_custom_log_file_path_from_env(self, monkeypatch):
-        """Test setting custom log file path via AGENT_ACTIONS_LOG_FILE."""
-        monkeypatch.setenv("AGENT_ACTIONS_LOG_FILE", "/custom/path/my.log")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.path == "/custom/path/my.log"
-
-    def test_custom_log_dir_from_env(self, monkeypatch):
-        """Test setting custom log directory via AGENT_ACTIONS_LOG_DIR."""
-        monkeypatch.setenv("AGENT_ACTIONS_LOG_DIR", "/custom/logs")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.path == "/custom/logs/agent_actions.log"
-
-    def test_log_file_overrides_log_dir(self, monkeypatch):
-        """Test that AGENT_ACTIONS_LOG_FILE takes precedence over LOG_DIR."""
-        monkeypatch.setenv("AGENT_ACTIONS_LOG_FILE", "/specific/file.log")
-        monkeypatch.setenv("AGENT_ACTIONS_LOG_DIR", "/general/dir")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.path == "/specific/file.log"
-
-    def test_file_log_level_from_env(self, monkeypatch):
-        """Test setting file log level via AGENT_ACTIONS_FILE_LOG_LEVEL."""
-        monkeypatch.setenv("AGENT_ACTIONS_FILE_LOG_LEVEL", "INFO")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.level == "INFO"
-
-    def test_file_log_level_defaults_to_debug(self):
-        """Test that file log level defaults to DEBUG when not set."""
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.level == "DEBUG"
-
-    def test_invalid_file_log_level_defaults_to_debug(self, monkeypatch):
-        """Test that invalid file log level defaults to DEBUG."""
-        monkeypatch.setenv("AGENT_ACTIONS_FILE_LOG_LEVEL", "INVALID")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.level == "DEBUG"
-
-    def test_file_log_level_case_insensitive(self, monkeypatch):
-        """Test that file log level is case-insensitive."""
-        monkeypatch.setenv("AGENT_ACTIONS_FILE_LOG_LEVEL", "warning")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.level == "WARNING"
+    def test_an_unread_variable_changes_nothing_in_the_config(self):
+        env = dict.fromkeys(UNREAD_LOGGING_ENV_VARS, "1")
+        with patch.dict(os.environ, env, clear=True):
+            config = LoggingConfig.from_environment()
+        assert config == LoggingConfig()
 
 
 class TestLoggingConfigFromProjectConfig:
@@ -152,7 +120,6 @@ class TestLoggingConfigFromProjectConfig:
         project_config = {"logging": {"level": "DEBUG", "include_source_location": True}}
         config = LoggingConfig.from_project_config(project_config)
         assert config.default_level == "DEBUG"
-        assert config.include_source_location is False
         err = capsys.readouterr().err
         assert "ignoring logging.include_source_location:" in err
         assert "keys read under logging: file, level, module_levels" in err
@@ -220,7 +187,6 @@ class TestLoggingConfigDebugMode:
         with patch.dict(os.environ, {"AGENT_ACTIONS_DEBUG": "1"}, clear=True):
             config = LoggingConfig.from_environment()
 
-            assert config.include_source_location is True
             assert config.default_level == "DEBUG"
 
     def test_debug_env_var_zero_disables_debug_mode(self):
@@ -228,7 +194,6 @@ class TestLoggingConfigDebugMode:
         with patch.dict(os.environ, {"AGENT_ACTIONS_DEBUG": "0"}, clear=True):
             config = LoggingConfig.from_environment()
 
-            assert config.include_source_location is False
             assert config.default_level == "INFO"
 
     def test_normal_mode_without_debug_env(self):
@@ -236,7 +201,6 @@ class TestLoggingConfigDebugMode:
         with patch.dict(os.environ, {}, clear=True):
             config = LoggingConfig.from_environment()
 
-            assert config.include_source_location is False
             assert config.default_level == "INFO"
 
     def test_debug_env_overrides_log_level(self):
@@ -250,7 +214,6 @@ class TestLoggingConfigDebugMode:
 
             # Debug mode should override WARNING level
             assert config.default_level == "DEBUG"
-            assert config.include_source_location is True
 
 
 class TestEnvironmentOverlaysProjectConfig:
@@ -293,7 +256,6 @@ class TestEnvironmentOverlaysProjectConfig:
         with patch.dict(os.environ, {"AGENT_ACTIONS_DEBUG": "1"}, clear=True):
             config = LoggingConfig.from_environment(base)
         assert config.default_level == "DEBUG"
-        assert config.include_source_location is True
 
     def test_an_invalid_variable_falls_back_to_the_project_value(self, base, capsys):
         env = {"AGENT_ACTIONS_LOG_LEVEL": "LOUD", "AGENT_ACTIONS_LOG_RETAIN_RUNS": "0"}

@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
+from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
 
 
 class VendorType(str, Enum):
@@ -24,6 +25,17 @@ class VendorType(str, Enum):
     TOOL = "tool"
     HITL = "hitl"
     AGAC_PROVIDER = "agac-provider"
+
+
+# Vendors that run no model: they reach no endpoint and have no batch API.
+NON_LLM_VENDORS = frozenset(
+    {VendorType.TOOL.value, VendorType.HITL.value, VendorType.AGAC_PROVIDER.value}
+)
+
+
+def vendor_names() -> list[str]:
+    """Every name ``model_vendor`` accepts: the vendor types, then the runtime profiles."""
+    return [v.value for v in VendorType] + list(RUNTIME_PROFILES)
 
 
 # Names the configuration reference gives a vendor that differ from its value.

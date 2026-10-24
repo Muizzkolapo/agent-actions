@@ -1099,3 +1099,147 @@ class TestThePlanSaysWhatAFileToolCosts:
         assert result.returncode == 0, output
         assert "From action: finalize" in output, output
         assert "File tool" not in output, output
+
+
+# Two rows per record, each computed from that record alone: the output expands, so
+# every row is minted a new identity on every run.
+_EXPANDING = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    return FileUDFResult(
+        outputs=[
+            {"source_index": i, "data": {"summary": f"{page} part {n}", "exam_density": "low"}}
+            for i, page in enumerate(pages)
+            for n in (1, 2)
+        ]
+    )
+"""
+)
+
+# Two rows per record, the second counted across the file: alpha returning changes
+# beta's second row and leaves its first as it was.
+_EXPANDING_COUNT = (
+    _FILE_TOOL_HEAD
+    + """
+
+@udf_tool(granularity=Granularity.FILE)
+def roll_pages(data: list) -> FileUDFResult:
+    pages = _handed(data)
+    return FileUDFResult(
+        outputs=[
+            row
+            for i, page in enumerate(pages)
+            for row in (
+                {"source_index": i, "data": {"summary": f"{page} part 1", "exam_density": "low"}},
+                {
+                    "source_index": i,
+                    "data": {"summary": f"{page} of {len(pages)}", "exam_density": "low"},
+                },
+            )
+        ]
+    )
+"""
+)
+
+
+def _row_of(rows: list[dict], action: str, summary: str) -> dict:
+    (row,) = [row for row in rows if _summaries([row], action) == [summary]]
+    return row
+
+
+class TestARowAnExpandingToolWritesAgainUnchangedIsCarriedBelow:
+    """The tool writes two rows per record, so each row is minted a new identity on
+    every run. Handed the whole file again, it writes beta's two rows as they were:
+    they are matched to the stored rows through the record they came from, and only
+    alpha's rows are answered again below."""
+
+    @pytest.fixture
+    def project(self, tmp_path):
+        return _project(tmp_path, TOOL_BELOW, _EXPANDING)
+
+    def test_the_premise_the_tool_writes_two_rows_per_record(self, project):
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        assert _handed(project) == [["Page alpha.", "Page beta."]]
+        assert sorted(_summaries(_rows(project)["pages1.json"])) == [
+            "Page alpha. part 1",
+            "Page alpha. part 2",
+            "Page beta. part 1",
+            "Page beta. part 2",
+        ]
+
+    def test_only_the_rows_of_the_record_the_retry_names_are_answered_again_below(self, project):
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        assert sorted(_finalized(project)) == ["Page alpha. part 1", "Page alpha. part 2"]
+        assert sorted(_summaries(_rows(project, "finalize")["pages1.json"], "finalize")) == [
+            "FINAL[Page alpha. part 1]",
+            "FINAL[Page alpha. part 2]",
+            "FINAL[Page beta. part 1]",
+            "FINAL[Page beta. part 2]",
+        ]
+
+    def test_each_row_written_again_unchanged_keeps_the_identity_it_was_stored_under(self, project):
+        before = _failed_then_fixed(project)["pages1.json"]
+        stored = {
+            summary: _row_of(before, "roll_up", summary)
+            for summary in ("Page beta. part 1", "Page beta. part 2")
+        }
+
+        _retry(project)
+
+        after = _rows(project, as_stored=True)["pages1.json"]
+        for summary, was in stored.items():
+            now = _row_of(after, "roll_up", summary)
+            assert now["source_guid"] == was["source_guid"]
+            assert now["target_id"] == was["target_id"]
+
+    def test_every_stored_row_below_is_vouched_for_and_a_run_after_finds_it_whole(self, project):
+        _failed_then_fixed(project)
+        _retry(project)
+        stored = {
+            row["source_guid"] for rows in _rows(project, "finalize").values() for row in rows
+        }
+        assert _successes(project, "finalize") == stored
+        rolled = {row["source_guid"] for rows in _rows(project).values() for row in rows}
+        assert rolled <= _successes(project)
+        (project / "handed.jsonl").unlink(missing_ok=True)
+        (project / "final.jsonl").unlink(missing_ok=True)
+
+        _run(project)
+
+        assert _handed(project) == []
+        assert _finalized(project) == []
+
+    def test_a_row_of_an_unnamed_record_the_tool_writes_differently_is_answered_again(
+        self, tmp_path
+    ):
+        """The positive control: beta's count changes with alpha back, its first row
+        does not; below, beta's count is answered again and its first row is carried."""
+        project = _project(tmp_path, TOOL_BELOW, _EXPANDING_COUNT)
+        _failed_then_fixed(project)
+
+        _retry(project)
+
+        assert sorted(_finalized(project)) == [
+            "Page alpha. of 2",
+            "Page alpha. part 1",
+            "Page beta. of 2",
+        ]
+
+    def test_a_batch_action_below_is_sent_only_the_rows_of_the_record_named(self, tmp_path):
+        project = _project(tmp_path, BATCH_BELOW, _EXPANDING)
+        _failed_then_fixed(project)
+
+        output = _retry(project)
+        _run(project)
+
+        assert "submitted: 2 requests" in output, output

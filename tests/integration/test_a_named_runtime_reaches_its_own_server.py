@@ -145,12 +145,24 @@ def test_the_llamafile_row_is_the_port_this_test_serves():
 
 
 def test_a_llamafile_action_and_an_openai_action_reach_their_own_servers(tmp_path, servers):
+    """One test holds port 8080, so parallel workers cannot skip half of it."""
     local, other = servers
+
+    # Positive control first: a base_url on the llamafile action is followed elsewhere,
+    # so the routing assertions below can tell the two servers apart.
+    _run(
+        tmp_path / "control",
+        _action("classify_local", "llamafile", "local", f"    base_url: {_url(other)}\n"),
+        {},
+    )
+    assert local.requests == []
+    assert [r["model"] for r in other.requests] == ["local"]
+    other.requests.clear()
+
     actions = _action("classify_local", "llamafile", "local") + _action(
         "summarize_cloud", "openai", "gpt-4o-mini", "    api_key: OPENAI_API_KEY\n"
     )
-
-    _run(tmp_path, actions, {"OPENAI_API_KEY": "sk-test", "OPENAI_BASE_URL": _url(other)})
+    _run(tmp_path / "mixed", actions, {"OPENAI_API_KEY": "sk-test", "OPENAI_BASE_URL": _url(other)})
 
     assert [r["model"] for r in local.requests] == ["local"]
     assert [r["model"] for r in other.requests] == ["gpt-4o-mini"]
@@ -160,14 +172,3 @@ def test_a_llamafile_action_and_an_openai_action_reach_their_own_servers(tmp_pat
     sent = local.requests[0]["response_format"]
     assert sent["type"] == "json_schema"
     assert set(sent["json_schema"]) == {"name", "schema"}
-
-
-def test_a_base_url_on_the_llamafile_action_reaches_that_server(tmp_path, servers):
-    """Positive control for the routing assertion: a URL that points elsewhere is followed."""
-    local, other = servers
-    actions = _action("classify_local", "llamafile", "local", f"    base_url: {_url(other)}\n")
-
-    _run(tmp_path, actions, {})
-
-    assert local.requests == []
-    assert [r["model"] for r in other.requests] == ["local"]

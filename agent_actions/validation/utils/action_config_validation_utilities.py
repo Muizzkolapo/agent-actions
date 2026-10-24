@@ -73,15 +73,6 @@ class ActionConfigValidationUtilities:
         "tool": {MODEL_NAME_KEY},
     }
 
-    _VALID_BATCH_VENDORS: set[str] = {
-        "openai",
-        "gemini",
-        "anthropic",
-        "groq",
-        "ollama_local",
-        "ollama_cloud",
-    }
-
     _VALID_GRANULARITY_VALUES: set[str] = {"record", "file"}
 
     # ===== Case-Insensitive Dict Operations =====
@@ -197,11 +188,6 @@ class ActionConfigValidationUtilities:
             all_keys = all_keys | type_keys
 
         return all_keys
-
-    @staticmethod
-    def get_valid_batch_vendors() -> set[str]:
-        """Get set of valid batch processing vendors."""
-        return ActionConfigValidationUtilities._VALID_BATCH_VENDORS.copy()
 
     @staticmethod
     def get_valid_granularity_values() -> set[str]:

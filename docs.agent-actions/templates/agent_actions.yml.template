@@ -9,7 +9,7 @@
 # This is the base layer of the configuration hierarchy
 
 # Model vendor for all agents (can be overridden at workflow or action level)
-# Supported vendors: openai, anthropic, gemini, groq, cohere, ollama_cloud, ollama_local
+# Supported vendors: openai, anthropic, gemini, groq, cohere, ollama_cloud, ollama_local, llamafile
 model_vendor: openai
 
 # Model name to use (vendor-specific)
