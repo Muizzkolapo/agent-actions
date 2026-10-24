@@ -392,13 +392,18 @@ that finishes an interrupted retry. A HITL review is not one: it shows only the 
 the repair names, and the rest keep their decisions.
 
 A row the tool writes again as it was stored, in all but what a run mints for a row, is put
-back as the stored row, identifiers and all. What every action below the tool holds for the
+back as the stored row, identifiers and all. A row minted an identity no stored row holds, an
+expansion's or a roll-up's, is matched to the one stored row of an identity not written again
+that holds what it holds, its producers included (its correlation is minted with its identity),
+and what collection vouches for it with is moved to the identity put back before it is written.
+What every action below the tool holds for the
 rest of that file was computed from the rows replaced, and a roll-up's new row is one no
 named record leads to. So before the file is written the actions below it in the stored
 dependency graph forget every disposition they hold under an identity of the file, except
-one built on rows put back unchanged alone (a FILE tool below, whose every row may be
-computed from the whole file, keeps its rows only for a file written again entirely as it
-was), and once it is written a repair reaching the
+one built on rows put back unchanged alone (judged by the rows of the file a row names, and
+by the file's inputs only for a row naming none of them; a FILE tool below, whose every row
+may be computed from the whole file, keeps its rows only where the file is written again as
+the rows it held, every one unchanged), and once it is written a repair reaching the
 file below answers it as a plain run does: every record whose row changed, and what still
 answers carried. A plain run finishing a stopped retry finds those dispositions gone and
 answers the file again the same way.

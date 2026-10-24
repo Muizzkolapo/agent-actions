@@ -201,14 +201,16 @@ not: those rows were computed from what the tool wrote before, and a roll-up's
 new row is one no record the retry names leads to. A record whose row the tool
 wrote again unchanged keeps its answer below, so a dedupe, or a tool writing
 one row per record, that writes most of its rows as they were costs the actions
-below only the records that changed. A row is matched to the one it was by the
-record's identity, so this holds for a tool whose rows keep their records'
-identities (one row per record, or fewer). A file the tool writes more rows for
-than the records it answered has every row minted an identity of its own each
-run, so none of them matches and every record of it is answered again below, as
-is a roll-up's row. A FILE tool below the tool is the exception: each of its rows
-may depend on every record of the file, so it keeps what it holds only for a
-file written again entirely as it was, and is handed the file again otherwise.
+below only the records that changed. A row that keeps its record's identity is
+matched to the one stored under it. A row minted an identity of its own each run,
+as every row is of a file the tool writes more rows for than the records it
+answered, and a roll-up's row, is matched to the stored row holding what it holds,
+the records it was made from included, and takes back that row's identity. Two
+rows of a file holding the same are never matched, since which was which cannot
+be told, and are answered again below. A FILE tool below the tool is the
+exception: each of its rows may depend on every record of the file, so it keeps
+what it holds only for a file written again as the rows it held, every one of them
+unchanged, and is handed the file again otherwise.
 The plain `agac run` that finishes a retry stopped part-way through does the
 same.
 

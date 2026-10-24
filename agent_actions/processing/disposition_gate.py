@@ -13,6 +13,7 @@ SQL queries across files within the same action.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from collections import Counter
@@ -295,15 +296,12 @@ _MINTED_PER_RUN: frozenset[str] = frozenset(
 def rows_written_again_unchanged(
     produced: list[dict[str, Any]], stored: list[dict[str, Any]]
 ) -> tuple[list[dict[str, Any]], frozenset[str]]:
-    """*produced* with each row written again as it was stored put back as it was.
+    """*produced*, in order, with each row written again as it was stored put back as it was.
 
-    A FILE tool handed its whole file again writes every row of it again, and a row
-    it writes as it stands is the row it was: what reads it was computed from that
-    row and still answers for it. Such a row keeps the identifiers it was stored under,
-    so the rows below that name it still name it. Returns the rows to write and the
-    identities put back. Two rows are the same row when they match under one
-    identity in all but what a run mints for a row whatever it holds; an identity
-    either file holds several rows under is never one.
+    What reads such a row was computed from it and still answers for it, so it keeps the
+    identifiers it was stored under. A row is the one stored under its identity or, minted
+    one no stored row holds, the stored row of an identity not written again holding what
+    it holds, producers included; never one of several. Returns the identities put back.
     """
     stored_per_guid = Counter(row.get("source_guid") or "" for row in stored)
     was_stored = {
@@ -313,7 +311,7 @@ def rows_written_again_unchanged(
     }
     produced_per_guid = Counter(row.get("source_guid") or "" for row in produced)
     unchanged: set[str] = set()
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, Any] | None] = []
     for row in produced:
         guid = row.get("source_guid")
         was = was_stored.get(guid) if guid and produced_per_guid[guid] == 1 else None
@@ -321,14 +319,55 @@ def rows_written_again_unchanged(
             out.append(was)
             unchanged.add(guid)
         else:
-            out.append(row)
-    return out, frozenset(unchanged)
+            out.append(None)
+
+    minted = [
+        at
+        for at, row in enumerate(produced)
+        if out[at] is None and row.get("source_guid") and row["source_guid"] not in stored_per_guid
+    ]
+    written_again = set(produced_per_guid)
+    left = [
+        row
+        for row in stored
+        if (guid := row.get("source_guid"))
+        and guid not in written_again
+        and stored_per_guid[guid] == 1
+    ]
+    left_per_content = Counter(_content_of(row) for row in left)
+    minted_per_content = Counter(_content_of(produced[at]) for at in minted)
+    left_by_content = {_content_of(row): row for row in left}
+    for at in minted:
+        content = _content_of(produced[at])
+        was = left_by_content.get(content)
+        if was is not None and left_per_content[content] == minted_per_content[content] == 1:
+            out[at] = was
+            unchanged.add(was["source_guid"])
+
+    rows = [was if was is not None else row for was, row in zip(out, produced, strict=True)]
+    return rows, frozenset(unchanged)
 
 
 def _holds_the_same(row: dict[str, Any], other: dict[str, Any]) -> bool:
     return {k: v for k, v in row.items() if k not in _MINTED_PER_RUN} == {
         k: v for k, v in other.items() if k not in _MINTED_PER_RUN
     }
+
+
+# What a run mints anew for a row it mints an identity for, beside what it mints for any.
+_MINTED_WITH_AN_IDENTITY: frozenset[str] = _MINTED_PER_RUN | {
+    "source_guid",
+    "version_correlation_id",
+}
+
+
+def _content_of(row: dict[str, Any]) -> str:
+    """What *row* holds but for what a run mints for a row minted an identity."""
+    return json.dumps(
+        {k: v for k, v in row.items() if k not in _MINTED_WITH_AN_IDENTITY},
+        sort_keys=True,
+        default=str,
+    )
 
 
 def note_replaced_above(
