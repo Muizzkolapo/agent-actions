@@ -6,13 +6,13 @@ them by source record, whatever the order.
 """
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from agent_actions.prompt.context.scope_inference import infer_dependencies
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 WORKFLOW = "fanin_probe"
 
@@ -114,10 +114,7 @@ def _project(root: Path, dependencies: str) -> Path:
 
 def _rows(root: Path, action: str) -> list[dict]:
     db = root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / f"{WORKFLOW}.db"
-    with sqlite3.connect(db) as conn:
-        found = conn.execute(
-            "select data from target_data where action_name = ?", (action,)
-        ).fetchall()
+    found = stored_rows(db, "select data from target_data where action_name = ?", action)
     return [record["content"][action] for (data,) in found for record in json.loads(data)]
 
 

@@ -9,12 +9,12 @@ test can see, because the state is still there.
 import json
 import os
 import shutil
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -62,11 +62,7 @@ def _records(project):
     dbs = sorted(store.glob("*.db")) if store.is_dir() else []
     if not dbs:
         return []
-    con = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
-    try:
-        blobs = [row[0] for row in con.execute("select data from target_data")]
-    finally:
-        con.close()
+    blobs = [row[0] for row in stored_rows(dbs[0], "select data from target_data")]
     out = []
     for blob in blobs:
         loaded = json.loads(blob)

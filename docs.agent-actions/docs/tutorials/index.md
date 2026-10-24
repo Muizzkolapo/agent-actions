@@ -208,14 +208,10 @@ Running workflow: product_pipeline
 Results written to: agent_io/store/product_pipeline.db
 ```
 
-Check the `target_data` table for your results:
+Print the content `generate_content` stored for each record (the store keeps records compressed, so read them with the CLI rather than sqlite3):
 
 ```bash
-sqlite3 agent_io/store/product_pipeline.db "
-  SELECT json_extract(r.value, '\$.content')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = 'generate_content'
-"
+agac records -w product_pipeline -a generate_content --field content
 ```
 
 ```json

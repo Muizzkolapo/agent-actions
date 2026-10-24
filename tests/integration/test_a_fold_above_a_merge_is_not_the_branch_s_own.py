@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 WORKFLOW = "fold_above"
 
@@ -198,8 +199,7 @@ def _db(root: Path) -> Path:
 
 
 def _source_of(root: Path, item: str) -> str:
-    with sqlite3.connect(_db(root)) as conn:
-        rows = conn.execute("select data from target_data where action_name = 'stage'").fetchall()
+    rows = stored_rows(_db(root), "select data from target_data where action_name = 'stage'")
     return next(
         r["source_guid"]
         for (data,) in rows

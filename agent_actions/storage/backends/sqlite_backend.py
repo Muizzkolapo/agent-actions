@@ -12,6 +12,7 @@ from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.errors.processing import SerializationError
 from agent_actions.errors.validation import DataValidationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.reasons import GUARD_SKIP
@@ -219,7 +220,7 @@ class SQLiteBackend(StorageBackend):
             threading.RLock()
         )  # Serialize write operations; RLock allows re-entry from connection property
         self._claimed_source_guids_this_run: dict[str, str] = {}
-        self._trace_dictionaries: dict[int, bytes] = {}
+        self._dictionaries: dict[int, bytes] = {}
 
     @classmethod
     def create(cls, **kwargs) -> "SQLiteBackend":
@@ -415,13 +416,14 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             try:
+                stored = self._compress(cursor, action_name, self._TARGET_DATA, data_json)
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO target_data
                     (action_name, relative_path, data, record_count, created_at)
                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    (action_name, relative_path, data_json, record_count),
+                    (action_name, relative_path, stored, record_count),
                 )
                 # Left beside the file just written, a checkpoint row would read as an
                 # answer given after it, and a resume would put it in place of the row
@@ -471,7 +473,11 @@ class SQLiteBackend(StorageBackend):
         if row is None:
             raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
 
-        result: list[dict[str, Any]] = deep_json.loads(row["data"])
+        result: list[dict[str, Any]] = self.decode_payload(
+            row["data"],
+            table="target_data",
+            where=f"action '{action_name}' file '{relative_path}'",
+        )
         return result
 
     def _read_target_raw_batch(
@@ -492,7 +498,11 @@ class SQLiteBackend(StorageBackend):
 
         result: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
-            result[row["action_name"]] = deep_json.loads(row["data"])
+            result[row["action_name"]] = self.decode_payload(
+                row["data"],
+                table="target_data",
+                where=f"action '{row['action_name']}' file '{relative_path}'",
+            )
         return result
 
     def _save_metadata_raw(self, key: str, value: str) -> None:
@@ -586,7 +596,15 @@ class SQLiteBackend(StorageBackend):
                     if enable_deduplication
                     else self._INSERT_SOURCE_REPLACE_SQL
                 )
-                cursor.executemany(sql, rows)
+                stored = [
+                    (
+                        path,
+                        guid,
+                        self._compress(cursor, self._SOURCE_SCOPE, self._SOURCE_DATA, text),
+                    )
+                    for path, guid, text in rows
+                ]
+                cursor.executemany(sql, stored)
                 # cursor.rowcount is aggregated across all executemany() iterations by
                 # Python's sqlite3 driver; SELECT changes() only reflects the last row.
                 inserted_count: int = cursor.rowcount if cursor.rowcount >= 0 else 0
@@ -625,7 +643,7 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "SELECT data FROM source_data WHERE relative_path = ? ORDER BY id",
+                "SELECT source_guid, data FROM source_data WHERE relative_path = ? ORDER BY id",
                 (relative_path,),
             )
             rows = cursor.fetchall()
@@ -633,7 +651,14 @@ class SQLiteBackend(StorageBackend):
         if not rows:
             raise FileNotFoundError(f"No source data found for {relative_path}")
 
-        return [deep_json.loads(row["data"]) for row in rows]
+        return [
+            self.decode_payload(
+                row["data"],
+                table="source_data",
+                where=f"file '{relative_path}' record '{row['source_guid']}'",
+            )
+            for row in rows
+        ]
 
     def claim_source_guid_for_run(self, source_guid: str, relative_path: str) -> bool:
         """Claim source_guid for this run under relative_path; True if taken elsewhere."""
@@ -661,12 +686,32 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             # CAST: a store migrated to record_count holds it as TEXT, where '0' > 0.
+            # SQLite can measure a text row itself; a compressed one is measured below.
             cursor.execute(
                 "SELECT EXISTS (SELECT 1 FROM target_data WHERE action_name = ? "
-                "AND COALESCE(CAST(record_count AS INTEGER), json_array_length(data)) > 0)",
+                "AND COALESCE(CAST(record_count AS INTEGER), "
+                "CASE WHEN typeof(data) = 'text' THEN json_array_length(data) END) > 0)",
                 (action_name,),
             )
-            return bool(cursor.fetchone()[0])
+            if cursor.fetchone()[0]:
+                return True
+            cursor.execute(
+                "SELECT relative_path, data FROM target_data WHERE action_name = ? "
+                "AND record_count IS NULL AND typeof(data) <> 'text'",
+                (action_name,),
+            )
+            uncounted = cursor.fetchall()
+        return any(
+            self._count_stored(action_name, row["relative_path"], row["data"]) > 0
+            for row in uncounted
+        )
+
+    def _count_stored(self, action_name: str, relative_path: str, data: Any) -> int:
+        """How many rows a stored file holds, read from the file itself."""
+        records = self.decode_payload(
+            data, table="target_data", where=f"action '{action_name}' file '{relative_path}'"
+        )
+        return len(records) if isinstance(records, list) else 1
 
     def has_target_file(self, action_name: str, relative_path: str) -> bool:
         action_name = self._validate_identifier(action_name, "action_name")
@@ -707,14 +752,27 @@ class SQLiteBackend(StorageBackend):
             cursor.execute(
                 """
                 SELECT relative_path,
-                       COALESCE(record_count, json_array_length(data)) as record_count
+                       COALESCE(record_count,
+                                CASE WHEN typeof(data) = 'text'
+                                     THEN json_array_length(data) END) as record_count,
+                       CASE WHEN record_count IS NULL AND typeof(data) <> 'text'
+                            THEN data END as uncounted
                 FROM target_data
                 WHERE action_name = ?
                 ORDER BY relative_path
                 """,
                 (action_name,),
             )
-            file_metadata = cursor.fetchall()
+            # A compressed row written without its count is measured from the file itself.
+            file_metadata = [
+                {
+                    "relative_path": row["relative_path"],
+                    "record_count": row["record_count"]
+                    if row["uncounted"] is None
+                    else self._count_stored(action_name, row["relative_path"], row["uncounted"]),
+                }
+                for row in cursor.fetchall()
+            ]
 
             files = [row["relative_path"] for row in file_metadata]
 
@@ -756,7 +814,11 @@ class SQLiteBackend(StorageBackend):
                 if not data_row:
                     continue
 
-                records = deep_json.loads(data_row["data"])
+                records = self.decode_payload(
+                    data_row["data"],
+                    table="target_data",
+                    where=f"action '{action_name}' file '{file_path}'",
+                )
                 if records and isinstance(records[0], dict) and "_delta_mode" in records[0]:
                     records = self._reconstruct_from_deltas(action_name, file_path, records)
                 for record in records:
@@ -900,7 +962,7 @@ class SQLiteBackend(StorageBackend):
                         disposition,
                         reason,
                         relative_path,
-                        input_snapshot,
+                        self._compress_snapshot(cursor, action_name, input_snapshot),
                         detail,
                     ),
                 )
@@ -968,7 +1030,10 @@ class SQLiteBackend(StorageBackend):
                      input_snapshot, detail, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    rows,
+                    [
+                        (a, r, d, reason, rp, self._compress_snapshot(cursor, a, snap), detail)
+                        for a, r, d, reason, rp, snap, detail in rows
+                    ],
                 )
                 self.connection.commit()
                 logger.debug(
@@ -1015,7 +1080,22 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
+            found = [dict(row) for row in cursor.fetchall()]
+        for row in found:
+            row["input_snapshot"] = self.payload_text(
+                row["input_snapshot"],
+                table="record_disposition",
+                where=f"action '{row['action_name']}' record '{row['record_id']}'",
+            )
+        return found
+
+    def actions_with_dispositions(self) -> list[str]:
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT DISTINCT action_name FROM record_disposition ORDER BY action_name"
+            )
+            return [row["action_name"] for row in cursor.fetchall()]
 
     def has_disposition(
         self,
@@ -1105,7 +1185,7 @@ class SQLiteBackend(StorageBackend):
                 chunk = ids[start : start + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE json_valid(data) AND ("
+                    f"SELECT 1 FROM source_data WHERE typeof(data) = 'text' AND json_valid(data) AND ("
                     f"(source_guid IN ({placeholders}) "
                     f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL) "
                     f"OR json_extract(data, '$.repeat_of_source_guid') IN ({placeholders})) "
@@ -1114,13 +1194,19 @@ class SQLiteBackend(StorageBackend):
                 )
                 if cursor.fetchone() is not None:
                     return True
-            # SQLite's JSON functions refuse a row nested 1000 levels deep (and a NaN);
-            # such a row is read here instead of failing the query for every row.
-            cursor.execute("SELECT source_guid, data FROM source_data WHERE NOT json_valid(data)")
+            # A compressed row is read here, as is a text row SQLite's JSON functions
+            # refuse (nested 1000 levels deep, or holding a NaN), rather than failing
+            # the query for every row.
+            cursor.execute(
+                "SELECT source_guid, data FROM source_data"
+                " WHERE typeof(data) <> 'text' OR NOT json_valid(data)"
+            )
             unreadable_by_sqlite = cursor.fetchall()
         wanted = set(ids)
         for row in unreadable_by_sqlite:
-            stored = deep_json.loads(row["data"])
+            stored = self.decode_payload(
+                row["data"], table="source_data", where=f"record '{row['source_guid']}'"
+            )
             repeat_of = stored.get("repeat_of_source_guid") if isinstance(stored, dict) else None
             if repeat_of is not None and (row["source_guid"] in wanted or repeat_of in wanted):
                 return True
@@ -1193,8 +1279,10 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             try:
                 cursor.execute(query, params)
-                self.connection.commit()
                 deleted = cursor.rowcount
+                if disposition is None and record_id is None:
+                    self._forget_dictionary(cursor, action_name, self._SNAPSHOT)
+                self.connection.commit()
                 if deleted > 0:
                     logger.info(
                         "Cleared %d dispositions: action=%s disp=%s record_id=%s",
@@ -1276,7 +1364,15 @@ class SQLiteBackend(StorageBackend):
                     "INSERT OR REPLACE INTO checkpoint_output "
                     "(action_name, relative_path, source_guid, record_data) "
                     "VALUES (?, ?, ?, ?)",
-                    rows,
+                    [
+                        (
+                            action,
+                            path,
+                            guid,
+                            self._compress(cursor, action_name, self._CHECKPOINT_DATA, text),
+                        )
+                        for action, path, guid, text in rows
+                    ],
                 )
                 self.connection.commit()
                 logger.debug(
@@ -1307,19 +1403,27 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "SELECT record_data FROM checkpoint_output "
+                "SELECT source_guid, record_data FROM checkpoint_output "
                 "WHERE action_name = ? AND relative_path = ? ORDER BY id",
                 (action_name, relative_path),
             )
             rows: list[dict[str, Any]] = []
             for stored in cursor.fetchall():
-                answer = deep_json.loads(stored["record_data"])
+                answer = self.decode_payload(
+                    stored["record_data"],
+                    table="checkpoint_output",
+                    where=f"action '{action_name}' file '{relative_path}'"
+                    f" record '{stored['source_guid']}'",
+                )
                 # An earlier version stored one row, not a list, per record.
                 rows.extend(answer if isinstance(answer, list) else [answer])
             return rows
 
     def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
-        """Records of an action/path an earlier version checkpointed: one row, not a list."""
+        """Records of an action/path an earlier version checkpointed: one row, not a list.
+
+        Only a row stored as text can be one: every row stored compressed holds a list.
+        """
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -1327,7 +1431,8 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             cursor.execute(
                 "SELECT source_guid FROM checkpoint_output "
-                "WHERE action_name = ? AND relative_path = ? AND substr(record_data, 1, 1) <> '['",
+                "WHERE action_name = ? AND relative_path = ?"
+                " AND typeof(record_data) = 'text' AND substr(record_data, 1, 1) <> '['",
                 (action_name, relative_path),
             )
             return {row["source_guid"] for row in cursor.fetchall()}
@@ -1359,6 +1464,8 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             cursor.execute(query, params)
             deleted = cursor.rowcount
+            if relative_path is None and source_guids is None:
+                self._forget_dictionary(cursor, action_name, self._CHECKPOINT_DATA)
             self.connection.commit()
             if deleted > 0:
                 logger.debug(
@@ -1385,60 +1492,117 @@ class SQLiteBackend(StorageBackend):
         return value
 
     _TRACE_TEXT_COLUMNS = ("compiled_prompt", "llm_context", "response_text")
-    _TRACE_DICTIONARY_SIZE = 32768
 
-    def _compress_trace_text(
-        self, cursor: sqlite3.Cursor, action_name: str, column: str, text: str | None
-    ) -> bytes | None:
-        """Compress against the action's dictionary for this column, made from its first value.
+    # A compressed column names its dictionary "<table>.<column>". A payload column's
+    # dictionary belongs to the action whose rows it serves; source rows belong to no
+    # action and share one under an empty scope.
+    _TARGET_DATA = "target_data.data"
+    _SOURCE_DATA = "source_data.data"
+    _CHECKPOINT_DATA = "checkpoint_output.record_data"
+    _SNAPSHOT = "record_disposition.input_snapshot"
+    _SOURCE_SCOPE = ""
+    _DICTIONARY_SIZE = 32768
+
+    def _compress(self, cursor: sqlite3.Cursor, scope: str, key: str, text: str) -> bytes:
+        """Compress against the dictionary for (*scope*, *key*), made from its first value.
 
         Stored as a 4-byte dictionary id followed by a zlib stream; id 0 means no dictionary.
         """
-        if text is None:
-            return None
         raw = text.encode("utf-8")
         dictionary_id, dictionary = 0, b""
         if raw:
             cursor.execute(
                 "INSERT OR IGNORE INTO prompt_trace_dictionary (action_name, column_name, data)"
                 " VALUES (?, ?, ?)",
-                (action_name, column, raw[-self._TRACE_DICTIONARY_SIZE :]),
+                (scope, key, raw[-self._DICTIONARY_SIZE :]),
             )
             # Not cached: a rolled-back write frees this id for reuse, so only committed
             # dictionaries, which readers load, may be cached.
             cursor.execute(
                 "SELECT id, data FROM prompt_trace_dictionary"
                 " WHERE action_name = ? AND column_name = ?",
-                (action_name, column),
+                (scope, key),
             )
             dictionary_id, dictionary = cursor.fetchone()
         compressor = zlib.compressobj(6, zdict=dictionary) if dictionary else zlib.compressobj(6)
         return dictionary_id.to_bytes(4, "big") + compressor.compress(raw) + compressor.flush()
 
-    def _trace_dictionary(self, dictionary_id: int) -> bytes:
+    def _compress_trace_text(
+        self, cursor: sqlite3.Cursor, action_name: str, column: str, text: str | None
+    ) -> bytes | None:
+        if text is None:
+            return None
+        return self._compress(cursor, action_name, f"prompt_trace.{column}", text)
+
+    def _compress_snapshot(
+        self, cursor: sqlite3.Cursor, action_name: str, input_snapshot: str | None
+    ) -> bytes | None:
+        if input_snapshot is None:
+            return None
+        return self._compress(cursor, action_name, self._SNAPSHOT, input_snapshot)
+
+    @staticmethod
+    def _forget_dictionary(cursor: sqlite3.Cursor, scope: str, key: str) -> None:
+        """Drop a dictionary once the last row it served is gone, so the next write makes a new one."""
+        cursor.execute(
+            "DELETE FROM prompt_trace_dictionary WHERE action_name = ? AND column_name = ?",
+            (scope, key),
+        )
+
+    def _dictionary(self, dictionary_id: int) -> bytes:
         if dictionary_id == 0:
             return b""
-        if dictionary_id not in self._trace_dictionaries:
+        if dictionary_id not in self._dictionaries:
             row = self.connection.execute(
                 "SELECT data FROM prompt_trace_dictionary WHERE id = ?", (dictionary_id,)
             ).fetchone()
             if row is None:
                 raise ValueError(
-                    f"A compressed trace names dictionary {dictionary_id}, which the store does not hold"
+                    f"the row names dictionary {dictionary_id}, which the store does not hold"
                 )
-            self._trace_dictionaries[dictionary_id] = row[0]
-        return self._trace_dictionaries[dictionary_id]
+            self._dictionaries[dictionary_id] = row[0]
+        return self._dictionaries[dictionary_id]
+
+    def _inflate(self, value: bytes) -> str:
+        dictionary = self._dictionary(int.from_bytes(value[:4], "big"))
+        decompressor = zlib.decompressobj(zdict=dictionary) if dictionary else zlib.decompressobj()
+        return (decompressor.decompress(value[4:]) + decompressor.flush()).decode("utf-8")
 
     def decompress_trace_text(self, value: Any) -> Any:
         """Return trace text as written; a TEXT value is a row stored before compression."""
         if not isinstance(value, bytes):
             return value
-        dictionary = self._trace_dictionary(int.from_bytes(value[:4], "big"))
-        decompressor = zlib.decompressobj(zdict=dictionary) if dictionary else zlib.decompressobj()
         try:
-            return (decompressor.decompress(value[4:]) + decompressor.flush()).decode("utf-8")
-        except (zlib.error, UnicodeDecodeError) as e:
+            return self._inflate(value)
+        except (zlib.error, ValueError) as e:
             raise ValueError(f"Unreadable compressed trace text: {e}") from e
+
+    def payload_text(self, value: Any, *, table: str, where: str) -> Any:
+        """The text a payload column holds, whether stored compressed or as text.
+
+        These columns feed resume and retry, where empty data would pass for an
+        answer, so a value that cannot be read is an error naming its row.
+        """
+        if not isinstance(value, bytes):
+            return value
+        try:
+            return self._inflate(value)
+        except (zlib.error, ValueError) as e:
+            raise SerializationError(
+                f"{table} for {where} cannot be read: {e}",
+                context={"table": table, "where": where},
+            ) from e
+
+    def decode_payload(self, value: Any, *, table: str, where: str) -> Any:
+        """The JSON a payload column holds; see :meth:`payload_text` for what fails."""
+        text = self.payload_text(value, table=table, where=where)
+        try:
+            return deep_json.loads(text)
+        except ValueError as e:
+            raise SerializationError(
+                f"{table} for {where} cannot be read: {e}",
+                context={"table": table, "where": where},
+            ) from e
 
     def _decompress_trace_row(self, row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
         trace = dict(row)
@@ -1759,13 +1923,16 @@ class SQLiteBackend(StorageBackend):
                     )
                     deleted = cursor.rowcount
                     cursor.execute(
-                        "DELETE FROM prompt_trace_dictionary WHERE action_name = ?",
+                        "DELETE FROM prompt_trace_dictionary"
+                        " WHERE action_name = ? AND column_name LIKE 'prompt_trace.%'",
                         (action_name,),
                     )
                 else:
                     cursor.execute("DELETE FROM prompt_trace")
                     deleted = cursor.rowcount
-                    cursor.execute("DELETE FROM prompt_trace_dictionary")
+                    cursor.execute(
+                        "DELETE FROM prompt_trace_dictionary WHERE column_name LIKE 'prompt_trace.%'"
+                    )
                 self.connection.commit()
                 logger.debug(
                     "Cleared %d prompt traces: action=%s",
@@ -1797,6 +1964,7 @@ class SQLiteBackend(StorageBackend):
                     (action_name,),
                 )
                 deleted = cursor.rowcount
+                self._forget_dictionary(cursor, action_name, self._TARGET_DATA)
                 cursor.execute(
                     "DELETE FROM workflow_metadata WHERE key = ?",
                     (batch_file_names_key(action_name),),
@@ -1847,8 +2015,9 @@ class SQLiteBackend(StorageBackend):
             cursor = self.connection.cursor()
             try:
                 cursor.execute("DELETE FROM source_data")
-                self.connection.commit()
                 deleted = cursor.rowcount
+                self._forget_dictionary(cursor, self._SOURCE_SCOPE, self._SOURCE_DATA)
+                self.connection.commit()
                 logger.info(
                     "Cleared source_data table (%d rows)",
                     deleted,
@@ -2129,7 +2298,7 @@ class SQLiteBackend(StorageBackend):
                                 elif ns is None:
                                     item = {**item, "content": {}}
                             records.append({**item, "_file": rp})
-                    except (FileNotFoundError, json.JSONDecodeError) as e:
+                    except (FileNotFoundError, SerializationError) as e:
                         logger.debug("Skipping %s/%s in scan: %s", action_name, rp, e)
 
                 # Keyed on the prepare-time id: a durable guid would also match

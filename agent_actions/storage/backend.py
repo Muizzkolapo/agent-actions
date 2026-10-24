@@ -796,6 +796,10 @@ class StorageBackend(ABC):
         """Check whether at least one matching disposition exists."""
         return False
 
+    def actions_with_dispositions(self) -> list[str]:
+        """Every action holding a disposition row, in name order."""
+        return []
+
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
         """Return record_ids with any gate-terminal disposition for an action."""
         return set()

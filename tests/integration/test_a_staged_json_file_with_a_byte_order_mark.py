@@ -11,12 +11,12 @@ Every case is a real `agac run` through the CLI.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "bom_json"
@@ -94,13 +94,7 @@ def _stored(root: Path, action: str) -> list[dict]:
     dbs = sorted(store.glob("*.db"))
     if not dbs:
         return []
-    con = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
-    try:
-        rows = con.execute(
-            "select data from target_data where action_name = ?", (action,)
-        ).fetchall()
-    finally:
-        con.close()
+    rows = stored_rows(dbs[0], "select data from target_data where action_name = ?", action)
     return [record for (data,) in rows for record in json.loads(data)]
 
 

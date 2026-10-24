@@ -141,7 +141,12 @@ def test_an_action_with_no_records_says_so(project):
     assert "No stored records for action 'nothing'" in result.output
 
 
-def test_a_workflow_with_no_store_says_so(project):
+def test_a_workflow_that_has_not_run_says_so(project):
+    other = project / "agent_workflow" / "other"
+    (other / "agent_config").mkdir(parents=True)
+    (other / "agent_io").mkdir()
+    (other / "agent_config" / "other.yml").write_text("name: other\nactions: []\n")
+
     result = CliRunner().invoke(cli, ["records", "-w", "other"])
 
     assert result.exit_code != 0

@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 WORKFLOW = "drop_beside"
 
@@ -224,10 +225,7 @@ def _db(root: Path) -> Path:
 
 
 def _stored(root: Path, action: str) -> list[dict]:
-    with sqlite3.connect(_db(root)) as conn:
-        found = conn.execute(
-            "select data from target_data where action_name = ?", (action,)
-        ).fetchall()
+    found = stored_rows(_db(root), "select data from target_data where action_name = ?", action)
     return [record for (data,) in found for record in json.loads(data)]
 
 

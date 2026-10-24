@@ -25,6 +25,7 @@ from types import SimpleNamespace
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
 EXAMPLE = REPO / "examples" / "map_reduce_fanin_check"
@@ -200,14 +201,11 @@ def _store(project: Path) -> sqlite3.Connection:
 
 
 def _rows(project: Path, action: str) -> list[dict]:
-    con = _store(project)
-    try:
-        blobs = [
-            row[0]
-            for row in con.execute("select data from target_data where action_name = ?", (action,))
-        ]
-    finally:
-        con.close()
+    (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
+    blobs = [
+        row[0]
+        for row in stored_rows(db, "select data from target_data where action_name = ?", action)
+    ]
     rows: list[dict] = []
     for blob in blobs:
         loaded = json.loads(blob)

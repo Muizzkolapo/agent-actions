@@ -21,13 +21,13 @@ from __future__ import annotations
 
 import json
 import shutil
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 FIXTURE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "upstream_failed"
@@ -265,11 +265,7 @@ class Project:
 
     def _query(self, sql: str, *params: str) -> list[tuple]:
         (db,) = (self.root / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        try:
-            return con.execute(sql, params).fetchall()
-        finally:
-            con.close()
+        return stored_rows(db, sql, *params)
 
     def dispositions(self, action: str) -> dict[str, tuple[str, str | None]]:
         return {

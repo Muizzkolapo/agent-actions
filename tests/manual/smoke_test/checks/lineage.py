@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
+from contextlib import closing
 
 import yaml
 
+from agent_actions.errors.processing import SerializationError
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -106,10 +108,9 @@ class LineageCheck(Check):
             # Load pipeline depths from workflow config
             action_depths = _compute_action_depths(ctx.config_path)
 
-            with sqlite3.connect(str(db_path)) as conn:
-                conn.row_factory = sqlite3.Row
-
-                rows = conn.execute(
+            backend = SQLiteBackend.create_readonly(db_path)
+            with closing(backend):
+                rows = backend.connection.execute(
                     "SELECT action_name, data FROM target_data ORDER BY action_name"
                 ).fetchall()
 
@@ -124,11 +125,11 @@ class LineageCheck(Check):
                 for row in rows:
                     action_name = row["action_name"]
                     try:
-                        data = json.loads(row["data"])
-                    except (json.JSONDecodeError, TypeError):
-                        results.append(
-                            CheckResult(False, f"lineage({action_name}): parse", "bad JSON")
+                        data = backend.decode_payload(
+                            row["data"], table="target_data", where=action_name
                         )
+                    except SerializationError as e:
+                        results.append(CheckResult(False, f"lineage({action_name}): parse", str(e)))
                         continue
 
                     records = data if isinstance(data, list) else [data]

@@ -6,12 +6,12 @@ the other branch's fields empty, and the run reported success (#1430).
 """
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 WORKFLOW = "fanin_probe"
 
@@ -199,10 +199,7 @@ def _project(root: Path, config: str) -> Path:
 
 def _rows(root: Path, action: str) -> list[dict]:
     db = root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / f"{WORKFLOW}.db"
-    with sqlite3.connect(db) as conn:
-        found = conn.execute(
-            "select data from target_data where action_name = ?", (action,)
-        ).fetchall()
+    found = stored_rows(db, "select data from target_data where action_name = ?", action)
     return [record["content"][action] for (data,) in found for record in json.loads(data)]
 
 
@@ -446,10 +443,7 @@ def test_a_split_gathered_into_one_record_pairs_with_another_split_of_its_source
 
 def _stored(root: Path, action: str) -> list[dict]:
     db = root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / f"{WORKFLOW}.db"
-    with sqlite3.connect(db) as conn:
-        found = conn.execute(
-            "select data from target_data where action_name = ?", (action,)
-        ).fetchall()
+    found = stored_rows(db, "select data from target_data where action_name = ?", action)
     return [record for (data,) in found for record in json.loads(data)]
 
 

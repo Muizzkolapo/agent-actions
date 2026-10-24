@@ -9,13 +9,12 @@ the map/reduce example, with the agac provider mock for the LLM actions.
 
 from __future__ import annotations
 
-import json
 import shutil
-import sqlite3
 from pathlib import Path
 
 import pytest
 
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests._support.agac_cli import run_agac
 from tests.helpers.trace_store import trace_rows
 
@@ -177,16 +176,21 @@ def _agac(root: Path, *args: str) -> str:
     return output
 
 
-def _db(root: Path) -> sqlite3.Connection:
-    return sqlite3.connect(
+def _tally_rows(root: Path) -> list[dict]:
+    backend = SQLiteBackend.create_readonly(
         root / "agent_workflow" / WORKFLOW / "agent_io" / "store" / f"{WORKFLOW}.db"
     )
-
-
-def _tally_rows(root: Path) -> list[dict]:
-    with _db(root) as conn:
-        rows = conn.execute("SELECT data FROM target_data WHERE action_name = 'tally'").fetchall()
-    return [record for (data,) in rows for record in json.loads(data)]
+    try:
+        rows = backend.connection.execute(
+            "SELECT data FROM target_data WHERE action_name = 'tally'"
+        ).fetchall()
+        return [
+            record
+            for (data,) in rows
+            for record in backend.decode_payload(data, table="target_data", where="tally")
+        ]
+    finally:
+        backend.close()
 
 
 def _notes(rows: list[dict]) -> list[tuple[int, str]]:

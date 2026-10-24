@@ -26,6 +26,7 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from tests.helpers.store import stored_rows
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "tool_action"
@@ -60,11 +61,11 @@ def _counts(project):
             (ACTION, "__node__"),
         ).fetchone()[0]
         target = 0
-        for (blob,) in con.execute("select data from target_data where action_name = ?", (ACTION,)):
-            rows = json.loads(blob)
-            target += len(rows) if isinstance(rows, list) else 1
     finally:
         con.close()
+    for (blob,) in stored_rows(db, "select data from target_data where action_name = ?", ACTION):
+        rows = json.loads(blob)
+        target += len(rows) if isinstance(rows, list) else 1
     return {"source": source, "dispositions": dispositions, "target": target}
 
 
@@ -91,11 +92,7 @@ class TestARunKeepsEveryStagedRecord:
         db = glob.glob(
             str(duplicated / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db")
         )[0]
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        try:
-            rows = [json.loads(d) for (d,) in con.execute("select data from source_data")]
-        finally:
-            con.close()
+        rows = [json.loads(d) for (d,) in stored_rows(db, "select data from source_data")]
 
         parents = [r.get("repeat_of_source_guid") for r in rows if r.get("repeat_of_source_guid")]
         assert len(parents) == 2, "two of the three identical records are repeats"
@@ -175,11 +172,7 @@ class TestTheSameContentInTwoFiles:
         db = glob.glob(
             str(across_files / "agent_workflow" / WORKFLOW / "agent_io" / "store" / "*.db")
         )[0]
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        try:
-            rows = [json.loads(d) for (d,) in con.execute("select data from source_data")]
-        finally:
-            con.close()
+        rows = [json.loads(d) for (d,) in stored_rows(db, "select data from source_data")]
 
         guids = {r["source_guid"] for r in rows}
         assert len(guids) == 4, "every staged occurrence is now its own identity"

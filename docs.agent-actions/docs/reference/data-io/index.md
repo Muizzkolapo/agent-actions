@@ -131,12 +131,13 @@ SELECT DISTINCT action_name FROM target_data;
 
 -- Count records per action
 SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
+```
 
--- Preview the first record produced by an action
-SELECT json_extract(r.value, '$')
-FROM target_data t, json_each(t.data) r
-WHERE t.action_name = 'extract_facts'
-LIMIT 1;
+The `data` column is compressed inside the store, so the records themselves are read with the CLI:
+
+```bash
+# The records extract_facts produced
+agac records -w <workflow> -a extract_facts
 ```
 
 ### Benefits

@@ -209,7 +209,14 @@ def _as_an_earlier_version_left_it(root):
         for row_id, answer in stored:
             backend.connection.execute(
                 "UPDATE checkpoint_output SET record_data = ? WHERE id = ?",
-                (json.dumps(json.loads(answer)[-1]), row_id),
+                (
+                    json.dumps(
+                        backend.decode_payload(
+                            answer, table="checkpoint_output", where=f"row {row_id}"
+                        )[-1]
+                    ),
+                    row_id,
+                ),
             )
         backend.connection.commit()
     finally:

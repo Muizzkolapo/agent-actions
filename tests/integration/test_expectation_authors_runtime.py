@@ -17,13 +17,13 @@ needs no credentials and no network.
 import glob
 import json
 import shutil
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -72,11 +72,7 @@ class Run:
         """The expect verdict each action wrote, keyed by action name."""
         out: dict[str, dict] = {}
         for db in self._dbs():
-            con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-            try:
-                blobs = [row[0] for row in con.execute("select data from target_data")]
-            finally:
-                con.close()
+            blobs = [row[0] for row in stored_rows(db, "select data from target_data")]
             for blob in blobs:
                 loaded = json.loads(blob)
                 for record in loaded if isinstance(loaded, list) else [loaded]:

@@ -18,6 +18,7 @@ from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.cli.preview import preview
+from agent_actions.cli.records import records
 from agent_actions.cli.retry import retry
 from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
@@ -93,6 +94,7 @@ class CLI:
         self.click_group.add_command(expect)
         self.click_group.add_command(skills)
         self.click_group.add_command(traces)
+        self.click_group.add_command(records)
 
     def _register_signal_handlers(self) -> None:
         try:

@@ -14,12 +14,12 @@ Every case is a real `agac run` through the CLI, with the mock provider for LLM 
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "sheet_columns"
@@ -119,11 +119,7 @@ def _run(root: Path, run_mode: str = "online"):
 
 def _query(root: Path, sql: str) -> list[tuple]:
     store = root / "agent_workflow" / WORKFLOW / "agent_io" / "store"
-    con = sqlite3.connect(f"file:{sorted(store.glob('*.db'))[0]}?mode=ro", uri=True)
-    try:
-        return con.execute(sql).fetchall()
-    finally:
-        con.close()
+    return stored_rows(sorted(store.glob("*.db"))[0], sql)
 
 
 def _stored(root: Path, action: str = "first") -> list[dict]:
