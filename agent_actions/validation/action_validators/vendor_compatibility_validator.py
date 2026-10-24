@@ -1,6 +1,7 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.config.types import RunMode
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
@@ -49,7 +50,7 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
                         f"interactive execution. Use one of: {vendors_str} for "
                         f"batch mode, or set run_mode='online' for tool vendor."
                     )
-                elif model_vendor not in CLIENT_REGISTRY:
+                elif model_vendor not in CLIENT_REGISTRY or model_vendor in NON_LLM_VENDORS:
                     vendors_str = ", ".join(batch_vendors())
                     warnings.append(
                         f"{desc} model_vendor '{model_vendor}' may not support "
