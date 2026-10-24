@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
-import sys
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_actions.logging.config import VALID_LOG_LEVELS, LoggingConfig
+from agent_actions.logging.config import ROOT_LOGGER_NAME, LoggingConfig, valid_module_levels
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.manager import EventManager
@@ -38,7 +37,7 @@ class LoggerFactory:
 
     _initialized: bool = False
     _config: LoggingConfig | None = None
-    _root_logger_name: str = "agent_actions"
+    _root_logger_name: str = ROOT_LOGGER_NAME
     _event_manager: EventManager | None = None
     _run_results_collector: RunResultsCollector | None = None
     # logger name → its level before the framework first touched it; used by reset()
@@ -224,29 +223,7 @@ class LoggerFactory:
         """Clamp noisy loggers + apply module_levels; restore prior level for loggers no longer managed."""
         new_managed: dict[str, str] = {name: "WARNING" for name in _THIRD_PARTY_NOISY_LOGGERS}
 
-        for name, level in config.module_levels.items():
-            if not isinstance(name, str):
-                sys.stderr.write(
-                    f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
-                    f"keys must be str, got {type(name).__name__}\n"
-                )
-                continue
-            if name == cls._root_logger_name or name.startswith(cls._root_logger_name + "."):
-                sys.stderr.write(
-                    f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
-                    f"overrides on {cls._root_logger_name!r} or its children would "
-                    "break events.json; use logging.level for CLI-visible levels.\n"
-                )
-                continue
-            normalized = LoggingConfig.normalize_log_level(level)
-            if normalized is None:
-                sys.stderr.write(
-                    f"agent_actions: ignoring logging.module_levels[{name!r}]={level!r}: "
-                    f"value must be one of {sorted(VALID_LOG_LEVELS)} "
-                    f"(got {type(level).__name__})\n"
-                )
-                continue
-            new_managed[name] = normalized
+        new_managed.update(valid_module_levels(config.module_levels))
 
         for name in list(cls._original_logger_levels):
             if name not in new_managed:
