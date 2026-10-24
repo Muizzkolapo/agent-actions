@@ -26,6 +26,11 @@ class TestUnreadEnvVarsAreReported:
         assert err.count("agent_actions: ignoring ") == 1
         assert f"ignoring {name}: not read and configures nothing; unset it" in err
 
+    def test_a_set_but_empty_unread_variable_is_still_named(self, capsys):
+        with patch.dict(os.environ, {"AGENT_ACTIONS_LOG_FILE": ""}, clear=True):
+            report_unread_env_vars()
+        assert "ignoring AGENT_ACTIONS_LOG_FILE:" in capsys.readouterr().err
+
     def test_read_and_unset_variables_are_not_named(self, capsys):
         env = {"AGENT_ACTIONS_LOG_RETAIN_RUNS": "2", "AGENT_ACTIONS_LOG_LEVEL": "INFO"}
         with patch.dict(os.environ, env, clear=True):
