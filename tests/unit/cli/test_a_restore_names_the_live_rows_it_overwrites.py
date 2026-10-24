@@ -19,7 +19,7 @@ def test_a_restore_names_each_live_row_it_overwrites(tmp_path: Path, dry_run: bo
     created_at = _write_manifest(
         manifest_file,
         from_action="classify",
-        record_ids=["edited", "untouched"],
+        record_ids=["edited", "renamed", "untouched"],
         downstream_actions=["classify"],
         dispositions=[
             {
@@ -27,6 +27,12 @@ def test_a_restore_names_each_live_row_it_overwrites(tmp_path: Path, dry_run: bo
                 "record_id": "edited",
                 "disposition": "failed",
                 "reason": "prompt_too_large",
+            },
+            {
+                "action_name": "classify",
+                "record_id": "renamed",
+                "disposition": "failed",
+                "reason": "timeout",
             },
             {
                 "action_name": "classify",
@@ -44,6 +50,12 @@ def test_a_restore_names_each_live_row_it_overwrites(tmp_path: Path, dry_run: bo
                     "record_id": "edited",
                     "disposition": "filtered",
                     "reason": "excluded_by_hand",
+                },
+                {
+                    "action_name": "classify",
+                    "record_id": "renamed",
+                    "disposition": "failed",
+                    "reason": "manual_note",
                 },
                 {
                     "action_name": "classify",
@@ -77,6 +89,7 @@ def test_a_restore_names_each_live_row_it_overwrites(tmp_path: Path, dry_run: bo
     printed = _printed(cmd.console)
     overwrites = [line.strip() for line in printed.splitlines() if " -> " in line]
     assert overwrites == [
-        "classify / edited: filtered (excluded_by_hand) -> failed (prompt_too_large)"
+        "classify / edited: filtered (excluded_by_hand) -> failed (prompt_too_large)",
+        "classify / renamed: failed (manual_note) -> failed (timeout)",
     ]
     assert str(manifest_file) in printed
