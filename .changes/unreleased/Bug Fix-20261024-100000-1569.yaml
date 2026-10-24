@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  `AGENT_ACTIONS_LOG_FILE`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_NO_LOG_FILE`,
-  `AGENT_ACTIONS_FILE_LOG_LEVEL` and `AGENT_ACTIONS_LOG_FORMAT` were accepted and changed
-  nothing: the run log is always `<output_dir>/logs/events.json` at DEBUG. The CLI now names
-  each one that is set on stderr at boot and ignores it. `LoggingConfig` loses the fields
-  they filled (`include_timestamps`, `include_source_location`, and `enabled`, `path`,
-  `level` and `format` on `FileHandlerSettings`), which nothing read. (#1569)
-time: 2026-10-24T10:00:00Z

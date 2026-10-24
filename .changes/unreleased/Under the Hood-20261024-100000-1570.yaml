@@ -1,8 +1,0 @@
-kind: Under the Hood
-body: >-
-  The test suite restores the expectation type registry around every test, so a user
-  `@expectation_check` one test registers no longer makes a later test that discovers
-  another copy of the same tools file fail with `Function '<name>' not found`. The order
-  dependence showed only under serial `pytest`. The four opt-in copies of the same
-  snapshot are gone. (#1570)
-time: 2026-10-24T10:00:00Z

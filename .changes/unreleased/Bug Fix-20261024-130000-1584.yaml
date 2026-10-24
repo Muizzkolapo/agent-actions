@@ -1,6 +1,0 @@
-kind: Bug Fix
-body: >-
-  A `llamafile` action's request, response and error events now name `llamafile`, not
-  `openai`, so run stats and the docs catalog report the right provider. Token usage
-  is still read with the OpenAI usage shape (#1584).
-time: 2026-10-24T13:00:00Z

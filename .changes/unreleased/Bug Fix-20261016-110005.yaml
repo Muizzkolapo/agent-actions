@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A batch file whose input is now empty no longer keeps what its last batch left behind.
-  The file was stored empty, but its failed or cancelled registry entry, context map, recorded
-  inputs and recovery state stayed, so the action went on reading as owed a batch for records
-  that no longer exist. They are removed when the file is stored empty, as a reset removes
-  them for the whole action.
-time: 2026-10-16T11:05:00Z

@@ -1,9 +1,0 @@
-kind: Breaking Change
-body: >-
-  `policy:` on an action, in a `defaults:` block, in an `agents:` block or under
-  `default_agent_config:` is refused at load, naming the key. It was declared on the
-  action schema as an untyped string, echoed into generated docs and listed in the
-  configuration reference as "Execution policy", but no runtime module read it, so any
-  value validated and changed nothing. Remove the key: a workflow that wrote it behaved
-  exactly as it does without it.
-time: 2026-10-11T09:30:00Z

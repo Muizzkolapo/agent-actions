@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  A version merge that cannot read or align its versions fails as any action does: it is
-  marked failed with the reason, the actions that read it are skipped, and actions on other
-  branches run on. A store error while it read its versions, or version records it could not
-  align, ended a sequential run at once with every other branch left pending, and in a
-  parallel run left the merge marked running, so the action that reads it ran against nothing
-  and failed instead of being skipped (1478).
-time: 2026-10-17T20:00:00Z

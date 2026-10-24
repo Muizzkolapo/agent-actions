@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  `agac preview` prints a record key that holds brackets as its column header. The cell
-  values were escaped and the headers, which are the record's own keys, were read as
-  markup: a key holding a closing tag raised `MarkupError` and a key such as `[note]`
-  printed a blank header.
-time: 2026-10-12T11:00:00Z

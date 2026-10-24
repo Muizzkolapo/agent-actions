@@ -1,6 +1,0 @@
-kind: Bug Fix
-body: >-
-  Preflight refuses `base_url` on an `anthropic`, `gemini`, `groq` or `cohere` action. Those
-  clients always call their vendor's own endpoint, so the field was accepted and ignored, and a
-  request meant for a local server went to the cloud vendor (#1564).
-time: 2026-10-22T12:00:00Z

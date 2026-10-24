@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A batch run now writes a filtered record's `filtered` disposition, and the `failed`
-  disposition of each record in a batch file whose processing raised, before it clears
-  the record's `deferred` mark. It used to clear `deferred` first, so a run that died
-  between the two writes left the record with no disposition at all. Every other batch
-  outcome was already written in this order. (#1457)
-time: 2026-10-18T06:00:00Z

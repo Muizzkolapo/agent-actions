@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: A prompt field named items, keys, values or get now reads its value instead of the dict's own method of the same name, in both the per-record and load-time renderers. Dot access on such a field used to silently send the model a string like '<built-in method items of dict object at ...>', and a for-loop or length filter over it raised a TypeError the error handler couldn't name, both with no indication anything was wrong.
-time: 2026-10-12T07:11:05.50041+01:00

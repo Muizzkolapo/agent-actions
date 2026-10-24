@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A batch action that splits records into several rows no longer keeps a failed record's
-  earlier rows. After a reset, a record sent again that failed beside an answered record of
-  its file was stored as its failure plus the rows it split into before the reset, and the
-  actions reading it answered those old rows again, for a record whose disposition read
-  `failed`. Batch now writes the failure alone, as online does, for an exhausted record too.
-time: 2026-10-16T10:05:00Z

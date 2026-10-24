@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  Pre-flight checks the whole key path of a `context_scope.observe` or `passthrough` entry
-  again, not only its first key. `prep.text.sub` under a string field, `prep.tags.0` under a
-  list and `prep.meta.nosuch` under a closed object are refused before the run; without this
-  an `observe` of one failed every record and a `passthrough` of one forwarded nothing and
-  exited 0. `prep.meta.x` on an object that lists `x` still runs (#1536).
-time: 2026-10-18T20:00:00Z

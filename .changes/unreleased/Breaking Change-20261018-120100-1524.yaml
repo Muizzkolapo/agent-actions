@@ -1,6 +1,0 @@
-kind: Breaking Change
-body: >-
-  `agac retry --from <action>` is refused, and exits 1, when a retry stopped before it
-  finished started above that action. Resume the stopped retry with `agac retry` first,
-  then retry from the action if anything is still failed there (#1524).
-time: 2026-10-18T12:01:00Z

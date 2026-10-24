@@ -1,7 +1,0 @@
-kind: Breaking Change
-body: >-
-  `agac run` exits 1 when, online, the store refuses to record a record's failure: the
-  action reads `failed` with the store error, and the actions that read it are skipped.
-  It exited 0 with the action `completed` and the failure lost. Fix the store, then run
-  `agac retry` (#1534).
-time: 2026-10-18T17:00:00Z

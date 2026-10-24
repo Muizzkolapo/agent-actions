@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  The HITL review page shows a value nested more than 50 levels deep as compact JSON in its
-  JSON view. It indented every value, and indented text grows with the square of the depth:
-  a record nested 2,000 levels made about 8 MB of text and took seconds to render, enough to
-  freeze the tab. An ordinary record is shown indented as before (1497).
-time: 2026-10-17T19:00:00Z

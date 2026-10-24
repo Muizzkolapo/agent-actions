@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  A record nested about 1000 levels deep or more is given a `source_guid` on Python 3.11.
-  The content hash used the recursive JSON encoder, which raised `RecursionError` at that
-  depth on 3.11; a record too deep for it is now serialized on a stack to the same bytes,
-  so its identity is the one 3.12 and later give, and no existing identity changes (1468).
-time: 2026-10-17T14:58:00Z

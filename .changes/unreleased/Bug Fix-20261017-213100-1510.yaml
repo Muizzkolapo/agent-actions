@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  An error whose text mentions schema validation, other than a pre-flight refusal or a
-  SchemaValidationError, now shows its own message, and the hint it carries as the fix. It used
-  to be replaced by "The configuration format is invalid / Check your YAML/JSON syntax and
-  required fields". YAML and JSON syntax errors are shown as before. (#1510)
-time: 2026-10-17T21:31:00Z

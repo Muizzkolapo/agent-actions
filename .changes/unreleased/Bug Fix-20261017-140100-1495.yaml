@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  An Anthropic 529 (overloaded) answer is now retried as an action's `retry:` asks, like the
-  provider's other 5xx answers. The anthropic SDK raises 529 as `OverloadedError`, which is not
-  an `InternalServerError`, so the record was failed at its first attempt; a batch status poll
-  that met a 529 failed the action instead of asking again on the next run.
-time: 2026-10-17T14:01:00Z

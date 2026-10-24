@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A `tool` action that sets `run_mode: batch` itself now loads instead of being refused,
-  and a `tool` or `hitl` action under batch now runs as an online action on every path: a
-  first action is staged online, its completion and execution time are recorded, its
-  events and progress are not labelled batch, and a judged `context:` rule on it is no
-  longer refused (#1585).
-time: 2026-10-24T16:00:00Z
