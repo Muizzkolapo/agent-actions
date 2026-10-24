@@ -61,6 +61,14 @@ class RetryCommandArgs(BaseModel):
         default=False,
         description="Proceed even though a batch has not been collected, giving up its results.",
     )
+    filters: list[tuple[str, str]] = Field(
+        default_factory=list,
+        description="(action, record_id) of each failed record to filter instead of retrying.",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="Why the records given to filters are filtered; stored as their reason.",
+    )
 
 
 class RunCommandArgs(BaseModel):
