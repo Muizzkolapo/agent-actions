@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from agent_actions.config.schema import ChunkConfig
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ValidationError
-from agent_actions.llm.config.vendor import canonical_vendor
+from agent_actions.llm.config.vendor import canonical_vendor, vendor_names
 from agent_actions.utils.constants import DANGEROUS_PATTERNS, contains_dangerous_pattern
 
 
@@ -186,10 +186,7 @@ class AgentConfig(BaseModel):
     model_name: str | None = None
     model_vendor: str | None = Field(
         default=None,
-        description=(
-            "Model vendor/provider: 'openai', 'anthropic', 'gemini', 'groq', "
-            "'cohere', 'ollama_local', 'ollama_cloud', 'tool', 'hitl', or 'agac-provider'"
-        ),
+        description="Model vendor/provider: " + ", ".join(f"'{v}'" for v in vendor_names()),
     )
     api_key: SecretStr | None = None
     code_path: str | None = None

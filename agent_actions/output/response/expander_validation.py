@@ -3,8 +3,7 @@
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
-from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
-from agent_actions.llm.config.vendor import VendorType
+from agent_actions.llm.config.vendor import vendor_names
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, RUNTIME_BUS_NAMESPACES
 
@@ -22,7 +21,7 @@ def validate_vendor_exists(vendor: str | None, action_name: str) -> None:
     """
     if not vendor:
         return
-    valid_vendors = [v.value for v in VendorType] + list(RUNTIME_PROFILES)
+    valid_vendors = vendor_names()
     if vendor not in valid_vendors:
         raise ConfigValidationError(
             "model_vendor",

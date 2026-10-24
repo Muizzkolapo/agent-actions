@@ -6,6 +6,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.base_validator import BaseValidator
@@ -44,6 +45,23 @@ def _resolve_capabilities(vendor: str) -> dict[str, Any] | None:
     if not caps:
         return None
     return caps  # type: ignore[no-any-return]
+
+
+def supports_batch(vendor: str) -> bool | None:
+    """Whether *vendor*'s client can batch; ``None`` when its capabilities are unknown."""
+    caps = _resolve_capabilities(vendor)
+    if caps is None:
+        return None
+    return bool(caps.get("supports_batch"))
+
+
+def batch_vendors() -> list[str]:
+    """The LLM vendors whose client can batch, sorted."""
+    return sorted(
+        vendor
+        for vendor in CLIENT_REGISTRY
+        if vendor not in NON_LLM_VENDORS and supports_batch(vendor)
+    )
 
 
 def get_vendor_capabilities_map() -> dict[str, dict[str, Any]]:

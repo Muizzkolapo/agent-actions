@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
+
 logger = logging.getLogger(__name__)
 
 # Root of the agent_actions package — used by functions that locate sibling
@@ -102,6 +104,20 @@ def scan_vendors(project_root: Path) -> dict[str, Any]:
 
     except (OSError, SyntaxError, UnicodeDecodeError) as e:
         logger.debug("Could not scan vendors from %s: %s", vendor_file, e)
+
+    for name, profile in RUNTIME_PROFILES.items():
+        vendors[name] = {
+            "id": name,
+            "enum_name": "",
+            "enum_value": name,
+            "config_class": "",
+            "fields": [],
+            "docstring": (
+                f"OpenAI-compatible runtime ({profile.wire}). "
+                f"Default base_url: {profile.default_base_url}. "
+                f"Verified with {profile.verified_with}."
+            ),
+        }
 
     return vendors
 
