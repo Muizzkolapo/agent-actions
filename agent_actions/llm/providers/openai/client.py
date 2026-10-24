@@ -11,6 +11,7 @@ consistent retry handling across all providers.
 import logging
 import time
 import uuid
+from dataclasses import replace
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,9 @@ _ERROR_MAPPING = VendorErrorMapping(
 class OpenAIClient(BaseClient):
     """OpenAI API client for JSON and non-JSON LLM invocations."""
 
+    # The vendor its events and errors name; a runtime profile client sets its own.
+    VENDOR: ClassVar[str] = "openai"
+
     CAPABILITIES: ClassVar[dict[str, Any]] = {
         "supports_json_mode": True,
         "supports_batch": True,
@@ -57,8 +61,13 @@ class OpenAIClient(BaseClient):
         "optional_fields": ["api_key", "base_url", "temperature", "max_tokens"],
     }
 
-    @staticmethod
+    @classmethod
+    def _error_mapping(cls) -> VendorErrorMapping:
+        return replace(_ERROR_MAPPING, vendor_name=cls.VENDOR)
+
+    @classmethod
     def call_json(
+        cls,
         api_key: str | None,
         agent_config: dict[str, Any],
         prompt_config: str,
@@ -84,7 +93,7 @@ class OpenAIClient(BaseClient):
 
         fire_event(
             LLMRequestEvent(
-                provider="openai",
+                provider=cls.VENDOR,
                 model=model_name,
                 request_id=request_id,
             )
@@ -108,11 +117,11 @@ class OpenAIClient(BaseClient):
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
-            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+            raise wrap_vendor_error(e, model_name, cls._error_mapping(), request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
-            response, "openai", model_name, latency_ms, request_id
+            response, cls.VENDOR, model_name, latency_ms, request_id
         )
 
         response_message = response.choices[0].message
@@ -120,7 +129,7 @@ class OpenAIClient(BaseClient):
         if response_content is None:
             fire_event(
                 LLMErrorEvent(
-                    provider="openai",
+                    provider=cls.VENDOR,
                     model=model_name,
                     error_type="EmptyResponse",
                     error_message="Empty response content from OpenAI API",
@@ -143,7 +152,7 @@ class OpenAIClient(BaseClient):
             )
             fire_event(
                 LLMErrorEvent(
-                    provider="openai",
+                    provider=cls.VENDOR,
                     model=model_name,
                     error_type="JSONDecodeError",
                     error_message="Failed to parse JSON from response",
@@ -161,8 +170,9 @@ class OpenAIClient(BaseClient):
         )
         return response_list
 
-    @staticmethod
+    @classmethod
     def call_non_json(
+        cls,
         api_key: str | None,
         agent_config: dict[str, Any],
         prompt_config: str,
@@ -180,7 +190,7 @@ class OpenAIClient(BaseClient):
 
         fire_event(
             LLMRequestEvent(
-                provider="openai",
+                provider=cls.VENDOR,
                 model=model_name,
                 request_id=request_id,
             )
@@ -199,11 +209,11 @@ class OpenAIClient(BaseClient):
         try:
             response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
-            raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
+            raise wrap_vendor_error(e, model_name, cls._error_mapping(), request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         ResponseBuilder.record_usage_and_event(
-            response, "openai", model_name, latency_ms, request_id
+            response, cls.VENDOR, model_name, latency_ms, request_id
         )
 
         response_message = response.choices[0].message
@@ -211,7 +221,7 @@ class OpenAIClient(BaseClient):
         if content is None:
             fire_event(
                 LLMErrorEvent(
-                    provider="openai",
+                    provider=cls.VENDOR,
                     model=model_name,
                     error_type="EmptyResponse",
                     error_message="Empty response content from OpenAI API",
@@ -222,7 +232,7 @@ class OpenAIClient(BaseClient):
                 "Empty response content from OpenAI API",
                 context={
                     "model_name": model_name,
-                    "vendor": "openai",
+                    "vendor": cls.VENDOR,
                     "api_operation": "chat.completions.create",
                     "output_field": agent_config.get("output_field", "raw_response"),
                 },
