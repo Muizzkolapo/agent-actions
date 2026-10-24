@@ -46,6 +46,7 @@ class SQLiteBackend(StorageBackend):
             source_guid TEXT NOT NULL,
             data TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            repeat_of_source_guid TEXT DEFAULT NULL,
             UNIQUE(relative_path, source_guid)
         )
     """
@@ -79,6 +80,9 @@ class SQLiteBackend(StorageBackend):
 
     SOURCE_INDEX_SQL = """
         CREATE INDEX IF NOT EXISTS idx_source_path ON source_data(relative_path)
+    """
+    SOURCE_INDEX_REPEAT_OF_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_source_repeat_of ON source_data(repeat_of_source_guid)
     """
     DISPOSITION_INDEX_ACTION_SQL = """
         CREATE INDEX IF NOT EXISTS idx_disp_action ON record_disposition(action_name)
@@ -155,7 +159,13 @@ class SQLiteBackend(StorageBackend):
     # Required columns per table — missing ones are ALTER-added on open
     # (see _enforce_schema; tables are never dropped or rebuilt).
     _REQUIRED_COLUMNS: dict[str, set[str]] = {
-        "source_data": {"relative_path", "source_guid", "data", "created_at"},
+        "source_data": {
+            "relative_path",
+            "source_guid",
+            "data",
+            "created_at",
+            "repeat_of_source_guid",
+        },
         "target_data": {"action_name", "relative_path", "data", "record_count", "created_at"},
         "record_disposition": {
             "action_name",
@@ -188,13 +198,13 @@ class SQLiteBackend(StorageBackend):
 
     _INSERT_SOURCE_IGNORE_SQL = """
         INSERT OR IGNORE INTO source_data
-        (relative_path, source_guid, data, created_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        (relative_path, source_guid, data, repeat_of_source_guid, created_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     """
     _INSERT_SOURCE_REPLACE_SQL = """
         INSERT OR REPLACE INTO source_data
-        (relative_path, source_guid, data, created_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        (relative_path, source_guid, data, repeat_of_source_guid, created_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     """
 
     # Allowlist for identifiers (action names, relative paths).
@@ -337,6 +347,7 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(self.TARGET_TABLE_SQL)
                 cursor.execute(self.DISPOSITION_TABLE_SQL)
                 cursor.execute(self.SOURCE_INDEX_SQL)
+                cursor.execute(self.SOURCE_INDEX_REPEAT_OF_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
@@ -566,6 +577,18 @@ class SQLiteBackend(StorageBackend):
             )
             return [row["key"] for row in cursor.fetchall()]
 
+    @staticmethod
+    def _repeat_of_column(repeat_of: Any) -> str | None:
+        """``source_data.repeat_of_source_guid`` for a row: ``""`` when it repeats nothing.
+
+        NULL, as on a row written before the column existed, leaves the answer to the payload.
+        """
+        if repeat_of is None:
+            return ""
+        if isinstance(repeat_of, str) and repeat_of:
+            return repeat_of
+        return None
+
     def write_source(
         self,
         relative_path: str,
@@ -577,7 +600,7 @@ class SQLiteBackend(StorageBackend):
 
         # A blank source_guid at the storage boundary is an upstream invariant
         # violation, not a routine skip: fail loud (a partial drop is silent data loss).
-        rows: list[tuple[str, str, str]] = []
+        rows: list[tuple[str, str, str, str | None]] = []
         for index, item in enumerate(data):
             source_guid = item.get("source_guid")
             if not source_guid:
@@ -586,7 +609,14 @@ class SQLiteBackend(StorageBackend):
                     f"refusing to drop it silently",
                     context={"relative_path": relative_path, "record_index": index},
                 )
-            rows.append((relative_path, source_guid, deep_json.dumps(item, ensure_ascii=False)))
+            rows.append(
+                (
+                    relative_path,
+                    source_guid,
+                    deep_json.dumps(item, ensure_ascii=False),
+                    self._repeat_of_column(item.get("repeat_of_source_guid")),
+                )
+            )
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -601,8 +631,9 @@ class SQLiteBackend(StorageBackend):
                         path,
                         guid,
                         self._compress(cursor, self._SOURCE_SCOPE, self._SOURCE_DATA, text),
+                        repeat_of,
                     )
-                    for path, guid, text in rows
+                    for path, guid, text, repeat_of in rows
                 ]
                 cursor.executemany(sql, stored)
                 # cursor.rowcount is aggregated across all executemany() iterations by
@@ -1183,8 +1214,8 @@ class SQLiteBackend(StorageBackend):
         ids = tuple(dict.fromkeys(record_ids))
         if not ids:
             return False
-        # Each id is bound twice in the combined predicate below, so chunk at
-        # half the param cap to stay under it.
+        # Each id is bound twice in each predicate below, so chunk at half the
+        # param cap to stay under it.
         chunk_size = _SQL_MAX_PARAMS // 2
         with self._lock:
             cursor = self.connection.cursor()
@@ -1192,7 +1223,17 @@ class SQLiteBackend(StorageBackend):
                 chunk = ids[start : start + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE typeof(data) = 'text' AND json_valid(data) AND ("
+                    f"SELECT 1 FROM source_data WHERE "
+                    f"(repeat_of_source_guid > '' AND source_guid IN ({placeholders})) "
+                    f"OR repeat_of_source_guid IN ({placeholders}) LIMIT 1",
+                    chunk + chunk,
+                )
+                if cursor.fetchone() is not None:
+                    return True
+                # A NULL column is a row written before it existed: ask its payload.
+                cursor.execute(
+                    f"SELECT 1 FROM source_data WHERE repeat_of_source_guid IS NULL "
+                    f"AND typeof(data) = 'text' AND json_valid(data) AND ("
                     f"(source_guid IN ({placeholders}) "
                     f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL) "
                     f"OR json_extract(data, '$.repeat_of_source_guid') IN ({placeholders})) "
@@ -1205,8 +1246,8 @@ class SQLiteBackend(StorageBackend):
             # refuse (nested 1000 levels deep, or holding a NaN), rather than failing
             # the query for every row.
             cursor.execute(
-                "SELECT source_guid, data FROM source_data"
-                " WHERE typeof(data) <> 'text' OR NOT json_valid(data)"
+                "SELECT source_guid, data FROM source_data WHERE repeat_of_source_guid IS NULL"
+                " AND (typeof(data) <> 'text' OR NOT json_valid(data))"
             )
             unreadable_by_sqlite = cursor.fetchall()
         wanted = set(ids)

@@ -49,11 +49,14 @@ CREATE TABLE IF NOT EXISTS source_data (
     source_guid TEXT NOT NULL,
     data TEXT NOT NULL,               -- the full input record as JSON, stored compressed
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    repeat_of_source_guid TEXT DEFAULT NULL,  -- the guid this row repeats; '' when none
     UNIQUE(relative_path, source_guid)
 )
 ```
 
-Index: `idx_source_path ON source_data(relative_path)`
+Indexes: `idx_source_path ON source_data(relative_path)`, `idx_source_repeat_of ON source_data(repeat_of_source_guid)`
+
+`repeat_of_source_guid` copies the row's own field out of `data`, which SQLite cannot read once compressed, so `records_share_a_repeat_chain` asks the index in both directions. NULL means the row was written before the column existed (or by a version that does not write it, or holds a value other than a non-empty string): only those rows have their payload read.
 
 Deduplication: `INSERT OR IGNORE` when `enable_deduplication=True` (default), `INSERT OR REPLACE` otherwise. Keyed on `(relative_path, source_guid)`.
 
@@ -233,7 +236,7 @@ columns is gone or guarded:
 `has_target_rows` and `preview_target` fall back to `json_array_length(data)` only
 for a text row and measure a compressed row that lacks its count in Python (the
 writer always stores one; only a store edited from outside holds such a row),
-`records_share_a_repeat_chain` reads compressed rows in Python, and
+`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes in Python only a compressed row whose column is NULL, and
 `checkpointed_without_row_count` names only text rows, since every compressed row
 holds a list. Outside the backend, `agac records` prints stored records and failed
 records' inputs; `sqlite3` shows these columns as blobs.
@@ -439,7 +442,7 @@ The `_REQUIRED_COLUMNS` dictionary lists the columns each table must have:
 
 | Table | Required columns |
 |-------|-----------------|
-| `source_data` | relative_path, source_guid, data, created_at |
+| `source_data` | relative_path, source_guid, data, created_at, repeat_of_source_guid |
 | `target_data` | action_name, relative_path, data, record_count, created_at |
 | `record_disposition` | action_name, record_id, disposition, reason, relative_path, input_snapshot, detail, created_at |
 | `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, created_at |
