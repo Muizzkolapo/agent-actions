@@ -21,6 +21,8 @@ agac retry -a <workflow-name> [options]
 | `--record TEXT` | Restrict retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what would be retried without executing |
 | `--abandon-in-flight` | Retry even though a batch is still in flight, giving up its results |
+| `--filter ACTION:RECORD_ID` | Mark a failed record filtered at `ACTION` instead of retrying it, so no retry selects it again. Repeatable. Records the exclusion and exits: nothing is re-run and no LLM is called. See [Keep a record out for good](#keep-a-record-out-for-good) |
+| `--reason TEXT` | Why the `--filter` records are filtered (required with `--filter`); stored as their disposition reason |
 
 ## Examples
 
@@ -53,6 +55,59 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 ```
 
 `--record` takes the identifier shown in the **Record ID** column of [`dispositions --quarantined`](./dispositions) — retry matches against exactly that value.
+
+## Keep a record out for good
+
+A record that fails the same way on every attempt — a prompt too large for the model's
+context window, a source record with nothing to extract — is selected again by every
+`retry`. `--filter` takes it out of the workflow instead, and leaves every other record
+alone:
+
+```bash
+agac retry -a my_workflow --filter extract_facts:3f9a1c2e-... --reason "scanned page, no text"
+```
+
+```
+Filtered 1 record(s); no retry selects them again:
+  extract_facts / 3f9a1c2e-...
+Removed 1 tombstone row(s) their failure left in the actions below.
+```
+
+The record is marked `filtered` at that action, with your reason and a detail naming
+`agac retry --filter` and the date, the disposition a guard's `on_false: filter` gives a
+record. From then on `retry` does not list it, and the actions reading that action treat
+it as absent: what its failure cascaded into them, their `unprocessed` row and tombstone,
+is removed, so they hold for it what they would hold under the guard — nothing. The
+action it failed at keeps its tombstone, so a later run of that action carries the record
+as it stands instead of asking it again.
+
+`--filter` only records the exclusion. Run `agac retry` afterwards to retry the records
+that are still failed. Give `--filter` once per record, at the action named in the
+**Action** column of [`dispositions --quarantined`](./dispositions), with the id in its
+**Record ID** column. `--dry-run` lists what would be filtered and writes nothing.
+
+Each record must be failed or exhausted at the action you name. Otherwise, and for an
+action the workflow does not have, nothing is filtered and the command names each target
+it refused, with where to find the right id:
+
+```
+Error: Nothing was filtered:
+  Record '3f9a1c2e-...' is unprocessed at 'summarize', and only a failed or exhausted record can be filtered. `agac dispositions -a my_workflow --action summarize --quarantined` lists those.
+```
+
+`--filter` takes none of `--from`, `--record` or `--abandon-in-flight`, and needs
+`--reason`.
+
+A filter lasts until the action is reset: `agac run --fresh` asks the record again. Where
+every record of the record's input file failed at that action, the file was never
+written, so the action holds no row to carry. The filter still holds for a retry of other
+records, but a run that processes that file again asks the record again, as `agac run` or
+`agac retry` does while the action is failed as a whole. `--filter` warns when this is
+so; remove the record from the input in `agent_io/staging/` to keep it out for good.
+
+When a [retry was interrupted](#when-a-retry-is-interrupted), its record of the failures
+to put back is changed too, so the retry that resumes it keeps the filter instead of
+putting the failure back.
 
 ## A retry runs the records it named, and only those
 
@@ -420,7 +475,9 @@ To keep a live value, edit its entry in .../agent_io/store/my_workflow/_retry_ma
 
 To keep a row you changed, give its entry in that file the same `disposition` and
 `reason`, then run `agac retry --dry-run` again. The row no longer shows in the list,
-and the plan no longer counts it.
+and the plan no longer counts it. A record excluded with
+[`--filter`](#keep-a-record-out-for-good) needs none of this: `--filter` changes that
+file to match.
 
 A retry stopped after an action that [splits records](#a-retry-runs-the-records-it-named-and-only-those)
 wrote, but before the actions below it ran, has not yet taken out of those actions
