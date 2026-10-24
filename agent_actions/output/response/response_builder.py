@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from agent_actions.llm.config.runtime_profiles import wire_vendor
 from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMResponseEvent
@@ -143,7 +144,7 @@ class ResponseBuilder:
         Dispatches to the correct extraction logic based on the provider's
         ``UsageShape`` config.
         """
-        config = PROVIDER_RESPONSE_CONFIGS.get(provider)
+        config = PROVIDER_RESPONSE_CONFIGS.get(wire_vendor(provider))
         if config is None:
             logger.debug("Unknown provider '%s' for usage extraction, returning zeros", provider)
             return UsageResult()

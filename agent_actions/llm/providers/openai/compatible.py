@@ -51,7 +51,7 @@ def _client_for(vendor: str, profile: RuntimeProfile) -> type[RuntimeProfileClie
     return type(
         f"{vendor.title()}Client",
         (RuntimeProfileClient,),
-        {"PROFILE": profile, "CAPABILITIES": capabilities},
+        {"PROFILE": profile, "VENDOR": vendor, "CAPABILITIES": capabilities},
     )
 
 
