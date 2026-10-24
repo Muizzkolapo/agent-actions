@@ -1,6 +1,7 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.config.types import RunMode
+from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
@@ -47,7 +48,10 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
                         f"interactive execution. Use one of: {vendors_str} for "
                         f"batch mode, or set run_mode='online' for tool vendor."
                     )
-                elif model_vendor not in self.VALID_BATCH_VENDORS:
+                elif model_vendor not in self.VALID_BATCH_VENDORS and (
+                    model_vendor not in RUNTIME_PROFILES
+                ):
+                    # A named runtime's batch support is measured, and preflight refuses it.
                     vendors_str = ", ".join(sorted(self.VALID_BATCH_VENDORS))
                     warnings.append(
                         f"{desc} model_vendor '{model_vendor}' may not support "
