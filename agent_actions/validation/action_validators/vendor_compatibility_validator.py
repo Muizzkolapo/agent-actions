@@ -1,20 +1,16 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.config.types import RunMode
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
 )
-from agent_actions.validation.utils.action_config_validation_utilities import (
-    ActionConfigValidationUtilities,
-)
 
 
 class VendorCompatibilityValidator(BaseActionEntryValidator):
     """Validates vendor compatibility for batch and online modes."""
-
-    VALID_BATCH_VENDORS = ActionConfigValidationUtilities.get_valid_batch_vendors()
 
     def validate(self, context) -> ActionEntryValidationResult:
         """Validate vendor compatibility based on run_mode."""
@@ -39,21 +35,33 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
             model_vendor = str(normalized_entry.get("model_vendor", "")).lower()
 
             if model_vendor:
+                # Imported here: the preflight module loads the client registry.
+                from agent_actions.validation.preflight.vendor_compatibility_validator import (
+                    CLIENT_REGISTRY,
+                    batch_vendors,
+                    supports_batch,
+                )
+
                 if model_vendor == "tool":
-                    vendors_str = ", ".join(sorted(self.VALID_BATCH_VENDORS))
+                    vendors_str = ", ".join(batch_vendors())
                     errors.append(
                         f"{desc} 'tool' vendor does not support batch processing. "
                         f"Tool vendors require online mode for "
                         f"interactive execution. Use one of: {vendors_str} for "
                         f"batch mode, or set run_mode='online' for tool vendor."
                     )
-                elif model_vendor not in self.VALID_BATCH_VENDORS:
-                    vendors_str = ", ".join(sorted(self.VALID_BATCH_VENDORS))
+                elif model_vendor not in CLIENT_REGISTRY or model_vendor in NON_LLM_VENDORS:
+                    vendors_str = ", ".join(batch_vendors())
                     warnings.append(
                         f"{desc} model_vendor '{model_vendor}' may not support "
                         f"batch processing. Verified batch-compatible vendors: "
                         f"{vendors_str}. If this vendor supports batch API, "
                         f"you can safely ignore this warning."
+                    )
+                elif supports_batch(model_vendor) is False:
+                    errors.append(
+                        f"{desc}: vendor '{model_vendor}' does not support run_mode: batch. "
+                        "Set run_mode: online."
                     )
 
             batch_provider = normalized_entry.get("batch_provider")

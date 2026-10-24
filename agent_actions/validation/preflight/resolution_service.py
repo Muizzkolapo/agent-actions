@@ -24,7 +24,7 @@ from agent_actions.config.path_config import (
 )
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
-from agent_actions.llm.config.vendor import VendorType
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
 from agent_actions.utils.constants import SCHEMA_KEY
@@ -46,9 +46,7 @@ _VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
 # Sentinel substrings in api_key_env_name that indicate no real key is needed.
 _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
 
-_VENDORS_WITHOUT_ENDPOINT = frozenset(
-    {VendorType.TOOL.value, VendorType.HITL.value, VendorType.AGAC_PROVIDER.value}
-)
+_VENDORS_WITHOUT_ENDPOINT = NON_LLM_VENDORS
 
 
 def _get_vendor_config_map() -> dict[str, type[BaseModel]]:

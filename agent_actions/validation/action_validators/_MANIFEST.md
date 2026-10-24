@@ -17,4 +17,4 @@ requirements before workflows execute.
 | `inline_schema_validator.py` | Module | Validates inline schemas defined inside action configs. | `validation`, `schema` |
 | `optional_field_type_validator.py` | Module | Checks optional fields for supported types. | `validation` |
 | `unknown_keys_detector.py` | Module | Warns about unsupported keys in action definitions. | `validation` |
-| `vendor_compatibility_validator.py` | Module | Validates vendor-specific limits (OpenAI, Anthropic, etc.). | `llm.providers`, `validation` |
+| `vendor_compatibility_validator.py` | Module | Validates vendor-specific limits (OpenAI, Anthropic, etc.). Batch support is read from the preflight `supports_batch()` / `batch_vendors()`, not a list of its own. | `llm.providers`, `validation` |
