@@ -1,0 +1,10 @@
+kind: Bug Fix
+body: >-
+  `llamafile` now appears in the generated docs vendor list and in the `model_vendor`
+  help text. Both lists, and the expander's list of valid vendors, now come from one
+  `vendor_names()` (#1577). `run_mode: batch` on a vendor that cannot batch (`llamafile`,
+  `cohere`) is now an error in the action entry check too, with the same text as preflight:
+  "vendor 'V' does not support run_mode: batch. Set run_mode: online." Previously that
+  check only warned that the vendor "may not support" batch. Both checks read the client's
+  `supports_batch`, and the hard-coded batch vendor set is gone (#1578).
+time: 2026-10-24T12:00:00Z
