@@ -33,6 +33,10 @@ NON_LLM_VENDORS = frozenset(
 )
 
 
+# Vendors whose actions the pipeline always runs online, whatever run_mode says.
+ONLINE_ONLY_VENDORS = frozenset({VendorType.TOOL.value, VendorType.HITL.value})
+
+
 def vendor_names() -> list[str]:
     """Every name ``model_vendor`` accepts: the vendor types, then the runtime profiles."""
     return [v.value for v in VendorType] + list(RUNTIME_PROFILES)

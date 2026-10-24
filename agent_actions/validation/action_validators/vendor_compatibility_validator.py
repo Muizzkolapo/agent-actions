@@ -1,7 +1,7 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.config.types import RunMode
-from agent_actions.llm.config.vendor import NON_LLM_VENDORS
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
@@ -25,16 +25,11 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
 
         if run_mode == RunMode.BATCH:
             kind = normalized_entry.get("kind", "").lower()
-            if kind in ("tool", "hitl"):
-                errors.append(
-                    f"{desc} kind '{kind}' does not support batch processing. "
-                    f"Tool and HITL actions execute synchronously. "
-                    f"Set run_mode='online' or change kind to 'llm'."
-                )
-
             model_vendor = str(normalized_entry.get("model_vendor", "")).lower()
+            # The pipeline runs these online inside a batch run.
+            runs_online = kind in ONLINE_ONLY_VENDORS or model_vendor in ONLINE_ONLY_VENDORS
 
-            if model_vendor:
+            if model_vendor and not runs_online:
                 # Imported here: the preflight module loads the client registry.
                 from agent_actions.validation.preflight.vendor_compatibility_validator import (
                     CLIENT_REGISTRY,
@@ -42,15 +37,7 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
                     supports_batch,
                 )
 
-                if model_vendor == "tool":
-                    vendors_str = ", ".join(batch_vendors())
-                    errors.append(
-                        f"{desc} 'tool' vendor does not support batch processing. "
-                        f"Tool vendors require online mode for "
-                        f"interactive execution. Use one of: {vendors_str} for "
-                        f"batch mode, or set run_mode='online' for tool vendor."
-                    )
-                elif model_vendor not in CLIENT_REGISTRY or model_vendor in NON_LLM_VENDORS:
+                if model_vendor not in CLIENT_REGISTRY or model_vendor in NON_LLM_VENDORS:
                     vendors_str = ", ".join(batch_vendors())
                     warnings.append(
                         f"{desc} model_vendor '{model_vendor}' may not support "

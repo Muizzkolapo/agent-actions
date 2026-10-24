@@ -24,7 +24,7 @@ from agent_actions.config.path_config import (
 )
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
-from agent_actions.llm.config.vendor import NON_LLM_VENDORS
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.llm.providers.client_base import api_key_env_name
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
@@ -659,7 +659,7 @@ class WorkflowResolutionService:
             if hasattr(run_mode, "value"):
                 run_mode = run_mode.value
 
-            if run_mode != "batch":
+            if run_mode != "batch" or vendor in ONLINE_ONLY_VENDORS:
                 continue
 
             if vendor == "openai" and config.get("base_url"):
