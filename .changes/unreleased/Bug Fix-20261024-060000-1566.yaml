@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  A retry reaching a `granularity: File` tool that writes several rows per record,
-  or a roll-up, answered every record of the file again below it, because each such
-  row is minted a new identity every run and none matched the row stored before. Such
-  a row is now matched to the stored row holding the same, the records it was made
-  from included, and takes back that row's identity, so the actions below answer
-  again only the rows that changed. (#1566)
-time: 2026-10-24T06:00:00Z

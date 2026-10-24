@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A staged `.json` file saved with a UTF-8 byte order mark stages. It failed with
-  "Unexpected UTF-8 BOM (decode using utf-8-sig)". The file is read as `utf-8-sig`, as a
-  staged CSV is (#1521), and `JsonLoader` drops a leading mark from a file or a string
-  too. The records and their `source_guid` are those of the same file without the mark.
-  (#1537)
-time: 2026-10-18T17:01:00Z

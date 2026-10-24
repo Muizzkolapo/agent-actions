@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: >-
-  `httpx` is now a declared dependency (`httpx>=0.27.0,<1`). agent-actions imports it directly
-  for the shared transport-error list and the Ollama and Gemini batch clients, but had it only
-  through the provider SDKs, so an SDK that dropped it would have broken the import.
-time: 2026-10-17T13:15:00Z

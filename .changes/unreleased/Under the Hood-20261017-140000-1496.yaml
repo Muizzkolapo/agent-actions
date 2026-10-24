@@ -1,7 +1,0 @@
-kind: Under the Hood
-body: >-
-  `click` and `werkzeug` are now declared dependencies (`click>=8.1.3,<9`, `werkzeug>=3.0.0,<4`).
-  The CLI imports click and the HITL review server imports werkzeug directly, but both came only
-  through flask, so a flask release that changed its own dependencies would have broken `agac` on
-  import.
-time: 2026-10-17T14:00:00Z

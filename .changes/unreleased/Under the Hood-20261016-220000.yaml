@@ -1,8 +1,0 @@
-kind: Under the Hood
-body: >-
-  Removed the synchronous batch retry loop (`BatchRetryService.retrieve_results_with_retry`), which
-  polled each retry batch to completion in-process and was reached by no production path: batch
-  retries are submitted and collected by a later run. With it went the helpers only it used and
-  `BatchProgressEvent` (B002), which only it fired. The batch-recovery reference now describes
-  the retry as submitted and collected rather than polled.
-time: 2026-10-16T22:00:00Z

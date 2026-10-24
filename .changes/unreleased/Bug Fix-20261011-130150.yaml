@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: A guard written NOT x == 1, unparenthesised, now negates the comparison, not the field. NOT bound to the field before any comparison ran, so NOT x == 1 read as (NOT x) == 1, decided by x's truthiness instead of its value, false for every record whose field was truthy. Only the parenthesised form, NOT (x == 1), negated the comparison. NOT now sits below comparisons and above AND for every operator, including IS NULL and the list and written forms of BETWEEN.
-time: 2026-10-11T13:01:50.428335+01:00

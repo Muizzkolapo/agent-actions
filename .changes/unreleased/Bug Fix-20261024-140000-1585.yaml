@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A `tool` or `hitl` action no longer gets a batch error or warning when its workflow
-  defaults to `run_mode: batch`. The pipeline always runs these actions online, so
-  `kind: tool`, `kind: hitl`, `model_vendor: tool` and `model_vendor: hitl` now pass
-  the entry check and preflight under batch. Their clients now report
-  `supports_batch: false` (#1585).
-time: 2026-10-24T14:00:00Z

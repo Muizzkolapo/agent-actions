@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: A record a guard could not be evaluated for (an unregistered UDF name, say) now fails alone instead of failing the whole action. The per-record guard pre-filter used to let any exception other than one specific type escape and kill the whole pass, so every other record, including ones the guard would judge cleanly, went unprocessed with no outcome recorded for it.
-time: 2026-10-11T19:28:34.503203+01:00

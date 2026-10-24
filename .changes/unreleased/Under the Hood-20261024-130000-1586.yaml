@@ -1,9 +1,0 @@
-kind: Under the Hood
-body: >-
-  A repair asks whether a retried record shares a repeat chain from an indexed
-  `source_data.repeat_of_source_guid` column instead of decompressing every source row
-  in Python, once per action: 10,000 source rows took about 0.2–0.4 s per call (4–16 s
-  over a 20–40 action repair) and 50,000 about 1.2–2 s, now well under a millisecond.
-  Opening an existing store adds the column; a row written before it has it NULL and is
-  still read from its payload. (#1586)
-time: 2026-10-24T13:00:00Z

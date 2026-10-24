@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  A batch collect pass that sends records to a retry no longer warns that they are
-  "possible orphans". Records a pending retry or repair batch holds are now reported as
-  waiting on that round, with the error recorded for their last attempt (for example a
-  provider that could not be reached) or a note that the provider returned no result
-  for them. Only DEFERRED records nothing holds are still called possible orphans. The
-  action's outcome is unchanged (1490).
-time: 2026-10-17T13:30:00Z

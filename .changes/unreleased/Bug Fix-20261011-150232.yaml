@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: Under batch, a guard UDF's write to its input now fails the whole action wherever it happens -- on a later prepared row, or during a retry round's preparation -- not only within the pre-submit preflight's first few rows. Online already failed the action the same way for the same data; batch now matches it instead of silently completing with just that one record failed.
-time: 2026-10-11T15:02:32.401458+01:00

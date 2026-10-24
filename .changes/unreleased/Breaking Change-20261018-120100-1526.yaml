@@ -1,9 +1,0 @@
-kind: Breaking Change
-body: >-
-  Pre-flight now refuses a prompt reference, `observe` or `passthrough` entry that reads a
-  field under an action which only observes or passes that field through, such as
-  `summarize.url` after `summarize` passed through `source.url`. The field is stored under the
-  namespace it came from, so such a prompt failed every record and such an `observe` handed
-  the model a null. Read the field from the action that produced it, such as `source.url`
-  (#1526).
-time: 2026-10-18T12:01:00Z

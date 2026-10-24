@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  A first-stage batch action no longer leaves a placeholder file on disk. Submitting a
-  staged file wrote one at the action's folder joined with the file's relative path again,
-  so a file in a subdirectory left `target/<action>/sub/sub/page.json` behind after its batch
-  was collected, which a reader of the target folder took for a batch still out. The batch
-  registry already marks a batch in flight, as it does for every later action, so the
-  placeholder is no longer written.
-time: 2026-10-16T13:00:00Z

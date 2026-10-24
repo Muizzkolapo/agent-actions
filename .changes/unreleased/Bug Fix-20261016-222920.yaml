@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  A guard or WHERE clause that compares a field to a string containing a blocked word,
-  such as `status == "open"` or `type == "file"`, now loads. The blocked-word check read
-  the clause's raw text, quoted values included, so these were refused as a "potentially
-  dangerous pattern". A quoted string is a value and is no longer checked; the same word
-  outside quotes, as in `open(x)`, is still refused.
-time: 2026-10-16T12:00:00Z

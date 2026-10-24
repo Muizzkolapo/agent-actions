@@ -1,6 +1,0 @@
-kind: Bug Fix
-body: >-
-  The retry reference listed retried server errors as HTTP 502, 503 and 504 for every provider.
-  It now says what each provider retries: any 5xx for OpenAI, Groq and Anthropic, and 500, 502,
-  503 and 504 for Gemini, Cohere and Ollama; connection failures are retried for every provider.
-time: 2026-10-17T13:16:00Z

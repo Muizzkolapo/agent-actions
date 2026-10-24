@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  A batch file that every record leaves while its batch is out is now stored empty when the
-  batch is collected, as online stores it. The run that finds the batch out records that the
-  file takes no input, so the collect writes the file empty instead of with the batch's
-  answers to records it no longer has. The run still waits for the batch, as before.
-time: 2026-10-16T15:17:37Z

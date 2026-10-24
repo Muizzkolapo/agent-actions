@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  When `agac retry` resumes an interrupted retry, it now lists each live disposition row the
-  restore will replace with a different value, live value first, and names the manifest to
-  edit to keep the live value. This holds for `--dry-run` too. Before, a row changed by hand
-  after the interruption was overwritten with no sign of it (#1549).
-time: 2026-10-24T11:00:00Z

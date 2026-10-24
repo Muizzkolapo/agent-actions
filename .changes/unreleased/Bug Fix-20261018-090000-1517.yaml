@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  A `granularity: File` tool that splits one record and drops another now tombstones the
-  dropped record `unprocessed` with reason `tool_missing_record`, as a tool that only drops
-  does. It used to get no row and no disposition, and a fan-in beside another branch ran it
-  with this branch's fields empty and reported success. An input no output names is still
-  left alone when an output declares `source_index: None`, since that row may have consumed
-  it (#1517).
-time: 2026-10-18T09:00:00Z

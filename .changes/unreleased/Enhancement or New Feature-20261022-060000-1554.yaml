@@ -1,8 +1,0 @@
-kind: Enhancement or New Feature
-body: >-
-  An `openai` action with `base_url` sends its requests to that URL, so one run can mix a
-  local OpenAI-compatible server such as llamafile with OpenAI. Each action keeps its own
-  URL; a `base_url` in the workflow `defaults:` block is inherited like every other model
-  field. Batch mode with `base_url` is refused at preflight, because the Batch API is served
-  only by OpenAI, and `--verify-keys` probes a `base_url` action at its own server. (#1554)
-time: 2026-10-22T06:00:00Z
