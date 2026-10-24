@@ -24,6 +24,7 @@ from agent_actions.config.path_config import (
 )
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
+from agent_actions.llm.config.vendor import VendorType
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
 from agent_actions.utils.constants import SCHEMA_KEY
@@ -44,6 +45,10 @@ _VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
 
 # Sentinel substrings in api_key_env_name that indicate no real key is needed.
 _NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
+
+_VENDORS_WITHOUT_ENDPOINT = frozenset(
+    {VendorType.TOOL.value, VendorType.HITL.value, VendorType.AGAC_PROVIDER.value}
+)
 
 
 def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
@@ -133,6 +138,10 @@ class WorkflowResolutionService:
     def resolve_all(self) -> StaticValidationResult:
         """Run all resolution checks and return aggregated result."""
         result = StaticValidationResult()
+
+        # Before the key probe, so a refused action is never probed at the wrong endpoint.
+        for error in self._check_vendor_base_url():
+            result.add_error(error)
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
             errors, warnings, targets = self._check_api_keys()
@@ -601,6 +610,49 @@ class WorkflowResolutionService:
                 exc,
             )
             return config
+
+    # ── Vendor base_url support ────────────────────────────────────────
+
+    def _check_vendor_base_url(self) -> list[StaticTypeError]:
+        """Refuse base_url on a vendor whose client does not list it as a field."""
+        errors: list[StaticTypeError] = []
+
+        from agent_actions.validation.preflight.vendor_compatibility_validator import (
+            _resolve_capabilities,
+        )
+
+        for action_name, config in self.action_configs.items():
+            base_url = config.get("base_url")
+            vendor = (config.get("model_vendor") or "").lower()
+            # These send no request, and may inherit base_url from defaults.
+            if not base_url or vendor in _VENDORS_WITHOUT_ENDPOINT:
+                continue
+
+            capabilities = _resolve_capabilities(vendor)
+            if capabilities is None or "base_url" in capabilities.get("optional_fields", []):
+                continue
+
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{action_name}': vendor '{vendor}' "
+                        "does not send requests to base_url."
+                    ),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="base_url",
+                        raw_reference=f"base_url={base_url}",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="base_url",
+                    hint=(
+                        "Remove base_url, or set model_vendor: openai "
+                        "for an OpenAI-compatible server."
+                    ),
+                )
+            )
+
+        return errors
 
     # ── Vendor run-mode compatibility ──────────────────────────────────
 
