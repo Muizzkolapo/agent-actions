@@ -212,8 +212,7 @@ class ActionExpander:
         agent["prompt"] = template_replacer(prompt) if prompt else None
 
         # Process tool actions
-        run_mode = agent["run_mode"]
-        process_tool_action(agent, action, run_mode)
+        process_tool_action(agent, action)
         if action_kind == "hitl":
             process_hitl_action(agent, action, defaults)
 

@@ -100,6 +100,20 @@ class TestFireAgentStart:
         assert event.total_actions == 2
         assert event.action_type == "llm"
 
+    @pytest.mark.parametrize(
+        ("config", "mode"),
+        [
+            ({"kind": "tool", "model_vendor": "tool", "run_mode": "batch"}, "online"),
+            ({"kind": "hitl", "model_vendor": "hitl", "run_mode": "batch"}, "online"),
+            ({"kind": "llm", "model_vendor": "openai", "run_mode": "batch"}, "batch"),
+        ],
+    )
+    def test_the_start_event_carries_the_mode_the_action_runs_in(self, event_logger, config, mode):
+        with patch(FIRE_EVENT_PATH) as mock_fire:
+            event_logger.fire_action_start(0, "agent_a", 2, config)
+
+        assert mock_fire.call_args[0][0].mode == mode
+
 
 # ── log_action_skip ─────────────────────────────────────────────────────
 

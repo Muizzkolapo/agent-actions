@@ -14,6 +14,7 @@ from rich.console import Console
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
+from agent_actions.llm.config.vendor import effective_run_mode
 from agent_actions.llm.providers.local_batch_records import (
     discard_partial_batch_records,
     release_local_batch_record,
@@ -586,7 +587,7 @@ class AgentWorkflow:
 
         self.event_logger.fire_action_start(idx, action_name, total_actions, action_config)
 
-        run_mode = action_config.get("run_mode", "")
+        run_mode = effective_run_mode(action_config)
 
         if self.services.core.state_manager.is_completed(action_name):
             if self.services.core.action_executor.verify_completion_status(action_name):

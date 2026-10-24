@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.workflow.context_scope_pruning import strip_unreachable_drops
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
@@ -102,7 +103,7 @@ class TestRunSingleAgent:
         wf.event_logger.fire_action_start.assert_called_once_with(
             0, "agent_a", 2, {"agent_type": "agent_a", "type": "llm"}
         )
-        wf.event_logger.log_action_skip.assert_called_once_with(0, "agent_a", 2, "")
+        wf.event_logger.log_action_skip.assert_called_once_with(0, "agent_a", 2, RunMode.ONLINE)
         wf.services.core.action_executor.execute_action_sync.assert_not_called()
 
     def test_success_returns_false(self):

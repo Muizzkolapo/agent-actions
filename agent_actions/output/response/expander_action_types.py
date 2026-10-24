@@ -3,7 +3,6 @@
 import logging
 from typing import Any
 
-from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.guards import GuardBehavior, GuardParser, parse_guard_config
 from agent_actions.utils.constants import (
@@ -53,7 +52,7 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
             }
 
 
-def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: RunMode) -> None:
+def process_tool_action(agent: dict[str, Any], action: dict[str, Any]) -> None:
     """Process tool-specific action configuration."""
     action_kind = action.get("kind", DEFAULT_ACTION_KIND)
     if action_kind != "tool":
@@ -71,20 +70,6 @@ def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode:
         )
     agent["model_vendor"] = "tool"
     agent["model_name"] = action.get("impl", action.get("name"))
-
-    if run_mode == RunMode.BATCH:
-        action_name = action.get("name", "unknown")
-        raise ConfigurationError(
-            "Tool actions do not support batch processing. "
-            "Please set run_mode='online' or remove the run_mode "
-            "setting to use the default",
-            context={
-                "action_name": action_name,
-                "kind": "tool",
-                "run_mode": "batch",
-                "operation": "expand_actions_to_agents",
-            },
-        )
 
     # Tool actions MUST declare an output schema.
     # Ordering: runs BEFORE compile_output_schema (which populates

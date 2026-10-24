@@ -2,12 +2,14 @@
 Vendor configuration models for LLM providers.
 """
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
+from agent_actions.config.types import RunMode
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
 
 
@@ -35,6 +37,20 @@ NON_LLM_VENDORS = frozenset(
 
 # Vendors whose actions the pipeline always runs online, whatever run_mode says.
 ONLINE_ONLY_VENDORS = frozenset({VendorType.TOOL.value, VendorType.HITL.value})
+
+
+def runs_in_batch(action_config: Mapping[str, Any]) -> bool:
+    """Whether an action takes the batch path; tool and hitl actions never do."""
+    if action_config.get("run_mode") != RunMode.BATCH:
+        return False
+    kind = getattr(action_config.get("kind"), "value", action_config.get("kind"))
+    vendor = getattr(action_config.get("model_vendor"), "value", action_config.get("model_vendor"))
+    return not ({str(kind or "").lower(), str(vendor or "").lower()} & ONLINE_ONLY_VENDORS)
+
+
+def effective_run_mode(action_config: Mapping[str, Any]) -> RunMode:
+    """The mode an action runs in, whatever its run_mode says."""
+    return RunMode.BATCH if runs_in_batch(action_config) else RunMode.ONLINE
 
 
 def vendor_names() -> list[str]:

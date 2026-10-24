@@ -29,6 +29,10 @@ actions:
 `run_mode` accepts the string values `batch` and `online` (case-insensitive). These map to the `RunMode` enum internally.
 :::
 
+:::note
+Tool and HITL actions always run online, also in a batch workflow. A `run_mode: batch` from `defaults:` or on the action itself is accepted for them with no message, and they are staged, run and reported as online actions.
+:::
+
 ## Online Mode
 
 Requests process synchronously with immediate responses.

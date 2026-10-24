@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from agent_actions.errors import WorkflowError, get_error_detail
+from agent_actions.llm.config.vendor import effective_run_mode
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
@@ -186,7 +187,7 @@ class ActionLevelOrchestrator:
                     action_name=action_name,
                     action_index=original_idx,
                     total_actions=total_actions,
-                    mode=action_config.get("run_mode", ""),
+                    mode=effective_run_mode(action_config),
                 )
             )
 
@@ -197,7 +198,7 @@ class ActionLevelOrchestrator:
                 is_last_action=is_last,
             )
 
-            run_mode = action_config.get("run_mode", "")
+            run_mode = effective_run_mode(action_config)
             self._fire_action_result_event(
                 action_name, original_idx, total_actions, result, run_mode
             )
@@ -238,12 +239,12 @@ class ActionLevelOrchestrator:
                                 error_message=str(exc),
                                 error_detail=get_error_detail(exc),
                                 error_type=type(exc).__name__,
-                                mode=action_config.get("run_mode", ""),
+                                mode=effective_run_mode(action_config),
                             )
                         )
                         raise
 
-                    run_mode = action_config.get("run_mode", "")
+                    run_mode = effective_run_mode(action_config)
                     self._fire_action_result_event(
                         action, original_idx, total_actions, result, run_mode
                     )

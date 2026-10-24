@@ -16,6 +16,7 @@ from agent_actions.expectations.expression import (
 )
 from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
+from agent_actions.llm.config.vendor import runs_in_batch
 
 EXPECTATIONS_REMEDY = (
     "Fix the expect: block — each defect names its correction. For "
@@ -99,8 +100,7 @@ def _repair_mode_defects(
 ) -> list[str]:
     """Defects for the repair-loop keys against the action's execution shape."""
     messages: list[str] = []
-    is_batch = _config_token(action.get("run_mode")) == "batch"
-    if is_batch:
+    if runs_in_batch(action):
         # Batch validates from the stored result and has no llm_context, so a
         # judged rule with context: refs would fail every record on a missing
         # context source rather than on its own rule.

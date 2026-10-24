@@ -21,6 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.config.types import RunMode
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStatus
 
@@ -502,7 +503,9 @@ class TestCoordinatorSequentialVerification:
 
         assert result is False
         mock.services.core.action_executor.execute_action_sync.assert_not_called()
-        mock.event_logger.log_action_skip.assert_called_once_with(0, "write_description", 1, "")
+        mock.event_logger.log_action_skip.assert_called_once_with(
+            0, "write_description", 1, RunMode.ONLINE
+        )
 
     def test_stale_completed_action_is_re_run(self):
         """Sequential coordinator re-runs action when storage has no data."""

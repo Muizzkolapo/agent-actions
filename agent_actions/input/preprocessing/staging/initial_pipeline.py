@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from agent_actions.config.types import RunMode
 from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
+from agent_actions.llm.config.vendor import runs_in_batch
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter, target_relative_path
@@ -257,7 +258,7 @@ def _check_and_prepare(ctx: InitialStageContext, content: Any, file_type: str) -
     prepared row for every action, and the first-record template render, in that
     order. Nothing is stored or sent here; the caller decides what happens next.
     """
-    run_mode = ctx.agent_config.get("run_mode")
+    run_mode = RunMode.BATCH if runs_in_batch(ctx.agent_config) else RunMode.ONLINE
     logger.info(
         "Staging loader run_mode check: mode=%s, agent=%s, file=%s",
         run_mode,

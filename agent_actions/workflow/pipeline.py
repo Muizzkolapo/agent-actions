@@ -19,6 +19,7 @@ from agent_actions.llm.batch.infrastructure.context import (
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
+from agent_actions.llm.config.vendor import runs_in_batch
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import target_relative_path
 from agent_actions.processing.disposition_gate import (
@@ -53,8 +54,6 @@ if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
     from agent_actions.storage.backend import StorageBackend
 
-TOOL_VENDOR = "tool"
-HITL_VENDOR = "hitl"
 logger = logging.getLogger(__name__)
 
 
@@ -503,15 +502,7 @@ class ProcessingPipeline:
         Returns:
             Path to the generated output file
         """
-        # Tool and HITL actions run synchronously regardless of run_mode
-        # (tools are Python functions, HITL blocks for human input)
-        is_synchronous = params.action_config.get("model_vendor") in [
-            TOOL_VENDOR,
-            HITL_VENDOR,
-        ] or params.action_config.get("kind") in ["tool", "hitl"]
-
-        run_mode = params.action_config.get("run_mode")
-        if run_mode == RunMode.BATCH and not is_synchronous:
+        if runs_in_batch(params.action_config):
             agent_indices, dependency_configs, version_context = (
                 ProcessingPipeline._build_pipeline_context(
                     params.action_config,
@@ -533,13 +524,6 @@ class ProcessingPipeline:
                     version_context=version_context,
                     retried_records=params.retried_records,
                 )
-            )
-        if run_mode == RunMode.BATCH and is_synchronous:
-            logger.warning(
-                "Action '%s' has run_mode=batch but kind '%s' requires synchronous "
-                "execution. Running in online mode.",
-                params.action_name,
-                params.action_config.get("kind", params.action_config.get("model_vendor")),
             )
         pipeline = create_processing_pipeline_from_params(
             action_config=params.action_config,
@@ -754,8 +738,7 @@ class ProcessingPipeline:
         # run reaches goes to it whole, and what the file held is replaced whole.
         whole_file = self.granularity == "file" and self.is_tool_action
         output_file_path = OutputHandler.output_path(file_path, base_directory, output_directory)
-        run_mode = self.config.action_config.get("run_mode")
-        in_batch = run_mode == RunMode.BATCH and not (self.is_tool_action or self.is_hitl_action)
+        in_batch = runs_in_batch(self.config.action_config)
         # The batch path drops them under the name its batch stores the file by.
         stored_before = (
             drop_rows_built_on_rows_gone_above(
