@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -151,8 +152,8 @@ def _outcome(project: Path) -> dict[str, tuple[str, str | None]]:
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
         pages = {}
-        for (blob,) in con.execute(
-            "select data from target_data where action_name = ?", ("extract",)
+        for (blob,) in stored_rows(
+            db, "select data from target_data where action_name = ?", "extract"
         ):
             loaded = json.loads(blob)
             for row in loaded if isinstance(loaded, list) else [loaded]:
@@ -164,8 +165,8 @@ def _outcome(project: Path) -> dict[str, tuple[str, str | None]]:
             ).fetchall()
         )
         states: dict[str, str] = {}
-        for (blob,) in con.execute(
-            "select data from target_data where action_name = ?", ("summarize",)
+        for (blob,) in stored_rows(
+            db, "select data from target_data where action_name = ?", "summarize"
         ):
             loaded = json.loads(blob)
             for row in loaded if isinstance(loaded, list) else [loaded]:

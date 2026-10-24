@@ -24,6 +24,7 @@ import pytest
 from agent_actions.errors import AgentActionsError, ProcessingError
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from tests.helpers.store import stored_rows
 from tests.integration.test_a_collect_pass_leaves_collected_files_alone import (
     _Action,
     _Provider,
@@ -202,13 +203,12 @@ def _stored_rows(project: Path) -> dict[str, list[tuple[str, str]]]:
     Every row, not only the answered ones: a stale failed row beside the answer for the
     same page is what a record sent again used to leave.
     """
-    con = _store(project)
-    try:
-        stored = con.execute(
-            "select relative_path, data from target_data where action_name = ?", (CLI_ACTION,)
-        ).fetchall()
-    finally:
-        con.close()
+    store = project / "agent_workflow" / WORKFLOW / "agent_io" / "store"
+    stored = stored_rows(
+        sorted(store.glob("*.db"))[0],
+        "select relative_path, data from target_data where action_name = ?",
+        CLI_ACTION,
+    )
     rows_by_file = {}
     for path, data in stored:
         rows = json.loads(data)

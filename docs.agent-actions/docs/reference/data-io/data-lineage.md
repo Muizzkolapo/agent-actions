@@ -228,19 +228,14 @@ A record carries the namespace of every action upstream of it through `dependenc
 
 ## Debugging Lineage
 
+The store keeps records compressed, so read them with [`agac records`](../cli/records) rather than sqlite3.
+
 ### Inspect Record Ancestry
 
+Every record carries `source_guid`, `target_id`, `parent_target_id`, `root_target_id` and `lineage`:
+
 ```bash
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT json_extract(r.value, '\$.source_guid'),
-         json_extract(r.value, '\$.target_id'),
-         json_extract(r.value, '\$.parent_target_id'),
-         json_extract(r.value, '\$.root_target_id'),
-         json_extract(r.value, '\$.lineage')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = 'merge'
-  LIMIT 1
-"
+agac records -w <workflow> -a merge
 ```
 
 ### Verify Sibling Relationships
@@ -248,12 +243,10 @@ sqlite3 agent_io/store/<workflow>.db "
 Check that parallel branches share the same parent:
 
 ```bash
-# All three should return the same parent_target_id
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT t.action_name, json_extract(r.value, '\$.parent_target_id')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name IN ('branch_a', 'branch_b', 'branch_c')
-"
+# All three should print the same parent_target_id
+for branch in branch_a branch_b branch_c; do
+  agac records -w <workflow> -a "$branch" --field parent_target_id
+done
 ```
 
 ### Trace Root Ancestry
@@ -261,12 +254,8 @@ sqlite3 agent_io/store/<workflow>.db "
 For Map-Reduce, verify all chunks trace back to the same root:
 
 ```bash
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT DISTINCT json_extract(r.value, '\$.root_target_id')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = 'process_chunk'
-"
-# Should output exactly one UUID
+agac records -w <workflow> -a process_chunk --field root_target_id
+# Every value should be the same UUID
 ```
 
 ## See Also

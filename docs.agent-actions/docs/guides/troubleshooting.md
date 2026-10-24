@@ -324,18 +324,15 @@ See [Prompt Traces reference](../reference/data-io/prompt-traces.md) for the ful
 
 ### Inspecting Failed Record Input Snapshots
 
-When records fail or exhaust retries, the framework captures the input record at the moment of failure. Query the disposition table to see what data was being processed:
+When records fail or exhaust retries, the framework captures the input record at the moment of failure. The store keeps these snapshots compressed, so print them with [`agac records --snapshots`](../reference/cli/records) rather than querying the table:
 
-```sql
--- View failed records with their input snapshots
-SELECT action_name, record_id, reason, input_snapshot
-FROM record_disposition
-WHERE disposition = 'failed' AND input_snapshot IS NOT NULL;
+```bash
+# Every failed or exhausted record, with the input it was processed with
+agac records -w <workflow> --snapshots
 
--- View exhausted records (retries exceeded)
-SELECT action_name, record_id, reason, input_snapshot
-FROM record_disposition
-WHERE disposition = 'exhausted' AND input_snapshot IS NOT NULL;
+# One action's, or one record's
+agac records -w <workflow> -a <action> --snapshots
+agac records -w <workflow> --snapshots --source-guid <source_guid>
 ```
 
 ---
@@ -356,37 +353,23 @@ Extract key information from the error message. Agent Actions provides structure
 
 ### Step 2: Find the Source Record
 
-Use `source_guid` to trace the record. Each action's output is a JSON array stored in the `data` column of the `target_data` table, keyed by `action_name`. Use `json_each(data)` to scan records and `json_extract` to filter by `source_guid`:
+Use `source_guid` to trace the record. Each action's output is a JSON array stored compressed in the `data` column of the `target_data` table, keyed by `action_name`; `agac records --source-guid` finds the record in every action that holds it:
 
 ```bash
 # Find every action that produced a record with this source_guid
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT DISTINCT t.action_name
-  FROM target_data t, json_each(t.data) r
-  WHERE json_extract(r.value, '\$.source_guid') = '37812c37-80a2-596b-8747-8f93e7a34e7f'
-"
+agac records -w <workflow> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f --field _action
 ```
 
 ### Step 3: Check Node Outputs
 
-Compare data at each stage. Filter the JSON blob in the `data` column by `source_guid` to inspect the same record at each step:
+Compare data at each stage. Select the same record at each step by its `source_guid` (the store keeps records compressed, so [`agac records`](../reference/cli/records) reads them rather than sqlite3):
 
 ```bash
 # Input to failing action — fetch the matching record
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT json_extract(r.value, '\$')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = '<failing_action>'
-    AND json_extract(r.value, '\$.source_guid') = '37812c37-80a2-596b-8747-8f93e7a34e7f'
-"
+agac records -w <workflow> -a <failing_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
 
 # Previous action's output for the same record
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT json_extract(r.value, '\$')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = '<previous_action>'
-    AND json_extract(r.value, '\$.source_guid') = '37812c37-80a2-596b-8747-8f93e7a34e7f'
-"
+agac records -w <workflow> -a <previous_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
 ```
 
 ### Step 4: Enable Debug Mode

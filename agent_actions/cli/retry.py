@@ -469,7 +469,7 @@ class RetryCommand:
         runner_backend = workflow.services.core.action_runner.storage_backend
 
         def settled(action: str) -> set[str]:
-            decided = {row["record_id"] for row in backend.get_disposition(action)}
+            decided = {row["record_id"] for row in backend.get_disposition(action, snapshots=False)}
             return decided | answered_by_repair(runner_backend, action)
 
         never_answered = cleared_ids - settled(from_action) - {NODE_LEVEL_RECORD_ID}
@@ -883,7 +883,10 @@ class RetryCommand:
         jobs = BatchRegistryManager(backend, action).get_all_jobs()
         if not jobs:
             return False
-        held = {row["record_id"]: row["disposition"] for row in backend.get_disposition(action)}
+        held = {
+            row["record_id"]: row["disposition"]
+            for row in backend.get_disposition(action, snapshots=False)
+        }
         for file_name, entry in jobs.items():
             try:
                 sent = cls._records_sent(backend, action, entry.parent_file_name or file_name)
@@ -907,7 +910,7 @@ class RetryCommand:
         """
         reached = {
             row["record_id"]
-            for row in backend.get_disposition(action)
+            for row in backend.get_disposition(action, snapshots=False)
             if row.get("disposition") not in (DISPOSITION_FILTERED, DISPOSITION_SKIPPED)
         }
         return any(
@@ -1080,7 +1083,8 @@ class RetryCommand:
         waiting: set[tuple[str, str]] = set()
         for action in sorted({action for action, *_ in owed}):
             dispositions = {
-                row["record_id"]: row["disposition"] for row in backend.get_disposition(action)
+                row["record_id"]: row["disposition"]
+                for row in backend.get_disposition(action, snapshots=False)
             }
             jobs = BatchRegistryManager(backend, action).get_all_jobs()
             for owed_action, batch_id, file_name, _state in owed:
@@ -1136,7 +1140,9 @@ class RetryCommand:
         return [
             (action, row["record_id"])
             for action in sorted(actions)
-            for row in backend.get_disposition(action, disposition=DISPOSITION_DEFERRED)
+            for row in backend.get_disposition(
+                action, disposition=DISPOSITION_DEFERRED, snapshots=False
+            )
             if row.get("record_id") and row.get("record_id") != NODE_LEVEL_RECORD_ID
         ]
 

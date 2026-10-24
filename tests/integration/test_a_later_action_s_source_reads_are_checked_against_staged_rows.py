@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 WORKFLOW = "later_source"
 TEXT = "Hello there. This is a short document.\n"
@@ -142,13 +143,10 @@ def _query(root: Path, sql: str) -> list[tuple]:
     dbs = sorted(store.glob("*.db"))
     if not dbs:
         return []
-    con = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
     try:
-        return con.execute(sql).fetchall()
+        return stored_rows(dbs[0], sql)
     except sqlite3.OperationalError:
         return []
-    finally:
-        con.close()
 
 
 def _stored(root: Path, action: str) -> list[dict]:

@@ -76,7 +76,7 @@ CREATE TABLE target_data (
 )
 ```
 
-Each row stores every record an action produced for a given input file (`relative_path`) as a single JSON array in `data`. Fan it out with `json_each(data)` and pull fields with `json_extract`.
+Each row stores every record an action produced for a given input file (`relative_path`) as a single JSON array in `data`, stored compressed. Read the records with [`agac records`](../cli/records); `sqlite3` shows the column as a blob.
 
 ## Data Flow
 
@@ -131,12 +131,13 @@ SELECT DISTINCT action_name FROM target_data;
 
 -- Count records per action
 SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
+```
 
--- Preview the first record produced by an action
-SELECT json_extract(r.value, '$')
-FROM target_data t, json_each(t.data) r
-WHERE t.action_name = 'extract_facts'
-LIMIT 1;
+The `data` column is compressed inside the store, so the records themselves are read with the CLI:
+
+```bash
+# The records extract_facts produced
+agac records -w <workflow> -a extract_facts
 ```
 
 ### Benefits

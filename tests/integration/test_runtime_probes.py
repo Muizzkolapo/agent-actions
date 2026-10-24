@@ -9,13 +9,13 @@ together.
 
 import json
 import shutil
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "runtime_probes"
@@ -42,11 +42,7 @@ class Run:
         dbs = list(store.glob("*.db")) if store.is_dir() else []
         if not dbs:
             return []
-        con = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
-        try:
-            blobs = [row[0] for row in con.execute("select data from target_data")]
-        finally:
-            con.close()
+        blobs = [row[0] for row in stored_rows(dbs[0], "select data from target_data")]
         out: list[dict] = []
         for blob in blobs:
             loaded = json.loads(blob)

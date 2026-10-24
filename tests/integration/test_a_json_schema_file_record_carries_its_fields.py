@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
+from tests.helpers.store import stored_rows
 from tests.integration.test_a_json_schema_file_runs import (
     _OBJECT,
     WORKFLOW,
@@ -16,11 +16,7 @@ from tests.integration.test_a_json_schema_file_runs import (
 
 def _records(root: Path) -> list[dict]:
     (db,) = (root / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        blobs = [row[0] for row in con.execute("select data from target_data")]
-    finally:
-        con.close()
+    blobs = [row[0] for row in stored_rows(db, "select data from target_data")]
     out: list[dict] = []
     for blob in blobs:
         loaded = json.loads(blob)

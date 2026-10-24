@@ -38,7 +38,7 @@ def _storage(target_by_action, filtered_by_action, dependency_graph=None):
         json.dumps(dependency_graph) if dependency_graph is not None else None
     )
 
-    def _get_disposition(action, record_id=None, disposition=None):
+    def _get_disposition(action, record_id=None, disposition=None, *, snapshots=True):
         if disposition == DISPOSITION_FILTERED:
             return [
                 {"record_id": rid, "disposition": DISPOSITION_FILTERED}
@@ -115,7 +115,7 @@ def test_filtered_record_dropped_from_single_source_file(tmp_path):
 
     storage.list_target_files.side_effect = _list_targets
 
-    def _get_disposition(action, record_id=None, disposition=None):
+    def _get_disposition(action, record_id=None, disposition=None, *, snapshots=True):
         if action == "tag_code_concept" and disposition == DISPOSITION_FILTERED:
             return [{"record_id": "sg-2", "disposition": DISPOSITION_FILTERED}]
         return []
@@ -280,7 +280,7 @@ def test_node_level_filtered_disposition_is_ignored(tmp_path):
     storage.list_target_files.return_value = ["data.json"]
     storage.read_target.side_effect = lambda action, rel: ({"a": a_records, "b": b_records}[action])
 
-    def _get_disposition(action, record_id=None, disposition=None):
+    def _get_disposition(action, record_id=None, disposition=None, *, snapshots=True):
         if action == "a" and disposition == DISPOSITION_FILTERED:
             return [{"record_id": NODE_LEVEL_RECORD_ID, "disposition": DISPOSITION_FILTERED}]
         return []

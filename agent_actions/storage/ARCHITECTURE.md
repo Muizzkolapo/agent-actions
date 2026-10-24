@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS source_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     relative_path TEXT NOT NULL,
     source_guid TEXT NOT NULL,
-    data TEXT NOT NULL,               -- JSON blob: the full input record
+    data TEXT NOT NULL,               -- the full input record as JSON, stored compressed
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(relative_path, source_guid)
 )
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS target_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action_name TEXT NOT NULL,
     relative_path TEXT NOT NULL,
-    data TEXT NOT NULL,                -- JSON blob: list[dict] of ALL records for this path
+    data TEXT NOT NULL,                -- list[dict] of ALL records for this path as JSON, stored compressed
     record_count INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path)
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS target_data (
 
 No additional indexes — the UNIQUE constraint provides one.
 
-The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` reads it rather than the blob, and has to read it carefully: a store that gained the column by migration holds it as `TEXT`, where `'0' > 0` is true, and a row written before the column existed has it `NULL`. So it casts the count and falls back to `json_array_length(data)`. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
+The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` reads it rather than the blob, and has to read it carefully: a store that gained the column by migration holds it as `TEXT`, where `'0' > 0` is true, and a row written before the column existed has it `NULL`. So it casts the count and, for a row still stored as text, falls back to `json_array_length(data)`; a compressed row always carries its count. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
 
 ### 3. record_disposition — per-record processing status
 
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS record_disposition (
     reason TEXT,
     detail TEXT,                       -- extended error message or context
     relative_path TEXT,
-    input_snapshot TEXT,               -- JSON of input record (capped at 10KB)
+    input_snapshot TEXT,               -- JSON of input record (capped at 10KB), stored compressed
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, record_id, disposition)
 )
@@ -183,7 +183,8 @@ Indexes:
 **Text compression.** `compiled_prompt`, `llm_context` and `response_text` are
 stored as BLOBs: a 4-byte dictionary id, then a zlib stream compressed against that
 dictionary (id 0 means none). Each action and column gets one dictionary, made from
-the first value written for it and kept in `prompt_trace_dictionary`:
+the first value written for it and kept in `prompt_trace_dictionary`, which also
+holds the dictionaries of the payload columns (see *Payload compression* below):
 
 ```sql
 CREATE TABLE IF NOT EXISTS prompt_trace_dictionary (
@@ -204,6 +205,38 @@ row written before compression and reads back as it is, so older stores need no
 migration. Every backend reader decompresses (`decompress_trace_text`); a value that
 will not decompress raises `ValueError` rather than returning bytes. Outside the
 backend, read the text with `agac traces` — `sqlite3` shows these columns as blobs.
+
+**Payload compression.** `target_data.data`, `source_data.data`,
+`checkpoint_output.record_data` and `record_disposition.input_snapshot` are stored
+the same way. A dictionary row is keyed `(action_name, column_name)` with
+`column_name` naming the column it serves — `prompt_trace.compiled_prompt`,
+`target_data.data`, `record_disposition.input_snapshot`, ... — so one table holds
+every dictionary and one id space names them; source rows belong to no action and
+share one dictionary under an empty `action_name`. A write compresses inside its own
+transaction, so a rolled-back write leaves no dictionary a reader could load.
+`delete_target(action)`, `clear_source_data()`, and `clear_checkpoint_records` or
+`clear_disposition` called for a whole action drop the dictionary with the last row
+it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`, and
+the bare column names a store written before the keys were qualified holds). The DDL column
+type stays `TEXT`: SQLite stores the blob as given, and a row written as text before
+compression still reads back. Unlike a trace, these columns are read on the resume
+and retry paths, where empty data would pass for an answer, so every reader goes
+through `decode_payload`, which raises `SerializationError` naming the table, action
+and row for a value it cannot read — a corrupt stream, or a dictionary id the store
+does not hold. The two places that count a stored file the walk could not read as a
+lost file (`runner_file_processing.py`, `managers/output.py`) catch that error where
+they caught `json.JSONDecodeError`: the row is recorded and the action left incomplete,
+not read as empty. `get_disposition(snapshots=False)` leaves `input_snapshot` out and
+decodes nothing; every run path that reads only ids and dispositions asks for that,
+so a forensic column it never uses cannot fail it. SQL that looked inside these
+columns is gone or guarded:
+`has_target_rows` and `preview_target` fall back to `json_array_length(data)` only
+for a text row and measure a compressed row that lacks its count in Python (the
+writer always stores one; only a store edited from outside holds such a row),
+`records_share_a_repeat_chain` reads compressed rows in Python, and
+`checkpointed_without_row_count` names only text rows, since every compressed row
+holds a list. Outside the backend, `agac records` prints stored records and failed
+records' inputs; `sqlite3` shows these columns as blobs.
 
 **Identity contract.** The table is a bounded historical log; `target_data`
 holds the current view. Rows accumulate across runs (filter by `run_id` for
@@ -242,7 +275,7 @@ CREATE TABLE IF NOT EXISTS checkpoint_output (
     action_name TEXT NOT NULL,
     relative_path TEXT NOT NULL,
     source_guid TEXT,
-    record_data TEXT NOT NULL,         -- JSON list: every row the record was answered with
+    record_data TEXT NOT NULL,       -- the record's rows as a JSON list, stored compressed
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path, source_guid)
 )

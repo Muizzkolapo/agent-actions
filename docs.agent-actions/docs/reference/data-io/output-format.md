@@ -49,7 +49,7 @@ CREATE TABLE target_data (
 )
 ```
 
-Each row stores **all records produced by `action_name` for a given input file** (`relative_path`) as a single JSON array in the `data` column. Use `json_each(data)` to fan rows out into individual records, and `json_extract` to pull fields.
+Each row stores **all records produced by `action_name` for a given input file** (`relative_path`) as a single JSON array in the `data` column, stored compressed. Read the records with [`agac records`](../cli/records) (recipes below); `sqlite3` shows the column as a blob.
 
 ## Record Structure
 
@@ -185,34 +185,25 @@ sqlite3 agent_io/store/<workflow>.db "
 "
 ```
 
+The `data` column is compressed inside the store, so the records themselves are read with [`agac records`](../cli/records) rather than sqlite3. Each record it prints carries `_action` and `_file`.
+
 ### Dump every record for one action
 
 ```bash
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT json_extract(r.value, '\$')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = 'extract_facts'
-"
+agac records -w <workflow> -a extract_facts
 ```
 
 ### Extract one field across all records for an action
 
 ```bash
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT json_extract(r.value, '\$.content.headline')
-  FROM target_data t, json_each(t.data) r
-  WHERE t.action_name = 'extract_facts'
-"
+agac records -w <workflow> -a extract_facts --field content.headline
 ```
 
-### Locate the row for one source record
+### Locate the rows for one source record
 
 ```bash
-sqlite3 agent_io/store/<workflow>.db "
-  SELECT t.action_name, json_extract(r.value, '\$.target_id')
-  FROM target_data t, json_each(t.data) r
-  WHERE json_extract(r.value, '\$.source_guid') = '<source_guid>'
-"
+# Every action's record for that source, each with its _action and target_id
+agac records -w <workflow> --source-guid <source_guid>
 ```
 
 ## Clean Outputs

@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "staged_text"
@@ -107,11 +108,7 @@ def _query(root: Path, sql: str) -> list[tuple]:
     dbs = sorted(store.glob("*.db"))
     if not dbs:
         return []
-    con = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
-    try:
-        return con.execute(sql).fetchall()
-    finally:
-        con.close()
+    return stored_rows(dbs[0], sql)
 
 
 def _stored(root: Path) -> list[dict]:

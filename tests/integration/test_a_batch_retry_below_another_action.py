@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 import shutil
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -142,14 +142,10 @@ def _tasks(batch: Path) -> list[dict]:
 def _rows(project: Path, action: str) -> dict[str, dict]:
     """The action's stored rows, keyed by the record id a batch task carries."""
     (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        blobs = [
-            row[0]
-            for row in con.execute("select data from target_data where action_name = ?", (action,))
-        ]
-    finally:
-        con.close()
+    blobs = [
+        row[0]
+        for row in stored_rows(db, "select data from target_data where action_name = ?", action)
+    ]
     rows: dict[str, dict] = {}
     for blob in blobs:
         loaded = json.loads(blob)

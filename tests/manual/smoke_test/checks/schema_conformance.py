@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+from contextlib import closing
 
 import yaml
 
+from agent_actions.errors.processing import SerializationError
 from agent_actions.storage.backend import (
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
     DISPOSITION_UNPROCESSED,
 )
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.manual.smoke_test.checks import Check
 from tests.manual.smoke_test.context import CheckResult, RunContext
 
@@ -71,7 +73,9 @@ class SchemaConformance(Check):
 
         schema_actions_checked = 0
 
-        with sqlite3.connect(str(db_path)) as conn:
+        backend = SQLiteBackend.create_readonly(db_path)
+        with closing(backend):
+            conn = backend.connection
             cursor = conn.execute("SELECT DISTINCT action_name FROM target_data")
             all_db_actions = {r[0] for r in cursor.fetchall()}
 
@@ -140,7 +144,9 @@ class SchemaConformance(Check):
 
                 for row in rows:
                     try:
-                        data = json.loads(row[0])
+                        data = backend.decode_payload(
+                            row[0], table="target_data", where=action_name
+                        )
                         records = data if isinstance(data, list) else [data]
                         for record in records:
                             if not isinstance(record, dict):
@@ -156,12 +162,12 @@ class SchemaConformance(Check):
                                     else "all required fields present",
                                 )
                             )
-                    except (json.JSONDecodeError, UnicodeDecodeError):
+                    except SerializationError as e:
                         results.append(
                             CheckResult(
                                 passed=False,
                                 name=f"schema({action_name})",
-                                message="failed to parse target_data JSON",
+                                message=str(e),
                             )
                         )
 

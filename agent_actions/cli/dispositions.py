@@ -84,7 +84,7 @@ class DispositionsCommand:
         stored = self._records_stored(backend)
 
         for action in actions:
-            rows = backend.get_disposition(action)
+            rows = backend.get_disposition(action, snapshots=False)
             rows = [r for r in rows if r.get("record_id") != NODE_LEVEL_RECORD_ID]
 
             counts: dict[str, int] = {}
@@ -143,7 +143,9 @@ class DispositionsCommand:
         """Node-level dispositions, which describe the action rather than a record."""
         found = []
         for action in actions:
-            for row in backend.get_disposition(action, record_id=NODE_LEVEL_RECORD_ID):
+            for row in backend.get_disposition(
+                action, record_id=NODE_LEVEL_RECORD_ID, snapshots=False
+            ):
                 found.append((action, row))
         return found
 
@@ -185,7 +187,7 @@ class DispositionsCommand:
 
         found = 0
         for action in actions:
-            rows = backend.get_disposition(action)
+            rows = backend.get_disposition(action, snapshots=False)
             for row in rows:
                 if row.get("record_id") == NODE_LEVEL_RECORD_ID:
                     continue

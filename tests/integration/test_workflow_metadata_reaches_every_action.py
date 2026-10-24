@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import json
 import shutil
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 from tests.helpers.trace_store import trace_rows
 
 REPO = Path(__file__).resolve().parents[2]
@@ -187,11 +187,7 @@ def _run_to_the_end(project: Path) -> str:
 
 def _query(project: Path, sql: str, *params: object) -> list[tuple]:
     (db,) = (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
-    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-    try:
-        return list(con.execute(sql, params))
-    finally:
-        con.close()
+    return stored_rows(db, sql, *params)
 
 
 def _traces(project: Path, action: str) -> list[tuple[str, str | None]]:

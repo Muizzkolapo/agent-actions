@@ -95,7 +95,8 @@ class StorageBackend(ABC):
     consumers — they see the exact same list[dict] as before.
     """
 
-    _STORAGE_FORMAT_VERSION = 2  # Version 1 = full records, Version 2 = delta storage
+    # Version 1 = full records, 2 = delta storage, 3 = compressed payload columns
+    _STORAGE_FORMAT_VERSION = 3
 
     def __init__(self) -> None:
         """Initialize base storage backend state."""
@@ -783,8 +784,15 @@ class StorageBackend(ABC):
         action_name: str,
         record_id: str | None = None,
         disposition: str | None = None,
+        *,
+        snapshots: bool = True,
     ) -> list[dict[str, Any]]:
-        """Query disposition records with optional filters."""
+        """Query disposition records with optional filters.
+
+        ``snapshots`` False leaves ``input_snapshot`` out of the rows; a caller that
+        reads only ids and dispositions asks for that, so a forensic column it never
+        uses cannot fail it.
+        """
         return []
 
     def has_disposition(
@@ -795,6 +803,10 @@ class StorageBackend(ABC):
     ) -> bool:
         """Check whether at least one matching disposition exists."""
         return False
+
+    def actions_with_dispositions(self) -> list[str]:
+        """Every action holding a disposition row, in name order."""
+        return []
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
         """Return record_ids with any gate-terminal disposition for an action."""

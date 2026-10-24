@@ -26,6 +26,7 @@ from agent_actions.errors import (
     raised_by_exhaustion_policy,
     raised_by_terminal_failure,
 )
+from agent_actions.errors.processing import SerializationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.storage.backend import (
     DISPOSITION_FILTERED,
@@ -167,7 +168,9 @@ def _failed_beside_stored_answers(runner: Any, action_name: str, error: Exceptio
         return False
     if is_action_fatal(error) or raised_by_exhaustion_policy(error):
         return False
-    return bool(backend.get_disposition(action_name, disposition=DISPOSITION_SUCCESS))
+    return bool(
+        backend.get_disposition(action_name, disposition=DISPOSITION_SUCCESS, snapshots=False)
+    )
 
 
 def _is_regular_file(item: Path) -> bool:
@@ -949,7 +952,9 @@ def _collect_upstream_filtered_guids(
     filtered_guids: set[str] = set()
     for dep in _ancestor_action_names(storage_backend, action_name, upstream_data_dirs):
         try:
-            dispositions = storage_backend.get_disposition(dep, disposition=DISPOSITION_FILTERED)
+            dispositions = storage_backend.get_disposition(
+                dep, disposition=DISPOSITION_FILTERED, snapshots=False
+            )
         except (OSError, sqlite3.Error, ValueError) as e:
             logger.warning(
                 "Could not read FILTERED dispositions for upstream '%s' — "
@@ -1055,7 +1060,7 @@ def process_from_storage_backend(
                 if relative_path not in data_by_path:
                     data_by_path[relative_path] = []
                 data_by_path[relative_path].append((action_name, data))
-            except (OSError, sqlite3.Error, json.JSONDecodeError) as e:
+            except (OSError, sqlite3.Error, SerializationError) as e:
                 # Dropped before the processing loop, so it never reaches the handler
                 # there. Counted and recorded here instead, or it is absent from
                 # files_found and from CollectedErrors both.

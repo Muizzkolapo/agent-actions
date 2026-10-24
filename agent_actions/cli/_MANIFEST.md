@@ -102,6 +102,8 @@
 | `preview` | Function | Preview data stored in the SQLite storage backend. | - |
 | `traces.py` | Module | `agac traces`: prints an action's prompt traces (prompt, context, response) as plain text or JSON, through a read-only store; the store keeps that text compressed. | `cli`, `storage` |
 | `traces` | Function | Print the prompt traces of an action. | - |
+| `records.py` | Module | `agac records`: prints an action's stored records as JSON through a read-only store (each with `_action` and `_file`; `--source-guid`, `--file`, `--field` narrow them), or with `--snapshots` the input each failed or exhausted record was processed with; the store keeps these payloads compressed. | `cli`, `storage` |
+| `records` | Function | Print the records an action stored. | - |
 
 ## Project Surface
 
@@ -144,7 +146,7 @@
 | `prompt` | outbound | Renders Jinja2 templates and validates prompt files |
 | `models` | outbound | Uses ActionSchema for inspect and schema display |
 | `errors` | outbound | Catches and formats AgentActionsError for CLI output |
-| `storage` | outbound | Reads the SQLite backend for the preview, dispositions and expect report commands |
+| `storage` | outbound | Reads the SQLite backend for the preview, traces, records, dispositions and expect report commands |
 | `llm` | outbound | Invokes Cleaner for clean command and batch CLI |
 | `tooling` | outbound | Generates docs and tracks run results |
 | `processing` | outbound | `retry` asks `answered_by_repair` and `found_by_repair` what its re-run reached; `expect` reads `bypasses_expectations` |

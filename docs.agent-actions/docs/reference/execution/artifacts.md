@@ -404,14 +404,11 @@ SELECT DISTINCT action_name FROM target_data;
 -- Count records per action
 SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
 
--- Preview data from an action
-SELECT data FROM target_data WHERE action_name = 'extract_data' LIMIT 1;
-
 -- Check record dispositions
 SELECT action_name, disposition, COUNT(*) FROM record_disposition GROUP BY action_name, disposition;
 ```
 
-Or use the CLI preview command:
+The `data` column is compressed inside the store; print an action's records with `agac records -w my_workflow -a extract_data` (see [records](../cli/records)), or use the CLI preview command:
 
 ```bash
 agac preview -w my_workflow
