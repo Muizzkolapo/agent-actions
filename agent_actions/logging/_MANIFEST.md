@@ -32,7 +32,8 @@ factories, filters, formatters, and the event-driven error/reporting plumbing.
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `LoggingConfig.from_project_config()` | `agent_actions.yml` | Reads at CLI boot (`cli/main.py` `_configure_logging`); reports any key under `logging:` that nothing reads | `logging.level`, `logging.module_levels`, `logging.file.max_bytes`, `logging.file.backup_count` |
-| `LoggingConfig.from_environment(base)` | `.env` | Reads; a set variable overrides the project value in *base* | `AGENT_ACTIONS_DEBUG`, `AGENT_ACTIONS_LOG_LEVEL`, `AGENT_ACTIONS_LOG_FORMAT`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_LOG_MAX_BYTES`, `AGENT_ACTIONS_LOG_RETAIN_RUNS` |
+| `LoggingConfig.from_environment(base)` | `.env` | Reads; a set variable overrides the project value in *base* | `AGENT_ACTIONS_DEBUG`, `AGENT_ACTIONS_LOG_LEVEL`, `AGENT_ACTIONS_LOG_MAX_BYTES`, `AGENT_ACTIONS_LOG_RETAIN_RUNS` |
+| `report_unread_env_vars()` | `.env` | Reads at CLI boot (`cli/main.py` `_resolve_logging_base`); names each set logging variable nothing reads on stderr | `AGENT_ACTIONS_LOG_FILE`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_NO_LOG_FILE`, `AGENT_ACTIONS_FILE_LOG_LEVEL`, `AGENT_ACTIONS_LOG_FORMAT` |
 | `LoggerFactory.initialize(output_dir=...)` | `{output_dir}/logs/events.json` | Writes (run only) | — |
 | `LoggerFactory.initialize(output_dir=...)` | `{output_dir}/logs/errors.json` | Writes (run only) | — |
 | `LoggerFactory.initialize(new_run=True)` | `{output_dir}/logs/{events,errors}.N.json` | Renames, deletes past N | — |

@@ -80,7 +80,8 @@ Phase 1: CLI() constructor
 Phase 2: CLI.execute() — before Click dispatch
   └─ _configure_logging()              ← LoggerFactory.initialize() with project + env config
      (LoggingConfig.from_project_config() reads the logging: block of agent_actions.yml;
-      from_environment(base) overlays AGENT_ACTIONS_LOG_LEVEL, AGENT_ACTIONS_DEBUG, etc.)
+      from_environment(base) overlays AGENT_ACTIONS_LOG_LEVEL, AGENT_ACTIONS_DEBUG, etc.;
+      report_unread_env_vars() names a set logging variable nothing reads)
 
 Phase 3: Click group callback — after arg parsing
   └─ _configure_logging(debug=True)    ← re-initialize with --debug/--verbose/--quiet

@@ -905,8 +905,7 @@ LoggerFactory.initialize(config=config)
   strings. Use this to re-enable a logger the framework clamps by default,
   or to silence one that's still too chatty.
 - `file_handler` (FileHandlerSettings): `max_bytes` and `backup_count` size and
-  rotate the run log; the other fields are read by nothing — see
-  [File Handler](#filehandlersettings) below
+  rotate the run log — see [File Handler](#filehandlersettings) below
 
 #### Third-party logger suppression
 
@@ -949,18 +948,17 @@ overrides only its own key. `module_levels` has no environment form. See
 
 #### FileHandlerSettings
 
-`LoggingConfig.file_handler` is a `FileHandlerSettings` (`enabled`, `path`,
-`level`, `max_bytes`, `backup_count`, `format`). `LoggerFactory` reads two of
-them: `max_bytes` (`logging.file.max_bytes` / `AGENT_ACTIONS_LOG_MAX_BYTES`)
+`LoggingConfig.file_handler` is a `FileHandlerSettings` with two fields, and
+`LoggerFactory` reads both: `max_bytes` (`logging.file.max_bytes` / `AGENT_ACTIONS_LOG_MAX_BYTES`)
 caps the DEBUG rows written per run file, and `backup_count`
 (`logging.file.backup_count` / `AGENT_ACTIONS_LOG_RETAIN_RUNS`) is how many
-earlier runs are kept. The other four are populated from the
-`AGENT_ACTIONS_NO_LOG_FILE` / `AGENT_ACTIONS_LOG_FILE` / `AGENT_ACTIONS_LOG_DIR`
-/ `AGENT_ACTIONS_FILE_LOG_LEVEL` env vars and read by nothing — whether a
-run-log file handler is registered, and where it writes, is decided entirely
-by the `output_dir` passed to `LoggerFactory.initialize()`. The matching
-`logging.file.*` project keys are therefore reported on stderr at boot and
-ignored rather than parsed (see the architecture doc's File Handler section).
+earlier runs are kept. Whether a run-log file handler is registered, and where
+it writes, is decided entirely by the `output_dir` passed to
+`LoggerFactory.initialize()`; the file is always `events.json` at DEBUG. Any
+other `logging.file.*` project key, and the `AGENT_ACTIONS_NO_LOG_FILE`,
+`AGENT_ACTIONS_LOG_FILE`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_FILE_LOG_LEVEL`
+and `AGENT_ACTIONS_LOG_FORMAT` env vars, configure nothing: the CLI reports each
+one that is set on stderr at boot and ignores it (see the architecture doc's File Handler section).
 
 ---
 
