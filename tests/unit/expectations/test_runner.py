@@ -615,7 +615,7 @@ def test_a_rule_waived_by_its_row_condition_is_not_listed_as_unchecked():
     assert result.to_record_dict()["overall_pass"] is True
 
 
-def test_a_raising_user_check_is_a_failed_outcome_not_a_crash(preserve_registry):
+def test_a_raising_user_check_is_a_failed_outcome_not_a_crash():
     from agent_actions import expectation_check
 
     @expectation_check("explodes")
@@ -629,7 +629,7 @@ def test_a_raising_user_check_is_a_failed_outcome_not_a_crash(preserve_registry)
     assert "check raised RuntimeError: boom" in result.outcomes[0].detail
 
 
-def test_a_raising_check_does_not_stop_later_expectations(preserve_registry):
+def test_a_raising_check_does_not_stop_later_expectations():
     from agent_actions import expectation_check
 
     @expectation_check("explodes_first")
@@ -670,7 +670,7 @@ def test_missing_judge_dispatcher_still_raises():
         run_suite(suite, {"title": "hello"})
 
 
-def test_a_mid_list_raise_still_checks_the_remaining_wildcard_inputs(preserve_registry):
+def test_a_mid_list_raise_still_checks_the_remaining_wildcard_inputs():
     from agent_actions import expectation_check
 
     @expectation_check("explodes_on_marker")

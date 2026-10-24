@@ -32,6 +32,40 @@ def _enable_log_propagation():
     aa_logger.propagate = orig
 
 
+@pytest.fixture(autouse=True)
+def _undo_tools_discovery():
+    """Undo what discovering a project's tools registers during a test.
+
+    ``@expectation_check`` refuses a second file claiming a registered name, so a check
+    left behind fails the next test that discovers another copy of the same tools file.
+    Discovery also skips a tools module already in ``sys.modules``, so the checks, the
+    UDFs and the modules that registered them are restored together: dropping only the
+    checks would leave a later test with the module and none of its checks.
+    """
+    from agent_actions.expectations import registry as checks
+    from agent_actions.utils.udf_management import registry as udfs
+
+    saved_checks = dict(checks._REGISTRY)
+    saved_sources = dict(checks._USER_CHECK_SOURCES)
+    saved_udfs = dict(udfs.UDF_REGISTRY)
+    saved_udf_modules = set(udfs._registered_modules)
+    saved_modules = {name for name in sys.modules if name.startswith("agent_actions._udfs.")}
+    yield
+    checks._REGISTRY.clear()
+    checks._REGISTRY.update(saved_checks)
+    checks._USER_CHECK_SOURCES.clear()
+    checks._USER_CHECK_SOURCES.update(saved_sources)
+    udfs.UDF_REGISTRY.clear()
+    udfs.UDF_REGISTRY.update(saved_udfs)
+    # A module that registered UDFs during the test may sit under its bare name too.
+    added = {n for n in sys.modules if n.startswith("agent_actions._udfs.")} - saved_modules
+    added |= udfs._registered_modules - saved_udf_modules
+    udfs._registered_modules.clear()
+    udfs._registered_modules.update(saved_udf_modules)
+    for name in added:
+        sys.modules.pop(name, None)
+
+
 @pytest.fixture
 def cli_runner() -> CliRunner:
     """Provide a Click CliRunner for testing CLI commands."""

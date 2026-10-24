@@ -22,7 +22,6 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from agent_actions.expectations import registry as registry_module
 from agent_actions.input.preprocessing.filtering.guard_filter import (
     reset_global_guard_filter,
 )
@@ -90,15 +89,13 @@ expectations:
 def project(tmp_path):
     """A real agac project on disk; `write_actions` swaps the action block.
 
-    A real run touches three process-global things, so all three are restored
-    around every test: the path manager, the guard filter's thread pool (a
-    completed run leaves an instance other tests would inherit), and the
-    expectation type registry (`tools/` discovery registers user checks into it).
+    A real run touches two process-global things this fixture restores around every
+    test: the path manager and the guard filter's thread pool (a completed run leaves
+    an instance other tests would inherit). The root conftest restores the expectation
+    type registry, which `tools/` discovery registers user checks into.
     """
     reset_path_manager()
     reset_global_guard_filter()
-    saved_types = dict(registry_module._REGISTRY)
-    saved_sources = dict(registry_module._USER_CHECK_SOURCES)
     saved_key = os.environ.get("OPENAI_API_KEY")
     os.environ["OPENAI_API_KEY"] = "sk-audit-not-used"
     root = tmp_path / "proj"
@@ -135,10 +132,6 @@ def project(tmp_path):
     yield p
     reset_path_manager()
     reset_global_guard_filter()
-    registry_module._REGISTRY.clear()
-    registry_module._REGISTRY.update(saved_types)
-    registry_module._USER_CHECK_SOURCES.clear()
-    registry_module._USER_CHECK_SOURCES.update(saved_sources)
     if saved_key is None:
         os.environ.pop("OPENAI_API_KEY", None)
     else:

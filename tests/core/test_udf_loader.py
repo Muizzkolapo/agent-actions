@@ -241,23 +241,8 @@ class TestValidateUDFReferences:
         assert error.context["function_name"] == "nonexistent_func"
 
 
-@pytest.fixture
-def preserve_expectation_registry():
-    from agent_actions.expectations import registry as expectation_registry
-
-    saved_registry = dict(expectation_registry._REGISTRY)
-    saved_sources = dict(expectation_registry._USER_CHECK_SOURCES)
-    yield
-    expectation_registry._REGISTRY.clear()
-    expectation_registry._REGISTRY.update(saved_registry)
-    expectation_registry._USER_CHECK_SOURCES.clear()
-    expectation_registry._USER_CHECK_SOURCES.update(saved_sources)
-
-
 class TestExpectationCheckDiscovery:
-    def test_a_tools_file_with_only_expectation_check_is_imported(
-        self, temp_user_code_dir, preserve_expectation_registry
-    ):
+    def test_a_tools_file_with_only_expectation_check_is_imported(self, temp_user_code_dir):
         (temp_user_code_dir / "quality_checks.py").write_text(
             "from agent_actions import expectation_check\n"
             "\n"
@@ -277,9 +262,7 @@ class TestExpectationCheckDiscovery:
         assert etype.required == frozenset({"min"})
         assert etype.check("hello", {"min": 3}) == (True, "")
 
-    def test_a_discovered_check_satisfies_preflight(
-        self, temp_user_code_dir, preserve_expectation_registry
-    ):
+    def test_a_discovered_check_satisfies_preflight(self, temp_user_code_dir):
         (temp_user_code_dir / "quality_checks.py").write_text(
             "from agent_actions import expectation_check\n"
             "\n"
@@ -301,9 +284,7 @@ class TestExpectationCheckDiscovery:
         }
         assert find_expectation_defects(configs, {"a": {"title"}}) == {}
 
-    def test_a_shadowing_check_fails_discovery_with_attribution(
-        self, temp_user_code_dir, preserve_expectation_registry
-    ):
+    def test_a_shadowing_check_fails_discovery_with_attribution(self, temp_user_code_dir):
         (temp_user_code_dir / "bad_checks.py").write_text(
             "from agent_actions import expectation_check\n"
             "\n"
