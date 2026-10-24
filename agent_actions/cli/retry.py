@@ -183,6 +183,7 @@ class RetryCommand:
             prior_manifest, bool(restoring or never_run_since), execution_order
         ):
             return
+        self._name_live_rows_it_overwrites(backend, restoring, manifest_file)
         if prior_manifest and self.args.dry_run:
             self.console.print(
                 "[yellow]Found incomplete retry manifest — prior retry was interrupted. "
@@ -702,6 +703,43 @@ class RetryCommand:
         return {
             action for action in resumed if state_mgr.get_status(action) not in COMPLETED_STATUSES
         }
+
+    def _name_live_rows_it_overwrites(
+        self, backend, restoring: list[dict], manifest_file: Path
+    ) -> None:
+        """Print each row the restore replaces with a different value.
+
+        Every snapshot row was cleared before its re-run, so a differing live row was
+        written since: by that re-run, or by hand.
+        """
+        lines = []
+        for row in restoring:
+            live = backend.get_disposition(row["action_name"], record_id=row["record_id"])
+            if not live:
+                continue
+            now = live[-1]
+            if (now.get("disposition"), now.get("reason")) == (
+                row["disposition"],
+                row.get("reason"),
+            ):
+                continue
+            lines.append(
+                f"  {row['action_name']} / {row['record_id']}: "
+                f"{now.get('disposition')} ({now.get('reason')}) -> "
+                f"{row['disposition']} ({row.get('reason')})"
+            )
+        if not lines:
+            return
+        self.console.print(
+            f"[yellow]The interrupted retry's snapshot replaces {len(lines)} row(s) "
+            "changed since it was taken, each shown as live then restored:[/yellow]"
+        )
+        for line in lines:
+            self.console.print(line, markup=False)
+        self.console.print(
+            f"[yellow]To keep a live value, edit its entry in {manifest_file} "
+            "before you retry.[/yellow]"
+        )
 
     @staticmethod
     def _snapshot_to_restore(

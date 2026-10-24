@@ -399,13 +399,28 @@ starts below it, so it would not answer what that one named. Resume it first —
 retry -a my_workflow — then retry from summarize if anything is still failed there.
 ```
 
-What has moved on since keeps what it holds. Nothing goes back once every action
+What a later run has moved on keeps what it holds. Nothing goes back once every action
 the stopped retry put back to pending has completed, nor on an action a run has
 reset since. The exception is a retry stopped while putting back the failures it
 could not repair: those go back though every action has completed, since nothing
 decided them again. And an action the stopped retry completed never gets back a
 failure recorded against the action as a whole, which would make the next
 `agac run` run it again.
+
+On any other action, what goes back replaces the row the action holds, whoever wrote
+it: the stopped retry's run, or you by hand. Before it does, the retry lists each row
+it is about to change, the value it holds then the value that goes back, and names
+the file it reads them from. `--dry-run` lists them too.
+
+```
+The interrupted retry's snapshot replaces 1 row(s) changed since it was taken, each shown as live then restored:
+  label / 9873aae5-ffca-5e5e-bf5c-daee1ed053b6: filtered (excluded_by_hand) -> failed (Error executing UDF 'mp_label': mp_label refuses row-bad)
+To keep a live value, edit its entry in .../agent_io/store/my_workflow/_retry_manifest.json before you retry.
+```
+
+To keep a row you changed, give its entry in that file the same `disposition` and
+`reason`, then run `agac retry --dry-run` again. The row no longer shows in the list,
+and the plan no longer counts it.
 
 A retry stopped after an action that [splits records](#a-retry-runs-the-records-it-named-and-only-those)
 wrote, but before the actions below it ran, has not yet taken out of those actions
