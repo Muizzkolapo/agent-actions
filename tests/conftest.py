@@ -32,6 +32,25 @@ def _enable_log_propagation():
     aa_logger.propagate = orig
 
 
+@pytest.fixture(autouse=True)
+def _restore_expectation_registry():
+    """Undo every expectation check a test registers.
+
+    ``@expectation_check`` refuses a second file claiming a registered name, so a check
+    left behind by one test fails the next test that discovers another copy of the same
+    tools file.
+    """
+    from agent_actions.expectations import registry
+
+    saved_registry = dict(registry._REGISTRY)
+    saved_sources = dict(registry._USER_CHECK_SOURCES)
+    yield
+    registry._REGISTRY.clear()
+    registry._REGISTRY.update(saved_registry)
+    registry._USER_CHECK_SOURCES.clear()
+    registry._USER_CHECK_SOURCES.update(saved_sources)
+
+
 @pytest.fixture
 def cli_runner() -> CliRunner:
     """Provide a Click CliRunner for testing CLI commands."""

@@ -247,7 +247,7 @@ def test_no_registered_argument_name_is_mistaken_for_a_rule_key():
     assert confused == {}
 
 
-def test_expectation_check_registers_a_usable_type(preserve_registry):
+def test_expectation_check_registers_a_usable_type():
     from agent_actions import expectation_check
 
     @expectation_check("ends_with_period")
@@ -264,7 +264,7 @@ def test_expectation_check_registers_a_usable_type(preserve_registry):
     assert "ends_with_period" in known_types()
 
 
-def test_expectation_check_declares_params_for_preflight(preserve_registry):
+def test_expectation_check_declares_params_for_preflight():
     from agent_actions import expectation_check
 
     @expectation_check("min_sentences", params=("min",), required=("min",))
@@ -279,7 +279,7 @@ def test_expectation_check_declares_params_for_preflight(preserve_registry):
     assert etype.required == frozenset({"min"})
 
 
-def test_shadowing_a_builtin_raises(preserve_registry):
+def test_shadowing_a_builtin_raises():
     from agent_actions import expectation_check
 
     with pytest.raises(ValueError, match="built-in"):
@@ -289,7 +289,7 @@ def test_shadowing_a_builtin_raises(preserve_registry):
             return True, ""
 
 
-def test_same_file_reregistration_is_idempotent(preserve_registry):
+def test_same_file_reregistration_is_idempotent():
     from agent_actions import expectation_check
 
     def original(value, params):
@@ -301,7 +301,7 @@ def test_same_file_reregistration_is_idempotent(preserve_registry):
     assert get("idempotent_check").check(None, {}) == (True, "original")
 
 
-def test_same_name_from_a_different_file_raises(preserve_registry, monkeypatch):
+def test_same_name_from_a_different_file_raises(monkeypatch):
     from agent_actions import expectation_check
     from agent_actions.errors import DuplicateFunctionError
     from agent_actions.expectations import registry as registry_module
@@ -318,7 +318,7 @@ def test_same_name_from_a_different_file_raises(preserve_registry, monkeypatch):
             return True, ""
 
 
-def test_user_check_flows_through_the_preflight_validator(preserve_registry):
+def test_user_check_flows_through_the_preflight_validator():
     from agent_actions import expectation_check
     from agent_actions.validation.expectations_validator import find_expectation_defects
 
@@ -339,7 +339,7 @@ def test_user_check_flows_through_the_preflight_validator(preserve_registry):
     assert any("takes no parameter 'at_most'" in d for d in defects)
 
 
-def test_two_different_functions_same_name_same_file_raises(preserve_registry):
+def test_two_different_functions_same_name_same_file_raises():
     from agent_actions import expectation_check
     from agent_actions.errors import DuplicateFunctionError
 
