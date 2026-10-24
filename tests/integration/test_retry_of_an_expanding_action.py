@@ -368,6 +368,21 @@ def file_granularity(project):  # noqa: F811
     return project
 
 
+def _guids_by_record(rows):
+    by_record: dict[str, set[str]] = {}
+    for row in rows:
+        by_record.setdefault(row.get("parent_source_guid"), set()).add(row["source_guid"])
+    return by_record
+
+
+def _assert_only_the_named_records_rows_are_new(before, after, selected):
+    now = _guids_by_record(after)
+    assert now[selected].isdisjoint(before[selected])
+    assert {record: guids for record, guids in now.items() if record != selected} == {
+        record: guids for record, guids in before.items() if record != selected
+    }
+
+
 class TestAtFileGranularity:
     def test_the_action_really_mints_at_this_granularity(self, file_granularity):
         rows = _rows(file_granularity, "fsplit")
@@ -378,10 +393,13 @@ class TestAtFileGranularity:
 
     def test_a_retry_replaces_the_whole_file_and_does_not_grow_it(self, file_granularity):
         """A FILE tool's rows may each stand on every record of the file, so a retry
-        reaching the file runs the tool over all of it and replaces every row."""
+        reaching the file runs the tool over all of it and replaces every row. The tool
+        writes each row of the records the retry does not name again as it was, so those
+        are put back under the identities they were stored under; the named record's rows
+        hang on its new row above, so they are new. None is held twice."""
         ids = _record_ids(file_granularity, ACTION)
         selected = ids[0]
-        before = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
+        before = _guids_by_record(_rows(file_granularity, "fsplit"))
         _fail(file_granularity, selected, ACTION)
 
         result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
@@ -389,7 +407,7 @@ class TestAtFileGranularity:
         assert result.exit_code == 0, result.output
         after = _rows(file_granularity, "fsplit")
         assert Counter(r.get("parent_source_guid") for r in after) == dict.fromkeys(ids, 2)
-        assert before.isdisjoint(r["source_guid"] for r in after)
+        _assert_only_the_named_records_rows_are_new(before, after, selected)
         assert "cannot be attributed" not in result.output
 
     def test_a_limit_drops_no_record_the_file_held_rows_for(self, file_granularity, monkeypatch):
@@ -403,7 +421,7 @@ class TestAtFileGranularity:
         """
         ids = _record_ids(file_granularity, ACTION)
         selected = ids[0]
-        before = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
+        before = _guids_by_record(_rows(file_granularity, "fsplit"))
         _fail(file_granularity, selected, ACTION)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
 
@@ -414,8 +432,24 @@ class TestAtFileGranularity:
         assert Counter(r.get("parent_source_guid") for r in after) == dict.fromkeys(ids, 2), (
             "a record the limit dropped lost its rows"
         )
-        assert before.isdisjoint(r["source_guid"] for r in after)
+        _assert_only_the_named_records_rows_are_new(before, after, selected)
         assert "cannot be attributed" not in result.output
+
+    def test_every_answer_a_retry_leaves_names_a_row_the_file_holds_or_a_record(
+        self, file_granularity
+    ):
+        """A row put back under its stored identity is vouched for under it, not under
+        the identity the run minted it and threw away."""
+        ids = _record_ids(file_granularity, ACTION)
+        _fail(file_granularity, ids[0], ACTION)
+
+        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", ids[0]])
+
+        assert result.exit_code == 0, result.output
+        held = {r["source_guid"] for r in _rows(file_granularity, "fsplit")}
+        answered = set(_record_ids(file_granularity, "fsplit"))
+        assert held <= answered
+        assert answered - held <= set(ids), "an answer names a row no file holds"
 
 
 # A basename no other fixture writes: tool discovery imports by module name, so

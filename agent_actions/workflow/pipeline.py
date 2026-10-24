@@ -185,6 +185,22 @@ def _whole_file_readers(below: list[str], action_configs: dict[str, Any] | None)
     )
 
 
+def _vouch_under_the_identity_put_back(
+    context: ProcessingContext, produced: list[dict[str, Any]], written: list[dict[str, Any]]
+) -> None:
+    put_back = {
+        minted: kept
+        for row, was in zip(produced, written, strict=True)
+        if (minted := row.get("source_guid")) != (kept := was.get("source_guid"))
+        and minted
+        and kept
+    }
+    if put_back:
+        context.kept_dispositions[:] = [
+            (row[0], put_back.get(row[1], row[1]), *row[2:]) for row in context.kept_dispositions
+        ]
+
+
 def _forget_answers_below(
     storage_backend: "StorageBackend",
     below: list[str],
@@ -193,20 +209,23 @@ def _forget_answers_below(
     inputs: Any,
     unchanged: frozenset[str] = frozenset(),
     whole_file_readers: frozenset[str] = frozenset(),
+    replacement: list[dict[str, Any]] | None = None,
 ) -> None:
     """Clear what each action in *below* holds a disposition for in *relative_path*.
 
-    Each row there was computed from the rows being replaced, except one built on
-    *unchanged* rows alone, which still answers. A row is built on the rows of the file it
-    carries the identity of or names as parent or producer, never on an ancestor above the
-    file; built on a changed row as well, it is gone under every identity it names. A row
-    of one of *whole_file_readers*, a FILE tool, may be computed from every record of the
-    file, so it stands only for a file written again entirely as it was. Cleared before
-    the replacement is written, so a run stopped in between finds them unanswered.
+    A row there stands only if built on *unchanged* rows alone: the rows of the file it
+    names, or the file's inputs where it names none, never an ancestor above the file.
+    Otherwise it is gone under every identity it names. A row of a FILE tool below may
+    stand on the whole file, so it stands only where *replacement* holds the stored rows
+    alone, all unchanged. Cleared before the replacement is written, so a run stopped
+    between finds them unanswered.
     """
     held = _identities_named(replaced_rows) | _identities_named(inputs)
-    rows_held = _own_identities(replaced_rows) | _own_identities(inputs)
-    file_as_it_was = bool(rows_held) and rows_held <= unchanged
+    file_rows = _own_identities(replaced_rows)
+    rows_held = file_rows | _own_identities(inputs)
+    file_as_it_was = (
+        bool(file_rows) and file_rows <= unchanged and _own_identities(replacement) == file_rows
+    )
     stale = held - unchanged
     for action in below:
         for row in _stored_rows(storage_backend, action, relative_path):
@@ -215,7 +234,7 @@ def _forget_answers_below(
                 if not file_as_it_was:
                     stale |= named
                 continue
-            built_on = named & rows_held
+            built_on = (named & file_rows) or (named & rows_held)
             if built_on and built_on <= unchanged:
                 continue
             stale |= named
@@ -872,7 +891,11 @@ class ProcessingPipeline:
             # still answers for it.
             unchanged: frozenset[str] = frozenset()
             if whole_file and stored_here:
-                output, unchanged = rows_written_again_unchanged(output, stored_here)
+                produced = output
+                output, unchanged = rows_written_again_unchanged(produced, stored_here)
+                # A row minted a new identity and put back holds its stored one, and so
+                # must what this run vouches for it with.
+                _vouch_under_the_identity_put_back(context, produced, output)
             # A row the tool did not write again is gone with the file it was replaced
             # in, and so is what vouched for it. Not an input's own disposition, which
             # this run decides wherever it reaches the input.
@@ -922,6 +945,7 @@ class ProcessingPipeline:
                     offered_to_repair,
                     unchanged,
                     whole_file_readers=_whole_file_readers(below, self.config.action_configs),
+                    replacement=output,
                 )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
