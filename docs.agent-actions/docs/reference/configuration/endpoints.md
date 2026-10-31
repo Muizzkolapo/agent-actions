@@ -38,7 +38,7 @@ endpoints:
 | Key | Required | Meaning |
 |-----|----------|---------|
 | `url` | yes | The base URL, `http` or `https`, or exactly one `${ENV_VAR}` that holds it. A URL that ends in `/chat/completions` is refused. |
-| `auth` | yes | `none`, or a mapping with exactly one of `env: NAME` (an environment variable) or `command: [argv, ...]` (a program whose output is the secret, run without a shell). |
+| `auth` | yes | `none`, or a mapping with exactly one of `env: NAME` (an environment variable) or `command: [argv, ...]` (a program whose output is the secret, run without a shell from the project root; parallel records run it once; after a 401 it runs once more, then the record fails). |
 | `auth.header` | no | The header that carries the secret. Default `Authorization`. With another header, agac sends no `Authorization` header unless `headers:` declares one. |
 | `auth.prefix` | no | Text before the secret. Default `Bearer ` for `Authorization`, empty otherwise. |
 | `auth.refresh_seconds` | no | `command` only: run the command again after this many seconds. Default 3000. |
