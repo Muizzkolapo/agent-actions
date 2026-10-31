@@ -121,11 +121,19 @@ def test_a_url_variable_whose_value_breaks_a_url_rule_is_refused_as_a_value(monk
 
     errors = result.resolve_all().errors
     assert [e.message for e in errors] == [
-        "Action 'classify': endpoint 'lab-vllm' reads its url from LAB_VLLM_URL, "
-        "which must start with http:// or https://"
+        "Action 'classify': endpoint 'lab-vllm' reads its url from LAB_VLLM_URL: "
+        "must start with http:// or https://"
     ]
-    assert "not set" not in errors[0].hint
-    assert "LAB_VLLM_URL" in errors[0].hint
+    assert errors[0].hint.startswith("Fix the value of LAB_VLLM_URL")
+
+
+def test_a_url_variable_whose_value_is_a_full_request_url_names_the_base_url_rule(monkeypatch):
+    monkeypatch.setenv("LAB_VLLM_URL", "http://gpu-box:8000/v1/chat/completions")
+
+    assert _errors({"classify": _action("lab-vllm")}) == [
+        "Action 'classify': endpoint 'lab-vllm' reads its url from LAB_VLLM_URL: give the "
+        "base URL, for example http://gpu-box:8000/v1; agac adds /chat/completions"
+    ]
 
 
 def test_two_broken_endpoints_are_both_reported(monkeypatch):
