@@ -96,6 +96,10 @@ changed. Staged input counts: adding, removing or changing a file under the firs
 input re-runs that action and every action reading it over all input, and the run log names
 the files that changed. `--fresh` is not needed to pick up new input.
 
+Neither flag holds back [`agac retry`](./retry): a repair walks every file holding a record it
+named. Stopping short of one would leave that record's cleared disposition unwritten, which is
+the erasure a limit exists to avoid.
+
 ## When you edit the workflow
 
 An edit to an action's config does not re-run anything. That covers its model
@@ -113,7 +117,8 @@ not answered use the edit. Run again with --rerun classify to answer every recor
 ```
 
 An action that stopped partway (killed, interrupted, or stopped by an error) keeps the
-records it finished and answers the rest under the edit:
+records it finished and answers the rest under the edit. Once it completes, each later run
+names the edit as for a completed action, since it still holds answers from before it:
 
 ```
 classify was edited since its last run started (model): the records it finished stand, and
@@ -128,13 +133,14 @@ action and every action that reads its output, and keeps every other action's an
 agac run -a my_agent --rerun classify
 ```
 
+Under a file limit, `--rerun` reaches only the files the walk opens. The run warns that
+the files it does not reach keep output from an earlier run, and the action still reads as
+complete. The same warning comes when a changed limit resets an edited action. Pass
+`--fresh` when the whole output has to come from one config.
+
 `--fresh` starts the whole workflow again. Each [prompt trace](../data-io/prompt-traces) row
 records the config its record was answered under, so a workflow that holds answers from more
 than one config can be read record by record.
-
-Neither flag holds back [`agac retry`](./retry): a repair walks every file holding a record it
-named. Stopping short of one would leave that record's cleared disposition unwritten, which is
-the erasure a limit exists to avoid.
 
 
 ## Parallel Execution

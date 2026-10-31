@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -57,7 +57,11 @@ from agent_actions.utils.limits import (
     slice_observation,
 )
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+from agent_actions.workflow.managers.state import (
+    COMPLETED_STATUSES,
+    KEPT_ANSWERS_UNDER,
+    ActionStatus,
+)
 from agent_actions.workflow.runner_file_processing import NoInputFilesError
 
 logger = logging.getLogger(__name__)
@@ -480,18 +484,24 @@ class ActionExecutor:
         return in_force
 
     def _held_to_earlier_answers(self, action_name: str, key: str, in_force: Any) -> Any:
-        """*in_force*, unless a repair answers beside records answered under another config.
+        """*in_force*, unless this run answers beside records answered under another config.
 
-        Those were answered under the completion stamp the repair keeps or, for an action
-        that never completed, under what its last run recorded as it started. Held to that,
-        an edit is the next plain run's to apply, to every record.
+        A repair answers beside the records of the completion stamp it keeps or, for an
+        action that never completed, of what its last run recorded as it started. An action
+        that stopped partway and resumes under an edit answers beside the records it kept
+        (``KEPT_ANSWERS_UNDER``). Held to that, each later run still names the edit, until
+        ``--rerun`` answers every record under it.
         """
+        details = self.deps.state_manager.get_status_details(action_name)
         if self._repair_is_keeping_an_earlier_stamp(action_name):
-            return self.deps.state_manager.get_status_details(action_name).get(key)
+            return details.get(key)
         if getattr(self.deps.action_runner, "retried_records", ()):
-            earlier = self.deps.state_manager.get_status_details(action_name).get(ANSWERED_UNDER)
+            earlier = details.get(ANSWERED_UNDER)
             if isinstance(earlier, dict) and earlier.get("config_hash") is not None:
                 return earlier.get(key)
+        kept = details.get(KEPT_ANSWERS_UNDER)
+        if isinstance(kept, dict):
+            return kept.get(key)
         return in_force
 
     def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
@@ -663,6 +673,10 @@ class ActionExecutor:
                 else "a cap recorded by the run that completed it"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
+            if edits:
+                self._warn_of_output_beyond_a_file_limit(
+                    action_name, action_config, f"an edit ({', '.join(edits)})"
+                )
             self.reopen_with_readers(action_name)
             return ActionStatus.PENDING
         if edits:
@@ -675,6 +689,44 @@ class ActionExecutor:
                 action_name,
             )
         return current_status
+
+    def rerun(self, action_names: Iterable[str]) -> list[str]:
+        """Answer every record of *action_names* and of what reads them again (``--rerun``).
+
+        Returns the names put back, each once.
+        """
+        reopened: list[str] = []
+        for name in action_names:
+            reopened += self.reopen_with_readers(name)
+        reopened = list(dict.fromkeys(reopened))
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        for name in reopened:
+            if name in configs:
+                self._warn_of_output_beyond_a_file_limit(name, configs[name], "--rerun")
+        return reopened
+
+    @staticmethod
+    def _warn_of_output_beyond_a_file_limit(
+        action_name: str, action_config: ActionConfigDict, why: str
+    ) -> None:
+        """Warn that a reset under a file limit leaves older output in the files it skips.
+
+        A record limit rewrites every file it walks; a file limit stops the walk, and a
+        file it never opens keeps what an earlier run put there while the action reads
+        as complete.
+        """
+        file_limit, _ = resolve_file_limit(action_config)
+        if file_limit is None:
+            return
+        logger.warning(
+            "%s is re-running under a file limit of %d after %s: files the walk does not "
+            "reach keep output produced by an earlier run, and the action will still be "
+            "recorded as complete. Use --fresh for an output that comes from one "
+            "configuration throughout",
+            action_name,
+            file_limit,
+            why,
+        )
 
     def reopen_with_readers(self, action_name: str) -> list[str]:
         """Forget what *action_name* and everything reading it hold, and put them all back
@@ -802,7 +854,7 @@ class ActionExecutor:
         return should_skip
 
     def _still_matches_its_config(self, action_name: str) -> bool:
-        """False if the action's config changed since it completed (and resets it)."""
+        """False if a limit or its staged input changed since it completed (and resets it)."""
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         action_config = configs.get(action_name)
         if action_config is None:

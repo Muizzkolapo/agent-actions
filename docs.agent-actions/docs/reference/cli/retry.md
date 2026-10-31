@@ -398,9 +398,9 @@ the retry carries those records rather than asking for them again. A plain `retr
 does this when the halt is the earliest failure.
 
 A retry clears what it wrote down only for the records whose failures it clears.
-A record keeping its `success` keeps its answer, so one answered after an edit
+A record keeping its `success` keeps its answer, so one answered after a `--rerun`
 replaced the stored file is answered again, as a plain run answers it, rather
-than carried from the stored file the edit made stale.
+than carried from the stored file the rerun made stale.
 
 ```bash
 agac retry -a my_workflow --from extract_facts

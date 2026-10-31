@@ -111,15 +111,17 @@ and these two are deliberately outside `config_hash`, so adding them could not r
 every stored digest at once and run every completed action again after an upgrade.
 
 These are what count as an edit to a completed action: its prompt, schema, guard,
-model, context scope or dependencies. Edit one and the next `agac run` logs what
-changed (for example `context scope changed for recap, resetting to pending`), and runs
-the action and every action reading it again under the new config. Reordering or
-repeating the entries of an `observe`, `passthrough` or `drop` list is not an edit;
-reordering `dependencies` is, since a fan-in merges its inputs in that order. A change to
-a tool's code or to the contents of a seed data file is not seen, so run
-`agac run --fresh` after one. A stamp written before a digest existed holds no value for
-it, so an edit it would have caught is not seen until the action next runs to completion
-for another reason, such as an edit to its prompt or a `--fresh` run.
+model, context scope or dependencies. An edit re-runs nothing: the action keeps its
+answers, and so does every action reading it. Each run names the edit, for example
+`recap was edited since it completed (context scope): its answers stand, and only records
+it has not answered use the edit. Run again with --rerun recap to answer every record under
+the edit`, until `agac run --rerun recap` answers the action and every action reading it
+under the new config (see [When you edit the workflow](../cli/run#when-you-edit-the-workflow)).
+Reordering or repeating the entries of an `observe`, `passthrough` or `drop` list is not
+an edit; reordering `dependencies` is, since a fan-in merges its inputs in that order. A
+change to a tool's code or to the contents of a seed data file is not seen at all, so use
+`--rerun` or `--fresh` after one. A stamp written before a digest existed holds no value
+for it, so an edit it would have caught is not named until the action next completes.
 
 A changed `record_limit` re-runs the action only when it could have held
 something back. An untruncated run processed everything there was, so a limit at
@@ -129,8 +131,8 @@ written before these counts existed, by a run that never sliced, or by one that
 lost an input file to an error, since records it never reached were never counted
 — keeps the coarse rule and re-runs. `file_limit` has no count to reason from and stays
 coarse throughout: any change to it re-runs the action, including a change to a
-value larger than the number of files. If anything else in the stamp differs on a
-later run, the action is reset to `pending` and re-executed rather than skipped.
+value larger than the number of files. A limit that changes re-runs the action and every
+action reading it.
 
 A first-stage action (one with no `dependencies`) also stores `staged_input`: the
 relative path, size and modification time of every input file it read. When a later
@@ -144,12 +146,14 @@ An action also records, when it starts work, what that work is answered under:
 `answered_under`, holding the same `config_hash`, `model_name`, `model_vendor`,
 `context_scope_hash` and `dependencies_hash`. A run that stops partway through an
 action — killed, interrupted, or stopped by an error — leaves the records it finished,
-and the next run keeps them only while these still match the config. If the prompt,
-schema, guard, model, context scope or dependencies was edited in between — the same
-edits as for a completed action, above — the action and every action that reads it
-answer everything again, and a batch still out under the old config is given up. A
-change to a tool's code or to the contents of a seed data file is not seen, so run
-`agac run --fresh` to answer everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
+and the next run keeps them. If the prompt, schema, guard, model, context scope or
+dependencies was edited in between — the same edits as for a completed action, above —
+the run names the edit and answers only the rest under it. When the action kept any
+answer, its stamps stay at the config those answers were given under
+(`kept_answers_under` in the status file), so every later run names the edit until
+`--rerun` answers every record under it. A change to a tool's code or to the contents of
+a seed data file is not seen, so run `agac run --rerun <action>` or `--fresh` to answer
+everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
 record to the guard again, so a record its code now skips is skipped, and one it now
 passes is answered. The exception is a record of a batch action whose batch was out, or
 finished and not yet collected, when the run stopped: it keeps the answer that batch
@@ -158,12 +162,14 @@ nothing. A record finished in a file the stopped run had not written yet is
 answered again when an earlier run had stored that file, since the stored row predates
 its answer. A file the store fails to write, on a full disk or a database error, stops
 the action this way: the run ends `failed`, and the next one writes that file. Online,
-the run writes the action's other files first, and after an edit each run that fails to
-store the file asks for its records again, as above. A batch collect pass stops at the
+the run writes the action's other files first, and after a `--rerun` each run that fails
+to store the file asks for its records again, as above. A batch collect pass stops at the
 file, and a later run collects it and the files after it without sending any of them
 again. An `agac retry` records what the records it does not name were answered under
 instead — the stamp of the action's last completion, or what its last run recorded if it
-never completed — so a retry, stopped or finished, leaves an edit to the next run.
+never completed — so a retry, stopped or finished, keeps the edit named on the next run.
+Each prompt trace row records the config its record was answered under, the retried
+records included.
 
 A reset leaves what the action stored in place, and the re-run replaces it file by file.
 A file in which every record of the re-run fails — the model's answers do not parse, or
@@ -171,11 +177,11 @@ a tool of record granularity raises on each or answers each with output its sche
 refuses, or a tool of file granularity raises on the file — is stored with those
 failures, as a file
 in which only some fail is, so neither the action nor what reads it keeps a row answered
-before the edit, and `agac retry` asks for them again. Outside a reset, a run that
+before the reset, and `agac retry` asks for them again. Outside a reset, a run that
 answers nothing in a file and fails some of it leaves what that file held.
 
 Staged input is the source of truth for what an action holds. An action reset after
-its input was removed — by an edit, or by a limit or model given on the command
+its input was removed — by an edit applied with `--rerun`, or by a limit or model given on the command
 line — finds no input file, is skipped, and its stored output is deleted along with
 its readers'. Restore the input and run again to rebuild them. A reset after only
 some of its input files were removed deletes what it stored for those files, once it
@@ -201,7 +207,7 @@ resumed after it stopped, keeps them for each record it does not ask again.
 | `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
 
-Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished unless it was edited since. A completed first-stage action whose staged input files changed runs again, with everything reading it.
+Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished, edited or not. A completed first-stage action whose staged input files changed runs again, with everything reading it.
 
 ### Run Results (`run_results.json`)
 

@@ -9,7 +9,6 @@ its readers again. Store, status file, executor and reset are real; the work is 
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
@@ -34,6 +33,7 @@ from agent_actions.workflow.executor import (
     edits_since_its_work_began,
 )
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
+from tests._support.logs import framework_records
 
 ORDER = ["define", "grade"]
 DEFINE = {"prompt": "Define it", "schema": "definition", "model_vendor": "v", "model_name": "m"}
@@ -128,8 +128,8 @@ def _edited(**changes: Any) -> dict[str, Any]:
     return {**CONFIGS, "define": {**DEFINE, **changes}}
 
 
-def _edit_warnings(caplog) -> list[str]:
-    return [r.getMessage() for r in caplog.records if "was edited since" in r.getMessage()]
+def _edit_warnings(records) -> list[str]:
+    return [r.getMessage() for r in records if "was edited since" in r.getMessage()]
 
 
 def _stopped_and_edited(label: str) -> str:
@@ -180,16 +180,16 @@ def test_a_stopped_action_keeps_what_it_finished_while_its_config_is_unchanged(
 )
 @RUNS
 def test_a_stopped_action_edited_since_its_run_started_keeps_what_it_finished_and_names_the_edit(
-    tmp_path, backend, caplog, stop, edit, label, run
+    tmp_path, backend, stop, edit, label, run
 ):
     _stopped(tmp_path, backend, stop, run=run)
 
-    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+    with framework_records("agent_actions.workflow.coordinator") as records:
         state = _next_run_resets(tmp_path, backend, _edited(**edit))
 
     assert _held(backend) == FINISHED
     assert state.get_status("define") == ActionStatus.PENDING
-    assert _edit_warnings(caplog) == [_stopped_and_edited(label)]
+    assert _edit_warnings(records) == [_stopped_and_edited(label)]
 
 
 @STOPS
@@ -281,7 +281,7 @@ def test_an_action_halted_on_purpose_is_left_alone_though_it_was_edited(tmp_path
     assert NODE_LEVEL_RECORD_ID in _held(backend)
 
 
-def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backend, caplog):
+def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backend):
     """A retry answers the records it names under the edit and leaves the rest as the
     old config answered them. Stopped partway, the next run must still see the edit."""
     state, _ = _process(tmp_path, backend)
@@ -309,15 +309,15 @@ def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backen
     assert edits_since_its_work_began(details, DEFINE) == []
     assert edits_since_its_work_began(details, edited["define"]) == [PROMPT_EDIT]
 
-    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+    with framework_records("agent_actions.workflow.coordinator") as records:
         _next_run_resets(tmp_path, backend, edited)
 
     assert _held(backend) == FINISHED
-    assert _edit_warnings(caplog) == [_stopped_and_edited(PROMPT_EDIT)]
+    assert _edit_warnings(records) == [_stopped_and_edited(PROMPT_EDIT)]
 
 
 def test_a_repair_of_an_action_that_never_completed_records_what_its_last_run_started_under(
-    tmp_path, backend, caplog
+    tmp_path, backend
 ):
     """No completion stamp says what the records a retry does not name were answered
     under; the start the stopped run recorded does, and the edit is the next run's."""
@@ -336,11 +336,11 @@ def test_a_repair_of_an_action_that_never_completed_records_what_its_last_run_st
     assert edits_since_its_work_began(details, DEFINE) == []
     assert edits_since_its_work_began(details, edited["define"]) == [PROMPT_EDIT]
 
-    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+    with framework_records("agent_actions.workflow.coordinator") as records:
         _next_run_resets(tmp_path, backend, edited)
 
     assert _held(backend) == FINISHED
-    assert _edit_warnings(caplog) == [_stopped_and_edited(PROMPT_EDIT)]
+    assert _edit_warnings(records) == [_stopped_and_edited(PROMPT_EDIT)]
 
 
 def test_an_edited_stopped_action_and_its_readers_keep_their_prompt_traces_until_a_rerun(

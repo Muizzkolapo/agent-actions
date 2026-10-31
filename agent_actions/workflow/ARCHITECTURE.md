@@ -327,7 +327,7 @@ readers are skipped and the other branches run on. Only `AllVersionsFilteredErro
 answered differently, by skipping the merge.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
-because its config, model or limit changed, or because its output is gone, is about to
+by `--rerun`, because a limit or its staged input changed, or because its output is gone, is about to
 answer everything again. Whatever an action that reads that output holds was computed
 from what is being replaced: the answers of a completed one, the batch of one still out,
 the records an interrupted or halted one had finished. Left as it is, it ends holding
@@ -463,8 +463,8 @@ Costs and limits:
   already answered again (#1226).
 - A retry clears the checkpoint records of every action it re-runs, so one that resumes a
   halt asks again what the halted action answered in the file it halted in, which was never
-  stored, and after an edit carries, for a record the halted run had answered, the row
-  stored before the edit.
+  stored, and after a `--rerun` carries, for a record the halted run had answered, the row
+  stored before it.
 - A retry starting past a halted action is not refused, though its range may read it. Such
   a reader is skipped, since the halt refuses to run, and the retry exits 1. The failures
   it cleared there are put back unrepaired, and a retry that resumes the halt repairs them.

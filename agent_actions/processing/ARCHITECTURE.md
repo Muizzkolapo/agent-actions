@@ -318,8 +318,8 @@ Re-run:
 Writing a file clears that file's checkpoint rows, in the store's own write
 (`_write_target_raw`), so a file batch stores leaves none behind either. A checkpoint row
 left beside a stored file is therefore a later answer than the row stored for that
-record: the run that gave it stopped before writing the file again, after an edit or an
-upstream change had reset the action. `answered_since_stored` names those records. Their
+record: the run that gave it stopped before writing the file again, after a `--rerun` or
+an upstream change had reset the action. `answered_since_stored` names those records. Their
 stored rows are not the answers their dispositions describe and are never carried; the
 online path takes each one's checkpoint row in their place (`checkpointed_answers`), or
 answers the record again where that row cannot stand alone (below). Batch does not read
@@ -893,7 +893,7 @@ writes it after the file:
 
     Written before the file, a run stopped between the two (a full disk, a
     Ctrl-C at the write) left records marked done while the stored file held
-    an earlier run's rows. After an edit upstream, the reset kept them and the
+    an earlier run's rows. After an upstream reset, the reset kept them and the
     gate carried those rows. A FILE tool leaves no checkpoint row to say the
     file is older, and a record whose checkpoint row failed has none either.
 
@@ -1040,9 +1040,10 @@ Why:
   submitted, and paid for, a second time.
 
   Kept after an edit, they are answers to another prompt or from another
-  model, carried as current, and the action is stamped complete under the
-  new config. Which config they were answered under is known only from
-  the stamp the executor writes when it starts the action's work.
+  model, by the user's choice: an edit re-runs nothing. Each prompt trace
+  row names the config its record was answered under, and the stamps stay
+  at the config of the kept answers (KEPT_ANSWERS_UNDER), so later runs
+  name the edit until `agac run --rerun` answers every record under it.
 
   A batch the provider refuses fails the action, and the walk raises it once
   every file is walked. The refusal sent and stored nothing, so what the action

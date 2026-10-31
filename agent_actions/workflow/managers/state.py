@@ -66,6 +66,11 @@ MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
 # manifest's ``created_at``. Removed when a reset makes what the action holds stale.
 REPAIRED_BY = "repaired_by"
 
+# Status detail: the config the answers an action kept were given under, written when an
+# action stopped partway resumes under an edit. Its stamps are held to it, so later runs
+# still name the edit. Removed when a reset answers everything again.
+KEPT_ANSWERS_UNDER = "kept_answers_under"
+
 
 def _as_count(value: Any) -> int | None:
     """*value* as a record count, or None if it is not one."""
@@ -189,6 +194,7 @@ class ActionStateManager:
                 details["status"] = ActionStatus.PENDING
                 details.pop("max_records", None)
                 details.pop(REPAIRED_BY, None)
+                details.pop(KEPT_ANSWERS_UNDER, None)
             self._save_status()
 
     def is_completed(self, action_name: str) -> bool:

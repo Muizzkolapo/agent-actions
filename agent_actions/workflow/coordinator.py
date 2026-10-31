@@ -32,8 +32,16 @@ from agent_actions.workflow.execution_events import (
     fire_step_complete,
     fire_step_start,
 )
-from agent_actions.workflow.executor import action_is_halted, edits_since_its_work_began
-from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
+from agent_actions.workflow.executor import (
+    ANSWERED_UNDER,
+    action_is_halted,
+    edits_since_its_work_began,
+)
+from agent_actions.workflow.managers.state import (
+    KEPT_ANSWERS_UNDER,
+    MID_PROCESSING_STATUSES,
+    ActionStatus,
+)
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
@@ -120,10 +128,8 @@ class AgentWorkflow:
         self._reset_retryable_actions()
         if self.config.rerun is None:
             return
-        reopened: list[str] = []
-        for name in self._rerun_actions():
-            reopened += self.services.core.action_executor.reopen_with_readers(name)
-        logger.info("--rerun: %s answer every record again", ", ".join(dict.fromkeys(reopened)))
+        reopened = self.services.core.action_executor.rerun(self._rerun_actions())
+        logger.info("--rerun: %s answer every record again", ", ".join(reopened))
 
     def _rerun_actions(self) -> list[str]:
         """The actions ``--rerun`` names: the action, or every version of a versioned one."""
@@ -283,6 +289,13 @@ class AgentWorkflow:
                     ", ".join(edits),
                     name,
                 )
+                if self._holds_answers(name):
+                    # Its stamps are then held to the config those answers were given
+                    # under, so the run that completes it does not stamp them as edited.
+                    details = state_mgr.get_status_details(name)
+                    state_mgr.update_status(
+                        name, status, **{KEPT_ANSWERS_UNDER: details[ANSWERED_UNDER]}
+                    )
             # With no config recorded as its work began, the state is reset as it was
             # then: by its status alone.
             if edits is not None or status in MID_PROCESSING_STATUSES:
@@ -302,6 +315,17 @@ class AgentWorkflow:
             if action_name not in keeps:
                 self._clear_prompt_traces(action_name)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
+
+    def _holds_answers(self, action_name: str) -> bool:
+        """Whether a stopped action keeps an answer through the reset: a stored row or a
+        verdict that is not a failure. An answer only checkpointed, in a file the run
+        never stored, is not seen here."""
+        if self.storage_backend.has_target_rows(action_name):
+            return True
+        return any(
+            row.get("disposition") not in RUNNING_CLEAR_DISPOSITIONS
+            for row in self.storage_backend.get_disposition(action_name, snapshots=False)
+        )
 
     def _clear_prompt_traces(self, action_name: str) -> None:
         try:

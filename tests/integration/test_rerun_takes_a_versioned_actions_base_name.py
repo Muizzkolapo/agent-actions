@@ -11,9 +11,14 @@ from tests.integration.test_a_config_edit_keeps_the_answers import (
     WORKFLOW,
     _agac,
     _ran,
+    _workflow,
     completed,  # noqa: F401 — fixture
     project,  # noqa: F401 — fixture
 )
+
+
+def _status_file(root):
+    return _workflow(root) / "agent_io" / ".agent_status.json"
 
 
 def _rerun_line(result):
@@ -42,3 +47,17 @@ def test_rerun_of_one_version_leaves_the_other_version_complete(completed):  # n
     assert result.returncode == 0, result.printed
     assert "vote_direct_2" not in _rerun_line(result)
     assert "vote_direct_1" in _rerun_line(result)
+
+
+def test_rerun_of_an_unknown_name_changes_no_status(completed):  # noqa: F811
+    status_file = _status_file(completed)
+    before = status_file.read_text()
+
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "no_such_action")
+
+    assert result.returncode != 0
+    assert "--rerun: 'no_such_action' is not an action of" in result.printed
+    assert status_file.read_text() == before
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "recap")
+    assert result.returncode == 0, result.printed
+    assert status_file.read_text() != before
