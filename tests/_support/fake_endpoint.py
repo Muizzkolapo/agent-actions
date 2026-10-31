@@ -1,14 +1,8 @@
 """A stub OpenAI-compatible chat server that records what it was handed.
 
-Each reply is built from the request: `honour` mode returns an object with every
-property of the schema the request carried, `ignore` returns JSON that matches no
-schema, and `prose` returns text that is not JSON. A queue of status codes answers
-the next requests before the mode does, so a 429 followed by a 200 is one line.
-
-As a program it serves the probe workflow of the sample project:
-`python -m tests._support.fake_endpoint --honour 8701 --ignore 8702` starts one server
-per mode and prints every request's headers, so the terminal shows which server
-received which credential.
+`honour` replies match the schema the request carried, `ignore` replies match none,
+`prose` is not JSON; a status queue answers first. As a program (`--honour PORT
+--ignore PORT`) it serves the sample project's probe and prints each request's headers.
 """
 
 from __future__ import annotations

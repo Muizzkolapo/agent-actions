@@ -206,6 +206,8 @@ class WorkflowResolutionService:
         self.workflow_config_path = workflow_config_path
         self.project_root = project_root
         self.verify_keys = verify_keys
+        # Declared endpoints the workflow uses, with the first model named for each.
+        self._endpoint_models: dict[str, str] = {}
 
     def resolve_all(self) -> StaticValidationResult:
         """Run all resolution checks and return aggregated result."""
@@ -227,6 +229,9 @@ class WorkflowResolutionService:
             # Probe vendor endpoints when --verify-keys is set and keys exist.
             if self.verify_keys and targets and not result.errors:
                 self._verify_api_keys(targets, result)
+            # One structured-output request per declared endpoint, same flag, same guard.
+            if self.verify_keys and self._endpoint_models and not result.errors:
+                self._verify_endpoints(result)
 
         seed_errors, seed_warnings = self._check_seed_file_references()
         for error in seed_errors:
@@ -276,6 +281,35 @@ class WorkflowResolutionService:
 
     # ── Declared endpoints ─────────────────────────────────────────────
 
+    def _verify_endpoints(self, result: StaticValidationResult) -> None:
+        """Send the structured-output probe to each endpoint the workflow uses."""
+        from agent_actions.llm.providers.openai.endpoint_probe import probe_endpoint
+
+        for name, model_name in self._endpoint_models.items():
+            probe = probe_endpoint(name, model_name)
+            if probe.ok or probe.error is None:
+                continue
+            if "refused the credential" in probe.error:
+                hint = f"Check the credential in endpoints.{name}.auth."
+            elif "could not be reached" in probe.error:
+                hint = f"Check endpoints.{name}.url and that the server is running."
+            else:
+                hint = (
+                    "Use a server that honours response_format json_schema, or put one "
+                    "(vLLM, TGI, a LiteLLM proxy) in front of this one."
+                )
+            result.add_error(
+                StaticTypeError(
+                    message=probe.error,
+                    location=FieldLocation(
+                        agent_name="(workflow)", config_field="model_vendor", raw_reference=name
+                    ),
+                    referenced_agent="(workflow)",
+                    referenced_field="model_vendor",
+                    hint=hint,
+                )
+            )
+
     def _check_endpoint_actions(self) -> list[StaticTypeError]:
         """Hold an action on a declared endpoint to the endpoint rules.
 
@@ -293,6 +327,7 @@ class WorkflowResolutionService:
             if endpoint is None:
                 continue
             subject = f"Action '{action_name}': endpoint '{vendor}'"
+            self._endpoint_models.setdefault(vendor, str(config.get("model_name") or ""))
 
             if not config.get("json_mode", True):
                 errors.append(
