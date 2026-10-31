@@ -173,8 +173,9 @@ def _edit(root, old, new):
 
 
 def _agac(root, *args):
+    """Run the command; ``printed`` is its output with the console's line wrapping undone."""
     result = run_agac(root, *args, env={"OPENAI_API_KEY": "sk-not-used"})
-    result.printed = result.stdout + result.stderr
+    result.printed = " ".join((result.stdout + result.stderr).split())
     return result
 
 
