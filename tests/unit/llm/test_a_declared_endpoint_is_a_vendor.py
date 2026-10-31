@@ -600,3 +600,16 @@ class TestHeaderSafeValues:
         assert info.value.context["reason"] == (
             "endpoint 'lab' reads TRACE_TOKEN for header X-Trace, whose value holds a line break"
         )
+
+    def test_a_line_break_inside_a_command_output_is_refused_by_name(self, compatible):
+        _declare_full(
+            "http://127.0.0.1:1/v1",
+            auth={"command": ["python3", "-c", "print('first-half-1234'); print('second')"]},
+        )
+
+        with pytest.raises(ConfigValidationError) as info:
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert info.value.context["reason"] == (
+            "endpoint 'lab' runs auth command 'python3', whose value holds a line break"
+        )
