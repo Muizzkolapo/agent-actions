@@ -17,11 +17,9 @@ class UnknownKeysDetector(BaseActionEntryValidator):
     def validate(self, context) -> ActionEntryValidationResult:
         """Detect unknown keys in action configuration."""
         entry = context.entry
-        normalized_entry = context.normalized_entry
         desc = context.description
 
-        agent_type = str(normalized_entry.get("agent_type", "")).lower()
-        all_known_keys = ActionConfigValidationUtilities.get_all_known_action_keys(agent_type)
+        all_known_keys = ActionConfigValidationUtilities.get_all_known_action_keys()
         keys_to_check = {k.lower() for k in entry.keys() if k.lower() != "config"}
         unknown_keys = keys_to_check - all_known_keys
 

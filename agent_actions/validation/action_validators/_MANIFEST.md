@@ -11,7 +11,7 @@ requirements before workflows execute.
 |------|------|-------------|---------|
 | `action_entry_structure_validator.py` | Module | Ensures action configs adhere to the expected dict structure. | `validation` |
 | `action_required_fields_validator.py` | Module | Validates that required keys (prompt, schema, intent) exist. | `validation` |
-| `action_type_specific_validator.py` | Module | Applies vendor-specific checks depending on agent type. | `llm.providers`, `validation` |
+| `action_type_specific_validator.py` | Module | Checks the `name` and `agent_type` fields (reserved names, string type). `agent_type` holds the action name; the type is `kind`. | `llm.providers`, `validation` |
 | `base_action_validator.py` | Module | Base class shared by action validators. | `validation` |
 | `granularity_output_field_validator.py` | Module | Verifies output fields align with configured granularity. | `validation`, `output` |
 | `inline_schema_validator.py` | Module | Validates inline schemas defined inside action configs. | `validation`, `schema` |

@@ -7,7 +7,6 @@ from typing import Any
 from agent_actions.utils.constants import (
     API_KEY_KEY,
     CHUNK_CONFIG_KEY,
-    DEFAULT_ACTION_KIND,
     JSON_MODE_KEY,
     MODEL_NAME_KEY,
     MODEL_VENDOR_KEY,
@@ -65,12 +64,6 @@ class ActionConfigValidationUtilities:
         "versions",
         "version_consumption",
         "retry",
-    }
-
-    _ACTION_TYPE_SPECIFIC_KEYS: dict[str, set[str]] = {
-        DEFAULT_ACTION_KIND: {MODEL_NAME_KEY},
-        "function": {"code_path"},
-        "tool": {MODEL_NAME_KEY},
     }
 
     _VALID_GRANULARITY_VALUES: set[str] = {"record", "file"}
@@ -153,41 +146,12 @@ class ActionConfigValidationUtilities:
         return ActionConfigValidationUtilities._OPTIONAL_ACTION_KEYS.copy()
 
     @staticmethod
-    def get_action_type_specific_keys(agent_type: str) -> set[str]:
-        """
-        Get required keys for a specific agent type.
-
-        Args:
-            agent_type: Type of agent ('llm', 'function', 'tool')
-
-        Returns:
-            Set of required keys for that type, or empty set if no special requirements
-        """
-        return ActionConfigValidationUtilities._ACTION_TYPE_SPECIFIC_KEYS.get(
-            agent_type.lower(), set()
-        ).copy()
-
-    @staticmethod
-    def get_all_known_action_keys(agent_type: str | None = None) -> set[str]:
-        """
-        Get all known action keys (required + optional + type-specific).
-
-        Args:
-            agent_type: Optional agent type to include type-specific keys
-
-        Returns:
-            Set of all known keys
-        """
-        all_keys = (
+    def get_all_known_action_keys() -> set[str]:
+        """Get all known action keys (required + optional)."""
+        return (
             ActionConfigValidationUtilities._REQUIRED_ACTION_KEYS
             | ActionConfigValidationUtilities._OPTIONAL_ACTION_KEYS
         )
-
-        if agent_type:
-            type_keys = ActionConfigValidationUtilities.get_action_type_specific_keys(agent_type)
-            all_keys = all_keys | type_keys
-
-        return all_keys
 
     @staticmethod
     def get_valid_granularity_values() -> set[str]:
