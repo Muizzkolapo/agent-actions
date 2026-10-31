@@ -87,18 +87,6 @@ class TestCheckPriorOutputIntentionalNoOutput:
         assert result is None
         assert executor.deps.state_manager.get_status("my_action") == ActionStatus.PENDING
 
-    def test_target_files_exist_returns_completed(self):
-        executor = _make_executor()
-        backend = MagicMock()
-        backend.list_target_files.return_value = ["output.json"]
-        # No FAILED/SKIPPED disposition
-        backend.has_disposition.return_value = False
-
-        has_output, result = executor._check_prior_output(backend, "my_action")
-
-        assert has_output is True
-        assert result.status == ActionStatus.COMPLETED
-
     def test_failed_disposition_triggers_rerun(self, tmp_path):
         executor = _completed(tmp_path)
         backend = executor.deps.action_runner.storage_backend
@@ -173,6 +161,7 @@ class TestCheckPriorOutputDoesNotRunStatsQuery:
 
         assert has_output is True
         assert result is not None
+        assert result.status == ActionStatus.COMPLETED
         assert result.metrics.record_count == 0, (
             f"cached-completion path must ship record_count=0 (this execution "
             f"did not run the action), got {result.metrics.record_count}"

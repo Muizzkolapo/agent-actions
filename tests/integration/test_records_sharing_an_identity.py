@@ -70,16 +70,6 @@ def _counts(project):
 
 
 class TestARunKeepsEveryStagedRecord:
-    def test_the_source_holds_every_staged_record(self, duplicated):
-        """The one the store dropped. Six staged, six kept."""
-        assert _counts(duplicated)["source"] == 6
-
-    def test_every_staged_record_gets_a_disposition(self, duplicated):
-        assert _counts(duplicated)["dispositions"] == 6
-
-    def test_the_target_holds_every_staged_record(self, duplicated):
-        assert _counts(duplicated)["target"] == 6
-
     def test_every_table_agrees_how_many_records_there_are(self, duplicated):
         """Six, on every side. A table that cannot hold a repeat is the reason
         the repeat needs an identity of its own, not a reason to drop it."""

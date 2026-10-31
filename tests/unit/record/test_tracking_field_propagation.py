@@ -89,11 +89,6 @@ class TestEnvelopeBuildCarriesTrackingFields:
         result = RecordEnvelope.build("act", {"x": 1}, inp)
         assert "lineage" not in result
 
-    def test_no_input_record_no_tracking_fields(self):
-        result = RecordEnvelope.build("act", {"x": 1})
-        assert "source_guid" not in result
-        assert "version_correlation_id" not in result
-
     def test_tracking_fields_chain_through_stages(self):
         """version_correlation_id must survive 3 sequential build() calls."""
         r1 = RecordEnvelope.build(

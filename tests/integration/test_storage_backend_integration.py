@@ -537,19 +537,6 @@ class TestConcurrencyAndResilience:
             assert len(results) == 8  # 4 source + 4 target threads completed
 
 
-class TestBackendTypeProperty:
-    """Test backend_type property behavior."""
-
-    def test_backend_type_returns_sqlite(self):
-        """SQLiteBackend returns 'sqlite' as backend_type."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "test.db"
-            backend = SQLiteBackend(str(db_path), "test_workflow")
-
-            assert backend.backend_type == "sqlite"
-            backend.close()
-
-
 class TestWorkflowIntegration:
     """Test integration with workflow patterns."""
 

@@ -211,7 +211,7 @@ PAIRED = sorted(f"L-{item}|R-{item}-{n}" for item in ("a", "b", "c") for n in (1
 
 
 @pytest.mark.parametrize("dependencies", ["left, right", "right, left"])
-def test_no_fan_in_record_is_missing_a_branch(tmp_path, dependencies):
+def test_each_split_record_is_paired_with_the_record_it_came_from(tmp_path, dependencies):
     root = _project(tmp_path, _config(dependencies))
 
     result = run_agac(root, "run", "-a", WORKFLOW, "--fresh")
@@ -219,15 +219,6 @@ def test_no_fan_in_record_is_missing_a_branch(tmp_path, dependencies):
     assert result.returncode == 0, result.stdout + result.stderr
     assert len(_rows(root, "left")) == 3
     assert len(_rows(root, "right")) == 6
-    assert not [joined for joined in _joined(root) if "None" in joined]
-
-
-@pytest.mark.parametrize("dependencies", ["left, right", "right, left"])
-def test_each_split_record_is_paired_with_the_record_it_came_from(tmp_path, dependencies):
-    root = _project(tmp_path, _config(dependencies))
-
-    run_agac(root, "run", "-a", WORKFLOW, "--fresh")
-
     assert _joined(root) == PAIRED
 
 

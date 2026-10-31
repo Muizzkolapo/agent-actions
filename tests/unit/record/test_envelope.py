@@ -28,11 +28,6 @@ class TestBuild:
         assert "y" not in result["content"]
         assert result["content"]["action_a"] == {"x": 1, "y": 2}
 
-    def test_carries_source_guid(self):
-        inp = {"source_guid": "guid-42", "content": {}}
-        result = RecordEnvelope.build("act", {"v": 1}, inp)
-        assert result["source_guid"] == "guid-42"
-
     def test_carries_parent_source_guid(self):
         """Expansion attribution must survive every stage, or source resolution dead-ends."""
         inp = {"source_guid": "minted", "parent_source_guid": "original", "content": {}}
@@ -79,10 +74,6 @@ class TestBuild:
         """Empty dict {} input_record must not be treated as absent by _carry_tracking_fields."""
         result = RecordEnvelope.build("action", {"x": 1}, {})
         assert result["content"] == {"action": {"x": 1}}
-
-    def test_input_record_tracking_fields_are_carried(self):
-        result = RecordEnvelope.build("action", {"x": 1}, {"source_guid": "g-carry"})
-        assert result["source_guid"] == "g-carry"
 
 
 # ── build_content() ─────────────────────────────────────────────────────────

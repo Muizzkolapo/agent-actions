@@ -195,17 +195,6 @@ class TestARecordNamedByIdIsAlwaysRetried:
         assert result.exit_code == 0, result.output
         assert _disposition(project, late) == "success"
 
-    def test_the_failure_is_never_left_erased(self, project, monkeypatch):
-        """Retry clears the disposition before re-running. If the record is then
-        dropped, the failure is gone and nothing records that it happened."""
-        late = _a_record_the_cap_would_cut(project, cap=1)
-        _fail(project, late)
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
-
-        CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
-
-        assert _disposition(project, late) is not None, "the failure row was erased"
-
     def test_no_record_loses_its_disposition_row(self, project, monkeypatch):
         """Asserted on the ids, not the count: a lost row plus a spurious one
         keeps the count and still means a record was lost."""
@@ -457,17 +446,6 @@ class TestALimitDoesNotTruncateWhatARetryReruns:
 
         assert retry.exit_code == 0, retry.output
         assert set(_stored_guids(chained, ACTION)) == before
-
-    def test_the_retried_record_is_still_repaired(self, chained, monkeypatch):
-        """The control: keeping every row must not come from the retry doing nothing."""
-        late = _a_record_the_cap_would_cut(chained, cap=1)
-        _fail(chained, late, SECOND)
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
-
-        assert retry.exit_code == 0, retry.output
-        assert _disposition(chained, late, SECOND) == "success"
 
 
 class TestARepairedRecordWithNoStoredRow:

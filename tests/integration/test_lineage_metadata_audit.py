@@ -107,6 +107,7 @@ class TestLineageChainIntegrity:
         enriched = _enrich_lineage(result, ctx)
         item = enriched.data[0]
 
+        assert item["node_id"].startswith("ingest_")
         assert item["lineage"] == [item["node_id"]]
         assert "parent_target_id" not in item
         assert "root_target_id" not in item
@@ -126,6 +127,7 @@ class TestLineageChainIntegrity:
         enriched = _enrich_lineage(result, ctx)
         item = enriched.data[0]
 
+        assert item["node_id"].startswith("transform_")
         assert len(item["lineage"]) == 2
         assert item["lineage"][0] == parent_nid
         assert item["lineage"][1] == item["node_id"]
@@ -228,22 +230,6 @@ class TestAncestryFields:
         for tid in target_ids:
             assert isinstance(tid, str) and len(tid) > 0
 
-    def test_parent_target_id_points_to_input(self):
-        """parent_target_id equals the source item's target_id exactly."""
-        guid = _uuid()
-        parent_tid = _uuid()
-        parent_nid = f"extract_{_uuid()}"
-        parent = _make_source_item(guid, parent_nid, target_id=parent_tid)
-
-        result = ProcessingResult.success(
-            data=[{"content": {"v": 1}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        ctx = _make_context(source_data=[parent], is_first_stage=False, action_name="transform")
-        enriched = _enrich_lineage(result, ctx)
-
-        assert enriched.data[0]["parent_target_id"] == parent_tid
-
     def test_root_target_id_propagated_from_ancestor(self):
         """root_target_id set at stage 1 carries unchanged through stages 2 and 3."""
         guid = _uuid()
@@ -275,20 +261,6 @@ class TestAncestryFields:
         item3 = e3.data[0]
 
         assert item3["root_target_id"] == root_tid, "root_target_id must propagate unchanged"
-
-    def test_first_stage_no_ancestry_fields(self):
-        """First-stage enrichment sets no parent_target_id or root_target_id."""
-        guid = _uuid()
-        result = ProcessingResult.success(
-            data=[{"content": {"v": 1}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        ctx = _make_context(source_data=[], is_first_stage=True, action_name="ingest")
-        enriched = _enrich_lineage(result, ctx)
-        item = enriched.data[0]
-
-        assert "parent_target_id" not in item
-        assert "root_target_id" not in item
 
     def test_root_target_id_initialized_from_parent_target_id(self):
         """When parent has target_id but no root_target_id, root = parent's target_id."""
@@ -342,31 +314,6 @@ class TestLLMRecordMode:
         assert item["node_id"].startswith("llm_action_")
         assert item["lineage"] == [parent_nid, item["node_id"]]
         assert item["parent_target_id"] == parent_tid
-
-    def test_metadata_fields_present_after_full_enrichment(self):
-        """After full enrichment, LLM output has all required metadata fields."""
-        guid = _uuid()
-        parent_nid = f"extract_{_uuid()}"
-        parent = _make_source_item(guid, parent_nid, target_id=_uuid())
-
-        result = ProcessingResult.success(
-            data=[{"content": {"response": "hi"}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        ctx = _make_context(
-            source_data=[parent],
-            is_first_stage=False,
-            action_name="llm_action",
-            current_item=parent,
-        )
-        enriched = _enrich_full(result, ctx)
-        item = enriched.data[0]
-
-        assert "node_id" in item
-        assert "lineage" in item
-        assert "target_id" in item
-        assert "source_guid" in item
-        assert "parent_target_id" in item
 
     def test_llm_record_mode_multiple_source_records(self):
         """When source_data has multiple records, per-item lookup finds correct parent."""
@@ -442,29 +389,6 @@ class TestToolRecordMode:
         assert len(llm_item["lineage"]) == len(tool_item["lineage"]) == 2
         assert llm_item["lineage"][0] == tool_item["lineage"][0] == parent_nid
 
-    def test_tool_record_mode_fields_present(self):
-        """TOOL RECORD output has all required metadata fields after full enrichment."""
-        guid = _uuid()
-        parent = _make_source_item(guid, f"extract_{_uuid()}", target_id=_uuid())
-
-        result = ProcessingResult.success(
-            data=[{"content": {"tool_out": True}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        ctx = _make_context(
-            source_data=[parent],
-            is_first_stage=False,
-            action_name="tool_action",
-            current_item=parent,
-        )
-        enriched = _enrich_full(result, ctx)
-        item = enriched.data[0]
-
-        assert "node_id" in item
-        assert "lineage" in item
-        assert "target_id" in item
-        assert "source_guid" in item
-
 
 # ---------------------------------------------------------------------------
 # TestToolFileMode
@@ -516,6 +440,8 @@ class TestToolFileMode:
         # lineage built from first source
         assert sources[0]["node_id"] in item["lineage"]
         assert item["node_id"] in item["lineage"]
+        assert item["lineage"][0] == sources[0]["node_id"]
+        assert item["lineage"][-1] == item["node_id"]
         # lineage_sources has all parent node_ids
         assert "lineage_sources" in item
         assert len(item["lineage_sources"]) == 3
@@ -572,10 +498,13 @@ class TestToolFileMode:
 
         # Output 0 → input 0
         assert enriched.data[0]["parent_target_id"] == sources[0]["target_id"]
+        assert sources[0]["node_id"] in enriched.data[0]["lineage"]
         # Output 1 → input 2
         assert enriched.data[1]["parent_target_id"] == sources[2]["target_id"]
+        assert sources[2]["node_id"] in enriched.data[1]["lineage"]
         # Output 2 → input 4
         assert enriched.data[2]["parent_target_id"] == sources[4]["target_id"]
+        assert sources[4]["node_id"] in enriched.data[2]["lineage"]
 
     def test_source_mapping_out_of_bounds_produces_root_lineage(self):
         """Out-of-bounds source_mapping index: output still gets node_id and lineage."""
@@ -595,6 +524,8 @@ class TestToolFileMode:
         assert "node_id" in item
         assert "lineage" in item
         assert item["lineage"] == [item["node_id"]]
+        assert "parent_target_id" not in item
+        assert item["node_id"].startswith("file_tool_")
 
     def test_file_mode_tool_multiple_outputs_get_indexed_node_ids(self):
         """N outputs: node_id gets _{i} suffix for disambiguation."""
@@ -661,6 +592,7 @@ class TestHITLFileMode:
             assert sources[i]["node_id"] in lineage, "Parent node lost"
             assert enriched.data[i]["node_id"] in lineage, "HITL node not appended"
             assert len(lineage) == 3
+            assert enriched.data[i]["parent_target_id"] == sources[i]["target_id"]
 
     def test_hitl_identity_mapping(self):
         """HITL source_mapping is {i:i} — each output[i] traces to source[i]."""
@@ -1109,6 +1041,7 @@ class TestFilteredResultBypass:
 
         assert enriched.data == []
         assert enriched.status == ProcessingStatus.FILTERED
+        assert enriched.node_id is None
 
     def test_filtered_result_bypasses_required_fields_enricher(self):
         result = ProcessingResult.filtered(source_guid=_uuid())
@@ -1152,5 +1085,6 @@ class TestResultNodeId:
 
         base = enriched.node_id
         assert base is not None
+        assert base.startswith("split_")
         for i, item in enumerate(enriched.data):
             assert item["node_id"] == f"{base}_{i}"

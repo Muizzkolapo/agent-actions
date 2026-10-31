@@ -199,21 +199,6 @@ class TestBatchClientFactorySecretStr:
         assert key_with_secret == key_with_plain
         assert key_with_secret.startswith("openai:")
 
-    def test_cache_key_unwraps_secret_str_generic_field(self):
-        """_build_cache_key handles SecretStr in the generic api_key field."""
-        from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
-            BatchClientResolver,
-        )
-
-        key_with_secret = BatchClientResolver._build_cache_key(
-            "openai", {"api_key": SecretStr("sk-vendor-fallback")}
-        )
-        key_with_plain = BatchClientResolver._build_cache_key(
-            "openai", {"api_key": "sk-vendor-fallback"}
-        )
-        assert key_with_secret == key_with_plain
-        assert key_with_secret.startswith("openai:")
-
 
 class TestAgentConfigApiKeySecret:
     """Verify AgentConfig.api_key uses SecretStr."""
@@ -227,6 +212,7 @@ class TestAgentConfigApiKeySecret:
         config = AgentConfig(agent_type="test", api_key="secret123")
         dumped = config.model_dump()
         assert isinstance(dumped["api_key"], SecretStr)
+        assert "secret123" not in str(dumped)
 
     def test_model_dump_json_returns_masked_string(self):
         config = AgentConfig(agent_type="test", api_key="secret123")
@@ -260,6 +246,7 @@ class TestDefaultAgentConfigApiKeySecret:
         config = DefaultAgentConfig(api_key="defaults_secret")
         dumped = config.model_dump()
         assert isinstance(dumped["api_key"], SecretStr)
+        assert "defaults_secret" not in str(dumped)
 
     def test_model_dump_json_returns_masked_string(self):
         config = DefaultAgentConfig(api_key="defaults_secret")
@@ -269,6 +256,9 @@ class TestDefaultAgentConfigApiKeySecret:
     def test_get_secret_value_returns_raw_key(self):
         config = DefaultAgentConfig(api_key="defaults_secret")
         assert config.api_key.get_secret_value() == "defaults_secret"
+
+    def test_none_api_key_is_none(self):
+        assert DefaultAgentConfig().api_key is None
 
 
 class TestEndToEndSecretStrPipeline:

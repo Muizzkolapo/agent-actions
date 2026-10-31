@@ -159,8 +159,8 @@ class TestMergeBranchRecordsVersionPattern:
 class TestMergeBranchRecordsMissingNamespace:
     """Branch missing its own namespace — warning logged, others proceed."""
 
-    def test_missing_namespace_logs_warning(self, mocker):
-        """Branch without own namespace in content logs a warning."""
+    def test_missing_namespace_logs_warning_and_other_branches_still_merge(self, mocker):
+        """Branch without own namespace in content logs a warning; the others still merge."""
         mock_warn = mocker.patch("agent_actions.workflow.merge.logger.warning")
         branch_a = {
             "source_guid": "guid-1",
@@ -188,24 +188,6 @@ class TestMergeBranchRecordsMissingNamespace:
         assert result["content"]["classify"] == {"topic": "science"}
         # enrich was not merged (not present)
         assert "enrich" not in result["content"]
-
-    def test_other_branches_still_merge_when_one_missing(self):
-        """Other branches' namespaces merge even if one branch is malformed."""
-        good_branch = {
-            "source_guid": "guid-1",
-            "content": {"source": {"url": "x"}, "good": {"data": "yes"}},
-        }
-        bad_branch = {
-            "source_guid": "guid-1",
-            "content": {"source": {"url": "x"}, "wrong_name": {"data": "no"}},
-        }
-
-        result = merge_branch_records(
-            {"good": good_branch, "bad": bad_branch}, base_record=good_branch
-        )
-
-        assert result["content"]["good"] == {"data": "yes"}
-        assert "bad" not in result["content"]
 
 
 class TestMergeBranchRecordsEmptyInput:

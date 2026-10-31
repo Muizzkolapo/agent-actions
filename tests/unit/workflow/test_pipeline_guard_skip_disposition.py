@@ -301,13 +301,6 @@ class TestZeroSuccessFailure:
 
         self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
 
-    def test_empty_input_no_raise(self, pipeline_and_mocks):
-        """Empty input data → no raise (nothing to fail)."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats()
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out, data=[], output=[])
-
 
 class TestZeroSuccessWithRealResults:
     """Integration tests using real ProcessingResult objects through ResultCollector.

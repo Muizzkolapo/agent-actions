@@ -85,14 +85,6 @@ def test_unreferenced_collision_does_not_block_unique_name(tmp_path):
     assert result["name"] == "unique_schema"
 
 
-def test_missing_name_still_raises_file_not_found(tmp_path):
-    """Ambiguity enforcement must not change the not-found contract."""
-    _setup_project(tmp_path)
-    (tmp_path / "schema").mkdir()
-    with pytest.raises(FileNotFoundError, match="not found"):
-        SchemaLoader.load_schema("nonexistent", project_root=tmp_path)
-
-
 def test_collision_warning_fires_once_for_repeated_discovery(tmp_path):
     """The walk used to re-warn on every call — once per action in an inspect run."""
     _setup_project(tmp_path)

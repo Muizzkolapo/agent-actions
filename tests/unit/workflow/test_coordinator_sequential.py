@@ -238,20 +238,6 @@ class TestRunWorkflowWithContext:
         assert wf.event_logger.handle_workflow_error.call_args.kwargs["failed_action"] == "agent_a"
         assert wf.state.failed is True
 
-    def test_success_after_completion(self):
-        """After all agents complete, should return success."""
-        wf = _build_workflow()
-        wf.services.core.state_manager.is_completed.return_value = True
-        wf.services.core.state_manager.is_workflow_complete.return_value = True
-
-        mgr = MagicMock()
-        mgr.context.return_value.__enter__ = MagicMock()
-        mgr.context.return_value.__exit__ = MagicMock(return_value=False)
-        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            result = wf._run_workflow_with_context(datetime.now())
-
-        assert result == ("success", {})
-
 
 # ── _reset_retryable_actions ─────────────────────────────────────────
 

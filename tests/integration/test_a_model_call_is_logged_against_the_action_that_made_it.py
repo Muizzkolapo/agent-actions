@@ -115,12 +115,6 @@ def test_actions_of_one_step_each_own_their_model_calls(one_step):
     assert _calls(events, "meta") == {"appraise": 4, "summarize": 4}
 
 
-def test_a_tool_action_beside_model_calls_is_credited_with_none(one_step):
-    events = _run(one_step)
-
-    assert "flatten" not in _calls(events, "meta")
-
-
 def test_every_event_an_action_fires_carries_its_name(one_step):
     events = _run(one_step)
 

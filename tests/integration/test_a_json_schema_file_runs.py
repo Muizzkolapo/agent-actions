@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests.helpers.store import stored_rows
 
 FIXTURE = Path(__file__).parent / "fixtures" / "expectation_authors"
 WORKFLOW = "json_schema_file"
@@ -141,6 +142,7 @@ def test_a_schema_file_in_json_schema_form_is_not_read_as_inline_shorthand(
     assert "Inline schema field" not in output, output
     assert "inline shorthand" not in output.lower(), output
     assert code == 0, output
+    assert _node_disposition(root) != "failed"
 
 
 @pytest.mark.parametrize("run_mode", ["online", "batch"])
@@ -155,10 +157,23 @@ def test_an_array_schema_with_a_top_level_required_list_gets_the_array_message(t
     assert "Inline schema field" not in output, output
 
 
-def test_an_array_form_schema_file_completes_online(tmp_path):
-    root = _project(tmp_path, "candidate_facts_list", _ARRAY, "online")
+def _records(root: Path) -> list[dict]:
+    (db,) = (root / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
+    blobs = [row[0] for row in stored_rows(db, "select data from target_data")]
+    out: list[dict] = []
+    for blob in blobs:
+        loaded = json.loads(blob)
+        out.extend(loaded if isinstance(loaded, list) else [loaded])
+    return out
+
+
+def test_an_object_form_schema_file_produces_records_with_its_properties(tmp_path):
+    root = _project(tmp_path, "json_schema_page_summary", _OBJECT, "online")
 
     code, output = _run(root)
 
     assert code == 0, output
-    assert _node_disposition(root) != "failed"
+    records = _records(root)
+    assert records, "nothing was written"
+    for record in records:
+        assert {"summary", "tone"} <= set(record["content"]["summarize"]), record

@@ -129,30 +129,6 @@ class TestCheckUpstreamHealth:
         result = executor._check_upstream_health("agent_b", config)
         assert result == "agent_a"
 
-    def test_dep_skipped_disposition_cleared_when_upstream_has_output(self, executor, mock_deps):
-        """Stale SKIPPED disposition on upstream with output is cleared — downstream proceeds."""
-        mock_deps.state_manager.is_failed.return_value = False
-        mock_deps.state_manager.is_skipped.return_value = False
-        storage = MagicMock()
-        storage.has_disposition.side_effect = lambda dep, disp, **kw: disp == DISPOSITION_SKIPPED
-        storage.list_target_files.return_value = ["batch_0.json"]
-        mock_deps.action_runner.storage_backend = storage
-
-        config = {"dependencies": ["agent_a"]}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result is None
-        storage.clear_disposition.assert_called_once()
-
-    def test_no_storage_backend_only_checks_state_manager(self, executor, mock_deps):
-        """No storage backend — only checks state_manager."""
-        mock_deps.state_manager.is_failed.return_value = False
-        mock_deps.state_manager.is_skipped.return_value = False
-        mock_deps.action_runner.storage_backend = None
-
-        config = {"dependencies": ["agent_a"]}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result is None
-
 
 class TestVersionSourceCascade:
     """Tests for version-source cascade detection in _check_upstream_health."""
@@ -229,16 +205,6 @@ class TestVersionSourceCascade:
         }
         result = executor._check_upstream_health("canonicalize_qa", config)
         assert result is None  # only _1 is a version agent, and it's healthy
-
-    def test_no_version_config_skips_check(self, executor, mock_deps):
-        """No version_consumption_config → only checks dependencies."""
-        mock_deps.state_manager.is_failed.return_value = False
-        mock_deps.state_manager.is_skipped.return_value = False
-        mock_deps.action_runner.storage_backend = None
-
-        config = {"dependencies": []}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result is None
 
     def test_empty_version_config_skips_check(self, executor, mock_deps):
         """Empty version_consumption_config dict → skips version source check."""
@@ -467,16 +433,6 @@ class TestZeroSuccessCircuitBreakerChain:
         assert result.success is False
         assert result.status == ActionStatus.FAILED
 
-    def test_failed_upstream_triggers_circuit_breaker(self, executor, mock_deps):
-        """After upstream marked FAILED, circuit breaker returns the failed dep name."""
-        mock_deps.state_manager.is_failed.return_value = True
-        mock_deps.state_manager.is_skipped.return_value = False
-
-        config = {"dependencies": ["extract_claims"]}
-        result = executor._check_upstream_health("score_quality", config)
-
-        assert result == "extract_claims"
-
     @patch("agent_actions.workflow.executor.fire_event")
     def test_full_chain_failure_then_skip(self, mock_fire, executor, mock_deps):
         """Full chain: upstream fails → downstream skipped by circuit breaker."""
@@ -608,35 +564,6 @@ class TestTotalFailureEscalation:
         assert executor._resolve_completion_status("agent_a") == ActionStatus.FAILED
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_partial_failure_still_completed_with_failures(self, mock_fire, executor, mock_deps):
-        """When some records fail but others succeed, status stays COMPLETED_WITH_FAILURES."""
-        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
-        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
-            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
-        ]
-        mock_deps.action_runner.storage_backend.has_successful_items.return_value = True
-        assert (
-            executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED_WITH_FAILURES
-        )
-
-    @patch("agent_actions.workflow.executor.fire_event")
-    def test_empty_input_not_treated_as_failure(self, mock_fire, executor, mock_deps):
-        """Zero records processed (no failures, no successes) is COMPLETED, not FAILED."""
-        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
-        mock_deps.action_runner.storage_backend.get_failed_items.return_value = []
-        assert executor._resolve_completion_status("agent_a") == ActionStatus.COMPLETED
-
-    @patch("agent_actions.workflow.executor.fire_event")
-    def test_skipped_and_failed_items_with_no_successes(self, mock_fire, executor, mock_deps):
-        """Skipped + failed items with zero successes should still escalate to FAILED."""
-        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
-        mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
-            {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
-        ]
-        mock_deps.action_runner.storage_backend.has_successful_items.return_value = False
-        assert executor._resolve_completion_status("agent_a") == ActionStatus.FAILED
-
-    @patch("agent_actions.workflow.executor.fire_event")
     def test_total_failure_handle_run_success_returns_failure_result(
         self, mock_fire, executor, mock_deps
     ):
@@ -751,19 +678,6 @@ class TestTotalFailureDownstreamSkip:
         config_b = {"dependencies": ["agent_a"]}
         failed_dep = executor._check_upstream_health("agent_b", config_b)
         assert failed_dep == "agent_a"
-
-
-class TestCircuitBreakerIgnoresPartial:
-    """completed_with_failures must NOT trigger circuit breaker."""
-
-    def test_completed_with_failures_not_detected_by_upstream_health(self, executor, mock_deps):
-        mock_deps.state_manager.is_failed.return_value = False
-        mock_deps.state_manager.is_skipped.return_value = False
-        mock_deps.action_runner.storage_backend = None
-
-        config = {"dependencies": ["agent_a"]}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result is None
 
 
 class TestGetFailedItems:

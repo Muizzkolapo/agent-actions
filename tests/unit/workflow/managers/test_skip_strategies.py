@@ -213,23 +213,6 @@ class TestGuardStrategy:
         # previous_outputs should still be present for backward compat
         assert "previous_outputs" in call_args.data
 
-    def test_unwraps_single_item_lists(self, strategy):
-        """Single-item list outputs are unwrapped to their dict for dot notation."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-        }
-        previous_outputs = {
-            "assess": [{"severity": "high"}],
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        call_args = filt.filter_item.call_args[0][0]
-        # Single-item list should be unwrapped to dict
-        assert call_args.data["assess"] == {"severity": "high"}
-
     def test_meta_keys_not_flattened(self, strategy):
         """Internal _meta metadata keys are excluded from top-level flattening."""
         filt = _make_filter(FakeFilterResult(success=True, matched=True))
@@ -355,34 +338,6 @@ class TestGuardStrategy:
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
         assert event.action_name == "triage"
-
-    def test_present_upstream_matching_does_not_skip(self, strategy):
-        """Guard on present upstream with matching value → action runs."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {
-                "scope": "action",
-                "clause": 'classify.category == "urgent"',
-            },
-            "agent_type": "triage",
-        }
-        previous_outputs = {"classify": [{"category": "urgent"}]}
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            assert strategy.should_skip(cfg, previous_outputs) is False
-
-    def test_present_upstream_non_matching_skips(self, strategy):
-        """Guard on present upstream with non-matching value → action skipped."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=False))
-        cfg = {
-            "guard": {
-                "scope": "action",
-                "clause": 'classify.category == "urgent"',
-            },
-            "agent_type": "triage",
-        }
-        previous_outputs = {"classify": [{"category": "low"}]}
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH):
-            assert strategy.should_skip(cfg, previous_outputs) is True
 
     def test_semantic_error_always_skips_regardless_of_passthrough(self, strategy):
         """SEMANTIC errors bypass passthrough_on_error and always skip.

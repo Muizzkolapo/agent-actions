@@ -184,14 +184,6 @@ def _run_to_the_end(project: Path) -> None:
     pytest.fail(f"the action never stopped asking to be run again:\n{output}")
 
 
-def test_a_lost_record_is_sent_again(project):
-    lost = _lose_one(_submitted(project))["custom_id"]
-
-    sent, output = _collected(project)
-
-    assert sent == [[lost]], f"no retry batch went out for the lost record:\n{output}"
-
-
 def test_the_retry_asks_with_what_the_action_above_answered(project):
     """Sent at all is not enough: the retry's prompt is the one the record was first
     sent with, built from the action above's answer for it."""

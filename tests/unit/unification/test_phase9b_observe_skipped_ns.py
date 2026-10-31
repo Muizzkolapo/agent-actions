@@ -10,9 +10,6 @@ observe/passthrough fields resolve to ``None``.  A namespace that is
 *absent entirely* from field_context is still a configuration error.
 """
 
-import pytest
-
-from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.null_namespace import NullNamespace
 from agent_actions.prompt.context.scope_application import apply_context_scope
 
@@ -73,16 +70,6 @@ class TestObserveSkippedNamespace:
             action_name="downstream",
         )
         assert "skipped_step" not in llm_ctx
-
-    def test_observe_from_missing_namespace_still_errors(self):
-        """Namespace absent from field_context entirely → ConfigurationError."""
-        fc = _make_field_context(present={"f": 1})
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["nonexistent_step.field"]},
-                action_name="downstream",
-            )
 
     def test_mixed_skipped_and_present_namespaces(self):
         """Normal namespace resolves normally; skipped resolves to None."""

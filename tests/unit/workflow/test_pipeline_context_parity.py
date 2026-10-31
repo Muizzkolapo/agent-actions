@@ -83,37 +83,6 @@ class TestBuildPipelineContext:
         assert version_context is None
 
 
-class TestBatchPathReceivesVersionContext:
-    """Verify that the batch path forwards version_context through the chain."""
-
-    def test_build_pipeline_context_called_before_batch_fork(self):
-        """_process_by_strategy should call _build_pipeline_context before the batch fork.
-
-        This is the architectural guarantee: context building happens ONCE,
-        before the batch/online decision, so both paths receive the same context.
-        """
-        # Verify by checking that _build_pipeline_context produces correct output
-        # for a versioned agent with action_configs — the same output that both
-        # the batch and online paths will receive.
-        action_config = {
-            "is_versioned_agent": True,
-            "_version_context": {"i": 2, "length": 5},
-        }
-        action_configs = {
-            "extract": {"idx": 0},
-            "transform": {"idx": 1},
-        }
-
-        agent_indices, dependency_configs, version_context = (
-            ProcessingPipeline._build_pipeline_context(action_config, action_configs)
-        )
-
-        # Both batch and online paths receive these same values
-        assert agent_indices == {"extract": 0, "transform": 1}
-        assert dependency_configs is action_configs
-        assert version_context == {"i": 2, "length": 5}
-
-
 class TestBatchPreparatorVersionContext:
     """Verify BatchTaskPreparator forwards version_context to PreparationContext."""
 

@@ -530,7 +530,7 @@ class TestObserveFanIn:
         }
         context_scope = {"observe": ["voter_1.*", "voter_2.*", "voter_3.*"]}
 
-        _, llm_context, _ = apply_context_scope(
+        prompt_context, llm_context, _ = apply_context_scope(
             field_context, context_scope, action_name="aggregate"
         )
 
@@ -544,6 +544,9 @@ class TestObserveFanIn:
         assert llm_context["voter_1"]["confidence"] == 0.9
         # All 3 namespaces present
         assert len(llm_context) == 3
+        assert "voter_1" in prompt_context
+        assert "voter_2" in prompt_context
+        assert "voter_3" in prompt_context
 
 
 # ---------------------------------------------------------------------------
@@ -714,23 +717,6 @@ class TestDropSecurity:
 
         with pytest.raises(ConfigurationError, match="not found in namespace"):
             apply_context_scope(field_context, context_scope, action_name="test")
-
-    def test_drop_happens_before_observe(self):
-        """Execution order: drop first, then observe reads from post-drop state."""
-        field_context = {
-            "dep": {"sensitive": "secret123", "public": "hello", "extra": "data"},
-        }
-        # Drop sensitive, then observe wildcard -- sensitive must be gone
-        context_scope = {
-            "drop": ["dep.sensitive"],
-            "observe": ["dep.*"],
-        }
-
-        _, llm_context, _ = apply_context_scope(field_context, context_scope, action_name="test")
-
-        assert "sensitive" not in llm_context.get("dep", {})
-        assert llm_context["dep"]["public"] == "hello"
-        assert llm_context["dep"]["extra"] == "data"
 
     def test_dropped_field_not_in_passthrough(self):
         """Dropped fields don't leak via passthrough either.
@@ -1023,31 +1009,3 @@ class TestContextScopeEdgeCases:
         # Nested path is stored with the dotted key
         assert llm_context["dep"]["parent.child"] == "nested_value"
         assert "flat_field" not in llm_context.get("dep", {})
-
-    def test_version_namespace_auto_expansion(self):
-        """Base name 'voter' expands to voter_1, voter_2, voter_3 when versioned.
-        After expansion, each version is a standard namespace in field_context."""
-        field_context = {
-            "voter_1": {"score": 8, "reasoning": "good", "confidence": 0.9},
-            "voter_2": {"score": 7, "reasoning": "decent", "confidence": 0.8},
-            "voter_3": {"score": 9, "reasoning": "great", "confidence": 0.95},
-        }
-        # After expansion, context_scope references concrete version names
-        context_scope = {"observe": ["voter_1.*", "voter_2.*", "voter_3.*"]}
-
-        prompt_context, llm_context, _ = apply_context_scope(
-            field_context, context_scope, action_name="aggregate"
-        )
-
-        # All 3 version namespaces present
-        assert "voter_1" in llm_context
-        assert "voter_2" in llm_context
-        assert "voter_3" in llm_context
-        # Correct values
-        assert llm_context["voter_1"]["score"] == 8
-        assert llm_context["voter_2"]["score"] == 7
-        assert llm_context["voter_3"]["score"] == 9
-        # All in prompt_context
-        assert "voter_1" in prompt_context
-        assert "voter_2" in prompt_context
-        assert "voter_3" in prompt_context

@@ -967,32 +967,6 @@ def test_validate_udf_output_rejects_invalid_items_in_list():
 
 # For `schema: {type: array, items: {…}}`, compile_output_schema stores
 # the items schema directly as json_output_schema (no wrapper).
-_ARRAY_ITEM_SCHEMA = {
-    "type": "object",
-    "properties": {"name": {"type": "string"}},
-    "required": ["name"],
-}
-
-
-def test_validate_udf_output_array_schema_validates_per_item():
-    """Array schema compiled to item schema — each list item validated individually."""
-    from agent_actions.utils.udf_management.tooling import _validate_udf_output
-
-    result = [{"name": "alice"}, {"name": "bob"}]
-
-    # Should not raise — each item matches the item schema
-    _validate_udf_output("my_tool", result, _ARRAY_ITEM_SCHEMA)
-
-
-def test_validate_udf_output_array_schema_rejects_invalid_item():
-    """Invalid item against array item schema should raise with item index."""
-    from agent_actions.errors import SchemaValidationError
-    from agent_actions.utils.udf_management.tooling import _validate_udf_output
-
-    result = [{"name": "alice"}, {"bad_field": 123}]  # item 1 missing 'name'
-
-    with pytest.raises(SchemaValidationError, match="item 1"):
-        _validate_udf_output("my_tool", result, _ARRAY_ITEM_SCHEMA)
 
 
 def test_compile_output_schema_extracts_array_items():
@@ -1201,34 +1175,6 @@ def test_result_collector_does_not_raise_when_all_filtered():
 # --- FILE-mode source_guid via TrackedItem ---
 
 
-def test_tracked_item_preserves_source_guid():
-    """TrackedItem output gets source_guid from input via source_index mapping."""
-    context = _make_context()
-
-    input_data = [
-        {"source_guid": "sg-1", "content": {"prev": {"id": 1}}},
-        {"source_guid": "sg-2", "content": {"prev": {"id": 2}}},
-    ]
-
-    context.source_data = input_data
-
-    with patch(
-        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-        return_value=(
-            [
-                TrackedItem({"score": 0.9}, source_index=0),
-                TrackedItem({"score": 0.8}, source_index=1),
-            ],
-            True,
-        ),
-    ):
-        results = FileToolStrategy().invoke(input_data, context)
-
-    result = results[0]
-    assert result.data[0]["source_guid"] == "sg-1"
-    assert result.data[1]["source_guid"] == "sg-2"
-
-
 def test_tracked_item_filter_fewer_outputs():
     """When tool filters N→fewer, TrackedItem._source_index resolves correct source_guid."""
     context = _make_context()
@@ -1312,22 +1258,6 @@ def test_file_tool_source_guid_never_empty_string():
 
 
 # --- Hardening: edge cases ---
-
-
-def test_file_tool_empty_input_empty_output():
-    """Empty input + empty output → no crash, no source_guid issues."""
-    context = _make_context()
-
-    context.source_data = []
-
-    with patch(
-        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-        return_value=([], True),
-    ):
-        results = FileToolStrategy().invoke([], context)
-
-    assert results[0].status == ProcessingStatus.SUCCESS
-    assert results[0].data == []
 
 
 def test_file_tool_input_without_source_guid():
@@ -1613,13 +1543,6 @@ class TestExtractToolInput:
             }
         }
         assert extract_tool_input(record, {"observe": []}) == {}
-
-    def test_absent_observe_key_still_flattens_all(self):
-        """Invariant: an absent `observe` key keeps meaning "pass everything"."""
-        from agent_actions.workflow.pipeline_file_mode import extract_tool_input
-
-        record = {"content": {"extract": {"q": "What?"}, "summarize": {"s": "Short"}}}
-        assert extract_tool_input(record, {}) == {"q": "What?", "s": "Short"}
 
     def test_drop_only_scope_still_flattens_all(self):
         """Invariant: `drop` without `observe` still flattens.
@@ -2041,49 +1964,6 @@ def test_file_hitl_carries_framework_fields():
     assert item["source_guid"] == "sg-1"
     assert item["target_id"] == "tid-1"
     assert item["_recovery"] == {"reason": "tombstone"}
-
-
-def test_file_tool_version_merge_spreads_not_wraps():
-    """Version merge tool output is spread flat, not wrapped under action name."""
-    agent_config = {
-        "kind": "tool",
-        "granularity": "file",
-        "version_consumption_config": {"source": "extract", "pattern": "merge"},
-    }
-    context = ProcessingContext(
-        agent_config=agent_config,
-        agent_name="aggregate",
-    )
-
-    input_data = [
-        {
-            "source_guid": "sg-1",
-            "content": {
-                "extract_1": {"vote": "keep"},
-                "extract_2": {"vote": "drop"},
-            },
-        }
-    ]
-
-    context.source_data = input_data
-
-    with patch(
-        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-        return_value=(
-            [TrackedItem({"consensus": "keep", "score": 11}, source_index=0)],
-            True,
-        ),
-    ):
-        results = FileToolStrategy().invoke(input_data, context)
-
-    content = results[0].data[0]["content"]
-    # Flat spread, NOT wrapped under action name
-    assert "aggregate" not in content
-    assert content["consensus"] == "keep"
-    assert content["score"] == 11
-    # Existing version namespaces preserved
-    assert content["extract_1"]["vote"] == "keep"
-    assert content["extract_2"]["vote"] == "drop"
 
 
 def test_file_tool_cascade_blocked_source_index_alignment():

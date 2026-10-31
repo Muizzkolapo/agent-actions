@@ -195,6 +195,8 @@ class TestBatchToDBPipeline:
         )
         writer.write_target(output)
 
+        assert not (tmp_path / "out.json").exists(), "Target file should not be written to disk"
+
         data = sqlite_backend.read_target("verify_answer", "out.json")
         assert data[0]["content"]["verify_answer"]["verified_answer"] == "C"
 
@@ -324,32 +326,6 @@ class TestPartialBatchFailure:
         data = sqlite_backend.read_target("verify_answer", "partial.json")
         populated = [r for r in data if r.get("content", {}).get("verify_answer") not in (None, {})]
         assert len(populated) >= 2
-
-
-# ---------------------------------------------------------------------------
-# Disk materialization
-# ---------------------------------------------------------------------------
-
-
-class TestDiskMaterialization:
-    def test_target_data_persisted_to_backend(
-        self, action_config, batch_result, context_map, sqlite_backend, tmp_path
-    ):
-        output = _process_batch([batch_result], context_map, action_config, str(tmp_path))
-
-        output_file = tmp_path / "target.json"
-        writer = FileWriter(
-            str(output_file),
-            storage_backend=sqlite_backend,
-            action_name="verify_answer",
-            output_directory=str(tmp_path),
-        )
-        writer.write_target(output)
-
-        assert not output_file.exists(), "Target file should not be written to disk"
-
-        backend_data = sqlite_backend.read_target("verify_answer", "target.json")
-        assert backend_data[0]["content"]["verify_answer"]["verified_answer"] == "C"
 
 
 # ---------------------------------------------------------------------------

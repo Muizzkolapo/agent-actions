@@ -55,14 +55,7 @@ def _write_versions(backend, agents):
 
 
 class TestAVersionMergeLeavesNoSourceArtefact:
-    def test_no_source_directory_is_created(self, correlator, backend, agent_folder):
-        _write_versions(backend, VERSIONS)
-
-        correlator.prepare_correlated_input("consumer", ["scorer_1", "scorer_2"], 3)
-
-        assert not (agent_folder / "source").exists()
-
-    def test_a_second_merge_to_the_same_basename_creates_nothing(
+    def test_neither_a_first_nor_a_second_merge_creates_a_source_directory(
         self, correlator, backend, agent_folder
     ):
         _write_versions(backend, VERSIONS)

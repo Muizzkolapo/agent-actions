@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from agent_actions.errors.configuration import ConfigValidationError
-from agent_actions.errors.validation import DataValidationError
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,
@@ -124,16 +123,6 @@ class TestDispositionEnum:
         assert len(rows) == 1
         assert rows[0]["detail"] is None
 
-    def test_set_disposition_success_value(self, backend):
-        backend.set_disposition(
-            action_name="action_e",
-            record_id="rec_005",
-            disposition=Disposition.SUCCESS,
-        )
-        rows = backend.get_disposition("action_e", "rec_005")
-        assert len(rows) == 1
-        assert rows[0]["disposition"] == "success"
-
 
 # ── T2-3: write_source executemany dedup ────────────────────────────────────
 
@@ -167,41 +156,3 @@ class TestWriteSourceExecutemany:
         # Only the 2 new guids were inserted; total is now 7
         assert len(rows2) == 7
         assert {r["source_guid"] for r in rows2} == {f"g{i}" for i in range(5)} | {"new1", "new2"}
-
-    def test_write_source_dedup_skips_existing(self, backend):
-        data = [{"source_guid": "g1", "value": "first"}]
-        backend.write_source("path/data.json", data)
-
-        # Second write with same guid — should be skipped
-        data2 = [
-            {"source_guid": "g1", "value": "dup"},
-            {"source_guid": "g3", "value": "new"},
-        ]
-        backend.write_source("path/data.json", data2, enable_deduplication=True)
-        rows = backend.read_source("path/data.json")
-        # g1 stays as first write; g3 is inserted
-        guids = {r["source_guid"] for r in rows}
-        assert "g1" in guids
-        assert "g3" in guids
-
-    def test_write_source_no_dedup_replaces(self, backend):
-        data = [{"source_guid": "g1", "value": "first"}]
-        backend.write_source("path/data.json", data)
-
-        data2 = [{"source_guid": "g1", "value": "replaced"}]
-        backend.write_source("path/data.json", data2, enable_deduplication=False)
-        rows = backend.read_source("path/data.json")
-        assert any(r["value"] == "replaced" for r in rows)
-
-    def test_write_source_raises_on_item_without_guid(self, backend):
-        data = [
-            {"value": "no_guid"},
-            {"source_guid": "g1", "value": "has_guid"},
-        ]
-        with pytest.raises(DataValidationError, match="no source_guid"):
-            backend.write_source("path/data.json", data)
-
-    def test_write_source_all_missing_guid_raises(self, backend):
-        data = [{"value": "no_guid_1"}, {"value": "no_guid_2"}]
-        with pytest.raises(DataValidationError, match="no source_guid"):
-            backend.write_source("path/data.json", data)

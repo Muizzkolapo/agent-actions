@@ -26,6 +26,7 @@ class TestDeleteTarget:
         deleted = backend.delete_target("action_a")
 
         assert deleted == 2
+        assert backend.list_target_files("action_a") == []
         # action_b data should remain
         remaining = backend.list_target_files("action_b")
         assert remaining == ["batch_001.json"]
@@ -34,30 +35,6 @@ class TestDeleteTarget:
         """Returns 0 when no matching rows exist."""
         deleted = backend.delete_target("nonexistent_action")
         assert deleted == 0
-
-    def test_works_with_real_sqlite_backend(self, tmp_path):
-        """Full roundtrip: write, verify, delete, verify gone."""
-        db_path = tmp_path / "test.db"
-        backend = SQLiteBackend(str(db_path), "wf")
-        backend.initialize()
-
-        try:
-            data = [{"field": "value1"}, {"field": "value2"}]
-            backend.write_target("my_action", "output.json", data)
-
-            # Verify data exists
-            files = backend.list_target_files("my_action")
-            assert len(files) == 1
-
-            # Delete
-            deleted = backend.delete_target("my_action")
-            assert deleted == 1
-
-            # Verify gone
-            files = backend.list_target_files("my_action")
-            assert len(files) == 0
-        finally:
-            backend.close()
 
 
 class TestDeleteTargetFiles:

@@ -56,58 +56,6 @@ def _uuid() -> str:
 class TestLineage1To1:
     """Single record flows through sequential actions."""
 
-    def test_first_stage_record_gets_lineage_with_single_node(self):
-        """First-stage record: lineage = [node_id], no parent_target_id."""
-        guid = _uuid()
-        result = ProcessingResult.success(
-            data=[{"content": {"text": "hello"}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        context = _make_context(
-            source_data=[],
-            is_first_stage=True,
-            action_name="extract",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert item["node_id"].startswith("extract_")
-        assert item["lineage"] == [item["node_id"]]
-        assert "parent_target_id" not in item
-        assert "root_target_id" not in item
-
-    def test_second_stage_inherits_parent_lineage(self):
-        """Second-stage: lineage = [parent_node, current_node], parent_target_id set."""
-        guid = _uuid()
-        parent_node_id = f"extract_{_uuid()}"
-        parent_target_id = _uuid()
-
-        parent_item = _make_source_item(
-            source_guid=guid,
-            node_id=parent_node_id,
-            lineage=[parent_node_id],
-            target_id=parent_target_id,
-        )
-
-        result = ProcessingResult.success(
-            data=[{"content": {"text": "transformed"}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        context = _make_context(
-            source_data=[parent_item],
-            is_first_stage=False,
-            action_name="transform",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert item["node_id"].startswith("transform_")
-        assert item["lineage"] == [parent_node_id, item["node_id"]]
-        assert item["parent_target_id"] == parent_target_id
-        assert item["root_target_id"] == parent_target_id
-
     def test_three_stage_chain_builds_complete_lineage(self):
         """A -> B -> C: lineage grows by one node_id per stage."""
         guid = _uuid()
@@ -209,28 +157,6 @@ class TestLineage1To1:
 
 class TestLineage1ToN:
     """One input record splits into multiple output records."""
-
-    def test_split_records_get_unique_node_ids(self):
-        """1 input -> 3 outputs: each gets node_id_{0,1,2}."""
-        guid = _uuid()
-        result = ProcessingResult.success(
-            data=[
-                {"content": {"chunk": 0}, "source_guid": guid},
-                {"content": {"chunk": 1}, "source_guid": guid},
-                {"content": {"chunk": 2}, "source_guid": guid},
-            ],
-            source_guid=guid,
-        )
-        context = _make_context(source_data=[], is_first_stage=True, action_name="split")
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        node_ids = [item["node_id"] for item in enriched.data]
-        assert len(set(node_ids)) == 3
-        # Each should end with _0, _1, _2
-        for i, item in enumerate(enriched.data):
-            assert item["node_id"].endswith(f"_{i}")
-            assert item["node_id"].startswith("split_")
 
     def test_split_records_share_parent_target_id(self):
         """All split children point to same parent_target_id (the input's target_id)."""
@@ -370,62 +296,6 @@ class TestLineage1ToN:
 class TestLineageNTo1Merge:
     """Multiple input records merge into fewer output records."""
 
-    def test_file_mode_many_to_one_sets_lineage_sources(self):
-        """3 inputs merged via source_mapping={0: [0,1,2]}: output has lineage_sources with all 3 parent node_ids."""
-        source_items = [
-            _make_source_item(f"guid_{i}", f"flatten_{_uuid()}", target_id=_uuid())
-            for i in range(3)
-        ]
-        source_node_ids = [item["node_id"] for item in source_items]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": {"merged": True}}],
-            source_guid=None,
-            source_mapping={0: [0, 1, 2]},
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="merge_tool",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert "lineage_sources" in item
-        assert len(item["lineage_sources"]) == 3
-        for nid in source_node_ids:
-            assert nid in item["lineage_sources"]
-
-    def test_file_mode_many_to_one_lineage_uses_first_source(self):
-        """Merged output's lineage chain is built from first source item."""
-        first_node = f"extract_{_uuid()}"
-        source_items = [
-            _make_source_item("guid_0", first_node, target_id=_uuid()),
-            _make_source_item("guid_1", f"extract_{_uuid()}", target_id=_uuid()),
-            _make_source_item("guid_2", f"extract_{_uuid()}", target_id=_uuid()),
-        ]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": {"merged": True}}],
-            source_guid=None,
-            source_mapping={0: [0, 1, 2]},
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="merge_tool",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        # Lineage should be built from first source's lineage + current node
-        assert item["lineage"][0] == first_node
-        assert item["lineage"][-1] == item["node_id"]
-
     def test_file_mode_many_to_one_ancestry_from_first_source(self):
         """parent_target_id and root_target_id propagated from first source."""
         first_tid = _uuid()
@@ -500,78 +370,6 @@ class TestLineageNToMDedup:
             )
             assert item["parent_target_id"] == source_items[i]["target_id"]
 
-    def test_dedup_source_mapping_one_to_one(self):
-        """5 inputs -> 3 outputs, source_mapping={0:0, 1:2, 2:4}: each output traces to correct input."""
-        guids = [_uuid() for _ in range(5)]
-        source_items = [
-            _make_source_item(
-                guids[i],
-                f"flatten_{_uuid()}",
-                target_id=_uuid(),
-            )
-            for i in range(5)
-        ]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[
-                {"content": {"deduped": 0}, "source_guid": guids[0]},
-                {"content": {"deduped": 1}, "source_guid": guids[2]},
-                {"content": {"deduped": 2}, "source_guid": guids[4]},
-            ],
-            source_guid=None,
-            source_mapping={0: 0, 1: 2, 2: 4},
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="dedup_tool",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        # Output 0 -> input 0
-        assert source_items[0]["node_id"] in enriched.data[0]["lineage"]
-        assert enriched.data[0]["parent_target_id"] == source_items[0]["target_id"]
-        # Output 1 -> input 2
-        assert source_items[2]["node_id"] in enriched.data[1]["lineage"]
-        assert enriched.data[1]["parent_target_id"] == source_items[2]["target_id"]
-        # Output 2 -> input 4
-        assert source_items[4]["node_id"] in enriched.data[2]["lineage"]
-        assert enriched.data[2]["parent_target_id"] == source_items[4]["target_id"]
-
-    def test_dedup_without_source_mapping_falls_back_to_guid(self):
-        """FileUDFResult without source_mapping: lineage resolved by source_guid scan (backward compat)."""
-        guid_a = _uuid()
-        guid_b = _uuid()
-        node_a = f"flatten_{_uuid()}"
-        node_b = f"flatten_{_uuid()}"
-
-        source_items = [
-            _make_source_item(guid_a, node_a, target_id=_uuid()),
-            _make_source_item(guid_b, node_b, target_id=_uuid()),
-        ]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[
-                {"content": {"val": 1}, "source_guid": guid_a},
-                {"content": {"val": 2}, "source_guid": guid_b},
-            ],
-            source_guid=None,
-            source_mapping=None,  # No mapping -> fallback to source_guid scan
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="dedup_tool",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        assert node_a in enriched.data[0]["lineage"]
-        assert node_b in enriched.data[1]["lineage"]
-
     def test_dedup_output_ids_are_unique(self):
         """All dedup outputs have unique target_id and unique node_id."""
         shared_guid = "shared-guid"
@@ -636,29 +434,6 @@ class TestLineageFileMode:
         assert enriched.data[0]["source_guid"] == guid_a
         assert enriched.data[1]["source_guid"] == guid_b
 
-    def test_file_mode_node_ids_indexed(self):
-        """Multiple outputs get node_id_{0}, node_id_{1}, etc."""
-        source_items = [
-            _make_source_item(_uuid(), f"extract_{_uuid()}", target_id=_uuid()) for _ in range(3)
-        ]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": {"out": i}} for i in range(3)],
-            source_guid=None,
-            source_mapping={0: 0, 1: 1, 2: 2},
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="file_tool",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        for i, item in enumerate(enriched.data):
-            assert item["node_id"].endswith(f"_{i}")
-
     def test_file_mode_single_output_no_index_suffix(self):
         """Single output gets node_id without _{0} suffix."""
         source_item = _make_source_item(_uuid(), f"extract_{_uuid()}", target_id=_uuid())
@@ -683,31 +458,6 @@ class TestLineageFileMode:
         # The node_id is just "file_tool_{uuid}" without an extra _0
         assert not node_id.endswith("_0")
 
-    def test_file_mode_parent_lookup_uses_correct_input(self):
-        """With 3 different source_guids, each output links to its own parent."""
-        guids = [_uuid() for _ in range(3)]
-        source_items = [
-            _make_source_item(guids[i], f"extract_{_uuid()}", target_id=_uuid()) for i in range(3)
-        ]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": {"out": i}, "source_guid": guids[i]} for i in range(3)],
-            source_guid=None,
-            source_mapping={0: 0, 1: 1, 2: 2},
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="file_tool",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        for i in range(3):
-            assert enriched.data[i]["parent_target_id"] == source_items[i]["target_id"]
-            assert source_items[i]["node_id"] in enriched.data[i]["lineage"]
-
 
 class TestLineageHitlFileMode:
     """HITL FILE-mode lineage integrity.
@@ -716,56 +466,6 @@ class TestLineageHitlFileMode:
     The identity source_mapping must cause the enricher to extend lineage
     from the parent record rather than truncating to [node_id].
     """
-
-    def test_hitl_file_mode_extends_parent_lineage(self):
-        """HITL output should contain parent lineage + HITL node_id."""
-        guid_a = _uuid()
-        guid_b = _uuid()
-        parent_node_a = f"extract_{_uuid()}"
-        parent_node_b = f"extract_{_uuid()}"
-        # Simulate upstream records with deep lineage chains
-        ancestor_node = f"ingest_{_uuid()}"
-        source_items = [
-            _make_source_item(
-                guid_a,
-                parent_node_a,
-                lineage=[ancestor_node, parent_node_a],
-                target_id=_uuid(),
-            ),
-            _make_source_item(
-                guid_b,
-                parent_node_b,
-                lineage=[ancestor_node, parent_node_b],
-                target_id=_uuid(),
-            ),
-        ]
-
-        # HITL output: 1:1 identity mapping (same as HITLStrategy builds)
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[
-                {"content": {"hitl_status": "approved"}, "source_guid": guid_a},
-                {"content": {"hitl_status": "rejected"}, "source_guid": guid_b},
-            ],
-            source_guid=None,
-            source_mapping={0: 0, 1: 1},
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="review_data",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        for i in range(2):
-            lineage = enriched.data[i]["lineage"]
-            # Lineage must include ALL ancestors plus the new HITL node_id
-            assert ancestor_node in lineage, "Ancestor node lost from lineage"
-            assert source_items[i]["node_id"] in lineage, "Parent node lost from lineage"
-            assert enriched.data[i]["node_id"] in lineage, "HITL node_id not appended"
-            # Parent ancestry preserved
-            assert enriched.data[i]["parent_target_id"] == source_items[i]["target_id"]
 
     def test_hitl_file_mode_single_record_no_index_suffix(self):
         """Single HITL output gets node_id without _0 suffix."""
@@ -792,37 +492,6 @@ class TestLineageHitlFileMode:
         assert not node_id.endswith("_0")
         assert parent_node in enriched.data[0]["lineage"]
         assert node_id in enriched.data[0]["lineage"]
-
-    def test_hitl_file_mode_without_source_mapping_truncates(self):
-        """Without source_mapping, HITL lineage falls back to per-item lookup.
-
-        This test documents the bug: when source_mapping is missing and
-        source_guid lookup fails, lineage is truncated to just [node_id].
-        """
-        guid = _uuid()
-        parent_node = f"extract_{_uuid()}"
-        # Source item has a DIFFERENT source_guid than the output — simulates
-        # the case where source_guid gets corrupted or overwritten.
-        source_item = _make_source_item(_uuid(), parent_node, target_id=_uuid())
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": {"hitl_status": "approved"}, "source_guid": guid}],
-            source_guid=None,
-            # NO source_mapping — this is the bug condition
-        )
-        context = _make_context(
-            source_data=[source_item],
-            is_first_stage=False,
-            action_name="review_data",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        # Without source_mapping AND mismatched source_guid, lineage is truncated
-        lineage = enriched.data[0]["lineage"]
-        assert parent_node not in lineage, "Parent should be lost without source_mapping"
-        assert len(lineage) == 1, "Lineage should be truncated to just [node_id]"
 
 
 class TestLineageVersionParallel:
@@ -973,69 +642,6 @@ class TestLineageVersionParallel:
 
 class TestLineageEdgeCases:
     """Edge cases and error handling."""
-
-    def test_missing_parent_item_produces_root_lineage(self):
-        """No parent -> lineage = [node_id], no parent_target_id."""
-        guid = _uuid()
-        result = ProcessingResult.success(
-            data=[{"content": {"text": "orphan"}, "source_guid": guid}],
-            source_guid=guid,
-        )
-        # is_first_stage=True means no parent lookup
-        context = _make_context(
-            source_data=[],
-            is_first_stage=True,
-            action_name="extract",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        assert item["lineage"] == [item["node_id"]]
-        assert "parent_target_id" not in item
-        assert "root_target_id" not in item
-
-    def test_filtered_result_bypasses_enrichment(self):
-        """FILTERED status: enrichment skipped, no lineage fields added."""
-        result = ProcessingResult.filtered(source_guid=_uuid())
-
-        context = _make_context(
-            source_data=[],
-            is_first_stage=True,
-            action_name="extract",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        assert enriched.status == ProcessingStatus.FILTERED
-        assert enriched.data == []
-        assert enriched.node_id is None
-
-    def test_out_of_bounds_source_mapping_produces_root_lineage(self):
-        """source_mapping pointing beyond source_data: parent_item=None, root lineage produced."""
-        source_items = [
-            _make_source_item(_uuid(), f"extract_{_uuid()}", target_id=_uuid()),
-        ]
-
-        result = ProcessingResult(
-            status=ProcessingStatus.SUCCESS,
-            data=[{"content": {"val": 1}}],
-            source_guid=None,
-            source_mapping={0: 99},  # Out of bounds
-        )
-        context = _make_context(
-            source_data=source_items,
-            is_first_stage=False,
-            action_name="tool_action",
-        )
-
-        enriched = LineageEnricher().enrich(result, context)
-
-        item = enriched.data[0]
-        # Out-of-bounds index -> parent_item=None -> root lineage
-        assert item["lineage"] == [item["node_id"]]
-        assert "parent_target_id" not in item
-        assert item["node_id"].startswith("tool_action_")
 
     def test_source_guid_empty_string_treated_as_none(self):
         """Empty string source_guid normalized to None."""

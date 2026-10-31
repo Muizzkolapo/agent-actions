@@ -636,12 +636,6 @@ class TestARecoveryEntryThatOutlivedItsStateIsDropped:
         assert CHILD not in manager.get_all_jobs(), "a state-less entry blocks its parent forever"
         assert PARENT in manager.get_all_jobs()
 
-    def test_the_parent_is_processable_once_the_entry_is_gone(self):
-        """The point of dropping it: the next pass makes progress."""
-        manager = _registry({PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT)})
-
-        assert _run(_service(manager)) == ["batch_parent"]
-
 
 class TestTheRankingIsNotDecidedByDigitOrdering:
     def test_attempt_10_beats_attempt_9_on_equal_timestamps(self):
@@ -758,14 +752,3 @@ class TestTheSkipDoesNotDependOnRegistryKeyOrder:
             return "/out/done.json"
 
         assert _run(_service(manager), on_process=finalize_and_clean) == ["batch_child"]
-
-    def test_a_parent_listed_first_is_unaffected(self):
-        """The reachable ordering keeps working."""
-        manager = _registry(
-            {
-                PARENT: _entry("batch_parent", BatchStatus.COMPLETED, PARENT),
-                CHILD: _child("batch_child"),
-            }
-        )
-
-        assert _run(_service(manager)) == ["batch_child"]

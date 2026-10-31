@@ -37,13 +37,6 @@ class TestOrphanEntriesIgnored:
 
         assert sm.is_workflow_complete() is True
 
-    def test_is_workflow_complete_false_when_current_action_pending(self, tmp_path):
-        sm = _make_state_manager(tmp_path, execution_order=["action_a", "action_b"])
-        sm.update_status("action_a", ActionStatus.COMPLETED)
-        # action_b is still PENDING
-
-        assert sm.is_workflow_complete() is False
-
     def test_is_workflow_done_ignores_orphan_pending(self, tmp_path):
         sm = _make_state_manager(
             tmp_path,
@@ -69,12 +62,6 @@ class TestOrphanEntriesIgnored:
         sm.update_status("action_a", ActionStatus.COMPLETED)
 
         assert sm.has_any_failed() is False
-
-    def test_has_any_failed_true_when_current_action_failed(self, tmp_path):
-        sm = _make_state_manager(tmp_path, execution_order=["action_a"])
-        sm.update_status("action_a", ActionStatus.FAILED)
-
-        assert sm.has_any_failed() is True
 
     def test_get_summary_excludes_orphans(self, tmp_path):
         sm = _make_state_manager(

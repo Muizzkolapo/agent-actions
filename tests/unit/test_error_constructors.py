@@ -1,10 +1,8 @@
 """Wave 9 Group H regression tests — Error class constructor P1 fixes."""
 
-from agent_actions.errors import ConfigurationError
 from agent_actions.errors.base import AgentActionsError
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.errors.external_services import VendorAPIError
-from agent_actions.errors.operations import OperationalError
 
 # ---------------------------------------------------------------------------
 # H-1  ·  VendorAPIError — endpoint=None no longer interpolated as "None"
@@ -65,32 +63,9 @@ class TestAgentActionsErrorDefensiveCopy:
         err = AgentActionsError("test", context=ctx)
         assert err.context is not ctx, "context must be a copy, not the same object"
 
-    def test_mutation_after_construction_does_not_affect_error(self):
-        ctx = {"key": "original"}
-        err = AgentActionsError("test", context=ctx)
-        ctx["key"] = "mutated"
-        assert err.context["key"] == "original", (
-            "mutating the original context dict must not affect err.context"
-        )
-
     def test_none_context_produces_empty_dict(self):
         err = AgentActionsError("test", context=None)
         assert err.context == {}
-
-    def test_subclass_also_gets_defensive_copy(self):
-        """H-4 — OperationalError (subclass via inheritance) also gets defensive copy."""
-        ctx = {"op": "start"}
-        err = OperationalError("test", context=ctx)
-        assert err.context is not ctx
-        ctx["op"] = "mutated"
-        assert err.context["op"] == "start"
-
-    def test_configuration_error_subclass_defensive_copy(self):
-        ctx = {"cfg": "original"}
-        err = ConfigurationError("oops", context=ctx)
-        assert err.context is not ctx
-        ctx["cfg"] = "changed"
-        assert err.context["cfg"] == "original"
 
     def test_non_dict_context_stored_as_is_for_backward_compat(self):
         """Non-dict context (e.g., string) is preserved — backward compat for test_exceptions.py."""

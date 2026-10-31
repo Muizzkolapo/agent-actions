@@ -197,12 +197,6 @@ class TestTheVersionsBlockIsRefusedWhereItIsRead:
         assert "items_from" in message
         assert "valid versions keys are param, range" in message
 
-    def test_a_block_with_no_range_expands_to_one_version(self, tmp_path):
-        """`range` carries the default the expansion already applied."""
-        rendered = _render(tmp_path, _workflow(actions=[_action(versions={"param": "round"})]))
-
-        assert [a["name"] for a in rendered["actions"]] == ["a1_1"]
-
 
 class TestVersionModeOnAnActionIsRefused:
     def test_the_action_surface_refuses_it(self):

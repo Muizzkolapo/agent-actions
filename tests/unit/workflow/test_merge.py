@@ -218,31 +218,6 @@ class TestParallelBranchLineageSources:
 
         assert existing["lineage_sources"] == ["action_g_456", "action_e_123"]
 
-    def test_merge_records_by_key_populates_lineage_sources(self):
-        """End-to-end: merge_records_by_key sets lineage_sources for parallel branch records."""
-        records = [
-            {
-                "source_guid": "book-001",
-                "node_id": "branch_a_001",
-                "lineage": ["root_0", "branch_a_001"],
-                "content": {"field_a": "A"},
-            },
-            {
-                "source_guid": "book-001",
-                "node_id": "branch_b_002",
-                "lineage": ["root_0", "branch_b_002"],
-                "content": {"field_b": "B"},
-            },
-        ]
-
-        result = merge_records_by_key(records)
-
-        assert len(result) == 1
-        merged = result[0]
-        assert merged["lineage_sources"] == ["branch_a_001", "branch_b_002"]
-        assert "branch_a_001" in merged["lineage"]
-        assert "branch_b_002" in merged["lineage"]
-
     def test_merge_json_files_populates_lineage_sources(self):
         """End-to-end: merge_json_files from parallel branches sets lineage_sources."""
         with TemporaryDirectory() as tmpdir:

@@ -523,28 +523,3 @@ class TestFileToolSnapshot:
             assert result.status == ProcessingStatus.FAILED
             assert result.source_snapshot is not None
             assert result.source_snapshot["source_guid"] == records[i]["source_guid"]
-
-    def test_failed_result_single_record_snapshot(self):
-        """Single-record failure captures that record's snapshot."""
-        from agent_actions.processing.strategies.file_tool import FileToolStrategy
-
-        strategy = FileToolStrategy()
-        records = [{"source_guid": "sg-single", "content": {}}]
-        context = MagicMock()
-        context.agent_name = "my_tool"
-        context.source_data = records
-        context.agent_config = {"context_scope": {}}
-
-        with (
-            patch(
-                "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-                return_value=([], True),
-            ),
-            patch(
-                "agent_actions.processing.strategies.file_tool.is_empty_response",
-                return_value=True,
-            ),
-        ):
-            results = strategy.invoke(records, context)
-
-        assert results[0].source_snapshot is not None
