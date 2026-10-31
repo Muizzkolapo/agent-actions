@@ -452,7 +452,8 @@ retry plans over, which a dry run reads with an interrupted retry's snapshot put
 
 Costs and limits:
 
-- A prompt change at the top of a long workflow re-answers everything below it.
+- `--rerun` at the top of a long workflow re-answers everything below it. A prompt
+  change alone re-answers nothing.
 - A limit counts as a change. `--record-limit` on a run resets the actions whose records
   it can reach and their readers, giving up a batch still out below and clearing a halt.
 - A reset does not delete stored rows; the re-run replaces them as it writes each file. A
@@ -841,7 +842,7 @@ Stamped beside it, each compared on its own (_edits_since):
     dependencies_hash    (_compute_dependencies_hash: in declared order)
 
 Never add a key to _compute_action_config_hash: every stored digest would
-change and every completed action of every workflow would re-run once.
+change and every completed action of every workflow would be named as edited.
 Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
 
 If you change one of these fields and re-run WITHOUT --fresh:

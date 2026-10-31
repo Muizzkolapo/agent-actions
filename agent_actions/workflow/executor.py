@@ -202,7 +202,7 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     """
     edits: list[str] = []
     # The hash reads a "model" key and configs write model_name/model_vendor; adding
-    # them would change every stored digest and re-run every workflow.
+    # them would change every stored digest and name an edit at every completed action.
     if any(
         stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
         for key in ("model_name", "model_vendor")
@@ -678,11 +678,15 @@ class ActionExecutor:
                 else "a cap recorded by the run that completed it"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
+            mixed_before = bool(edits) or bool(details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG))
             if edits:
                 self._warn_of_output_beyond_a_file_limit(
                     action_name, action_config, f"an edit ({', '.join(edits)})"
                 )
             self.reopen_with_readers(action_name)
+            if mixed_before and file_limit is not None:
+                # The files the walk does not reach keep the answers of the other config.
+                self.deps.state_manager.mark_mixed_answers([action_name])
             return ActionStatus.PENDING
         if edits:
             logger.warning(
@@ -707,14 +711,29 @@ class ActionExecutor:
 
         Returns the names put back, each once.
         """
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        names = list(action_names)
+        mixed_before = set()
+        for name in [*names, *(r for n in names for r in self._stale_readers(n))]:
+            details = self.deps.state_manager.get_status_details(name)
+            if name in configs and (
+                _edits_since(details, configs[name])
+                or details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG)
+            ):
+                mixed_before.add(name)
         reopened: list[str] = []
-        for name in action_names:
+        for name in names:
             reopened += self.reopen_with_readers(name)
         reopened = list(dict.fromkeys(reopened))
-        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        still_mixed = []
         for name in reopened:
             if name in configs:
                 self._warn_of_output_beyond_a_file_limit(name, configs[name], "--rerun")
+                if name in mixed_before and resolve_file_limit(configs[name])[0] is not None:
+                    still_mixed.append(name)
+        if still_mixed:
+            # The files the walk does not reach keep the answers of the other config.
+            self.deps.state_manager.mark_mixed_answers(still_mixed)
         return reopened
 
     @staticmethod
@@ -2254,12 +2273,19 @@ class ActionExecutor:
     def _start_work(self, params: ActionRunParams) -> None:
         """Set the action running, recording what the work it starts is answered under."""
         self._clear_stale_node_disposition(params.action_name)
+        answered_under = self._answered_under(params.action_name, params.action_config)
+        details = self.deps.state_manager.get_status_details(params.action_name)
+        # Resuming beside answers kept from another config: what this run answers mixes in.
+        mixed = isinstance(details.get(KEPT_ANSWERS_UNDER), dict) and bool(
+            _edits_since(answered_under, params.action_config)
+        )
         self.deps.state_manager.update_status(
             params.action_name,
             ActionStatus.RUNNING,
             **{
-                ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config),
+                ANSWERED_UNDER: answered_under,
                 INPUT_AT_START: self._staged_input(params.action_name, params.action_config),
+                **({ANSWERS_UNDER_MORE_THAN_ONE_CONFIG: True} if mixed else {}),
             },
         )
         self._track_action_start(params)

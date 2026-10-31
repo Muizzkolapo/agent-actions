@@ -244,3 +244,69 @@ def test_an_edit_while_the_batch_is_out_is_named_by_the_run_that_collects_it(pro
     result = _run()
 
     assert STILL_NAMED in _printed(result)
+
+
+MIXED = f"{ACTION} holds answers given under more than one config"
+
+
+def _set_model(root, model):
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    text = config.read_text()
+    for old in (MODEL, EDITED_MODEL):
+        text = text.replace(f"model_name: {old}", f"model_name: {model}")
+    config.write_text(text)
+
+
+def test_an_edit_reverted_while_the_resumed_action_is_still_unfinished_is_still_named(
+    online,  # noqa: F811
+    provider,  # noqa: F811
+):
+    provider.stops(at_call=2, raising=KeyboardInterrupt())
+    _run("--fresh")
+    _set_model(online, EDITED_MODEL)
+    provider.stops(at_call=2, raising=KeyboardInterrupt())
+    _run()
+    assert provider.asked[0] == ("Page beta.", EDITED_MODEL)
+    _set_model(online, MODEL)
+    provider.answers()
+    assert _run().exit_code == 0
+    assert _status(online) == "completed"
+    provider.answers()
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert MIXED in _printed(result)
+
+
+def test_a_reset_under_a_file_limit_after_an_edit_names_the_answers_it_left(online):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    _edit_model(online, EDITED_MODEL)
+    assert _run("--file-limit", "1").exit_code == 0
+
+    result = _run("--file-limit", "1")
+
+    assert result.exit_code == 0, result.output
+    assert MIXED in _printed(result)
+
+
+def test_a_reset_under_a_file_limit_with_no_edit_names_no_mix(online):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    assert _run("--file-limit", "1").exit_code == 0
+
+    result = _run("--file-limit", "1")
+
+    assert result.exit_code == 0, result.output
+    assert "more than one config" not in _printed(result)
+
+
+def test_a_rerun_of_an_action_whose_batch_is_out_does_not_say_it_is_collected(project):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    assert _status(project) == "batch_submitted"
+    _edit_model(project, EDITED_MODEL)
+
+    result = _run("--rerun", ACTION)
+
+    assert result.exit_code == 0, result.output
+    assert "collected as it was sent" not in _printed(result)
+    assert f"--rerun: {ACTION}" in _printed(result)

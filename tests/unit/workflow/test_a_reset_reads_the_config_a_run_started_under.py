@@ -366,3 +366,25 @@ def test_an_edited_stopped_action_and_its_readers_keep_their_prompt_traces_until
     _next_run_resets(tmp_path, backend, edited, rerun="define")
 
     assert [backend.get_prompt_traces(action) for action in ORDER] == [[], []]
+
+
+def test_an_edited_stopped_action_that_keeps_answers_is_marked_as_kept(tmp_path, backend):
+    _stopped(tmp_path, backend, _Killed())
+
+    state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+
+    assert "kept_answers_under" in state.get_status_details("define")
+
+
+def test_an_action_cleared_in_bulk_drops_the_marker_of_answers_it_no_longer_holds(
+    tmp_path, backend
+):
+    _stopped(tmp_path, backend, _Killed())
+    state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+    assert "kept_answers_under" in state.get_status_details("define")
+    state.update_status("define", ActionStatus.SKIPPED)
+
+    state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+
+    assert _held(backend) == {}
+    assert "kept_answers_under" not in state.get_status_details("define")

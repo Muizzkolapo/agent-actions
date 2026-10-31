@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -125,9 +125,19 @@ class AgentWorkflow:
         if self.config.fresh:
             self._clear_for_fresh_run()
             return
-        self._reset_retryable_actions()
         if self.config.rerun is None:
+            self._reset_retryable_actions()
             return
+        # A batch out at an action --rerun resets is given up, not collected: name no edit
+        # as collected as sent.
+        executor = self.services.core.action_executor
+        self._reset_retryable_actions(
+            {
+                reset
+                for name in self._rerun_actions()
+                for reset in (name, *executor._stale_readers(name))
+            }
+        )
         reopened = self.services.core.action_executor.rerun(self._rerun_actions())
         logger.info("--rerun: %s answer every record again", ", ".join(reopened))
 
@@ -247,7 +257,7 @@ class AgentWorkflow:
             ]
         )
 
-    def _reset_retryable_actions(self) -> None:
+    def _reset_retryable_actions(self, about_to_rerun: Container[str] = ()) -> None:
         """Put failed, skipped and stopped actions back to pending so this run retries them.
 
         An action whose run stopped partway (killed, interrupted, or stopped by an error)
@@ -276,7 +286,8 @@ class AgentWorkflow:
         for name in state_mgr.execution_order:
             status = state_mgr.get_status(name)
             if status == ActionStatus.BATCH_SUBMITTED:
-                self._name_an_edit_under_a_batch_out(name)
+                if name not in about_to_rerun:
+                    self._name_an_edit_under_a_batch_out(name)
                 continue
             if status not in stopped_partway or name in halted:
                 continue
@@ -306,6 +317,8 @@ class AgentWorkflow:
         reset_actions = state_mgr.reset_retryable(exclude=halted)
         if not reset_actions:
             return
+        # Cleared in bulk, these answer every record again: no answer of another config stays.
+        state_mgr.forget_mixed_answers(name for name in reset_actions if name not in keeps)
         for action_name in reset_actions:
             try:
                 if action_name in keeps:

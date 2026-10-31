@@ -203,6 +203,22 @@ class ActionStateManager:
                 details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
             self._save_status()
 
+    def forget_mixed_answers(self, action_names: Iterable[str]) -> None:
+        """Drop the markers of answers kept from another config: none of them remains."""
+        with self._lock:
+            for name in action_names:
+                details = self.action_status.get(name, {})
+                details.pop(KEPT_ANSWERS_UNDER, None)
+                details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
+            self._save_status()
+
+    def mark_mixed_answers(self, action_names: Iterable[str]) -> None:
+        """Record that these actions hold answers given under more than one config."""
+        with self._lock:
+            for name in action_names:
+                self.action_status.setdefault(name, {})[ANSWERS_UNDER_MORE_THAN_ONE_CONFIG] = True
+            self._save_status()
+
     def is_completed(self, action_name: str) -> bool:
         """Return True if action completed (including partial failures)."""
         return self.get_status(action_name) in COMPLETED_STATUSES

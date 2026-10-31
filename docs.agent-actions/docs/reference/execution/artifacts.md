@@ -108,7 +108,7 @@ the run actually did rather than what it was asked for, and `model_name`,
 reads has digests of its own: `context_scope_hash` over its `context_scope` (observe,
 passthrough, drop and seed) and `dependencies_hash` over its `dependencies`. The model
 and these two are deliberately outside `config_hash`, so adding them could not rotate
-every stored digest at once and run every completed action again after an upgrade.
+every stored digest at once and name every completed action as edited after an upgrade.
 
 These are what count as an edit to a completed action: its prompt, schema, guard,
 model, context scope or dependencies. An edit re-runs nothing: the action keeps its

@@ -91,8 +91,9 @@ not a fresh smaller copy of it: it is the earlier output with the walked files r
 usually what you want for a quick pass. Pass `--fresh` when the whole output has to come from
 one run.
 
-A workflow that has completed is skipped on the next run unless something it ran under
-changed. Staged input counts: adding, removing or changing a file under the first stage's
+A workflow that has completed is skipped on the next run unless its limits or its staged
+input changed (a config edit re-runs nothing; see
+[When you edit the workflow](#when-you-edit-the-workflow)). Staged input counts: adding, removing or changing a file under the first stage's
 input re-runs that action and every action reading it over all input, and the run log names
 the files that changed. `--fresh` is not needed to pick up new input.
 
