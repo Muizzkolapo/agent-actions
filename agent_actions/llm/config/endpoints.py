@@ -109,7 +109,10 @@ def parse_endpoints(raw: Any) -> dict[str, Endpoint]:
         _refuse("endpoints", "must be a mapping of endpoint name to its settings")
     for name in raw:
         if not isinstance(name, str):
-            _refuse("endpoints", f"an endpoint name must be text; quote it, for example '{name}'")
+            spelling = _yaml_spelling(name)
+            _refuse(
+                "endpoints", f"an endpoint name must be text; quote it, for example '{spelling}'"
+            )
     return {name: _parse_endpoint(name, settings) for name, settings in raw.items()}
 
 
@@ -219,7 +222,16 @@ def _refuse_non_string_keys(key: str, mapping: Mapping[Any, Any]) -> None:
     # Before pydantic sees the mapping: it reports a non-string key coerced (True as 1).
     for name in mapping:
         if not isinstance(name, str):
-            _refuse(key, f"unknown key '{name}'")
+            _refuse(key, f"unknown key '{_yaml_spelling(name)}'")
+
+
+def _yaml_spelling(value: Any) -> str:
+    """A non-string YAML key as the user wrote it, not as Python spells it."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
 
 
 def _refuse_pydantic(key: str, exc: ValidationError) -> NoReturn:
