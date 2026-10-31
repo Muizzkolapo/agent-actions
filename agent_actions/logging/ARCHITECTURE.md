@@ -299,7 +299,7 @@ Standalone function in `filters.py` used by code that builds event data dicts di
 - Dict keys matching: `api_key`, `key`, `token`, `password`, `secret`, `authorization`
 - String values matching vendor key regex patterns
 
-Both layers use the same regex patterns and the same registered values but operate at different stages -- Layer 1 on stdlib LogRecords, Layer 2 on event data dicts before they reach handlers, and on a vendor SDK's error text in `wrap_vendor_error` before it becomes a record reason.
+Both layers mask the same registered values, each with its own pattern set, and operate at different stages -- Layer 1 on stdlib LogRecords, Layer 2 on event data dicts before they reach handlers, and on a vendor SDK's error text in `wrap_vendor_error` before it becomes a record reason.
 
 ---
 

@@ -232,7 +232,7 @@ def _secret(endpoint: Endpoint) -> str:
     auth = endpoint.auth
     assert auth is not None
     if auth.env is not None:
-        value = os.environ.get(auth.env, "")
+        value = _header_safe(endpoint, os.environ.get(auth.env, ""), f"reads {auth.env}")
         if not value:
             _refuse(endpoint, f"reads {auth.env}, which is not set")
         register_secret(value)
@@ -279,7 +279,9 @@ def clear_command_secrets() -> None:
 def _resolve_header(endpoint: Endpoint, header: str, value: str) -> str:
     def substitute(match: re.Match[str]) -> str:
         variable = match.group(1)
-        resolved = os.environ.get(variable, "")
+        resolved = _header_safe(
+            endpoint, os.environ.get(variable, ""), f"reads {variable} for header {header}"
+        )
         if not resolved:
             _refuse(endpoint, f"reads {variable} for header {header}, which is not set")
         # A region or an API version read from a variable is not a secret to mask;
@@ -289,6 +291,14 @@ def _resolve_header(endpoint: Endpoint, header: str, value: str) -> str:
         return resolved
 
     return _HEADER_ENV_VAR.sub(substitute, value)
+
+
+def _header_safe(endpoint: Endpoint, value: str, subject: str) -> str:
+    """The value as a header can carry it: trimmed, and never with a line break inside."""
+    value = value.strip()
+    if "\n" in value or "\r" in value:
+        _refuse(endpoint, f"{subject}, whose value holds a line break")
+    return value
 
 
 def _refuse(endpoint: Endpoint, text: str) -> NoReturn:

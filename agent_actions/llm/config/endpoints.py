@@ -29,6 +29,8 @@ _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _ENV_VAR_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _WHOLE_ENV_VAR = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 _CREDENTIAL_WORDS = ("authorization", "key", "token", "secret")
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")
+_HEADER_NAME_HINT = "must be a header name: letters, digits and - _ ."
 _CHAT_COMPLETIONS = "/chat/completions"
 _URL_HINT = f"give the base URL, for example http://gpu-box:8000/v1; agac adds {_CHAT_COMPLETIONS}"
 _ENV_HINT = "name the environment variable that holds the credential, for example AZURE_OPENAI_KEY"
@@ -136,6 +138,9 @@ def _parse_endpoint(name: str, settings: Any) -> Endpoint:
         _refuse_non_string_keys(f"{key}.headers", headers)
         if any(not header for header in headers):
             _refuse(f"{key}.headers", "a header name must not be empty")
+        for header in headers:
+            if not _HEADER_NAME.match(header):
+                _refuse(f"{key}.headers.{header}", _HEADER_NAME_HINT)
 
     fields = {**settings, "name": name, "auth": _parse_auth(f"{key}.auth", settings["auth"])}
     try:
@@ -169,8 +174,8 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
 
     if (auth.env is None) == (auth.command is None):
         _refuse(key, "give exactly one of env or command, or write 'auth: none'")
-    if not auth.header.strip():
-        _refuse(f"{key}.header", "must be a header name")
+    if not _HEADER_NAME.match(auth.header):
+        _refuse(f"{key}.header", _HEADER_NAME_HINT)
     if auth.refresh_seconds is not None and auth.command is None:
         _refuse(key, "refresh_seconds applies to command auth only")
 
