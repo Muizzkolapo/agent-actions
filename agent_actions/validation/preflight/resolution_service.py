@@ -142,7 +142,7 @@ def _endpoint_environment_errors(
                 _endpoint_error(
                     action_name,
                     "model_vendor",
-                    f"{subject} reads its url from {variable}, which {rule}",
+                    f"{subject} reads its url from {variable}: {rule}",
                     f"Fix the value of {variable}: it is the base URL, for example "
                     "http://gpu-box:8000/v1.",
                 )
