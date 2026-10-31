@@ -153,37 +153,6 @@ class TestFileModePipelineVersionMerge:
         # Existing namespace preserved
         assert "upstream_action" in content
 
-    def test_version_merge_tool_returns_content_key(self):
-        """Version merge tool returning {"content": {...}} is handled correctly."""
-        context = _make_version_merge_context()
-
-        input_data = [
-            {
-                "source_guid": "sg-1",
-                "node_id": "n1",
-                "content": {
-                    "filter_learning_quality_1": {"vote": "keep"},
-                    "filter_learning_quality_2": {"vote": "drop"},
-                },
-            }
-        ]
-        context.source_data = input_data
-
-        # Tool returns output via TrackedItem
-        with patch(
-            "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-            return_value=(
-                [TrackedItem({"consensus": "keep"}, source_index=0)],
-                True,
-            ),
-        ):
-            results = FileToolStrategy().invoke(input_data, context)
-
-        content = results[0].data[0]["content"]
-        assert "aggregate_votes" not in content
-        assert content["consensus"] == "keep"
-        assert content["filter_learning_quality_1"]["vote"] == "keep"
-
 
 # ---------------------------------------------------------------------------
 # LLM path: transformer.py

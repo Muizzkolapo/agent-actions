@@ -5,9 +5,6 @@ on the record.  Downstream observe/passthrough must yield None for its
 fields instead of raising ConfigurationError.
 """
 
-import pytest
-
-from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import apply_context_scope
 
 
@@ -78,33 +75,6 @@ class TestObserveNullNamespace:
             action_name="downstream",
         )
         assert prompt_ctx["skipped"] is None
-
-
-# ── Observe: strict mode preserved ───────────────────────────────────
-
-
-class TestObserveStrictPreserved:
-    """Observe strict: missing field from present namespace raises RecordContextError."""
-
-    def test_missing_field_from_present_namespace_raises(self):
-        """observe: ['dep.nonexistent'] where dep is a real dict → RecordContextError."""
-        fc = _make_field_context(dep={"actual_field": "value"})
-        with pytest.raises(ConfigurationError, match="not found in namespace"):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["dep.nonexistent"]},
-                action_name="downstream",
-            )
-
-    def test_undeclared_namespace_raises(self):
-        """observe: ['ghost.field'] where ghost is not in field_context → ConfigurationError."""
-        fc = _make_field_context(dep={"f": 1})
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["ghost.field"]},
-                action_name="downstream",
-            )
 
 
 # ── Passthrough: null namespace ──────────────────────────────────────

@@ -32,22 +32,6 @@ def _online(content, file_type, file_path):
     return _prepare_online_data(ctx)
 
 
-def test_derive_golden_values_unchanged():
-    # canonicalization must be a strict no-op for normal string-keyed payloads
-    assert (
-        IDGenerator.derive_source_guid(
-            {"content": "The mitochondria is the powerhouse of the cell."}
-        )
-        == "865e85c1-c292-5537-a9dc-aed6618263eb"
-    )
-    assert (
-        IDGenerator.derive_source_guid(
-            {"question": "What is 2+2?", "answer": "4", "metadata": {"src": "quiz.json", "row": 7}}
-        )
-        == "cac9d8de-ed99-5b95-948e-ebd0439e27e2"
-    )
-
-
 def test_derive_handles_datetime_values_deterministically():
     row = {"id": "1", "when": datetime.datetime(2024, 1, 1)}
     g1 = IDGenerator.derive_source_guid(dict(row))

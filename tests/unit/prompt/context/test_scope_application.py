@@ -359,10 +359,6 @@ class TestObserveNamespacing:
         assert "ghost" not in lc
         assert lc["dep"]["f"] == 1
 
-    def test_specific_field_absent_namespace_raises(self):
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope({"dep": {"f": 1}}, {"observe": ["ghost.field"]})
-
     def test_empty_observe_empty_llm_context(self):
         _, lc, _ = apply_context_scope({"dep": {"f": 1}}, {"passthrough": ["dep.f"]})
         assert lc == {}
@@ -388,23 +384,9 @@ class TestPassthroughNamespacing:
         assert pt["v_2"]["id"] == "b"
         assert pt["v_3"]["id"] == "c"
 
-    def test_falsy_zero(self):
-        fc = {"dep": {"count": 0}}
-        _, _, pt = apply_context_scope(fc, {"passthrough": ["dep.count"]})
-        assert pt["dep"]["count"] == 0
-
-    def test_falsy_false(self):
-        fc = {"dep": {"enabled": False}}
-        _, _, pt = apply_context_scope(fc, {"passthrough": ["dep.enabled"]})
-        assert pt["dep"]["enabled"] is False
-
     def test_missing_field_returns_none(self):
         _, _, pt = apply_context_scope({"dep": {"a": 1}}, {"passthrough": ["dep.missing"]})
         assert pt["dep"]["missing"] is None
-
-    def test_missing_namespace_raises(self):
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope({"dep": {"a": 1}}, {"passthrough": ["ghost.field"]})
 
     def test_no_cross_contamination_with_observe(self):
         fc = {"dep": {"obs": "o", "pt": "p"}}

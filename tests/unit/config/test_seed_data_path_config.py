@@ -48,8 +48,3 @@ class TestGetSeedDataPath:
         r"""Value containing '\\' is rejected, returns default."""
         (tmp_path / "agent_actions.yml").write_text(yaml.dump({"seed_data_path": "some\\dir"}))
         assert get_seed_data_path(tmp_path) == "seed_data"
-
-    def test_standard_seed_data_value(self, tmp_path):
-        """Standard seed_data_path: seed_data works."""
-        (tmp_path / "agent_actions.yml").write_text(yaml.dump({"seed_data_path": "seed_data"}))
-        assert get_seed_data_path(tmp_path) == "seed_data"

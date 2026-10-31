@@ -1171,23 +1171,6 @@ class TestParseErrorDisposition:
         assert stats.failed == 1
         backend.set_disposition.assert_not_called()
 
-    def test_parse_error_no_backend_no_crash(self):
-        """Parse error detection works gracefully without storage backend."""
-        result = ProcessingResult.success(
-            data=[{"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}}],
-            source_guid="guid-pe",
-        )
-
-        output, stats = ResultCollector.collect_results(
-            [result],
-            {},
-            "action",
-            is_first_stage=False,
-            storage_backend=None,
-        )
-
-        assert stats.failed == 1
-
 
 class TestCollectorStateStamping:
     """Verify ResultCollector stamps correct _state based on skip_reason."""

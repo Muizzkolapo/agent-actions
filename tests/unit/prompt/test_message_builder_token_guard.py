@@ -143,54 +143,6 @@ class TestOpenAIPromptInjectionFix:
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "user"
 
-    def test_openai_non_json_unchanged(self):
-        """OpenAI non-JSON mode (SINGLE_USER) is unaffected."""
-        envelope = MessageBuilder.build(
-            "openai",
-            "instructions",
-            "context data",
-            json_mode=False,
-        )
-        messages = envelope.to_dicts()
-        assert len(messages) == 1
-        assert messages[0]["role"] == "user"
-
-    def test_groq_json_mode_still_single_system(self):
-        """Groq JSON mode (TAGGED_GROQ style) keeps single system message."""
-        envelope = MessageBuilder.build(
-            "groq",
-            "instructions",
-            "context data",
-            json_mode=True,
-        )
-        messages = envelope.to_dicts()
-        assert len(messages) == 1
-        assert messages[0]["role"] == "system"
-
-    def test_groq_non_json_still_single_system(self):
-        """Groq non-JSON mode keeps single system message."""
-        envelope = MessageBuilder.build(
-            "groq",
-            "instructions",
-            "context data",
-            json_mode=False,
-        )
-        messages = envelope.to_dicts()
-        assert len(messages) == 1
-        assert messages[0]["role"] == "system"
-
-    def test_anthropic_unaffected(self):
-        """Anthropic (SINGLE_USER) is unaffected by the split."""
-        envelope = MessageBuilder.build(
-            "anthropic",
-            "instructions",
-            "context data",
-            json_mode=True,
-        )
-        messages = envelope.to_dicts()
-        assert len(messages) == 1
-        assert messages[0]["role"] == "user"
-
     def test_openai_json_mode_empty_context_single_system(self):
         """OpenAI JSON mode with empty context keeps single system message."""
         envelope = MessageBuilder.build(

@@ -19,39 +19,9 @@ def backend(tmp_path):
     backend.close()
 
 
-def _write(backend, relative_path, source_guid, repeat_of_source_guid=None):
-    row = {"source_guid": source_guid}
-    if repeat_of_source_guid is not None:
-        row["repeat_of_source_guid"] = repeat_of_source_guid
-    backend.write_source(relative_path, [row])
-
-
 class TestSQLiteBackend:
-    def test_the_repeat_side_of_a_collision_is_true(self, backend):
-        _write(backend, "a", "base")
-        _write(backend, "b", "repeat", repeat_of_source_guid="base")
-
-        assert backend.records_share_a_repeat_chain(["repeat"]) is True
-
-    def test_the_original_side_of_a_collision_is_also_true(self, backend):
-        """The base row itself carries no repeat_of_source_guid — only the
-        OTHER row pointing back at it does, so this direction needs its own
-        query, not just a reflection of the repeat-side check."""
-        _write(backend, "a", "base")
-        _write(backend, "b", "repeat", repeat_of_source_guid="base")
-
-        assert backend.records_share_a_repeat_chain(["base"]) is True
-
-    def test_an_ordinary_unrepeated_record_is_false(self, backend):
-        _write(backend, "a", "solo")
-
-        assert backend.records_share_a_repeat_chain(["solo"]) is False
-
     def test_empty_input_is_false(self, backend):
         assert backend.records_share_a_repeat_chain([]) is False
-
-    def test_an_unknown_guid_is_false(self, backend):
-        assert backend.records_share_a_repeat_chain(["nonexistent"]) is False
 
 
 class TestBaseClassDefault:

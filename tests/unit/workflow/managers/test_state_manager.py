@@ -158,16 +158,6 @@ class TestWorkflowLevel:
         assert result == ["a"]
         assert mgr.get_status("a") == ActionStatus.FAILED
 
-    def test_mark_running_as_failed_marks_checking_batch(self, tmp_path):
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a"])
-        mgr.update_status("a", ActionStatus.CHECKING_BATCH)
-
-        result = mgr.mark_running_as_failed()
-
-        assert result == ["a"]
-        assert mgr.get_status("a") == ActionStatus.FAILED
-
     def test_mark_running_as_failed_marks_all(self, tmp_path):
         """All running/checking_batch agents should be marked failed."""
         status_file = tmp_path / "status.json"

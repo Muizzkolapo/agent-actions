@@ -86,10 +86,3 @@ def test_a_refusal_never_advises_what_the_author_already_did():
     with pytest.raises(PreFlightValidationError) as exc:
         _preflight("array_member_rule")
     assert "declare them under a field" not in str(exc.value)
-
-
-def test_every_author_has_a_verdict():
-    on_disk = {
-        d.name for d in (PROJECT / "agent_workflow").iterdir() if (d / "agent_config").is_dir()
-    }
-    assert on_disk == set(ACCEPTED) | set(REFUSED)

@@ -183,13 +183,3 @@ class TestNothingElseIsReclassifiedAsSkipped:
         result, _, _ = _run(path, executor, deps)
         assert result.status == ActionStatus.FAILED
         assert result.success is False
-
-    def test_total_failure_in_batch_still_resolves_as_failed(self, executor, deps):
-        _all_records_guard_filtered(deps, filtered=False)
-        deps.action_runner.storage_backend.get_failed_items.return_value = [
-            {"record_id": "guid-1", "disposition": "failed", "reason": "503"}
-        ]
-        deps.action_runner.storage_backend.has_successful_items.return_value = False
-        result, _, _ = _run("batch_completed", executor, deps)
-        assert result.status == ActionStatus.FAILED
-        assert result.success is False

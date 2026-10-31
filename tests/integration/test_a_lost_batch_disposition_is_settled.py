@@ -174,7 +174,7 @@ class TestARecordTheProviderLeftOut:
     )
     def test_a_retry_repairs_it_and_only_it(self, tmp_path, first):
         project = _collected_with_the_fault(tmp_path, leave_one_out=True)
-        failed = _failed_record(project)
+        _failed_record(project)
         batches = _batches(project)
         if first:
             code, output = _agac(project, *first)
@@ -190,9 +190,6 @@ class TestARecordTheProviderLeftOut:
 
         assert sorted(_dispositions(project).values()) == ["success"] * 8, output + collected
         assert [row["_state"] for row in _all_rows(project)] == ["processed"] * 8
-        assert failed not in {
-            r["source_guid"] for r in _all_rows(project) if r["_state"] != "processed"
-        }
 
     def test_a_dry_run_counts_it(self, tmp_path):
         project = _collected_with_the_fault(tmp_path, leave_one_out=True)

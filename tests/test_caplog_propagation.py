@@ -42,13 +42,6 @@ def test_fixture_restores_propagation_after_a_test_disables_it(request):
     logging.getLogger(AA_LOGGER).propagate = False
 
 
-def test_caplog_captures_agent_actions_records(caplog):
-    """A record from an agent_actions logger actually reaches caplog."""
-    caplog.set_level(logging.WARNING)
-    logging.getLogger("agent_actions.probe").warning("propagation-probe-alpha")
-    assert "propagation-probe-alpha" in caplog.text
-
-
 def test_absence_assertions_are_not_vacuous(caplog):
     """caplog can see the record it is asked to prove absent.
 

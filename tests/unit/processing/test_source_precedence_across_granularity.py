@@ -145,6 +145,8 @@ class TestTheCarriedValueMustBeANamespace:
         assert resolve_source_content(row, "GHOST", POOL, "a2") is row
 
     def test_a_record_carrying_no_source_key_at_all_still_resolves_by_identity(self):
+        """Once the pool is a separate set, identity answers from it, not from the
+        record's own content."""
         row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
 
         assert record_mode_source(row) == {"url": "POOL"}
@@ -197,12 +199,6 @@ class TestAPoolThatIsTheActionsOwnInputSet:
         row = carrying("CARRIED", source_guid="G0")
 
         assert record_mode_source(row, pool=[row]) == {"url": "CARRIED"}
-
-    def test_a_separate_pool_row_is_still_preferred_over_the_records_own_content(self):
-        """The boundary: once the pool is a separate set, identity answers from it."""
-        row = {"content": {"a1": {"n": 1}}, "source_guid": "G0"}
-
-        assert record_mode_source(row) == {"url": "POOL"}
 
 
 class TestAFirstStageGuardReadsTheSameNamespaceAsTheActionItGuards:

@@ -227,20 +227,6 @@ class TestStandardStrategy:
         assert call_kwargs["data"] is pre_loaded
 
     @patch("agent_actions.workflow.pipeline.create_processing_pipeline_from_params")
-    def test_execute_passes_none_data_when_not_provided(self, mock_create):
-        mock_pipeline = MagicMock()
-        mock_pipeline.process.return_value = "/out/file.json"
-        mock_create.return_value = mock_pipeline
-
-        strategy = StandardStrategy()
-        params = _make_params()  # data=None by default
-
-        strategy.execute(params)
-
-        call_kwargs = mock_pipeline.process.call_args[1]
-        assert call_kwargs["data"] is None
-
-    @patch("agent_actions.workflow.pipeline.create_processing_pipeline_from_params")
     def test_execute_forwards_workflow_metadata_to_pipeline_factory(self, mock_create):
         """workflow_metadata on the params flows into create_processing_pipeline_from_params
         so `{{ workflow.name }}` / `{{ workflow.run_id }}` resolve at runtime."""

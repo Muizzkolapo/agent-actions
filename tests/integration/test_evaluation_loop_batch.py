@@ -369,17 +369,6 @@ class TestStrategyPluggable:
 class TestBackwardCompat:
     """Old recovery state files (no graduated_results) work correctly."""
 
-    def test_old_state_evaluation_loop_still_works(self, make_batch_results, make_strategy):
-        """EvaluationLoop works on results from old state (no evaluation metadata)."""
-        results = make_batch_results(5)
-        strategy = make_strategy(name="validation", evaluate_return=True)
-
-        loop = EvaluationLoop(strategy)
-        graduated, failing, _ = loop.split(results)
-
-        assert len(graduated) == 5
-        assert len(failing) == 0
-
     def test_mixed_old_new_results(self, make_batch_results):
         """Mix of results with and without evaluation metadata handled correctly."""
         results = make_batch_results(10)

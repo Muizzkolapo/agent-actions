@@ -40,11 +40,6 @@ class TestExecutorRunTrackerInit:
     def test_run_id_is_none_by_default(self, executor):
         assert executor.run_id is None
 
-    def test_run_tracker_and_run_id_are_attributes(self, executor):
-        """Attributes must exist — no AttributeError on access."""
-        assert executor.run_tracker is None
-        assert executor.run_id is None
-
     def test_track_action_start_noop_when_tracker_is_none(self, executor):
         """_track_action_start must be a no-op when run_tracker is None."""
         params = ActionRunParams(

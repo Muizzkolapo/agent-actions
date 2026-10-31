@@ -82,20 +82,6 @@ class TestCascadeBlockingDetection:
         result = preparer.prepare(item, self._make_context())
         assert result.guard_status != GuardStatus.UPSTREAM_UNPROCESSED
 
-    def test_processed_does_not_cascade(self):
-        """PROCESSED is resettable — after P5-040 reset it arrives as ACTIVE."""
-        preparer = TaskPreparer()
-        item = _record("active")  # simulates post-reset
-        result = preparer.prepare(item, self._make_context())
-        assert result.guard_status != GuardStatus.UPSTREAM_UNPROCESSED
-
-    def test_guard_skipped_does_not_cascade(self):
-        """GUARD_SKIPPED is resettable — after P5-040 reset it arrives as ACTIVE."""
-        preparer = TaskPreparer()
-        item = _record("active")  # simulates post-reset
-        result = preparer.prepare(item, self._make_context())
-        assert result.guard_status != GuardStatus.UPSTREAM_UNPROCESSED
-
     def test_non_dict_does_not_cascade(self):
         """It has no _state to block on. Below the first stage it has no source_guid
         either, and is refused for that instead."""

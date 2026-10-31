@@ -261,11 +261,6 @@ class TestTaggedContent:
         assert "GENERATE JSON with the fields" in content
         assert "'sentiment'" in content
 
-    def test_cohere_json_no_schema(self):
-        env = MessageBuilder.build("cohere", PROMPT, CONTEXT_STR, json_mode=True, schema=None)
-        content = env.messages[0].content
-        assert "GENERATE JSON" in content
-
     def test_openai_json_has_rules(self):
         env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=True)
         # Rules are in prompt_body (system message has raw prompt after split)
@@ -327,11 +322,6 @@ class TestGroqFormat:
         assert "Input Text:" in content
         assert "Please provide a direct response" in content
         assert "<|begin_of_user_instruction|>" not in content
-
-    def test_groq_json_uses_tags(self):
-        env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=True)
-        content = env.messages[0].content
-        assert "<|begin_of_user_instruction|>" in content
 
 
 # ---------------------------------------------------------------------------

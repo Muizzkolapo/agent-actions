@@ -245,6 +245,9 @@ class TestVendorCompilation:
         assert inner["type"] == "object"
         assert "title" in inner["properties"]
         assert "score" in inner["required"]
+        assert "title" not in inner, (
+            "Gemini schema has raw field as top-level key (old broken format)"
+        )
 
     def test_ollama_schema_format(self):
         """Ollama gets {title, type: object, properties, required, additionalProperties}."""
@@ -307,15 +310,6 @@ class TestVendorCompilation:
             compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
             assert compiled is not None, f"{vendor} returned None"
 
-    def test_gemini_format_not_just_properties(self):
-        """Regression: Gemini must include type/required, not just raw properties."""
-        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "gemini")
-        inner = compiled["schema"]
-        # Must be a full JSON Schema object, not just the properties dict
-        assert "type" in inner, "Gemini schema.schema must include 'type'"
-        assert "required" in inner, "Gemini schema.schema must include 'required'"
-        assert inner["type"] == "object"
-
     def test_gemini_empty_schema(self):
         """Gemini with zero fields produces valid structure with empty properties."""
         schema = {"name": "empty", "fields": []}
@@ -356,23 +350,6 @@ class TestVendorCompilation:
         assert inner["type"] == "object"
         assert "facts" in inner["properties"]
 
-    def test_gemini_regression_old_format_rejected(self):
-        """Regression guard: Gemini schema.schema must NOT be just the properties dict.
-
-        Old broken format: {"name": "...", "schema": {"title": {"type": "string"}}}
-        Fixed format:      {"name": "...", "schema": {"type": "object", "properties": {...}, "required": [...]}}
-        """
-        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "gemini")
-        inner = compiled["schema"]
-        # The old format would have field names as direct keys of schema
-        # (e.g., inner["title"] == {"type": "string"})
-        # The fixed format wraps them under "properties"
-        assert "title" not in inner, (
-            "Gemini schema has raw field as top-level key (old broken format)"
-        )
-        assert "properties" in inner, "Gemini schema missing 'properties' wrapper"
-        assert "type" in inner, "Gemini schema missing 'type' key"
-
     def test_array_schema_conversion_then_compilation(self):
         """Array-type JSON Schema is converted to unified format before compilation."""
         array_schema = {
@@ -402,13 +379,6 @@ class TestVendorCompilation:
 
 class TestJsonModeInteraction:
     """Tests for json_mode interaction with schema."""
-
-    def test_json_mode_true_compiles_schema(self):
-        """json_mode=true (default) compiles and returns schema."""
-        compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
-        config = {"schema": SAMPLE_UNIFIED_SCHEMA, "name": "test"}
-        compiled, _ = compiler.compile(config, "openai")
-        assert compiled is not None
 
     def test_json_mode_false_wraps_in_output_field(self):
         """json_mode=false causes BaseClient to use call_non_json (schema not sent).
@@ -841,46 +811,6 @@ class TestSchemaFieldExtraction:
 
 class TestFullPipelineIntegration:
     """End-to-end tests combining resolution, compilation, and validation."""
-
-    def test_inline_schema_compile_validate_pass(self):
-        """Full path: inline schema → compile → validate matching output."""
-        compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
-        config = {"schema": SAMPLE_UNIFIED_SCHEMA, "name": "test_action"}
-
-        compiled, _ = compiler.compile(config, "openai")
-        assert compiled is not None
-
-        # Validate output against the original schema
-        output = {"title": "hello", "score": 42, "tags": ["a"]}
-        report = validate_output_against_schema(output, SAMPLE_UNIFIED_SCHEMA, "test_action")
-        assert report.is_compliant
-
-    def test_inline_schema_compile_validate_fail(self):
-        """Full path: inline schema → compile → validate mismatched output."""
-        compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
-        config = {"schema": SAMPLE_UNIFIED_SCHEMA, "name": "test_action"}
-
-        compiled, _ = compiler.compile(config, "openai")
-        assert compiled is not None
-
-        output = {"wrong_field": "value"}
-        report = validate_output_against_schema(output, SAMPLE_UNIFIED_SCHEMA, "test_action")
-        assert not report.is_compliant
-
-    def test_every_vendor_compiles_same_schema(self):
-        """All vendors compile the same unified schema without errors."""
-        vendors = [
-            "openai",
-            "anthropic",
-            "gemini",
-            "ollama_local",
-            "ollama_cloud",
-            "groq",
-            "cohere",
-        ]
-        for vendor in vendors:
-            compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
-            assert compiled is not None, f"Vendor {vendor} failed to compile"
 
     def test_schema_with_all_field_types(self):
         """Schema with every supported field type compiles and validates."""

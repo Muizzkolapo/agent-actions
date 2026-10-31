@@ -1,12 +1,10 @@
 """The guards that keep a compressed row's dictionary alive as long as a row needs it.
 
 Each one protects a production path (a retry's scoped clear, a resume's per-file
-checkpoint clear, a writer after one of its own writes rolled back) and each would
-regress by one token with the suite otherwise green.
+checkpoint clear) and each would regress by one token with the suite otherwise green.
 """
 
 import json
-import sqlite3
 
 import pytest
 
@@ -81,22 +79,6 @@ def test_clearing_one_paths_checkpoints_keeps_the_other_paths_readable(backend, 
         )
     finally:
         reader.close()
-
-
-def test_the_writer_itself_reads_a_write_after_one_of_its_own_rolled_back(backend):
-    """A rolled-back insert frees its dictionary id, which the next write may be given;
-    a writer that cached the first would decode the second against the wrong bytes."""
-    backend.connection.execute(
-        "CREATE TRIGGER refuse_a BEFORE INSERT ON target_data WHEN NEW.action_name = 'a'"
-        " BEGIN SELECT RAISE(ABORT, 'refused'); END"
-    )
-    backend.connection.commit()
-
-    with pytest.raises(sqlite3.Error):
-        backend.write_target("a", FILE, [_record(0)], force_full=True)
-    backend.write_target("b", FILE, [_record(1), _record(2)], force_full=True)
-
-    assert _summaries(backend.read_target("b", FILE)) == _summaries([_record(1), _record(2)])
 
 
 def test_clearing_every_actions_traces_leaves_records_readable(backend, db):

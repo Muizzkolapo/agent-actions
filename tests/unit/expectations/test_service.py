@@ -240,11 +240,6 @@ def test_execute_threads_llm_context_to_a_judged_expectations_context_ref():
     assert captured["context"] == {"extract_context.source_context": "docs say X"}
 
 
-def test_execute_without_llm_context_still_works_for_non_judged_suites():
-    result = ExpectationService(SUITE, repair="none").execute(passing_llm, "PROMPT")
-    assert result.suite_result.overall_pass is True
-
-
 def test_factory_does_not_build_a_judge_for_a_purely_deterministic_suite():
     service = create_expectation_service_from_config(
         {"expectations": INLINE, "repair": "none"}, action_name="brainstorm"

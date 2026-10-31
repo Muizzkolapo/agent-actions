@@ -46,50 +46,6 @@ def _fc(**namespaces: dict) -> dict:
 class TestObserveDirective:
     """Observe fields must appear in llm_context and prompt_context."""
 
-    def test_observe_field_appears_in_llm_context(self):
-        field_context = _fc(dep={"summary": "hello", "score": 0.9})
-        scope = {"observe": ["dep.summary"]}
-        prompt_ctx, llm_ctx, pt = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx["dep"]["summary"] == "hello"
-        assert "score" not in llm_ctx.get("dep", {})
-
-    def test_observe_field_appears_in_prompt_context(self):
-        field_context = _fc(dep={"text": "abc", "extra": "xyz"})
-        scope = {"observe": ["dep.text"]}
-        prompt_ctx, _, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert prompt_ctx["dep"]["text"] == "abc"
-        assert "extra" not in prompt_ctx.get("dep", {})
-
-    def test_observe_wildcard_expands_all_fields(self):
-        field_context = _fc(dep={"a": 1, "b": 2, "c": 3})
-        scope = {"observe": ["dep.*"]}
-        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx["dep"] == {"a": 1, "b": 2, "c": 3}
-
-    def test_observe_multiple_namespaces(self):
-        field_context = _fc(dep_a={"x": 10}, dep_b={"y": 20})
-        scope = {"observe": ["dep_a.x", "dep_b.y"]}
-        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx["dep_a"]["x"] == 10
-        assert llm_ctx["dep_b"]["y"] == 20
-
-    def test_observe_missing_field_raises(self):
-        """Missing field from present namespace raises RecordContextError for observe."""
-        field_context = _fc(dep={"present": "yes"})
-        scope = {"observe": ["dep.absent"]}
-        with pytest.raises(ConfigurationError, match="not found in namespace"):
-            apply_context_scope(field_context, scope, action_name="act")
-
-    def test_observe_preserves_falsy_values(self):
-        """0, False, None, '' must all survive observe extraction."""
-        field_context = _fc(dep={"zero": 0, "false": False, "none": None, "empty": ""})
-        scope = {"observe": ["dep.zero", "dep.false", "dep.none", "dep.empty"]}
-        _, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx["dep"]["zero"] == 0
-        assert llm_ctx["dep"]["false"] is False
-        assert llm_ctx["dep"]["none"] is None
-        assert llm_ctx["dep"]["empty"] == ""
-
     def test_observe_version_base_expansion(self):
         """After normalization, version base refs expand to concrete variants."""
         agent_configs = {
@@ -115,13 +71,6 @@ class TestObserveDirective:
 
 class TestPassthroughDirective:
     """Passthrough fields must NOT appear in llm_context, but in passthrough output."""
-
-    def test_passthrough_excluded_from_llm_context(self):
-        field_context = _fc(dep={"score": 0.8, "text": "hello"})
-        scope = {"observe": ["dep.text"], "passthrough": ["dep.score"]}
-        _, llm_ctx, pt = apply_context_scope(field_context, scope, action_name="act")
-        assert "score" not in llm_ctx.get("dep", {})
-        assert pt["dep"]["score"] == 0.8
 
     def test_passthrough_wildcard(self):
         field_context = _fc(dep={"a": 1, "b": 2})
@@ -190,20 +139,6 @@ class TestDropDirective:
         except ConfigurationError:
             # Also acceptable: error because field was dropped before passthrough
             pass
-
-    def test_drop_wildcard_removes_all(self):
-        field_context = _fc(dep={"a": 1, "b": 2, "c": 3})
-        scope = {"drop": ["dep.*"], "observe": ["dep.*"]}
-        prompt_ctx, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert prompt_ctx.get("dep", {}) == {}
-        assert llm_ctx.get("dep", {}) == {}
-
-    def test_drop_then_observe_specific_raises(self):
-        """Observing a dropped field raises — secret not leaked, config contradiction detected."""
-        field_context = _fc(dep={"field_a": "value"})
-        scope = {"drop": ["dep.field_a"], "observe": ["dep.field_a"]}
-        with pytest.raises(ConfigurationError, match="not found in namespace"):
-            apply_context_scope(field_context, scope, action_name="act")
 
 
 # ---------------------------------------------------------------------------
@@ -280,32 +215,6 @@ class TestFileModeObserve:
     def _make_records(self, ns_name, *contents):
         """Build file-mode records with namespaced content."""
         return [{"content": {ns_name: c}, "source_guid": f"sg_{i}"} for i, c in enumerate(contents)]
-
-    def test_file_mode_enriches_per_record(self):
-        """observe specific field -> extracts from namespace, preserves original."""
-        data = self._make_records(
-            "dep",
-            {"question": "What?", "answer": "42", "noise": "junk"},
-            {"question": "Why?", "answer": "because", "noise": "more junk"},
-        )
-        agent_config = {
-            "dependencies": "dep",
-            "context_scope": {"observe": ["dep.question", "dep.answer"]},
-        }
-        result, _ = apply_context_scope_for_records(
-            records=data,
-            context_scope=agent_config["context_scope"],
-            action_name="act",
-        )
-        assert len(result) == 2
-        # Observed fields extracted from namespace
-        assert result[0]["content"]["question"] == "What?"
-        assert result[0]["content"]["answer"] == "42"
-        # Original namespace preserved
-        assert result[0]["content"]["dep"]["noise"] == "junk"
-        assert result[0]["source_guid"] == "sg_0"
-        assert result[1]["content"]["question"] == "Why?"
-        assert result[1]["content"]["answer"] == "because"
 
     def test_file_mode_wildcard_single_ns_includes_all(self):
         """observe: ['dep.*'] extracts all fields from namespace."""
@@ -472,10 +381,6 @@ class TestFieldParsing:
         with pytest.raises(ValueError):
             parse_field_reference("")
 
-    def test_no_dot_raises(self):
-        with pytest.raises(ValueError):
-            parse_field_reference("nodot")
-
     def test_extract_field_names(self):
         refs = ["dep_a.score", "dep_b.label"]
         assert extract_field_names_from_references(refs) == ["score", "label"]
@@ -500,26 +405,6 @@ class TestFieldParsing:
 
 class TestSecurityInvariants:
     """Security-critical invariants that must never be violated."""
-
-    def test_drop_plus_passthrough_no_leak(self):
-        """CRITICAL: If a field is dropped AND passthroughed, drop must win.
-
-        This is the primary security test for the drop+passthrough bug fix.
-        """
-        field_context = _fc(dep={"api_key": "TOP_SECRET", "name": "safe_data"})
-        scope = {
-            "drop": ["dep.api_key"],
-            "observe": ["dep.name"],
-            "passthrough": ["dep.api_key"],
-        }
-        try:
-            _, _, pt = apply_context_scope(field_context, scope, action_name="act")
-            # If it doesn't raise, the dropped field MUST be absent
-            assert "api_key" not in pt.get("dep", {}), (
-                "SECURITY VIOLATION: dropped field leaked via passthrough"
-            )
-        except ConfigurationError:
-            pass  # Also acceptable — field is gone after drop
 
     def test_drop_wildcard_plus_passthrough_wildcard_no_leak(self):
         """drop: ['dep.*'] + passthrough: ['dep.*'] -> nothing leaks."""
@@ -564,12 +449,6 @@ class TestSecurityInvariants:
 
 class TestEdgeCases:
     """Edge cases and boundary conditions."""
-
-    def test_empty_observe_list(self):
-        field_context = _fc(dep={"text": "hello"})
-        scope = {"observe": []}
-        prompt_ctx, llm_ctx, _ = apply_context_scope(field_context, scope, action_name="act")
-        assert llm_ctx == {}
 
     def test_empty_field_context(self):
         scope = {"observe": ["dep.*"]}

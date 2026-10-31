@@ -491,13 +491,6 @@ class TestMetadata:
         backend.save_metadata("key", "v2")
         assert backend.load_metadata("key") == "v2"
 
-    def test_execution_order_stored_and_retrieved(self, backend):
-        """Execution order survives save/load cycle."""
-        order = ["a1", "a2", "a3"]
-        backend.save_metadata("execution_order", json.dumps(order))
-        loaded = json.loads(backend.load_metadata("execution_order"))
-        assert loaded == order
-
 
 class TestFormatVersionCheck:
     """Format version prevents silent corruption on downgrade."""

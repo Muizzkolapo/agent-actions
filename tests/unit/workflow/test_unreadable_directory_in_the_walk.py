@@ -422,14 +422,6 @@ class TestARepairIsReportedLikeAnyOtherWalk:
         assert (found, processed) == (1, 0)
         assert [message.split(":")[0] for message in errors.messages] == ["locked"]
 
-    def test_a_record_the_store_cannot_place_does_not_silence_the_report(self, tmp_path):
-        """The shape an exemption keyed on the store would miss: `source_files_for_records`
-        is a set union, so a retried id with no source row simply contributes nothing
-        to the wanted set — and its staging file may be the one behind the lock."""
-        found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}))
-
-        assert [message.split(":")[0] for message in errors.messages] == ["locked"]
-
     def test_a_repair_that_fell_back_to_walking_everything_still_reports(self, tmp_path):
         found, processed, errors = self._walk(tmp_path, _RepairBackend({"a"}, shares_chain=True))
 

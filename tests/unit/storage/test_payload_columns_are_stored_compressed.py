@@ -168,6 +168,7 @@ class TestTargetData:
             backend.write_target("a", FILE, _records(1), force_full=True)
         backend.write_target("b", FILE, _records(2), force_full=True)
 
+        assert _summaries(backend.read_target("b", FILE)) == _summaries(_records(2))
         reader = _fresh_reader(db)
         try:
             assert _summaries(reader.read_target("b", FILE)) == _summaries(_records(2))

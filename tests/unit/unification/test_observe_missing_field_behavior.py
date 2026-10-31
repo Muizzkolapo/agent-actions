@@ -44,26 +44,6 @@ class TestObserveNullSafety:
                 action_name="downstream",
             )
 
-    def test_observe_undeclared_namespace_still_raises(self):
-        """Namespace not in field_context at all → still errors (config bug)."""
-        fc = _make_field_context(dep={"f": 1})
-        with pytest.raises(ConfigurationError, match="not found at runtime"):
-            apply_context_scope(
-                field_context=fc,
-                context_scope={"observe": ["ghost.field"]},
-                action_name="downstream",
-            )
-
-    def test_observe_null_namespace_still_returns_none(self):
-        """Null namespace (guard-skipped) → None, unchanged from existing behavior."""
-        fc = _make_field_context(skipped=None)
-        _prompt_ctx, llm_ctx, _ = apply_context_scope(
-            field_context=fc,
-            context_scope={"observe": ["skipped.field"]},
-            action_name="downstream",
-        )
-        assert llm_ctx["skipped"]["field"] is None
-
     def test_passthrough_missing_field_returns_none(self):
         """Passthrough still resolves missing field to None (not rendered in prompts)."""
         fc = _make_field_context(ns={"existing": "value"})

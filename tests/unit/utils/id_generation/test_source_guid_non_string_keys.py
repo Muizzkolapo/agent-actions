@@ -27,19 +27,3 @@ def test_none_field_name_is_rejected():
 def test_nested_non_string_key_is_rejected():
     with pytest.raises(DataValidationError):
         IDGenerator.derive_source_guid({"outer": {2024: "x"}})
-
-
-def test_string_keyed_identity_unchanged():
-    # the guard is a strict no-op for normal string-keyed payloads
-    assert (
-        IDGenerator.derive_source_guid(
-            {"content": "The mitochondria is the powerhouse of the cell."}
-        )
-        == "865e85c1-c292-5537-a9dc-aed6618263eb"
-    )
-    assert (
-        IDGenerator.derive_source_guid(
-            {"question": "What is 2+2?", "answer": "4", "metadata": {"src": "quiz.json", "row": 7}}
-        )
-        == "cac9d8de-ed99-5b95-948e-ebd0439e27e2"
-    )

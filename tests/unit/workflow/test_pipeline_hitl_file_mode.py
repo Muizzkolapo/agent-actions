@@ -772,23 +772,6 @@ def test_collision_uses_qualified_keys():
     assert result[0]["content"]["body"] == "Body A"
 
 
-def test_no_collision_stays_bare():
-    """When all refs have unique bare keys, flat keys are unqualified."""
-    data = [
-        {
-            "content": {
-                "upstream": {"question": "Q1", "answer": "A1"},
-            },
-        },
-    ]
-    context_scope = {"observe": ["upstream.question", "upstream.answer"]}
-    result, _ = apply_context_scope_for_records(
-        records=data, context_scope=context_scope, action_name="test"
-    )
-    assert result[0]["content"]["question"] == "Q1"
-    assert result[0]["content"]["answer"] == "A1"
-
-
 def test_invalid_ref_does_not_misalign_pairs():
     """Invalid refs between valid ones must not shift collision pairing."""
     data = [

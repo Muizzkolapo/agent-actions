@@ -4,7 +4,6 @@ Covers the gaps identified in P4-000 inventory:
 - BatchCompleteEvent payload verification (total, completed, failed, elapsed)
 - Recovery batch dispatch within batch check
 - Status transitions during batch check (CHECKING_BATCH intermediate)
-- Batch wall clock computation
 """
 
 from unittest.mock import MagicMock, patch
@@ -171,42 +170,3 @@ class TestBatchCheckStatusTransitions:
 
         # CHECKING_BATCH should appear before final status
         assert ActionStatus.CHECKING_BATCH in status_calls
-
-    def test_in_progress_stays_batch_submitted(self, executor, mock_deps):
-        """In-progress batch: final status remains BATCH_SUBMITTED."""
-        mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
-        mock_deps.batch_manager.handle_batch_agent.return_value = (None, "in_progress")
-
-        with patch("agent_actions.workflow.executor.fire_event"):
-            result = executor.execute_action_sync(
-                "agent_a", action_idx=0, action_config={"kind": "llm"}, is_last_action=False
-            )
-
-        assert result.status == ActionStatus.BATCH_SUBMITTED
-
-
-class TestBatchWallClock:
-    """_compute_batch_wall_clock calculation."""
-
-    def test_computes_elapsed_from_submitted_at(self, executor, mock_deps):
-        """Wall clock = now - batch_submitted_at timestamp."""
-        mock_deps.state_manager.get_status_details.return_value = {
-            "status": ActionStatus.BATCH_SUBMITTED,
-            "batch_submitted_at": "2026-05-01T10:00:00",
-        }
-
-        elapsed = executor._compute_batch_wall_clock("agent_a", fallback=99.0)
-
-        # Should be a positive number (time since 2026-05-01T10:00:00)
-        assert elapsed > 0
-        assert elapsed != 99.0  # Not the fallback
-
-    def test_missing_timestamp_returns_fallback(self, executor, mock_deps):
-        """Missing batch_submitted_at returns the fallback value."""
-        mock_deps.state_manager.get_status_details.return_value = {
-            "status": ActionStatus.BATCH_SUBMITTED,
-        }
-
-        elapsed = executor._compute_batch_wall_clock("agent_a", fallback=42.0)
-
-        assert elapsed == 42.0

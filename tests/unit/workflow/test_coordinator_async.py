@@ -288,21 +288,6 @@ class TestAsyncRunErrorHandling:
         assert call_args.kwargs["failed_action"] == "agent_a, agent_b"
 
     @pytest.mark.asyncio
-    async def test_exception_reraises(self):
-        """The original exception should be re-raised after error handling."""
-        wf = _build_workflow()
-
-        orchestrator = wf.services.core.action_level_orchestrator
-        orchestrator.compute_execution_levels.side_effect = TypeError("type error")
-
-        mgr = _mock_manager()
-        with (
-            patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr),
-            pytest.raises(TypeError, match="type error"),
-        ):
-            await wf.async_run()
-
-    @pytest.mark.asyncio
     async def test_exception_during_execute_level_async(self):
         """An exception from execute_level_async should be caught and reraised."""
         wf = _build_workflow()

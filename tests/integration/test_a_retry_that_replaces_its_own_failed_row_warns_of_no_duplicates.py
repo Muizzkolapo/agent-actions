@@ -135,11 +135,4 @@ class TestAFanInOverARecordAndItsExpansion:
 
         assert result.exit_code == 0, result.output
         assert "cannot be attributed" not in result.output
-
-    def test_it_cites_no_issue_number(self, diamond):  # noqa: F811
-        selected = _record_ids(diamond, ACTION)[0]
-        _fail(diamond, selected, ACTION)
-
-        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
-
         assert "issue #" not in result.output

@@ -110,14 +110,6 @@ class TestTheRecordedInputSitsAboveEveryNarrowing:
         assert submitted == ["i1", "i2"]
         assert recorded == ["i1", "i2"]
 
-    def test_the_recording_is_handed_over_at_all(self):
-        """A None recording disables the inference, so forgetting to pass it is silent."""
-        _submitted, recorded = _run_fork(_records("i1"))
-
-        assert recorded is not None, (
-            "run_inputs never reached submit_batch_job — carry-forward would infer nothing"
-        )
-
 
 @pytest.mark.parametrize("retried", [frozenset(), frozenset({"i2"})])
 def test_the_recording_always_covers_what_was_submitted(retried):

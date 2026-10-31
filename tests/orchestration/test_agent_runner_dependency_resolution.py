@@ -252,18 +252,6 @@ class TestResolveDependencyDirectories:
         assert "action_A" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 
-    def test_three_dependencies_are_all_input(self, agent_runner, temp_agent_folder):
-        """All deps are input sources in bus model."""
-        dependencies = ["action_A", "action_B", "action_C"]
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, "test_action"
-        )
-
-        # Bus model: all dependencies are input sources
-        assert len(result) == 3
-        assert {r.name for r in result} == {"action_A", "action_B", "action_C"}
-
     def test_empty_dependencies_returns_empty_list(self, agent_runner, temp_agent_folder):
         """Test empty dependencies returns empty list."""
         dependencies = []

@@ -5,6 +5,9 @@ whenever a namespace the prompt read was missing, with or without a guard anywhe
 the workflow (1489). The failure stays loud; only the diagnosis changes: a guard is
 named only when the record shows that guard skipping it, and an upstream output that
 holds none of the observed fields is reported as that.
+
+A prompt reading a field its namespace lacks names the namespace and the field, not
+"Namespace 'summary' not found in context" (1500).
 """
 
 from __future__ import annotations
@@ -80,13 +83,15 @@ actions:
     intent: "Publish"
     schema: out
     prompt: $missing_ns.Publish
-    context_scope: {{ observe: [note_direct.summary] }}
+    context_scope: {{ observe: [{observe}] }}
 """
 
 GUARD = "    guard: { condition: \"source.text == 'one'\", on_false: skip }\n"
 
 
-def _project(base: Path, run_mode: str, guard: str) -> Path:
+def _project(
+    base: Path, run_mode: str, guard: str = "", observe: str = "note_direct.summary"
+) -> Path:
     root = base / "project"
     directory = root / "agent_workflow" / WORKFLOW
     (directory / "agent_config").mkdir(parents=True)
@@ -103,7 +108,7 @@ def _project(base: Path, run_mode: str, guard: str) -> Path:
     (root / "prompt_store" / f"{WORKFLOW}.md").write_text(PROMPT)
     (root / "tools" / WORKFLOW / "make_note.py").write_text(TOOL)
     (directory / "agent_config" / f"{WORKFLOW}.yml").write_text(
-        CONFIG.format(run_mode=run_mode, guard=guard)
+        CONFIG.format(run_mode=run_mode, guard=guard, observe=observe)
     )
     (directory / "agent_io" / "staging" / "rows.json").write_text(
         json.dumps([{"text": "one"}, {"text": "two"}])
@@ -174,3 +179,19 @@ def test_a_guard_skip_the_record_shows_is_named(tmp_path, run_mode):
     if run_mode == "online":
         (reason,) = _publish_failures(root)
         assert "a guard on 'note_direct' skipped it" in reason
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_a_field_the_namespace_lacks_is_named_with_its_namespace(tmp_path, run_mode):
+    """The prompt reads `note_direct.summary`; record `two`'s output holds only `note`."""
+    root = _project(tmp_path, run_mode, observe="note_direct.*")
+
+    result = _run(root)
+    output = _flat(result.stdout + result.stderr)
+
+    assert "Namespace 'summary' not found in context" not in output
+    assert "nothing supplies 'summary'" not in output
+    assert "'note_direct' has no field 'summary'" in output
+    # Record `two` alone fails, and its stored reason names the namespace and field.
+    (reason,) = _publish_failures(root)
+    assert "'note_direct' has no field 'summary' (it has: note)" in reason

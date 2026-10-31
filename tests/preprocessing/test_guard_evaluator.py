@@ -120,16 +120,6 @@ class TestGuardEvaluator:
         assert result.should_execute is False
         assert result.behavior == "skip"
 
-    def test_evaluate_returns_guard_result(self, evaluator, mock_guard_filter):
-        """evaluate() returns GuardResult."""
-        mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=False)
-        guard_config = {"clause": "x > 10", "scope": "item", "behavior": "skip"}
-
-        result = evaluator.evaluate({"x": 5}, guard_config)
-
-        assert result.should_execute is False
-        assert result.behavior == "skip"
-
     def test_prepare_eval_context_with_nested_content(self, evaluator):
         """Nested content structure is properly extracted with ALL top-level metadata."""
         context = {

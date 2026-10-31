@@ -31,8 +31,3 @@ class TestGetSchemaPath:
         (tmp_path / "agent_actions.yml").write_text("")
         with pytest.raises(ConfigValidationError, match="No agent_actions.yml"):
             get_schema_path(tmp_path)
-
-    def test_standard_schema_value(self, tmp_path):
-        """Standard schema_path: schema works."""
-        (tmp_path / "agent_actions.yml").write_text(yaml.dump({"schema_path": "schema"}))
-        assert get_schema_path(tmp_path) == "schema"

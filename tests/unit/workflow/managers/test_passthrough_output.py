@@ -94,20 +94,7 @@ class TestProcessAgentOutputBackend:
         assert result["output_count"] == 2
 
     def test_empty_backend_returns_empty(self, tmp_path, make_manager, mock_storage_backend):
-        """When backend has no data, returns empty — no filesystem fallback."""
-        mock_storage_backend.list_target_files.return_value = []
-
-        mgr = make_manager(
-            execution_order=["extract", "transform"],
-            action_status={"extract": {"status": "completed"}},
-        )
-        result = mgr._process_agent_output("extract")
-
-        assert result["has_data"] is False
-        assert result["data"] == []
-
-    def test_both_empty_returns_empty(self, tmp_path, make_manager, mock_storage_backend):
-        """When both backend and filesystem have no data, returns empty output."""
+        """When the backend has no data, returns empty output."""
         mock_storage_backend.list_target_files.return_value = []
 
         mgr = make_manager(

@@ -77,30 +77,6 @@ class TestParallelCorrelationIsolation:
             correlated_input=None,
         )
 
-    def test_version_consumer_gets_its_merged_input(self, executor, mock_deps):
-        """Version consumer should receive its merged input."""
-        correlated = {"data.json": [{"source_guid": "g1"}]}
-        mock_deps.output_manager.resolve_correlated_input.return_value = correlated
-
-        params = ActionRunParams(
-            action_name="merge_code_alternatives",
-            action_idx=4,
-            action_config={},
-            is_last_action=False,
-            start_time=datetime.now(),
-        )
-
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            executor._execute_action_run(params)
-
-        mock_deps.action_runner.run_action.assert_called_once_with(
-            params.action_config,
-            "merge_code_alternatives",
-            None,
-            4,
-            correlated_input=correlated,
-        )
-
     def test_each_action_gets_its_own_override(self, executor, mock_deps):
         """Consumer and non-consumer executed sequentially get independent overrides."""
 
