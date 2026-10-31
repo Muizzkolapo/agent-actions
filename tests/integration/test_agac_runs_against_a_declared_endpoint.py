@@ -267,3 +267,30 @@ def test_an_endpoint_with_no_credential_needs_no_api_key_anywhere(tmp_path, serv
     _run(root, _env(servers))
 
     assert _dispositions(root, "on_lab") == [("success", "")]
+
+
+def test_a_server_error_that_echoes_the_credential_is_masked_everywhere(tmp_path, servers):
+    servers["keyed"].echo_headers = True
+    servers["keyed"].statuses = [401]
+    root = _project(tmp_path, _action("on_keyed", "keyed", "gpt-4o-mini"))
+
+    output = _run(root, _env(servers), expect_exit=1)
+
+    echoed = json.dumps(servers["keyed"].requests[0]["headers"])
+    assert SECRET in echoed and TRACE in echoed  # the server did echo them
+    assert SECRET not in output and TRACE not in output
+    assert "[REDACTED]" in output
+    texts = {
+        str(path): path.read_text(errors="replace")
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix in {".json", ".jsonl", ".log", ".txt", ".md", ".yml"}
+    }
+    leaks = sorted(name for name, text in texts.items() if SECRET in text or TRACE in text)
+    assert leaks == []
+    events = next(text for name, text in texts.items() if name.endswith("events.json"))
+    assert "[REDACTED]" in events
+    (db,) = (root / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db")
+    assert SECRET.encode() not in db.read_bytes()
+    ((disposition, reason),) = _dispositions(root, "on_keyed")
+    assert disposition == "failed"
+    assert SECRET not in reason

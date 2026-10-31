@@ -298,3 +298,192 @@ class TestEndpointClient:
         RedactingFilter().filter(record)
         assert record.msg == "key [REDACTED]"
         assert redact_text("short values stay") == "short values stay"
+
+
+def _declare_full(server_url: str, **endpoint: Any) -> None:
+    load_project_endpoints({"endpoints": {"lab": {"url": server_url, **endpoint}}})
+
+
+class TestCredentialHeaders:
+    def test_a_prefix_on_authorization_is_honoured(self, compatible, monkeypatch):
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"env": "LAB_KEY", "prefix": "Token "})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["authorization"] == f"Token {SECRET}"
+
+    def test_an_empty_prefix_sends_the_bare_secret(self, compatible, monkeypatch):
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"env": "LAB_KEY", "prefix": ""})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["authorization"] == SECRET
+
+    def test_a_user_authorization_header_beside_a_named_auth_header_is_kept(
+        self, compatible, monkeypatch
+    ):
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        monkeypatch.setenv("USER_JWT", "user-jwt-value-1234567890")
+        with FakeEndpoint() as server:
+            _declare_full(
+                server.base_url,
+                auth={"env": "LAB_KEY", "header": "X-Api-Key"},
+                headers={"Authorization": "${USER_JWT}"},
+            )
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        headers = server.requests[0]["headers"]
+        assert headers["x-api-key"] == SECRET
+        assert headers["authorization"] == "user-jwt-value-1234567890"
+
+    def test_the_timeout_reaches_the_request(self, compatible):
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth="none", timeout_seconds=5)
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["x-stainless-read-timeout"].startswith("5")
+
+
+class TestReplyShapes:
+    @pytest.mark.parametrize(
+        ("content", "fragment"),
+        [
+            ("42", "reply was int, expected a JSON object"),
+            ("null", "expected a JSON object"),
+            ('[{"label": "a", "score": 1}, 2]', "reply was int, expected a JSON object"),
+        ],
+        ids=["scalar", "null", "list-with-a-scalar"],
+    )
+    def test_a_reply_that_is_not_an_object_is_a_parse_error(self, compatible, content, fragment):
+        with FakeEndpoint() as server:
+            server.content = content
+            _declare(server.base_url)
+
+            (record,) = compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert record["_parse_error"].startswith("endpoint 'lab' returned JSON that does not match")
+        assert fragment in record["_parse_error"]
+
+    def test_an_extra_field_is_refused_by_a_closed_schema_and_kept_by_an_open_one(self, compatible):
+        closed = SCHEMA
+        open_schema = {
+            "name": "classify",
+            "schema": {
+                "type": "object",
+                "properties": {"label": {"type": "string"}, "score": {"type": "integer"}},
+                "required": ["label", "score"],
+            },
+        }
+        with FakeEndpoint() as server:
+            server.content = '{"label": "a", "score": 1, "extra": true}'
+            _declare(server.base_url)
+            client = compatible.endpoint_client("lab")
+
+            (refused,) = client.invoke(_agent_config(), "C", {}, closed)
+            (kept,) = client.invoke(_agent_config(), "C", {}, open_schema)
+
+        assert "extra" in refused["_parse_error"]
+        assert kept == {"label": "a", "score": 1, "extra": True}
+
+
+class TestCommandAuth:
+    def test_the_command_output_is_the_credential(self, compatible):
+        with FakeEndpoint() as server:
+            _declare_full(
+                server.base_url,
+                auth={"command": ["python3", "-c", "print('cmd-token-value-123456')"]},
+            )
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["authorization"] == "Bearer cmd-token-value-123456"
+        assert redact_text("saw cmd-token-value-123456") == "saw [REDACTED]"
+
+    def test_the_command_runs_once_until_refresh_seconds_pass(
+        self, compatible, tmp_path, monkeypatch
+    ):
+        counter = tmp_path / "runs"
+        counter.write_text("0")
+        script = (
+            f"import pathlib; p = pathlib.Path({str(counter)!r}); n = int(p.read_text()) + 1; "
+            "p.write_text(str(n)); print(f'token-number-{n}-abcdef')"
+        )
+        with FakeEndpoint() as server:
+            _declare_full(
+                server.base_url, auth={"command": ["python3", "-c", script], "refresh_seconds": 60}
+            )
+            client = compatible.endpoint_client("lab")
+            now = [1000.0]
+            monkeypatch.setattr(compatible.time, "monotonic", lambda: now[0])
+
+            client.invoke(_agent_config(), "C", {}, SCHEMA)
+            now[0] += 30
+            client.invoke(_agent_config(), "C", {}, SCHEMA)
+            now[0] += 31
+            client.invoke(_agent_config(), "C", {}, SCHEMA)
+
+        sent = [r["headers"]["authorization"] for r in server.requests]
+        assert sent == [
+            "Bearer token-number-1-abcdef",
+            "Bearer token-number-1-abcdef",
+            "Bearer token-number-2-abcdef",
+        ]
+        assert counter.read_text() == "2"
+
+    def test_a_failing_command_is_refused_without_its_stderr(self, compatible):
+        _declare_full(
+            "http://127.0.0.1:1/v1",
+            auth={
+                "command": [
+                    "python3",
+                    "-c",
+                    "import sys; print('leaked-secret-stderr', file=sys.stderr); sys.exit(3)",
+                ]
+            },
+        )
+
+        with pytest.raises(ConfigValidationError) as info:
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert info.value.context["reason"] == "endpoint 'lab' auth command 'python3' exited with 3"
+        assert "leaked" not in str(info.value)
+
+    def test_a_command_that_cannot_run_is_refused(self, compatible, tmp_path):
+        not_executable = tmp_path / "token.txt"
+        not_executable.write_text("x")
+        _declare_full("http://127.0.0.1:1/v1", auth={"command": [str(not_executable)]})
+
+        with pytest.raises(ConfigValidationError) as info:
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert info.value.context["reason"].startswith(
+            f"endpoint 'lab' auth command '{not_executable}' could not be run: "
+        )
+
+
+class TestRedactionRules:
+    def test_a_short_header_value_is_not_masked_by_value(self, compatible, monkeypatch):
+        monkeypatch.setenv("SHORT", "v")
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth="none", headers={"api-version": "${SHORT}"})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["api-version"] == "v"
+        assert redact_text("v is a letter in every log line") == "v is a letter in every log line"
+
+    def test_a_vendor_error_that_echoes_the_request_is_masked_where_it_is_wrapped(
+        self, compatible, monkeypatch
+    ):
+        from agent_actions.errors import VendorAPIError
+
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        with FakeEndpoint(statuses=[401], echo_headers=True) as server:
+            _declare_full(server.base_url, auth={"env": "LAB_KEY", "header": "api-key"})
+
+            with pytest.raises(VendorAPIError) as info:
+                compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert SECRET not in str(info.value)
+        assert "[REDACTED]" in str(info.value)
+        assert SECRET in server.requests[0]["headers"]["api-key"]  # it was sent, and echoed

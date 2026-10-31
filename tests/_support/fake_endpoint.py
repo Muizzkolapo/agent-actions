@@ -40,9 +40,15 @@ def reply_for_schema(schema: dict[str, Any] | None, model: str) -> dict[str, Any
 class FakeEndpoint:
     """One server; `requests` holds every request in order."""
 
-    def __init__(self, mode: str = "honour", statuses: list[int] | None = None) -> None:
+    def __init__(
+        self, mode: str = "honour", statuses: list[int] | None = None, echo_headers: bool = False
+    ) -> None:
         self.mode = mode
         self.statuses = list(statuses or [])
+        # A gateway's error body often quotes the request; this one does on demand.
+        self.echo_headers = echo_headers
+        # When set, every 200 reply carries exactly this text as the content.
+        self.content: str | None = None
         self.requests: list[dict[str, Any]] = []
         self._server: ThreadingHTTPServer | None = None
 
@@ -94,11 +100,16 @@ class FakeEndpoint:
         if self.statuses:
             status = self.statuses.pop(0)
             if status != 200:
-                return status, {"error": {"message": f"stub answered {status}", "type": "stub"}}
+                message = f"stub answered {status}"
+                if self.echo_headers:
+                    message += " for request headers " + json.dumps(self.requests[-1]["headers"])
+                return status, {"error": {"message": message, "type": "stub"}}
         model = body.get("model") if isinstance(body, dict) else None
         response_format = body.get("response_format") if isinstance(body, dict) else None
         schema = (response_format or {}).get("json_schema")
-        if self.mode == "honour":
+        if self.content is not None:
+            content = self.content
+        elif self.mode == "honour":
             content = json.dumps(reply_for_schema(schema, str(model)))
         elif self.mode == "ignore":
             content = json.dumps({"wrong": 1})
