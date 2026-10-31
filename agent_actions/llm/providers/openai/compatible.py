@@ -264,7 +264,7 @@ def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
     # stderr stays out of the message: it can hold the secret.
     if completed.returncode != 0:
         _refuse(endpoint, f"auth command '{command[0]}' exited with {completed.returncode}")
-    value = completed.stdout.strip()
+    value = _header_safe(endpoint, completed.stdout, f"runs auth command '{command[0]}'")
     if not value:
         _refuse(endpoint, f"auth command '{command[0]}' printed nothing")
     register_secret(value)

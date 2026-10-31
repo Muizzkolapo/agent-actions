@@ -80,7 +80,7 @@ class Endpoint(BaseModel):
     @property
     def url_env_var(self) -> str | None:
         """The variable a `${NAME}` url reads, or None for a literal url."""
-        match = _WHOLE_ENV_VAR.match(self.url)
+        match = _WHOLE_ENV_VAR.fullmatch(self.url)
         return match.group(1) if match else None
 
     def resolved_url(self, environ: Mapping[str, str] = os.environ) -> str:
@@ -122,7 +122,7 @@ def _parse_endpoint(name: str, settings: Any) -> Endpoint:
     key = f"endpoints.{name}"
     if name in builtin_vendor_names():
         _refuse(key, f"'{name}' is a built-in vendor; choose another endpoint name")
-    if not _NAME.match(name):
+    if not _NAME.fullmatch(name):
         _refuse(key, "use a lowercase name of letters, digits, '-' and '_'")
     if not isinstance(settings, Mapping):
         _refuse(key, "must be a mapping with url and auth")
@@ -139,7 +139,7 @@ def _parse_endpoint(name: str, settings: Any) -> Endpoint:
         if any(not header for header in headers):
             _refuse(f"{key}.headers", "a header name must not be empty")
         for header in headers:
-            if not _HEADER_NAME.match(header):
+            if not _HEADER_NAME.fullmatch(header):
                 _refuse(f"{key}.headers.{header}", _HEADER_NAME_HINT)
 
     fields = {**settings, "name": name, "auth": _parse_auth(f"{key}.auth", settings["auth"])}
@@ -161,7 +161,7 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
         _refuse(key, "write 'auth: none', or a mapping with env or command")
     _refuse_non_string_keys(key, raw)
     env, command = raw.get("env"), raw.get("command")
-    if env is not None and not (isinstance(env, str) and _ENV_VAR_NAME.match(env)):
+    if env is not None and not (isinstance(env, str) and _ENV_VAR_NAME.fullmatch(env)):
         _refuse(f"{key}.env", _ENV_HINT)
     if command is not None and not (
         isinstance(command, list) and command and all(isinstance(c, str) and c for c in command)
@@ -174,7 +174,7 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
 
     if (auth.env is None) == (auth.command is None):
         _refuse(key, "give exactly one of env or command, or write 'auth: none'")
-    if not _HEADER_NAME.match(auth.header):
+    if not _HEADER_NAME.fullmatch(auth.header):
         _refuse(f"{key}.header", _HEADER_NAME_HINT)
     if auth.refresh_seconds is not None and auth.command is None:
         _refuse(key, "refresh_seconds applies to command auth only")
