@@ -21,7 +21,6 @@ from typing import Any, ClassVar, NoReturn
 
 from openai import Omit
 
-from agent_actions.config.path_config import find_project_root_dir
 from agent_actions.errors import ConfigurationError, ConfigValidationError, VendorAPIError
 from agent_actions.llm.config.endpoints import (
     AUTHORIZATION_HEADER,
@@ -37,6 +36,7 @@ from agent_actions.llm.config.runtime_profiles import (
 from agent_actions.llm.providers.openai.client import OpenAIClient
 from agent_actions.logging.filters import register_secret
 from agent_actions.utils.constants import JSON_MODE_KEY
+from agent_actions.utils.project_root import find_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -171,14 +171,16 @@ class EndpointClient(OpenAIClient):
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
+        auth = cls.ENDPOINT.auth
+        # The token this call sends, so a 401 renews that one and not a sibling's renewal.
+        sent = _secret(cls.ENDPOINT) if auth is not None and auth.command is not None else None
         try:
             records = super().call_json(api_key, agent_config, prompt_config, context_data, schema)
         except VendorAPIError as exc:
-            auth = cls.ENDPOINT.auth
-            if auth is None or auth.command is None or not _is_unauthorized(exc):
+            if sent is None or auth is None or auth.command is None or not _is_unauthorized(exc):
                 raise
             # An expired token: run the command once more, then let a second 401 stand.
-            _command_secret(cls.ENDPOINT, auth.command, stale=_secret(cls.ENDPOINT))
+            _command_secret(cls.ENDPOINT, auth.command, stale=sent)
             records = super().call_json(api_key, agent_config, prompt_config, context_data, schema)
         if schema is None or any(
             isinstance(record, dict) and "_parse_error" in record for record in records
@@ -283,7 +285,8 @@ def _command_secret(endpoint: Endpoint, command: list[str], stale: str | None = 
 
 
 def _run_command(endpoint: Endpoint, command: list[str], key: _CommandKey) -> str:
-    root = find_project_root_dir() or Path.cwd()
+    # The same root `agac run` resolves (the nearest agent_actions.yml), not the outermost.
+    root = find_project_root() or Path.cwd()
     try:
         completed = subprocess.run(  # noqa: S603 — argv from the project config, no shell
             command,
