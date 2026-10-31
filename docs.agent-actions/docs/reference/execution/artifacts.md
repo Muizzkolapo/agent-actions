@@ -151,9 +151,9 @@ dependencies was edited in between — the same edits as for a completed action,
 the run names the edit and answers only the rest under it. When the action kept any
 answer, its stamps stay at the config those answers were given under
 (`kept_answers_under` in the status file), so every later run names the edit until
-`--rerun` answers every record under it. An action that completes holding answers from more
-than one config is marked so (`answers_under_more_than_one_config`), and each run says so
-even after the edit is undone. A change to a tool's code or to the contents of
+`--rerun` answers every record under it. An action that may hold answers from more than one
+config is marked so (`answers_under_more_than_one_config`), and each run says so even after
+the edit is undone. A change to a tool's code or to the contents of
 a seed data file is not seen, so run `agac run --rerun <action>` or `--fresh` to answer
 everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
 record to the guard again, so a record its code now skips is skipped, and one it now

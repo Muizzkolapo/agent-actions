@@ -135,8 +135,8 @@ def _edit_warnings(records) -> list[str]:
 def _stopped_and_edited(label: str) -> str:
     return (
         f"define was edited since its last run started ({label}): the records it finished "
-        "stand, and the rest are answered under the edit. Run again with --rerun define to "
-        "answer every record under the edit"
+        "stand, a batch already sent is collected as it was sent, and the rest are answered "
+        "under the edit. Run again with --rerun define to answer every record under the edit"
     )
 
 

@@ -122,9 +122,9 @@ records it finished and answers the rest under the edit. Once it completes, each
 names the edit as for a completed action, since it still holds answers from before it:
 
 ```
-classify was edited since its last run started (model): the records it finished stand, and
-the rest are answered under the edit. Run again with --rerun classify to answer every record
-under the edit
+classify was edited since its last run started (model): the records it finished stand, a
+batch already sent is collected as it was sent, and the rest are answered under the edit. Run
+again with --rerun classify to answer every record under the edit
 ```
 
 To answer every record under the edit, pass `--rerun` with the action's name. It re-runs that
@@ -134,12 +134,13 @@ action and every action that reads its output, and keeps every other action's an
 agac run -a my_agent --rerun classify
 ```
 
-An action that holds answers from more than one config keeps saying so, even after the
-config is changed back:
+An action that may hold answers from more than one config keeps saying so, even after the
+config is changed back. That covers a resume under an edit, a retry under an edit, and a reset
+under a file limit that leaves files from an earlier config:
 
 ```
-classify holds answers given under more than one config. Run again with --rerun classify to
-answer every record under the config in force
+classify may hold answers given under more than one config. Run again with --rerun classify
+to answer every record under the config in force
 ```
 
 An edit made while an action's batch is out is named by the run that collects it. The batch

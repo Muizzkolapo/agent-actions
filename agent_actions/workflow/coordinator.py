@@ -294,11 +294,12 @@ class AgentWorkflow:
             edits = edits_since_its_work_began(
                 state_mgr.get_status_details(name), self.action_configs.get(name)
             )
-            if edits:
+            if edits and name not in about_to_rerun:
                 logger.warning(
                     "%s was edited since its last run started (%s): the records it finished "
-                    "stand, and the rest are answered under the edit. Run again with --rerun "
-                    "%s to answer every record under the edit",
+                    "stand, a batch already sent is collected as it was sent, and the rest are "
+                    "answered under the edit. Run again with --rerun %s to answer every record "
+                    "under the edit",
                     name,
                     ", ".join(edits),
                     name,
@@ -333,11 +334,15 @@ class AgentWorkflow:
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
 
     def _name_an_edit_under_a_batch_out(self, action_name: str) -> None:
-        """Warn of an edit made while the action's batch is out; it is collected as sent."""
-        edits = edits_since_its_work_began(
-            self.services.core.state_manager.get_status_details(action_name),
-            self.action_configs.get(action_name),
-        )
+        """Warn of an edit made while the action's batch is out; it is collected as sent.
+
+        Not for an action held to answers it kept from another config: its stamp names that
+        config, not the one the batch was sent under, and the mix is named once it completes.
+        """
+        details = self.services.core.state_manager.get_status_details(action_name)
+        if isinstance(details.get(KEPT_ANSWERS_UNDER), dict):
+            return
+        edits = edits_since_its_work_began(details, self.action_configs.get(action_name))
         if edits:
             logger.warning(
                 "%s was edited since its batch was sent (%s): the batch is collected as it "

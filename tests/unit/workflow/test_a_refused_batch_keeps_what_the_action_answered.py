@@ -129,8 +129,9 @@ def test_an_edit_since_the_refusal_keeps_what_it_had_answered_and_names_the_edit
     assert manager.get_status(ACTION) == ActionStatus.PENDING
     assert [r.getMessage() for r in records if "was edited since" in r.getMessage()] == [
         f"{ACTION} was edited since its last run started (action config (prompt/schema/guard)): "
-        "the records it finished stand, and the rest are answered under the edit. Run again "
-        f"with --rerun {ACTION} to answer every record under the edit"
+        "the records it finished stand, a batch already sent is collected as it was sent, and "
+        f"the rest are answered under the edit. Run again with --rerun {ACTION} to answer "
+        "every record under the edit"
     ]
 
 

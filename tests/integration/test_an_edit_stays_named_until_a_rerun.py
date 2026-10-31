@@ -212,7 +212,7 @@ def test_an_edit_reverted_after_a_resume_still_says_the_answers_come_from_two_co
     assert result.exit_code == 0, result.output
     assert provider.asked == []
     assert "was edited since" not in _printed(result)
-    assert f"{ACTION} holds answers given under more than one config" in _printed(result)
+    assert f"{ACTION} may hold answers given under more than one config" in _printed(result)
 
     result = _run("--rerun", ACTION)
 
@@ -246,7 +246,7 @@ def test_an_edit_while_the_batch_is_out_is_named_by_the_run_that_collects_it(pro
     assert STILL_NAMED in _printed(result)
 
 
-MIXED = f"{ACTION} holds answers given under more than one config"
+MIXED = f"{ACTION} may hold answers given under more than one config"
 
 
 def _set_model(root, model):
@@ -310,3 +310,85 @@ def test_a_rerun_of_an_action_whose_batch_is_out_does_not_say_it_is_collected(pr
     assert result.exit_code == 0, result.output
     assert "collected as it was sent" not in _printed(result)
     assert f"--rerun: {ACTION}" in _printed(result)
+
+
+def _flags(root):
+    return _status_details(root).get("answers_under_more_than_one_config")
+
+
+def test_a_rerun_under_a_file_limit_after_an_edit_leaves_the_action_marked_as_mixed(online):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    _edit_model(online, EDITED_MODEL)
+    assert _run("--rerun", ACTION, "--file-limit", "1").exit_code == 0
+    assert _flags(online) is True
+
+    result = _run("--file-limit", "1")
+
+    assert result.exit_code == 0, result.output
+    assert MIXED in _printed(result)
+
+    assert _run("--rerun", ACTION, "--file-limit", "1").exit_code == 0
+    assert _flags(online) is True, "a rerun under the limit dropped a mix the skipped file holds"
+
+
+def test_a_rerun_under_a_file_limit_with_nothing_edited_marks_no_mix(online):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    assert _run("--rerun", ACTION, "--file-limit", "1").exit_code == 0
+
+    result = _run("--file-limit", "1")
+
+    assert result.exit_code == 0, result.output
+    assert _flags(online) is None
+    assert "more than one config" not in _printed(result)
+
+
+def test_a_retry_under_an_edit_then_reverted_still_names_the_mix(online, monkeypatch):  # noqa: F811
+    answer = AgacClient.call_json
+
+    def beta_empty(api_key, agent_config, prompt_config, context_data, schema):
+        if _page_in(prompt_config, context_data) == "Page beta.":
+            return [{}]
+        return answer(api_key, agent_config, prompt_config, context_data, schema)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(AgacClient, "call_json", staticmethod(beta_empty))
+        assert _run("--fresh").exit_code == 0
+    _set_model(online, EDITED_MODEL)
+    assert CliRunner().invoke(cli, ["retry", "-a", WORKFLOW]).exit_code == 0
+    _set_model(online, MODEL)
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert "was edited since" not in _printed(result)
+    assert MIXED in _printed(result)
+
+
+def test_a_batch_sent_under_the_edit_is_not_said_to_be_sent_before_it(online, provider):  # noqa: F811
+    provider.stops(at_call=3, raising=KeyboardInterrupt())
+    _run("--fresh")
+    _set_model(online, EDITED_MODEL)
+    config = online / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().replace("run_mode: online", "run_mode: batch"))
+    assert _run().exit_code == 0
+    assert _status(online) == "batch_submitted"
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _status(online) == "completed"
+    assert "edited since its batch was sent" not in _printed(result)
+    assert len(_stored(online)) == len(EVERY_PAGE)
+
+
+def test_a_rerun_of_an_edited_stopped_action_does_not_say_its_answers_stand(online, provider):  # noqa: F811
+    provider.stops(at_call=3, raising=KeyboardInterrupt())
+    _run("--fresh")
+    _set_model(online, EDITED_MODEL)
+    provider.answers()
+
+    result = _run("--rerun", ACTION)
+
+    assert result.exit_code == 0, result.output
+    assert "edited since its last run started" not in _printed(result)
+    assert provider.pages() == EVERY_PAGE

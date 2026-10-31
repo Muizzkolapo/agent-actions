@@ -699,8 +699,8 @@ class ActionExecutor:
             )
         elif details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
             logger.warning(
-                "%s holds answers given under more than one config. Run again with --rerun %s "
-                "to answer every record under the config in force",
+                "%s may hold answers given under more than one config. Run again with --rerun "
+                "%s to answer every record under the config in force",
                 action_name,
                 action_name,
             )
