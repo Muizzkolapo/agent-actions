@@ -1,0 +1,5 @@
+kind: Bug Fix
+body: >-
+  Editing a tool or guard UDF's source file now re-runs the affected action and its
+  readers on the next run, including when an earlier run stopped partway through.
+time: 2026-10-31T15:55:00Z

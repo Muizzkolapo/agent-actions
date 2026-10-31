@@ -1,6 +1,7 @@
 """UDF discovery and validation."""
 
 import ast
+import hashlib
 import importlib.util
 import logging
 import sys
@@ -156,7 +157,13 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
                 sys.modules[f"agent_actions._udfs.{module_name}"] = module
-                spec.loader.exec_module(module)
+                source = py_file.read_bytes()
+                code = compile(source, str(py_file), "exec", dont_inherit=True)
+                exec(code, module.__dict__)
+                source_hash = hashlib.sha256(source).hexdigest()
+                for metadata in UDF_REGISTRY.values():
+                    if metadata["file"] == str(py_file):
+                        metadata["source_hash"] = source_hash
 
         except DuplicateFunctionError:
             raise

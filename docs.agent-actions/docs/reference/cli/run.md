@@ -95,6 +95,8 @@ A workflow that has completed is skipped on the next run unless something it ran
 changed. Staged input counts: adding, removing or changing a file under the first stage's
 input re-runs that action and every action reading it over all input, and the run log names
 the files that changed. `--fresh` is not needed to pick up new input.
+Editing the source file of a tool or guard UDF also re-runs its action and readers.
+The whole file is tracked, including helpers in that file; imported files are not tracked.
 
 Neither flag holds back [`agac retry`](./retry): a repair walks every file holding a record it
 named. Stopping short of one would leave that record's cleared disposition unwritten, which is

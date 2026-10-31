@@ -137,6 +137,19 @@ def test_a_guard_that_reads_skips_the_record_it_rejects(project):
     assert _answered(project) == ["keep"], output
 
 
+def test_editing_a_guard_source_reopens_its_action(project):
+    _guard(project, READS)
+    code, output = _run(project)
+    assert code == 0, output
+    assert _answered(project) == ["keep"]
+
+    _guard(project, READS.replace('!= "reject"', '!= "keep"'))
+    code, output = _agac(project, "run", "-a", WORKFLOW)
+    output = _unwrapped(output)
+    assert code == 0, output
+    assert _answered(project) == [" Reject "], output
+
+
 def test_a_guard_that_writes_to_its_input_fails_its_action_by_name(project):
     _guard(project, TIDIES)
 

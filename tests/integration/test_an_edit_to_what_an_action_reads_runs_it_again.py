@@ -12,6 +12,7 @@ line to `calls.log` per record, so a test sees which actions ran. Every run is i
 """
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -157,7 +158,7 @@ def logged_bystander(data: dict[str, Any]) -> dict[str, Any]:
     return {{"seen": item}}
 """
 
-STAMP_KEYS = ("context_scope_hash", "dependencies_hash")
+STAMP_KEYS = ("context_scope_hash", "dependencies_hash", "udf_source_hash")
 
 
 def _workflow(root):
@@ -281,6 +282,60 @@ def test_an_edit_to_the_context_scope_runs_the_action_and_its_readers_under_it(c
     assert _ran(completed) == {}
 
 
+def test_an_edit_to_tool_source_runs_it_and_its_readers_again(completed):
+    tool = completed / "tools" / WORKFLOW / "logged.py"
+    source = tool.read_text()
+    old = 'return {"saw": item + ":" + staged.get("text", "-")}'
+    assert source.count(old) == 1
+    tool.write_text(source.replace(old, 'return {"saw": item + ":changed"}'))
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, _output(result)
+    ran = _ran(completed)
+    assert ran["recap"] == ITEMS
+    assert ran["after_recap"] == ITEMS
+    assert _recap_saw(completed) == [f"{item}:changed" for item in ITEMS]
+    assert _reader_echoed(completed) == [f"{item}:changed" for item in ITEMS]
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+    assert result.returncode == 0, _output(result)
+    assert _ran(completed) == {}
+
+
+def test_an_interrupted_tool_with_edited_source_restarts_its_work(project):
+    (project / FAULT).write_text(json.dumps({"item": "beta", "raise": "interrupt"}))
+    result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
+    assert result.returncode != 0, _output(result)
+    assert _ran(project).get("recap") == ["alpha"]
+
+    (project / FAULT).unlink()
+    tool = project / "tools" / WORKFLOW / "logged.py"
+    source = tool.read_text()
+    old = 'return {"saw": item + ":" + staged.get("text", "-")}'
+    assert source.count(old) == 1
+    tool.write_text(source.replace(old, 'return {"saw": item + ":changed"}'))
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, _output(result)
+    assert _recap_saw(project) == [f"{item}:changed" for item in ITEMS]
+    assert _reader_echoed(project) == [f"{item}:changed" for item in ITEMS]
+
+
+def test_same_size_edit_with_unchanged_timestamp_executes_new_source(completed):
+    tool = completed / "tools" / WORKFLOW / "logged.py"
+    original = tool.read_text()
+    timestamp = tool.stat()
+    old = 'item + ":" + staged.get("text", "-")'
+    assert original.count(old) == 1
+    tool.write_text(original.replace(old, 'item + "!" + staged.get("text", "-")'))
+    os.utime(tool, ns=(timestamp.st_atime_ns, timestamp.st_mtime_ns))
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+    assert result.returncode == 0, _output(result)
+    assert _recap_saw(completed) == [f"{item}!-" for item in ITEMS]
+
+
 def test_a_drop_or_a_passthrough_added_counts_as_an_edit(completed):
     _edit(
         completed,
@@ -351,7 +406,7 @@ def test_a_store_stamped_before_these_edits_were_recorded_does_not_run_again(com
     statuses = json.loads(_status_file(completed).read_text())
     for details in statuses.values():
         for stamp in (details, details.get("answered_under") or {}):
-            for key in STAMP_KEYS:
+            for key in ("context_scope_hash", "dependencies_hash"):
                 stamp.pop(key, None)
     _status_file(completed).write_text(json.dumps(statuses))
 
@@ -360,6 +415,24 @@ def test_a_store_stamped_before_these_edits_were_recorded_does_not_run_again(com
     assert result.returncode == 0, _output(result)
     assert "resetting to pending" not in _output(result)
     assert _ran(completed) == {}
+
+
+def test_a_store_without_source_stamps_refreshes_udf_actions(completed):
+    statuses = json.loads(_status_file(completed).read_text())
+    for details in statuses.values():
+        for stamp in (details, details.get("answered_under") or {}):
+            stamp.pop("udf_source_hash", None)
+    _status_file(completed).write_text(json.dumps(statuses))
+    tool = completed / "tools" / WORKFLOW / "logged.py"
+    source = tool.read_text()
+    old = 'return {"saw": item + ":" + staged.get("text", "-")}'
+    assert source.count(old) == 1
+    tool.write_text(source.replace(old, 'return {"saw": item + ":changed"}'))
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+    assert result.returncode == 0, _output(result)
+    assert _recap_saw(completed) == [f"{item}:changed" for item in ITEMS]
+    assert _reader_echoed(completed) == [f"{item}:changed" for item in ITEMS]
 
 
 def test_an_action_stopped_partway_answers_everything_again_after_a_scope_edit(project):

@@ -1,5 +1,7 @@
 """Config loading, schema validation, and UDF discovery for workflow initialization."""
 
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -7,7 +9,7 @@ from typing import Any
 from rich.console import Console
 
 from agent_actions.config.manager import ConfigManager
-from agent_actions.errors import UDFLoadError, enrich_exception_context
+from agent_actions.errors import FunctionNotFoundError, UDFLoadError, enrich_exception_context
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -16,9 +18,33 @@ from agent_actions.logging.events import (
     WorkflowInitializationStartEvent,
 )
 from agent_actions.utils.limits import FILE_LIMIT_KEY, RECORD_LIMIT_KEY, check_environment
+from agent_actions.utils.udf_management.registry import get_udf_metadata
 from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _udf_source_hash(action_config: dict[str, Any]) -> str:
+    """Snapshot the source files used by a tool and its UDF guard for this run."""
+    names = []
+    if action_config.get("model_vendor") == "tool" and action_config.get("model_name"):
+        names.append(action_config["model_name"])
+    if action_config.get("conditional_clause"):
+        names.append(action_config["conditional_clause"])
+    if not names:
+        return ""
+    sources: dict[str, str | None] = {}
+    for name in sorted(set(names)):
+        try:
+            metadata = get_udf_metadata(name)
+        except FunctionNotFoundError:
+            sources[name] = None
+            continue
+        if "source_hash" in metadata:
+            sources[name] = metadata["source_hash"]
+        else:
+            sources[name] = hashlib.sha256(Path(metadata["file"]).read_bytes()).hexdigest()
+    return hashlib.sha256(json.dumps(sources, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -> Any:
@@ -88,6 +114,7 @@ def load_workflow_configs(
             continue
         if action_name in action_indices:
             action_config["idx"] = action_indices[action_name]
+        action_config["_udf_source_hash"] = _udf_source_hash(action_config)
         # Add workflow config path for static data loading
         action_config["workflow_config_path"] = config.paths.constructor_path
         # Named suites resolve through the schema route at execution time,
