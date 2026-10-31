@@ -87,6 +87,7 @@ Key Functions
 | `PathManager.get_standard_path` | `agent_io/target/{action}/` | Reads | — |
 | `PathManager.clean_path` | `agent_io/target/{action}/` | Writes | — |
 | `load_project_config` | `agent_actions.yml` | Reads | `project_name`, `schema_path`, `tool_path`, `seed_data_path`, `seed_data_paths`, `logging` |
+| `load_project_config` | `agent_actions.yml` | Validates | `endpoints` (each entry's `url`, `auth`, `headers`, `timeout_seconds`; refused with the endpoint name and key, see `llm.config.endpoints`) |
 | `get_tool_dirs` | `agent_actions.yml` | Reads | `tool_path` |
 | `get_schema_path` | `agent_actions.yml` | Reads | `schema_path` |
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |

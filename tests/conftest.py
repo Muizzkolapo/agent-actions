@@ -173,6 +173,7 @@ def wire_batch_disposition_delegate(backend: MagicMock) -> None:
 @pytest.fixture(autouse=True)
 def _reset_global_singletons():
     """Prevent singleton state from leaking between tests."""
+    from agent_actions.llm.config.endpoints import clear_project_endpoints
     from agent_actions.logging.factory import LoggerFactory
     from agent_actions.utils.correlation import VersionIdGenerator
     from agent_actions.utils.path_utils import reset_path_manager
@@ -180,10 +181,12 @@ def _reset_global_singletons():
     reset_path_manager()
     LoggerFactory.reset()
     VersionIdGenerator.clear()
+    clear_project_endpoints()
     yield
     reset_path_manager()
     LoggerFactory.reset()  # cascades to EventManager.reset()
     VersionIdGenerator.clear()
+    clear_project_endpoints()
 
 
 @pytest.fixture(autouse=True, scope="session")
