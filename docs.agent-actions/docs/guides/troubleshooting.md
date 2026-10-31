@@ -289,7 +289,7 @@ expect:
 
 ## Declared Endpoints
 
-Errors from the `endpoints:` block of `agent_actions.yml` and from an action that selects one with `model_vendor`. See [Endpoints](../reference/configuration/endpoints.md).
+The texts most often met from the `endpoints:` block of `agent_actions.yml` and from an action that selects one with `model_vendor`. Every load rule is on the [Endpoints](../reference/configuration/endpoints.md) page.
 
 | Message | Stage | What to do |
 |---------|-------|------------|
@@ -303,7 +303,9 @@ Errors from the `endpoints:` block of `agent_actions.yml` and from an action tha
 | `Action '<a>': endpoint '<name>' auth command 'x' is not on PATH` | preflight | Install the command or add its directory to PATH. |
 | `Action '<a>': endpoint '<name>' takes its credential from endpoints.<name>.auth; remove api_key from the action` | load | Remove `api_key` (or `base_url`) from the action; the endpoint carries them. |
 | `Action '<a>': vendor '<name>' does not support run_mode: batch.` | preflight | Set `run_mode: online`; endpoints run online only. |
-| `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys`, record | Check the credential in `endpoints.<name>.auth`; with `command` auth the command is run once more before a record fails. |
+| `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys` | Check the credential in `endpoints.<name>.auth`. At record time a 401 shows as the vendor's own error text; with `command` auth the command is run once more before the record fails. |
+| `endpoint '<name>' could not be reached: ...` | `--verify-keys` | Check `endpoints.<name>.url` and that the server is running. |
+| `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion: check the url, the model name and the server's own log. |
 | `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` | `--verify-keys` | Use a server that honours `json_schema`, or put one (vLLM, TGI, a LiteLLM proxy) in front of this one. |
 | `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema; the record is dispositioned `parse_error`. Check the model and the schema. |
 

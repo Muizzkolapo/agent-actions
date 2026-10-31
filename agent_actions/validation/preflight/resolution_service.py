@@ -285,19 +285,24 @@ class WorkflowResolutionService:
         """Send the structured-output probe to each endpoint the workflow uses."""
         from agent_actions.llm.providers.openai.endpoint_probe import probe_endpoint
 
+        hints = {
+            "refused": "Check the credential in endpoints.{name}.auth.",
+            "not_honoured": (
+                "Use a server that honours response_format json_schema, or put one "
+                "(vLLM, TGI, a LiteLLM proxy) in front of this one."
+            ),
+            "answered": (
+                "The server answered, but not with a completion: check endpoints.{name}.url, "
+                "the model name, and the server's own log."
+            ),
+            "unreachable": "Check endpoints.{name}.url and that the server is running.",
+            "config": "Fix endpoints.{name}.auth.",
+        }
         for name, model_name in self._endpoint_models.items():
             probe = probe_endpoint(name, model_name)
             if probe.ok or probe.error is None:
                 continue
-            if "refused the credential" in probe.error:
-                hint = f"Check the credential in endpoints.{name}.auth."
-            elif "could not be reached" in probe.error:
-                hint = f"Check endpoints.{name}.url and that the server is running."
-            else:
-                hint = (
-                    "Use a server that honours response_format json_schema, or put one "
-                    "(vLLM, TGI, a LiteLLM proxy) in front of this one."
-                )
+            hint = hints[probe.kind].format(name=name)
             result.add_error(
                 StaticTypeError(
                     message=probe.error,
