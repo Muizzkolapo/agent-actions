@@ -129,10 +129,24 @@ def _endpoint_environment_errors(
             )
         )
 
-    try:
-        endpoint.resolved_url()
-    except ConfigurationError as exc:
-        unset(f"Action '{action_name}': {exc.context['reason']}", endpoint.url_env_var or "")
+    variable = endpoint.url_env_var
+    if variable is not None and not os.environ.get(variable):
+        unset(f"{subject} reads its url from {variable}, which is not set", variable)
+    else:
+        try:
+            endpoint.resolved_url()
+        except ConfigurationError as exc:
+            # A literal url was checked at load; only a variable's value can fail here.
+            rule = exc.context["reason"].split(": ", 1)[-1]
+            errors.append(
+                _endpoint_error(
+                    action_name,
+                    "model_vendor",
+                    f"{subject} reads its url from {variable}, which {rule}",
+                    f"Fix the value of {variable}: it is the base URL, for example "
+                    "http://gpu-box:8000/v1.",
+                )
+            )
 
     auth = endpoint.auth
     if auth is not None and auth.env is not None and not os.environ.get(auth.env):
