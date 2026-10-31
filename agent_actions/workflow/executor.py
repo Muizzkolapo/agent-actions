@@ -140,6 +140,7 @@ def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str]], ...] = (
     ("context_scope_hash", "context scope", _compute_context_scope_hash),
     ("dependencies_hash", "dependencies", _compute_dependencies_hash),
+    ("udf_source_hash", "tool source", lambda config: config.get("_udf_source_hash", "")),
 )
 
 
@@ -168,6 +169,7 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "config_hash",
         "context_scope_hash",
         "dependencies_hash",
+        "udf_source_hash",
         "records_processed",
         "truncated",
         "max_records",
@@ -192,8 +194,8 @@ CONFIG_EDIT = "action config (prompt/schema/guard)"
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:
     """What differs from the config *stamp* recorded, by label; empty when nothing does.
 
-    A key the stamp holds no value for never differs, so state written before a key
-    was recorded is left alone.
+    Older stamps without a UDF source hash must be refreshed once for actions
+    that use a UDF, because their recorded output cannot establish its source.
     """
     edits: list[str] = []
     # The hash reads a "model" key and configs write model_name/model_vendor; adding
@@ -208,7 +210,10 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
         edits.append(CONFIG_EDIT)
     for key, label, compute in _READS_STAMPS:
         stored = stamp.get(key)
-        if stored is not None and stored != compute(action_config):
+        current = compute(action_config)
+        if (stored is not None and stored != current) or (
+            key == "udf_source_hash" and stored is None and current
+        ):
             edits.append(label)
     return edits
 

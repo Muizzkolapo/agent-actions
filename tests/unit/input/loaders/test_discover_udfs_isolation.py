@@ -1,5 +1,8 @@
 """UDF discovery imports only udf_tool-declaring files; broken helpers must not block it."""
 
+import hashlib
+import os
+import py_compile
 import sys
 from unittest.mock import patch
 
@@ -88,6 +91,23 @@ def test_broken_non_udf_helper_does_not_block_discovery(tmp_path):
     (tmp_path / "formatting_tools.py").write_text(_BROKEN_HELPER)
     discover_udfs(tmp_path)
     assert "normalize_text" in UDF_REGISTRY
+
+
+def test_discovery_executes_and_stamps_the_same_source_when_pyc_is_stale(tmp_path):
+    path = tmp_path / "good.py"
+    old = _GOOD_UDF.replace("return data", "return 1   ")
+    new = _GOOD_UDF.replace("return data", "return 2   ")
+    path.write_text(old)
+    timestamp = path.stat()
+    py_compile.compile(str(path), doraise=True)
+    path.write_text(new)
+    os.utime(path, ns=(timestamp.st_atime_ns, timestamp.st_mtime_ns))
+
+    discover_udfs(tmp_path)
+
+    entry = UDF_REGISTRY["normalize_text"]
+    assert entry["function"]({}) == 2
+    assert entry["source_hash"] == hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_decorator_mention_in_comment_does_not_make_a_helper_a_udf(tmp_path):

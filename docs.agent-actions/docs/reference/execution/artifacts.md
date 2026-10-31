@@ -106,20 +106,22 @@ asks for. Alongside them are `records_processed` and `truncated`, which say what
 the run actually did rather than what it was asked for, and `model_name`,
 `model_vendor` and a `config_hash` over the prompt, schema and guard. What the action
 reads has digests of its own: `context_scope_hash` over its `context_scope` (observe,
-passthrough, drop and seed) and `dependencies_hash` over its `dependencies`. The model
-and these two are deliberately outside `config_hash`, so adding them could not rotate
+passthrough, drop and seed), `dependencies_hash` over its `dependencies`, and
+`udf_source_hash` over the source files of its tool and guard UDFs. The model
+and these digests are deliberately outside `config_hash`, so adding them could not rotate
 every stored digest at once and run every completed action again after an upgrade.
 
 These are what count as an edit to a completed action: its prompt, schema, guard,
-model, context scope or dependencies. Edit one and the next `agac run` logs what
+model, context scope, dependencies or tool and guard source files. Edit one and the next `agac run` logs what
 changed (for example `context scope changed for recap, resetting to pending`), and runs
 the action and every action reading it again under the new config. Reordering or
 repeating the entries of an `observe`, `passthrough` or `drop` list is not an edit;
 reordering `dependencies` is, since a fan-in merges its inputs in that order. A change to
-a tool's code or to the contents of a seed data file is not seen, so run
-`agac run --fresh` after one. A stamp written before a digest existed holds no value for
-it, so an edit it would have caught is not seen until the action next runs to completion
-for another reason, such as an edit to its prompt or a `--fresh` run.
+an imported helper file or to the contents of a seed data file is not seen, so run
+`agac run --fresh` after one. The whole file defining each UDF is tracked, including
+other helpers in that file. An older stamp without a UDF source digest causes an action
+using a tool or guard to run again once, since its recorded source is unknown. Older
+stamps missing the other digests remain unchanged until the action next completes.
 
 A changed `record_limit` re-runs the action only when it could have held
 something back. An untruncated run processed everything there was, so a limit at
@@ -142,13 +144,13 @@ left alone until the action next completes.
 
 An action also records, when it starts work, what that work is answered under:
 `answered_under`, holding the same `config_hash`, `model_name`, `model_vendor`,
-`context_scope_hash` and `dependencies_hash`. A run that stops partway through an
+`context_scope_hash`, `dependencies_hash` and `udf_source_hash`. A run that stops partway through an
 action — killed, interrupted, or stopped by an error — leaves the records it finished,
 and the next run keeps them only while these still match the config. If the prompt,
-schema, guard, model, context scope or dependencies was edited in between — the same
+schema, guard, model, context scope, dependencies or UDF source was edited in between — the same
 edits as for a completed action, above — the action and every action that reads it
 answer everything again, and a batch still out under the old config is given up. A
-change to a tool's code or to the contents of a seed data file is not seen, so run
+change to an imported helper or to a seed data file is not seen, so run
 `agac run --fresh` to answer everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
 record to the guard again, so a record its code now skips is skipped, and one it now
 passes is answered. The exception is a record of a batch action whose batch was out, or

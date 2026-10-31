@@ -146,6 +146,7 @@ class ActionConfigDict(TypedDict, total=False):
     # Guard / skip
     guard: GuardConfigDict
     conditional_clause: str
+    _udf_source_hash: str  # runtime snapshot of tool and guard source files
     skip_condition: str
     where_clause: WhereClauseDict
 
