@@ -344,6 +344,12 @@ something different for a file with no model and several independent readers, an
 because the merge at `manager.py` mixes it with a block that is already strict. It is
 the last remaining instance of this class inside `config/`.
 
+One block is modelled without modelling the file: `endpoints:` is refused by
+`llm.config.endpoints.load_project_endpoints`, called from `get_user_agents` beside the
+`default_agent_config` checks. The loader itself stays a dict read, so the helpers that
+take one key each (`get_tool_dirs`, `get_required_by_default`) keep reading theirs beside
+a bad `endpoints:` block, and a command that never reads the project is not told about it.
+
 A key already *known* to have no reader does not wait for that decision.
 `warn_unread_project_keys` names such a key at load, once per workflow, from the same
 place the project defaults are checked. It reports a fixed list of keys rather than

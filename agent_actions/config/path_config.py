@@ -61,29 +61,10 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
                     f"got {type(config).__name__}",
                     context={"config_path": str(config_file), "operation": "load_config"},
                 )
-            _load_endpoints(config, config_file)
             fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
             return config
 
-    _load_endpoints({}, None)
     return {}
-
-
-def _load_endpoints(config: dict[str, Any], config_file: Path | None) -> None:
-    """Validate the `endpoints:` block and make it the project's endpoint registry.
-
-    Every load replaces the registry, so the endpoints of a project loaded earlier in
-    the same process never reach the one loaded now.
-    """
-    from agent_actions.llm.config.endpoints import parse_endpoints, set_project_endpoints
-
-    try:
-        endpoints = parse_endpoints(config.get("endpoints"))
-    except ConfigValidationError as e:
-        e.context.setdefault("config_path", str(config_file))
-        e.context.setdefault("operation", "load_config")
-        raise
-    set_project_endpoints(endpoints)
 
 
 # Reported rather than refused: this file has no model, so a raise would be its only

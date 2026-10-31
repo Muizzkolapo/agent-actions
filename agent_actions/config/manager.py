@@ -315,6 +315,7 @@ class ConfigManager:
                 project_defaults = _validate_project_expect_block(project_defaults)
                 _refuse_blank_project_output_field(project_defaults)
             except (FileNotFoundError, ProjectRootNotFoundError):
+                project_config = {}
                 project_defaults = {}
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:
                 raise ConfigurationError(
@@ -325,6 +326,11 @@ class ConfigManager:
                     },
                     cause=e,
                 ) from e
+            # Beside its reader, like default_agent_config above: the plain loader
+            # stays a dict read, and a refusal names the endpoint and the key itself.
+            from agent_actions.llm.config.endpoints import load_project_endpoints
+
+            load_project_endpoints(project_config)
             # Validate entire workflow config (actions, defaults, duplicates,
             # dangling deps, circular deps) in one pass via Pydantic.
             try:
