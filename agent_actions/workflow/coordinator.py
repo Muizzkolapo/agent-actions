@@ -22,6 +22,7 @@ from agent_actions.llm.providers.local_batch_records import (
 from agent_actions.logging.core.handlers.json_file import RUN_LOG_NAMES
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.prompt.context.scope_inference import expand_version_base_names
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.workflow.config_pipeline import load_workflow_configs
@@ -31,7 +32,7 @@ from agent_actions.workflow.execution_events import (
     fire_step_complete,
     fire_step_start,
 )
-from agent_actions.workflow.executor import action_is_halted, edited_since_its_work_began
+from agent_actions.workflow.executor import action_is_halted, edits_since_its_work_began
 from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
 from agent_actions.workflow.models import (
     ActionLogParams,
@@ -59,6 +60,7 @@ class AgentWorkflow:
 
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
+        self._check_rerun_names_an_action()
         self._run_static_validation()
         strip_unreachable_drops(self.action_configs)
 
@@ -114,8 +116,30 @@ class AgentWorkflow:
             return
         if self.config.fresh:
             self._clear_for_fresh_run()
-        else:
-            self._reset_retryable_actions()
+            return
+        self._reset_retryable_actions()
+        if self.config.rerun is None:
+            return
+        reopened: list[str] = []
+        for name in self._rerun_actions():
+            reopened += self.services.core.action_executor.reopen_with_readers(name)
+        logger.info("--rerun: %s answer every record again", ", ".join(dict.fromkeys(reopened)))
+
+    def _rerun_actions(self) -> list[str]:
+        """The actions ``--rerun`` names: the action, or every version of a versioned one."""
+        if self.config.rerun is None:
+            return []
+        return expand_version_base_names([self.config.rerun], list(self.action_configs))
+
+    def _check_rerun_names_an_action(self) -> None:
+        if self.config.rerun is not None and not set(self._rerun_actions()) & set(
+            self.action_configs
+        ):
+            raise ConfigurationError(
+                f"--rerun: '{self.config.rerun}' is not an action of {self.agent_name}. "
+                f"Actions: {', '.join(self.action_configs)}",
+                context={"rerun": self.config.rerun, "workflow": self.agent_name},
+            )
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
@@ -221,10 +245,10 @@ class AgentWorkflow:
         """Put failed, skipped and stopped actions back to pending so this run retries them.
 
         An action whose run stopped partway (killed, interrupted, or stopped by an error)
-        keeps the records it finished, and their prompt traces, while its config is the one
-        they were answered under: only failure dispositions are cleared, and the
-        DispositionGate carries the rest. Edited since, it and everything reading it are
-        forgotten and answer everything again. Any other action is cleared in bulk.
+        keeps the records it finished, and their prompt traces: only failure dispositions
+        are cleared, and the DispositionGate carries the rest. Edited since, it keeps them
+        too and answers the rest under the edit, with a warning. Any other action is
+        cleared in bulk.
         """
         state_mgr = self.services.core.state_manager
         halted = {
@@ -247,21 +271,21 @@ class AgentWorkflow:
             status = state_mgr.get_status(name)
             if status not in stopped_partway or name in halted:
                 continue
-            edited = edited_since_its_work_began(
+            edits = edits_since_its_work_began(
                 state_mgr.get_status_details(name), self.action_configs.get(name)
             )
-            if edited:
-                # Before any status below is written, so a process that dies in between
-                # finds the edit again and repeats this.
-                logger.info(
-                    "%s was edited since its last run started: it and what reads it "
-                    "answer everything again",
+            if edits:
+                logger.warning(
+                    "%s was edited since its last run started (%s): the records it finished "
+                    "stand, and the rest are answered under the edit. Run again with --rerun "
+                    "%s to answer every record under the edit",
+                    name,
+                    ", ".join(edits),
                     name,
                 )
-                self.services.core.action_executor.reopen_with_readers(name)
-            elif edited is False or status in MID_PROCESSING_STATUSES:
-                # Written before the config was recorded as work began, the state is reset
-                # as it was then: by its status alone.
+            # With no config recorded as its work began, the state is reset as it was
+            # then: by its status alone.
+            if edits is not None or status in MID_PROCESSING_STATUSES:
                 keeps.add(name)
         reset_actions = state_mgr.reset_retryable(exclude=halted)
         if not reset_actions:

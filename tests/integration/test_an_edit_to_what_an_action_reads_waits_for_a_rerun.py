@@ -1,9 +1,11 @@
-"""An edit to what an action reads runs it again, with what reads it (1332).
+"""An edit to what an action reads is named, and waits for ``--rerun`` to run it again.
 
-A completed action was run again after an edit only when its prompt, schema, guard or
-model changed. An edit to its `context_scope` or its `dependencies` left it `already
-complete`, holding answers produced under what it read before, and so did what reads it.
-An action stopped partway kept the records it had finished under the old scope.
+An edit to an action's `context_scope` or `dependencies` is recorded with its answers
+(1332). A run after one keeps those answers and those of what reads it, and warns which
+action was edited; ``--rerun <action>`` answers it and its readers again under the edit.
+What counts as such an edit, a retry after one, a batch action under one and an action
+stopped partway then rerun are pinned here; the plain keep is pinned by
+`test_a_config_edit_keeps_the_answers.py`.
 
 `recap` reads one field of `stage_items` and writes what it saw; `after_recap` reads
 `recap`; `bystander` reads `stage_items` and nothing the edits touch. Each tool writes a
@@ -27,7 +29,10 @@ FAULT = "fault.json"
 CALLS = "calls.log"
 ITEMS = ["alpha", "beta", "gamma"]
 TEXT = {"alpha": "first item", "beta": "second item", "gamma": "third item"}
+SAW_THE_ID = [f"{item}:-" for item in ITEMS]
 SAW_THE_TEXT = [f"{item}:{TEXT[item]}" for item in ITEMS]
+SCOPE = "observe: [stage_items.item_id, merge_direct.decision]"
+WIDER_SCOPE = "observe: [stage_items.item_id, stage_items.text, merge_direct.decision]"
 
 CONFIG = """name: map_reduce_fanin_check
 description: "an edit to what an action reads"
@@ -185,17 +190,17 @@ def _edit(root, old, new):
 def _agac(root, *args):
     """Run the command, then run again for each batch it leaves out, as a user does.
 
-    The last run's result, with what every run printed.
+    The last run's result, with what every run printed and the console's wrapping undone.
     """
     env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
     result = run_agac(root, *args, env=env)
     printed = result.stdout + result.stderr
     for _ in range(3):
-        if "run again" not in result.stdout + result.stderr:
+        if "run again to continue" not in " ".join((result.stdout + result.stderr).split()):
             break
         result = run_agac(root, "run", "-a", WORKFLOW, env=env)
         printed += result.stdout + result.stderr
-    result.printed = printed
+    result.printed = " ".join(printed.split())
     return result
 
 
@@ -255,41 +260,21 @@ def project(tmp_path):
 def completed(project):
     result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     assert result.returncode == 0, _output(result)
-    assert _recap_saw(project) == [f"{item}:-" for item in ITEMS]
+    assert _recap_saw(project) == SAW_THE_ID
     assert _ran(project) == {"recap": ITEMS, "after_recap": ITEMS, "bystander": ITEMS}
     return project
 
 
-def test_an_edit_to_the_context_scope_runs_the_action_and_its_readers_under_it(completed):
-    _edit(
-        completed,
-        "observe: [stage_items.item_id, merge_direct.decision]",
-        "observe: [stage_items.item_id, stage_items.text, merge_direct.decision]",
-    )
+def test_a_drop_or_a_passthrough_added_counts_as_an_edit_to_the_context_scope(completed):
+    _edit(completed, SCOPE, SCOPE + "\n      passthrough: [merge_direct.n_votes]")
 
     result = _agac(completed, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    assert "context scope changed for recap, resetting to pending" in _output(result)
-    assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS}
-    assert _recap_saw(completed) == SAW_THE_TEXT
-    assert _reader_echoed(completed) == SAW_THE_TEXT
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, _output(result)
+    assert "recap was edited since it completed (context scope)" in _output(result)
     assert _ran(completed) == {}
 
-
-def test_a_drop_or_a_passthrough_added_counts_as_an_edit(completed):
-    _edit(
-        completed,
-        "observe: [stage_items.item_id, merge_direct.decision]",
-        "observe: [stage_items.item_id, merge_direct.decision]\n"
-        "      passthrough: [merge_direct.n_votes]",
-    )
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "recap")
 
     assert result.returncode == 0, _output(result)
     assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS}
@@ -301,23 +286,7 @@ def test_a_drop_or_a_passthrough_added_counts_as_an_edit(completed):
     result = _agac(completed, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS}
-
-
-def test_an_edit_to_the_dependencies_runs_the_action_and_its_readers_again(completed):
-    _edit(
-        completed, "dependencies: [merge_direct]\n", "dependencies: [merge_direct, stage_items]\n"
-    )
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, _output(result)
-    assert "dependencies changed for recap, resetting to pending" in _output(result)
-    assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS}
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, _output(result)
+    assert "recap was edited since it completed (context scope)" in _output(result)
     assert _ran(completed) == {}
 
 
@@ -326,28 +295,28 @@ def test_an_edit_to_the_dependencies_runs_the_action_and_its_readers_again(compl
     [
         pytest.param(None, id="nothing-edited"),
         pytest.param(
-            (
-                "observe: [stage_items.item_id, merge_direct.decision]",
-                "observe: [merge_direct.decision, stage_items.item_id, merge_direct.decision]",
-            ),
+            (SCOPE, "observe: [merge_direct.decision, stage_items.item_id, merge_direct.decision]"),
             id="scope-reordered-and-repeated",
         ),
     ],
 )
-def test_a_run_that_changes_nothing_the_action_reads_runs_nothing(completed, edit):
+def test_a_run_that_changes_nothing_the_action_reads_names_no_edit_and_runs_nothing(
+    completed, edit
+):
     if edit is not None:
         _edit(completed, *edit)
 
     result = _agac(completed, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
+    assert "was edited since" not in _output(result)
     assert "resetting to pending" not in _output(result)
     assert _ran(completed) == {}
 
 
-def test_a_store_stamped_before_these_edits_were_recorded_does_not_run_again(completed):
+def test_a_store_stamped_before_these_edits_were_recorded_names_no_edit(completed):
     """Stamps written before this release hold neither digest: reading their absence as an
-    edit would run every completed action of every workflow once after the upgrade."""
+    edit would warn of an edit at every completed action of every workflow after the upgrade."""
     statuses = json.loads(_status_file(completed).read_text())
     for details in statuses.values():
         for stamp in (details, details.get("answered_under") or {}):
@@ -358,34 +327,33 @@ def test_a_store_stamped_before_these_edits_were_recorded_does_not_run_again(com
     result = _agac(completed, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
+    assert "was edited since" not in _output(result)
     assert "resetting to pending" not in _output(result)
     assert _ran(completed) == {}
 
 
-def test_an_action_stopped_partway_answers_everything_again_after_a_scope_edit(project):
-    """The resume kept the record finished before the stop, answered under the old scope."""
+def test_rerun_of_an_action_stopped_partway_after_a_scope_edit_answers_every_record(project):
+    """Without --rerun the record finished before the stop keeps what the old scope gave it."""
     (project / FAULT).write_text(json.dumps({"item": "beta", "raise": "interrupt"}))
     result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     assert result.returncode != 0, _output(result)
     assert _ran(project).get("recap") == ["alpha"]
 
     (project / FAULT).unlink()
-    _edit(
-        project,
-        "observe: [stage_items.item_id, merge_direct.decision]",
-        "observe: [stage_items.item_id, stage_items.text, merge_direct.decision]",
-    )
-    result = _agac(project, "run", "-a", WORKFLOW)
+    _edit(project, SCOPE, WIDER_SCOPE)
+    result = _agac(project, "run", "-a", WORKFLOW, "--rerun", "recap")
 
     assert result.returncode == 0, _output(result)
+    assert _ran(project) == {"recap": ITEMS, "after_recap": ITEMS}
     assert _recap_saw(project) == SAW_THE_TEXT
     assert _reader_echoed(project) == SAW_THE_TEXT
-    assert "recap was edited since its last run started" in _output(result)
 
 
-def test_a_retry_after_a_scope_edit_leaves_the_edit_to_the_next_run(project):
-    """A retry answers only the records it names. Stamped with the edited scope, the next
-    run read nothing to apply and the other records kept what the old scope gave them."""
+def test_a_retry_after_a_scope_edit_answers_only_what_it_names_and_the_edit_waits_for_rerun(
+    project,
+):
+    """A retry answers only the records it names, under the edit, and leaves the stamp as it
+    was: the next run still names the edit, and --rerun answers every record under it."""
     (project / FAULT).write_text(json.dumps({"item": "beta", "raise": "error"}))
     result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     assert result.returncode == 0, _output(result)
@@ -393,25 +361,32 @@ def test_a_retry_after_a_scope_edit_leaves_the_edit_to_the_next_run(project):
     (project / FAULT).unlink()
     _ran(project)
 
-    _edit(
-        project,
-        "observe: [stage_items.item_id, merge_direct.decision]",
-        "observe: [stage_items.item_id, stage_items.text, merge_direct.decision]",
-    )
+    _edit(project, SCOPE, WIDER_SCOPE)
     result = _agac(project, "retry", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    assert "recap was edited since it completed" in _output(result)
+    assert (
+        "recap was edited since it completed (context scope). A retry answers only the records "
+        "it names" in _output(result)
+    )
     assert _ran(project).get("recap") == ["beta"]
+    assert _recap_saw(project) == ["alpha:-", "beta:second item", "gamma:-"]
 
     result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, _output(result)
+    assert "recap was edited since it completed (context scope)" in _output(result)
+    assert _ran(project) == {}
+    assert _recap_saw(project) == ["alpha:-", "beta:second item", "gamma:-"]
+
+    result = _agac(project, "run", "-a", WORKFLOW, "--rerun", "recap")
 
     assert result.returncode == 0, _output(result)
     assert _ran(project) == {"recap": ITEMS, "after_recap": ITEMS}
     assert _recap_saw(project) == SAW_THE_TEXT
 
 
-def test_a_batch_action_runs_again_under_an_edited_scope(project):
+def test_a_batch_action_keeps_its_answers_under_an_edited_scope_until_a_rerun(project):
     _config(project).write_text(CONFIG % {"recap": BATCH_RECAP})
     result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     assert result.returncode == 0, _output(result)
@@ -419,15 +394,18 @@ def test_a_batch_action_runs_again_under_an_edited_scope(project):
     assert "first item" not in _batch_prompts(project)
     _ran(project)
 
-    _edit(
-        project,
-        "observe: [stage_items.item_id, merge_direct.decision]",
-        "observe: [stage_items.item_id, stage_items.text, merge_direct.decision]",
-    )
+    _edit(project, SCOPE, WIDER_SCOPE)
     result = _agac(project, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    assert "context scope changed for recap, resetting to pending" in _output(result)
+    assert "recap was edited since it completed (context scope)" in _output(result)
+    assert _status(project, "recap") == "completed", _output(result)
+    assert "first item" not in _batch_prompts(project)
+    assert _ran(project) == {}
+
+    result = _agac(project, "run", "-a", WORKFLOW, "--rerun", "recap")
+
+    assert result.returncode == 0, _output(result)
     assert _status(project, "recap") == "completed", _output(result)
     assert "first item" in _batch_prompts(project)
     assert _ran(project) == {"after_recap": ITEMS}
@@ -435,5 +413,5 @@ def test_a_batch_action_runs_again_under_an_edited_scope(project):
     result = _agac(project, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    assert "resetting to pending" not in _output(result)
+    assert "was edited since" not in _output(result)
     assert _ran(project) == {}

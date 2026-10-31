@@ -4,8 +4,8 @@ A `granularity: File` tool is handed a whole file and answers it as one result, 
 names no record. When it raised, or answered with output its schema refused, the walk
 logged the file and went on: nothing was stored for the file and no disposition named
 any of its records, so the action read `completed` with exit 0. `agac retry` found
-nothing to retry and the next run found the action complete. After an edit the file
-kept its rows from before it, and under a retry the repaired record was left with no
+nothing to retry and the next run found the action complete. Run again with --rerun of
+the action above it, the file kept its rows from before it, and under a retry the repaired record was left with no
 disposition at all.
 
 Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
@@ -176,18 +176,10 @@ class _Project:
     def tag(self, tag: str) -> None:
         (self.root / "tag").write_text(tag)
 
-    def edit_upstream(self) -> None:
-        """An edit that resets the action above the tool, and so the tool."""
-        if self.workflow == "tool_action":
-            edited = self.root / "schema" / "tool_action" / "tool_action_output.yml"
-            before = "  - id: exam_density\n"
-            after = before + "    description: How densely the page carries exam material\n"
-        else:
-            edited = self.root / "prompt_store" / "p.md"
-            before = "Summarise the page in one sentence"
-            after = "Summarise the page in one short sentence"
-        assert before in edited.read_text()
-        edited.write_text(edited.read_text().replace(before, after, 1))
+    @property
+    def upstream(self) -> str:
+        """The action above the tool; `--rerun` of it reopens the tool with it."""
+        return "flatten" if self.workflow == "tool_action" else "summarize"
 
     def status(self) -> str:
         io = self.root / "agent_workflow" / self.workflow / "agent_io"
@@ -320,19 +312,18 @@ def test_a_retry_runs_the_tool_on_that_file_again(project):
     assert project.status() == "completed"
 
 
-def test_after_an_edit_the_file_keeps_no_row_from_before_it(project):
-    """The edit resets the action above the tool and the tool with it."""
+def test_after_a_rerun_the_file_keeps_no_row_from_before_it(project):
+    """`--rerun` of the action above the tool reopens it and the tool with it."""
     project.run("--fresh")
     assert project.status() == "completed"
     assert all(len(rows) == 2 for rows in project.summaries().values())
-    project.edit_upstream()
     project.tag("v2")
     project.breaks()
 
-    project.run()
+    project.run("--rerun", project.upstream)
 
     stored = project.summaries()
-    assert stored.get(BROKEN_FILE, []) == [], "a row from before the edit"
+    assert stored.get(BROKEN_FILE, []) == [], "a row from before the rerun"
     assert len(stored["pages2.json"]) == 2
     assert all(summary.startswith("v2 ") for summary in stored["pages2.json"])
     assert project.dispositions()["Page alpha."][0] == "failed"
@@ -398,17 +389,16 @@ def test_an_answer_its_schema_refuses_fails_only_the_record_it_answers(project):
     assert project.status() == "completed"
 
 
-def test_after_an_edit_a_refused_answer_keeps_no_row_from_before_it(project):
+def test_after_a_rerun_a_refused_answer_keeps_no_row_from_before_it(project):
     project.run("--fresh")
     assert project.status() == "completed"
-    project.edit_upstream()
     project.tag("v2")
     project.breaks(flag=MISSHAPE_FLAG)
 
-    project.run()
+    project.run("--rerun", project.upstream)
 
     stored = project.summaries()
-    assert len(stored[BROKEN_FILE]) == 1, "a row from before the edit, or none for page beta"
+    assert len(stored[BROKEN_FILE]) == 1, "a row from before the rerun, or none for page beta"
     assert all(summary.startswith("v2 ") for rows in stored.values() for summary in rows)
     dispositions = _broken_pages(project.dispositions())
     assert dispositions["Page alpha."] == "failed"

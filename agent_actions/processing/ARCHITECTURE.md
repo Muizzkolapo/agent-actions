@@ -399,7 +399,7 @@ Every path that resets action state also clears checkpoint records:
 | Path | When | Code |
 |------|------|------|
 | A file written | In its write, that file's rows only, online or batch | `sqlite_backend.py` (`_write_target_raw`); `pipeline.py`, `initial_pipeline.py` |
-| An action reset to run again | `reopen_with_readers` | `executor.py` (`_forget_what_it_did`) |
+| An action reset to run again (`--rerun`, a limit or staged-input change) | `reopen_with_readers` | `executor.py` (`_forget_what_it_did`) |
 | `--fresh` | At workflow startup | `coordinator.py:285` |
 | `retry` command | Per downstream action | `cli/retry.py:201` |
 
@@ -1013,17 +1013,16 @@ If you add a new reset path (e.g., a new CLI command that resets actions):
 When _reset_retryable_actions resets action statuses to PENDING:
 
   Stopped partway (RUNNING, INTERRUPTED, CHECKING_BATCH, FAILED), with the
-  config its run recorded as it started (`answered_under`) still in force
+  config its run recorded as it started (`answered_under`), edited since
+  or not
                  → clear only RUNNING_CLEAR_DISPOSITIONS
                     (FAILED, EXHAUSTED, DEFERRED)
                     Preserves: SUCCESS, PASSTHROUGH, FILTERED, SKIPPED,
                     and the prompt traces of what it keeps
-
-  Stopped partway, edited since (prompt, schema, guard, model, context
-  scope, dependencies)
-                 → it and every action reading it are forgotten, prompt
-                   traces too, and answer everything again
-                   (ActionExecutor.reopen_with_readers)
+                    An edit (prompt, schema, guard, model, context scope,
+                    dependencies) is named in a warning; the rest of the
+                    records are answered under it. `agac run --rerun`
+                    (ActionExecutor.reopen_with_readers) answers them all
 
   Stopped partway, nothing recorded (state from before the stamp)
                  → by status: selective for RUNNING, INTERRUPTED,

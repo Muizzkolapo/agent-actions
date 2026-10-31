@@ -933,11 +933,13 @@ class StorageBackend(ABC):
         attempt: int = 0,
         source_guid: str | None = None,
         run_id: str | None = None,
+        answered_under: str | None = None,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record.
 
         ``record_id`` holds the prepare-time target_id; ``source_guid`` is the
-        durable identity joins key on. This is telemetry. Implementations
+        durable identity joins key on; ``answered_under`` is the JSON config
+        stamp the record was answered under. This is telemetry. Implementations
         should not raise on failure.
         """
 

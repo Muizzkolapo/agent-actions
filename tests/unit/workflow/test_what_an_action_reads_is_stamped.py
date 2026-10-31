@@ -11,7 +11,7 @@ from agent_actions.workflow.executor import (
     _compute_context_scope_hash,
     _compute_dependencies_hash,
     _edits_since,
-    edited_since_its_work_began,
+    edits_since_its_work_began,
 )
 
 CONFIG = {
@@ -108,5 +108,6 @@ class TestEditsSince:
         details = {"answered_under": _stamp(CONFIG)}
         edited = _with_scope(observe=["a.x"])
 
-        assert edited_since_its_work_began(details, edited) is True
-        assert edited_since_its_work_began(details, CONFIG) is False
+        assert edits_since_its_work_began(details, edited) == ["context scope"]
+        assert edits_since_its_work_began(details, CONFIG) == []
+        assert edits_since_its_work_began({}, edited) is None

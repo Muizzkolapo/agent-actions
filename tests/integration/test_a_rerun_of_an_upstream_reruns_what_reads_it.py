@@ -1,8 +1,10 @@
-"""An edit to an upstream action, as `agac run` and `agac retry` meet it.
+"""`--rerun` of an upstream action, and the edit it applies, as `agac run` and `agac retry`
+meet them.
 
 Two tool actions over six staged records: `flatten`, and `enrich`, which reads what
-`flatten` writes. The edit gives `flatten` a guard that filters the first page, so the
-next plain run resets it and it writes five rows.
+`flatten` writes. The edit gives `flatten` a guard that filters the first page. A plain
+run keeps the answers both hold and names the edit; ``--rerun flatten`` answers every
+record of both again, and `flatten` writes five rows.
 """
 
 from click.testing import CliRunner
@@ -46,10 +48,10 @@ def _raw_rows(project, action):  # noqa: F811
         backend.close()
 
 
-def test_the_action_below_holds_what_the_edited_action_holds_now(chained):  # noqa: F811
+def test_a_rerun_of_the_edited_action_reruns_the_action_below(chained):  # noqa: F811
     _filter_the_first_page(chained)
 
-    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--rerun", ACTION])
 
     assert result.exit_code == 0, result.output
     assert len(_stored_guids(chained, ACTION)) == RECORDS - 1
@@ -82,32 +84,44 @@ def test_a_repair_after_the_edit_touches_only_the_record_it_named(chained):  # n
     assert _disposition(chained, named, SECOND) == "success"
     assert _disposition(chained, other, SECOND) == "failed"
     assert len(_record_ids(chained, ACTION)) == RECORDS, "the edited action lost its records"
+    assert f"{ACTION} was edited since it completed" in _unwrapped(result.output)
+    assert f"run again with --rerun {ACTION}" in _unwrapped(result.output)
 
 
-def test_the_plain_run_after_that_repair_still_finds_the_edit(chained):  # noqa: F811
+def _after_a_repair_a_plain_run_names_the_edit_and_a_rerun_applies_it(chained):  # noqa: F811
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+
+    assert result.exit_code == 0, result.output
+    assert f"{ACTION} was edited since it completed" in _unwrapped(result.output)
+    assert len(_stored_guids(chained, ACTION)) == RECORDS, "the plain run applied the edit"
+
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--rerun", ACTION])
+
+    assert result.exit_code == 0, result.output
+    assert len(_stored_guids(chained, ACTION)) == RECORDS - 1
+    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+
+def test_the_plain_run_after_a_repair_below_still_names_the_edit(chained):  # noqa: F811
     named = _record_ids(chained, SECOND)[-1]
     _fail(chained, named, SECOND)
     _filter_the_first_page(chained)
     assert CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named]).exit_code == 0
 
-    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
-
-    assert result.exit_code == 0, result.output
-    assert len(_stored_guids(chained, ACTION)) == RECORDS - 1
-    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+    _after_a_repair_a_plain_run_names_the_edit_and_a_rerun_applies_it(chained)
 
 
-def test_a_repair_of_the_edited_action_leaves_the_edit_for_the_plain_run(chained):  # noqa: F811
-    """The repair completes the edited action on the one record it named. Stamped as
-    answered under the new config, the other five keep rows the old config wrote, and
-    the plain run calls both actions already complete."""
+def test_the_plain_run_after_a_repair_of_the_edited_action_still_names_the_edit(chained):  # noqa: F811
+    """The repair answers the one record it named under the edit. Were the action then
+    stamped as answered under the new config, the other five would keep rows the old
+    config wrote and no later run could find the edit."""
     named = _record_ids(chained, ACTION)[-1]
     _fail(chained, named)
     _filter_the_first_page(chained)
     assert CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named]).exit_code == 0
 
-    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+    _after_a_repair_a_plain_run_names_the_edit_and_a_rerun_applies_it(chained)
 
-    assert result.exit_code == 0, result.output
-    assert len(_stored_guids(chained, ACTION)) == RECORDS - 1
-    assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
+
+def _unwrapped(output):
+    return " ".join(output.split())

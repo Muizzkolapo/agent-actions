@@ -1186,9 +1186,9 @@ class TestALimitAcrossTheBatchPause:
 
 class TestAFileLimitMeetingAConfigChange:
     """A file limit bounds which files are opened, so one it never reaches keeps
-    what the previous run wrote. That is what not walking a file means — but
-    when the reset came from a changed prompt or model, the untouched files hold
-    answers from the configuration being replaced, under a stamp saying complete.
+    what the previous run wrote. An edit resets nothing, so under a file limit it
+    leaves the action completed as it would without one, and names the edit; a
+    limit change still resets it.
     """
 
     @pytest.fixture
@@ -1201,57 +1201,50 @@ class TestAFileLimitMeetingAConfigChange:
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
-    def _reset_under(self, executor, caplog, action_config, stored):
+    def _next_run(self, executor, caplog, action_config, stored):
         executor.deps.state_manager.get_status_details.return_value = stored
         with caplog.at_level("WARNING", logger="agent_actions.workflow.executor"):
             status = executor._maybe_invalidate_completed_status(
                 "act", action_config, ActionStatus.COMPLETED
             )
-        assert status == ActionStatus.PENDING
-        return [r.message for r in caplog.records if "file limit" in r.message]
-
-    def test_a_config_change_under_a_file_limit_is_announced(self, executor, caplog):
-        said = self._reset_under(
-            executor,
-            caplog,
-            {"file_limit": 1, "prompt": "new"},
-            {"record_limit": None, "file_limit": 1, "config_hash": "stale"},
-        )
-
-        assert len(said) == 1
-        assert "previous configuration" in said[0]
+        return status, [r.message for r in caplog.records if r.levelname == "WARNING"]
 
     @pytest.mark.parametrize(
-        ("action_config", "stored", "messages"),
+        ("action_config", "stored", "label"),
         [
+            pytest.param(
+                {"file_limit": 1, "prompt": "new"},
+                {"record_limit": None, "file_limit": 1, "config_hash": "stale"},
+                "action config (prompt/schema/guard)",
+                id="config_change",
+            ),
             pytest.param(
                 {"file_limit": 2, "model_name": "new-model"},
                 {"record_limit": None, "file_limit": 2, "model_name": "old-model"},
-                1,
-                id="model_change_under_a_limit_is_announced",
-            ),
-            # Controls: without a limit every file is walked; a limit change alone
-            # changes nothing semantic, so the untouched files are still valid.
-            pytest.param(
-                {"prompt": "new"},
-                {"record_limit": None, "file_limit": None, "config_hash": "stale"},
-                0,
-                id="config_change_without_a_limit_says_nothing",
-            ),
-            pytest.param(
-                {"file_limit": 1},
-                {"record_limit": None, "file_limit": 5},
-                0,
-                id="limit_change_alone_says_nothing",
+                "model",
+                id="model_change",
             ),
         ],
     )
-    def test_a_reset_warns_only_when_a_limit_leaves_stale_answers(
-        self, executor, caplog, action_config, stored, messages
+    def test_an_edit_under_a_file_limit_keeps_the_action_completed(
+        self, executor, caplog, action_config, stored, label
     ):
-        said = self._reset_under(executor, caplog, action_config, stored)
+        status, said = self._next_run(executor, caplog, action_config, stored)
 
-        assert len(said) == messages
+        assert status == ActionStatus.COMPLETED
+        assert said == [
+            f"act was edited since it completed ({label}): its answers stand, and only "
+            "records it has not answered use the edit. Run again with --rerun act to answer "
+            "every record under the edit"
+        ]
+
+    def test_a_file_limit_change_alone_resets_and_says_nothing(self, executor, caplog):
+        status, said = self._next_run(
+            executor, caplog, {"file_limit": 1}, {"record_limit": None, "file_limit": 5}
+        )
+
+        assert status == ActionStatus.PENDING
+        assert said == []
 
 
 class TestTheBatchPauseWiring:

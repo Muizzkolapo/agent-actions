@@ -79,7 +79,7 @@ Each input file is sent as its own batch. If the provider refuses one (a quota, 
 error, a request it rejects), the run fails the action once every file has been walked,
 even when the batches of its other files were taken. Run again: the records of the refused
 file that have no answer yet are sent again. The records the action had already answered,
-in that file or any other, are kept while its config is unchanged, and a batch still out
+in that file or any other, are kept, and a batch still out
 for another file is kept and collected rather than sent again.
 
 A run collects batches only after a run that got every file sent, so while the provider

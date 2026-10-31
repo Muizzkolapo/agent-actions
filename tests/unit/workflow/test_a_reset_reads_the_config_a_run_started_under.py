@@ -2,12 +2,14 @@
 
 The executor records the config an action's work is answered under as it starts it. The
 status file carries that to the next process, whose reset compares it with the config now
-in force. Store, status file, executor and reset are real; the work is stood in for.
+in force and names any edit; an edit resets nothing, and ``--rerun`` answers the action and
+its readers again. Store, status file, executor and reset are real; the work is stood in for.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
@@ -29,6 +31,7 @@ from agent_actions.workflow.executor import (
     ActionRunParams,
     ExecutorDependencies,
     _compute_action_config_hash,
+    edits_since_its_work_began,
 )
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
@@ -100,7 +103,10 @@ def _stopped(
     return state
 
 
-def _next_run_resets(tmp_path, backend, configs=CONFIGS) -> ActionStateManager:
+def _next_run_resets(
+    tmp_path, backend, configs=CONFIGS, *, rerun: str | None = None
+) -> ActionStateManager:
+    """The next `agac run`'s startup reset, then what ``--rerun`` does after it."""
     state, executor = _process(tmp_path, backend, configs)
     workflow = object.__new__(AgentWorkflow)
     workflow.metadata = SimpleNamespace(action_configs=configs)
@@ -109,6 +115,8 @@ def _next_run_resets(tmp_path, backend, configs=CONFIGS) -> ActionStateManager:
         core=SimpleNamespace(state_manager=state, action_executor=executor)
     )
     workflow._reset_retryable_actions()
+    if rerun is not None:
+        executor.reopen_with_readers(rerun)
     return state
 
 
@@ -118,6 +126,21 @@ def _held(backend, action="define") -> dict[str, str]:
 
 def _edited(**changes: Any) -> dict[str, Any]:
     return {**CONFIGS, "define": {**DEFINE, **changes}}
+
+
+def _edit_warnings(caplog) -> list[str]:
+    return [r.getMessage() for r in caplog.records if "was edited since" in r.getMessage()]
+
+
+def _stopped_and_edited(label: str) -> str:
+    return (
+        f"define was edited since its last run started ({label}): the records it finished "
+        "stand, and the rest are answered under the edit. Run again with --rerun define to "
+        "answer every record under the edit"
+    )
+
+
+PROMPT_EDIT = "action config (prompt/schema/guard)"
 
 
 STOPS = pytest.mark.parametrize(
@@ -145,37 +168,55 @@ def test_a_stopped_action_keeps_what_it_finished_while_its_config_is_unchanged(
 
 @STOPS
 @pytest.mark.parametrize(
-    "edit",
+    ("edit", "label"),
     [
-        {"prompt": "Define it briefly"},
-        {"schema": "definition_v2"},
-        {"guard": "source.keep == true"},
-        {"model_name": "m2"},
-        {"model_vendor": "v2"},
+        ({"prompt": "Define it briefly"}, PROMPT_EDIT),
+        ({"schema": "definition_v2"}, PROMPT_EDIT),
+        ({"guard": "source.keep == true"}, PROMPT_EDIT),
+        ({"model_name": "m2"}, "model"),
+        ({"model_vendor": "v2"}, "model"),
     ],
-    ids=lambda edit: next(iter(edit)),
+    ids=["prompt", "schema", "guard", "model_name", "model_vendor"],
 )
 @RUNS
-def test_a_stopped_action_edited_since_its_run_started_keeps_nothing(
-    tmp_path, backend, stop, edit, run
+def test_a_stopped_action_edited_since_its_run_started_keeps_what_it_finished_and_names_the_edit(
+    tmp_path, backend, caplog, stop, edit, label, run
 ):
     _stopped(tmp_path, backend, stop, run=run)
 
-    state = _next_run_resets(tmp_path, backend, _edited(**edit))
+    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+        state = _next_run_resets(tmp_path, backend, _edited(**edit))
+
+    assert _held(backend) == FINISHED
+    assert state.get_status("define") == ActionStatus.PENDING
+    assert _edit_warnings(caplog) == [_stopped_and_edited(label)]
+
+
+@STOPS
+def test_rerun_of_a_stopped_edited_action_keeps_nothing(tmp_path, backend, stop):
+    _stopped(tmp_path, backend, stop)
+
+    state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"), rerun="define")
 
     assert _held(backend) == {}
     assert state.get_status("define") == ActionStatus.PENDING
 
 
-def test_what_reads_an_edited_action_is_reset_with_it(tmp_path, backend):
+def test_what_reads_an_edited_stopped_action_keeps_its_answers_until_a_rerun(tmp_path, backend):
     """A reader can hold answers made from the stopped action's output: a retry or a
     node-level failure puts an action back to work and leaves its readers completed."""
     state, _ = _process(tmp_path, backend)
     state.update_status("grade", ActionStatus.COMPLETED)
     backend.set_disposition("grade", "r1", DISPOSITION_SUCCESS)
     _stopped(tmp_path, backend, _Killed())
+    edited = _edited(prompt="Define it briefly")
 
-    state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+    state = _next_run_resets(tmp_path, backend, edited)
+
+    assert _held(backend, "grade") == {"r1": DISPOSITION_SUCCESS}
+    assert state.get_status("grade") == ActionStatus.COMPLETED
+
+    state = _next_run_resets(tmp_path, backend, edited, rerun="define")
 
     assert _held(backend, "grade") == {}
     assert state.get_status("grade") == ActionStatus.PENDING
@@ -230,29 +271,6 @@ def test_a_skipped_action_is_cleared_whole_though_its_config_is_unchanged(tmp_pa
     assert _held(backend) == {}
 
 
-def test_a_reset_stopped_while_forgetting_an_edited_action_is_done_again_by_the_next_run(
-    tmp_path, backend, monkeypatch
-):
-    """The reset forgets what an edited action holds before it writes any status, so a
-    process killed in between leaves the action as it found it, and the edit to be
-    found again."""
-    _stopped(tmp_path, backend, _Killed())
-    edited = _edited(prompt="Define it briefly")
-    forget = ActionExecutor._forget_what_it_did
-
-    def killed_while_forgetting(self, action_name):
-        raise _Killed()
-
-    monkeypatch.setattr(ActionExecutor, "_forget_what_it_did", killed_while_forgetting)
-    with pytest.raises(_Killed):
-        _next_run_resets(tmp_path, backend, edited)
-    monkeypatch.setattr(ActionExecutor, "_forget_what_it_did", forget)
-
-    _next_run_resets(tmp_path, backend, edited)
-
-    assert _held(backend) == {}
-
-
 def test_an_action_halted_on_purpose_is_left_alone_though_it_was_edited(tmp_path, backend):
     halt = AgentActionsError("exhausted", context={"on_exhausted": "raise"})
     _stopped(tmp_path, backend, halt)
@@ -263,7 +281,7 @@ def test_an_action_halted_on_purpose_is_left_alone_though_it_was_edited(tmp_path
     assert NODE_LEVEL_RECORD_ID in _held(backend)
 
 
-def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backend):
+def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backend, caplog):
     """A retry answers the records it names under the edit and leaves the rest as the
     old config answered them. Stopped partway, the next run must still see the edit."""
     state, _ = _process(tmp_path, backend)
@@ -285,13 +303,21 @@ def test_a_repair_records_the_config_of_the_completion_it_keeps(tmp_path, backen
     for guid, disposition in FINISHED.items():
         backend.set_disposition("define", guid, disposition)
 
-    _next_run_resets(tmp_path, backend, edited)
+    details = ActionStateManager(tmp_path / ".agent_status.json", ORDER).get_status_details(
+        "define"
+    )
+    assert edits_since_its_work_began(details, DEFINE) == []
+    assert edits_since_its_work_began(details, edited["define"]) == [PROMPT_EDIT]
 
-    assert _held(backend) == {}
+    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+        _next_run_resets(tmp_path, backend, edited)
+
+    assert _held(backend) == FINISHED
+    assert _edit_warnings(caplog) == [_stopped_and_edited(PROMPT_EDIT)]
 
 
 def test_a_repair_of_an_action_that_never_completed_records_what_its_last_run_started_under(
-    tmp_path, backend
+    tmp_path, backend, caplog
 ):
     """No completion stamp says what the records a retry does not name were answered
     under; the start the stopped run recorded does, and the edit is the next run's."""
@@ -304,22 +330,39 @@ def test_a_repair_of_an_action_that_never_completed_records_what_its_last_run_st
             ActionRunParams("define", 0, edited["define"], False, datetime.now())
         )
 
-    _next_run_resets(tmp_path, backend, edited)
+    details = ActionStateManager(tmp_path / ".agent_status.json", ORDER).get_status_details(
+        "define"
+    )
+    assert edits_since_its_work_began(details, DEFINE) == []
+    assert edits_since_its_work_began(details, edited["define"]) == [PROMPT_EDIT]
 
-    assert _held(backend) == {}
+    with caplog.at_level(logging.WARNING, logger="agent_actions"):
+        _next_run_resets(tmp_path, backend, edited)
+
+    assert _held(backend) == FINISHED
+    assert _edit_warnings(caplog) == [_stopped_and_edited(PROMPT_EDIT)]
 
 
-def test_an_edited_action_and_its_readers_lose_the_prompt_traces_of_what_they_answered(
+def test_an_edited_stopped_action_and_its_readers_keep_their_prompt_traces_until_a_rerun(
     tmp_path, backend
 ):
-    """Every record is about to be answered again under the edit, so these traces show
-    prompts that answer nothing any more, listed beside the ones that replace them."""
+    """The answers stand, so the traces of the prompts that made them stand with them.
+    ``--rerun`` asks every record again, and a trace of the run it replaces shows a
+    prompt whose answer no longer stands."""
     state, _ = _process(tmp_path, backend)
     state.update_status("grade", ActionStatus.COMPLETED)
     for action in ORDER:
         backend.write_prompt_trace(action, "t1", "an old prompt", source_guid="r1")
     _stopped(tmp_path, backend, _Killed())
+    edited = _edited(prompt="Define it briefly")
 
-    _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+    _next_run_resets(tmp_path, backend, edited)
+
+    assert [[t["source_guid"] for t in backend.get_prompt_traces(a)] for a in ORDER] == [
+        ["r1"],
+        ["r1"],
+    ]
+
+    _next_run_resets(tmp_path, backend, edited, rerun="define")
 
     assert [backend.get_prompt_traces(action) for action in ORDER] == [[], []]

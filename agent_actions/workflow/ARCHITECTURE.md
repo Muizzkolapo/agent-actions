@@ -36,7 +36,7 @@ agac run -a my_workflow
            ▼
 ┌──────────────────────────────────────────────────────────┐
 │  ActionExecutor (executor.py)                            │
-│    1. Config change detection → invalidate completed     │
+│    1. Limit/input change → invalidate; edit → warn only  │
 │    2. Circuit breaker → skip if upstream failed           │
 │    3. Skip evaluator → WHERE clause check                │
 │    4. _execute_action_run → ActionRunner.run_action()    │
@@ -749,7 +749,7 @@ The retry command is the dedicated path for fixing partial failures.
 It clears only the failed records' dispositions, preserving successes.
 ```
 
-### A stopped action keeps what it finished while its config is unchanged
+### A stopped action keeps what it finished, edited or not
 
 ```
 When the executor starts an action's work it records, in the write that
@@ -758,7 +758,8 @@ the config hash, model_name and model_vendor. The status changes after it
 (FAILED, INTERRUPTED, BATCH_SUBMITTED, CHECKING_BATCH, a sweep) leave it.
 
 _reset_retryable_actions takes an action stopped partway and compares
-that with the config in force, as the executor compares a completed one.
+that with the config in force, as the executor compares a completed one,
+to name an edit in a warning. An edit changes nothing it keeps.
 Stopped partway is one of:
     RUNNING        — the process died without unwinding (SIGKILL, OOM,
                      power loss), so nothing rewrote the status.
@@ -780,10 +781,9 @@ Stopped partway is one of:
                 row is stored; one answered since holds a checkpoint
                 row instead (processing/ARCHITECTURE.md, "Checkpoint
                 and Resume")
-    edited    → ActionExecutor.reopen_with_readers: it and every action
-                reading it are forgotten (dispositions, checkpoints, prompt
-                traces, batch state, a batch still out given up) and put
-                back to pending
+    edited    → kept the same as unchanged, with a warning naming the
+                edit and `--rerun <action>`; the records not yet answered
+                are answered under the edit
     unknown   → state written before the stamp existed: reset by status,
                 selective for MID_PROCESSING_STATUSES, bulk for FAILED
 
@@ -792,32 +792,31 @@ answered under, not the config it runs under: the completion stamp it
 keeps, or, for an action that never completed, the `answered_under` its
 last run recorded (_held_to_earlier_answers). It stamps the same when it
 completes the action. A retry of an edited action, stopped or finished,
-leaves the edit to the next run, which applies it to every record.
+answers the records it names under the edit and warns that the rest stand.
 
 If you clear a stopped action in bulk while its config is unchanged:
     Checkpoint resume breaks — the DispositionGate finds no terminal IDs
     and reprocesses everything from scratch. For a batch that means
     submitting, and paying for, every collected file again.
 
-If you keep what it finished after an edit:
-    The gate carries answers given under the old prompt or model, the
-    batch jobs still out are collected as they are, and the action is then
-    stamped complete under the new config, so nothing re-runs it.
+After an edit the gate carries answers given under the old config, and
+a batch still out is collected as it is. The action is then stamped
+complete under the new config. Each prompt trace row records the config
+its record was answered under (`answered_under`, from config_in_force),
+so the mix stays readable record by record. `agac run --rerun <action>`
+(reopen_with_readers) answers every record under the edit.
 ```
 
 ### The reset decides before it writes a status
 
 ```
-for each stopped action:  edited → reopen_with_readers (one status write)
-                          else   → keeps.add(name)
+for each stopped action:  stamp known or mid-processing → keeps.add(name)
 reset_actions = state_mgr.reset_retryable(exclude=halted)  ← mutates to PENDING
+--rerun ACTION:           reopen_with_readers(ACTION), after the reset
 
-Both MUST happen before reset_retryable(). It moves every retryable
+keeps MUST be built before reset_retryable(). It moves every retryable
 status to PENDING, after which nothing says which actions were stopped
-partway. And an edited action reset after it would sit PENDING, which
-is not retryable: a process that died in between would leave it to run
-on with what it holds. Before it, the stamp still differs and the next
-run repeats the reset.
+partway.
 ```
 
 ### Config hash invalidation scope
@@ -836,13 +835,16 @@ change and every completed action of every workflow would re-run once.
 Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
 
 If you change one of these fields and re-run WITHOUT --fresh:
-    The executor detects the hash mismatch, resets the action to PENDING,
-    and clears its dispositions, and does the same to every action that
-    reads it. They re-run with new config. Not while `agac retry` is
-    re-running records: it acts on no mismatch and keeps the stamps it
-    found, so the next plain run still sees the mismatch. An action stopped
-    partway is compared at the start of the next run, against the
-    `answered_under` its run recorded (_edits_since serves both).
+    Nothing is reset. The executor finds the mismatch and logs a warning
+    naming the edit and `--rerun <action>`; the action stays complete and
+    keeps its answers, and so does every action reading it. The warning
+    repeats on each run until `--rerun` or `--fresh` restamps the action.
+    An action stopped partway is compared at the start of the next run,
+    against the `answered_under` its run recorded (_edits_since serves
+    both), and resumes under the edit.
+    Limits, staged input and a recorded truncation still reset the
+    action and its readers: those change which records exist, not how
+    one is answered.
 
 A first stage also stamps `staged_input` (path, size, mtime of each file
 it read, taken as its work began). A different set on a later run resets

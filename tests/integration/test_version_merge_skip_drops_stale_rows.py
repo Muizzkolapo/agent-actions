@@ -4,6 +4,10 @@ Two roads lead a merge to a skip: a version that is itself skipped trips the
 circuit breaker, and versions that completed with no rows raise
 AllVersionsFilteredError. Neither rewrites the merge's output, so rows it stored
 before must be removed by the skip — or they outlive the output they merged.
+
+A guard edit on the versions is applied by ``--rerun vote_direct``, which answers every
+version and what reads them again; a change to the staged input resets everything on
+its own.
 """
 
 import json
@@ -74,8 +78,6 @@ actions:
       observe: [merge_direct.*]
 """
 
-RESET = "{ condition: 'true', on_false: \"skip\" }"
-
 
 def _config(root):
     return root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
@@ -90,11 +92,6 @@ def _add_guard(root, impl, guard):
     config.write_text(
         config.read_text().replace(f"    impl: {impl}\n", f"    impl: {impl}\n    guard: {guard}\n")
     )
-
-
-def _reset_readers(root):
-    _add_guard(root, "merge_votes", RESET)
-    _add_guard(root, "note_direct", RESET)
 
 
 def _rows(root, action):
@@ -137,9 +134,8 @@ def test_every_version_filtered_leaves_the_merge_and_its_reader_empty(merged):
         "cast_vote_direct",
         '{ condition: \'stage_items.item_id == "none"\', on_false: "filter" }',
     )
-    _reset_readers(merged)
 
-    result = _run()
+    result = _run("--rerun", "vote_direct")
 
     assert "Upstream dependency 'vote_direct_" in result.output, result.output
     assert _rows(merged, "merge_direct") == 0
@@ -152,9 +148,8 @@ def test_one_version_filtered_leaves_the_merge_empty(merged):
         "cast_vote_direct",
         '{ condition: \'${voter_id} > 1 AND stage_items.item_id != "none"\', on_false: "filter" }',
     )
-    _reset_readers(merged)
 
-    result = _run()
+    result = _run("--rerun", "vote_direct")
 
     assert "Upstream dependency 'vote_direct_1' skipped" in result.output, result.output
     assert _rows(merged, "vote_direct_2") == ITEMS
@@ -163,9 +158,6 @@ def test_one_version_filtered_leaves_the_merge_empty(merged):
 
 def test_versions_that_completed_empty_leave_the_merge_and_its_reader_empty(merged):
     _staging(merged).write_text(json.dumps([]))
-    for impl in ("stage_items", "cast_vote_direct"):
-        _add_guard(merged, impl, RESET)
-    _reset_readers(merged)
 
     result = _run()
 
@@ -178,18 +170,11 @@ def test_versions_that_completed_empty_leave_the_merge_and_its_reader_empty(merg
 def test_versions_that_completed_empty_then_refilled_merge_again(merged):
     original = _staging(merged).read_text()
     _staging(merged).write_text(json.dumps([]))
-    for impl in ("stage_items", "cast_vote_direct"):
-        _add_guard(merged, impl, RESET)
-    _reset_readers(merged)
     _run()
     _run()
     assert _rows(merged, "merge_direct") == 0
 
     _staging(merged).write_text(original)
-    config = _config(merged)
-    config.write_text(
-        "".join(line for line in config.read_text().splitlines(True) if "guard:" not in line)
-    )
     _run()
 
     assert _rows(merged, "merge_direct") == ITEMS

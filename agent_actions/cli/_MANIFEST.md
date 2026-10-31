@@ -124,6 +124,7 @@
 | `RunCommand.execute()` | `agent_io/target/events.json` | Writes | — |
 | `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
 | `RunCommand.execute()` | `.agac/batch_state/` | Deletes | `--fresh` |
+| `RunCommand.execute()` | `agent_io/store/{workflow_name}.db` | Deletes | `--rerun` |
 | `RunCommand.execute()` | `tools/{workflow}/*.py` | Reads | `user_code` |
 | `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
 | `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |

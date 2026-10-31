@@ -1,10 +1,10 @@
-"""An action reset to answer everything again keeps no prompt trace from before the reset.
+"""An action answered again keeps no prompt trace from before; one left as it is keeps them.
 
-A re-run after an edit, or after an action's output went missing, asks every record
-again, so the traces of the run it replaces describe answers that no longer stand.
-They were left beside the new ones, for the action and every reader reset with it,
-until retention pruned them. A retry, which answers only what failed, keeps the
-traces of what it does not ask again.
+``--rerun``, or an action's output gone missing, asks every record again, so the traces of
+the run it replaces describe answers that no longer stand. They were left beside the new
+ones, for the action and every reader reset with it, until retention pruned them. A config
+edit alone asks nothing again, so the traces of the answers that stand stay. A retry, which
+answers only what failed, keeps the traces of what it does not ask again.
 
 Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
 provider.
@@ -128,15 +128,25 @@ def _assert_one_run_of_traces(root, action):
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])
-def test_an_edited_action_and_its_reader_keep_only_the_new_prompts_traces(project, mode):
+def test_an_edit_keeps_the_traces_that_stand_until_a_rerun_leaves_only_the_new_ones(project, mode):
     if mode == "online":
         config = _config(project)
         config.write_text(config.read_text().replace("run_mode: batch", "run_mode: online"))
     _run_to_completion("--fresh")
     first_run = {t["run_id"] for t in _traces(project, PUBLISHER)}
+    first_summaries = _assert_one_run_of_traces(project, ACTION)
+    assert all(OLD in t["compiled_prompt"] for t in first_summaries)
     _edit_prompt(project)
 
     _run_to_completion()
+
+    kept = _assert_one_run_of_traces(project, ACTION)
+    assert {t["run_id"] for t in kept} == {t["run_id"] for t in first_summaries}
+    assert all(OLD in t["compiled_prompt"] for t in kept)
+    assert all(NEW not in t["compiled_prompt"] for t in kept)
+    assert {t["run_id"] for t in _assert_one_run_of_traces(project, PUBLISHER)} == first_run
+
+    _run_to_completion("--rerun", ACTION)
 
     summaries = _assert_one_run_of_traces(project, ACTION)
     assert all(NEW in t["compiled_prompt"] for t in summaries)

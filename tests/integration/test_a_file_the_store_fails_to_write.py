@@ -2,10 +2,10 @@
 
 A failure confined to one input file costs only that file: the walk records it, goes on
 with the others, and the action completes holding fewer records. A store that failed to
-write one file of several was treated the same way. After an edit, the reset leaves each
-file's rows in place until the run writes it again, so the action was recorded complete,
-with exit 0, over the rows that file held from before the edit; its readers ran on them,
-and nothing asked for them again. On a first run the file was simply never stored.
+write one file of several was treated the same way. On `--rerun` under an edit, the reset
+leaves each file's rows in place until the run writes it again, so the action was recorded
+complete, with exit 0, over the rows that file held from before the edit; its readers ran
+on them, and nothing asked for them again. On a first run the file was simply never stored.
 
 A batch collect pass took the failure the same way, and recorded the action partly
 complete over that file's earlier rows.
@@ -104,7 +104,7 @@ def _with_a_reader(root):
 
 
 @FAULTS
-def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_next_run(
+def test_a_file_the_store_fails_to_write_on_a_rerun_is_answered_again_by_the_next_run(
     online,  # noqa: F811
     provider,  # noqa: F811
     fault,
@@ -117,7 +117,7 @@ def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_
 
     _edit_prompt(online)
     with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
-        failed = _run()
+        failed = _run("--rerun", ACTION)
     assert failed.exit_code == 1, failed.output
     assert _status(online) == "failed"
     provider.answers()
@@ -195,11 +195,11 @@ def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_writ
     _reported_as_a_failed_write(project, result, ACTION, fault)
 
 
-def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_before_the_edit(
+def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_before_a_rerun(
     online,  # noqa: F811
     provider,  # noqa: F811
 ):
-    """The edit resets the reader with its source. Run while the source still held its
+    """`--rerun` resets the reader with its source. Run while the source still held its
     old answers for that file, the reader would make its rows from them."""
     _with_a_reader(online)
     assert _run("--fresh").exit_code == 0
@@ -207,7 +207,7 @@ def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_befo
 
     _edit_prompt(online)
     with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
-        failed = _run()
+        failed = _run("--rerun", ACTION)
     assert failed.exit_code == 1, failed.output
     assert _status(online, READER) == "skipped"
     result = _run()
@@ -218,7 +218,7 @@ def test_a_reader_of_an_action_whose_file_was_not_stored_keeps_nothing_made_befo
     assert _stored(online, READER) == answers
 
 
-def test_a_reader_file_the_store_fails_to_write_after_its_source_was_edited_is_made_again(
+def test_a_reader_file_the_store_fails_to_write_after_its_source_reran_is_made_again(
     online,  # noqa: F811
 ):
     """A file tool leaves no checkpoint row; the file it did store keeps its records."""
@@ -228,7 +228,7 @@ def test_a_reader_file_the_store_fails_to_write_after_its_source_was_edited_is_m
 
     _edit_prompt(online)
     with _the_store_fails_to_write(FILE_READER, NOT_STORED, OSError(28, "No space left")):
-        failed = _run()
+        failed = _run("--rerun", ACTION)
     assert failed.exit_code == 1, failed.output
     assert _status(online, FILE_READER) == "failed"
     handed = online / "handed.jsonl"
@@ -275,7 +275,7 @@ def test_a_file_stored_on_the_run_after_its_store_failed_carries_its_lineage(
     assert all(row.get("lineage") for row in _stored_rows(online))
 
 
-def test_a_batch_file_the_store_fails_to_collect_after_an_edit_is_collected_by_a_later_run(
+def test_a_batch_file_the_store_fails_to_collect_on_a_rerun_is_collected_by_a_later_run(
     project,  # noqa: F811
 ):
     """The collect pass took the failure as that file's own, recorded the action partly
@@ -288,7 +288,7 @@ def test_a_batch_file_the_store_fails_to_collect_after_an_edit_is_collected_by_a
     before_the_edit = _stored(project)
 
     _edit_prompt(project)
-    assert _run().exit_code == 0
+    assert _run("--rerun", ACTION).exit_code == 0
     with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
         failed = _run()
     assert failed.exit_code == 1, failed.output

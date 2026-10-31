@@ -2,8 +2,8 @@
 
 A retry answers the records it names at every action it runs and carries what each
 action already holds for the rest. That is sound for an action that finished: what it
-holds for the rest is its answer. An action its last run left unfinished, reset for an
-edit and stopped while running again or never run at all, holds nothing current for the
+holds for the rest is its answer. An action its last run left unfinished, reset by
+``--rerun`` and stopped while running again or never run at all, holds nothing current for the
 records that run had not reached, and the retry completed it on the ones it named.
 
 Two tool actions over six staged records, `flatten` and `enrich`, which reads it. Every
@@ -23,7 +23,9 @@ from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.runner import ActionRunner
-from tests.integration.test_an_upstream_edit_reruns_what_reads_it import _filter_the_first_page
+from tests.integration.test_a_rerun_of_an_upstream_reruns_what_reads_it import (
+    _filter_the_first_page,
+)
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,
@@ -80,10 +82,11 @@ def _stopped_at_the_readers_record(stop, nth=3, action=SECOND):
 
 
 def _edit_then_stop_the_reader(project, stop):  # noqa: F811
-    """The edit resets both actions; the run re-answers `flatten` and stops in `enrich`."""
+    """`--rerun flatten` resets both actions; the run re-answers `flatten` under the edit
+    and stops in `enrich`."""
     _filter_the_first_page(project)
     with _stopped_at_the_readers_record(stop):
-        _run()
+        _run("--rerun", ACTION)
     assert len(_stored_guids(project, ACTION)) == RECORDS - 1
     assert len(_stored_guids(project, SECOND)) == RECORDS, "the reset deletes no row"
 
@@ -316,7 +319,7 @@ def test_a_reader_that_failed_everything_after_a_reset_refuses(chained):  # noqa
     Nothing would reach that row again once a retry carried it."""
     _filter_the_first_page(chained)
     with _every_file_of_the_reader_fails():
-        _run()
+        _run("--rerun", ACTION)
     assert _status(chained) == "failed"
     named = _a_failure_at_the_first_action(chained)
 
@@ -335,7 +338,7 @@ def test_a_reader_whose_every_record_failed_after_a_reset_is_narrowed(chained): 
     retry is for, so the retry narrows it."""
     _filter_the_first_page(chained)
     with _the_readers_tool_raises(RuntimeError("blew up")):
-        _run()
+        _run("--rerun", ACTION)
     assert _status(chained) == "failed"
     assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
     named = _a_failure_at_the_first_action(chained)

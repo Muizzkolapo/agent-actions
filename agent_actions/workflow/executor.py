@@ -213,10 +213,10 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     return edits
 
 
-def edited_since_its_work_began(
+def edits_since_its_work_began(
     details: dict[str, Any], action_config: ActionConfigDict | None
-) -> bool | None:
-    """Whether *action_config* differs from the one the action's records were answered under.
+) -> list[str] | None:
+    """What differs from the config the action's records were answered under, by label.
 
     None when that is unknown: nothing was recorded when its work began, or it has no
     config now.
@@ -224,7 +224,18 @@ def edited_since_its_work_began(
     stamp = details.get(ANSWERED_UNDER)
     if not isinstance(stamp, dict) or stamp.get("config_hash") is None or action_config is None:
         return None
-    return bool(_edits_since(stamp, action_config))
+    return _edits_since(stamp, action_config)
+
+
+def config_in_force(action_config: ActionConfigDict) -> dict[str, Any]:
+    """The config *action_config* answers a record under, as ``answered_under`` records it."""
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    return {
+        "config_hash": _compute_action_config_hash(action_config),
+        "model_name": cfg.get("model_name"),
+        "model_vendor": cfg.get("model_vendor"),
+        **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
+    }
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -484,17 +495,10 @@ class ActionExecutor:
         return in_force
 
     def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
-        """The config the work this run starts is answered under, for a later reset to compare."""
-        cfg: dict[str, Any] = action_config  # type: ignore[assignment]
-        in_force = {
-            "config_hash": _compute_action_config_hash(action_config),
-            "model_name": cfg.get("model_name"),
-            "model_vendor": cfg.get("model_vendor"),
-            **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
-        }
+        """The config the work this run starts is answered under, for a later run to compare."""
         return {
             key: self._held_to_earlier_answers(action_name, key, value)
-            for key, value in in_force.items()
+            for key, value in config_in_force(action_config).items()
         }
 
     def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
@@ -589,25 +593,28 @@ class ActionExecutor:
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
     ) -> ActionStatus:
-        """Reset to pending if limit or semantic config changed since last completion."""
+        """Reset to pending if its limits, its staged input or a cap it ran under changed.
+
+        A config edit resets nothing: the answers the action holds stand, and a warning
+        names the edit until ``--rerun`` answers every record under it.
+        """
         repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
         edits = _edits_since(details, action_config)
-        model_changed = MODEL_EDIT in edits
-        config_changed = any(edit != MODEL_EDIT for edit in edits)
 
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
         # reads this action, with nothing run to replace it. The stamp stays as it is.
         if repairing:
-            # Said for an action the retry is about to re-run as well: it answers the
-            # named records under the edit and the rest still hold what came before.
-            if config_changed or model_changed:
+            if edits:
                 logger.warning(
-                    "%s was edited since it completed. A retry answers only the records it "
-                    "names and leaves the rest as they are: `agac run` applies the edit",
+                    "%s was edited since it completed (%s). A retry answers only the records "
+                    "it names and leaves the rest as they are: run again with --rerun %s to "
+                    "answer every record under the edit",
+                    action_name,
+                    ", ".join(edits),
                     action_name,
                 )
             return current_status
@@ -647,36 +654,26 @@ class ActionExecutor:
                 ", ".join(changed) or "none",
             )
 
-        if limits_changed or config_changed or model_changed or was_truncated or input_changed:
+        if limits_changed or was_truncated or input_changed:
             reason = (
                 "staged input"
                 if input_changed
                 else "limit config"
                 if limits_changed
-                else "model"
-                if model_changed
                 else "a cap recorded by the run that completed it"
-                if was_truncated
-                else " and ".join(edits)
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
-            if file_limit is not None and (config_changed or model_changed):
-                # A record limit rewrites every file it walks; a file limit stops
-                # the walk, and a file it never opens keeps what the last run put
-                # there. Harmless on its own, but the answers under it were
-                # produced by the configuration this reset is replacing, and the
-                # action reads as complete either way.
-                logger.warning(
-                    "%s is re-running under a file limit of %d after a %s change: files the "
-                    "walk does not reach keep output produced by the previous configuration, "
-                    "and the action will still be recorded as complete. Use --fresh for an "
-                    "output that comes from one configuration throughout",
-                    action_name,
-                    file_limit,
-                    reason,
-                )
             self.reopen_with_readers(action_name)
             return ActionStatus.PENDING
+        if edits:
+            logger.warning(
+                "%s was edited since it completed (%s): its answers stand, and only records "
+                "it has not answered use the edit. Run again with --rerun %s to answer every "
+                "record under the edit",
+                action_name,
+                ", ".join(edits),
+                action_name,
+            )
         return current_status
 
     def reopen_with_readers(self, action_name: str) -> list[str]:

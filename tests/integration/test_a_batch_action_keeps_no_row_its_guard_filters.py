@@ -1,8 +1,8 @@
 """A batch action holds no row for a record its guard filters, as online holds none.
 
 `summarize` and `publish` both run under `run_mode: batch` against the provider mock,
-each to completion, before `summarize` is given a guard. Editing it resets both, so
-every record reaches the guard again. Where the guard filters every record the action
+each to completion, before `summarize` is given a guard. A run with ``--rerun summarize``
+resets both, so every record reaches the guard again. Where the guard filters every record the action
 holds nothing and is skipped, and its reader is skipped and emptied, as online
 (test_skipped_reader_drops_stale_rows). Where it filters one, that record's row goes.
 """
@@ -82,7 +82,7 @@ def test_an_action_whose_guard_filters_everything_holds_nothing_and_its_reader_i
     project = both_collected
     _add_guard(project, FILTER_ALL)
 
-    transcript = _run_to_the_end(project, "-e", mode)
+    transcript = _run_to_the_end(project, "-e", mode, "--rerun", FIRST)
 
     assert _rows(project, FIRST) == []
     assert _rows(project, READER) == []
@@ -101,7 +101,7 @@ def test_a_record_the_guard_filters_leaves_no_row_in_the_action_or_its_reader(bo
     kept = sorted(set(_guids(project, FIRST)) - {filtered})
     _add_guard(project, FILTER_PAGE_0)
 
-    transcript = _run_to_the_end(project)
+    transcript = _run_to_the_end(project, "--rerun", FIRST)
 
     assert _guids(project, FIRST) == kept, transcript
     assert _guids(project, READER) == kept, transcript
@@ -110,13 +110,13 @@ def test_a_record_the_guard_filters_leaves_no_row_in_the_action_or_its_reader(bo
 def test_a_second_run_keeps_it_empty_and_lifting_the_filter_restores_it(both_collected):
     project = both_collected
     _add_guard(project, FILTER_ALL)
-    _run_to_the_end(project)
+    _run_to_the_end(project, "--rerun", FIRST)
     _run_to_the_end(project)
     assert _rows(project, READER) == []
 
     config = _config(project)
     config.write_text(config.read_text().replace(FILTER_ALL, ""))
-    _run_to_the_end(project)
+    _run_to_the_end(project, "--rerun", FIRST)
 
     assert len(_guids(project, FIRST)) == len(_guids(project, READER)) == RECORDS
     assert _statuses(project) == {
