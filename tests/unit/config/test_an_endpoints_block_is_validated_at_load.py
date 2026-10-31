@@ -122,7 +122,7 @@ REFUSALS = [
     ),
     (
         "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, true: x }\n",
-        "endpoints.lab-vllm.auth: unknown key 'True'",
+        "endpoints.lab-vllm.auth: unknown key 'true'",
     ),
     (
         "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n    name: x\n",
@@ -334,6 +334,15 @@ REFUSALS = [
     (
         "endpoints:\n  lab-vllm:\n    url: 'http://'\n    auth: none\n",
         "endpoints.lab-vllm.url: must name a host, for example http://gpu-box:8000/v1",
+    ),
+    (
+        "endpoints:\n  null:\n    url: http://gpu-box:8000/v1\n    auth: none\n",
+        "endpoints: an endpoint name must be text; quote it, for example 'null'",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n"
+        "    headers: { on: x }\n",
+        "endpoints.lab-vllm.headers: unknown key 'true'",
     ),
     (
         "endpoints:\n  a:\n    url: http://h/v1\n    auth: none\n"
