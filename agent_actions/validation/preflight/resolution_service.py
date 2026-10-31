@@ -735,8 +735,10 @@ class WorkflowResolutionService:
         for action_name, config in self.action_configs.items():
             base_url = config.get("base_url")
             vendor = (config.get("model_vendor") or "").lower()
-            # These send no request, and may inherit base_url from defaults.
-            if not base_url or vendor in _VENDORS_WITHOUT_ENDPOINT:
+            # These send no request, and may inherit base_url from defaults. A declared
+            # endpoint sends to its own url; base_url written on the action is refused
+            # at expansion, and an inherited one is ignored.
+            if not base_url or vendor in _VENDORS_WITHOUT_ENDPOINT or project_endpoint(vendor):
                 continue
 
             capabilities = _resolve_capabilities(vendor)

@@ -23,9 +23,21 @@ logger = logging.getLogger(__name__)
 _client_cache: dict[tuple[type, str, tuple[tuple[str, Any], ...]], Any] = {}
 
 
+def _hashable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return tuple(sorted((str(k), _hashable(v)) for k, v in value.items()))
+    if isinstance(value, list | tuple):
+        return tuple(_hashable(v) for v in value)
+    return value
+
+
 def get_or_create_client(cls: type, api_key: str | None, **kwargs: Any) -> Any:
-    """Return a cached SDK client instance, creating one if needed."""
-    cache_key = (cls, api_key or "", tuple(sorted(kwargs.items())))
+    """Return a cached SDK client instance, creating one if needed.
+
+    Keyed by class, key and every constructor kwarg, so two clients with different
+    headers or URLs never share an instance.
+    """
+    cache_key = (cls, api_key or "", tuple(sorted((k, _hashable(v)) for k, v in kwargs.items())))
     client = _client_cache.get(cache_key)
     if client is None:
         client = cls(api_key=api_key, **kwargs)

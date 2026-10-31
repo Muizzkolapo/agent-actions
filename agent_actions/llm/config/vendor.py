@@ -54,8 +54,10 @@ def effective_run_mode(action_config: Mapping[str, Any]) -> RunMode:
 
 
 def vendor_names() -> list[str]:
-    """Every name ``model_vendor`` accepts: the vendor types, then the runtime profiles."""
-    return [v.value for v in VendorType] + list(RUNTIME_PROFILES)
+    """Every name ``model_vendor`` accepts: vendor types, runtime profiles, declared endpoints."""
+    from agent_actions.llm.config.endpoints import project_endpoints
+
+    return [v.value for v in VendorType] + list(RUNTIME_PROFILES) + list(project_endpoints())
 
 
 # Names the configuration reference gives a vendor that differ from its value.

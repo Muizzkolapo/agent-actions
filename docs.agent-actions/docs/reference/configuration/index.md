@@ -41,6 +41,11 @@ seed_data_path: seed_data
 seed_data_paths: [shared_seeds]
 required_by_default: false
 
+endpoints:                  # OpenAI-compatible servers an action selects with model_vendor
+  lab-vllm:
+    url: http://gpu-box:8000/v1
+    auth: none
+
 logging:
   level: WARNING            # console level; the run log keeps every level
   module_levels:
@@ -57,6 +62,7 @@ logging:
 | `tool_path` | Directories to scan for custom tools |
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
 | `seed_data_paths` | Shared seed folders, relative to the project root, searched after the workflow's and the project's own folder; see [Seed Data](../context/seed-data#shared-folders) |
+| `endpoints` | OpenAI-compatible servers with structured output, each with a `url`, an `auth` source and optional `headers`; an action selects one with `model_vendor: <name>`. See [Endpoints](./endpoints) |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required unless marked `optional: true`; when `false` (default) they are optional unless marked `required: true`. Applies project-wide; a schema declaring its own `required_by_default` overrides it. |
 | `logging` | Logging for every command run in the project. `level` is the console level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`; default `INFO`); `module_levels` maps Python logger names to levels, which is the only way to re-open a logger the framework clamps (`httpx`, `openai`, ...) or to quiet another; `file.max_bytes` and `file.backup_count` size and rotate the run log. Loaded when the CLI boots, before any command runs. An `AGENT_ACTIONS_*` variable that is set overrides the matching key, and `--debug` / `--verbose` / `--quiet` override both. A key under `logging:` that nothing reads (`file.path`, `file.enabled`, `file.level`, `file.format`, and any other) is reported on stderr at boot and configures nothing: the run log always writes to the workflow's `agent_io/logs/events.json`. See [Logging](../architecture/logging). |
 
