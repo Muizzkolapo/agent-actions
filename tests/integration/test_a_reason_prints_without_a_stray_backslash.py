@@ -4,6 +4,7 @@ Printing it at all was the first fix. Escaping it for the table instead of print
 as text satisfies "the tag appears" while putting a backslash in front of it.
 """
 
+import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
@@ -15,13 +16,15 @@ from tests.integration.test_dispositions_prints_a_reason_that_holds_brackets imp
 REASON = "Error executing UDF 'flat_brackets': [/note] gamma breaks"
 
 
-def test_the_quarantined_table_prints_the_reason_exactly(project):  # noqa: F811
-    result = CliRunner().invoke(cli, ["dispositions", "-a", WORKFLOW, "--quarantined"])
-
-    assert REASON in result.output
-
-
-def test_the_retry_plan_prints_the_reason_exactly(project):  # noqa: F811
-    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--dry-run"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["dispositions", "-a", WORKFLOW, "--quarantined"],
+        ["retry", "-a", WORKFLOW, "--dry-run"],
+    ],
+    ids=["dispositions-quarantined", "retry-dry-run"],
+)
+def test_the_reason_prints_exactly(project, args):  # noqa: F811
+    result = CliRunner().invoke(cli, args)
 
     assert REASON in result.output

@@ -81,68 +81,27 @@ class TestWorkflowInvariants:
 
 
 class TestCircularDependencyDetection:
-    def test_self_cycle_raises(self):
-        with pytest.raises(ValidationError, match=r"A -> A"):
-            WorkflowConfig(
-                **_workflow(
-                    actions=[
-                        {
-                            "name": "A",
-                            "intent": "self-loop",
-                            "kind": "llm",
-                            "dependencies": ["A"],
-                        },
-                    ]
-                )
-            )
-
-    def test_two_node_cycle_shows_path(self):
-        with pytest.raises(ValidationError, match=r"A -> B -> A"):
-            WorkflowConfig(
-                **_workflow(
-                    actions=[
-                        {
-                            "name": "A",
-                            "intent": "a",
-                            "kind": "llm",
-                            "dependencies": ["B"],
-                        },
-                        {
-                            "name": "B",
-                            "intent": "b",
-                            "kind": "llm",
-                            "dependencies": ["A"],
-                        },
-                    ]
-                )
-            )
-
-    def test_three_node_cycle_shows_path(self):
-        with pytest.raises(ValidationError, match=r"A -> B -> C -> A"):
-            WorkflowConfig(
-                **_workflow(
-                    actions=[
-                        {
-                            "name": "A",
-                            "intent": "a",
-                            "kind": "llm",
-                            "dependencies": ["B"],
-                        },
-                        {
-                            "name": "B",
-                            "intent": "b",
-                            "kind": "llm",
-                            "dependencies": ["C"],
-                        },
-                        {
-                            "name": "C",
-                            "intent": "c",
-                            "kind": "llm",
-                            "dependencies": ["A"],
-                        },
-                    ]
-                )
-            )
+    @pytest.mark.parametrize(
+        ("dependencies", "match"),
+        [
+            pytest.param({"A": ["A"]}, r"A -> A", id="self"),
+            pytest.param({"A": ["B"], "B": ["A"]}, r"A -> B -> A", id="two_node"),
+            pytest.param(
+                {"A": ["B"], "B": ["C"], "C": ["A"]}, r"A -> B -> C -> A", id="three_node"
+            ),
+            # A is acyclic; the B -> C -> B cycle is still found
+            pytest.param(
+                {"A": [], "B": ["A", "C"], "C": ["B"]}, r"B -> C -> B", id="cycle_beside_acyclic"
+            ),
+        ],
+    )
+    def test_cycle_raises_with_path(self, dependencies, match):
+        actions = [
+            {"name": name, "intent": name.lower(), "kind": "llm", "dependencies": deps}
+            for name, deps in dependencies.items()
+        ]
+        with pytest.raises(ValidationError, match=match):
+            WorkflowConfig(**_workflow(actions=actions))
 
     def test_diamond_dag_no_false_positive(self):
         """Diamond shape (A->B, A->C, B->D, C->D) is valid — no cycle."""
@@ -172,29 +131,6 @@ class TestCircularDependencyDetection:
             )
         )
         assert len(wf.actions) == 4
-
-    def test_cycle_with_acyclic_branch(self):
-        """Cycle in B->C->B, but A is acyclic — cycle still detected."""
-        with pytest.raises(ValidationError, match=r"B -> C -> B"):
-            WorkflowConfig(
-                **_workflow(
-                    actions=[
-                        {"name": "A", "intent": "a", "kind": "llm"},
-                        {
-                            "name": "B",
-                            "intent": "b",
-                            "kind": "llm",
-                            "dependencies": ["A", "C"],
-                        },
-                        {
-                            "name": "C",
-                            "intent": "c",
-                            "kind": "llm",
-                            "dependencies": ["B"],
-                        },
-                    ]
-                )
-            )
 
     def test_deep_chain_no_recursion_error(self):
         """A 1500-node linear chain must not hit RecursionError."""

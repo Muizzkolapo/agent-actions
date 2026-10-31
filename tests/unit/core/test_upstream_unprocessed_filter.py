@@ -58,21 +58,10 @@ class TestCascadeBlockingDetection:
             is_first_stage=False,
         )
 
-    def test_cascade_skipped_triggers_cascade(self):
+    @pytest.mark.parametrize("state", ["cascade_skipped", "failed", "exhausted"])
+    def test_blocking_state_triggers_cascade(self, state):
         preparer = TaskPreparer()
-        item = _record("cascade_skipped")
-        result = preparer.prepare(item, self._make_context())
-        assert result.guard_status == GuardStatus.UPSTREAM_UNPROCESSED
-
-    def test_failed_triggers_cascade(self):
-        preparer = TaskPreparer()
-        item = _record("failed")
-        result = preparer.prepare(item, self._make_context())
-        assert result.guard_status == GuardStatus.UPSTREAM_UNPROCESSED
-
-    def test_exhausted_triggers_cascade(self):
-        preparer = TaskPreparer()
-        item = _record("exhausted")
+        item = _record(state)
         result = preparer.prepare(item, self._make_context())
         assert result.guard_status == GuardStatus.UPSTREAM_UNPROCESSED
 

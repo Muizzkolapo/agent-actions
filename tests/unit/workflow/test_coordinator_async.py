@@ -96,8 +96,14 @@ class TestAsyncRunLevelExecution:
         assert orchestrator.execute_level_async.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_level_execution_params_passed_correctly(self):
-        """The LevelExecutionParams should include correct fields."""
+    @pytest.mark.parametrize(
+        ("run_kwargs", "limit"),
+        [
+            pytest.param({"concurrency_limit": 10}, 10, id="explicit_limit"),
+            pytest.param({}, 5, id="default_limit"),
+        ],
+    )
+    async def test_level_execution_params_passed_correctly(self, run_kwargs, limit):
         wf = _build_workflow(execution_order=["agent_a"])
 
         orchestrator = wf.services.core.action_level_orchestrator
@@ -106,13 +112,13 @@ class TestAsyncRunLevelExecution:
 
         mgr = _mock_manager()
         with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            await wf.async_run(concurrency_limit=10)
+            await wf.async_run(**run_kwargs)
 
         call_args = orchestrator.execute_level_async.call_args[0][0]
         assert call_args.level_idx == 0
         assert call_args.level_actions == ["agent_a"]
         assert call_args.action_indices == {"agent_a": 0}
-        assert call_args.concurrency_limit == 10
+        assert call_args.concurrency_limit == limit
 
     @pytest.mark.asyncio
     async def test_stops_when_level_incomplete(self):
@@ -151,22 +157,6 @@ class TestAsyncRunLevelExecution:
 
         labelled = [c for c in mgr.set_context.call_args_list if "action_name" in c.kwargs]
         assert labelled == []
-
-    @pytest.mark.asyncio
-    async def test_concurrency_limit_default(self):
-        """Default concurrency_limit should be 5."""
-        wf = _build_workflow(execution_order=["agent_a"])
-
-        orchestrator = wf.services.core.action_level_orchestrator
-        orchestrator.compute_execution_levels.return_value = [["agent_a"]]
-        orchestrator.execute_level_async = AsyncMock(return_value=True)
-
-        mgr = _mock_manager()
-        with patch("agent_actions.workflow.coordinator.get_manager", return_value=mgr):
-            await wf.async_run()  # No explicit concurrency_limit
-
-        call_args = orchestrator.execute_level_async.call_args[0][0]
-        assert call_args.concurrency_limit == 5
 
 
 # ── async_run: completion ──────────────────────────────────────────────

@@ -18,52 +18,30 @@ from agent_actions.processing.helpers import _is_empty_output
 class TestIsEmptyOutput:
     """Tests for the _is_empty_output() helper function."""
 
-    def test_none_is_empty(self):
-        assert _is_empty_output(None) is True
-
-    def test_empty_dict_is_empty(self):
-        assert _is_empty_output({}) is True
-
-    def test_empty_list_is_empty(self):
-        assert _is_empty_output([]) is True
-
-    def test_non_empty_dict_is_not_empty(self):
-        assert _is_empty_output({"key": "val"}) is False
-
-    def test_non_empty_list_is_not_empty(self):
-        assert _is_empty_output([1, 2, 3]) is False
-
-    def test_string_is_not_empty(self):
-        assert _is_empty_output("hello") is False
-
-    def test_empty_string_is_not_empty(self):
-        """Empty string is not considered empty output (it's a valid response)."""
-        assert _is_empty_output("") is False
-
-    def test_zero_is_not_empty(self):
-        assert _is_empty_output(0) is False
-
-    def test_false_is_not_empty(self):
-        assert _is_empty_output(False) is False
-
-    def test_list_of_one_empty_dict_is_empty(self):
-        """[{}] is effectively empty — no usable fields in any item."""
-        assert _is_empty_output([{}]) is True
-
-    def test_list_of_two_empty_dicts_is_empty(self):
-        """[{}, {}] is effectively empty — all items are empty dicts."""
-        assert _is_empty_output([{}, {}]) is True
-
-    def test_list_with_mixed_dicts_is_not_empty(self):
-        """[{}, {"key": "val"}] has at least one non-empty item."""
-        assert _is_empty_output([{}, {"key": "val"}]) is False
-
-    def test_list_with_non_empty_dict_is_not_empty(self):
-        assert _is_empty_output([{"key": "val"}]) is False
-
-    def test_list_with_non_dict_items_is_not_empty(self):
-        """[1, 2] — non-dict items are not considered empty dicts."""
-        assert _is_empty_output([1, 2]) is False
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            pytest.param(None, True, id="none"),
+            pytest.param({}, True, id="empty-dict"),
+            pytest.param([], True, id="empty-list"),
+            pytest.param({"key": "val"}, False, id="dict"),
+            pytest.param([1, 2, 3], False, id="list"),
+            pytest.param("hello", False, id="str"),
+            # An empty string is a valid response, not empty output.
+            pytest.param("", False, id="empty-str"),
+            pytest.param(0, False, id="zero"),
+            pytest.param(False, False, id="false"),
+            # A list whose items are all empty dicts has no usable fields.
+            pytest.param([{}], True, id="one-empty-dict"),
+            pytest.param([{}, {}], True, id="two-empty-dicts"),
+            pytest.param([{}, {"key": "val"}], False, id="mixed-dicts"),
+            pytest.param([{"key": "val"}], False, id="non-empty-dict-in-list"),
+            # Non-dict items are not empty dicts.
+            pytest.param([1, 2], False, id="non-dict-items"),
+        ],
+    )
+    def test_is_empty_output(self, value, expected):
+        assert _is_empty_output(value) is expected
 
 
 # =============================================================================
@@ -131,13 +109,10 @@ class TestOnEmptyConfig:
         config = ActionConfig(name="test", intent="test action")
         assert config.on_empty == "warn"
 
-    def test_can_set_error(self):
-        config = ActionConfig(name="test", intent="test action", on_empty="error")
-        assert config.on_empty == "error"
-
-    def test_can_set_skip(self):
-        config = ActionConfig(name="test", intent="test action", on_empty="skip")
-        assert config.on_empty == "skip"
+    @pytest.mark.parametrize("on_empty", ["warn", "error", "skip"])
+    def test_accepts_each_mode(self, on_empty):
+        config = ActionConfig(name="test", intent="test action", on_empty=on_empty)
+        assert config.on_empty == on_empty
 
     def test_invalid_value_rejected(self):
         from pydantic import ValidationError

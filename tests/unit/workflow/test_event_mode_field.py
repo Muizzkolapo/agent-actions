@@ -1,5 +1,7 @@
 """Tests for mode field on action lifecycle events (ARCH-006)."""
 
+import pytest
+
 from agent_actions.logging.events import (
     ActionCachedEvent,
     ActionCompleteEvent,
@@ -12,30 +14,20 @@ from agent_actions.logging.events import (
 class TestActionEventModeField:
     """Verify mode field is present and propagated on all action events."""
 
-    def test_action_start_event_carries_mode(self):
-        event = ActionStartEvent(action_name="extract", mode="online")
-        assert event.mode == "online"
-        assert event.data["mode"] == "online"
-
-    def test_action_complete_event_carries_mode(self):
-        event = ActionCompleteEvent(action_name="extract", mode="batch")
-        assert event.mode == "batch"
-        assert event.data["mode"] == "batch"
-
-    def test_action_skip_event_carries_mode(self):
-        event = ActionSkipEvent(action_name="extract", skip_reason="cached", mode="online")
-        assert event.mode == "online"
-        assert event.data["mode"] == "online"
-
-    def test_action_failed_event_carries_mode(self):
-        event = ActionFailedEvent(action_name="extract", error_message="boom", mode="batch")
-        assert event.mode == "batch"
-        assert event.data["mode"] == "batch"
-
-    def test_action_cached_event_carries_mode(self):
-        event = ActionCachedEvent(action_name="extract", mode="online")
-        assert event.mode == "online"
-        assert event.data["mode"] == "online"
+    @pytest.mark.parametrize(
+        ("event_cls", "extra", "mode"),
+        [
+            pytest.param(ActionStartEvent, {}, "online", id="start"),
+            pytest.param(ActionCompleteEvent, {}, "batch", id="complete"),
+            pytest.param(ActionSkipEvent, {"skip_reason": "cached"}, "online", id="skip"),
+            pytest.param(ActionFailedEvent, {"error_message": "boom"}, "batch", id="failed"),
+            pytest.param(ActionCachedEvent, {}, "online", id="cached"),
+        ],
+    )
+    def test_action_event_carries_mode(self, event_cls, extra, mode):
+        event = event_cls(action_name="extract", mode=mode, **extra)
+        assert event.mode == mode
+        assert event.data["mode"] == mode
 
     def test_mode_defaults_to_empty_string(self):
         """When mode is not provided, it defaults to empty string."""

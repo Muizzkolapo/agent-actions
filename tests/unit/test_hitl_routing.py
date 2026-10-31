@@ -58,8 +58,13 @@ def test_get_all_agent_configs_forces_kind_vendor_mapping():
     assert normalized["transform_data"]["model_vendor"] == "tool"
 
 
-def test_get_all_agent_configs_raises_on_none_model_vendor():
-    """LLM actions with model_vendor=None should raise ConfigurationError."""
+@pytest.mark.parametrize(
+    ("kind", "model_vendor"),
+    [("llm", None), ("llm", ""), (None, None)],
+    ids=["none-vendor", "empty-vendor", "none-kind"],
+)
+def test_get_all_agent_configs_raises_on_missing_model_vendor(kind, model_vendor):
+    """An LLM or unset-kind action with no model_vendor raises ConfigurationError."""
     from agent_actions.config.manager import ConfigManager
     from agent_actions.errors import ConfigurationError
 
@@ -69,8 +74,8 @@ def test_get_all_agent_configs_raises_on_none_model_vendor():
             {
                 "agent_type": "classify",
                 "name": "classify",
-                "kind": "llm",
-                "model_vendor": None,
+                "kind": kind,
+                "model_vendor": model_vendor,
             }
         ),
     }
@@ -96,45 +101,3 @@ def test_get_all_agent_configs_allows_none_vendor_for_tool_and_hitl():
     result = manager.get_all_agent_configs_as_dicts()
     assert result["review"]["model_vendor"] == "hitl"
     assert result["transform"]["model_vendor"] == "tool"
-
-
-def test_get_all_agent_configs_raises_on_empty_string_model_vendor():
-    """LLM actions with model_vendor='' should also raise ConfigurationError."""
-    from agent_actions.config.manager import ConfigManager
-    from agent_actions.errors import ConfigurationError
-
-    manager = ConfigManager(constructor_path="unused.yml", default_path="")
-    manager.agent_configs = {
-        "classify": AgentConfig.model_validate(
-            {
-                "agent_type": "classify",
-                "name": "classify",
-                "kind": "llm",
-                "model_vendor": "",
-            }
-        ),
-    }
-
-    with pytest.raises(ConfigurationError, match="missing required field 'model_vendor'"):
-        manager.get_all_agent_configs_as_dicts()
-
-
-def test_get_all_agent_configs_raises_when_kind_is_none():
-    """Actions with kind=None (absent/unset) should still validate model_vendor."""
-    from agent_actions.config.manager import ConfigManager
-    from agent_actions.errors import ConfigurationError
-
-    manager = ConfigManager(constructor_path="unused.yml", default_path="")
-    manager.agent_configs = {
-        "summarize": AgentConfig.model_validate(
-            {
-                "agent_type": "summarize",
-                "name": "summarize",
-                "kind": None,
-                "model_vendor": None,
-            }
-        ),
-    }
-
-    with pytest.raises(ConfigurationError, match="missing required field 'model_vendor'"):
-        manager.get_all_agent_configs_as_dicts()

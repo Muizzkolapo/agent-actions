@@ -172,17 +172,31 @@ class TestParentRecordsLineagePropagation:
 class TestBatchContextAdapterParentRecords:
     """Batch path populates parent_records symmetrically with the online path."""
 
-    def test_batch_adapter_defaults_parent_records_to_empty(self):
-        """No explicit parent_records → empty; batch relies on current_item for parent lookup."""
+    @pytest.mark.parametrize(
+        ("original_row", "agent_config"),
+        [
+            # Batch relies on current_item for parent lookup.
+            pytest.param(
+                {"source_guid": "guid_b", "node_id": "stage_one_b", "lineage": ["stage_one_b"]},
+                {"agent_type": "stage_two", "dependencies": ["stage_one"]},
+                id="staged-row",
+            ),
+            # A falsy row gives empty parent_records, not [None].
+            pytest.param({}, {"agent_type": "stage_one"}, id="empty-row"),
+            pytest.param(
+                {"source_guid": "seed_1", "page_content": "raw text"},
+                {"agent_type": "stage_one"},
+                id="raw-seed",
+            ),
+        ],
+    )
+    def test_batch_adapter_keeps_current_item_with_no_parent_records(
+        self, original_row, agent_config
+    ):
         from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 
-        original_row = {
-            "source_guid": "guid_b",
-            "node_id": "stage_one_b",
-            "lineage": ["stage_one_b"],
-        }
         ctx = BatchContextAdapter.to_processing_context(
-            agent_config={"agent_type": "stage_two", "dependencies": ["stage_one"]},
+            agent_config=agent_config,
             original_row=original_row,
             record_index=0,
         )
@@ -205,30 +219,6 @@ class TestBatchContextAdapterParentRecords:
             parent_records=explicit_parents,
         )
         assert ctx.parent_records == explicit_parents
-
-    def test_batch_adapter_empty_when_no_original_row(self):
-        """No original_row → empty parent_records, not [None]."""
-        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
-
-        ctx = BatchContextAdapter.to_processing_context(
-            agent_config={"agent_type": "stage_one"},
-            original_row={},  # falsy
-            record_index=0,
-        )
-        assert ctx.parent_records == []
-
-    def test_batch_adapter_seed_record_keeps_current_item_but_no_parents(self):
-        """Raw seed input still flows through as current_item; parent_records stays empty."""
-        from agent_actions.processing.batch_context_adapter import BatchContextAdapter
-
-        seed = {"source_guid": "seed_1", "page_content": "raw text"}
-        ctx = BatchContextAdapter.to_processing_context(
-            agent_config={"agent_type": "stage_one"},
-            original_row=seed,
-            record_index=0,
-        )
-        assert ctx.parent_records == []
-        assert ctx.current_item is seed
 
 
 class TestGetParentItemDirect:

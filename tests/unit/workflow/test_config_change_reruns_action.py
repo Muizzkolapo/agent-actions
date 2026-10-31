@@ -63,9 +63,33 @@ def _complete_with(state_manager, action_config: dict) -> None:
 
 
 class TestAChangedConfigReRunsTheAction:
-    def test_a_changed_guard_is_not_skipped(self, state_manager):
-        _complete_with(state_manager, _config('density == "high"'))
-        executor = _executor(state_manager, _config('density == "impossible"'))
+    @pytest.mark.parametrize(
+        ("before", "change"),
+        [
+            pytest.param(
+                _config('density == "high"'),
+                {"guard": _config('density == "impossible"')["guard"]},
+                id="guard",
+            ),
+            # The hash cannot see the model, so it is compared from the stamp.
+            pytest.param(
+                dict(
+                    _config('density == "high"'), model_name="gpt-oss:120b", model_vendor="ollama"
+                ),
+                {"model_name": "claude-sonnet-4"},
+                id="model_name",
+            ),
+            pytest.param(
+                dict(_config('density == "high"'), model_name="m", model_vendor="ollama"),
+                {"model_vendor": "anthropic"},
+                id="model_vendor",
+            ),
+            pytest.param(_config('density == "high"'), {"record_limit": 5}, id="record_limit"),
+        ],
+    )
+    def test_a_changed_setting_is_not_skipped(self, state_manager, before, change):
+        _complete_with(state_manager, before)
+        executor = _executor(state_manager, dict(before, **change))
 
         assert executor.verify_completion_status(ACTION) is False
 
@@ -76,25 +100,6 @@ class TestAChangedConfigReRunsTheAction:
         executor.verify_completion_status(ACTION)
 
         assert state_manager.get_status(ACTION) == ActionStatus.PENDING
-
-    def test_a_changed_model_is_not_skipped(self, state_manager):
-        """The hash cannot see the model, so it is compared from the stamp."""
-        before = dict(
-            _config('density == "high"'), model_name="gpt-oss:120b", model_vendor="ollama"
-        )
-        _complete_with(state_manager, before)
-        after = dict(before, model_name="claude-sonnet-4")
-        executor = _executor(state_manager, after)
-
-        assert executor.verify_completion_status(ACTION) is False
-
-    def test_a_changed_model_vendor_is_not_skipped(self, state_manager):
-        before = dict(_config('density == "high"'), model_name="m", model_vendor="ollama")
-        _complete_with(state_manager, before)
-        after = dict(before, model_vendor="anthropic")
-        executor = _executor(state_manager, after)
-
-        assert executor.verify_completion_status(ACTION) is False
 
     def test_a_stale_verdict_is_wiped_for_the_whole_action(self, state_manager):
         """A changed prompt or guard makes every per-record verdict stale.
@@ -110,14 +115,6 @@ class TestAChangedConfigReRunsTheAction:
 
         backend = executor.deps.action_runner.storage_backend
         assert backend.clear_disposition.call_args_list == [(("extract_candidates",), {})]
-
-    def test_a_changed_record_limit_is_not_skipped(self, state_manager):
-        before = _config('density == "high"')
-        _complete_with(state_manager, before)
-        after = dict(before, record_limit=5)
-        executor = _executor(state_manager, after)
-
-        assert executor.verify_completion_status(ACTION) is False
 
 
 class TestAnUnchangedConfigIsStillSkipped:

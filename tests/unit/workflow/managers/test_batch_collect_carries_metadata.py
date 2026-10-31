@@ -28,20 +28,17 @@ def parts():
 
 
 class TestCollectPassReceivesTheRunsMetadata:
-    def test_when_the_registry_reads_completed(self, parts):
+    @pytest.mark.parametrize(
+        ("registry", "all_done"),
+        [
+            pytest.param("completed", None, id="registry_reads_completed"),
+            pytest.param("in_progress", True, id="in_progress_but_every_job_finished"),
+        ],
+    )
+    def test_the_collect_pass_receives_the_metadata(self, parts, registry, all_done):
         manager, job_manager, processing_service = parts
-        job_manager.get_registry_status.return_value = "completed"
-
-        with patch("agent_actions.workflow.managers.batch.fire_event"):
-            manager.handle_batch_agent("act", "/out", CONFIG, workflow_metadata=METADATA)
-
-        sent = processing_service.process_all_batch_results.call_args.kwargs
-        assert sent["workflow_metadata"] == METADATA
-
-    def test_when_every_job_finished_while_the_registry_read_in_progress(self, parts):
-        manager, job_manager, processing_service = parts
-        job_manager.get_registry_status.return_value = "in_progress"
-        job_manager.are_all_jobs_completed.return_value = True
+        job_manager.get_registry_status.return_value = registry
+        job_manager.are_all_jobs_completed.return_value = all_done
 
         with patch("agent_actions.workflow.managers.batch.fire_event"):
             manager.handle_batch_agent("act", "/out", CONFIG, workflow_metadata=METADATA)

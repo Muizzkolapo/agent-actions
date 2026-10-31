@@ -80,35 +80,28 @@ def _run_fork(
 
 
 class TestTheRecordedInputSitsAboveEveryNarrowing:
-    def test_a_record_limit_drops_a_record_from_the_batch_but_not_the_recording(self):
-        """The dropped record still holds rows this action must carry."""
+    @pytest.mark.parametrize(
+        ("guids", "action_config", "retried", "expected_submitted"),
+        [
+            # The dropped records still hold rows this action must carry.
+            pytest.param(
+                ("i1", "i2", "i3"), {"record_limit": 1}, frozenset(), ["i1"], id="record_limit"
+            ),
+            # `agac retry` names one record; the rest are still inputs of this run. Recorded
+            # below the repair, every record it did not name reads as a generation that is gone.
+            pytest.param(("i1", "i2", "i3"), None, frozenset({"i2"}), ["i2"], id="repair"),
+            pytest.param(("i1", "i2"), None, frozenset(), ["i1", "i2"], id="unnarrowed"),
+        ],
+    )
+    def test_the_batch_is_narrowed_but_the_recording_holds_every_input(
+        self, guids, action_config, retried, expected_submitted
+    ):
         submitted, recorded = _run_fork(
-            _records("i1", "i2", "i3"), action_config={"record_limit": 1}
+            _records(*guids), action_config=action_config, retried=retried
         )
 
-        assert submitted == ["i1"], f"the limit did not narrow the batch: {submitted}"
-        assert recorded == ["i1", "i2", "i3"], (
-            f"the recording was taken below the limit, so i2/i3 read as gone: {recorded}"
-        )
-
-    def test_a_repair_narrows_the_batch_but_not_the_recording(self):
-        """`agac retry` names one record; the rest are still inputs of this run.
-
-        This is the case that deletes most: recorded below the repair narrowing,
-        every record the repair did not name reads as a generation that is gone.
-        """
-        submitted, recorded = _run_fork(_records("i1", "i2", "i3"), retried=frozenset({"i2"}))
-
-        assert submitted == ["i2"], f"the repair did not narrow the batch: {submitted}"
-        assert recorded == ["i1", "i2", "i3"], (
-            f"the recording was taken below the repair, so i1/i3 read as gone: {recorded}"
-        )
-
-    def test_an_unnarrowed_run_records_exactly_what_it_submits(self):
-        submitted, recorded = _run_fork(_records("i1", "i2"))
-
-        assert submitted == ["i1", "i2"]
-        assert recorded == ["i1", "i2"]
+        assert submitted == expected_submitted, f"the batch was not narrowed: {submitted}"
+        assert recorded == list(guids), f"the recording was taken below the narrowing: {recorded}"
 
 
 @pytest.mark.parametrize("retried", [frozenset(), frozenset({"i2"})])
@@ -230,20 +223,20 @@ class TestAFileReadIsItsOwnRecording:
             )
         return captured["run_inputs"]
 
-    def test_the_file_it_read_is_what_it_records(self, tmp_path):
+    @pytest.mark.parametrize(
+        "retried",
+        [
+            pytest.param(frozenset(), id="whole_file_read"),
+            # The refusal is for a caller that narrowed and did not say so.
+            pytest.param(frozenset({"i2"}), id="repair_not_refused"),
+        ],
+    )
+    def test_the_file_it_read_is_what_it_records(self, tmp_path, retried):
         rows = [{"source_guid": "i1"}, {"source_guid": "i2"}]
 
-        recorded = self._submit_from_file(tmp_path, rows)
+        recorded = self._submit_from_file(tmp_path, rows, retried=retried)
 
         assert recorded is not None, "a whole-file read recorded nothing"
-        assert [r["source_guid"] for r in recorded] == ["i1", "i2"]
-
-    def test_a_repair_on_this_path_is_not_refused(self, tmp_path):
-        """The refusal is for a caller that narrowed and did not say so."""
-        rows = [{"source_guid": "i1"}, {"source_guid": "i2"}]
-
-        recorded = self._submit_from_file(tmp_path, rows, retried=frozenset({"i2"}))
-
         assert [r["source_guid"] for r in recorded] == ["i1", "i2"]
 
 

@@ -139,25 +139,17 @@ def test_a_key_set_only_in_a_branch_is_refused_in_every_spelling(tmp_path, mode,
 
 
 @pytest.mark.parametrize(
-    "after",
+    ("initialiser", "after", "items_required"),
     [
-        'out |= {"items": ""}',
-        'out.update(items="")',
-        'out.setdefault("items", "")',
+        (INITIALISERS["plain"], 'out |= {"items": ""}', True),
+        (INITIALISERS["plain"], 'out.update(items="")', True),
+        (INITIALISERS["plain"], 'out.setdefault("items", "")', True),
+        (INITIALISERS["annotated"], "", False),
     ],
+    ids=["ior", "update", "setdefault", "optional-key"],
 )
-def test_a_key_set_on_every_path_runs(tmp_path, after):
-    project = _project(tmp_path, "online", INITIALISERS["plain"], after=after)
-
-    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
-    output = result.stdout + result.stderr
-
-    assert result.returncode == 0, output
-    assert _dispositions(project) == ["success", "success"], output
-
-
-def test_an_optional_key_set_only_in_a_branch_runs(tmp_path):
-    project = _project(tmp_path, "online", INITIALISERS["annotated"], items_required=False)
+def test_a_key_set_on_every_path_or_not_required_runs(tmp_path, initialiser, after, items_required):
+    project = _project(tmp_path, "online", initialiser, after=after, items_required=items_required)
 
     result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
     output = result.stdout + result.stderr

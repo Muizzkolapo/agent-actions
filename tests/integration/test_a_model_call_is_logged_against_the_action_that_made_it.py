@@ -109,10 +109,11 @@ def chain(tmp_path):
     return _project(tmp_path, actions)
 
 
-def test_actions_of_one_step_each_own_their_model_calls(one_step):
+@pytest.mark.parametrize("where", ["meta", "data"])
+def test_actions_of_one_step_each_own_their_model_calls(one_step, where):
     events = _run(one_step)
 
-    assert _calls(events, "meta") == {"appraise": 4, "summarize": 4}
+    assert _calls(events, where) == {"appraise": 4, "summarize": 4}
 
 
 def test_every_event_an_action_fires_carries_its_name(one_step):
@@ -125,12 +126,6 @@ def test_every_event_an_action_fires_carries_its_name(one_step):
         and event["meta"].get("action_name") != event["data"]["action_name"]
     }
     assert started == set()
-
-
-def test_the_llm_event_data_names_the_action(one_step):
-    events = _run(one_step)
-
-    assert _calls(events, "data") == {"appraise": 4, "summarize": 4}
 
 
 def test_a_sequential_run_names_each_call_in_meta_and_data(chain):

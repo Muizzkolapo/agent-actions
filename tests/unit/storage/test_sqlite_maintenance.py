@@ -51,10 +51,17 @@ class TestDispositionCleanup:
             )
             backend.connection.commit()
 
-    def test_removes_old_failed_when_success_exists(self, backend):
-        """Old FAILED disposition removed when newer SUCCESS exists for same record."""
+    @pytest.mark.parametrize(
+        ("stale", "reason"),
+        [
+            pytest.param("failed", "error", id="failed"),
+            pytest.param("exhausted", "retries", id="exhausted"),
+        ],
+    )
+    def test_removes_old_terminal_when_success_exists(self, backend, stale, reason):
+        """An older FAILED or EXHAUSTED row is removed when a newer SUCCESS exists."""
         # Insert directly to simulate dispositions accumulated across runs
-        self._insert_disposition(backend, "action_a", "record_1", "failed", "error")
+        self._insert_disposition(backend, "action_a", "record_1", stale, reason)
         self._insert_disposition(backend, "action_a", "record_1", "success")
 
         backend._cleanup_stale_dispositions()
@@ -62,19 +69,7 @@ class TestDispositionCleanup:
         rows = backend.get_disposition("action_a", record_id="record_1")
         dispositions = [r["disposition"] for r in rows]
         assert "success" in dispositions
-        assert "failed" not in dispositions
-
-    def test_removes_old_exhausted_when_success_exists(self, backend):
-        """Old EXHAUSTED disposition removed when newer SUCCESS exists."""
-        self._insert_disposition(backend, "action_a", "record_1", "exhausted", "retries")
-        self._insert_disposition(backend, "action_a", "record_1", "success")
-
-        backend._cleanup_stale_dispositions()
-
-        rows = backend.get_disposition("action_a", record_id="record_1")
-        dispositions = [r["disposition"] for r in rows]
-        assert "success" in dispositions
-        assert "exhausted" not in dispositions
+        assert stale not in dispositions
 
     def test_preserves_failed_without_success(self, backend):
         """FAILED disposition kept when no SUCCESS exists for that record."""
@@ -168,22 +163,18 @@ class TestPromptTraceRetention:
         assert "r_mid" in record_ids
         assert "r_new" in record_ids
 
-    def test_noop_when_fewer_runs_than_retention(self, backend):
-        """No deletion when there are fewer runs than the retention window."""
+    @pytest.mark.parametrize(
+        "retention_runs",
+        [
+            pytest.param(10, id="fewer-runs-than-window"),
+            pytest.param(0, id="retention-below-one"),
+        ],
+    )
+    def test_retention_is_noop(self, backend, retention_runs):
         today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._insert_trace(backend, "act", "r1", today)
 
-        backend._enforce_prompt_trace_retention(retention_runs=10)
-
-        traces = backend.get_prompt_traces("act")
-        assert len(traces) == 1
-
-    def test_retention_zero_is_noop(self, backend):
-        """retention_runs < 1 does nothing."""
-        today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self._insert_trace(backend, "act", "r1", today)
-
-        backend._enforce_prompt_trace_retention(retention_runs=0)
+        backend._enforce_prompt_trace_retention(retention_runs=retention_runs)
 
         traces = backend.get_prompt_traces("act")
         assert len(traces) == 1

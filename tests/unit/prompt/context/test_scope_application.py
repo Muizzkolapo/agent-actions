@@ -136,45 +136,26 @@ class TestDropWildcard:
 class TestFalsyFieldPassthrough:
     """Falsy values (0, "", False, None) must not be silently dropped."""
 
-    def test_observe_includes_zero_value(self):
-        """observe: field with value 0 must appear in llm_context."""
-        field_context = {"dep": {"score": 0}}
-        _, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["dep.score"]},
+    @pytest.mark.parametrize(
+        ("mode", "value"),
+        [
+            pytest.param("observe", 0, id="observe-zero"),
+            pytest.param("observe", "", id="observe-empty-string"),
+            # None is a valid observed value — only a missing field should be excluded.
+            pytest.param("observe", None, id="observe-explicit-none"),
+            pytest.param("passthrough", 0, id="passthrough-zero"),
+            pytest.param("passthrough", False, id="passthrough-false"),
+        ],
+    )
+    def test_falsy_value_is_kept(self, mode, value):
+        _, llm_context, passthrough = apply_context_scope(
+            field_context={"dep": {"field": value}},
+            context_scope={mode: ["dep.field"]},
             action_name="test_action",
         )
-        assert llm_context["dep"]["score"] == 0
-
-    def test_observe_includes_empty_string(self):
-        """observe: field with value "" must appear in llm_context."""
-        field_context = {"dep": {"label": ""}}
-        _, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["dep.label"]},
-            action_name="test_action",
-        )
-        assert llm_context["dep"]["label"] == ""
-
-    def test_passthrough_includes_zero_value(self):
-        """passthrough: field with value 0 must appear in passthrough_fields."""
-        field_context = {"dep": {"count": 0}}
-        _, _, passthrough = apply_context_scope(
-            field_context=field_context,
-            context_scope={"passthrough": ["dep.count"]},
-            action_name="test_action",
-        )
-        assert passthrough["dep"]["count"] == 0
-
-    def test_passthrough_includes_false_value(self):
-        """passthrough: field with value False must appear in passthrough_fields."""
-        field_context = {"dep": {"enabled": False}}
-        _, _, passthrough = apply_context_scope(
-            field_context=field_context,
-            context_scope={"passthrough": ["dep.enabled"]},
-            action_name="test_action",
-        )
-        assert passthrough["dep"]["enabled"] is False
+        kept = (llm_context if mode == "observe" else passthrough)["dep"]["field"]
+        assert kept == value
+        assert type(kept) is type(value)
 
     def test_missing_field_raises_for_observe(self):
         """Fields absent from present namespace raise RecordContextError for observe."""
@@ -185,17 +166,6 @@ class TestFalsyFieldPassthrough:
                 context_scope={"observe": ["dep.missing"]},
                 action_name="test_action",
             )
-
-    def test_observe_includes_explicit_none_value(self):
-        """Field whose value IS None must still appear in llm_context.
-        None is a valid observed value — only a missing field should be excluded."""
-        field_context = {"dep": {"nullable_field": None}}
-        _, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["dep.nullable_field"]},
-            action_name="test_action",
-        )
-        assert llm_context["dep"]["nullable_field"] is None
 
     def test_passthrough_nested_path_missing_field_returns_none(self):
         """Missing nested field resolves to None."""

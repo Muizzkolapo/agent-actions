@@ -1,5 +1,7 @@
 """Unit tests for schema_output_validator module."""
 
+import pytest
+
 from agent_actions.validation.schema_output_validator import (
     SchemaValidationReport,
     validate_output_against_schema,
@@ -107,47 +109,24 @@ class TestValidateOutputAgainstSchema:
         assert not report.is_compliant
         assert "extra" in report.extra_fields
 
-    def test_type_mismatch(self):
-        """Test type mismatch is detected."""
+    @pytest.mark.parametrize(
+        ("schema_type", "value", "actual_type"),
+        [("integer", "not a number", "str"), ("integer", True, "bool"), ("number", False, "bool")],
+        ids=["str-vs-integer", "bool-vs-integer", "bool-vs-number"],
+    )
+    def test_type_mismatch(self, schema_type, value, actual_type):
+        """A wrong-typed value is a type error; bool is not accepted as int/float."""
         schema = {
             "name": "test_schema",
-            "fields": [{"id": "age", "type": "integer", "required": True}],
+            "fields": [{"id": "field", "type": schema_type, "required": True}],
         }
-        output = {"age": "not a number"}
+        output = {"field": value}
 
         report = validate_output_against_schema(output, schema, "test_action")
 
         assert not report.is_compliant
-        assert "age" in report.type_errors
-        assert report.type_errors["age"] == ("integer", "str")
-
-    def test_bool_rejected_for_integer_type(self):
-        """Test that bool values are rejected for integer type (bool subclasses int in Python)."""
-        schema = {
-            "name": "test_schema",
-            "fields": [{"id": "count", "type": "integer", "required": True}],
-        }
-        output = {"count": True}
-
-        report = validate_output_against_schema(output, schema, "test_action")
-
-        assert not report.is_compliant
-        assert "count" in report.type_errors
-        assert report.type_errors["count"] == ("integer", "bool")
-
-    def test_bool_rejected_for_number_type(self):
-        """Test that bool values are rejected for number type (bool subclasses int/float in Python)."""
-        schema = {
-            "name": "test_schema",
-            "fields": [{"id": "score", "type": "number", "required": True}],
-        }
-        output = {"score": False}
-
-        report = validate_output_against_schema(output, schema, "test_action")
-
-        assert not report.is_compliant
-        assert "score" in report.type_errors
-        assert report.type_errors["score"] == ("number", "bool")
+        assert "field" in report.type_errors
+        assert report.type_errors["field"] == (schema_type, actual_type)
 
     def test_json_schema_format(self):
         """Test validation with JSON Schema format."""

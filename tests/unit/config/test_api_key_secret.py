@@ -8,52 +8,49 @@ from pydantic import SecretStr
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
 from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
 
+_MODELS = [
+    pytest.param(
+        lambda **kw: ActionConfig(name="test_action", intent="test intent", **kw), id="action"
+    ),
+    pytest.param(DefaultsConfig, id="defaults"),
+    pytest.param(lambda **kw: AgentConfig(agent_type="test", **kw), id="agent"),
+    pytest.param(DefaultAgentConfig, id="default_agent"),
+]
+
+
+@pytest.mark.parametrize("make", _MODELS)
+def test_repr_does_not_expose_raw_key(make):
+    config = make(api_key="secret123")
+    assert "secret123" not in repr(config)
+    assert "**********" in repr(config)  # masking sentinel must be present
+
+
+@pytest.mark.parametrize("make", _MODELS)
+def test_get_secret_value_returns_raw_key(make):
+    assert make(api_key="secret123").api_key.get_secret_value() == "secret123"
+
+
+@pytest.mark.parametrize("make", [p for p in _MODELS if p.id != "defaults"])
+def test_none_api_key_is_none(make):
+    assert make().api_key is None
+
 
 class TestActionConfigApiKeySecret:
-    def _minimal(self, **kwargs) -> dict:
-        return {
-            "name": "test_action",
-            "intent": "test intent",
-            **kwargs,
-        }
-
-    def test_repr_does_not_expose_raw_key(self):
-        config = ActionConfig(**self._minimal(api_key="secret123"))
-        assert "secret123" not in repr(config)
-        assert "**********" in repr(config)  # masking sentinel must be present
-
     def test_model_dump_does_not_expose_raw_key(self):
-        config = ActionConfig(**self._minimal(api_key="secret123"))
+        config = ActionConfig(name="test_action", intent="test intent", api_key="secret123")
         assert "secret123" not in str(config.model_dump())
         assert "**********" in str(config.model_dump())
         assert "secret123" not in str(config.model_dump(mode="json"))
         assert "**********" in str(config.model_dump(mode="json"))
 
-    def test_get_secret_value_returns_raw_key(self):
-        config = ActionConfig(**self._minimal(api_key="secret123"))
-        assert config.api_key.get_secret_value() == "secret123"
-
-    def test_none_api_key_is_none(self):
-        config = ActionConfig(**self._minimal())
-        assert config.api_key is None
-
 
 class TestDefaultsConfigApiKeySecret:
-    def test_repr_does_not_expose_raw_key(self):
-        config = DefaultsConfig(api_key="defaults_secret")
-        assert "defaults_secret" not in repr(config)
-        assert "**********" in repr(config)
-
     def test_model_dump_does_not_expose_raw_key(self):
         config = DefaultsConfig(api_key="defaults_secret")
         assert "defaults_secret" not in str(config.model_dump())
         assert "**********" in str(config.model_dump())
         assert "defaults_secret" not in str(config.model_dump(mode="json"))
         assert "**********" in str(config.model_dump(mode="json"))
-
-    def test_get_secret_value_returns_raw_key(self):
-        config = DefaultsConfig(api_key="defaults_secret")
-        assert config.api_key.get_secret_value() == "defaults_secret"
 
 
 class TestBatchClientFactorySecretStr:
@@ -203,11 +200,6 @@ class TestBatchClientFactorySecretStr:
 class TestAgentConfigApiKeySecret:
     """Verify AgentConfig.api_key uses SecretStr."""
 
-    def test_repr_does_not_expose_raw_key(self):
-        config = AgentConfig(agent_type="test", api_key="secret123")
-        assert "secret123" not in repr(config)
-        assert "**********" in repr(config)
-
     def test_model_dump_python_preserves_secret_str(self):
         config = AgentConfig(agent_type="test", api_key="secret123")
         dumped = config.model_dump()
@@ -220,14 +212,6 @@ class TestAgentConfigApiKeySecret:
         assert dumped["api_key"] == "**********"
         assert "secret123" not in str(dumped)
 
-    def test_get_secret_value_returns_raw_key(self):
-        config = AgentConfig(agent_type="test", api_key="secret123")
-        assert config.api_key.get_secret_value() == "secret123"
-
-    def test_none_api_key_is_none(self):
-        config = AgentConfig(agent_type="test")
-        assert config.api_key is None
-
     def test_plain_string_coerced_to_secret_str(self):
         config = AgentConfig.model_validate({"agent_type": "test", "api_key": "plain"})
         assert isinstance(config.api_key, SecretStr)
@@ -236,11 +220,6 @@ class TestAgentConfigApiKeySecret:
 
 class TestDefaultAgentConfigApiKeySecret:
     """Verify DefaultAgentConfig.api_key uses SecretStr."""
-
-    def test_repr_does_not_expose_raw_key(self):
-        config = DefaultAgentConfig(api_key="defaults_secret")
-        assert "defaults_secret" not in repr(config)
-        assert "**********" in repr(config)
 
     def test_model_dump_python_preserves_secret_str(self):
         config = DefaultAgentConfig(api_key="defaults_secret")
@@ -252,13 +231,6 @@ class TestDefaultAgentConfigApiKeySecret:
         config = DefaultAgentConfig(api_key="defaults_secret")
         dumped = config.model_dump(mode="json")
         assert dumped["api_key"] == "**********"
-
-    def test_get_secret_value_returns_raw_key(self):
-        config = DefaultAgentConfig(api_key="defaults_secret")
-        assert config.api_key.get_secret_value() == "defaults_secret"
-
-    def test_none_api_key_is_none(self):
-        assert DefaultAgentConfig().api_key is None
 
 
 class TestEndToEndSecretStrPipeline:

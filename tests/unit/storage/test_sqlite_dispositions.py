@@ -80,48 +80,32 @@ class TestDispositionEnum:
     def test_disposition_is_str_subclass(self):
         assert isinstance(Disposition.PASSTHROUGH, str)
 
-    def test_set_disposition_accepts_enum_member(self, backend):
+    @pytest.mark.parametrize(
+        ("disposition", "kwargs", "expected"),
+        [
+            pytest.param(
+                Disposition.SKIPPED,
+                {"reason": "test"},
+                {"disposition": "skipped"},
+                id="enum-member",
+            ),
+            pytest.param("filtered", {}, {"disposition": "filtered"}, id="string"),
+            pytest.param(
+                "failed",
+                {"reason": "processing_error", "detail": "ValueError: invalid input format"},
+                {"detail": "ValueError: invalid input format", "reason": "processing_error"},
+                id="stores-detail",
+            ),
+            pytest.param("success", {}, {"detail": None}, id="detail-defaults-to-none"),
+        ],
+    )
+    def test_set_disposition_round_trips(self, backend, disposition, kwargs, expected):
         backend.set_disposition(
-            action_name="action_a",
-            record_id="rec_001",
-            disposition=Disposition.SKIPPED,
-            reason="test",
+            action_name="action_a", record_id="rec_001", disposition=disposition, **kwargs
         )
         rows = backend.get_disposition("action_a", "rec_001")
         assert len(rows) == 1
-        assert rows[0]["disposition"] == "skipped"
-
-    def test_set_disposition_accepts_string(self, backend):
-        backend.set_disposition(
-            action_name="action_b",
-            record_id="rec_002",
-            disposition="filtered",
-        )
-        rows = backend.get_disposition("action_b", "rec_002")
-        assert rows[0]["disposition"] == "filtered"
-
-    def test_set_disposition_stores_detail(self, backend):
-        backend.set_disposition(
-            action_name="action_c",
-            record_id="rec_003",
-            disposition="failed",
-            reason="processing_error",
-            detail="ValueError: invalid input format",
-        )
-        rows = backend.get_disposition("action_c", "rec_003")
-        assert len(rows) == 1
-        assert rows[0]["detail"] == "ValueError: invalid input format"
-        assert rows[0]["reason"] == "processing_error"
-
-    def test_set_disposition_detail_defaults_to_none(self, backend):
-        backend.set_disposition(
-            action_name="action_d",
-            record_id="rec_004",
-            disposition="success",
-        )
-        rows = backend.get_disposition("action_d", "rec_004")
-        assert len(rows) == 1
-        assert rows[0]["detail"] is None
+        assert {key: rows[0][key] for key in expected} == expected
 
 
 # ── T2-3: write_source executemany dedup ────────────────────────────────────

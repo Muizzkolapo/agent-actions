@@ -147,26 +147,7 @@ _CONTEXT_CAPABLE_CLASSES = [c for c in ALL_CLASSES if c is not TemplateVariableE
 def test_context_dict_is_copied_on_construction(cls):
     """Mutating caller's dict after construction must not affect stored context."""
     original_ctx = {"key": "original"}
-    if cls is ConfigValidationError:
-        exc = cls(message="msg", context=original_ctx)
-    elif cls in (
-        DuplicateFunctionError,
-        UDFLoadError,
-        VendorAPIError,
-        AnthropicError,
-        RateLimitError,
-    ):
-        exc = cls(message="msg", context=original_ctx)
-    elif cls in (
-        PreFlightValidationError,
-        VendorConfigError,
-        ContextStructureError,
-        PathValidationError,
-        SchemaValidationError,
-    ):
-        exc = cls("msg", context=original_ctx)
-    else:
-        exc = cls("msg", context=original_ctx)
+    exc = cls("msg", context=original_ctx)
 
     # Mutate caller's dict
     original_ctx["key"] = "mutated"

@@ -1,5 +1,7 @@
 """find_unknown_bus_namespaces: flag literal UDF reads of an unknown bus namespace."""
 
+import pytest
+
 from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
 
 _SRC = (
@@ -23,33 +25,37 @@ def test_known_literals_not_flagged():
     assert find_unknown_bus_namespaces({"agg": src}, _VALID) == []
 
 
-def test_dynamic_key_is_ignored():
-    src = "def f(data):\n    k = 'x'\n    return data.get(k)\n"
+@pytest.mark.parametrize(
+    "src",
+    [
+        pytest.param("def f(data):\n    k = 'x'\n    return data.get(k)\n", id="dynamic-key"),
+        # Only reads off the `data` bus count; a regex over source text would over-match.
+        pytest.param(
+            "def f(data):\n    other = {}\n    return other.get('typo_name')\n",
+            id="non-data-var",
+        ),
+        # AST anchors on real reads; literals in comments/strings are invisible.
+        pytest.param(
+            "def f(data):\n    # data.get('ghost')\n    s = \"data['phantom']\"\n    return data.get('author')\n",
+            id="literal-in-comment-or-string",
+        ),
+        pytest.param("def f(data)\n    return data.get('bad')\n", id="syntax-error"),
+    ],
+)
+def test_source_without_a_literal_unknown_read_is_not_flagged(src):
     assert find_unknown_bus_namespaces({"f": src}, {"author"}) == []
 
 
-def test_subscript_literal_flagged():
-    src = "def f(data):\n    return data['nope']\n"
-    assert any("nope" in f for f in find_unknown_bus_namespaces({"f": src}, {"author"}))
-
-
-def test_default_arg_get_is_still_flagged():
-    # data.get("X", default) is a warning, not an error — the optional read stays
-    # unbroken but the typo is still surfaced (FAILURE MODE #3).
-    src = "def f(data):\n    return data.get('maybe', {})\n"
-    assert any("maybe" in f for f in find_unknown_bus_namespaces({"f": src}, {"author"}))
-
-
-def test_non_data_variable_not_flagged():
-    # Only reads off the `data` bus count — a regex over source text would over-match.
-    src = "def f(data):\n    other = {}\n    return other.get('typo_name')\n"
-    assert find_unknown_bus_namespaces({"f": src}, {"author"}) == []
-
-
-def test_literal_in_comment_or_string_not_flagged():
-    # AST anchors on real reads — literals in comments/strings must be invisible.
-    src = "def f(data):\n    # data.get('ghost')\n    s = \"data['phantom']\"\n    return data.get('author')\n"
-    assert find_unknown_bus_namespaces({"f": src}, {"author"}) == []
+@pytest.mark.parametrize(
+    ("src", "key"),
+    [
+        pytest.param("def f(data):\n    return data['nope']\n", "nope", id="subscript"),
+        # data.get("X", default) keeps the optional read unbroken but still surfaces the typo.
+        pytest.param("def f(data):\n    return data.get('maybe', {})\n", "maybe", id="get-default"),
+    ],
+)
+def test_unknown_literal_read_is_flagged(src, key):
+    assert any(key in f for f in find_unknown_bus_namespaces({"f": src}, {"author"}))
 
 
 def test_finding_attributed_to_enclosing_function_not_siblings():
@@ -68,11 +74,6 @@ def test_finding_attributed_to_enclosing_function_not_siblings():
 def test_same_key_read_twice_in_one_udf_is_deduped():
     src = "def f(data):\n    x = data.get('bad')\n    y = data['bad']\n    return x or y\n"
     assert len(find_unknown_bus_namespaces({"f": src}, {"author"})) == 1
-
-
-def test_syntax_error_source_is_skipped():
-    src = "def f(data)\n    return data.get('bad')\n"  # missing colon
-    assert find_unknown_bus_namespaces({"f": src}, {"author"}) == []
 
 
 def test_multiple_unknown_keys_all_reported():

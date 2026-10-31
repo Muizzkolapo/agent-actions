@@ -163,27 +163,25 @@ class TestSafeLoadYaml:
         result = svc._safe_load_yaml(raw, Path("/fake.yml"))
         assert result == {"key": "value", "items": ["a", "b"]}
 
-    def test_empty_string_raises(self):
+    @pytest.mark.parametrize(
+        ("raw", "match"),
+        [
+            pytest.param("", "empty", id="empty-string"),
+            pytest.param("   \n  \n  ", "empty", id="whitespace-only"),
+            # '---\n' parses to None.
+            pytest.param("---\n", "empty data", id="resolves-to-none"),
+        ],
+    )
+    def test_empty_yaml_raises(self, raw, match):
         svc = ConfigRenderingService()
-        with pytest.raises(ConfigurationError, match="empty"):
-            svc._safe_load_yaml("", Path("/fake.yml"))
-
-    def test_whitespace_only_raises(self):
-        svc = ConfigRenderingService()
-        with pytest.raises(ConfigurationError, match="empty"):
-            svc._safe_load_yaml("   \n  \n  ", Path("/fake.yml"))
+        with pytest.raises(ConfigurationError, match=match):
+            svc._safe_load_yaml(raw, Path("/fake.yml"))
 
     def test_yaml_syntax_error_raises(self):
         svc = ConfigRenderingService()
         bad_yaml = "key: [unclosed"
         with pytest.raises(ConfigurationError, match="YAML syntax error"):
             svc._safe_load_yaml(bad_yaml, Path("/bad.yml"))
-
-    def test_yaml_that_resolves_to_none_raises(self):
-        """YAML like '---\\n' parses to None -- should raise."""
-        svc = ConfigRenderingService()
-        with pytest.raises(ConfigurationError, match="empty data"):
-            svc._safe_load_yaml("---\n", Path("/empty.yml"))
 
     def test_yaml_syntax_error_includes_context(self):
         svc = ConfigRenderingService()

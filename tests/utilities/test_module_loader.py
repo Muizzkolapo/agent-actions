@@ -122,16 +122,12 @@ def test_resolve_module_file_package(tmp_path):
     assert result == pkg / "__init__.py"
 
 
-def test_resolve_module_file_not_found(tmp_path):
-    """Return None for non-existent module."""
-    result = _resolve_module_file("nonexistent", tmp_path)
-    assert result is None
-
-
-def test_resolve_module_file_empty_name(tmp_path):
-    """Return None for empty module name."""
-    result = _resolve_module_file("", tmp_path)
-    assert result is None
+@pytest.mark.parametrize(
+    "name",
+    [pytest.param("nonexistent", id="not-found"), pytest.param("", id="empty-name")],
+)
+def test_resolve_module_file_returns_none(tmp_path, name):
+    assert _resolve_module_file(name, tmp_path) is None
 
 
 def test_resolve_module_file_subdirectory(tmp_path):

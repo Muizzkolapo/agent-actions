@@ -27,19 +27,41 @@ class TestMissingFieldError:
         with pytest.raises(MissingFieldError, match="does not exist"):
             evaluate_node(node, {"name": "Alice"})
 
-    def test_is_null_returns_true_for_missing_field(self):
-        node = ComparisonNode(
-            FieldNode("nonexistent"),
-            ComparisonOperator.IS_NULL,
-        )
-        assert evaluate_node(node, {"name": "Alice"}) is True
-
-    def test_is_not_null_returns_false_for_missing_field(self):
-        node = ComparisonNode(
-            FieldNode("nonexistent"),
-            ComparisonOperator.IS_NOT_NULL,
-        )
-        assert evaluate_node(node, {"name": "Alice"}) is False
+    @pytest.mark.parametrize(
+        ("field", "operator", "data", "expected"),
+        [
+            pytest.param(
+                "nonexistent",
+                ComparisonOperator.IS_NULL,
+                {"name": "Alice"},
+                True,
+                id="missing-is-null",
+            ),
+            pytest.param(
+                "nonexistent",
+                ComparisonOperator.IS_NOT_NULL,
+                {"name": "Alice"},
+                False,
+                id="missing-is-not-null",
+            ),
+            pytest.param(
+                "status",
+                ComparisonOperator.IS_NULL,
+                {"status": None},
+                True,
+                id="present-none-is-null",
+            ),
+            pytest.param(
+                "status",
+                ComparisonOperator.IS_NOT_NULL,
+                {"status": "active"},
+                True,
+                id="present-value-is-not-null",
+            ),
+        ],
+    )
+    def test_null_check(self, field, operator, data, expected):
+        assert evaluate_node(ComparisonNode(FieldNode(field), operator), data) is expected
 
     def test_missing_field_in_comparison_still_raises(self):
         node = ComparisonNode(
@@ -49,20 +71,6 @@ class TestMissingFieldError:
         )
         with pytest.raises(MissingFieldError):
             evaluate_node(node, {"name": "Alice"})
-
-    def test_existing_field_with_none_value_works(self):
-        node = ComparisonNode(
-            FieldNode("status"),
-            ComparisonOperator.IS_NULL,
-        )
-        assert evaluate_node(node, {"status": None}) is True
-
-    def test_existing_field_with_value_is_not_null(self):
-        node = ComparisonNode(
-            FieldNode("status"),
-            ComparisonOperator.IS_NOT_NULL,
-        )
-        assert evaluate_node(node, {"status": "active"}) is True
 
     def test_missing_field_suggests_dot_notation(self):
         """When a field exists as a sub-field, the error message suggests dot notation."""

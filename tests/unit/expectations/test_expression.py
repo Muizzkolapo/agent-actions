@@ -24,41 +24,29 @@ def test_parse_condition_returns_an_evaluable_ast():
     assert ast.evaluate({"score": 12}) is False
 
 
-def test_parse_condition_rejects_udf_prefix_pointing_at_the_decorator():
-    with pytest.raises(ExpressionParseError, match="expectation_check"):
-        parse_condition("udf:tools.checks.my_check")
-
-
-def test_parse_condition_rejects_dangerous_patterns():
-    with pytest.raises(ExpressionParseError, match="dangerous pattern"):
-        parse_condition("__import__('os').system('true') == 0")
-
-
-def test_parse_condition_rejects_an_empty_condition():
-    with pytest.raises(ExpressionParseError):
-        parse_condition("   ")
-
-
-def test_parse_condition_rejects_an_overlong_condition():
-    with pytest.raises(ExpressionParseError, match="does not parse"):
-        parse_condition("score >= 80 and " * 700 + "score >= 80")
-
-
-def test_parse_condition_rejects_unparseable_syntax():
-    with pytest.raises(ExpressionParseError, match="does not parse"):
-        parse_condition("score >=")
-
-
-def test_parse_condition_rejects_function_call_syntax():
-    # The grammar parses LENGTH(...) fine (guards use it) — expressions reject it
-    # explicitly afterward, per the documented expectations-page restriction.
-    with pytest.raises(ExpressionParseError, match="function calls are not available"):
-        parse_condition("LENGTH(tags) > 0")
-
-
-def test_parse_condition_rejects_a_nested_function_call():
-    with pytest.raises(ExpressionParseError, match="function calls are not available"):
-        parse_condition('verdict == "ok" and LENGTH(tags) > 0')
+@pytest.mark.parametrize(
+    ("condition", "match"),
+    [
+        pytest.param("udf:tools.checks.my_check", "expectation_check", id="udf-prefix"),
+        pytest.param(
+            "__import__('os').system('true') == 0", "dangerous pattern", id="dangerous-pattern"
+        ),
+        pytest.param("   ", None, id="empty"),
+        pytest.param("score >= 80 and " * 700 + "score >= 80", "does not parse", id="overlong"),
+        pytest.param("score >=", "does not parse", id="unparseable"),
+        # The grammar parses LENGTH(...) fine (guards use it) — expressions reject it
+        # explicitly afterward, per the documented expectations-page restriction.
+        pytest.param("LENGTH(tags) > 0", "function calls are not available", id="function-call"),
+        pytest.param(
+            'verdict == "ok" and LENGTH(tags) > 0',
+            "function calls are not available",
+            id="nested-function-call",
+        ),
+    ],
+)
+def test_parse_condition_rejects(condition, match):
+    with pytest.raises(ExpressionParseError, match=match):
+        parse_condition(condition)
 
 
 def test_referenced_field_paths_walks_nested_logic_and_comparisons():

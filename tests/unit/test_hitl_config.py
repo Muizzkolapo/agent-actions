@@ -201,10 +201,15 @@ def test_hitl_config_not_mutated_by_expansion():
     assert "timeout" not in source_hitl
 
 
-def test_hitl_timeout_default_rejects_non_numeric():
-    """Runtime validation catches non-numeric hitl_timeout from raw YAML."""
-    with pytest.raises(ConfigurationError, match="must be an integer between 5 and 3600"):
-        _expand_hitl({"instructions": "Review"}, defaults={"hitl_timeout": "notanumber"})
+@pytest.mark.parametrize(
+    ("timeout", "match"),
+    [("notanumber", "must be an integer between 5 and 3600"), (5.9, "must be an integer")],
+    ids=["non-numeric", "float"],
+)
+def test_hitl_timeout_default_rejects_non_integer(timeout, match):
+    """Runtime validation rejects a non-integer hitl_timeout instead of truncating it."""
+    with pytest.raises(ConfigurationError, match=match):
+        _expand_hitl({"instructions": "Review"}, defaults={"hitl_timeout": timeout})
 
 
 def test_hitl_timeout_default_rejects_out_of_range():
@@ -216,37 +221,19 @@ def test_hitl_timeout_default_rejects_out_of_range():
         _expand_hitl({"instructions": "Review"}, defaults={"hitl_timeout": 9999})
 
 
-def test_hitl_timeout_default_rejects_float():
-    """Fractional values are rejected instead of silently truncated."""
-    with pytest.raises(ConfigurationError, match="must be an integer"):
-        _expand_hitl({"instructions": "Review"}, defaults={"hitl_timeout": 5.9})
-
-
-def test_hitl_config_rejection_reasons_with_values():
-    """Rejection reasons round-trip with valid labels."""
-    config = HitlConfig(
-        instructions="Review",
-        rejection_reasons=["Not grounded", "Ambiguous"],
-    )
-    assert config.rejection_reasons == ["Not grounded", "Ambiguous"]
-
-
-def test_hitl_config_rejection_reasons_strips_whitespace():
-    """Validator strips leading/trailing whitespace from reason labels."""
-    config = HitlConfig(
-        instructions="Review",
-        rejection_reasons=["  padded  ", "clean"],
-    )
-    assert config.rejection_reasons == ["padded", "clean"]
-
-
-def test_hitl_config_rejection_reasons_filters_empty():
-    """Validator removes empty strings and whitespace-only entries."""
-    config = HitlConfig(
-        instructions="Review",
-        rejection_reasons=["good", "", "  ", "also good"],
-    )
-    assert config.rejection_reasons == ["good", "also good"]
+@pytest.mark.parametrize(
+    ("reasons", "expected"),
+    [
+        (["Not grounded", "Ambiguous"], ["Not grounded", "Ambiguous"]),
+        (["  padded  ", "clean"], ["padded", "clean"]),
+        (["good", "", "  ", "also good"], ["good", "also good"]),
+    ],
+    ids=["values", "strips-whitespace", "filters-empty"],
+)
+def test_hitl_config_rejection_reasons_are_normalised(reasons, expected):
+    """Reason labels round-trip with whitespace stripped and empty entries removed."""
+    config = HitlConfig(instructions="Review", rejection_reasons=reasons)
+    assert config.rejection_reasons == expected
 
 
 def test_hitl_config_rejection_reasons_max_length():

@@ -4,6 +4,8 @@ import json
 import random
 from collections import Counter
 
+import pytest
+
 from agent_actions.tooling.docs.generator import (
     PROBLEM_PRIORITY,
     CatalogGenerator,
@@ -100,20 +102,20 @@ class TestCatalogGeneratorHappyPath:
         assert "metadata" in result
         assert "generated_at" in result["metadata"]
 
-    def test_metadata_contains_project_name(self):
-        gen = _make_generator(project_path="/home/user/my_project")
+    @pytest.mark.parametrize(
+        ("project_path", "expected"),
+        [("/home/user/my_project", "my_project"), ("/", "")],
+        ids=["named-dir", "root-path"],
+    )
+    def test_metadata_contains_project_name(self, project_path, expected):
+        gen = _make_generator(project_path=project_path)
         result = gen.generate(**_empty_inputs())
-        assert result["metadata"]["project_name"] == "my_project"
+        assert result["metadata"]["project_name"] == expected
 
     def test_metadata_project_name_none_without_path(self):
         gen = CatalogGenerator({}, project_path=None)
         result = gen.generate(**_empty_inputs())
         assert result["metadata"]["project_name"] is None
-
-    def test_metadata_project_name_root_path(self):
-        gen = _make_generator(project_path="/")
-        result = gen.generate(**_empty_inputs())
-        assert result["metadata"]["project_name"] == ""
 
 
 def _stream_rows(source: str, level: str, count: int) -> list[dict]:

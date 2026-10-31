@@ -29,42 +29,29 @@ def _read_template() -> str:
 # ── Static template assertions (cheap; no server boot) ───────────────────
 
 
-def test_template_includes_countdown_banner_element() -> None:
-    """The banner has a stable id so the JS can target it."""
-    assert 'id="hitl-session-countdown"' in _read_template()
-
-
-def test_template_includes_countdown_time_span() -> None:
-    """The MM:SS text span is the rendered countdown target."""
-    assert 'id="hitl-session-countdown-time"' in _read_template()
-
-
-def test_template_reads_timeout_from_server_rendered_meta_tag() -> None:
-    """The countdown reads its budget from a server-rendered meta tag —
-    the cleanest single round-trip delivery (no extra fetch)."""
+@pytest.mark.parametrize(
+    "fragments",
+    [
+        ['id="hitl-session-countdown"'],
+        ['id="hitl-session-countdown-time"'],
+        ['name="hitl-timeout"', "{{ hitl_timeout }}"],
+        ["setInterval"],
+        ["agac run --resume", "_hitlShowStaleSessionError"],
+        ["Failed to fetch"],
+    ],
+    ids=[
+        "countdown-banner",
+        "countdown-time-span",
+        "timeout-meta",
+        "countdown-setinterval",
+        "stale-session-hint",
+        "failed-to-fetch",
+    ],
+)
+def test_template_carries_the_countdown_and_stale_session_markup(fragments) -> None:
     html = _read_template()
-    assert 'name="hitl-timeout"' in html
-    assert "{{ hitl_timeout }}" in html
-
-
-def test_template_countdown_javascript_uses_setinterval() -> None:
-    """The countdown is driven by `setInterval`. The exact cadence is
-    JS-side; this asserts the mechanism, not the period."""
-    assert "setInterval" in _read_template()
-
-
-def test_template_catches_stale_session_and_names_resume_command() -> None:
-    """When fetch fails because the server is gone, the page renders a
-    fixed-position banner that names the recovery command verbatim."""
-    html = _read_template()
-    assert "agac run --resume" in html
-    assert "_hitlShowStaleSessionError" in html
-
-
-def test_template_detects_failed_to_fetch_typeerror() -> None:
-    """``fetch`` rejects with ``TypeError('Failed to fetch')`` when the
-    server is unreachable. The helper must look for that substring."""
-    assert "Failed to fetch" in _read_template()
+    for fragment in fragments:
+        assert fragment in html
 
 
 def test_template_does_not_use_bare_alert_on_error() -> None:

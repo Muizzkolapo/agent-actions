@@ -132,36 +132,29 @@ class TestParallelExceptionHandling:
         assert "kaboom" in event.error_message
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("actions", "result"),
+        [
+            pytest.param(["a", "b", "c"], FakeActionResult(success=True), id="all_succeed"),
+            # Failures the actions returned are the circuit breaker's: nothing is raised.
+            pytest.param(
+                ["a", "b"],
+                FakeActionResult(success=False, error=ValueError("bad input")),
+                id="failed_results_alone",
+            ),
+        ],
+    )
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")
-    async def test_successful_actions_return_normally(self, mock_fire_event):
-        """All actions succeed — function returns normally."""
-        actions = ["a", "b", "c"]
+    async def test_returned_results_return_normally(self, mock_fire_event, actions, result):
         orchestrator = self._make_orchestrator(actions)
 
         executor = AsyncMock()
-        executor.execute_action_async.return_value = FakeActionResult(success=True)
+        executor.execute_action_async.return_value = result
         params = self._make_params(actions, executor)
 
         await orchestrator._execute_parallel_actions(params)
 
-        assert executor.execute_action_async.call_count == 3
-
-    @pytest.mark.asyncio
-    @patch("agent_actions.workflow.parallel.action_executor.fire_event")
-    async def test_failed_results_alone_return_normally(self, mock_fire_event):
-        """Failures the actions returned are the circuit breaker's: nothing is raised."""
-        actions = ["a", "b"]
-        orchestrator = self._make_orchestrator(actions)
-
-        executor = AsyncMock()
-        executor.execute_action_async.return_value = FakeActionResult(
-            success=False, error=ValueError("bad input")
-        )
-        params = self._make_params(actions, executor)
-
-        await orchestrator._execute_parallel_actions(params)
-
-        assert executor.execute_action_async.call_count == 2
+        assert executor.execute_action_async.call_count == len(actions)
 
     @pytest.mark.asyncio
     @patch("agent_actions.workflow.parallel.action_executor.fire_event")

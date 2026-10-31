@@ -1,5 +1,6 @@
 """Tests for AgentWorkflow sequential execution (_run_single_action, _run_workflow_with_context)."""
 
+import copy
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -330,76 +331,111 @@ class TestClearForFreshRun:
 class TestStripUnreachableDrops:
     """Tests for _strip_unreachable_drops() — compile-time dead-drop elimination."""
 
-    def test_unreachable_drops_stripped(self):
-        """Drops targeting actions not in the dependency chain are removed."""
-        configs = {
-            "source": {"dependencies": []},
-            "analyze_clause": {"dependencies": ["source"]},
-            "aggregate": {"dependencies": ["source"]},
-            "summary": {
-                "dependencies": ["aggregate"],
-                "context_scope": {
-                    "observe": ["aggregate.*"],
-                    "drop": [
-                        "analyze_clause.risk_score",
-                        "analyze_clause.clause_text",
-                    ],
+    @pytest.mark.parametrize(
+        ("configs", "consumer", "expected"),
+        [
+            pytest.param(
+                {
+                    "source": {"dependencies": []},
+                    "analyze_clause": {"dependencies": ["source"]},
+                    "aggregate": {"dependencies": ["source"]},
+                    "summary": {
+                        "dependencies": ["aggregate"],
+                        "context_scope": {
+                            "observe": ["aggregate.*"],
+                            "drop": ["analyze_clause.risk_score", "analyze_clause.clause_text"],
+                        },
+                    },
                 },
-            },
-        }
-        wf = _build_workflow(
-            execution_order=["source", "analyze_clause", "aggregate", "summary"],
-            agent_configs=configs,
-        )
-
-        strip_unreachable_drops(wf.action_configs)
-
-        # Unreachable drops should be stripped.
-        assert configs["summary"]["context_scope"]["drop"] == []
-
-    def test_reachable_drops_preserved(self):
-        """Drops targeting reachable actions are kept."""
-        configs = {
-            "source": {"dependencies": []},
-            "upstream": {"dependencies": ["source"]},
-            "consumer": {
-                "dependencies": ["upstream"],
-                "context_scope": {
-                    "drop": ["upstream.verbose_field"],
+                "summary",
+                [],
+                id="unreachable_drops_stripped",
+            ),
+            pytest.param(
+                {
+                    "source": {"dependencies": []},
+                    "upstream": {"dependencies": ["source"]},
+                    "consumer": {
+                        "dependencies": ["upstream"],
+                        "context_scope": {"drop": ["upstream.verbose_field"]},
+                    },
                 },
-            },
-        }
-        wf = _build_workflow(
-            execution_order=["source", "upstream", "consumer"],
-            agent_configs=configs,
-        )
-
-        strip_unreachable_drops(wf.action_configs)
-
-        assert configs["consumer"]["context_scope"]["drop"] == ["upstream.verbose_field"]
-
-    def test_transitive_dependency_reachable(self):
-        """Drops on transitively reachable actions are kept."""
-        configs = {
-            "source": {"dependencies": []},
-            "A": {"dependencies": ["source"]},
-            "B": {"dependencies": ["A"]},
-            "C": {
-                "dependencies": ["B"],
-                "context_scope": {
-                    "drop": ["A.field"],
+                "consumer",
+                ["upstream.verbose_field"],
+                id="reachable_drops_kept",
+            ),
+            pytest.param(
+                {
+                    "source": {"dependencies": []},
+                    "A": {"dependencies": ["source"]},
+                    "B": {"dependencies": ["A"]},
+                    "C": {"dependencies": ["B"], "context_scope": {"drop": ["A.field"]}},
                 },
-            },
-        }
-        wf = _build_workflow(
-            execution_order=["source", "A", "B", "C"],
-            agent_configs=configs,
-        )
+                "C",
+                ["A.field"],
+                id="transitive_dependency_kept",
+            ),
+            pytest.param(
+                {
+                    "source": {"dependencies": []},
+                    "reachable": {"dependencies": ["source"]},
+                    "unreachable": {"dependencies": ["source"]},
+                    "consumer": {
+                        "dependencies": ["reachable"],
+                        "context_scope": {"drop": ["reachable.field_a", "unreachable.field_b"]},
+                    },
+                },
+                "consumer",
+                ["reachable.field_a"],
+                id="mixed_reachable_and_unreachable",
+            ),
+            # A merge depending on a version base reaches its branches and what is above them.
+            pytest.param(
+                {
+                    "split_words": {"dependencies": []},
+                    "other": {"dependencies": []},
+                    "vote_1": {"dependencies": ["split_words"]},
+                    "vote_2": {"dependencies": ["split_words"]},
+                    "merge_votes": {
+                        "dependencies": ["vote"],
+                        "context_scope": {
+                            "drop": [
+                                "vote_1.voted_word",
+                                "vote_2.voted_word",
+                                "split_words.word",
+                                "other.field",
+                            ],
+                        },
+                    },
+                },
+                "merge_votes",
+                ["vote_1.voted_word", "vote_2.voted_word", "split_words.word"],
+                id="drops_through_a_version_base_kept",
+            ),
+            # An action below a merge reaches the merge's branches by their base.
+            pytest.param(
+                {
+                    "split_words": {"dependencies": []},
+                    "vote_1": {"dependencies": ["split_words"]},
+                    "vote_2": {"dependencies": ["split_words"]},
+                    "merge_votes": {"dependencies": ["vote"]},
+                    "recap": {
+                        "dependencies": ["merge_votes"],
+                        "context_scope": {"drop": ["vote_1.voted_word", "split_words.word"]},
+                    },
+                },
+                "recap",
+                ["vote_1.voted_word", "split_words.word"],
+                id="drops_below_a_merge_reach_through_the_version_base",
+            ),
+        ],
+    )
+    def test_only_drops_on_reachable_actions_are_kept(self, configs, consumer, expected):
+        configs = copy.deepcopy(configs)
 
-        strip_unreachable_drops(wf.action_configs)
+        strip_unreachable_drops(configs)
 
-        # A is transitively reachable from C through B.
-        assert configs["C"]["context_scope"]["drop"] == ["A.field"]
+        assert configs[consumer]["context_scope"]["drop"] == expected
 
     def test_no_drops_no_op(self):
         """Actions without drops are skipped without error."""
@@ -413,76 +449,3 @@ class TestStripUnreachableDrops:
         )
 
         strip_unreachable_drops(wf.action_configs)  # Should not raise
-
-    def test_mixed_reachable_and_unreachable(self):
-        """Reachable drops kept, unreachable drops stripped, in the same list."""
-        configs = {
-            "source": {"dependencies": []},
-            "reachable": {"dependencies": ["source"]},
-            "unreachable": {"dependencies": ["source"]},
-            "consumer": {
-                "dependencies": ["reachable"],
-                "context_scope": {
-                    "drop": [
-                        "reachable.field_a",
-                        "unreachable.field_b",
-                    ],
-                },
-            },
-        }
-        wf = _build_workflow(
-            execution_order=["source", "reachable", "unreachable", "consumer"],
-            agent_configs=configs,
-        )
-
-        strip_unreachable_drops(wf.action_configs)
-
-        assert configs["consumer"]["context_scope"]["drop"] == ["reachable.field_a"]
-
-    def test_drops_through_a_version_base_are_kept(self):
-        """A merge depending on a version base reaches its branches and what is above them."""
-        configs = {
-            "split_words": {"dependencies": []},
-            "other": {"dependencies": []},
-            "vote_1": {"dependencies": ["split_words"]},
-            "vote_2": {"dependencies": ["split_words"]},
-            "merge_votes": {
-                "dependencies": ["vote"],
-                "context_scope": {
-                    "drop": [
-                        "vote_1.voted_word",
-                        "vote_2.voted_word",
-                        "split_words.word",
-                        "other.field",
-                    ],
-                },
-            },
-        }
-
-        strip_unreachable_drops(configs)
-
-        assert configs["merge_votes"]["context_scope"]["drop"] == [
-            "vote_1.voted_word",
-            "vote_2.voted_word",
-            "split_words.word",
-        ]
-
-    def test_drops_below_a_merge_reach_through_the_version_base(self):
-        """An action below a merge reaches the branches the merge depends on by their base."""
-        configs = {
-            "split_words": {"dependencies": []},
-            "vote_1": {"dependencies": ["split_words"]},
-            "vote_2": {"dependencies": ["split_words"]},
-            "merge_votes": {"dependencies": ["vote"]},
-            "recap": {
-                "dependencies": ["merge_votes"],
-                "context_scope": {"drop": ["vote_1.voted_word", "split_words.word"]},
-            },
-        }
-
-        strip_unreachable_drops(configs)
-
-        assert configs["recap"]["context_scope"]["drop"] == [
-            "vote_1.voted_word",
-            "split_words.word",
-        ]

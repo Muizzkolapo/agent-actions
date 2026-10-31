@@ -72,16 +72,18 @@ def _vendors_the_reference_lists() -> list[str]:
 
 
 class TestTheNameTheReferenceGivesForGemini:
-    def test_google_set_in_defaults_reaches_the_agent_as_gemini(self):
+    @pytest.mark.parametrize(
+        ("vendor", "on_action"),
+        [
+            pytest.param("google", False, id="google-in-defaults"),
+            pytest.param("google", True, id="google-on-the-action"),
+            pytest.param("gemini", False, id="gemini-unchanged"),
+        ],
+    )
+    def test_the_vendor_reaches_the_agent_as_gemini(self, vendor, on_action):
         """One name from here on, so every later lookup — the batch client factory
         registers only `gemini` — finds the vendor."""
-        assert _expand("google")["model_vendor"] == "gemini"
-
-    def test_google_set_on_the_action_reaches_the_agent_as_gemini(self):
-        assert _expand("google", on_action=True)["model_vendor"] == "gemini"
-
-    def test_gemini_is_unchanged(self):
-        assert _expand("gemini")["model_vendor"] == "gemini"
+        assert _expand(vendor, on_action=on_action)["model_vendor"] == "gemini"
 
 
 class TestEveryNameTheReferenceListsLoads:
@@ -131,21 +133,12 @@ class TestAWorkflowThatWritesGoogleRunsThroughTheCli:
 
         return root, write
 
-    def test_inspect_loads_and_validates_a_workflow_whose_vendor_is_google(self, project):
+    @pytest.mark.parametrize("vendor", ["google", "gemini"])
+    def test_inspect_loads_and_validates_a_workflow_whose_vendor_is(self, project, vendor):
+        """The gemini case is the control: only the name differs, so the google case is not
+        passing because the project around it is lenient."""
         root, write = project
-        write("google")
-
-        result = run_agac(root, "inspect", "-a", WORKFLOW, env={"COLUMNS": "240"})
-        output = result.stdout + result.stderr
-
-        assert result.returncode == 0, output
-        assert "validated" in output, output
-
-    def test_the_same_workflow_written_gemini_loads_alike(self, project):
-        """Control: only the name differs, so the CLI case above is not passing
-        because the project around it is lenient."""
-        root, write = project
-        write("gemini")
+        write(vendor)
 
         result = run_agac(root, "inspect", "-a", WORKFLOW, env={"COLUMNS": "240"})
         output = result.stdout + result.stderr

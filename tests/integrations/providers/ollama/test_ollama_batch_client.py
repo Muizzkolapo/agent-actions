@@ -131,59 +131,41 @@ def _make_task(custom_id: str) -> dict:
 class TestOllamaBatchConcurrency:
     """Tests for concurrent batch processing and max_workers config."""
 
-    def test_default_max_workers_is_one(self):
-        """No behavior change without opt-in."""
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_from_constructor(self):
-        """Constructor param is used directly."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=4)
-        assert client._get_max_workers() == 4
-
-    def test_max_workers_from_env_var(self, monkeypatch):
-        """Env var OLLAMA_BATCH_MAX_WORKERS is respected."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "6")
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 6
-
-    def test_max_workers_constructor_overrides_env(self, monkeypatch):
-        """Constructor param takes precedence over env var."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "8")
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=2)
-        assert client._get_max_workers() == 2
-
-    def test_max_workers_env_invalid_uses_default(self, monkeypatch):
-        """Non-integer env var falls back to default."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "not_a_number")
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_env_zero_uses_default(self, monkeypatch):
-        """Zero env var falls back to default (must be >= 1)."""
-        monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", "0")
-        client = OllamaBatchClient(base_url="http://localhost:11434")
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_constructor_negative_uses_default(self):
-        """Negative constructor value falls back to default."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=-1)
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_constructor_zero_uses_default(self):
-        """Zero constructor value falls back to default."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=0)
-        assert client._get_max_workers() == 1
-
-    def test_max_workers_clamped_at_limit(self):
-        """Values above limit are clamped to 32."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=500)
-        assert client._get_max_workers() == 32
-
-    def test_max_workers_at_limit_is_allowed(self):
-        """Exactly at the limit is fine."""
-        client = OllamaBatchClient(base_url="http://localhost:11434", max_workers=32)
-        assert client._get_max_workers() == 32
+    @pytest.mark.parametrize(
+        ("ctor", "env", "expected"),
+        [
+            (None, None, 1),
+            (4, None, 4),
+            (None, "6", 6),
+            (2, "8", 2),
+            (None, "not_a_number", 1),
+            (None, "0", 1),
+            (-1, None, 1),
+            (0, None, 1),
+            (500, None, 32),
+            (32, None, 32),
+        ],
+        ids=[
+            "default-is-one",
+            "from-constructor",
+            "from-env",
+            "constructor-over-env",
+            "env-invalid-uses-default",
+            "env-zero-uses-default",
+            "constructor-negative-uses-default",
+            "constructor-zero-uses-default",
+            "clamped-at-limit",
+            "at-limit-is-allowed",
+        ],
+    )
+    def test_max_workers(self, monkeypatch, ctor, env, expected):
+        """Constructor beats OLLAMA_BATCH_MAX_WORKERS; values below 1 fall back to 1,
+        values above 32 are clamped."""
+        if env is not None:
+            monkeypatch.setenv("OLLAMA_BATCH_MAX_WORKERS", env)
+        kwargs = {} if ctor is None else {"max_workers": ctor}
+        client = OllamaBatchClient(base_url="http://localhost:11434", **kwargs)
+        assert client._get_max_workers() == expected
 
     def test_cloud_default_max_workers(self):
         """Cloud client also defaults to 1."""

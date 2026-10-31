@@ -358,38 +358,33 @@ class TestValidateAgentPaths:
         result = validator.validate_agent_paths({})
         assert result is True
 
-    def test_valid_input_file(self, validator, tmp_path):
-        f = tmp_path / "input.json"
-        f.write_text("{}")
-        result = validator.validate_agent_paths({"input_file": str(f)})
-        assert result is True
+    @pytest.mark.parametrize(
+        ("key", "make_dir", "expected"),
+        [
+            pytest.param("input_file", False, True, id="input-file"),
+            pytest.param("schema_file", False, True, id="schema-file"),
+            pytest.param("prompt_file", False, True, id="prompt-file"),
+            pytest.param("input_path", False, True, id="input-path"),
+            pytest.param("source_path", False, True, id="source-path"),
+            # output paths check writable, not readable
+            pytest.param("output_path", True, True, id="output-path-dir"),
+            pytest.param("tools_path", True, True, id="tools-path-dir"),
+            # output_file maps to path_type='output', which expects a directory
+            pytest.param("output_file", True, True, id="output-file-dir"),
+            pytest.param("output_file", False, False, id="output-file-is-file"),
+        ],
+    )
+    def test_existing_path_key(self, validator, tmp_path, key, make_dir, expected):
+        path = tmp_path / "target"
+        if make_dir:
+            path.mkdir()
+        else:
+            path.write_text("{}")
+        assert validator.validate_agent_paths({key: str(path)}) is expected
 
     def test_invalid_input_file(self, validator):
         result = validator.validate_agent_paths({"input_file": "/no/file.json"})
         assert result is False
-
-    def test_valid_output_path(self, validator, tmp_path):
-        """Output paths check writable, not readable."""
-        result = validator.validate_agent_paths({"output_path": str(tmp_path)})
-        assert result is True
-
-    def test_schema_file(self, validator, tmp_path):
-        f = tmp_path / "schema.json"
-        f.write_text("{}")
-        result = validator.validate_agent_paths({"schema_file": str(f)})
-        assert result is True
-
-    def test_prompt_file(self, validator, tmp_path):
-        f = tmp_path / "prompt.txt"
-        f.write_text("You are a helpful assistant.")
-        result = validator.validate_agent_paths({"prompt_file": str(f)})
-        assert result is True
-
-    def test_tools_path(self, validator, tmp_path):
-        tools_dir = tmp_path / "tools"
-        tools_dir.mkdir()
-        result = validator.validate_agent_paths({"tools_path": str(tools_dir)})
-        assert result is True
 
     def test_all_path_keys(self, validator, tmp_path):
         """Config with all recognized path keys should validate all of them."""
@@ -431,34 +426,6 @@ class TestValidateAgentPaths:
         validator.validate_agent_paths({"input_file": "/no/file"}, agent_name="agent_x")
         issues = validator.get_issues()
         assert any(i.agent_name == "agent_x" for i in issues)
-
-    def test_input_path_key(self, validator, tmp_path):
-        """input_path key should be recognized as an input path."""
-        f = tmp_path / "data.csv"
-        f.write_text("a,b,c")
-        result = validator.validate_agent_paths({"input_path": str(f)})
-        assert result is True
-
-    def test_source_path_key(self, validator, tmp_path):
-        """source_path key should be recognized as an input path."""
-        f = tmp_path / "source.py"
-        f.write_text("x = 1")
-        result = validator.validate_agent_paths({"source_path": str(f)})
-        assert result is True
-
-    def test_output_file_key_with_directory(self, validator, tmp_path):
-        """output_file maps to path_type='output' which expects a directory."""
-        out_dir = tmp_path / "output_dir"
-        out_dir.mkdir()
-        result = validator.validate_agent_paths({"output_file": str(out_dir)})
-        assert result is True
-
-    def test_output_file_key_with_file_fails(self, validator, tmp_path):
-        """output_file with path_type='output' rejects a regular file (expects dir)."""
-        f = tmp_path / "out.json"
-        f.write_text("{}")
-        result = validator.validate_agent_paths({"output_file": str(f)})
-        assert result is False
 
 
 # ---------------------------------------------------------------------------

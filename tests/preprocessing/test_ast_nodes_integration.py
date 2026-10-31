@@ -399,90 +399,45 @@ class TestParserOperatorMapping:
             "balance": None,
         }
 
-    # --- Single-symbol operators ---
-
-    def test_eq_operator(self, parser, data):
-        result = parser.parse('status == "active"')
+    @pytest.mark.parametrize(
+        ("clause", "override"),
+        [
+            pytest.param('status == "active"', {"status": "inactive"}, id="eq"),
+            # Regression: != must NOT silently become ==.
+            pytest.param('status != "inactive"', {"status": "inactive"}, id="ne"),
+            pytest.param("age < 30", {"age": 30}, id="lt"),
+            pytest.param("age <= 25", {"age": 26}, id="le"),
+            pytest.param("age > 20", {"age": 20}, id="gt"),
+            pytest.param("age >= 25", {"age": 24}, id="ge"),
+            pytest.param('status IN ["active", "pending"]', {"status": "deleted"}, id="in"),
+            pytest.param(
+                'email CONTAINS "@example.com"', {"email": "john@gmail.com"}, id="contains"
+            ),
+            pytest.param('name LIKE "John%"', {"name": "Jane Doe"}, id="like"),
+            pytest.param('status NOT IN ["deleted", "banned"]', {"status": "deleted"}, id="not_in"),
+        ],
+    )
+    def test_operator(self, parser, data, clause, override):
+        result = parser.parse(clause)
         assert result.success
         assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "status": "inactive"}) is False
+        assert result.ast.evaluate({**data, **override}) is False
 
-    def test_ne_operator(self, parser, data):
-        """Regression: != must NOT silently become ==."""
-        result = parser.parse('status != "inactive"')
+    @pytest.mark.parametrize(
+        ("clause", "false_row", "true_row"),
+        [
+            pytest.param(
+                'status != "active"', {"status": "active"}, {"status": "inactive"}, id="ne"
+            ),
+            pytest.param("age > 25", {"age": 25}, {"age": 30}, id="gt"),
+        ],
+    )
+    def test_operator_does_not_silently_become_eq(self, parser, clause, false_row, true_row):
+        """Regression: != and > must not produce EQ."""
+        result = parser.parse(clause)
         assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "status": "inactive"}) is False
-
-    def test_lt_operator(self, parser, data):
-        result = parser.parse("age < 30")
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "age": 30}) is False
-
-    def test_le_operator(self, parser, data):
-        result = parser.parse("age <= 25")
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "age": 26}) is False
-
-    def test_gt_operator(self, parser, data):
-        result = parser.parse("age > 20")
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "age": 20}) is False
-
-    def test_ge_operator(self, parser, data):
-        result = parser.parse("age >= 25")
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "age": 24}) is False
-
-    # --- Word operators ---
-
-    def test_in_operator(self, parser, data):
-        result = parser.parse('status IN ["active", "pending"]')
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "status": "deleted"}) is False
-
-    def test_contains_operator(self, parser, data):
-        result = parser.parse('email CONTAINS "@example.com"')
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "email": "john@gmail.com"}) is False
-
-    def test_like_operator(self, parser, data):
-        result = parser.parse('name LIKE "John%"')
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "name": "Jane Doe"}) is False
-
-    # --- Multi-word operators ---
-
-    def test_not_in_operator(self, parser, data):
-        result = parser.parse('status NOT IN ["deleted", "banned"]')
-        assert result.success
-        assert result.ast.evaluate(data) is True
-        assert result.ast.evaluate({**data, "status": "deleted"}) is False
-
-    # --- Critical regression tests ---
-
-    def test_ne_does_not_silently_become_eq(self, parser):
-        """!= must produce NE, not EQ."""
-        result = parser.parse('status != "active"')
-        assert result.success
-        # With the bug: this would return True (== "active" matches "active")
-        # With the fix: this correctly returns False (!= "active" when status IS "active")
-        assert result.ast.evaluate({"status": "active"}) is False
-        assert result.ast.evaluate({"status": "inactive"}) is True
-
-    def test_gt_does_not_silently_become_eq(self, parser):
-        """Regression: > must produce GT, not EQ."""
-        result = parser.parse("age > 25")
-        assert result.success
-        assert result.ast.evaluate({"age": 25}) is False
-        assert result.ast.evaluate({"age": 30}) is True
+        assert result.ast.evaluate(false_row) is False
+        assert result.ast.evaluate(true_row) is True
 
     def test_all_symbolic_operators_produce_distinct_enums(self, parser):
         """Ensure each symbolic operator produces a different ComparisonOperator."""
@@ -532,91 +487,46 @@ class TestIsNullDottedPaths:
             "present": "value",
         }
 
-    # --- Dotted path IS NULL ---
-
-    def test_dotted_is_null_on_null_value(self, parser, data):
-        result = parser.parse("action.score IS NULL")
+    @pytest.mark.parametrize(
+        ("clause", "expected"),
+        [
+            pytest.param("action.score IS NULL", True, id="null-on-null"),
+            pytest.param("action.status IS NULL", False, id="null-on-value"),
+            # A missing field is conceptually null.
+            pytest.param("action.nonexistent IS NULL", True, id="null-on-missing"),
+            pytest.param("action.status IS NOT NULL", True, id="notnull-on-value"),
+            pytest.param("action.score IS NOT NULL", False, id="notnull-on-null"),
+            pytest.param("action.nonexistent IS NOT NULL", False, id="notnull-on-missing"),
+            pytest.param("meta.nested.empty IS NULL", True, id="deep-null"),
+            pytest.param("meta.nested.deep IS NOT NULL", True, id="deep-notnull"),
+            pytest.param("top_level IS NULL", True, id="simple-null"),
+            pytest.param("present IS NOT NULL", True, id="simple-notnull"),
+            pytest.param(
+                'action.score IS NULL AND action.status == "done"', True, id="null-and-comparison"
+            ),
+            pytest.param(
+                "action.status IS NOT NULL OR action.score IS NULL", True, id="notnull-or-null"
+            ),
+            pytest.param(
+                "action.status IS NULL AND action.score IS NOT NULL", False, id="both-sides-false"
+            ),
+        ],
+    )
+    def test_is_null_clause(self, parser, data, clause, expected):
+        result = parser.parse(clause)
         assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    def test_dotted_is_null_on_non_null_value(self, parser, data):
-        result = parser.parse("action.status IS NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is False
-
-    def test_dotted_is_null_on_missing_field(self, parser, data):
-        """Missing field is conceptually null → IS NULL returns True."""
-        result = parser.parse("action.nonexistent IS NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    # --- Dotted path IS NOT NULL ---
-
-    def test_dotted_is_not_null_on_non_null_value(self, parser, data):
-        result = parser.parse("action.status IS NOT NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    def test_dotted_is_not_null_on_null_value(self, parser, data):
-        result = parser.parse("action.score IS NOT NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is False
-
-    def test_dotted_is_not_null_on_missing_field(self, parser, data):
-        result = parser.parse("action.nonexistent IS NOT NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is False
-
-    # --- Deep nesting ---
-
-    def test_deeply_nested_is_null(self, parser, data):
-        result = parser.parse("meta.nested.empty IS NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    def test_deeply_nested_is_not_null(self, parser, data):
-        result = parser.parse("meta.nested.deep IS NOT NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    # --- Non-dotted still works ---
-
-    def test_simple_is_null(self, parser, data):
-        result = parser.parse("top_level IS NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    def test_simple_is_not_null(self, parser, data):
-        result = parser.parse("present IS NOT NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    # --- Combined with AND / OR ---
-
-    def test_dotted_is_null_and_binary_comparison(self, parser, data):
-        result = parser.parse('action.score IS NULL AND action.status == "done"')
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    def test_dotted_is_not_null_or_dotted_is_null(self, parser, data):
-        result = parser.parse("action.status IS NOT NULL OR action.score IS NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is True
-
-    def test_both_sides_false(self, parser, data):
-        """IS NULL on non-null AND IS NOT NULL on null → both False → result False."""
-        result = parser.parse("action.status IS NULL AND action.score IS NOT NULL")
-        assert result.success, f"Parse failed: {result.error}"
-        assert result.ast.evaluate(data) is False
+        assert result.ast.evaluate(data) is expected
 
     # --- AST round-trip ---
 
-    def test_dotted_is_null_ast_string_roundtrip(self, parser):
-        result = parser.parse("action.field IS NULL")
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            pytest.param("action.field IS NULL", id="is_null"),
+            pytest.param("ns.sub.field IS NOT NULL", id="is_not_null"),
+        ],
+    )
+    def test_dotted_ast_string_roundtrip(self, parser, clause):
+        result = parser.parse(clause)
         assert result.success
-        assert str(result.ast) == "action.field IS NULL"
-
-    def test_dotted_is_not_null_ast_string_roundtrip(self, parser):
-        result = parser.parse("ns.sub.field IS NOT NULL")
-        assert result.success
-        assert str(result.ast) == "ns.sub.field IS NOT NULL"
+        assert str(result.ast) == clause

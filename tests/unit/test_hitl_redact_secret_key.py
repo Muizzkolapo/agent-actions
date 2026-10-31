@@ -7,6 +7,8 @@ in OAuth-style payloads (`{"client_id": ..., "secret": ...}`).
 
 from __future__ import annotations
 
+import pytest
+
 from agent_actions.llm.providers.hitl.server import _sanitize_context
 
 
@@ -28,17 +30,11 @@ def test_secret_key_in_list_is_redacted():
     assert out[1]["y"] == 2
 
 
-def test_secret_in_compound_name_still_handled_by_suffix_rule():
-    """Existing `_secret` suffix coverage must still pass — the new rule
-    is additive, not replacing the suffix match."""
-    out = _sanitize_context({"client_secret": "x"})
-    assert out["client_secret"] == "***"
-
-
-def test_benign_secret_prefix_not_redacted():
-    """`secret_santa` is a benign name; the regression test for
-    sanitize-redacts (test_sanitize_context_does_not_redact_benign_keys)
-    already pins this — repeat here so the additive rule doesn't silently
-    over-match."""
-    out = _sanitize_context({"secret_santa": "bob"})
-    assert out["secret_santa"] == "bob"
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [("client_secret", "x", "***"), ("secret_santa", "bob", "bob")],
+    ids=["compound-name-redacted", "benign-prefix-kept"],
+)
+def test_the_bare_key_rule_neither_replaces_the_suffix_rule_nor_over_matches(key, value, expected):
+    out = _sanitize_context({key: value})
+    assert out[key] == expected

@@ -6,6 +6,8 @@ returns the bound method instead of raising or reading the key. `_render_prompt_
 must read the key first.
 """
 
+import pytest
+
 from agent_actions.prompt.context.scope_application import apply_context_scope
 from agent_actions.prompt.service import PromptPreparationService
 
@@ -22,31 +24,22 @@ def _scope_and_render(template: str, field_context: dict, context_scope: dict) -
 
 
 class TestDotAccessOnADictMethodName:
-    def test_items_field_reads_its_value_not_the_method(self):
+    @pytest.mark.parametrize(
+        ("key", "value", "rendered"),
+        [
+            ("items", ["a", "b"], "['a', 'b']"),
+            ("keys", ["x", "y"], "['x', 'y']"),
+            ("values", [1, 2], "[1, 2]"),
+        ],
+        ids=["items", "keys", "values"],
+    )
+    def test_field_reads_its_value_not_the_method(self, key, value, rendered):
         result = _scope_and_render(
-            "Items: {{ dep.items }}",
-            {"dep": {"items": ["a", "b"]}},
+            f"Field: {{{{ dep.{key} }}}}",
+            {"dep": {key: value}},
             {"observe": ["dep.*"]},
         )
-        assert result == "Items: ['a', 'b']"
-        assert "built-in method" not in result
-
-    def test_keys_field_reads_its_value_not_the_method(self):
-        result = _scope_and_render(
-            "Keys: {{ dep.keys }}",
-            {"dep": {"keys": ["x", "y"]}},
-            {"observe": ["dep.*"]},
-        )
-        assert result == "Keys: ['x', 'y']"
-        assert "built-in method" not in result
-
-    def test_values_field_reads_its_value_not_the_method(self):
-        result = _scope_and_render(
-            "Values: {{ dep.values }}",
-            {"dep": {"values": [1, 2]}},
-            {"observe": ["dep.*"]},
-        )
-        assert result == "Values: [1, 2]"
+        assert result == f"Field: {rendered}"
         assert "built-in method" not in result
 
     def test_nested_items_field_matching_the_filed_repro(self):

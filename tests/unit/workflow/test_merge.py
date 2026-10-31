@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+
 from agent_actions.workflow.merge import (
     _identify_branch_mapping,
     _merge_group_deep,
@@ -261,53 +263,39 @@ class TestParallelBranchLineageSources:
 class TestGetCorrelationValue:
     """Tests for get_correlation_value function."""
 
-    def test_finds_top_level_key(self):
-        """Should find correlation value at top level."""
-        record = {"source_guid": "abc123", "other": "data"}
-
-        result = get_correlation_value(record, ["source_guid"])
-
-        assert result == "abc123"
-
-    def test_finds_nested_in_content(self):
-        """Should find correlation value nested in content dict."""
-        record = {"content": {"parent_target_id": "xyz"}}
-
-        result = get_correlation_value(record, ["parent_target_id"])
-
-        assert result == "xyz"
-
-    def test_fallback_chain(self):
-        """Should try keys in order and return first found."""
-        record = {"source_guid": "fallback"}
-
-        result = get_correlation_value(record, ["missing_key", "source_guid"])
-
-        assert result == "fallback"
-
-    def test_returns_none_when_not_found(self):
-        """Should return None when no correlation key found."""
-        record = {"unrelated": "data"}
-
-        result = get_correlation_value(record, ["source_guid", "parent_target_id"])
-
-        assert result is None
-
-    def test_handles_non_dict_content(self):
-        """Should handle non-dict content gracefully."""
-        record = {"content": "string_value"}
-
-        result = get_correlation_value(record, ["nested_key"])
-
-        assert result is None
-
-    def test_converts_to_string(self):
-        """Should convert correlation value to string."""
-        record = {"id": 12345}
-
-        result = get_correlation_value(record, ["id"])
-
-        assert result == "12345"
+    @pytest.mark.parametrize(
+        ("record", "keys", "expected"),
+        [
+            pytest.param(
+                {"source_guid": "abc123", "other": "data"},
+                ["source_guid"],
+                "abc123",
+                id="top_level_key",
+            ),
+            pytest.param(
+                {"content": {"parent_target_id": "xyz"}},
+                ["parent_target_id"],
+                "xyz",
+                id="nested_in_content",
+            ),
+            pytest.param(
+                {"source_guid": "fallback"},
+                ["missing_key", "source_guid"],
+                "fallback",
+                id="first_found_in_key_order",
+            ),
+            pytest.param(
+                {"unrelated": "data"},
+                ["source_guid", "parent_target_id"],
+                None,
+                id="not_found",
+            ),
+            pytest.param({"content": "string_value"}, ["nested_key"], None, id="non_dict_content"),
+            pytest.param({"id": 12345}, ["id"], "12345", id="converted_to_string"),
+        ],
+    )
+    def test_resolves_correlation_value(self, record, keys, expected):
+        assert get_correlation_value(record, keys) == expected
 
 
 class TestMergeRecordsByKey:
@@ -339,40 +327,29 @@ class TestMergeRecordsByKey:
         assert result[0]["answer_1"] == "A"
         assert result[0]["answer_2"] == "B"
 
-    def test_keeps_records_with_different_keys_separate(self):
-        """Should not merge records with different correlation keys."""
-        records = [
-            {"source_guid": "abc", "value": 1},
-            {"source_guid": "xyz", "value": 2},
-        ]
-
-        result = merge_records_by_key(records)
-
-        assert len(result) == 2
-
-    def test_handles_records_without_key(self):
-        """Should include records without correlation keys as-is."""
-        records = [
-            {"source_guid": "abc", "merged": True},
-            {"no_key": "orphan"},
-        ]
-
-        result = merge_records_by_key(records)
-
-        assert len(result) == 2
-
-    def test_empty_identity_key_does_not_collapse_records(self):
-        """Identity keys stay truthiness-gated: an unset source_guid is not a group.
-
-        These ids are framework-assigned, so an empty one means unassigned rather than a
-        group named "". Presence-gating the lookup instead merges every unassigned record
-        into one and loses the rest, silently.
-        """
-        records = [
-            {"source_guid": "", "content": {"a": {"value": "a"}}},
-            {"source_guid": "", "content": {"b": {"value": "b"}}},
-        ]
-
+    @pytest.mark.parametrize(
+        "records",
+        [
+            pytest.param(
+                [{"source_guid": "abc", "value": 1}, {"source_guid": "xyz", "value": 2}],
+                id="different_keys",
+            ),
+            pytest.param(
+                [{"source_guid": "abc", "merged": True}, {"no_key": "orphan"}],
+                id="record_without_key",
+            ),
+            # An empty framework-assigned id means unassigned, not a group named "";
+            # grouping on it would merge every unassigned record into one.
+            pytest.param(
+                [
+                    {"source_guid": "", "content": {"a": {"value": "a"}}},
+                    {"source_guid": "", "content": {"b": {"value": "b"}}},
+                ],
+                id="empty_identity_key",
+            ),
+        ],
+    )
+    def test_records_without_a_shared_key_stay_separate(self, records):
         result = merge_records_by_key(records)
 
         assert len(result) == 2
@@ -513,35 +490,29 @@ class TestIdentifyBranchMapping:
         assert mapping["gen_alt_1"] is group[1]
         assert mapping["merge_alts"] is group[1]
 
-    def test_identical_schemas_returns_none(self):
-        """Records with identical content keys — cannot identify branches."""
-        group = [
-            {"content": {"source": {}, "action": {"v": 1}}},
-            {"content": {"source": {}, "action": {"v": 2}}},
-        ]
-        result = _identify_branch_mapping(group)
-        assert result is None
-
-    def test_no_content_dict_returns_none(self):
-        """Records without content dicts — fallback."""
-        group = [{"field_a": "A"}, {"field_b": "B"}]
-        result = _identify_branch_mapping(group)
-        assert result is None
-
-    def test_non_dict_content_returns_none(self):
-        """Records with non-dict content — fallback."""
-        group = [{"content": "string"}, {"content": "other"}]
-        result = _identify_branch_mapping(group)
-        assert result is None
-
-    def test_one_record_no_unique_returns_none(self):
-        """If one record has no unique namespace, returns None even if others do."""
-        group = [
-            {"content": {"shared": {}, "unique_a": {}}},
-            {"content": {"shared": {}}},
-        ]
-        result = _identify_branch_mapping(group)
-        assert result is None
+    @pytest.mark.parametrize(
+        "group",
+        [
+            pytest.param(
+                [
+                    {"content": {"source": {}, "action": {"v": 1}}},
+                    {"content": {"source": {}, "action": {"v": 2}}},
+                ],
+                id="identical_schemas",
+            ),
+            pytest.param([{"field_a": "A"}, {"field_b": "B"}], id="no_content_dict"),
+            pytest.param([{"content": "string"}, {"content": "other"}], id="non_dict_content"),
+            pytest.param(
+                [
+                    {"content": {"shared": {}, "unique_a": {}}},
+                    {"content": {"shared": {}}},
+                ],
+                id="one_record_without_unique_namespace",
+            ),
+        ],
+    )
+    def test_unidentifiable_branches_return_none(self, group):
+        assert _identify_branch_mapping(group) is None
 
 
 class TestFanInViaPrimitive:
@@ -744,50 +715,28 @@ class TestMergeGroupDeep:
 class TestPropagateCascadeBlocking:
     """Fan-in merge must propagate cascade-blocking state from any branch."""
 
-    def test_no_blocking_state_leaves_merged_unchanged(self):
-        merged = {"_state": "processed", "source_guid": "r1"}
+    @pytest.mark.parametrize(
+        ("merged_state", "branch_state", "expected"),
+        [
+            pytest.param("processed", "processed", "processed", id="no_blocking_state"),
+            pytest.param("processed", "failed", "cascade_skipped", id="failed_branch"),
+            pytest.param("processed", "exhausted", "cascade_skipped", id="exhausted_branch"),
+            pytest.param(
+                "processed", "cascade_skipped", "cascade_skipped", id="cascade_skipped_branch"
+            ),
+            pytest.param("active", "guard_skipped", "active", id="guard_skipped_branch"),
+        ],
+    )
+    def test_only_a_blocking_branch_marks_the_merge_cascade_skipped(
+        self, merged_state, branch_state, expected
+    ):
+        merged = {"_state": merged_state, "source_guid": "r1"}
         group = [
-            {"_state": "processed", "source_guid": "r1"},
-            {"_state": "processed", "source_guid": "r1"},
+            {"_state": merged_state, "source_guid": "r1"},
+            {"_state": branch_state, "source_guid": "r1"},
         ]
         _propagate_cascade_blocking(merged, group)
-        assert merged["_state"] == "processed"
-
-    def test_failed_branch_propagates_cascade_skipped(self):
-        merged = {"_state": "processed", "source_guid": "r1"}
-        group = [
-            {"_state": "processed", "source_guid": "r1"},
-            {"_state": "failed", "source_guid": "r1"},
-        ]
-        _propagate_cascade_blocking(merged, group)
-        assert merged["_state"] == "cascade_skipped"
-
-    def test_exhausted_branch_propagates_cascade_skipped(self):
-        merged = {"_state": "processed", "source_guid": "r1"}
-        group = [
-            {"_state": "processed", "source_guid": "r1"},
-            {"_state": "exhausted", "source_guid": "r1"},
-        ]
-        _propagate_cascade_blocking(merged, group)
-        assert merged["_state"] == "cascade_skipped"
-
-    def test_cascade_skipped_branch_propagates(self):
-        merged = {"_state": "processed", "source_guid": "r1"}
-        group = [
-            {"_state": "processed", "source_guid": "r1"},
-            {"_state": "cascade_skipped", "source_guid": "r1"},
-        ]
-        _propagate_cascade_blocking(merged, group)
-        assert merged["_state"] == "cascade_skipped"
-
-    def test_all_healthy_no_change(self):
-        merged = {"_state": "active", "source_guid": "r1"}
-        group = [
-            {"_state": "active", "source_guid": "r1"},
-            {"_state": "guard_skipped", "source_guid": "r1"},
-        ]
-        _propagate_cascade_blocking(merged, group)
-        assert merged["_state"] == "active"
+        assert merged["_state"] == expected
 
     def test_merge_records_by_key_propagates_blocking(self):
         """End-to-end: merge_records_by_key applies cascade propagation."""

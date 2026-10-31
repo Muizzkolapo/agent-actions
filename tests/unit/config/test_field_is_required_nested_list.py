@@ -10,16 +10,18 @@ from agent_actions.utils.schema_utils import is_compiled_schema
 NESTED = {"id": "metadata", "type": "object", "required": ["created_at"]}
 
 
-def test_a_nested_required_list_does_not_make_the_field_required():
-    assert field_is_required(NESTED, False, frozenset()) is False
-
-
-def test_a_nested_required_list_leaves_the_field_to_the_schemas_required_list():
-    assert field_is_required(NESTED, False, frozenset({"metadata"})) is True
-
-
-def test_a_nested_required_list_leaves_the_field_to_required_by_default():
-    assert field_is_required(NESTED, True, frozenset()) is True
+@pytest.mark.parametrize(
+    ("required_by_default", "schema_required", "expected"),
+    [
+        pytest.param(False, frozenset(), False, id="alone"),
+        pytest.param(False, frozenset({"metadata"}), True, id="in_schema_required_list"),
+        pytest.param(True, frozenset(), True, id="required_by_default"),
+    ],
+)
+def test_a_nested_required_list_leaves_the_field_to_the_schema(
+    required_by_default, schema_required, expected
+):
+    assert field_is_required(NESTED, required_by_default, schema_required) is expected
 
 
 @pytest.mark.parametrize(

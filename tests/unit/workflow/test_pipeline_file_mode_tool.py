@@ -333,8 +333,15 @@ def _only_failure(results) -> str:
     return results[0].error
 
 
-def test_file_tool_plain_dict_rejected():
-    """FILE tool returning plain dicts (not TrackedItem) fails the records it was handed."""
+@pytest.mark.parametrize(
+    ("returned", "message"),
+    [
+        pytest.param([{"score": 0.9}], "plain dict", id="plain_dict"),
+        pytest.param(["just a string"], "expected TrackedItem", id="non_dict_item"),
+        pytest.param({"single": "dict"}, "must return list or FileUDFResult", id="non_list"),
+    ],
+)
+def test_file_tool_output_of_the_wrong_shape_fails_the_records_it_was_handed(returned, message):
     context = _make_context()
 
     input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
@@ -343,45 +350,11 @@ def test_file_tool_plain_dict_rejected():
 
     with patch(
         "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-        return_value=([{"score": 0.9}], True),
+        return_value=(returned, True),
     ):
         results = FileToolStrategy().invoke(input_data, context)
 
-    assert "plain dict" in _only_failure(results)
-
-
-def test_file_tool_non_dict_rejected():
-    """FILE tool returning non-dict items fails the records it was handed."""
-    context = _make_context()
-
-    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
-
-    context.source_data = input_data
-
-    with patch(
-        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-        return_value=(["just a string"], True),
-    ):
-        results = FileToolStrategy().invoke(input_data, context)
-
-    assert "expected TrackedItem" in _only_failure(results)
-
-
-def test_file_tool_non_list_non_fileudfresult_rejected():
-    """FILE tool returning non-list, non-FileUDFResult fails the records it was handed."""
-    context = _make_context()
-
-    input_data = [{"source_guid": "sg-1", "content": {"prev": {"id": 1}}}]
-
-    context.source_data = input_data
-
-    with patch(
-        "agent_actions.processing.strategies.file_tool.run_dynamic_agent",
-        return_value=({"single": "dict"}, True),
-    ):
-        results = FileToolStrategy().invoke(input_data, context)
-
-    assert "must return list or FileUDFResult" in _only_failure(results)
+    assert message in _only_failure(results)
 
 
 # --- Empty tool output detection ---

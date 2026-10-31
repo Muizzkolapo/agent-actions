@@ -10,6 +10,8 @@ override wins). Explicit per-field markers still take precedence over both.
 
 import textwrap
 
+import pytest
+
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.output.response.vendor_compilation import compile_unified_schema
 from agent_actions.validation.schema_output_validator import validate_output_against_schema
@@ -49,18 +51,13 @@ def test_project_flag_makes_unmarked_field_required(tmp_path):
     assert "b" in report.missing_required
 
 
-def test_no_project_flag_keeps_unmarked_field_optional(tmp_path):
-    """Absent flag → v0.2.8 behavior preserved: unmarked 'b' stays optional."""
-    _project(tmp_path, project_flag="", schema_body=_UNMARKED)
-    loaded = SchemaLoader.load_schema("foo", project_root=tmp_path)
-    report = validate_output_against_schema({"a": "x"}, loaded, "act")
-    assert report.is_compliant
-    assert "b" in report.missing_optional
-
-
-def test_project_flag_false_keeps_unmarked_field_optional(tmp_path):
-    """required_by_default: false is explicit opt-out; unmarked 'b' stays optional."""
-    _project(tmp_path, project_flag="required_by_default: false", schema_body=_UNMARKED)
+@pytest.mark.parametrize(
+    "project_flag",
+    ["", "required_by_default: false"],
+    ids=["no-flag", "flag-false"],
+)
+def test_project_flag_absent_or_false_keeps_unmarked_field_optional(tmp_path, project_flag):
+    _project(tmp_path, project_flag=project_flag, schema_body=_UNMARKED)
     loaded = SchemaLoader.load_schema("foo", project_root=tmp_path)
     report = validate_output_against_schema({"a": "x"}, loaded, "act")
     assert report.is_compliant

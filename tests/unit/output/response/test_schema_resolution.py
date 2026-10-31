@@ -24,56 +24,34 @@ def _write_schema(path, name, fields=None):
 class TestMultiLevelResolution:
     """Tests for the 3-step resolution order."""
 
-    def test_step1_project_level_found(self, tmp_path):
-        """Schema in project-level schema/ dir is found."""
+    @pytest.mark.parametrize(
+        ("relpath", "ref"),
+        [
+            pytest.param("schema/my_schema.yml", "my_schema", id="step1-project-level"),
+            pytest.param(
+                "schema/workflow_a/nested.yml", "nested", id="step1-project-level-subdirectory"
+            ),
+            pytest.param(
+                "agent_workflow/my_wf/schema/wf_schema.yml", "wf_schema", id="step2-workflow-level"
+            ),
+            pytest.param(
+                "agent_workflow/other_wf/schema/other_schema.yml",
+                "other_schema",
+                id="step3-search-all-workflows",
+            ),
+            pytest.param(
+                "agent_workflow/wf_a/schema/step3_only.yml",
+                "step3_only",
+                id="workflow-level-without-explicit-name",
+            ),
+            pytest.param("schema/yaml_ext.yaml", "yaml_ext", id="yaml-extension"),
+        ],
+    )
+    def test_schema_is_found(self, tmp_path, relpath, ref):
         _setup_project(tmp_path)
-        _write_schema(tmp_path / "schema" / "my_schema.yml", "project_level")
-        result = SchemaLoader.load_schema("my_schema", project_root=tmp_path)
-        assert result["name"] == "project_level"
-
-    def test_step1_project_level_subdirectory(self, tmp_path):
-        """Schema in project-level schema/sub/ dir is found via rglob."""
-        _setup_project(tmp_path)
-        _write_schema(tmp_path / "schema" / "workflow_a" / "nested.yml", "nested_in_project")
-        result = SchemaLoader.load_schema("nested", project_root=tmp_path)
-        assert result["name"] == "nested_in_project"
-
-    def test_step2_workflow_level_found(self, tmp_path):
-        """Schema in a workflow's schema dir is found."""
-        _setup_project(tmp_path)
-        _write_schema(
-            tmp_path / "agent_workflow" / "my_wf" / "schema" / "wf_schema.yml",
-            "workflow_level",
-        )
-        result = SchemaLoader.load_schema("wf_schema", project_root=tmp_path)
-        assert result["name"] == "workflow_level"
-
-    def test_step3_search_all_workflows(self, tmp_path):
-        """Schema in another workflow's schema dir is found without workflow_name."""
-        _setup_project(tmp_path)
-        _write_schema(
-            tmp_path / "agent_workflow" / "other_wf" / "schema" / "other_schema.yml",
-            "found_via_step3",
-        )
-        result = SchemaLoader.load_schema("other_schema", project_root=tmp_path)
-        assert result["name"] == "found_via_step3"
-
-    def test_workflow_level_found_without_explicit_name(self, tmp_path):
-        """Schema in any workflow's schema dir is found via all-workflows search."""
-        _setup_project(tmp_path)
-        _write_schema(
-            tmp_path / "agent_workflow" / "wf_a" / "schema" / "step3_only.yml",
-            "step3_only",
-        )
-        result = SchemaLoader.load_schema("step3_only", project_root=tmp_path)
-        assert result["name"] == "step3_only"
-
-    def test_yaml_extension_supported(self, tmp_path):
-        """Schema with .yaml extension is found."""
-        _setup_project(tmp_path)
-        _write_schema(tmp_path / "schema" / "yaml_ext.yaml", "yaml_extension")
-        result = SchemaLoader.load_schema("yaml_ext", project_root=tmp_path)
-        assert result["name"] == "yaml_extension"
+        _write_schema(tmp_path / relpath, f"found_{ref}")
+        result = SchemaLoader.load_schema(ref, project_root=tmp_path)
+        assert result["name"] == f"found_{ref}"
 
 
 class TestGlobalUniqueness:

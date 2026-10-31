@@ -145,38 +145,37 @@ class TestCheckPromptIdDuplicates:
 class TestValidatePromptFormatLogic:
     """Test prompt format validation logic."""
 
-    def test_no_sections_no_ids(self, validator):
-        result = validator._validate_prompt_format_logic("Just text.", "file.md")
-        assert result is None
+    @pytest.mark.parametrize(
+        "content",
+        [
+            pytest.param("Just text.", id="no-sections-no-ids"),
+            pytest.param("{prompt analyze}\nDo analysis\n{end_prompt}", id="valid"),
+        ],
+    )
+    def test_accepted_format_returns_none(self, validator, content):
+        assert validator._validate_prompt_format_logic(content, "file.md") is None
 
-    def test_sections_but_no_ids(self, validator):
-        content = "# Section\nSome text without prompt blocks."
+    @pytest.mark.parametrize(
+        ("content", "fragment"),
+        [
+            pytest.param(
+                "# Section\nSome text without prompt blocks.", "no prompt ids", id="sections-no-ids"
+            ),
+            pytest.param(
+                "{prompt analyze}\nDo analysis without closing", "unclosed", id="unclosed"
+            ),
+            pytest.param("{prompt analyze}\n{end_prompt}", "empty", id="empty"),
+            pytest.param(
+                "Some intro text\n# Section\n{prompt analyze}\nDo it\n{end_prompt}",
+                "does not start with a markdown heading",
+                id="no-heading",
+            ),
+        ],
+    )
+    def test_bad_format_returns_message(self, validator, content, fragment):
         result = validator._validate_prompt_format_logic(content, "file.md")
         assert result is not None
-        assert "no prompt ids" in result.lower()
-
-    def test_valid_format(self, validator):
-        content = "{prompt analyze}\nDo analysis\n{end_prompt}"
-        result = validator._validate_prompt_format_logic(content, "file.md")
-        assert result is None
-
-    def test_unclosed_prompt_block(self, validator):
-        content = "{prompt analyze}\nDo analysis without closing"
-        result = validator._validate_prompt_format_logic(content, "file.md")
-        assert result is not None
-        assert "unclosed" in result.lower()
-
-    def test_empty_prompt_content(self, validator):
-        content = "{prompt analyze}\n{end_prompt}"
-        result = validator._validate_prompt_format_logic(content, "file.md")
-        assert result is not None
-        assert "empty" in result.lower()
-
-    def test_no_heading_start_with_sections(self, validator):
-        content = "Some intro text\n# Section\n{prompt analyze}\nDo it\n{end_prompt}"
-        result = validator._validate_prompt_format_logic(content, "file.md")
-        assert result is not None
-        assert "does not start with a markdown heading" in result.lower()
+        assert fragment in result.lower()
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,8 @@ context_scope.observe or passthrough. Framework namespaces and source
 are always available and should not trigger errors.
 """
 
+import pytest
+
 from agent_actions.validation.static_analyzer import analyze_workflow
 
 
@@ -201,18 +203,37 @@ class TestTemplateScopeCoverage:
         assert "classify" in uncovered_ns
         assert "summarize" in uncovered_ns
 
-    def test_for_loop_vars_not_flagged(self):
-        """Jinja for-loop variables should not be treated as action namespace references."""
+    @pytest.mark.parametrize(
+        ("prompt", "local_names"),
+        [
+            (
+                "{% for skill in seed.data.skills %}"
+                "- {{ skill.name }} ({{ skill.level }})"
+                "{% endfor %}",
+                ("skill",),
+            ),
+            (
+                "{% for skill in seed.exam.skills %}"
+                "### {{ skill.skill_area }}"
+                "{% for section in skill.sections %}"
+                "**{{ section.section_name }}**"
+                "{% endfor %}"
+                "{% endfor %}",
+                ("skill", "section"),
+            ),
+            ("{% set total = source.metadata %}Count: {{ total.count }}", ("total",)),
+            ("{% macro render_item(item) %}Name: {{ item.name }}{% endmacro %}", ("item",)),
+        ],
+        ids=["for", "nested-for", "set", "macro"],
+    )
+    def test_template_local_vars_not_flagged(self, prompt, local_names):
+        """Jinja for/set/macro names are not treated as action namespace references."""
         workflow_config = {
             "actions": [
                 {
                     "name": "processor",
                     "context_scope": {"observe": ["source.*"]},
-                    "prompt": (
-                        "{% for skill in seed.data.skills %}"
-                        "- {{ skill.name }} ({{ skill.level }})"
-                        "{% endfor %}"
-                    ),
+                    "prompt": prompt,
                 },
             ]
         }
@@ -221,69 +242,8 @@ class TestTemplateScopeCoverage:
 
         coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
         flagged = {e.referenced_agent for e in coverage_errors}
-        assert "skill" not in flagged
-
-    def test_nested_for_loop_vars_not_flagged(self):
-        """Nested for-loop variables should not be treated as action namespace references."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "processor",
-                    "context_scope": {"observe": ["source.*"]},
-                    "prompt": (
-                        "{% for skill in seed.exam.skills %}"
-                        "### {{ skill.skill_area }}"
-                        "{% for section in skill.sections %}"
-                        "**{{ section.section_name }}**"
-                        "{% endfor %}"
-                        "{% endfor %}"
-                    ),
-                },
-            ]
-        }
-
-        result = analyze_workflow(workflow_config)
-
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
-        flagged = {e.referenced_agent for e in coverage_errors}
-        assert "skill" not in flagged
-        assert "section" not in flagged
-
-    def test_set_vars_not_flagged(self):
-        """{% set %} variables should not be treated as action namespace references."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "processor",
-                    "context_scope": {"observe": ["source.*"]},
-                    "prompt": ("{% set total = source.metadata %}Count: {{ total.count }}"),
-                },
-            ]
-        }
-
-        result = analyze_workflow(workflow_config)
-
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
-        flagged = {e.referenced_agent for e in coverage_errors}
-        assert "total" not in flagged
-
-    def test_macro_params_not_flagged(self):
-        """{% macro %} parameters should not be treated as action namespace references."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "processor",
-                    "context_scope": {"observe": ["source.*"]},
-                    "prompt": ("{% macro render_item(item) %}Name: {{ item.name }}{% endmacro %}"),
-                },
-            ]
-        }
-
-        result = analyze_workflow(workflow_config)
-
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
-        flagged = {e.referenced_agent for e in coverage_errors}
-        assert "item" not in flagged
+        for name in local_names:
+            assert name not in flagged
 
     def test_loop_var_same_name_as_action_not_flagged(self):
         """A loop var sharing a name with an action should not be flagged inside its scope."""

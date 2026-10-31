@@ -14,6 +14,8 @@ Audit spec: specs/new/026-lineage-node-metadata-audit.md
 import re
 import uuid
 
+import pytest
+
 from agent_actions.processing.enrichment import (
     EnrichmentPipeline,
     LineageEnricher,
@@ -26,6 +28,17 @@ from agent_actions.processing.types import (
 )
 
 # Valid node_id pattern: {action_name}_{identifier}
+_ACTION_TYPES = pytest.mark.parametrize(
+    ("name", "sm"),
+    [
+        ("llm_action", None),
+        ("tool_record", None),
+        ("tool_file", {0: 0}),
+        ("hitl_review", {0: 0}),
+    ],
+    ids=["llm", "tool_record", "tool_file", "hitl_file"],
+)
+
 _NODE_ID_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*_[a-zA-Z0-9_-]+$")
 
 
@@ -806,59 +819,39 @@ class TestUniformShape:
         enriched = _enrich_full(result, ctx)
         return enriched.data[0]
 
-    def test_all_action_types_produce_node_id(self):
+    @_ACTION_TYPES
+    def test_all_action_types_produce_node_id(self, name, sm):
         """node_id present and valid for LLM, TOOL-RECORD, TOOL-FILE, HITL-FILE."""
-        for name, sm in [
-            ("llm_action", None),
-            ("tool_record", None),
-            ("tool_file", {0: 0}),
-            ("hitl_review", {0: 0}),
-        ]:
-            item = self._enriched_item(name, source_mapping=sm)
-            assert "node_id" in item, f"{name}: missing node_id"
-            assert isinstance(item["node_id"], str), f"{name}: node_id not str"
-            assert item["node_id"].startswith(f"{name}_"), f"{name}: wrong prefix"
+        item = self._enriched_item(name, source_mapping=sm)
+        assert "node_id" in item, f"{name}: missing node_id"
+        assert isinstance(item["node_id"], str), f"{name}: node_id not str"
+        assert item["node_id"].startswith(f"{name}_"), f"{name}: wrong prefix"
 
-    def test_all_action_types_produce_target_id(self):
+    @_ACTION_TYPES
+    def test_all_action_types_produce_target_id(self, name, sm):
         """target_id present and non-empty for all action types."""
-        for name, sm in [
-            ("llm_action", None),
-            ("tool_record", None),
-            ("tool_file", {0: 0}),
-            ("hitl_review", {0: 0}),
-        ]:
-            item = self._enriched_item(name, source_mapping=sm)
-            assert "target_id" in item, f"{name}: missing target_id"
-            assert isinstance(item["target_id"], str) and item["target_id"], (
-                f"{name}: target_id empty or not str"
-            )
+        item = self._enriched_item(name, source_mapping=sm)
+        assert "target_id" in item, f"{name}: missing target_id"
+        assert isinstance(item["target_id"], str) and item["target_id"], (
+            f"{name}: target_id empty or not str"
+        )
 
-    def test_all_action_types_produce_lineage_array(self):
+    @_ACTION_TYPES
+    def test_all_action_types_produce_lineage_array(self, name, sm):
         """lineage is a non-empty list of strings for all action types."""
-        for name, sm in [
-            ("llm_action", None),
-            ("tool_record", None),
-            ("tool_file", {0: 0}),
-            ("hitl_review", {0: 0}),
-        ]:
-            item = self._enriched_item(name, source_mapping=sm)
-            assert "lineage" in item, f"{name}: missing lineage"
-            assert isinstance(item["lineage"], list), f"{name}: lineage not list"
-            assert len(item["lineage"]) > 0, f"{name}: lineage empty"
-            for nid in item["lineage"]:
-                assert isinstance(nid, str), f"{name}: lineage entry not str"
+        item = self._enriched_item(name, source_mapping=sm)
+        assert "lineage" in item, f"{name}: missing lineage"
+        assert isinstance(item["lineage"], list), f"{name}: lineage not list"
+        assert len(item["lineage"]) > 0, f"{name}: lineage empty"
+        for nid in item["lineage"]:
+            assert isinstance(nid, str), f"{name}: lineage entry not str"
 
-    def test_all_action_types_produce_source_guid(self):
+    @_ACTION_TYPES
+    def test_all_action_types_produce_source_guid(self, name, sm):
         """source_guid present for all action types."""
-        for name, sm in [
-            ("llm_action", None),
-            ("tool_record", None),
-            ("tool_file", {0: 0}),
-            ("hitl_review", {0: 0}),
-        ]:
-            item = self._enriched_item(name, source_mapping=sm)
-            assert "source_guid" in item, f"{name}: missing source_guid"
-            assert isinstance(item["source_guid"], str), f"{name}: source_guid not str"
+        item = self._enriched_item(name, source_mapping=sm)
+        assert "source_guid" in item, f"{name}: missing source_guid"
+        assert isinstance(item["source_guid"], str), f"{name}: source_guid not str"
 
     def test_first_stage_uniform_shape(self):
         """First-stage items also have all required fields after full enrichment."""

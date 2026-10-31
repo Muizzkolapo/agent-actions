@@ -132,30 +132,32 @@ def test_a_file_the_store_fails_to_write_after_an_edit_is_answered_again_by_the_
     assert all(row.get("lineage") for row in _stored_rows(online))
 
 
-@FAULTS
+@pytest.mark.parametrize(
+    ("action", "reader", "fault"),
+    [
+        pytest.param(ACTION, False, sqlite3.OperationalError("disk I/O error"), id="database"),
+        pytest.param(ACTION, False, OSError(28, "No space left on device"), id="disk-full"),
+        pytest.param(
+            READER, True, sqlite3.OperationalError("disk I/O error"), id="downstream-database"
+        ),
+    ],
+)
 def test_a_file_the_store_fails_to_write_is_reported_as_a_failed_write_not_a_load(
     online,  # noqa: F811
+    action,
+    reader,
     fault,
 ):
     """The writer reported through the loaders' failure event, so the run said at error
-    level, in the terminal and in its log, that it failed to load the file it was writing."""
-    with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
+    level, in the terminal and in its log, that it failed to load the file it was writing.
+    An action reading another's output stores its file through the same writer, by another
+    route than the first stage's, so it said the same."""
+    if reader:
+        _with_a_reader(online)
+    with _the_store_fails_to_write(action, NOT_STORED, fault):
         result = _run("--fresh")
 
-    _reported_as_a_failed_write(online, result, ACTION, fault)
-
-
-def test_a_file_a_downstream_action_fails_to_store_is_reported_as_a_failed_write(
-    online,  # noqa: F811
-):
-    """An action reading another's output stores its file through the same writer, by
-    another route than the first stage's, so it said the same."""
-    _with_a_reader(online)
-    fault = sqlite3.OperationalError("disk I/O error")
-    with _the_store_fails_to_write(READER, NOT_STORED, fault):
-        result = _run("--fresh")
-
-    _reported_as_a_failed_write(online, result, READER, fault)
+    _reported_as_a_failed_write(online, result, action, fault)
 
 
 @FAULTS

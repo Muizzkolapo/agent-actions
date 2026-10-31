@@ -116,34 +116,23 @@ class TestTheStagingWalk:
             runner, input_dir, output, str(input_dir), _params(tmp_path), set()
         )
 
-    def test_a_file_that_fails_leaves_the_action_count_unknown(self, tmp_path):
+    # Order must not matter: the records are missing either way.
+    @pytest.mark.parametrize(
+        "fail_on", [pytest.param(1, id="first_file"), pytest.param(2, id="last_file")]
+    )
+    def test_a_file_that_fails_leaves_the_action_count_unknown(self, tmp_path, fail_on):
         backend = _Backend({})
         calls = {"n": 0}
 
         def per_file(params):
             calls["n"] += 1
-            if calls["n"] == 1:
+            if calls["n"] == fail_on:
                 raise ValueError("unreadable input")
             _slices(backend)(params)
 
         _found, processed, _errors = self._walk(tmp_path, backend, per_file)
 
         assert processed == 1, "the walk tolerates the failure and completes"
-        assert slice_observation(backend, ACTION) is None
-
-    def test_a_file_that_fails_after_the_others_still_poisons(self, tmp_path):
-        """Order must not matter: the records are missing either way."""
-        backend = _Backend({})
-        calls = {"n": 0}
-
-        def per_file(params):
-            calls["n"] += 1
-            if calls["n"] == 2:
-                raise ValueError("unreadable input")
-            _slices(backend)(params)
-
-        self._walk(tmp_path, backend, per_file)
-
         assert slice_observation(backend, ACTION) is None
 
     def test_a_clean_walk_keeps_its_count(self, tmp_path):

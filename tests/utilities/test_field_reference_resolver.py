@@ -161,19 +161,18 @@ class TestFieldReferenceResolver:
         assert result.value == 2
         assert result.source_action == "extract_facts"
 
-    def test_resolve_nested_path(self, resolver, field_context):
-        """Test resolving a nested path reference."""
-        result = resolver.resolve("extract_facts.response.data.status", field_context)
+    @pytest.mark.parametrize(
+        ("reference", "expected"),
+        [
+            pytest.param("extract_facts.response.data.status", "success", id="nested-path"),
+            pytest.param("extract_facts.facts.0.name", "fact1", id="array-element"),
+        ],
+    )
+    def test_resolve_path(self, resolver, field_context, reference, expected):
+        result = resolver.resolve(reference, field_context)
 
         assert result.success
-        assert result.value == "success"
-
-    def test_resolve_array_element(self, resolver, field_context):
-        """Test resolving array element by index."""
-        result = resolver.resolve("extract_facts.facts.0.name", field_context)
-
-        assert result.success
-        assert result.value == "fact1"
+        assert result.value == expected
 
     def test_resolve_missing_action(self, resolver, field_context):
         """Test resolving reference to non-existent action."""
@@ -195,26 +194,22 @@ class TestFieldReferenceResolver:
         with pytest.raises(ReferenceNotFoundError):
             strict_resolver.resolve("nonexistent.field", field_context)
 
-    def test_substitute_single_reference(self, resolver, field_context):
-        """Test substituting a single reference in text."""
-        text = "Found {extract_facts.count} facts"
-        result = resolver.substitute(text, field_context)
-
-        assert result == "Found 2 facts"
-
-    def test_substitute_multiple_references(self, resolver, field_context):
-        """Test substituting multiple references in text."""
-        text = "{source.title} has {extract_facts.count} facts"
-        result = resolver.substitute(text, field_context)
-
-        assert result == "Test Document has 2 facts"
-
-    def test_substitute_nested_reference(self, resolver, field_context):
-        """Test substituting nested reference in text."""
-        text = "Status: {extract_facts.response.data.status}"
-        result = resolver.substitute(text, field_context)
-
-        assert result == "Status: success"
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            pytest.param("Found {extract_facts.count} facts", "Found 2 facts", id="single"),
+            pytest.param(
+                "{source.title} has {extract_facts.count} facts",
+                "Test Document has 2 facts",
+                id="multiple",
+            ),
+            pytest.param(
+                "Status: {extract_facts.response.data.status}", "Status: success", id="nested"
+            ),
+        ],
+    )
+    def test_substitute_references(self, resolver, field_context, text, expected):
+        assert resolver.substitute(text, field_context) == expected
 
     def test_parse_batch_via_resolver(self, resolver):
         """Test batch parsing through resolver."""

@@ -25,32 +25,22 @@ def written(tmp_path) -> dict:
 
 
 class TestAStampThatRecordedACap:
-    def test_a_cap_below_the_configured_limit_is_a_truncation(self, tmp_path):
-        state = manager(tmp_path, record_limit=8, max_records=2)
+    @pytest.mark.parametrize(
+        ("details", "expected"),
+        [
+            pytest.param({"record_limit": 8, "max_records": 2}, True, id="cap_below_limit"),
+            # No limit was asked for, so any cap cut the run short.
+            pytest.param({"record_limit": None, "max_records": 2}, True, id="cap_with_no_limit"),
+            # The run stopped where its config said to stop.
+            pytest.param({"record_limit": 2, "max_records": 2}, False, id="cap_equal_to_limit"),
+            pytest.param({"record_limit": 8, "max_records": None}, False, id="null_cap"),
+            pytest.param({"record_limit": 8}, False, id="no_cap_key"),
+        ],
+    )
+    def test_only_a_cap_below_the_limit_is_a_truncation(self, tmp_path, details, expected):
+        state = manager(tmp_path, **details)
 
-        assert state.adopt_truncation_marker("act") is True
-
-    def test_a_cap_with_no_configured_limit_is_a_truncation(self, tmp_path):
-        """No limit was asked for, so any cap cut the run short."""
-        state = manager(tmp_path, record_limit=None, max_records=2)
-
-        assert state.adopt_truncation_marker("act") is True
-
-    def test_a_cap_equal_to_the_configured_limit_is_not(self, tmp_path):
-        """The run stopped where its config said to stop."""
-        state = manager(tmp_path, record_limit=2, max_records=2)
-
-        assert state.adopt_truncation_marker("act") is False
-
-    def test_a_null_cap_is_not(self, tmp_path):
-        state = manager(tmp_path, record_limit=8, max_records=None)
-
-        assert state.adopt_truncation_marker("act") is False
-
-    def test_a_stamp_without_the_key_is_not(self, tmp_path):
-        state = manager(tmp_path, record_limit=8)
-
-        assert state.adopt_truncation_marker("act") is False
+        assert state.adopt_truncation_marker("act") is expected
 
 
 class TestACapThatNeverCappedAnything:

@@ -154,29 +154,22 @@ class TestTheHelperSeparatesNotAFileFromCannotTell:
 
         assert should_skip_item(input_dir / "nested", input_dir, set()) is True
 
-    def test_a_dotfile_the_walk_cannot_stat_is_still_just_skipped(self, tmp_path):
-        """A deliberate exclusion outranks a failed stat: a dotfile would never be
-        processed, so reporting it as a lost record is a false alarm."""
-        input_dir = _staging(tmp_path, dangling=(".hidden.json",))
+    @pytest.mark.parametrize(
+        ("name", "processed", "skip_kwargs"),
+        [
+            # A dotfile would never be processed, so reporting it as lost is a false alarm.
+            pytest.param(".hidden.json", set(), {}, id="dotfile"),
+            pytest.param("gone.txt", set(), {"file_type_filter": {"json"}}, id="filtered_suffix"),
+            pytest.param("gone.json", {Path("gone.json")}, {}, id="already_processed"),
+        ],
+    )
+    def test_a_deliberate_exclusion_the_walk_cannot_stat_is_still_just_skipped(
+        self, tmp_path, name, processed, skip_kwargs
+    ):
+        """A deliberate exclusion outranks a failed stat."""
+        input_dir = _staging(tmp_path, dangling=(name,))
 
-        assert should_skip_item(input_dir / ".hidden.json", input_dir, set()) is True
-
-    def test_a_filtered_suffix_the_walk_cannot_stat_is_still_just_skipped(self, tmp_path):
-        """Same reasoning for the suffix filter."""
-        input_dir = _staging(tmp_path, dangling=("gone.txt",))
-
-        assert (
-            should_skip_item(input_dir / "gone.txt", input_dir, set(), file_type_filter={"json"})
-            is True
-        )
-
-    def test_an_already_processed_path_the_walk_cannot_stat_is_still_just_skipped(self, tmp_path):
-        """And for a path a previous pass already took."""
-        input_dir = _staging(tmp_path, dangling=("gone.json",))
-
-        processed = {Path("gone.json")}
-
-        assert should_skip_item(input_dir / "gone.json", input_dir, processed) is True
+        assert should_skip_item(input_dir / name, input_dir, processed, **skip_kwargs) is True
 
     def test_a_readable_file_is_still_processed(self, tmp_path):
         """Control: the happy path must not become a loss."""

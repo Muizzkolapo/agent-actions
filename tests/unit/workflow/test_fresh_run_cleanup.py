@@ -10,6 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def _make_coordinator_stub(
     tmp_path: Path,
@@ -120,25 +122,17 @@ class TestFreshRunClearsBatchState:
 class TestFreshRunExistingBehavior:
     """Existing cleanup behavior must be preserved."""
 
-    def test_delete_target_called_per_action(self, tmp_path: Path):
+    @pytest.mark.parametrize(
+        "method", ["delete_target", "clear_disposition", "clear_prompt_traces"]
+    )
+    def test_each_store_clear_runs_once_per_action(self, tmp_path: Path, method):
         stub = _make_coordinator_stub(tmp_path, ["a1", "a2"])
         stub._clear_for_fresh_run()
 
-        assert stub.storage_backend.delete_target.call_count == 2
-        stub.storage_backend.delete_target.assert_any_call("a1")
-        stub.storage_backend.delete_target.assert_any_call("a2")
-
-    def test_clear_disposition_called_per_action(self, tmp_path: Path):
-        stub = _make_coordinator_stub(tmp_path, ["a1", "a2"])
-        stub._clear_for_fresh_run()
-
-        assert stub.storage_backend.clear_disposition.call_count == 2
-
-    def test_clear_prompt_traces_called_per_action(self, tmp_path: Path):
-        stub = _make_coordinator_stub(tmp_path, ["a1", "a2"])
-        stub._clear_for_fresh_run()
-
-        assert stub.storage_backend.clear_prompt_traces.call_count == 2
+        clear = getattr(stub.storage_backend, method)
+        assert clear.call_count == 2
+        clear.assert_any_call("a1")
+        clear.assert_any_call("a2")
 
     def test_state_manager_reset_called(self, tmp_path: Path):
         stub = _make_coordinator_stub(tmp_path, ["a1"])
@@ -190,30 +184,28 @@ class TestFreshRunExistingBehavior:
 class TestFreshRunClearsBatchJsonlFiles:
     """--fresh must delete batch JSONL/JSON artifacts from target/{action}/batch/."""
 
-    def test_jsonl_files_deleted(self, tmp_path: Path):
-        batch_dir = tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "extract" / "batch"
+    @pytest.mark.parametrize(
+        ("action", "filenames"),
+        [
+            pytest.param(
+                "extract",
+                ["extract_openai_batch_input.jsonl", "batch_abc123_results.jsonl"],
+                id="jsonl",
+            ),
+            # Anthropic writes .json input files, not .jsonl.
+            pytest.param("classify", ["classify_anthropic_batch_input.json"], id="json"),
+        ],
+    )
+    def test_batch_files_deleted(self, tmp_path: Path, action, filenames):
+        batch_dir = tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / action / "batch"
         batch_dir.mkdir(parents=True)
-        (batch_dir / "extract_openai_batch_input.jsonl").write_text("{}")
-        (batch_dir / "batch_abc123_results.jsonl").write_text("{}")
+        for name in filenames:
+            (batch_dir / name).write_text("{}")
 
-        stub = _make_coordinator_stub(tmp_path, ["extract"])
+        stub = _make_coordinator_stub(tmp_path, [action])
         stub._clear_for_fresh_run()
 
-        assert not (batch_dir / "extract_openai_batch_input.jsonl").exists()
-        assert not (batch_dir / "batch_abc123_results.jsonl").exists()
-
-    def test_json_files_deleted(self, tmp_path: Path):
-        """Anthropic writes .json input files, not .jsonl."""
-        batch_dir = (
-            tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "classify" / "batch"
-        )
-        batch_dir.mkdir(parents=True)
-        (batch_dir / "classify_anthropic_batch_input.json").write_text("{}")
-
-        stub = _make_coordinator_stub(tmp_path, ["classify"])
-        stub._clear_for_fresh_run()
-
-        assert not (batch_dir / "classify_anthropic_batch_input.json").exists()
+        assert [name for name in filenames if (batch_dir / name).exists()] == []
 
     def test_non_json_files_preserved(self, tmp_path: Path):
         """Non-JSON/JSONL files in batch/ are not deleted."""
@@ -270,16 +262,6 @@ class TestFreshKeepsTheNameWhileThePayloadIsThere:
         workflow.config.resolve_project_root.return_value = Path("/nonexistent-project")
         return workflow
 
-    def test_the_registry_stays_when_a_record_would_not_go(self):
-        from agent_actions.workflow.coordinator import AgentWorkflow
-
-        workflow = self._workflow()
-        workflow._release_batch_records.return_value = False
-
-        AgentWorkflow._clear_for_fresh_run(workflow)
-
-        workflow.storage_backend.clear_batch_state.assert_not_called()
-
     def test_the_registry_goes_once_the_records_are_gone(self):
         from agent_actions.workflow.coordinator import AgentWorkflow
 
@@ -290,12 +272,19 @@ class TestFreshKeepsTheNameWhileThePayloadIsThere:
 
         workflow.storage_backend.clear_batch_state.assert_called_once_with("summarize")
 
-    def test_a_registry_that_cannot_be_read_keeps_itself(self):
-        """A read that failed proves nothing went, so it is the same case."""
+    @pytest.mark.parametrize(
+        ("attribute", "value"),
+        [
+            pytest.param("return_value", False, id="a_record_would_not_go"),
+            # A read that failed proves nothing went, so it is the same case.
+            pytest.param("side_effect", OSError("database is locked"), id="unreadable"),
+        ],
+    )
+    def test_the_registry_stays_unless_the_records_are_gone(self, attribute, value):
         from agent_actions.workflow.coordinator import AgentWorkflow
 
         workflow = self._workflow()
-        workflow._release_batch_records.side_effect = OSError("database is locked")
+        setattr(workflow._release_batch_records, attribute, value)
 
         AgentWorkflow._clear_for_fresh_run(workflow)
 

@@ -21,62 +21,46 @@ from agent_actions.processing.recovery.retry import (
 class TestClassifyError:
     """Tests for error classification."""
 
-    def test_classify_rate_limit_error(self):
-        """RateLimitError classified as rate_limit."""
-        error = RateLimitError("Rate limit exceeded")
-        assert classify_error(error) == "rate_limit"
-
-    def test_classify_timeout_error(self):
-        """NetworkError with timeout classified as timeout."""
-        error = NetworkError("Request timeout")
-        assert classify_error(error) == "timeout"
-
-    def test_classify_network_error(self):
-        """NetworkError without timeout classified as network_error."""
-        error = NetworkError("Connection refused")
-        assert classify_error(error) == "network_error"
-
-    def test_classify_vendor_api_error(self):
-        """VendorAPIError classified as api_error."""
-        error = VendorAPIError("API error")
-        assert classify_error(error) == "api_error"
-
-    def test_classify_unknown_error(self):
-        """Unknown error type classified as unknown."""
-        error = ValueError("Some error")
-        assert classify_error(error) == "unknown"
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            pytest.param(RateLimitError("Rate limit exceeded"), "rate_limit", id="rate-limit"),
+            pytest.param(NetworkError("Request timeout"), "timeout", id="network-timeout"),
+            pytest.param(NetworkError("Connection refused"), "network_error", id="network-other"),
+            pytest.param(VendorAPIError("API error"), "api_error", id="vendor-api"),
+            pytest.param(ValueError("Some error"), "unknown", id="unknown"),
+        ],
+    )
+    def test_classify_error(self, error, expected):
+        assert classify_error(error) == expected
 
 
 class TestIsRetriableError:
     """Tests for is_retriable_error function."""
 
-    def test_network_error_is_retriable(self):
-        """NetworkError is retriable."""
-        assert is_retriable_error(NetworkError("timeout"))
-
-    def test_rate_limit_error_is_retriable(self):
-        """RateLimitError is retriable."""
-        assert is_retriable_error(RateLimitError("rate limited"))
-
-    def test_vendor_api_error_not_retriable(self):
-        """VendorAPIError is not retriable by default."""
-        assert not is_retriable_error(VendorAPIError("api error"))
-
-    def test_vendor_api_error_transient_json_parse_is_retriable(self):
-        """VendorAPIError with transient JSON parse message is retriable."""
-        error = VendorAPIError(
-            "openai API error: We could not parse the JSON body of your request."
-        )
-        assert is_retriable_error(error)
-
-    def test_vendor_api_error_schema_processing_is_retriable(self):
-        """VendorAPIError with schema processing message is retriable."""
-        error = VendorAPIError("We are currently processing your JSON schema. Please try again.")
-        assert is_retriable_error(error)
-
-    def test_value_error_not_retriable(self):
-        """ValueError is not retriable."""
-        assert not is_retriable_error(ValueError("bad value"))
+    @pytest.mark.parametrize(
+        ("error", "expected"),
+        [
+            pytest.param(NetworkError("timeout"), True, id="network"),
+            pytest.param(RateLimitError("rate limited"), True, id="rate-limit"),
+            pytest.param(VendorAPIError("api error"), False, id="vendor-api"),
+            pytest.param(
+                VendorAPIError(
+                    "openai API error: We could not parse the JSON body of your request."
+                ),
+                True,
+                id="vendor-transient-json-parse",
+            ),
+            pytest.param(
+                VendorAPIError("We are currently processing your JSON schema. Please try again."),
+                True,
+                id="vendor-schema-processing",
+            ),
+            pytest.param(ValueError("bad value"), False, id="value-error"),
+        ],
+    )
+    def test_is_retriable_error(self, error, expected):
+        assert is_retriable_error(error) is expected
 
 
 class TestRetryServiceOnlineSuccess:

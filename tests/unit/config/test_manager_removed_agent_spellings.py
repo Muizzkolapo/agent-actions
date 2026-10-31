@@ -24,28 +24,22 @@ def _bare_manager() -> ConfigManager:
     return cm
 
 
-class TestMergeAgentConfigsRefusesRemovedSpellings:
-    def test_depends_on_refused_not_silently_misread(self):
-        cm = _bare_manager()
-        user_agents = [
-            {
-                "agent_type": "consumer",
-                "model_vendor": "openai",
-                "model_name": "gpt-4",
-                "depends_on": ["producer"],
-            }
-        ]
-        with pytest.raises(ConfigurationError, match="removed field spelling"):
-            cm.merge_agent_configs(user_agents)
+_REMOVED = [
+    pytest.param("depends_on", ["producer"], id="depends_on"),
+    pytest.param("skip_if", "1 == 2", id="skip_if"),
+]
 
-    def test_skip_if_refused_not_silently_ignored(self):
+
+class TestMergeAgentConfigsRefusesRemovedSpellings:
+    @pytest.mark.parametrize(("key", "value"), _REMOVED)
+    def test_removed_spelling_refused_not_silently_misread(self, key, value):
         cm = _bare_manager()
         user_agents = [
             {
                 "agent_type": "consumer",
                 "model_vendor": "openai",
                 "model_name": "gpt-4",
-                "skip_if": "1 == 2",
+                key: value,
             }
         ]
         with pytest.raises(ConfigurationError, match="removed field spelling"):
@@ -86,16 +80,10 @@ class TestDefaultAgentConfigRefusesRemovedSpellings:
     disappears and the setting stops working across every agent at once.
     """
 
-    def test_depends_on_in_project_block_refused(self):
+    @pytest.mark.parametrize(("key", "value"), _REMOVED)
+    def test_removed_spelling_in_project_block_refused(self, key, value):
         cm = _bare_manager()
-        cm.default_config = {"default_agent_config": {"depends_on": ["ghost"]}}
-
-        with pytest.raises(ConfigurationError, match="removed field spelling"):
-            cm.merge_agent_configs([{"agent_type": "consumer", "chunk_config": {}}])
-
-    def test_skip_if_in_project_block_refused(self):
-        cm = _bare_manager()
-        cm.default_config = {"default_agent_config": {"skip_if": "1 == 1"}}
+        cm.default_config = {"default_agent_config": {key: value}}
 
         with pytest.raises(ConfigurationError, match="removed field spelling"):
             cm.merge_agent_configs([{"agent_type": "consumer", "chunk_config": {}}])

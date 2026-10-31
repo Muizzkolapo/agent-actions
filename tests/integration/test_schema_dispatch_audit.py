@@ -62,6 +62,9 @@ SAMPLE_JSON_SCHEMA: dict[str, Any] = {
 }
 
 
+_VENDORS = ["openai", "anthropic", "gemini", "ollama_local", "ollama_cloud", "groq", "cohere"]
+
+
 # ===================================================================
 # 1. Schema Resolution
 # ===================================================================
@@ -295,20 +298,11 @@ class TestVendorCompilation:
         result = _compile_schema_for_vendor(SAMPLE_UNIFIED_SCHEMA, "unknown_vendor", "test")
         assert result is None
 
-    def test_all_vendors_receive_required_fields(self):
+    @pytest.mark.parametrize("vendor", _VENDORS)
+    def test_all_vendors_receive_required_fields(self, vendor):
         """Every supported vendor includes required field info in compiled output."""
-        vendors = [
-            "openai",
-            "anthropic",
-            "gemini",
-            "ollama_local",
-            "ollama_cloud",
-            "groq",
-            "cohere",
-        ]
-        for vendor in vendors:
-            compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
-            assert compiled is not None, f"{vendor} returned None"
+        compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, vendor)
+        assert compiled is not None, f"{vendor} returned None"
 
     def test_gemini_empty_schema(self):
         """Gemini with zero fields produces valid structure with empty properties."""
@@ -426,66 +420,57 @@ class TestDispatchInSchema:
         # Context retains the offending fragment for downstream diagnostics.
         assert exc_info.value.context.get("schema_fragment") == schema_str
 
-    def test_recursive_injection_in_dict(self):
-        """_inject_functions_into_schema recursively processes dict values."""
-        schema = {"field_a": "regular_value", "field_b": {"nested": "value"}}
-        # No dispatch_task strings, so should return identical structure
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            {"field_a": "regular_value", "field_b": {"nested": "value"}},
+            ["regular_value", {"nested": "value"}],
+            {"type": "string", "description": "A text field"},
+        ],
+        ids=["dict", "list", "plain-strings"],
+    )
+    def test_injection_without_dispatch_returns_the_schema_unchanged(self, schema):
+        """_inject_functions_into_schema recurses through dicts and lists and leaves
+        strings without dispatch_task() as written."""
         result = _inject_functions_into_schema(schema, None, None, None, {})
         assert result == schema
 
-    def test_recursive_injection_in_list(self):
-        """_inject_functions_into_schema recursively processes list items."""
-        schema = ["regular_value", {"nested": "value"}]
-        result = _inject_functions_into_schema(schema, None, None, None, {})
-        assert result == schema
-
-    def test_non_dispatch_strings_in_schema_preserved(self):
-        """Regular strings in schema fields are not modified."""
-        schema = {"type": "string", "description": "A text field"}
-        result = _inject_functions_into_schema(schema, None, None, None, {})
-        assert result["type"] == "string"
-        assert result["description"] == "A text field"
-
-    def test_unresolved_dispatch_raises_during_injection(self):
-        """Unresolved dispatch_task must raise at injection — never reach the vendor.
-
-        Previously this silently passed an unresolved 'dispatch_task(...)' string
-        into the compiled schema, producing opaque LLM API errors. The contract
-        is now to fail fast at compile time.
-        """
-        schema_with_dispatch = {
-            "name": "test",
-            "fields": [
-                {"id": "static_field", "type": "string", "required": True},
-                {"id": "dynamic_field", "type": 'dispatch_task("missing_fn")', "required": True},
-            ],
-        }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            _inject_functions_into_schema(schema_with_dispatch, None, None, None, {})
-        assert "dispatch_task() resolution failed" in str(exc_info.value)
-
-    def test_first_dispatch_failure_short_circuits(self):
-        """First failing dispatch_task() aborts the traversal with a raise."""
-        schema = {
-            "field_a": 'dispatch_task("missing_a")',
-            "field_b": 'dispatch_task("missing_b")',
-            "field_c": "regular_string",
-        }
-        with pytest.raises(ConfigValidationError):
+    @pytest.mark.parametrize(
+        "schema",
+        [
+            {
+                "name": "test",
+                "fields": [
+                    {"id": "static_field", "type": "string", "required": True},
+                    {
+                        "id": "dynamic_field",
+                        "type": 'dispatch_task("missing_fn")',
+                        "required": True,
+                    },
+                ],
+            },
+            {
+                "field_a": 'dispatch_task("missing_a")',
+                "field_b": 'dispatch_task("missing_b")',
+                "field_c": "regular_string",
+            },
+            {
+                "outer": {
+                    "inner": 'dispatch_task("nested_fn")',
+                    "list_field": ['dispatch_task("list_fn")', "normal"],
+                }
+            },
+        ],
+        ids=["in-field-type", "multiple", "nested"],
+    )
+    def test_unresolved_dispatch_raises_during_injection(self, schema):
+        """Unresolved dispatch_task must raise at injection, wherever it sits, and
+        never reach the vendor as an opaque string."""
+        with pytest.raises(ConfigValidationError, match=r"dispatch_task\(\) resolution failed"):
             _inject_functions_into_schema(schema, None, None, None, {})
 
-    def test_dispatch_task_in_nested_positions_raises(self):
-        """dispatch_task failures inside nested dict/list positions still raise."""
-        schema = {
-            "outer": {
-                "inner": 'dispatch_task("nested_fn")',
-                "list_field": ['dispatch_task("list_fn")', "normal"],
-            }
-        }
-        with pytest.raises(ConfigValidationError):
-            _inject_functions_into_schema(schema, None, None, None, {})
-
-    def test_dispatch_failure_full_pipeline_raises(self):
+    @pytest.mark.parametrize("vendor", _VENDORS)
+    def test_dispatch_failure_full_pipeline_raises(self, vendor):
         """Full pipeline path: dispatch fails → ResponseSchemaCompiler.compile raises.
 
         Replaces the prior 'compile silently produces an unresolved schema for
@@ -502,17 +487,8 @@ class TestDispatchInSchema:
         compiler = ResponseSchemaCompiler(project_root=None, tools_path="/tmp/_missing_tools")
         config = {"schema": schema, "name": "test_action"}
 
-        for vendor in [
-            "openai",
-            "anthropic",
-            "gemini",
-            "ollama_local",
-            "ollama_cloud",
-            "groq",
-            "cohere",
-        ]:
-            with pytest.raises(ConfigValidationError):
-                compiler.compile(config, vendor)
+        with pytest.raises(ConfigValidationError):
+            compiler.compile(config, vendor)
 
 
 # ===================================================================
@@ -677,18 +653,12 @@ class TestOutputValidation:
         assert not report.is_compliant
         assert "score" in report.missing_required
 
-    def test_malformed_properties_detected(self):
-        """Schema with properties: null is detected as structural error."""
-        schema = {"type": "object", "properties": None}
-        errors = _check_properties_type(schema)
+    @pytest.mark.parametrize("properties", [None, "invalid"], ids=["null", "string"])
+    def test_malformed_properties_detected(self, properties):
+        """Schema whose properties is not a dict is detected as a structural error."""
+        errors = _check_properties_type({"type": "object", "properties": properties})
         assert len(errors) > 0
         assert "must be a dict" in errors[0]
-
-    def test_properties_string_detected(self):
-        """Schema with properties as string is detected."""
-        schema = {"type": "object", "properties": "invalid"}
-        errors = _check_properties_type(schema)
-        assert len(errors) > 0
 
     def test_array_output_validation(self):
         """Validator handles array output by checking all items."""

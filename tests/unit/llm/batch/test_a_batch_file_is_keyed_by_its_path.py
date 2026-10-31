@@ -47,22 +47,19 @@ def test_a_batch_output_is_stored_under_its_input_path_as_json(name, stored):
 
 
 @EACH_KEY
-@pytest.mark.parametrize("name", ["page.json", "page.csv", "noext"])
-def test_a_top_level_file_is_keyed_as_it_was(key, name):
-    build, prefix = key
-    assert build("act", name) == f"{prefix}:act:{name}"
-
-
-@EACH_KEY
-def test_a_file_in_a_subdirectory_keeps_its_directory_in_the_key(key):
-    build, prefix = key
-    assert build("act", "sub/page.json") == f"{prefix}:act:sub/page.json"
-
-
-@EACH_KEY
-@pytest.mark.parametrize("name", ["v1..2/page.json", "notes..v2.json"])
-def test_two_dots_inside_a_name_are_part_of_the_name(key, name):
-    """The store refuses only a `..` that is a whole part; online writes these files."""
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("page.json", id="top-level-json"),
+        pytest.param("page.csv", id="top-level-csv"),
+        pytest.param("noext", id="top-level-noext"),
+        pytest.param("sub/page.json", id="subdirectory-kept"),
+        # The store refuses only a `..` that is a whole part; online writes these files.
+        pytest.param("v1..2/page.json", id="dots-inside-directory-name"),
+        pytest.param("notes..v2.json", id="dots-inside-file-name"),
+    ],
+)
+def test_a_file_is_keyed_by_its_path_under_the_input_root(key, name):
     build, prefix = key
     assert build("act", name) == f"{prefix}:act:{name}"
 

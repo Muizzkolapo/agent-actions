@@ -136,30 +136,25 @@ class TestWithTheFramework:
         finally:
             backend.close()
 
-    def test_one_record_that_would_not_go_keeps_the_store(self, script, project, monkeypatch):
-        """Not every record — one is enough, because the store names them all."""
+    @pytest.mark.parametrize(
+        "released",
+        # Not every record has to refuse; one is enough, because the store names them all.
+        [False, True],
+        ids=["one-record-stays-keeps-store", "all-go-release-store"],
+    )
+    def test_the_store_is_released_only_when_every_record_goes(
+        self, script, project, monkeypatch, released
+    ):
         from agent_actions.llm.providers import local_batch_records
 
         root, base = project
         self._registry(base, "mock_batch_abc123")
         _record(root)
         monkeypatch.setattr(
-            local_batch_records, "release_local_batch_record", lambda batch_id: False
+            local_batch_records, "release_local_batch_record", lambda batch_id: released
         )
 
-        assert script.release_batch_records(root, base, "wf") is False
-
-    def test_records_that_all_go_release_the_store(self, script, project, monkeypatch):
-        from agent_actions.llm.providers import local_batch_records
-
-        root, base = project
-        self._registry(base, "mock_batch_abc123")
-        _record(root)
-        monkeypatch.setattr(
-            local_batch_records, "release_local_batch_record", lambda batch_id: True
-        )
-
-        assert script.release_batch_records(root, base, "wf") is True
+        assert script.release_batch_records(root, base, "wf") is released
 
 
 class TestTheHelperItself:

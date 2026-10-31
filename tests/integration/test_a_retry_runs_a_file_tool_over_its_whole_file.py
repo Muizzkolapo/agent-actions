@@ -405,20 +405,6 @@ class TestARollUpOverTheFile:
         assert "Page beta." in _summaries(held["pages1.json"])
         assert _summaries(held["pages2.json"]) == ["Page delta. + Page gamma."]
 
-    def test_the_file_holds_one_roll_up_of_every_record(self, project):
-        _failed_then_fixed(project)
-
-        _retry(project)
-
-        assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
-
-    def test_the_tool_is_handed_the_whole_file(self, project):
-        _failed_then_fixed(project)
-
-        _retry(project)
-
-        assert _handed(project) == [["Page alpha.", "Page beta."]]
-
     def test_the_other_file_is_left_as_it_was(self, project):
         before = _failed_then_fixed(project)["pages2.json"]
 
@@ -442,14 +428,6 @@ class TestARollUpOverTheFile:
         output = _retry(project)
 
         assert "cannot be attributed" not in output
-
-    def test_a_retry_of_one_record_rolls_up_its_whole_file(self, project):
-        _failed_then_fixed(project)
-
-        _retry(project, "--record", _alpha(project))
-
-        assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
-        assert _handed(project) == [["Page alpha.", "Page beta."]]
 
     def test_a_run_after_the_retry_finds_it_complete_and_whole(self, project):
         _failed_then_fixed(project)
@@ -524,9 +502,10 @@ class TestACountAcrossTheFile:
         assert _summaries(rows["pages2.json"]) == ["Page gamma. (1 of 2)", "Page delta. (2 of 2)"]
 
 
+@pytest.mark.parametrize("config", [ONLINE, BATCH_ABOVE], ids=["online-above", "batch-above"])
 @pytest.mark.parametrize("one_record", [False, True], ids=["retry", "retry --record"])
-def test_a_batch_action_above_changes_nothing(tmp_path, one_record):
-    project = _project(tmp_path, BATCH_ABOVE, _ROLL_UP)
+def test_a_retry_rolls_up_the_whole_file_and_leaves_the_other(tmp_path, config, one_record):
+    project = _project(tmp_path, config, _ROLL_UP)
     _failed_then_fixed(project)
 
     _retry(project, *(["--record", _alpha(project)] if one_record else []))

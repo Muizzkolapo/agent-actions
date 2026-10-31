@@ -126,21 +126,13 @@ class TestUnsupportedGuardBehavior:
 
         return GuardEvaluator()
 
-    def test_write_to_behavior_raises_config_error(self):
-        """K-2: 'write_to' behavior must raise ConfigValidationError."""
+    @pytest.mark.parametrize("behavior", ["write_to", "reprocess"])
+    def test_unsupported_behavior_raises_config_error(self, behavior):
+        """K-2: 'write_to' and 'reprocess' behaviors must raise ConfigValidationError."""
         from agent_actions.errors.configuration import ConfigValidationError
 
         ev = self._make_evaluator()
-        guard_config = {"clause": "True", "scope": "item", "behavior": "write_to"}
-        with pytest.raises(ConfigValidationError):
-            ev._evaluate_guard({}, guard_config)
-
-    def test_reprocess_behavior_raises_config_error(self):
-        """K-2: 'reprocess' behavior must raise ConfigValidationError."""
-        from agent_actions.errors.configuration import ConfigValidationError
-
-        ev = self._make_evaluator()
-        guard_config = {"clause": "True", "scope": "item", "behavior": "reprocess"}
+        guard_config = {"clause": "True", "scope": "item", "behavior": behavior}
         with pytest.raises(ConfigValidationError):
             ev._evaluate_guard({}, guard_config)
 

@@ -201,17 +201,19 @@ class TestOnEmptyOnTheAction:
 
 
 class TestOnEmptyInheritedFromADefault:
-    def test_the_workflow_s_defaults_reach_the_action(self, project):
-        """Every other key the expansion inherits can be written under `defaults:`."""
-        _on_empty(project, TOOL_WORKFLOW, defaults="skip")
-
-        result = _run(TOOL_WORKFLOW)
-
-        assert result.exit_code == 0, result.output
-        assert _records(project, TOOL_WORKFLOW, "flatten") == ["passthrough", "success"]
-
-    def test_the_action_s_own_overrides_the_workflow_s_defaults(self, project):
-        _on_empty(project, TOOL_WORKFLOW, defaults="error", action="skip")
+    @pytest.mark.parametrize(
+        "written",
+        [
+            {"defaults": "skip"},
+            {"defaults": "error", "action": "skip"},
+            {"project_default": "error", "action": "skip"},
+        ],
+        ids=["defaults", "action-over-defaults", "action-over-project-default"],
+    )
+    def test_the_nearest_skip_reaches_the_action(self, project, written):
+        """`defaults:` and the project's `default_agent_config:` sit under the action's
+        own key, as for every key the expansion inherits."""
+        _on_empty(project, TOOL_WORKFLOW, **written)
 
         result = _run(TOOL_WORKFLOW)
 
@@ -225,16 +227,6 @@ class TestOnEmptyInheritedFromADefault:
 
         assert result.exit_code != 0, result.output
         assert _halted_on_empty(project, TOOL_WORKFLOW, "flatten")
-
-    def test_the_action_s_own_overrides_the_project_s_default(self, project):
-        """The project's `default_agent_config:` sits under the action, as for every
-        key the expansion inherits."""
-        _on_empty(project, TOOL_WORKFLOW, project_default="error", action="skip")
-
-        result = _run(TOOL_WORKFLOW)
-
-        assert result.exit_code == 0, result.output
-        assert _records(project, TOOL_WORKFLOW, "flatten") == ["passthrough", "success"]
 
     def test_a_project_default_it_does_not_take_is_refused(self, project):
         """`default_agent_config:` takes keys it does not declare, so a misspelling

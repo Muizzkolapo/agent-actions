@@ -1,4 +1,4 @@
-"""Tool code a page shows returns every field the schema it goes with requires.
+"""Tool code a page or an example shows returns every field its schema requires.
 
 A tool's function goes with a schema when an action that runs it as its `impl` names
 one: in a YAML block on the same page, or, for an example's page, in that example's
@@ -6,6 +6,10 @@ workflow. A schema written inline or kept in the example's `schema/` directory i
 compiled as the loader compiles it, and the function is put to pre-flight's
 required-key check. A tool that leaves a required field out fails every record, and
 pre-flight refuses it.
+
+The tool modules under `examples/*/tools` are paired the same way with the schema the
+action running them names in the example's workflow, so a copied example passes
+pre-flight.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from agent_actions.validation.udf_required_field_validator import (
 )
 
 _REPO = Path(__file__).resolve().parents[3]
+_EXAMPLES = _REPO / "examples"
 _PAGES = sorted(
     [
         *(_REPO / "docs.agent-actions" / "docs").rglob("*.md*"),
@@ -122,12 +127,53 @@ def _pairs() -> list[Any]:
     return found
 
 
+def _example_pairs() -> list[Any]:
+    """One per function an example's tool module defines and the schema its action names."""
+    found = []
+    for example in sorted(p for p in _EXAMPLES.iterdir() if (p / "tools").is_dir()):
+        actions = _workflow_actions(example)
+        for module in sorted((example / "tools").rglob("*.py")):
+            source = module.read_text(encoding="utf-8")
+            for func in ast.parse(source).body:
+                if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for action in actions:
+                    if action["impl"] != func.name:
+                        continue
+                    required = _required(action["schema"], action["name"], example)
+                    if not required:
+                        continue
+                    found.append(
+                        pytest.param(
+                            action["name"],
+                            ast.get_source_segment(source, func),
+                            required,
+                            id=f"{module.relative_to(_EXAMPLES)}:{func.name}",
+                        )
+                    )
+    return found
+
+
+def _both_corpora() -> list[Any]:
+    return [
+        pytest.param(*param.values, id=f"{corpus}:{param.id}")
+        for corpus, pairs in (("docs", _pairs()), ("example", _example_pairs()))
+        for param in pairs
+    ]
+
+
 def test_the_incident_triage_patterns_are_paired_with_their_schemas():
     ids = {param.id for param in _pairs()}
     page = "examples/incident_triage/docs/PATTERNS.md"
     for tool in ("aggregate_severity_votes", "assign_team_based_on_impact"):
         assert any(i.startswith(page) and i.endswith(f":{tool}") for i in ids), tool
     assert any(i.startswith(page) and i.endswith(":format_incident_triage") for i in ids)
+
+
+def test_the_incident_triage_aggregator_module_is_paired_with_its_schema():
+    ids = {param.id for param in _example_pairs()}
+    module = "incident_triage/tools/incident_triage/aggregate_severity_votes.py"
+    assert f"{module}:aggregate_severity_votes" in ids
 
 
 def test_a_tool_that_leaves_out_a_required_field_is_found():
@@ -138,7 +184,7 @@ def test_a_tool_that_leaves_out_a_required_field_is_found():
     assert len(findings) == 1 and "'triage_id'" in findings[0]
 
 
-@pytest.mark.parametrize(("action", "shown", "required"), _pairs())
+@pytest.mark.parametrize(("action", "shown", "required"), _both_corpora())
 def test_a_shown_tool_returns_every_field_its_schema_requires(action, shown, required):
     assert (
         find_conditional_required_field_risks({action: {"source": shown, "required": required}})

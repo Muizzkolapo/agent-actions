@@ -69,56 +69,27 @@ class TestHandleBatchGenerationNothingToSend:
 class TestHITLFileModePropagatesExceptions:
     """C-3 — non-AgentActionsError propagates bare (not swallowed or wrapped)."""
 
-    def test_runtime_error_propagates_bare(self):
+    @pytest.mark.parametrize(
+        "original",
+        [
+            pytest.param(RuntimeError("infra failure"), id="runtime_error"),
+            pytest.param(ValueError("bad value"), id="value_error"),
+            pytest.param(AgentActionsError("original app error"), id="agent_actions_error"),
+        ],
+    )
+    def test_the_original_exception_propagates_unwrapped(self, original):
         data = [{"source_guid": "sg-1", "content": {}}]
         context = ProcessingContext(
             agent_config={"kind": "hitl", "granularity": "file"},
             agent_name="review",
         )
         context.source_data = data
-        with (
-            patch(
-                "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-                side_effect=RuntimeError("infra failure"),
-            ),
-            pytest.raises(RuntimeError, match="infra failure"),
-        ):
-            HITLStrategy().invoke(data, context)
-
-    def test_non_agent_error_propagates_as_original_type(self):
-        data = [{"source_guid": "sg-1", "content": {}}]
-        context = ProcessingContext(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review",
-        )
-        context.source_data = data
-        original = ValueError("bad value")
         with (
             patch(
                 "agent_actions.processing.strategies.hitl.run_dynamic_agent",
                 side_effect=original,
             ),
-            pytest.raises(ValueError) as exc_info,
-        ):
-            HITLStrategy().invoke(data, context)
-
-        assert exc_info.value is original
-
-    def test_agent_actions_error_passes_through_unchanged(self):
-        """AgentActionsError is NOT re-wrapped — it re-raises directly."""
-        data = [{"source_guid": "sg-1", "content": {}}]
-        context = ProcessingContext(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review",
-        )
-        context.source_data = data
-        original = AgentActionsError("original app error")
-        with (
-            patch(
-                "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-                side_effect=original,
-            ),
-            pytest.raises(AgentActionsError) as exc_info,
+            pytest.raises(type(original)) as exc_info,
         ):
             HITLStrategy().invoke(data, context)
 

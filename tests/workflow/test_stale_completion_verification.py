@@ -224,58 +224,69 @@ class TestExecuteLevelAsyncVerification:
 # ---------------------------------------------------------------------------
 
 
+def _make_tracking_lock(backend):
+    """Return (TrackingLock, acquired_list) for patching backend._lock."""
+    acquired: list[str] = []
+    original = backend._lock
+
+    class TrackingLock:
+        def __enter__(self_inner):
+            acquired.append("locked")
+            return original.__enter__()
+
+        def __exit__(self_inner, *args):
+            return original.__exit__(*args)
+
+    return TrackingLock(), acquired
+
+
+def _seed_target(backend):
+    backend.write_target(
+        "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
+    )
+
+
+def _seed_source(backend):
+    backend.write_source("in.json", [{"source_guid": "abc", "val": 1}])
+
+
+def _seed_disposition(backend):
+    backend.set_disposition("action_a", "rec1", "skipped")
+
+
 class TestSQLiteBackendThreadSafeReads:
-    """list_target_files and read_target hold self._lock during the query."""
+    """Every read method holds self._lock during the query."""
 
-    def test_list_target_files_acquires_lock(self, tmp_path):
+    @pytest.mark.parametrize(
+        ("seed", "method", "args"),
+        [
+            pytest.param(_seed_target, "list_target_files", ("action_a",), id="list_target_files"),
+            pytest.param(_seed_target, "read_target", ("action_a", "out.json"), id="read_target"),
+            pytest.param(_seed_source, "read_source", ("in.json",), id="read_source"),
+            pytest.param(_seed_source, "list_source_files", (), id="list_source_files"),
+            pytest.param(_seed_disposition, "get_disposition", ("action_a",), id="get_disposition"),
+            pytest.param(
+                _seed_disposition,
+                "has_disposition",
+                ("action_a", "skipped"),
+                id="has_disposition",
+            ),
+            pytest.param(_seed_target, "preview_target", ("action_a",), id="preview_target"),
+            pytest.param(_seed_target, "get_storage_stats", (), id="get_storage_stats"),
+        ],
+    )
+    def test_read_acquires_lock(self, tmp_path, seed, method, args):
         from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
         backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
         backend.initialize()
-        backend.write_target(
-            "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
-        )
+        seed(backend)
 
-        acquired = []
-        original_lock = backend._lock
+        tracking_lock, acquired = _make_tracking_lock(backend)
+        with patch.object(backend, "_lock", tracking_lock):
+            getattr(backend, method)(*args)
 
-        class TrackingLock:
-            def __enter__(self_inner):
-                acquired.append("locked")
-                return original_lock.__enter__()
-
-            def __exit__(self_inner, *args):
-                return original_lock.__exit__(*args)
-
-        with patch.object(backend, "_lock", TrackingLock()):
-            backend.list_target_files("action_a")
-
-        assert "locked" in acquired, "list_target_files must acquire _lock"
-
-    def test_read_target_acquires_lock(self, tmp_path):
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-
-        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
-        backend.initialize()
-        backend.write_target(
-            "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
-        )
-
-        acquired = []
-        original_lock = backend._lock
-
-        class TrackingLock:
-            def __enter__(self_inner):
-                acquired.append("locked")
-                return original_lock.__enter__()
-
-            def __exit__(self_inner, *args):
-                return original_lock.__exit__(*args)
-
-        with patch.object(backend, "_lock", TrackingLock()):
-            backend.read_target("action_a", "out.json")
-
-        assert "locked" in acquired, "read_target must acquire _lock"
+        assert "locked" in acquired, f"{method} must acquire _lock"
 
     def test_concurrent_reads_return_correct_data(self, tmp_path):
         """Multiple threads reading simultaneously must all return correct data."""
@@ -306,103 +317,6 @@ class TestSQLiteBackendThreadSafeReads:
 
         assert not errors, f"Concurrent reads raised: {errors}"
         assert all(r == ["data.json"] for r in results), "All threads must see correct data"
-
-
-# ---------------------------------------------------------------------------
-# SQLiteBackend — lock-acquisition for remaining read methods
-# ---------------------------------------------------------------------------
-
-
-def _make_tracking_lock(backend):
-    """Return (TrackingLock, acquired_list) for patching backend._lock."""
-    acquired: list[str] = []
-    original = backend._lock
-
-    class TrackingLock:
-        def __enter__(self_inner):
-            acquired.append("locked")
-            return original.__enter__()
-
-        def __exit__(self_inner, *args):
-            return original.__exit__(*args)
-
-    return TrackingLock(), acquired
-
-
-class TestSQLiteBackendRemainingReadLocks:
-    """read_source, list_source_files, get_disposition, has_disposition,
-    preview_target, and get_storage_stats must all acquire self._lock."""
-
-    def _setup_backend(self, tmp_path):
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-
-        backend = SQLiteBackend(str(tmp_path / "test.db"), "test_workflow")
-        backend.initialize()
-        return backend
-
-    def test_read_source_acquires_lock(self, tmp_path):
-        backend = self._setup_backend(tmp_path)
-        backend.write_source("in.json", [{"source_guid": "abc", "val": 1}])
-
-        tracking_lock, acquired = _make_tracking_lock(backend)
-        with patch.object(backend, "_lock", tracking_lock):
-            backend.read_source("in.json")
-
-        assert "locked" in acquired, "read_source must acquire _lock"
-
-    def test_list_source_files_acquires_lock(self, tmp_path):
-        backend = self._setup_backend(tmp_path)
-        backend.write_source("in.json", [{"source_guid": "abc", "val": 1}])
-
-        tracking_lock, acquired = _make_tracking_lock(backend)
-        with patch.object(backend, "_lock", tracking_lock):
-            backend.list_source_files()
-
-        assert "locked" in acquired, "list_source_files must acquire _lock"
-
-    def test_get_disposition_acquires_lock(self, tmp_path):
-        backend = self._setup_backend(tmp_path)
-        backend.set_disposition("action_a", "rec1", "skipped")
-
-        tracking_lock, acquired = _make_tracking_lock(backend)
-        with patch.object(backend, "_lock", tracking_lock):
-            backend.get_disposition("action_a")
-
-        assert "locked" in acquired, "get_disposition must acquire _lock"
-
-    def test_has_disposition_acquires_lock(self, tmp_path):
-        backend = self._setup_backend(tmp_path)
-        backend.set_disposition("action_a", "rec1", "skipped")
-
-        tracking_lock, acquired = _make_tracking_lock(backend)
-        with patch.object(backend, "_lock", tracking_lock):
-            backend.has_disposition("action_a", "skipped")
-
-        assert "locked" in acquired, "has_disposition must acquire _lock"
-
-    def test_preview_target_acquires_lock(self, tmp_path):
-        backend = self._setup_backend(tmp_path)
-        backend.write_target(
-            "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
-        )
-
-        tracking_lock, acquired = _make_tracking_lock(backend)
-        with patch.object(backend, "_lock", tracking_lock):
-            backend.preview_target("action_a")
-
-        assert "locked" in acquired, "preview_target must acquire _lock"
-
-    def test_get_storage_stats_acquires_lock(self, tmp_path):
-        backend = self._setup_backend(tmp_path)
-        backend.write_target(
-            "action_a", "out.json", [{"_state": "processed", "_state_schema_version": 1, "id": 1}]
-        )
-
-        tracking_lock, acquired = _make_tracking_lock(backend)
-        with patch.object(backend, "_lock", tracking_lock):
-            backend.get_storage_stats()
-
-        assert "locked" in acquired, "get_storage_stats must acquire _lock"
 
 
 # ---------------------------------------------------------------------------

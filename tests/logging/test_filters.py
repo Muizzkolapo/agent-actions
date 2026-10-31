@@ -36,19 +36,32 @@ class TestRedactingFilter:
             assert expected in record.msg or "***" in record.msg, f"Failed for: {input_msg}"
 
     @pytest.mark.parametrize(
-        "msg,sensitive_value",
+        "msg,sensitive_value,marker",
         [
-            pytest.param("secret=mysecretvalue", "mysecretvalue", id="secret"),
-            pytest.param("token=mytokenvalue", "mytokenvalue", id="token"),
-            pytest.param("password=mypassword123", "mypassword123", id="password"),
+            pytest.param("secret=mysecretvalue", "mysecretvalue", "***", id="secret"),
+            pytest.param("token=mytokenvalue", "mytokenvalue", "***", id="token"),
+            pytest.param("password=mypassword123", "mypassword123", "***", id="password"),
             pytest.param(
                 "Using key sk-ant-api03-abcdefghij1234567890",
                 "sk-ant-api03-abcdefghij1234567890",
+                "***",
                 id="anthropic_key",
+            ),
+            pytest.param(
+                "Using key sk-abcdefghij1234567890abcdefghij12",
+                "sk-abcdefghij1234567890abcdefghij12",
+                "sk-***",
+                id="openai_key",
+            ),
+            pytest.param(
+                "Using key AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "AIza***",
+                id="google_key",
             ),
         ],
     )
-    def test_redacts_sensitive_patterns(self, msg, sensitive_value):
+    def test_redacts_sensitive_patterns(self, msg, sensitive_value, marker):
         """Test that various sensitive patterns are redacted."""
         filter_instance = RedactingFilter()
         record = logging.LogRecord(
@@ -62,39 +75,7 @@ class TestRedactingFilter:
         )
         filter_instance.filter(record)
         assert sensitive_value not in record.msg
-        assert "***" in record.msg
-
-    def test_redacts_openai_keys(self):
-        """Test that OpenAI API keys are redacted with sk-*** prefix."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="Using key sk-abcdefghij1234567890abcdefghij12",
-            args=(),
-            exc_info=None,
-        )
-        filter_instance.filter(record)
-        assert "sk-abcdefghij1234567890abcdefghij12" not in record.msg
-        assert "sk-***" in record.msg
-
-    def test_redacts_google_keys(self):
-        """Test that Google API keys are redacted with AIza*** prefix."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="Using key AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            args=(),
-            exc_info=None,
-        )
-        filter_instance.filter(record)
-        assert "AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in record.msg
-        assert "AIza***" in record.msg
+        assert marker in record.msg
 
     def test_multiple_patterns_in_single_message(self):
         """Test redacting multiple patterns in a single message."""

@@ -9,17 +9,11 @@ import pytest
 from pydantic import ValidationError
 
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
-from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigValidationError
 
 
 class TestActionConfigForbidsUnknownKeys:
     """ActionConfig with extra='forbid' rejects unrecognized keys."""
-
-    def test_unknown_key_raises_validation_error(self):
-        data = {"name": "test", "intent": "test", "totally_bogus": True}
-        with pytest.raises(ValidationError, match="totally_bogus"):
-            ActionConfig.model_validate(data)
 
     def test_unknown_guard_subkey_raises_via_field_validator(self):
         data = {
@@ -35,18 +29,6 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.version_context == {"key": "val"}
 
-    def test_vendor_model_shorthand_rejected(self):
-        """Old vendor/model shorthand rejected; use model_vendor/model_name."""
-        data = {"name": "a", "intent": "i", "vendor": "anthropic"}
-        with pytest.raises(ValidationError, match="vendor"):
-            ActionConfig.model_validate(data)
-
-    def test_version_context_by_field_name_rejected(self):
-        """version_context (without underscore) must not be accepted from user input."""
-        data = {"name": "a", "intent": "i", "version_context": {"key": "val"}}
-        with pytest.raises(ValidationError, match="version_context"):
-            ActionConfig.model_validate(data)
-
     # --- retry / reprompt mapping validation ---
 
     def test_retry_false_converts_to_none(self):
@@ -55,93 +37,54 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.retry is None
 
-    def test_retry_true_rejected(self):
-        """retry: true is ambiguous and rejected (must use mapping)."""
-        data = {"name": "a", "intent": "i", "retry": True}
-        with pytest.raises(ValidationError, match="retry"):
-            ActionConfig.model_validate(data)
-
     def test_retry_config_accepted(self):
         data = {"name": "a", "intent": "i", "retry": {"max_attempts": 3}}
         config = ActionConfig.model_validate(data)
         assert config.retry.max_attempts == 3
 
-    # --- Type enforcement ---
-
-    def test_temperature_rejects_non_numeric(self):
-        data = {"name": "a", "intent": "i", "temperature": "banana"}
-        with pytest.raises(ValidationError, match="temperature"):
-            ActionConfig.model_validate(data)
-
-    def test_max_tokens_rejects_non_int(self):
-        data = {"name": "a", "intent": "i", "max_tokens": "lots"}
-        with pytest.raises(ValidationError, match="max_tokens"):
-            ActionConfig.model_validate(data)
-
-    def test_top_level_on_schema_mismatch_rejected(self):
-        """Top-level on_schema_mismatch is no longer a valid key."""
-        data = {"name": "a", "intent": "i", "on_schema_mismatch": "reject"}
-        with pytest.raises(ValidationError, match="on_schema_mismatch"):
-            ActionConfig.model_validate(data)
-
-    def test_top_level_strict_schema_rejected(self):
-        """Top-level strict_schema is no longer a valid key."""
-        data = {"name": "a", "intent": "i", "strict_schema": True}
-        with pytest.raises(ValidationError, match="strict_schema"):
-            ActionConfig.model_validate(data)
-
-    def test_is_operational_rejects_non_bool(self):
-        data = {"name": "a", "intent": "i", "is_operational": "maybe"}
-        with pytest.raises(ValidationError, match="is_operational"):
-            ActionConfig.model_validate(data)
-
-    def test_chunk_size_rejects_non_int(self):
-        data = {"name": "a", "intent": "i", "chunk_size": "big"}
-        with pytest.raises(ValidationError, match="chunk_size"):
-            ActionConfig.model_validate(data)
-
-    # --- Other validations ---
+    @pytest.mark.parametrize(
+        ("extra", "match"),
+        [
+            pytest.param({"totally_bogus": True}, "totally_bogus", id="bogus_key"),
+            # use model_vendor/model_name instead
+            pytest.param({"vendor": "anthropic"}, "vendor", id="vendor_shorthand"),
+            # only the _version_context alias is accepted from user input
+            pytest.param(
+                {"version_context": {"key": "val"}},
+                "version_context",
+                id="version_context_by_name",
+            ),
+            # ambiguous: retry must be a mapping
+            pytest.param({"retry": True}, "retry", id="retry_true"),
+            pytest.param({"temperature": "banana"}, "temperature", id="temperature_str"),
+            pytest.param({"max_tokens": "lots"}, "max_tokens", id="max_tokens_str"),
+            pytest.param(
+                {"on_schema_mismatch": "reject"}, "on_schema_mismatch", id="on_schema_mismatch"
+            ),
+            pytest.param({"strict_schema": True}, "strict_schema", id="strict_schema"),
+            pytest.param({"is_operational": "maybe"}, "is_operational", id="is_operational_str"),
+            pytest.param({"chunk_size": "big"}, "chunk_size", id="chunk_size_str"),
+            pytest.param({"run_mode": "invalid"}, "run_mode", id="run_mode_invalid"),
+            pytest.param({"run_mode": "realtime"}, "run_mode", id="run_mode_realtime"),
+            # old spelling of skip_condition
+            pytest.param({"skip_if": "x > 1"}, "skip_if", id="skip_if"),
+            # old spelling of dependencies
+            pytest.param({"depends_on": ["other"]}, "depends_on", id="depends_on"),
+        ],
+    )
+    def test_invalid_key_or_value_rejected(self, extra, match):
+        with pytest.raises(ValidationError, match=match):
+            ActionConfig.model_validate({"name": "a", "intent": "i", **extra})
 
     def test_intent_required(self):
         with pytest.raises(ValidationError, match="intent"):
             ActionConfig.model_validate({"name": "a"})
-
-    def test_granularity_mixed_case_accepted(self):
-        """Granularity: Record (mixed-case) must be accepted."""
-        data = {"name": "a", "intent": "i", "granularity": "Record"}
-        config = ActionConfig.model_validate(data)
-        assert config.granularity.value == "record"
-
-    def test_run_mode_mixed_case_accepted(self):
-        """RunMode: BATCH (uppercase) must be accepted."""
-        data = {"name": "a", "intent": "i", "run_mode": "BATCH"}
-        config = ActionConfig.model_validate(data)
-        assert config.run_mode == RunMode.BATCH
-        assert config.run_mode.value == "batch"
 
     def test_run_mode_none_accepted(self):
         """RunMode: None must be accepted (optional field)."""
         data = {"name": "a", "intent": "i"}
         config = ActionConfig.model_validate(data)
         assert config.run_mode is None
-
-    def test_run_mode_invalid_rejected(self):
-        """RunMode: invalid value must be rejected."""
-        data = {"name": "a", "intent": "i", "run_mode": "invalid"}
-        with pytest.raises(ValidationError, match="run_mode"):
-            ActionConfig.model_validate(data)
-
-    def test_run_mode_realtime_rejected(self):
-        """RunMode: 'realtime' is not a valid mode and must be rejected."""
-        data = {"name": "a", "intent": "i", "run_mode": "realtime"}
-        with pytest.raises(ValidationError, match="run_mode"):
-            ActionConfig.model_validate(data)
-
-    def test_kind_mixed_case_accepted(self):
-        """kind: LLM (mixed-case) must be accepted."""
-        data = {"name": "a", "intent": "i", "kind": "LLM"}
-        config = ActionConfig.model_validate(data)
-        assert config.kind.value == "llm"
 
     # --- Version config ---
 
@@ -184,18 +127,6 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.version_consumption.pattern.value == "merge"
 
-    def test_skip_if_legacy_spelling_rejected(self):
-        """skip_if (old spelling of skip_condition) is an unknown key here too."""
-        data = {"name": "a", "intent": "i", "skip_if": "x > 1"}
-        with pytest.raises(ValidationError, match="skip_if"):
-            ActionConfig.model_validate(data)
-
-    def test_depends_on_legacy_spelling_rejected(self):
-        """depends_on (old spelling of dependencies) is an unknown key here too."""
-        data = {"name": "a", "intent": "i", "depends_on": ["other"]}
-        with pytest.raises(ValidationError, match="depends_on"):
-            ActionConfig.model_validate(data)
-
 
 class TestDefaultsConfigValidation:
     """DefaultsConfig with extra='forbid' refuses a key it does not declare."""
@@ -226,16 +157,6 @@ class TestDefaultsConfigValidation:
         config = DefaultsConfig.model_validate({})
         assert config.model_vendor is None
 
-    def test_granularity_mixed_case_accepted(self):
-        """Granularity: Record (mixed-case) must be accepted in defaults."""
-        config = DefaultsConfig.model_validate({"granularity": "Record"})
-        assert config.granularity.value == "record"
-
-    def test_run_mode_mixed_case_accepted(self):
-        """RunMode: Batch (mixed-case) must be accepted in defaults."""
-        config = DefaultsConfig.model_validate({"run_mode": "Batch"})
-        assert config.run_mode == RunMode.BATCH
-
     def test_temperature_rejects_non_numeric(self):
         with pytest.raises(ValidationError, match="temperature"):
             DefaultsConfig.model_validate({"temperature": "warm"})
@@ -247,3 +168,19 @@ class TestDefaultsConfigValidation:
     def test_retry_true_rejected(self):
         with pytest.raises(ValidationError, match="retry"):
             DefaultsConfig.model_validate({"retry": True})
+
+
+@pytest.mark.parametrize(
+    ("model", "field", "raw", "expected"),
+    [
+        pytest.param(ActionConfig, "granularity", "Record", "record", id="action_granularity"),
+        pytest.param(ActionConfig, "run_mode", "BATCH", "batch", id="action_run_mode"),
+        pytest.param(ActionConfig, "kind", "LLM", "llm", id="action_kind"),
+        pytest.param(DefaultsConfig, "granularity", "Record", "record", id="defaults_granularity"),
+        pytest.param(DefaultsConfig, "run_mode", "Batch", "batch", id="defaults_run_mode"),
+    ],
+)
+def test_mixed_case_enum_value_accepted_and_normalized(model, field, raw, expected):
+    data = {"name": "a", "intent": "i"} if model is ActionConfig else {}
+    config = model.model_validate({**data, field: raw})
+    assert getattr(config, field).value == expected

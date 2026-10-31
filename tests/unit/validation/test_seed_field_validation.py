@@ -14,6 +14,8 @@ Covers:
 
 import json
 
+import pytest
+
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
     _nested_key_exists,
@@ -247,8 +249,16 @@ class TestSeedFieldValidation:
 
         assert len(result.warnings) == 0
 
-    def test_did_you_mean_suggestion(self, tmp_path):
-        """Close misspelling triggers did-you-mean hint."""
+    @pytest.mark.parametrize(
+        ("field", "hint_fragment"),
+        [
+            # a close misspelling gets a did-you-mean
+            pytest.param("marketplace_ruls", "marketplace_rules", id="close-name"),
+            # a distant name gets only the available fields
+            pytest.param("zzz_completely_wrong", "Available fields:", id="distant-name"),
+        ],
+    )
+    def test_unknown_seed_field_hint(self, tmp_path, field, hint_fragment):
         wf_path = _make_project(
             tmp_path,
             {"rules.json": {"marketplace_rules": 1, "brand_voice": 2}},
@@ -259,7 +269,7 @@ class TestSeedFieldValidation:
                 "processor": {
                     "context_scope": {
                         "seed": {"rules": "$file:rules.json"},
-                        "observe": ["seed.rules.marketplace_ruls"],  # close typo
+                        "observe": [f"seed.rules.{field}"],
                     },
                 },
             },
@@ -268,30 +278,7 @@ class TestSeedFieldValidation:
         result = svc.resolve_all()
 
         assert len(result.warnings) == 1
-        assert "marketplace_rules" in result.warnings[0].hint
-
-    def test_no_suggestion_for_distant_name(self, tmp_path):
-        """Completely different name gets no did-you-mean, just available fields."""
-        wf_path = _make_project(
-            tmp_path,
-            {"rubric.json": {"scoring_criteria": 1, "tone": 2}},
-        )
-
-        svc = WorkflowResolutionService(
-            action_configs={
-                "processor": {
-                    "context_scope": {
-                        "seed": {"rubric": "$file:rubric.json"},
-                        "observe": ["seed.rubric.zzz_completely_wrong"],
-                    },
-                },
-            },
-            workflow_config_path=wf_path,
-        )
-        result = svc.resolve_all()
-
-        assert len(result.warnings) == 1
-        assert "Available fields:" in result.warnings[0].hint
+        assert hint_fragment in result.warnings[0].hint
 
     def test_wildcard_path_skipped(self, tmp_path):
         """Wildcard paths (passthrough: seed.rubric.*) are not validated."""

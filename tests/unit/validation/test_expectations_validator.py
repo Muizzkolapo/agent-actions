@@ -1,5 +1,6 @@
 """Preflight defect detection for expect blocks."""
 
+import pytest
 import yaml
 
 from agent_actions.validation.expectations_validator import find_expectation_defects
@@ -37,38 +38,48 @@ def test_clean_suite_reports_no_defects():
     assert defects == {}
 
 
-def test_unregistered_type_is_reported_with_the_type_name():
-    defects = find_expectation_defects(config([{"type": "vibe_check", "field": "options"}]), FIELDS)
-    assert "vibe_check" in defects["write_q"][0]
-
-
-def test_unknown_parameter_is_reported():
-    defects = find_expectation_defects(
-        config([{"type": "item_count", "field": "options", "params": {"equalz": 4}}]), FIELDS
-    )
-    assert "equalz" in defects["write_q"][0]
-
-
-def test_missing_required_parameter_is_reported():
-    defects = find_expectation_defects(
-        config([{"type": "word_count_ratio", "field": "options"}]), FIELDS
-    )
-    assert "max_ratio" in defects["write_q"][0]
-
-
-def test_field_absent_from_the_action_output_is_reported():
-    defects = find_expectation_defects(
-        config([{"type": "not_null", "field": "nonexistent"}]), FIELDS
-    )
-    assert "nonexistent" in defects["write_q"][0]
-
-
-def test_wildcard_selector_is_checked_against_its_base_name():
-    defects = find_expectation_defects(
-        config([{"type": "word_count_between", "field": "nonexistent[*]", "params": {"max": 5}}]),
-        FIELDS,
-    )
-    assert "nonexistent" in defects["write_q"][0]
+@pytest.mark.parametrize(
+    ("entry", "fragment"),
+    [
+        pytest.param(
+            {"type": "vibe_check", "field": "options"}, "vibe_check", id="unregistered-type"
+        ),
+        pytest.param(
+            {"type": "item_count", "field": "options", "params": {"equalz": 4}},
+            "equalz",
+            id="unknown-parameter",
+        ),
+        pytest.param(
+            {"type": "word_count_ratio", "field": "options"}, "max_ratio", id="missing-parameter"
+        ),
+        pytest.param(
+            {"type": "not_null", "field": "nonexistent"}, "nonexistent", id="absent-field"
+        ),
+        # a wildcard selector is checked against its base name
+        pytest.param(
+            {"type": "word_count_between", "field": "nonexistent[*]", "params": {"max": 5}},
+            "nonexistent",
+            id="absent-wildcard-field",
+        ),
+        pytest.param(
+            {
+                "type": "not_null",
+                "field": "options",
+                "params": {"row_condition": "not a condition"},
+            },
+            "row_condition",
+            id="unparseable-row-condition",
+        ),
+        pytest.param(
+            {"type": "not_null", "field": "options", "params": {"row_condition": "ghost == 'x'"}},
+            "ghost",
+            id="row-condition-absent-field",
+        ),
+    ],
+)
+def test_inline_entry_defect_is_reported(entry, fragment):
+    defects = find_expectation_defects(config([entry]), FIELDS)
+    assert fragment in defects["write_q"][0]
 
 
 def test_list_selector_reports_only_the_absent_member():
@@ -129,22 +140,33 @@ def test_malformed_field_value_is_reported_not_crashed():
     assert "int" in defects["write_q"][0]
 
 
-def test_named_suite_with_an_unregistered_type_is_reported(tmp_path):
-    write_suite(tmp_path, "scenario", [{"type": "vibe_check", "field": "options"}])
-    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
-    assert "vibe_check" in defects["write_q"][0]
-
-
-def test_named_suite_with_a_missing_field_is_reported(tmp_path):
-    write_suite(tmp_path, "scenario", [{"type": "not_null", "field": "nonexistent"}])
-    defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
-    assert "nonexistent" in defects["write_q"][0]
-
-
-def test_named_suite_that_does_not_exist_is_reported(tmp_path):
-    write_suite(tmp_path, "scenario", [{"type": "not_null", "field": "options"}])
-    defects = find_expectation_defects(suite_config("missing_suite"), FIELDS, project_root=tmp_path)
-    assert "missing_suite" in defects["write_q"][0]
+@pytest.mark.parametrize(
+    ("written", "suite_name", "fragment"),
+    [
+        pytest.param(
+            [{"type": "vibe_check", "field": "options"}],
+            "scenario",
+            "vibe_check",
+            id="unregistered-type",
+        ),
+        pytest.param(
+            [{"type": "not_null", "field": "nonexistent"}],
+            "scenario",
+            "nonexistent",
+            id="absent-field",
+        ),
+        pytest.param(
+            [{"type": "not_null", "field": "options"}],
+            "missing_suite",
+            "missing_suite",
+            id="suite-does-not-exist",
+        ),
+    ],
+)
+def test_named_suite_defect_is_reported(tmp_path, written, suite_name, fragment):
+    write_suite(tmp_path, "scenario", written)
+    defects = find_expectation_defects(suite_config(suite_name), FIELDS, project_root=tmp_path)
+    assert fragment in defects["write_q"][0]
 
 
 def test_clean_named_suite_reports_no_defects(tmp_path):
@@ -267,42 +289,37 @@ def test_defaulted_expect_is_skipped_without_project_context():
     assert defects == {}
 
 
-def test_llm_judge_negative_votes_is_a_defect():
+@pytest.mark.parametrize(
+    ("params", "fragment"),
+    [
+        pytest.param({"rule": "x", "votes": -1}, "votes", id="negative-votes"),
+        pytest.param({"rule": "x", "votes": "three"}, "votes", id="non-int-votes"),
+        pytest.param(
+            {"rule": "x", "context": ["nonexistent.field"]},
+            "unknown action 'nonexistent'",
+            id="context-unknown-action",
+        ),
+        pytest.param(
+            {"rule": "x", "context": ["no_dot"]},
+            "must be 'action.field'",
+            id="context-malformed-ref",
+        ),
+        # a defect, not a crash
+        pytest.param({"rule": "x", "context": 5}, "context must be a list", id="context-non-list"),
+    ],
+)
+def test_llm_judge_bad_params_is_a_defect(params, fragment):
     action_configs = {
         "write_q": {
             "expect": {
                 "expectations": [
-                    {
-                        "id": "r",
-                        "type": "llm_judge",
-                        "field": "options",
-                        "params": {"rule": "x", "votes": -1},
-                    }
+                    {"id": "r", "type": "llm_judge", "field": "options", "params": params}
                 ]
             }
         }
     }
     defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
-    assert defects and "votes" in defects["write_q"][0]
-
-
-def test_llm_judge_non_integer_votes_is_a_defect():
-    action_configs = {
-        "write_q": {
-            "expect": {
-                "expectations": [
-                    {
-                        "id": "r",
-                        "type": "llm_judge",
-                        "field": "options",
-                        "params": {"rule": "x", "votes": "three"},
-                    }
-                ]
-            }
-        }
-    }
-    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
-    assert defects and "votes" in defects["write_q"][0]
+    assert defects and fragment in defects["write_q"][0]
 
 
 def test_llm_judge_positive_votes_is_accepted():
@@ -346,25 +363,6 @@ def test_llm_judge_context_ref_to_a_real_field_is_accepted():
     assert find_expectation_defects(action_configs, available_fields) == {}
 
 
-def test_llm_judge_context_ref_to_unknown_action_is_a_defect():
-    action_configs = {
-        "write_q": {
-            "expect": {
-                "expectations": [
-                    {
-                        "id": "r",
-                        "type": "llm_judge",
-                        "field": "options",
-                        "params": {"rule": "x", "context": ["nonexistent.field"]},
-                    }
-                ]
-            }
-        }
-    }
-    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
-    assert defects and "unknown action 'nonexistent'" in defects["write_q"][0]
-
-
 def test_llm_judge_context_ref_to_unknown_field_is_a_defect():
     action_configs = {
         "write_q": {
@@ -385,44 +383,6 @@ def test_llm_judge_context_ref_to_unknown_field_is_a_defect():
     assert defects and "does not produce field 'missing_field'" in defects["write_q"][0]
 
 
-def test_llm_judge_malformed_context_ref_is_a_defect():
-    action_configs = {
-        "write_q": {
-            "expect": {
-                "expectations": [
-                    {
-                        "id": "r",
-                        "type": "llm_judge",
-                        "field": "options",
-                        "params": {"rule": "x", "context": ["no_dot"]},
-                    }
-                ]
-            }
-        }
-    }
-    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
-    assert defects and "must be 'action.field'" in defects["write_q"][0]
-
-
-def test_llm_judge_non_list_context_value_is_a_defect_not_a_crash():
-    action_configs = {
-        "write_q": {
-            "expect": {
-                "expectations": [
-                    {
-                        "id": "r",
-                        "type": "llm_judge",
-                        "field": "options",
-                        "params": {"rule": "x", "context": 5},
-                    }
-                ]
-            }
-        }
-    }
-    defects = find_expectation_defects(action_configs, {"write_q": {"options"}})
-    assert defects and "context must be a list" in defects["write_q"][0]
-
-
 EXPR_FIELDS = {"write_q": {"score", "verdict", "meta"}}
 
 
@@ -437,47 +397,73 @@ def test_valid_expression_entry_has_no_defects():
     )
 
 
-def test_expression_with_field_is_a_defect():
-    defects = _expr_defects(
-        {
-            "id": "floor",
-            "type": "expression",
-            "field": "score",
-            "params": {"condition": "score >= 80"},
-        }
-    )
-    assert any("does not take field" in d for d in defects)
-
-
-def test_expression_udf_condition_defect_names_the_decorator():
-    defects = _expr_defects(
-        {"id": "floor", "type": "expression", "params": {"condition": "udf:tools.checks.my_check"}}
-    )
-    assert any("expectation_check" in d for d in defects)
-
-
-def test_expression_unparseable_condition_is_a_defect():
-    defects = _expr_defects(
-        {"id": "floor", "type": "expression", "params": {"condition": "score >="}}
-    )
-    assert any("does not parse" in d for d in defects)
-
-
-def test_expression_non_string_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "params": {"condition": 5}})
-    assert any("condition must be a non-empty string" in d for d in defects)
-
-
-def test_expression_constant_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "params": {"condition": '"80"'}})
-    assert any("references no record fields" in d for d in defects)
-
-
-def test_expression_unknown_field_reference_is_a_defect():
-    defects = _expr_defects(
-        {"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}
-    )
-    assert any("does not produce field 'points'" in d for d in defects)
+@pytest.mark.parametrize(
+    ("entry", "fragment"),
+    [
+        pytest.param(
+            {
+                "id": "floor",
+                "type": "expression",
+                "field": "score",
+                "params": {"condition": "score >= 80"},
+            },
+            "does not take field",
+            id="expression-with-field",
+        ),
+        # the defect names the decorator
+        pytest.param(
+            {
+                "id": "floor",
+                "type": "expression",
+                "params": {"condition": "udf:tools.checks.my_check"},
+            },
+            "expectation_check",
+            id="udf-condition",
+        ),
+        pytest.param(
+            {"id": "floor", "type": "expression", "params": {"condition": "score >="}},
+            "does not parse",
+            id="unparseable-condition",
+        ),
+        pytest.param(
+            {"id": "floor", "type": "expression", "params": {"condition": 5}},
+            "condition must be a non-empty string",
+            id="non-string-condition",
+        ),
+        pytest.param(
+            {"id": "floor", "type": "expression", "params": {"condition": "   "}},
+            "condition must be a non-empty string",
+            id="whitespace-condition",
+        ),
+        pytest.param(
+            {"id": "floor", "type": "expression", "params": {"condition": '"80"'}},
+            "references no record fields",
+            id="constant-condition",
+        ),
+        pytest.param(
+            {"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}},
+            "does not produce field 'points'",
+            id="unknown-field-reference",
+        ),
+        pytest.param(
+            {"id": "present", "type": "not_null"},
+            "requires field",
+            id="deterministic-entry-no-field",
+        ),
+        pytest.param(
+            {"id": "present", "type": "not_null", "field": ""},
+            "must not be empty",
+            id="empty-string-field",
+        ),
+        pytest.param(
+            {"id": "present", "type": "not_null", "field": []},
+            "must not be empty",
+            id="empty-list-field",
+        ),
+    ],
+)
+def test_entry_defect_is_reported(entry, fragment):
+    assert any(fragment in d for d in _expr_defects(entry))
 
 
 def test_expression_dotted_reference_checks_the_top_segment():
@@ -494,21 +480,6 @@ def test_expression_missing_condition_reports_once():
     assert len([d for d in defects if "condition" in d]) == 1
 
 
-def test_missing_field_on_a_deterministic_entry_is_now_a_preflight_defect():
-    defects = _expr_defects({"id": "present", "type": "not_null"})
-    assert any("requires field" in d for d in defects)
-
-
-def test_empty_string_field_is_a_defect():
-    defects = _expr_defects({"id": "present", "type": "not_null", "field": ""})
-    assert any("must not be empty" in d for d in defects)
-
-
-def test_empty_list_field_is_a_defect():
-    defects = _expr_defects({"id": "present", "type": "not_null", "field": []})
-    assert any("must not be empty" in d for d in defects)
-
-
 def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
     write_suite(
         tmp_path,
@@ -519,48 +490,11 @@ def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
     assert any("does not produce field 'points'" in d for d in defects["write_q"])
 
 
-def test_whitespace_only_condition_is_a_defect():
-    defects = _expr_defects({"id": "floor", "type": "expression", "params": {"condition": "   "}})
-    assert any("condition must be a non-empty string" in d for d in defects)
-
-
 def test_expression_schema_cross_check_skips_when_the_action_has_no_known_fields():
     defects = find_expectation_defects(
         config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]), {}
     ).get("write_q", [])
     assert defects == []
-
-
-def test_unparseable_row_condition_is_a_defect():
-    defects = find_expectation_defects(
-        config(
-            [
-                {
-                    "type": "not_null",
-                    "field": "options",
-                    "params": {"row_condition": "not a condition"},
-                }
-            ]
-        ),
-        FIELDS,
-    )
-    assert "row_condition" in defects["write_q"][0]
-
-
-def test_row_condition_naming_an_absent_field_is_a_defect():
-    defects = find_expectation_defects(
-        config(
-            [
-                {
-                    "type": "not_null",
-                    "field": "options",
-                    "params": {"row_condition": "ghost == 'x'"},
-                }
-            ]
-        ),
-        FIELDS,
-    )
-    assert "ghost" in defects["write_q"][0]
 
 
 def test_a_row_condition_over_a_produced_field_is_accepted():

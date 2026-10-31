@@ -19,25 +19,10 @@ def test_named_suite_is_accepted():
     assert ExpectConfig(suite="scenario_question").suite == "scenario_question"
 
 
-def test_both_suite_and_inline_expectations_is_rejected():
-    with pytest.raises(ValidationError, match="at most one"):
-        ExpectConfig(suite="s", expectations=INLINE)
-
-
 def test_a_bare_expect_block_is_legal():
     cfg = ExpectConfig(repair="none")
     assert cfg.suite is None
     assert cfg.expectations is None
-
-
-def test_an_explicitly_empty_expectations_list_is_rejected():
-    with pytest.raises(ValidationError, match="empty"):
-        ExpectConfig(expectations=[])
-
-
-def test_an_empty_suite_name_is_rejected():
-    with pytest.raises(ValidationError, match="empty"):
-        ExpectConfig(suite="")
 
 
 @pytest.mark.parametrize("mode", ["none", "retry", "auto"])
@@ -50,40 +35,8 @@ def test_repair_prompt_mapping_is_accepted():
     assert cfg.repair == {"prompt": "$wf.Fix"}
 
 
-def test_unknown_repair_mode_is_rejected():
-    with pytest.raises(ValidationError, match="none, retry, auto"):
-        ExpectConfig(expectations=INLINE, repair="regenerate")
-
-
-def test_repair_mapping_with_unexpected_keys_is_rejected():
-    with pytest.raises(ValidationError, match="prompt"):
-        ExpectConfig(expectations=INLINE, repair={"prompt": "$wf.Fix", "extra": 1})
-
-
-def test_observe_mode_rejects_max_iterations():
-    with pytest.raises(ValidationError, match="max_iterations"):
-        ExpectConfig(expectations=INLINE, repair="none", max_iterations=3)
-
-
-def test_observe_mode_rejects_on_exhausted():
-    with pytest.raises(ValidationError, match="on_exhausted"):
-        ExpectConfig(expectations=INLINE, repair="none", on_exhausted="fail")
-
-
 def test_observe_mode_without_loop_keys_is_valid():
     assert ExpectConfig(expectations=INLINE, repair="none").repair == "none"
-
-
-def test_unknown_key_is_rejected():
-    with pytest.raises(ValidationError):
-        ExpectConfig(expectations=INLINE, max_iteration=3)
-
-
-def test_max_iterations_is_bounded():
-    with pytest.raises(ValidationError):
-        ExpectConfig(expectations=INLINE, max_iterations=0)
-    with pytest.raises(ValidationError):
-        ExpectConfig(expectations=INLINE, max_iterations=11)
 
 
 def test_action_config_accepts_an_expect_block():
@@ -112,16 +65,53 @@ def test_judge_budget_accepts_a_positive_int():
     assert config.judge_budget == 20
 
 
-def test_judge_budget_rejects_zero_and_negative():
-    for bad in (0, -5):
-        with pytest.raises(ValidationError):
-            ExpectConfig(
-                repair="none", expectations=[{"type": "not_null", "field": "x"}], judge_budget=bad
-            )
-
-
 def test_judge_budget_is_allowed_under_repair_none():
     config = ExpectConfig(
         repair="none", expectations=[{"type": "not_null", "field": "x"}], judge_budget=5
     )
     assert config.judge_budget == 5
+
+
+_NOT_NULL = [{"type": "not_null", "field": "x"}]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        pytest.param({"suite": "s", "expectations": INLINE}, "at most one", id="suite_and_inline"),
+        pytest.param({"expectations": []}, "empty", id="empty_list"),
+        pytest.param({"suite": ""}, "empty", id="empty_suite"),
+        pytest.param(
+            {"expectations": INLINE, "repair": "regenerate"},
+            "none, retry, auto",
+            id="unknown_repair",
+        ),
+        pytest.param(
+            {"expectations": INLINE, "repair": {"prompt": "$wf.Fix", "extra": 1}},
+            "prompt",
+            id="repair_extra_key",
+        ),
+        pytest.param(
+            {"expectations": INLINE, "repair": "none", "max_iterations": 3},
+            "max_iterations",
+            id="observe_max_iter",
+        ),
+        pytest.param(
+            {"expectations": INLINE, "repair": "none", "on_exhausted": "fail"},
+            "on_exhausted",
+            id="observe_on_exhausted",
+        ),
+        pytest.param({"expectations": INLINE, "max_iteration": 3}, None, id="unknown_key"),
+        pytest.param({"expectations": INLINE, "max_iterations": 0}, None, id="max_iter_0"),
+        pytest.param({"expectations": INLINE, "max_iterations": 11}, None, id="max_iter_11"),
+        pytest.param(
+            {"repair": "none", "expectations": _NOT_NULL, "judge_budget": 0}, None, id="judge_0"
+        ),
+        pytest.param(
+            {"repair": "none", "expectations": _NOT_NULL, "judge_budget": -5}, None, id="judge_neg"
+        ),
+    ],
+)
+def test_invalid_expect_block_is_rejected(kwargs, match):
+    with pytest.raises(ValidationError, match=match):
+        ExpectConfig(**kwargs)

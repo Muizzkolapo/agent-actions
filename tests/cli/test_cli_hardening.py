@@ -182,26 +182,22 @@ class TestReadOnlyCommandsNoMutation:
 class TestPreviewPagingBounds:
     """Preview --limit and --offset reject invalid values."""
 
-    def test_preview_rejects_negative_limit(self):
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (["-n", "-1"], "-1 is not in the range x>=1"),
+            (["-n", "0"], "0 is not in the range x>=1"),
+            (["--offset", "-1"], "-1 is not in the range x>=0"),
+        ],
+        ids=["limit=-1", "limit=0", "offset=-1"],
+    )
+    def test_preview_rejects_out_of_range_paging(self, args, message):
         from agent_actions.cli.main import cli
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["preview", "-w", "test", "-n", "-1"])
+        result = runner.invoke(cli, ["preview", "-w", "test", *args])
         assert result.exit_code != 0
-
-    def test_preview_rejects_zero_limit(self):
-        from agent_actions.cli.main import cli
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["preview", "-w", "test", "-n", "0"])
-        assert result.exit_code != 0
-
-    def test_preview_rejects_negative_offset(self):
-        from agent_actions.cli.main import cli
-
-        runner = CliRunner()
-        result = runner.invoke(cli, ["preview", "-w", "test", "--offset", "-1"])
-        assert result.exit_code != 0
+        assert message in result.output
 
 
 class TestInitForceBackupSafety:
@@ -239,7 +235,12 @@ class TestInitForceBackupSafety:
 class TestStatusCorruptedFileExitCode:
     """Corrupted status files must produce non-zero exit codes."""
 
-    def test_corrupted_json_exits_nonzero(self):
+    @pytest.mark.parametrize(
+        ("payload", "match"),
+        [("{invalid json", "corrupted"), ('["not", "a", "dict"]', "unexpected format")],
+        ids=["bad-json", "non-object"],
+    )
+    def test_bad_status_file_exits_nonzero(self, payload, match):
         import click
 
         from agent_actions.cli.args import StatusCommandArgs
@@ -248,7 +249,7 @@ class TestStatusCorruptedFileExitCode:
         with tempfile.TemporaryDirectory() as tmpdir:
             io_dir = Path(tmpdir)
             status_file = io_dir / ".agent_status.json"
-            status_file.write_text("{invalid json")
+            status_file.write_text(payload)
 
             args = StatusCommandArgs(agent="test")
             cmd = StatusCommand(args)
@@ -257,28 +258,7 @@ class TestStatusCorruptedFileExitCode:
             mock_paths.io_dir = io_dir
 
             with patch.object(ProjectPathsFactory, "create_project_paths", return_value=mock_paths):
-                with pytest.raises(click.ClickException, match="corrupted"):
-                    cmd.execute()
-
-    def test_non_dict_status_exits_nonzero(self):
-        import click
-
-        from agent_actions.cli.args import StatusCommandArgs
-        from agent_actions.cli.status import StatusCommand
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            io_dir = Path(tmpdir)
-            status_file = io_dir / ".agent_status.json"
-            status_file.write_text('["not", "a", "dict"]')
-
-            args = StatusCommandArgs(agent="test")
-            cmd = StatusCommand(args)
-            cmd.agent_name = "test"
-            mock_paths = MagicMock()
-            mock_paths.io_dir = io_dir
-
-            with patch.object(ProjectPathsFactory, "create_project_paths", return_value=mock_paths):
-                with pytest.raises(click.ClickException, match="unexpected format"):
+                with pytest.raises(click.ClickException, match=match):
                     cmd.execute()
 
 

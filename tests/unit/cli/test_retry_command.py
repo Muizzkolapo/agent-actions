@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import click
+import pytest
 
 from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import RetryCommand
@@ -444,17 +445,17 @@ class TestARepairNarrowsOnlyWhatFinished:
             backend.close()
         return None
 
-    def test_an_action_never_run_since_it_was_put_back_is_refused(self, tmp_path):
-        assert "classify (pending)" in self._refused(tmp_path, "pending")
+    @pytest.mark.parametrize(
+        "status", ["pending", "failed"], ids=["never-run-since-put-back", "error-stopped"]
+    )
+    def test_an_action_left_unfinished_is_refused(self, tmp_path, status):
+        assert f"classify ({status})" in self._refused(tmp_path, status)
 
     def test_an_action_a_run_was_stopped_in_is_refused(self, tmp_path):
         for status in ("running", "interrupted", "checking_batch"):
             target = tmp_path / status
             target.mkdir()
             assert f"classify ({status})" in self._refused(target, status)
-
-    def test_an_action_an_error_stopped_is_refused(self, tmp_path):
-        assert "classify (failed)" in self._refused(tmp_path, "failed")
 
     def test_an_action_swept_to_failed_without_a_node_failure_is_refused(self, tmp_path):
         """What the coordinator leaves when an error escapes the action that was running."""

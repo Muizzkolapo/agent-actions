@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from tests._support.agac_cli import run_agac
 
 WORKFLOW = "w"
@@ -118,25 +120,20 @@ def _output(result) -> str:
     return result.stdout + result.stderr
 
 
-def test_agac_run_shows_a_warning_with_no_error_and_still_runs(tmp_path):
+@pytest.mark.parametrize(
+    "command",
+    [("run", "-a", WORKFLOW, "--fresh"), ("inspect", "-a", WORKFLOW)],
+    ids=["run", "inspect"],
+)
+def test_a_warning_with_no_error_shows_and_the_command_succeeds(tmp_path, command):
     project = _project(tmp_path, guard="produce.score == 'high'")
 
-    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
+    result = run_agac(project, *command)
     output = _output(result)
 
     assert result.returncode == 0, output
     assert output.count(_LITERAL_WARNING) == 1, output
     assert "Align the literal with the field's declared schema type." in output, output
-
-
-def test_agac_inspect_shows_a_warning_with_no_error(tmp_path):
-    project = _project(tmp_path, guard="produce.score == 'high'")
-
-    result = run_agac(project, "inspect", "-a", WORKFLOW)
-    output = _output(result)
-
-    assert result.returncode == 0, output
-    assert output.count(_LITERAL_WARNING) == 1, output
 
 
 def test_a_workflow_with_nothing_to_warn_about_prints_no_static_warning(tmp_path):

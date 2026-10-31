@@ -23,17 +23,18 @@ def handler_with_categories() -> ConsoleEventHandler:
 class TestCategoryBypass:
     """WARN and ERROR events bypass category filtering."""
 
-    def test_error_bypasses_category_filter(self, handler_with_categories):
-        event = _make_event(EventLevel.ERROR, category="utils")
-        assert handler_with_categories.accepts(event) is True
-
-    def test_warn_bypasses_category_filter(self, handler_with_categories):
-        event = _make_event(EventLevel.WARN, category="config")
-        assert handler_with_categories.accepts(event) is True
-
-    def test_info_filtered_by_category(self, handler_with_categories):
-        event = _make_event(EventLevel.INFO, category="utils")
-        assert handler_with_categories.accepts(event) is False
+    @pytest.mark.parametrize(
+        ("level", "category", "accepted"),
+        [
+            pytest.param(EventLevel.ERROR, "utils", True, id="error-bypass"),
+            pytest.param(EventLevel.WARN, "config", True, id="warn-bypass"),
+            pytest.param(EventLevel.INFO, "utils", False, id="info-filtered"),
+            pytest.param(EventLevel.INFO, "workflow", True, id="info-matching-category"),
+        ],
+    )
+    def test_category_filter(self, handler_with_categories, level, category, accepted):
+        event = _make_event(level, category=category)
+        assert handler_with_categories.accepts(event) is accepted
 
     def test_debug_filtered_by_category(self, handler_with_categories):
         handler = ConsoleEventHandler(
@@ -42,10 +43,6 @@ class TestCategoryBypass:
         )
         event = _make_event(EventLevel.DEBUG, category="llm")
         assert handler.accepts(event) is False
-
-    def test_info_accepted_in_matching_category(self, handler_with_categories):
-        event = _make_event(EventLevel.INFO, category="workflow")
-        assert handler_with_categories.accepts(event) is True
 
     def test_no_categories_passes_all(self):
         handler = ConsoleEventHandler(min_level=EventLevel.INFO, categories=None)

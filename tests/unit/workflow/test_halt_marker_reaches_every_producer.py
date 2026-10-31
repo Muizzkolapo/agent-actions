@@ -113,10 +113,19 @@ def _run_files_until_it_raises(tmp_path, *, ordinary: int, then_halt: bool) -> E
 class TestTheHaltNeedNotFailFirst:
     """process_files chains one cause; it must be the halting one."""
 
-    def test_a_halt_behind_an_ordinary_failure_is_still_marked(self, tmp_path):
-        raised = _run_files_until_it_raises(tmp_path, ordinary=1, then_halt=True)
+    @pytest.mark.parametrize(
+        ("ordinary", "then_halt", "marker"),
+        [
+            pytest.param(1, True, HALT_MARKER, id="halt-behind-an-ordinary-failure"),
+            pytest.param(2, False, None, id="no-halt-among-the-failures"),
+        ],
+    )
+    def test_the_chain_is_marked_only_when_a_halt_raised(
+        self, tmp_path, ordinary, then_halt, marker
+    ):
+        raised = _run_files_until_it_raises(tmp_path, ordinary=ordinary, then_halt=then_halt)
 
-        assert _halt_marker(raised) == HALT_MARKER
+        assert _halt_marker(raised) == marker
 
     def test_a_halt_past_the_tracked_error_cap_is_still_marked(self, tmp_path):
         raised = _run_files_until_it_raises(
@@ -128,11 +137,6 @@ class TestTheHaltNeedNotFailFirst:
             "the message is built from the capped sample, so a halt failing "
             "past the cap reaches the reader on the chain and nowhere else"
         )
-
-    def test_no_halt_among_the_failures_is_not_marked(self, tmp_path):
-        raised = _run_files_until_it_raises(tmp_path, ordinary=2, then_halt=False)
-
-        assert _halt_marker(raised) is None
 
 
 class TestABatchHaltIsNotLeftRetryable:

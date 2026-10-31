@@ -24,24 +24,18 @@ def test_list_selector_yields_a_single_combined_input():
     assert resolve(RECORD, ["options", "answer"]) == [[["alpha", "beta"], "alpha"]]
 
 
-def test_missing_field_raises_with_the_field_name():
-    with pytest.raises(FieldResolutionError, match="missing"):
-        resolve(RECORD, "missing")
-
-
-def test_missing_field_inside_list_selector_raises():
-    with pytest.raises(FieldResolutionError, match="nope"):
-        resolve(RECORD, ["options", "nope"])
-
-
-def test_wildcard_on_a_non_list_raises_naming_the_actual_type():
-    with pytest.raises(FieldResolutionError, match="int"):
-        resolve(RECORD, "count[*]")
-
-
-def test_wildcard_on_a_missing_field_raises_rather_than_defaulting_to_empty():
-    with pytest.raises(FieldResolutionError, match="missing"):
-        resolve(RECORD, "missing[*]")
+@pytest.mark.parametrize(
+    ("selector", "match"),
+    [
+        pytest.param("missing", "missing", id="missing-field"),
+        pytest.param(["options", "nope"], "nope", id="missing-field-inside-list-selector"),
+        pytest.param("count[*]", "int", id="wildcard-on-non-list-names-the-type"),
+        pytest.param("missing[*]", "missing", id="wildcard-on-missing-field"),
+    ],
+)
+def test_unresolvable_selector_raises_naming_the_problem(selector, match):
+    with pytest.raises(FieldResolutionError, match=match):
+        resolve(RECORD, selector)
 
 
 def test_wildcard_on_empty_list_yields_no_inputs():
@@ -72,17 +66,17 @@ class TestResolveContext:
         result = resolve_context(llm_context, ["a.x", "b.y"])
         assert result == {"a.x": 1, "b.y": 2}
 
-    def test_raises_when_action_missing(self):
+    @pytest.mark.parametrize(
+        ("llm_context", "ref"),
+        [
+            pytest.param({}, "missing_action.field", id="action-missing"),
+            pytest.param({"a": {"other_field": 1}}, "a.field", id="field-missing-on-action"),
+            pytest.param({"a": {"x": 1}}, "no_dot_here", id="malformed-ref-without-dot"),
+        ],
+    )
+    def test_raises_on_unresolvable_ref(self, llm_context, ref):
         with pytest.raises(FieldResolutionError):
-            resolve_context({}, ["missing_action.field"])
-
-    def test_raises_when_field_missing_on_present_action(self):
-        with pytest.raises(FieldResolutionError):
-            resolve_context({"a": {"other_field": 1}}, ["a.field"])
-
-    def test_raises_on_malformed_ref_without_a_dot(self):
-        with pytest.raises(FieldResolutionError):
-            resolve_context({"a": {"x": 1}}, ["no_dot_here"])
+            resolve_context(llm_context, [ref])
 
     def test_same_field_name_on_different_actions_does_not_collide(self):
         llm_context = {"action_one": {"text": "from one"}, "action_two": {"text": "from two"}}

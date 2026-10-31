@@ -22,63 +22,45 @@ from agent_actions.prompt.service import (
 class TestPromptPreparationParity:
     """Verify batch and online produce identical prompt context."""
 
-    def test_same_formatted_prompt_for_same_input(
+    @pytest.mark.parametrize(
+        ("config_fixture", "agent_name", "attr"),
+        [
+            pytest.param(
+                "parity_agent_config_no_context_scope",
+                "parity_test_agent_simple",
+                "formatted_prompt",
+                id="formatted-prompt",
+            ),
+            pytest.param(
+                "parity_agent_config_no_context_scope",
+                "parity_test_agent_simple",
+                "prompt_context",
+                id="prompt-context",
+            ),
+            pytest.param(
+                "parity_agent_config", "parity_test_agent", "passthrough_fields", id="passthrough"
+            ),
+        ],
+    )
+    def test_same_result_for_same_input(
         self,
-        parity_agent_config_no_context_scope,
+        request,
+        config_fixture,
+        agent_name,
+        attr,
         parity_contents,
         parity_current_item,
         parity_agent_indices,
         parity_dependency_configs,
     ):
         """
-        Both modes should format prompts identically.
-
-        The formatted_prompt is the rendered Jinja2 template with all field
-        references resolved. This MUST be identical across modes.
+        Both modes must render the same formatted_prompt (the Jinja2 template with every
+        field reference resolved), build the same prompt_context (source, upstream actions,
+        seed data) and extract the same passthrough fields (context_scope.passthrough).
         """
         common_args = {
-            "agent_config": parity_agent_config_no_context_scope,
-            "agent_name": "parity_test_agent_simple",
-            "contents": parity_contents,
-            "agent_indices": parity_agent_indices,
-            "dependency_configs": parity_dependency_configs,
-            "source_content": parity_contents,
-            "current_item": parity_current_item,
-        }
-
-        # Act: Call with mode="batch" and mode="online"
-        batch_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="batch", **common_args
-        )
-        online_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="online", **common_args
-        )
-
-        # Assert: formatted_prompt must be identical
-        assert batch_result.formatted_prompt == online_result.formatted_prompt, (
-            f"Formatted prompts diverged!\n"
-            f"Batch: {batch_result.formatted_prompt}\n"
-            f"Online: {online_result.formatted_prompt}"
-        )
-
-    def test_same_prompt_context_for_same_input(
-        self,
-        parity_agent_config_no_context_scope,
-        parity_contents,
-        parity_current_item,
-        parity_agent_indices,
-        parity_dependency_configs,
-    ):
-        """
-        Both modes should build identical prompt_context.
-
-        prompt_context is the full context dict used for Jinja2 template
-        rendering. It includes source, upstream actions, seed data, etc.
-        This MUST be identical across modes.
-        """
-        common_args = {
-            "agent_config": parity_agent_config_no_context_scope,
-            "agent_name": "parity_test_agent_simple",
+            "agent_config": request.getfixturevalue(config_fixture),
+            "agent_name": agent_name,
             "contents": parity_contents,
             "agent_indices": parity_agent_indices,
             "dependency_configs": parity_dependency_configs,
@@ -93,49 +75,10 @@ class TestPromptPreparationParity:
             mode="online", **common_args
         )
 
-        # Assert: prompt_context must be identical
-        assert batch_result.prompt_context == online_result.prompt_context, (
-            f"Prompt contexts diverged!\n"
-            f"Batch keys: {set(batch_result.prompt_context.keys()) if batch_result.prompt_context else 'None'}\n"
-            f"Online keys: {set(online_result.prompt_context.keys()) if online_result.prompt_context else 'None'}"
-        )
-
-    def test_same_passthrough_fields(
-        self,
-        parity_agent_config,
-        parity_contents,
-        parity_current_item,
-        parity_agent_indices,
-        parity_dependency_configs,
-    ):
-        """
-        Both modes should extract identical passthrough fields.
-
-        Passthrough fields (from context_scope.passthrough) are extracted
-        for merging into output. Must be identical across modes.
-        """
-        common_args = {
-            "agent_config": parity_agent_config,
-            "agent_name": "parity_test_agent",
-            "contents": parity_contents,
-            "agent_indices": parity_agent_indices,
-            "dependency_configs": parity_dependency_configs,
-            "source_content": parity_contents,
-            "current_item": parity_current_item,
-        }
-
-        batch_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="batch", **common_args
-        )
-        online_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="online", **common_args
-        )
-
-        # Assert: passthrough_fields must be identical
-        assert batch_result.passthrough_fields == online_result.passthrough_fields, (
-            f"Passthrough fields diverged!\n"
-            f"Batch: {batch_result.passthrough_fields}\n"
-            f"Online: {online_result.passthrough_fields}"
+        batch_value = getattr(batch_result, attr)
+        online_value = getattr(online_result, attr)
+        assert batch_value == online_value, (
+            f"{attr} diverged!\nBatch: {batch_value}\nOnline: {online_value}"
         )
 
     def test_metadata_records_correct_mode(

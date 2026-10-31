@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.core.manager import EventManager
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
@@ -50,23 +52,16 @@ def _invoke_empty(on_empty: str, monkeypatch: Any) -> _Spy:
     return spy
 
 
-def test_file_mode_empty_output_fires_record_empty_output_event(monkeypatch):
-    spy = _invoke_empty("skip", monkeypatch)
+@pytest.mark.parametrize("on_empty", ["skip", "warn"])
+def test_file_mode_empty_output_fires_record_empty_output_event(on_empty, monkeypatch):
+    spy = _invoke_empty(on_empty, monkeypatch)
 
     empties = _empties(spy)
     assert len(empties) == 1
-    assert empties[0].on_empty == "skip"
+    assert empties[0].on_empty == on_empty
     assert empties[0].input_field_count == 2
     assert empties[0].record_index == -1
     assert empties[0].action_name == "my_file_tool"
-
-
-def test_file_mode_empty_output_event_carries_on_empty_warn(monkeypatch):
-    spy = _invoke_empty("warn", monkeypatch)
-
-    empties = _empties(spy)
-    assert len(empties) == 1
-    assert empties[0].on_empty == "warn"
 
 
 def test_file_mode_non_empty_output_fires_no_empty_event(monkeypatch):

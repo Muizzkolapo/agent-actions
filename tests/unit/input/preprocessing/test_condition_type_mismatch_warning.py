@@ -102,39 +102,38 @@ class TestRelationalTypeMismatchWarns:
 
 @pytest.mark.usefixtures("_enable_log_propagation", "_reset_mismatch_dedup")
 class TestCompatibleComparisonsStaySilent:
-    def test_boolean_value_vs_boolean_literal_no_warning(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = _evaluate(
+    @pytest.mark.parametrize(
+        ("item", "clause", "should_execute"),
+        [
+            pytest.param(
                 {"content": {"review": {"approved": True}}},
                 "review.approved == true",
-            )
-
-        assert result.should_execute is True
-        assert _mismatch_warnings(caplog) == []
-
-    def test_none_value_no_warning(self, caplog):
-        """None fields come from skipped upstreams — a mismatch warning would fire
-        on every legitimately skipped record."""
-        with caplog.at_level(logging.WARNING):
-            result = _evaluate(
+                True,
+                id="bool-vs-bool",
+            ),
+            # None comes from a skipped upstream; a warning would fire on every such record
+            pytest.param(
                 {"content": {"review": {"approved": None}}},
                 "review.approved == true",
-            )
+                False,
+                id="none-value",
+            ),
+            pytest.param(
+                {"content": {"vote": {"score": 5}}}, "vote.score > 3", True, id="number-vs-number"
+            ),
+        ],
+    )
+    def test_compatible_comparison_no_warning(self, caplog, item, clause, should_execute):
+        with caplog.at_level(logging.WARNING):
+            result = _evaluate(item, clause)
 
-        assert result.should_execute is False
+        assert result.should_execute is should_execute
         assert _mismatch_warnings(caplog) == []
 
     def test_boolean_value_vs_number_literal_no_warning(self, caplog):
         with caplog.at_level(logging.WARNING):
             _evaluate({"content": {"review": {"flag": True}}}, "review.flag == 1")
 
-        assert _mismatch_warnings(caplog) == []
-
-    def test_number_value_vs_number_literal_no_warning(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = _evaluate({"content": {"vote": {"score": 5}}}, "vote.score > 3")
-
-        assert result.should_execute is True
         assert _mismatch_warnings(caplog) == []
 
 

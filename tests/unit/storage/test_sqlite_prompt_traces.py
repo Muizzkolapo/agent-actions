@@ -135,23 +135,20 @@ class TestSizeCap:
 
 
 class TestClearTraces:
-    def test_clear_by_action(self, backend):
+    @pytest.mark.parametrize(
+        ("clear_args", "deleted", "act2_remaining"),
+        [
+            pytest.param(("act1",), 1, 1, id="by-action"),
+            pytest.param((), 2, 0, id="all"),
+        ],
+    )
+    def test_clear_prompt_traces(self, backend, clear_args, deleted, act2_remaining):
         backend.write_prompt_trace("act1", "rec-1", "p1")
         backend.write_prompt_trace("act2", "rec-2", "p2")
 
-        deleted = backend.clear_prompt_traces("act1")
-        assert deleted == 1
+        assert backend.clear_prompt_traces(*clear_args) == deleted
         assert len(backend.get_prompt_traces("act1")) == 0
-        assert len(backend.get_prompt_traces("act2")) == 1
-
-    def test_clear_all(self, backend):
-        backend.write_prompt_trace("act1", "rec-1", "p1")
-        backend.write_prompt_trace("act2", "rec-2", "p2")
-
-        deleted = backend.clear_prompt_traces()
-        assert deleted == 2
-        assert len(backend.get_prompt_traces("act1")) == 0
-        assert len(backend.get_prompt_traces("act2")) == 0
+        assert len(backend.get_prompt_traces("act2")) == act2_remaining
 
 
 # ---------------------------------------------------------------------------
@@ -205,17 +202,17 @@ class TestPreview:
 
 
 class TestValidation:
-    def test_empty_action_name_rejected(self, backend):
-        with pytest.raises(ValueError, match="Empty"):
-            backend.write_prompt_trace("", "rec-1", "prompt")
-
-    def test_empty_record_id_rejected(self, backend):
-        with pytest.raises(ValueError, match="Empty"):
-            backend.write_prompt_trace("act", "", "prompt")
-
-    def test_path_traversal_rejected(self, backend):
-        with pytest.raises(ValueError, match="traversal"):
-            backend.write_prompt_trace("../evil", "rec-1", "prompt")
+    @pytest.mark.parametrize(
+        ("action", "record_id", "match"),
+        [
+            pytest.param("", "rec-1", "Empty", id="empty-action-name"),
+            pytest.param("act", "", "Empty", id="empty-record-id"),
+            pytest.param("../evil", "rec-1", "traversal", id="path-traversal"),
+        ],
+    )
+    def test_invalid_identifier_rejected(self, backend, action, record_id, match):
+        with pytest.raises(ValueError, match=match):
+            backend.write_prompt_trace(action, record_id, "prompt")
 
 
 # ---------------------------------------------------------------------------

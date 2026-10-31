@@ -64,20 +64,18 @@ def _emit(extra: dict | None, *, redact: bool = False) -> dict:
 
 
 class TestIdentifiersSurvive:
-    def test_a_custom_id_reaches_the_event(self):
-        data = _emit({"operation": "process_batch_item", "custom_id": "req-42"})
+    @pytest.mark.parametrize(
+        ("operation", "key", "value"),
+        [
+            pytest.param("process_batch_item", "custom_id", "req-42", id="custom_id"),
+            pytest.param("set_disposition", "record_id", "34d2c361", id="record_id"),
+            pytest.param("submit_batch", "batch_id", "batch_abc", id="batch_id"),
+        ],
+    )
+    def test_an_identifier_reaches_the_event(self, operation, key, value):
+        data = _emit({"operation": operation, key: value})
 
-        assert data["custom_id"] == "req-42"
-
-    def test_a_record_id_reaches_the_event(self):
-        data = _emit({"operation": "set_disposition", "record_id": "34d2c361"})
-
-        assert data["record_id"] == "34d2c361"
-
-    def test_a_batch_id_reaches_the_event(self):
-        data = _emit({"operation": "submit_batch", "batch_id": "batch_abc"})
-
-        assert data["batch_id"] == "batch_abc"
+        assert data[key] == value
 
     def test_an_identifier_the_whitelist_never_knew_about_reaches_it(self):
         """The point of copying rather than naming: no list to keep updating."""

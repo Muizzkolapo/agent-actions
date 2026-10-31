@@ -348,32 +348,29 @@ def _evaluate(udf, item, context):
 
 
 class TestAMutatingUdfCannotReachTheRecord:
-    def test_the_record_survives_a_mutating_udf_with_no_context(self):
-        """context=None means eval_data IS the record — the worst of the two paths. The
-        refused write stops the guard (test_a_guard_udf_that_writes_gives_no_answer)."""
+    @pytest.mark.parametrize(
+        ("udf", "context", "ran"),
+        [
+            # context=None means eval_data IS the record — the worst of the two paths. The
+            # refused write stops the guard (test_a_guard_udf_that_writes_gives_no_answer).
+            pytest.param("guard_probe_mutates_raw", None, "raw", id="no-context-raw"),
+            # With a context the namespaces are promoted, still by reference.
+            pytest.param(
+                "guard_probe_mutates_promoted", {"source": {}}, "promoted", id="context-promoted"
+            ),
+        ],
+    )
+    def test_the_record_survives_a_mutating_udf(self, udf, context, ran):
         item = _item()
         with pytest.raises(ConfigurationError, match="wrote to its input"):
             GuardEvaluator().evaluate(
                 item,
                 {"clause": "a1.tier == 'keep'", "on_false": "filter"},
-                conditional_clause="guard_probe_mutates_raw",
+                context=context,
+                conditional_clause=udf,
             )
 
-        assert _ran == ["raw"], "the UDF must have run, or the record survived for no reason"
-        assert item["content"]["a1"]["tier"] == "keep", item
-
-    def test_the_record_survives_a_mutating_udf_with_a_context(self):
-        """With a context the namespaces are promoted, still by reference."""
-        item = _item()
-        with pytest.raises(ConfigurationError, match="wrote to its input"):
-            GuardEvaluator().evaluate(
-                item,
-                {"clause": "a1.tier == 'keep'", "on_false": "filter"},
-                context={"source": {}},
-                conditional_clause="guard_probe_mutates_promoted",
-            )
-
-        assert _ran == ["promoted"], "the UDF must have run"
+        assert _ran == [ran], "the UDF must have run, or the record survived for no reason"
         assert item["content"]["a1"]["tier"] == "keep", item
 
     def test_a_reading_udf_still_works_and_keeps_require(self):

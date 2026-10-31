@@ -1,5 +1,7 @@
 """Tests for tracking field propagation through RecordEnvelope and enrichment pipeline."""
 
+import pytest
+
 from agent_actions.record.envelope import (
     RECORD_FRAMEWORK_FIELDS,
     RECORD_LIFECYCLE_FIELDS,
@@ -10,41 +12,41 @@ from agent_actions.record.envelope import (
 
 
 class TestFieldSets:
-    def test_tracking_fields_are_subset_of_framework(self):
-        assert RECORD_TRACKING_FIELDS < RECORD_FRAMEWORK_FIELDS
-
-    def test_lifecycle_fields_are_subset_of_framework(self):
-        assert RECORD_LIFECYCLE_FIELDS < RECORD_FRAMEWORK_FIELDS
-
-    def test_stage_fields_are_subset_of_framework(self):
-        assert RECORD_STAGE_FIELDS < RECORD_FRAMEWORK_FIELDS
+    @pytest.mark.parametrize(
+        "subset",
+        [
+            pytest.param(RECORD_TRACKING_FIELDS, id="tracking"),
+            pytest.param(RECORD_LIFECYCLE_FIELDS, id="lifecycle"),
+            pytest.param(RECORD_STAGE_FIELDS, id="stage"),
+        ],
+    )
+    def test_field_set_is_strict_subset_of_framework(self, subset):
+        assert subset < RECORD_FRAMEWORK_FIELDS
 
     def test_framework_is_union(self):
         assert RECORD_FRAMEWORK_FIELDS == (
             RECORD_TRACKING_FIELDS | RECORD_LIFECYCLE_FIELDS | RECORD_STAGE_FIELDS
         )
 
-    def test_tracking_and_lifecycle_are_disjoint(self):
-        assert RECORD_TRACKING_FIELDS.isdisjoint(RECORD_LIFECYCLE_FIELDS)
+    @pytest.mark.parametrize(
+        ("a", "b"),
+        [
+            pytest.param(RECORD_TRACKING_FIELDS, RECORD_LIFECYCLE_FIELDS, id="tracking-lifecycle"),
+            pytest.param(RECORD_TRACKING_FIELDS, RECORD_STAGE_FIELDS, id="tracking-stage"),
+            pytest.param(RECORD_LIFECYCLE_FIELDS, RECORD_STAGE_FIELDS, id="lifecycle-stage"),
+        ],
+    )
+    def test_field_sets_are_disjoint(self, a, b):
+        assert a.isdisjoint(b)
 
-    def test_tracking_and_stage_are_disjoint(self):
-        assert RECORD_TRACKING_FIELDS.isdisjoint(RECORD_STAGE_FIELDS)
+    @pytest.mark.parametrize("field", ["source_guid", "version_correlation_id"])
+    def test_tracking_contains(self, field):
+        assert field in RECORD_TRACKING_FIELDS
 
-    def test_lifecycle_and_stage_are_disjoint(self):
-        assert RECORD_LIFECYCLE_FIELDS.isdisjoint(RECORD_STAGE_FIELDS)
-
-    def test_tracking_contains_source_guid(self):
-        assert "source_guid" in RECORD_TRACKING_FIELDS
-
-    def test_tracking_contains_version_correlation_id(self):
-        assert "version_correlation_id" in RECORD_TRACKING_FIELDS
-
-    def test_metadata_not_in_tracking(self):
-        # metadata is a per-stage field — must not bleed into tracking carry
-        assert "metadata" not in RECORD_TRACKING_FIELDS
-
-    def test_target_id_not_in_tracking(self):
-        assert "target_id" not in RECORD_TRACKING_FIELDS
+    # metadata is a per-stage field — must not bleed into tracking carry
+    @pytest.mark.parametrize("field", ["metadata", "target_id"])
+    def test_per_stage_field_not_in_tracking(self, field):
+        assert field not in RECORD_TRACKING_FIELDS
 
     def test_producer_source_guids_is_a_stage_field(self):
         """It names which input of *this* action produced the row. Carried forward
@@ -69,25 +71,19 @@ class TestEnvelopeBuildCarriesTrackingFields:
         result = RecordEnvelope.build("act", {"x": 1}, inp)
         assert result["source_guid"] == "g1"
 
-    def test_does_not_carry_metadata(self):
-        inp = {"source_guid": "g1", "metadata": {"model": "gpt-4"}, "content": {}}
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            pytest.param("metadata", {"model": "gpt-4"}, id="metadata"),
+            pytest.param("target_id", "t1", id="target_id"),
+            pytest.param("producer_source_guids", ["r0"], id="producer_source_guids"),
+            pytest.param("lineage", ["n1", "n2"], id="lineage"),
+        ],
+    )
+    def test_does_not_carry_per_stage_field(self, field, value):
+        inp = {"source_guid": "g1", field: value, "content": {}}
         result = RecordEnvelope.build("act", {"x": 1}, inp)
-        assert "metadata" not in result
-
-    def test_does_not_carry_target_id(self):
-        inp = {"source_guid": "g1", "target_id": "t1", "content": {}}
-        result = RecordEnvelope.build("act", {"x": 1}, inp)
-        assert "target_id" not in result
-
-    def test_does_not_carry_producer_source_guids(self):
-        inp = {"source_guid": "g1", "producer_source_guids": ["r0"], "content": {}}
-        result = RecordEnvelope.build("act", {"x": 1}, inp)
-        assert "producer_source_guids" not in result
-
-    def test_does_not_carry_lineage(self):
-        inp = {"source_guid": "g1", "lineage": ["n1", "n2"], "content": {}}
-        result = RecordEnvelope.build("act", {"x": 1}, inp)
-        assert "lineage" not in result
+        assert field not in result
 
     def test_tracking_fields_chain_through_stages(self):
         """version_correlation_id must survive 3 sequential build() calls."""
@@ -258,15 +254,17 @@ class TestTheProducerIsNotOfferedAsBusinessData:
 
         assert sorted(_RECORD_METADATA_KEYS - METADATA_KEYS) == []
 
-    def test_a_parent_identity_is_classified_as_metadata_not_content(self):
+    @pytest.mark.parametrize(
+        "field",
+        [
+            pytest.param("parent_source_guid", id="parent"),
+            pytest.param("repeat_of_source_guid", id="repeat"),
+        ],
+    )
+    def test_an_identity_field_is_classified_as_metadata_not_content(self, field):
         from agent_actions.tooling.rendering.data_card import classify_field
 
-        assert classify_field("parent_source_guid") == "metadata"
-
-    def test_a_repeat_identity_is_classified_as_metadata_not_content(self):
-        from agent_actions.tooling.rendering.data_card import classify_field
-
-        assert classify_field("repeat_of_source_guid") == "metadata"
+        assert classify_field(field) == "metadata"
 
     def test_it_is_not_rendered_as_a_data_card_field(self):
         """data_card.METADATA_KEYS calls itself the single source of truth, mirrored in

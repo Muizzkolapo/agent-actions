@@ -139,40 +139,21 @@ def _analysis(page: dict) -> str:
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_a_store_prompt_sends_each_record_the_prompt_it_loads(tmp_path, mode):
+@pytest.mark.parametrize(
+    ("prompt", "suffix"),
+    [
+        pytest.param("$lp_wf.Main_Analysis", "", id="loads"),
+        pytest.param("$lp_wf.Outer", "\nBe brief.", id="loads-one-that-loads-another"),
+    ],
+)
+def test_a_store_prompt_sends_each_record_the_prompt_it_loads(tmp_path, mode, prompt, suffix):
     """prompt-store.md "Load Other Prompts": every record failed on 'load_prompt' is undefined."""
-    project = _project(tmp_path, mode, "$lp_wf.Main_Analysis")
+    project = _project(tmp_path, mode, prompt)
 
     code, output = _run(project)
 
     assert code == 0, output
-    assert _prompts(project) == [_analysis(page) for page in PAGES]
-
-
-@pytest.mark.parametrize("mode", MODES)
-def test_a_loaded_prompt_that_loads_another_is_expanded_too(tmp_path, mode):
-    project = _project(tmp_path, mode, "$lp_wf.Outer")
-
-    code, output = _run(project)
-
-    assert code == 0, output
-    assert _prompts(project) == [_analysis(page) + "\nBe brief." for page in PAGES]
-
-
-def test_an_inline_prompt_loading_a_store_prompt_that_loads_another_is_expanded(tmp_path):
-    project = _project(
-        tmp_path,
-        "online",
-        '|\n      {{ load_prompt("lp_wf.Header_Line") }}\n      Summarize the page.',
-    )
-
-    code, output = _run(project)
-
-    assert code == 0, output
-    assert _prompts(project) == [
-        f"You are reviewing the page titled {page['title']}.\nSummarize the page.\n"
-        for page in PAGES
-    ]
+    assert _prompts(project) == [_analysis(page) + suffix for page in PAGES]
 
 
 def test_store_prompts_that_load_each_other_fail_the_load_naming_the_cycle(tmp_path):
@@ -224,6 +205,11 @@ def test_an_inline_prompt_reading_a_record_loads_a_store_prompt_of_several_lines
             "\"{{ load_prompt('lp_wf.Two_Lines') }} Summarize {{ source.title }}.\"",
             "Line one.\nLine two. Summarize {title}.",
             id="double-quoted-keeps-the-line-break",
+        ),
+        pytest.param(
+            '|\n      {{ load_prompt("lp_wf.Header_Line") }}\n      Summarize the page.',
+            "You are reviewing the page titled {title}.\nSummarize the page.\n",
+            id="loads-a-store-prompt-that-loads-another",
         ),
     ],
 )

@@ -163,22 +163,21 @@ MODES = ["online", "batch"]
 
 
 @pytest.mark.parametrize("run_mode", MODES)
-def test_the_guard_keeps_the_pages_inside_the_range(tmp_path, run_mode):
-    project = _ran(tmp_path, run_mode, "source.page_no BETWEEN 2 AND 10")
+@pytest.mark.parametrize(
+    ("condition", "filtered", "kept"),
+    [
+        ("source.page_no BETWEEN 2 AND 10", [1, 1], [2, 2]),
+        ("NOT (source.page_no BETWEEN 2 AND 10)", [2, 2], [1, 1]),
+    ],
+    ids=["between", "not_between"],
+)
+def test_the_guard_keeps_the_pages_its_range_names(tmp_path, run_mode, condition, filtered, kept):
+    project = _ran(tmp_path, run_mode, condition)
 
-    assert project.pages("publish", "filtered") == [1, 1]
+    assert project.pages("publish", "filtered") == filtered
     for action in BELOW:
-        assert project.pages(action, "success") == [2, 2], action
+        assert project.pages(action, "success") == kept, action
     assert set(project.statuses().values()) == {"completed"}
-
-
-@pytest.mark.parametrize("run_mode", MODES)
-def test_under_not_the_guard_keeps_the_pages_outside_the_range(tmp_path, run_mode):
-    project = _ran(tmp_path, run_mode, "NOT (source.page_no BETWEEN 2 AND 10)")
-
-    assert project.pages("publish", "filtered") == [2, 2]
-    for action in BELOW:
-        assert project.pages(action, "success") == [1, 1], action
 
 
 @pytest.mark.parametrize(

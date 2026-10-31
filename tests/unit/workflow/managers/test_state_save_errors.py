@@ -12,29 +12,31 @@ from agent_actions.workflow.managers.state import ActionStateManager, ActionStat
 class TestSaveStatusErrorPropagation:
     """_save_status must raise on I/O failure, not swallow exceptions."""
 
-    def test_oserror_propagates_through_update_status(self, tmp_path):
-        """OSError from atomic_json_write must propagate through update_status."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["action_a"])
+    @pytest.mark.parametrize(
+        ("error", "call"),
+        [
+            pytest.param(
+                OSError("disk full"),
+                lambda mgr: mgr.update_status("action_a", ActionStatus.COMPLETED),
+                id="update_status_oserror",
+            ),
+            pytest.param(
+                ValueError("not serializable"),
+                lambda mgr: mgr._save_status(),
+                id="save_status_valueerror",
+            ),
+            pytest.param(OSError("disk full"), lambda mgr: mgr.reset(), id="reset_oserror"),
+        ],
+    )
+    def test_a_failed_status_write_propagates(self, tmp_path, error, call):
+        mgr = ActionStateManager(tmp_path / "status.json", ["action_a"])
 
         with patch(
             "agent_actions.workflow.managers.state.atomic_json_write",
-            side_effect=OSError("disk full"),
+            side_effect=error,
         ):
-            with pytest.raises(OSError, match="disk full"):
-                mgr.update_status("action_a", ActionStatus.COMPLETED)
-
-    def test_value_error_propagates_through_save_status(self, tmp_path):
-        """ValueError from atomic_json_write (serialization bug) must propagate."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["action_a"])
-
-        with patch(
-            "agent_actions.workflow.managers.state.atomic_json_write",
-            side_effect=ValueError("not serializable"),
-        ):
-            with pytest.raises(ValueError, match="not serializable"):
-                mgr._save_status()
+            with pytest.raises(type(error), match=str(error)):
+                call(mgr)
 
     def test_mkdir_failure_propagates(self, tmp_path):
         """If the status directory can't be created, the error must propagate."""
@@ -48,18 +50,6 @@ class TestSaveStatusErrorPropagation:
         ):
             with pytest.raises(OSError, match="permission denied"):
                 mgr._save_status()
-
-    def test_reset_save_failure_propagates(self, tmp_path):
-        """If save fails during reset(), the error must propagate."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["action_a"])
-
-        with patch(
-            "agent_actions.workflow.managers.state.atomic_json_write",
-            side_effect=OSError("disk full"),
-        ):
-            with pytest.raises(OSError, match="disk full"):
-                mgr.reset()
 
 
 class TestClearDispositionErrorPropagation:

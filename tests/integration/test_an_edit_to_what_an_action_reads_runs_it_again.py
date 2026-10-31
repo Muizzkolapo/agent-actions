@@ -321,20 +321,22 @@ def test_an_edit_to_the_dependencies_runs_the_action_and_its_readers_again(compl
     assert _ran(completed) == {}
 
 
-def test_a_run_with_nothing_edited_runs_nothing(completed):
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, _output(result)
-    assert "resetting to pending" not in _output(result)
-    assert _ran(completed) == {}
-
-
-def test_reordering_or_repeating_what_the_scope_lists_runs_nothing(completed):
-    _edit(
-        completed,
-        "observe: [stage_items.item_id, merge_direct.decision]",
-        "observe: [merge_direct.decision, stage_items.item_id, merge_direct.decision]",
-    )
+@pytest.mark.parametrize(
+    "edit",
+    [
+        pytest.param(None, id="nothing-edited"),
+        pytest.param(
+            (
+                "observe: [stage_items.item_id, merge_direct.decision]",
+                "observe: [merge_direct.decision, stage_items.item_id, merge_direct.decision]",
+            ),
+            id="scope-reordered-and-repeated",
+        ),
+    ],
+)
+def test_a_run_that_changes_nothing_the_action_reads_runs_nothing(completed, edit):
+    if edit is not None:
+        _edit(completed, *edit)
 
     result = _agac(completed, "run", "-a", WORKFLOW)
 

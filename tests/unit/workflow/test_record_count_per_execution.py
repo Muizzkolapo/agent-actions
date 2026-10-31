@@ -61,11 +61,16 @@ def _run_params(action_name="agent_a"):
 class TestExecuteActionRunReportsPerExecutionDelta:
     """Online path: _execute_action_run snapshots before/after and reports the delta."""
 
-    def test_resume_after_prior_run_reports_only_new_records(self):
-        # Pre-existing rows from a prior run that wrote to different paths.
-        # The current execution writes 30 more records; ActionCompleteEvent
-        # must ship 30, not the cumulative 80.
-        deps = _build_deps([50, 80])
+    @pytest.mark.parametrize(
+        ("tally", "expected"),
+        [
+            pytest.param([50, 80], 30, id="resume-after-prior-run"),
+            pytest.param([0, 25], 25, id="fresh-run"),
+            pytest.param([12, 12], 0, id="writes-nothing"),
+        ],
+    )
+    def test_record_count_is_the_rows_this_execution_added(self, tally, expected):
+        deps = _build_deps(tally)
         deps.action_runner.run_action.return_value = "/out"
         executor = ActionExecutor(deps)
 
@@ -74,33 +79,10 @@ class TestExecuteActionRunReportsPerExecutionDelta:
 
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
-        assert result.metrics.record_count == 30, (
-            f"expected per-execution delta 30 (80 - 50), got cumulative "
-            f"{result.metrics.record_count} — record_count is being read "
-            f"as SUM instead of after-before delta"
+        assert result.metrics.record_count == expected, (
+            f"expected per-execution delta {expected} ({tally[1]} - {tally[0]}), got "
+            f"{result.metrics.record_count}; record_count is not the after-before delta"
         )
-
-    def test_fresh_run_reports_full_record_count(self):
-        # No prior rows; this execution wrote 25.
-        deps = _build_deps([0, 25])
-        deps.action_runner.run_action.return_value = "/out"
-        executor = ActionExecutor(deps)
-
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor._execute_action_run(_run_params())
-
-        assert result.metrics.record_count == 25
-
-    def test_run_that_writes_nothing_reports_zero(self):
-        # Snapshots unchanged across the run.
-        deps = _build_deps([12, 12])
-        deps.action_runner.run_action.return_value = "/out"
-        executor = ActionExecutor(deps)
-
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor._execute_action_run(_run_params())
-
-        assert result.metrics.record_count == 0
 
 
 class TestBatchPathReportsPerExecutionDelta:

@@ -136,18 +136,20 @@ class Project:
         )
 
 
-def test_the_guard_runs_on_a_string_containing_and(tmp_path):
-    project = Project(tmp_path, 'source.title == "rock and roll"')
+@pytest.mark.parametrize(
+    ("condition", "filtered", "succeeded"),
+    [
+        ('source.title == "rock and roll"', ["jazz"], ["rock and roll"]),
+        ('source.title != "this or that"', [], ["jazz", "rock and roll"]),
+    ],
+    ids=["and", "negated-or"],
+)
+def test_the_guard_runs_on_a_string_holding_a_reserved_word(
+    tmp_path, condition, filtered, succeeded
+):
+    project = Project(tmp_path, condition)
     project.run_to_the_end()
 
-    assert project.titles_held("publish", "filtered") == ["jazz"]
+    assert project.titles_held("publish", "filtered") == filtered
     for action in BELOW:
-        assert project.titles_held(action, "success") == ["rock and roll"], action
-
-
-def test_the_guard_runs_on_a_negated_string_comparison_with_or_in_it(tmp_path):
-    project = Project(tmp_path, 'source.title != "this or that"')
-    project.run_to_the_end()
-
-    for action in BELOW:
-        assert sorted(project.titles_held(action, "success")) == ["jazz", "rock and roll"], action
+        assert project.titles_held(action, "success") == succeeded, action

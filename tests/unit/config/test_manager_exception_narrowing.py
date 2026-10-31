@@ -75,8 +75,15 @@ class TestGetUserAgentsExceptionNarrowing:
 
         assert isinstance(result, list)
 
-    def test_yaml_error_raises_configuration_error(self, tmp_path):
-        """yaml.YAMLError → ConfigurationError with context."""
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(yaml.YAMLError("bad yaml"), id="yaml_error"),
+            pytest.param(PermissionError("access denied"), id="permission_error"),
+            pytest.param(ConfigValidationError("invalid config"), id="config_validation_error"),
+        ],
+    )
+    def test_load_failure_raises_configuration_error(self, tmp_path, error):
         cm = self._make_workflow_manager(tmp_path)
 
         with (
@@ -84,35 +91,7 @@ class TestGetUserAgentsExceptionNarrowing:
             patch("agent_actions.config.manager.load_project_config") as mock_load,
         ):
             mock_pm_cls.return_value.get_project_root.return_value = tmp_path
-            mock_load.side_effect = yaml.YAMLError("bad yaml")
-
-            with pytest.raises(ConfigurationError, match="Failed to load project defaults"):
-                cm.get_user_agents()
-
-    def test_os_error_raises_configuration_error(self, tmp_path):
-        """OSError → ConfigurationError with context."""
-        cm = self._make_workflow_manager(tmp_path)
-
-        with (
-            patch("agent_actions.config.manager.PathManager") as mock_pm_cls,
-            patch("agent_actions.config.manager.load_project_config") as mock_load,
-        ):
-            mock_pm_cls.return_value.get_project_root.return_value = tmp_path
-            mock_load.side_effect = PermissionError("access denied")
-
-            with pytest.raises(ConfigurationError, match="Failed to load project defaults"):
-                cm.get_user_agents()
-
-    def test_config_validation_error_raises_configuration_error(self, tmp_path):
-        """ConfigValidationError from load_project_config → ConfigurationError."""
-        cm = self._make_workflow_manager(tmp_path)
-
-        with (
-            patch("agent_actions.config.manager.PathManager") as mock_pm_cls,
-            patch("agent_actions.config.manager.load_project_config") as mock_load,
-        ):
-            mock_pm_cls.return_value.get_project_root.return_value = tmp_path
-            mock_load.side_effect = ConfigValidationError("invalid config")
+            mock_load.side_effect = error
 
             with pytest.raises(ConfigurationError, match="Failed to load project defaults"):
                 cm.get_user_agents()

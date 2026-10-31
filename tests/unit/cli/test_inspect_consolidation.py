@@ -132,12 +132,14 @@ class TestVersionGroupCollapse:
 
         return collapse_version_groups([name for name, _ in name_cfg_pairs], dict(name_cfg_pairs))
 
-    def test_versioned_group_collapses(self):
-        assert self._collapse(self._versioned("foo", 3)) == ["foo (×3)"]
-
-    def test_singleton_versioned_keeps_full_name(self):
-        # Only one variant — no `(×1)` noise.
-        assert self._collapse(self._versioned("foo", 1)) == ["foo_1"]
+    @pytest.mark.parametrize(
+        ("n", "expected"),
+        # A single variant keeps its full name — no `(×1)` noise.
+        [(3, ["foo (×3)"]), (1, ["foo_1"])],
+        ids=["group-collapses", "singleton-keeps-name"],
+    )
+    def test_versioned_group_collapse(self, n, expected):
+        assert self._collapse(self._versioned("foo", n)) == expected
 
     def test_non_versioned_pass_through_even_with_n_suffix(self):
         # `step_1` / `step_2` look version-shaped but the runtime never
@@ -195,10 +197,17 @@ class TestGroupFlagPropagation:
     group level; subcommands must inherit it via ``ctx.default_map``.
     """
 
-    def test_agent_passed_before_subcommand_reaches_subcommand(self):
-        """Regression: ``-a foo action <name>`` used to fail with
-        'Missing option -a'. The group must propagate the agent.
-        """
+    @pytest.mark.parametrize(
+        ("args", "kwarg", "expected"),
+        [
+            # Regression: `-a foo action <name>` used to fail with 'Missing option -a'.
+            (["-a", "test_workflow", "action", "a"], "agent_name", "test_workflow"),
+            (["-a", "wf", "-u", "my_tools", "action", "a"], "user_code_path", "my_tools"),
+            (["-a", "group_wf", "action", "-a", "sub_wf", "a"], "agent_name", "sub_wf"),
+        ],
+        ids=["agent-before-subcommand", "user-code", "subcommand-agent-wins"],
+    )
+    def test_group_flag_reaches_subcommand(self, args, kwarg, expected):
         with (
             patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls,
             patch(
@@ -213,52 +222,8 @@ class TestGroupFlagPropagation:
             mock_inspector_cls.return_value = mock_inspector
 
             runner = CliRunner()
-            result = runner.invoke(inspect, ["-a", "test_workflow", "action", "a"])
-
-        assert result.exit_code == 0, result.output
-        # WorkflowInspector should be constructed with the propagated agent.
-        kwargs = mock_inspector_cls.call_args.kwargs
-        assert kwargs.get("agent_name") == "test_workflow"
-
-    def test_user_code_propagates_too(self):
-        with (
-            patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls,
-            patch(
-                "agent_actions.cli.cli_decorators.ensure_in_project",
-                return_value=Path("/fake/project"),
-            ),
-        ):
-            mock_inspector = MagicMock()
-            mock_inspector.action_configs = {"a": {}}
-            mock_inspector.execution_order = ["a"]
-            mock_inspector.schema_service = None
-            mock_inspector_cls.return_value = mock_inspector
-
-            runner = CliRunner()
-            result = runner.invoke(inspect, ["-a", "wf", "-u", "my_tools", "action", "a"])
+            result = runner.invoke(inspect, args)
 
         assert result.exit_code == 0, result.output
         kwargs = mock_inspector_cls.call_args.kwargs
-        assert kwargs.get("user_code_path") == "my_tools"
-
-    def test_subcommand_explicit_agent_wins_over_group(self):
-        """When both group and subcommand pass -a, subcommand wins."""
-        with (
-            patch("agent_actions.cli.inspect_base.WorkflowInspector") as mock_inspector_cls,
-            patch(
-                "agent_actions.cli.cli_decorators.ensure_in_project",
-                return_value=Path("/fake/project"),
-            ),
-        ):
-            mock_inspector = MagicMock()
-            mock_inspector.action_configs = {"a": {}}
-            mock_inspector.execution_order = ["a"]
-            mock_inspector.schema_service = None
-            mock_inspector_cls.return_value = mock_inspector
-
-            runner = CliRunner()
-            result = runner.invoke(inspect, ["-a", "group_wf", "action", "-a", "sub_wf", "a"])
-
-        assert result.exit_code == 0, result.output
-        kwargs = mock_inspector_cls.call_args.kwargs
-        assert kwargs.get("agent_name") == "sub_wf"
+        assert kwargs.get(kwarg) == expected

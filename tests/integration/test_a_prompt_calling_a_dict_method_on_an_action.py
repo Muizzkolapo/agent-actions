@@ -168,25 +168,27 @@ def _dispositions(project: Path) -> list[str]:
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])
-def test_the_docs_dictionary_iteration_example_runs(tmp_path, mode):
-    project = _project(tmp_path, mode, _DOCS_PROMPT)
+@pytest.mark.parametrize(
+    ("prompt", "sent"),
+    [
+        (_DOCS_PROMPT, ["- slow", "- slow - flaky"]),
+        (
+            _CALLS + "\n",
+            [
+                "second=flaky;severity=high;"
+                "keys=issue_description_1,issue_description_2,severity;values=3",
+                "second=none;severity=high;keys=issue_description_1,severity;values=2",
+            ],
+        ),
+    ],
+    ids=["docs-items-loop", "get-keys-values"],
+)
+def test_a_dict_method_called_on_an_action_renders(tmp_path, mode, prompt, sent):
+    project = _project(tmp_path, mode, prompt)
 
     _run_to_the_end(project)
 
-    assert _sent(project) == ["- slow", "- slow - flaky"]
-    assert _dispositions(project) == ["success", "success"]
-
-
-@pytest.mark.parametrize("mode", ["online", "batch"])
-def test_get_keys_and_values_called_on_an_action_render(tmp_path, mode):
-    project = _project(tmp_path, mode, _CALLS + "\n")
-
-    _run_to_the_end(project)
-
-    assert _sent(project) == [
-        "second=flaky;severity=high;keys=issue_description_1,issue_description_2,severity;values=3",
-        "second=none;severity=high;keys=issue_description_1,severity;values=2",
-    ]
+    assert _sent(project) == sent
     assert _dispositions(project) == ["success", "success"]
 
 

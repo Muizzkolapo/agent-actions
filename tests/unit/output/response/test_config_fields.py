@@ -110,23 +110,10 @@ class TestMutableDefaults:
 class TestRunModeCoercion:
     """Verify run_mode is coerced to RunMode enum from raw YAML strings."""
 
-    def test_uppercase_run_mode_coerced_to_enum(self):
-        """Raw YAML string 'BATCH' (uppercase) must be coerced to RunMode.BATCH."""
+    @pytest.mark.parametrize("raw", ["BATCH", "Batch", "batch"], ids=["upper", "mixed", "lower"])
+    def test_raw_yaml_run_mode_coerced_to_enum(self, raw):
         agent: dict = {}
-        inherit_simple_fields(agent, {"run_mode": "BATCH"}, {})
-        assert agent["run_mode"] == RunMode.BATCH
-        assert isinstance(agent["run_mode"], RunMode)
-
-    def test_mixed_case_run_mode_coerced(self):
-        """Raw YAML string 'Batch' (mixed-case) must be coerced to RunMode.BATCH."""
-        agent: dict = {}
-        inherit_simple_fields(agent, {"run_mode": "Batch"}, {})
-        assert agent["run_mode"] == RunMode.BATCH
-
-    def test_lowercase_run_mode_coerced(self):
-        """Raw YAML string 'batch' (lowercase) must be coerced to RunMode.BATCH."""
-        agent: dict = {}
-        inherit_simple_fields(agent, {"run_mode": "batch"}, {})
+        inherit_simple_fields(agent, {"run_mode": raw}, {})
         assert agent["run_mode"] == RunMode.BATCH
         assert isinstance(agent["run_mode"], RunMode)
 
@@ -153,19 +140,10 @@ class TestRunModeCoercion:
 class TestRunModeEnumContract:
     """Verify RunMode enum construction contract."""
 
-    def test_invalid_value_raises_value_error(self):
-        """RunMode('invalid') must raise ValueError."""
-        import pytest
-
+    @pytest.mark.parametrize("raw", ["invalid", "realtime"])
+    def test_unknown_value_raises_value_error(self, raw):
         with pytest.raises(ValueError):
-            RunMode("invalid")
-
-    def test_realtime_rejected(self):
-        """RunMode('realtime') must raise ValueError — not a valid mode."""
-        import pytest
-
-        with pytest.raises(ValueError):
-            RunMode("realtime")
+            RunMode(raw)
 
 
 class TestIsOperationalFromConfig:

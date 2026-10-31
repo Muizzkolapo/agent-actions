@@ -202,21 +202,30 @@ class TestANameOutsideTheLineageIsRefused:
 
 
 class TestANameUpstreamOfTheInputIsRead:
-    def test_through_the_actions_it_depends_on(self, project):
-        _late(project, ["final"], ["final.summary", "mid.summary"])
+    @pytest.mark.parametrize(
+        ("dependencies", "observe", "named", "expected"),
+        [
+            pytest.param(
+                ["final"], ["final.summary", "mid.summary"], "mid", "mid:{}", id="through-deps"
+            ),
+            pytest.param(
+                ["flatten", "final"],
+                ["flatten.summary", "final.summary"],
+                "final",
+                "final:mid:{}",
+                id="also-direct",
+            ),
+        ],
+    )
+    def test_through_the_actions_it_depends_on(
+        self, project, dependencies, observe, named, expected
+    ):
+        _late(project, dependencies, observe)
 
         result = _run("--fresh")
 
         assert result.exit_code == 0, result.output
-        assert _what_late_read(project, "mid") == {p: f"mid:{p}" for p in PAGES}
-
-    def test_when_the_reader_depends_on_it_as_well(self, project):
-        _late(project, ["flatten", "final"], ["flatten.summary", "final.summary"])
-
-        result = _run("--fresh")
-
-        assert result.exit_code == 0, result.output
-        assert _what_late_read(project, "final") == {p: f"final:mid:{p}" for p in PAGES}
+        assert _what_late_read(project, named) == {p: expected.format(p) for p in PAGES}
 
     def test_a_reader_of_a_failed_action_runs_again_once_it_succeeds(self, project):
         """Why the startup reset needs nothing of its own: a failed action skips every

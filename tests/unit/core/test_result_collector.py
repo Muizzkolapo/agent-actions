@@ -391,190 +391,110 @@ def _make_backend():
     return backend
 
 
+def _filtered_with_reason() -> ProcessingResult:
+    result = ProcessingResult.filtered(source_guid="src-f1")
+    result.skip_reason = "low_confidence"
+    return result
+
+
+def _exhausted_with_data() -> ProcessingResult:
+    result = ProcessingResult.exhausted(
+        error="Retry exhausted",
+        source_guid="src-ex",
+        recovery_metadata=_retry_metadata(),
+    )
+    result.data = [{"source_guid": "src-ex", "content": {}}]
+    return result
+
+
 class TestResultCollectorDispositions:
     """Tests for per-record disposition writes in ResultCollector."""
 
-    def test_filtered_result_writes_disposition(self):
+    @pytest.mark.parametrize(
+        ("make_result", "expected_args", "expected_kwargs"),
+        [
+            pytest.param(
+                _filtered_with_reason,
+                ("src-f1", "filtered"),
+                {"reason": "low_confidence"},
+                id="filtered",
+            ),
+            pytest.param(
+                lambda: ProcessingResult.filtered(source_guid="src-f2"),
+                ("src-f2", "filtered"),
+                {"reason": "guard_filter"},
+                id="filtered-default-reason",
+            ),
+            pytest.param(
+                lambda: ProcessingResult.failed(error="timeout", source_guid="src-fail"),
+                ("src-fail", "failed"),
+                {"reason": "timeout", "input_snapshot": None, "detail": "timeout"},
+                id="failed",
+            ),
+            # An empty error string falls back to 'processing_error'.
+            pytest.param(
+                lambda: ProcessingResult(
+                    status=ProcessingStatus.FAILED,
+                    data=[],
+                    executed=False,
+                    error="",
+                    source_guid="src-fail2",
+                ),
+                ("src-fail2", "failed"),
+                {"reason": "processing_error", "input_snapshot": None, "detail": ""},
+                id="failed-default-reason",
+            ),
+            pytest.param(
+                lambda: ProcessingResult.skipped(
+                    passthrough_data={"content": {}}, reason="guard_skip", source_guid="src-sk"
+                ),
+                ("src-sk", "passthrough"),
+                {"reason": "guard_skip"},
+                id="skipped",
+            ),
+            pytest.param(
+                _exhausted_with_data,
+                ("src-ex", "exhausted"),
+                {
+                    "reason": "exhausted_after_2_attempts",
+                    "input_snapshot": None,
+                    "detail": "Retry exhausted",
+                },
+                id="exhausted",
+            ),
+            pytest.param(
+                lambda: ProcessingResult(
+                    status=ProcessingStatus.UNPROCESSED,
+                    source_guid="src-un",
+                    data=[{"content": {}}],
+                    skip_reason="where_clause",
+                ),
+                ("src-un", "unprocessed"),
+                {"reason": "where_clause"},
+                id="unprocessed",
+            ),
+            pytest.param(
+                lambda: ProcessingResult.success(
+                    data=[{"content": {"v": 1}}], source_guid="src-ok"
+                ),
+                ("src-ok", "success"),
+                {},
+                id="success",
+            ),
+        ],
+    )
+    def test_result_writes_its_disposition(self, make_result, expected_args, expected_kwargs):
         backend = _make_backend()
-        filtered = ProcessingResult.filtered(source_guid="src-f1")
-        filtered.skip_reason = "low_confidence"
 
         ResultCollector.collect_results(
-            [filtered],
-            {},
-            "my_agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "my_agent",
-            "src-f1",
-            "filtered",
-            reason="low_confidence",
-        )
-
-    def test_filtered_result_default_reason(self):
-        backend = _make_backend()
-        filtered = ProcessingResult.filtered(source_guid="src-f2")
-
-        ResultCollector.collect_results(
-            [filtered],
-            {},
-            "agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-f2",
-            "filtered",
-            reason="guard_filter",
-        )
-
-    def test_failed_result_writes_disposition(self):
-        backend = _make_backend()
-        failed = ProcessingResult.failed(error="timeout", source_guid="src-fail")
-
-        ResultCollector.collect_results(
-            [failed],
-            {},
-            "agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-fail",
-            "failed",
-            reason="timeout",
-            input_snapshot=None,
-            detail="timeout",
-        )
-
-    def test_failed_result_default_reason(self):
-        """When error field is empty string, falls back to 'processing_error'."""
-        backend = _make_backend()
-        failed = ProcessingResult(
-            status=ProcessingStatus.FAILED,
-            data=[],
-            executed=False,
-            error="",
-            source_guid="src-fail2",
-        )
-
-        ResultCollector.collect_results(
-            [failed],
-            {},
-            "agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-fail2",
-            "failed",
-            reason="processing_error",
-            input_snapshot=None,
-            detail="",
-        )
-
-    def test_skipped_result_writes_disposition(self):
-        backend = _make_backend()
-        skipped = ProcessingResult.skipped(
-            passthrough_data={"content": {}},
-            reason="guard_skip",
-            source_guid="src-sk",
-        )
-
-        ResultCollector.collect_results(
-            [skipped],
+            [make_result()],
             {},
             "agent",
             is_first_stage=False,
             storage_backend=backend,
         )
 
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-sk",
-            "passthrough",
-            reason="guard_skip",
-        )
-
-    def test_exhausted_result_writes_disposition(self):
-        backend = _make_backend()
-        exhausted = ProcessingResult.exhausted(
-            error="Retry exhausted",
-            source_guid="src-ex",
-            recovery_metadata=_retry_metadata(),
-        )
-        exhausted.data = [{"source_guid": "src-ex", "content": {}}]
-
-        ResultCollector.collect_results(
-            [exhausted],
-            {},
-            "agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-ex",
-            "exhausted",
-            reason="exhausted_after_2_attempts",
-            input_snapshot=None,
-            detail="Retry exhausted",
-        )
-
-    def test_unprocessed_result_writes_disposition(self):
-        backend = _make_backend()
-        unprocessed = ProcessingResult(
-            status=ProcessingStatus.UNPROCESSED,
-            source_guid="src-un",
-            data=[{"content": {}}],
-            skip_reason="where_clause",
-        )
-
-        ResultCollector.collect_results(
-            [unprocessed],
-            {},
-            "agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-un",
-            "unprocessed",
-            reason="where_clause",
-        )
-
-    def test_success_result_writes_disposition(self):
-        backend = _make_backend()
-        success = ProcessingResult.success(
-            data=[{"content": {"v": 1}}],
-            source_guid="src-ok",
-        )
-
-        ResultCollector.collect_results(
-            [success],
-            {},
-            "agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "agent",
-            "src-ok",
-            "success",
-        )
+        backend.set_disposition.assert_called_once_with("agent", *expected_args, **expected_kwargs)
 
     def test_no_storage_backend_no_crash(self):
         """Dispositions are skipped gracefully when storage_backend is None."""
@@ -839,40 +759,31 @@ class TestCollectionStatsOnlyGuardOutcomes:
     the new field has a non-zero count — no manual update needed.
     """
 
-    def test_all_filtered(self):
-        assert CollectionStats(filtered=5).only_guard_outcomes is True
-
-    def test_all_skipped(self):
-        assert CollectionStats(skipped=3).only_guard_outcomes is True
-
-    def test_mixed_filtered_and_skipped(self):
-        assert CollectionStats(filtered=2, skipped=3).only_guard_outcomes is True
-
-    def test_all_zeros(self):
-        """All-zero stats: 0 == 0 → True (preserves existing behavior)."""
-        assert CollectionStats().only_guard_outcomes is True
-
-    def test_unprocessed_blocks(self):
-        assert CollectionStats(unprocessed=5).only_guard_outcomes is False
-
-    def test_success_blocks(self):
-        assert CollectionStats(success=1).only_guard_outcomes is False
-
-    def test_failed_blocks(self):
-        assert CollectionStats(failed=1).only_guard_outcomes is False
-
-    def test_exhausted_blocks(self):
-        assert CollectionStats(exhausted=1).only_guard_outcomes is False
-
-    def test_deferred_blocks(self):
-        assert CollectionStats(deferred=1).only_guard_outcomes is False
-
-    def test_mixed_filtered_with_unprocessed_blocks(self):
-        """Filtered + unprocessed: not all-guard, must block."""
-        assert CollectionStats(filtered=3, unprocessed=2).only_guard_outcomes is False
-
-    def test_mixed_skipped_with_success_blocks(self):
-        assert CollectionStats(skipped=2, success=1).only_guard_outcomes is False
+    @pytest.mark.parametrize(
+        ("stats", "expected"),
+        [
+            pytest.param(CollectionStats(filtered=5), True, id="all-filtered"),
+            pytest.param(CollectionStats(skipped=3), True, id="all-skipped"),
+            pytest.param(CollectionStats(filtered=2, skipped=3), True, id="filtered-and-skipped"),
+            # All-zero stats: 0 == 0 → True (preserves existing behavior).
+            pytest.param(CollectionStats(), True, id="all-zeros"),
+            pytest.param(CollectionStats(unprocessed=5), False, id="unprocessed-blocks"),
+            pytest.param(CollectionStats(success=1), False, id="success-blocks"),
+            pytest.param(CollectionStats(failed=1), False, id="failed-blocks"),
+            pytest.param(CollectionStats(exhausted=1), False, id="exhausted-blocks"),
+            pytest.param(CollectionStats(deferred=1), False, id="deferred-blocks"),
+            pytest.param(
+                CollectionStats(filtered=3, unprocessed=2),
+                False,
+                id="filtered-with-unprocessed-blocks",
+            ),
+            pytest.param(
+                CollectionStats(skipped=2, success=1), False, id="skipped-with-success-blocks"
+            ),
+        ],
+    )
+    def test_only_guard_outcomes(self, stats, expected):
+        assert stats.only_guard_outcomes is expected
 
 
 # ---------------------------------------------------------------------------
@@ -904,55 +815,53 @@ class TestTerminalFailure:
         assert stats.terminal_failure("act", [1, 2], [{"data": 1}], backend) is None
         backend.set_disposition.assert_not_called()
 
-    def test_zero_success_all_failed_raises(self):
-        """All records failed → RuntimeError."""
-        stats = CollectionStats(failed=3)
-        assert "0 successful records" in str(stats.terminal_failure("act", [1, 2, 3], []))
+    @pytest.mark.parametrize(
+        ("stats", "input_records", "needle"),
+        [
+            pytest.param(
+                CollectionStats(failed=3), [1, 2, 3], "0 successful records", id="all-failed"
+            ),
+            pytest.param(
+                CollectionStats(exhausted=2), [1, 2], "0 successful records", id="all-exhausted"
+            ),
+            pytest.param(
+                CollectionStats(failed=2, exhausted=1),
+                [1, 2, 3],
+                "3 active input",
+                id="mixed-failed-exhausted",
+            ),
+            # 2 unprocessed + 1 failed → active_input_count is 1.
+            pytest.param(
+                CollectionStats(unprocessed=2, failed=1),
+                [1, 2, 3],
+                "1 active input",
+                id="unprocessed-with-failures-counts-only-active",
+            ),
+        ],
+    )
+    def test_zero_success_returns_failure(self, stats, input_records, needle):
+        assert needle in str(stats.terminal_failure("act", input_records, []))
 
-    def test_zero_success_all_exhausted_raises(self):
-        """All records exhausted → RuntimeError."""
-        stats = CollectionStats(exhausted=2)
-        assert "0 successful records" in str(stats.terminal_failure("act", [1, 2], []))
-
-    def test_zero_success_mixed_failed_exhausted_raises(self):
-        """Mixed failed + exhausted → RuntimeError."""
-        stats = CollectionStats(failed=2, exhausted=1)
-        assert "3 active input" in str(stats.terminal_failure("act", [1, 2, 3], []))
-
-    def test_some_success_does_not_raise(self):
-        """At least one success → no raise."""
-        stats = CollectionStats(success=1, failed=2)
-        assert stats.terminal_failure("act", [1, 2, 3], [{"ok": True}]) is None
-
-    def test_unprocessed_excluded_from_denominator(self):
-        """Unprocessed (cascade-quarantined) records don't count as active input.
-
-        3 input records, all 3 unprocessed (0 active) → no raise even though
-        success == 0 and the input list is non-empty.
-        """
-        stats = CollectionStats(unprocessed=3)
-        # active_input_count is 0
-        assert stats.terminal_failure("act", [1, 2, 3], []) is None
-
-    def test_unprocessed_with_failures_raises_for_active(self):
-        """2 unprocessed + 1 failed → active_input_count is 1, raises."""
-        stats = CollectionStats(unprocessed=2, failed=1)
-        assert "1 active input" in str(stats.terminal_failure("act", [1, 2, 3], []))
-
-    def test_empty_data_does_not_raise(self):
-        """Empty input → no raise regardless of stats."""
-        stats = CollectionStats(failed=5)
-        assert stats.terminal_failure("act", [], []) is None
-
-    def test_no_backend_guard_only_does_not_crash(self):
-        """Guard-only with no storage backend → no crash, no disposition write."""
-        stats = CollectionStats(filtered=2)
-        assert stats.terminal_failure("act", [1, 2], []) is None
-
-    def test_deferred_only_does_not_raise(self):
-        """All deferred, zero success → no raise (no failed/exhausted)."""
-        stats = CollectionStats(deferred=3)
-        assert stats.terminal_failure("act", [1, 2, 3], []) is None
+    @pytest.mark.parametrize(
+        ("stats", "input_records", "output"),
+        [
+            pytest.param(
+                CollectionStats(success=1, failed=2), [1, 2, 3], [{"ok": True}], id="some-success"
+            ),
+            # Unprocessed (cascade-quarantined) records don't count as active input.
+            pytest.param(
+                CollectionStats(unprocessed=3),
+                [1, 2, 3],
+                [],
+                id="unprocessed-excluded-from-denominator",
+            ),
+            pytest.param(CollectionStats(failed=5), [], [], id="empty-input"),
+            pytest.param(CollectionStats(filtered=2), [1, 2], [], id="guard-only-no-backend"),
+            pytest.param(CollectionStats(deferred=3), [1, 2, 3], [], id="deferred-only"),
+        ],
+    )
+    def test_no_failure_returned(self, stats, input_records, output):
+        assert stats.terminal_failure("act", input_records, output) is None
 
 
 # ---------------------------------------------------------------------------
@@ -963,44 +872,50 @@ class TestTerminalFailure:
 class TestDataHasParseError:
     """Tests for _data_has_parse_error detection helper."""
 
-    def test_detects_parse_error_in_content_namespace(self):
-        data = [
-            {
-                "content": {
-                    "my_action": {
-                        "_parse_error": "Extra data: line 15",
-                        "raw_response": "bad json",
+    @pytest.mark.parametrize(
+        ("data", "expected"),
+        [
+            pytest.param(
+                [
+                    {
+                        "content": {
+                            "my_action": {
+                                "_parse_error": "Extra data: line 15",
+                                "raw_response": "bad json",
+                            }
+                        }
                     }
-                }
-            }
-        ]
-        assert _data_has_parse_error(data) is True
-
-    def test_detects_parse_error_at_top_level(self):
-        data = [{"_parse_error": "Expecting value", "raw_response": "not json"}]
-        assert _data_has_parse_error(data) is True
-
-    def test_normal_record_no_false_positive(self):
-        data = [{"content": {"my_action": {"question": "What is X?", "answer": "Y"}}}]
-        assert _data_has_parse_error(data) is False
-
-    def test_empty_data_returns_false(self):
-        assert _data_has_parse_error([]) is False
-
-    def test_content_with_non_dict_namespace_skipped(self):
-        data = [{"content": {"action": "just a string"}}]
-        assert _data_has_parse_error(data) is False
-
-    def test_multiple_items_one_has_error(self):
-        data = [
-            {"content": {"action": {"field": "ok"}}},
-            {"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}},
-        ]
-        assert _data_has_parse_error(data) is True
-
-    def test_no_content_key(self):
-        data = [{"source_guid": "abc", "metadata": {}}]
-        assert _data_has_parse_error(data) is False
+                ],
+                True,
+                id="in-content-namespace",
+            ),
+            pytest.param(
+                [{"_parse_error": "Expecting value", "raw_response": "not json"}],
+                True,
+                id="at-top-level",
+            ),
+            pytest.param(
+                [{"content": {"my_action": {"question": "What is X?", "answer": "Y"}}}],
+                False,
+                id="normal-record",
+            ),
+            pytest.param([], False, id="empty-data"),
+            pytest.param(
+                [{"content": {"action": "just a string"}}], False, id="non-dict-namespace-skipped"
+            ),
+            pytest.param(
+                [
+                    {"content": {"action": {"field": "ok"}}},
+                    {"content": {"action": {"_parse_error": "bad", "raw_response": "x"}}},
+                ],
+                True,
+                id="one-of-several-items",
+            ),
+            pytest.param([{"source_guid": "abc", "metadata": {}}], False, id="no-content-key"),
+        ],
+    )
+    def test_data_has_parse_error(self, data, expected):
+        assert _data_has_parse_error(data) is expected
 
 
 # ---------------------------------------------------------------------------
@@ -1175,17 +1090,25 @@ class TestParseErrorDisposition:
 class TestCollectorStateStamping:
     """Verify ResultCollector stamps correct _state based on skip_reason."""
 
-    def test_guard_prefilter_skip_stamps_guard_skipped(self):
-        """FILE prefilter skip_reason=guard_prefilter_skip → GUARD_SKIPPED (resettable)."""
+    @pytest.mark.parametrize(
+        ("skip_reason", "state"),
+        [
+            # FILE prefilter skip is resettable, like a per-record guard skip.
+            pytest.param("guard_prefilter_skip", "guard_skipped", id="guard-prefilter"),
+            pytest.param("guard_skip", "guard_skipped", id="guard-skip"),
+            pytest.param("upstream_unprocessed", "cascade_skipped", id="non-guard-reason-cascades"),
+        ],
+    )
+    def test_unprocessed_skip_reason_sets_state(self, skip_reason, state):
         record = {"content": {}, "_state": "active"}
         result = ProcessingResult(
             status=ProcessingStatus.UNPROCESSED,
-            source_guid="src-gp",
+            source_guid="src-1",
             data=[record],
-            skip_reason="guard_prefilter_skip",
+            skip_reason=skip_reason,
         )
 
-        output, stats = ResultCollector.collect_results(
+        output, _ = ResultCollector.collect_results(
             [result],
             {},
             "test_action",
@@ -1194,47 +1117,7 @@ class TestCollectorStateStamping:
         )
 
         assert len(output) == 1
-        assert output[0]["_state"] == "guard_skipped"
-
-    def test_guard_skip_stamps_guard_skipped(self):
-        """skip_reason=guard_skip → GUARD_SKIPPED."""
-        record = {"content": {}, "_state": "active"}
-        result = ProcessingResult(
-            status=ProcessingStatus.UNPROCESSED,
-            source_guid="src-gs",
-            data=[record],
-            skip_reason="guard_skip",
-        )
-
-        output, _ = ResultCollector.collect_results(
-            [result],
-            {},
-            "test_action",
-            is_first_stage=False,
-            storage_backend=None,
-        )
-
-        assert output[0]["_state"] == "guard_skipped"
-
-    def test_cascade_reason_stamps_cascade_skipped(self):
-        """Non-guard skip_reason (e.g. 'upstream_unprocessed') → CASCADE_SKIPPED."""
-        record = {"content": {}, "_state": "active"}
-        result = ProcessingResult(
-            status=ProcessingStatus.UNPROCESSED,
-            source_guid="src-cs",
-            data=[record],
-            skip_reason="upstream_unprocessed",
-        )
-
-        output, _ = ResultCollector.collect_results(
-            [result],
-            {},
-            "test_action",
-            is_first_stage=False,
-            storage_backend=None,
-        )
-
-        assert output[0]["_state"] == "cascade_skipped"
+        assert output[0]["_state"] == state
 
     def test_success_stamps_processed(self):
         """SUCCESS results stamp PROCESSED."""

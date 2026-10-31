@@ -68,12 +68,35 @@ class TestGuardSkipDisposition:
         pipeline._unified_processor.process.return_value = (output, stats)
         pipeline.process(file_path, base_dir, output_dir, data=data)
 
-    def test_no_disposition_when_all_guard_skipped_with_output(self, pipeline_and_mocks):
-        """Guard-skipped records ARE in output — no node-level skip, downstream proceeds."""
+    @pytest.mark.parametrize(
+        ("stats", "data", "output"),
+        [
+            # Guard-skipped records are in the output, so downstream proceeds.
+            pytest.param(
+                CollectionStats(skipped=2), None, None, id="all_guard_skipped_with_output"
+            ),
+            pytest.param(
+                CollectionStats(unprocessed=2), None, None, id="all_unprocessed_with_output"
+            ),
+            # Unprocessed (not filtered) with empty output must not read as skipped.
+            pytest.param(
+                CollectionStats(unprocessed=5), None, [], id="all_unprocessed_empty_output"
+            ),
+            pytest.param(
+                CollectionStats(skipped=1, filtered=1),
+                None,
+                [{"id": "1"}],
+                id="mixed_skip_filter_with_output",
+            ),
+            pytest.param(CollectionStats(success=1, skipped=1), None, None, id="some_succeed"),
+            pytest.param(CollectionStats(deferred=2), None, None, id="records_deferred"),
+            pytest.param(CollectionStats(), [], None, id="input_data_empty"),
+        ],
+    )
+    def test_no_node_disposition_is_written(self, pipeline_and_mocks, stats, data, output):
         pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(skipped=2)
 
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
+        self._run_with_stats(pipeline, config, stats, fp, base, out, data=data, output=output)
 
         config.storage_backend.set_disposition.assert_not_called()
 
@@ -91,37 +114,6 @@ class TestGuardSkipDisposition:
             reason="All records filtered — no output produced",
         )
 
-    def test_no_disposition_when_all_unprocessed_with_output(self, pipeline_and_mocks):
-        """Unprocessed records ARE in output — no node-level skip."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(unprocessed=2)
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-        config.storage_backend.set_disposition.assert_not_called()
-
-    def test_no_disposition_when_all_unprocessed_empty_data(self, pipeline_and_mocks):
-        """Bug #10: UNPROCESSED with empty data → empty output, but must NOT trigger SKIPPED.
-
-        Records were unprocessed (not filtered). The disposition condition must
-        check stats.unprocessed to avoid falsely writing SKIPPED.
-        """
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(unprocessed=5)
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
-
-        config.storage_backend.set_disposition.assert_not_called()
-
-    def test_no_disposition_when_mixed_skip_filter_with_output(self, pipeline_and_mocks):
-        """Mixed skip+filter: skipped records produce output, so no cascade-block."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(skipped=1, filtered=1)
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out, output=[{"id": "1"}])
-
-        config.storage_backend.set_disposition.assert_not_called()
-
     def test_writes_disposition_when_skipped_data_is_empty(self, pipeline_and_mocks):
         """Guard-skipped records with empty data produce empty output — cascade-block."""
         pipeline, config, fp, base, out = pipeline_and_mocks
@@ -131,50 +123,19 @@ class TestGuardSkipDisposition:
 
         config.storage_backend.set_disposition.assert_called_once()
 
-    def test_no_disposition_when_some_succeed(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if any record succeeded."""
+    # A failed or exhausted record raises instead of writing a skip.
+    @pytest.mark.parametrize(
+        "stats",
+        [
+            pytest.param(CollectionStats(failed=1, skipped=1), id="some_failed"),
+            pytest.param(CollectionStats(exhausted=2), id="records_exhausted"),
+        ],
+    )
+    def test_no_skip_disposition_when_records_did_not_succeed(self, pipeline_and_mocks, stats):
         pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(success=1, skipped=1)
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-        config.storage_backend.set_disposition.assert_not_called()
-
-    def test_no_disposition_when_some_failed(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if any record failed (raises instead)."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(failed=1, skipped=1)
 
         with pytest.raises(RuntimeError, match="produced 0 successful records"):
             self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-        config.storage_backend.set_disposition.assert_not_called()
-
-    def test_no_disposition_when_records_exhausted(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if records exhausted retries (raises instead)."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(exhausted=2)
-
-        with pytest.raises(RuntimeError, match="produced 0 successful records"):
-            self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-        config.storage_backend.set_disposition.assert_not_called()
-
-    def test_no_disposition_when_records_deferred(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if records are deferred."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(deferred=2)
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out)
-
-        config.storage_backend.set_disposition.assert_not_called()
-
-    def test_no_disposition_when_data_empty(self, pipeline_and_mocks):
-        """DISPOSITION_SKIPPED must NOT be written if input data is empty."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats()
-
-        self._run_with_stats(pipeline, config, stats, fp, base, out, data=[])
 
         config.storage_backend.set_disposition.assert_not_called()
 
@@ -232,36 +193,31 @@ class TestZeroSuccessFailure:
         pipeline._unified_processor.process.return_value = (output, stats)
         pipeline.process(fp, base, out, data=data)
 
-    def test_all_failed_raises(self, pipeline_and_mocks):
-        """All records FAILED with zero output → RuntimeError."""
+    @pytest.mark.parametrize(
+        ("stats", "output", "match"),
+        [
+            pytest.param(CollectionStats(failed=3), [], "failed or exhausted", id="all_failed"),
+            # Exhausted records leave tombstones, so the output is not empty even
+            # though nothing succeeded.
+            pytest.param(
+                CollectionStats(exhausted=3),
+                [{"_unprocessed": True}] * 3,
+                "produced 0 successful records",
+                id="all_exhausted",
+            ),
+            pytest.param(
+                CollectionStats(failed=2, exhausted=1),
+                [{"_unprocessed": True}],
+                "produced 0 successful records",
+                id="mixed_failed_exhausted",
+            ),
+        ],
+    )
+    def test_zero_successes_with_failures_raises(self, pipeline_and_mocks, stats, output, match):
         pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(failed=3)
 
-        with pytest.raises(RuntimeError, match="failed or exhausted"):
-            self._run_with_stats(pipeline, config, stats, fp, base, out, output=[])
-
-    def test_all_exhausted_raises(self, pipeline_and_mocks):
-        """All records EXHAUSTED (tombstones in output) → RuntimeError.
-
-        This is the blind spot: EXHAUSTED records produce tombstone data
-        that makes the output list non-empty, but zero records actually
-        succeeded. The old check (`not output`) missed this.
-        """
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(exhausted=3)
-        tombstones = [{"_unprocessed": True}] * 3
-
-        with pytest.raises(RuntimeError, match="produced 0 successful records"):
-            self._run_with_stats(pipeline, config, stats, fp, base, out, output=tombstones)
-
-    def test_mixed_failed_exhausted_raises(self, pipeline_and_mocks):
-        """Mixed FAILED + EXHAUSTED with zero successes → RuntimeError."""
-        pipeline, config, fp, base, out = pipeline_and_mocks
-        stats = CollectionStats(failed=2, exhausted=1)
-        tombstones = [{"_unprocessed": True}]
-
-        with pytest.raises(RuntimeError, match="produced 0 successful records"):
-            self._run_with_stats(pipeline, config, stats, fp, base, out, output=tombstones)
+        with pytest.raises(RuntimeError, match=match):
+            self._run_with_stats(pipeline, config, stats, fp, base, out, output=output)
 
     def test_error_message_includes_both_counts(self, pipeline_and_mocks):
         """Error message should include both failed and exhausted counts."""

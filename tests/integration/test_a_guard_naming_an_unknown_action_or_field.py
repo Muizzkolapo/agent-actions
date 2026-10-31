@@ -148,51 +148,62 @@ def _refused(project: Path, *args: str) -> str:
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_guard_naming_an_action_that_does_not_exist_is_refused(tmp_path, mode):
-    project = _project(tmp_path, "nosuch.severity == 'high'", mode)
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        (
+            "nosuch.severity == 'high'",
+            ["Referenced action 'nosuch' does not exist in workflow", "Location: guard"],
+        ),
+        (
+            "merge_alternatives.sevrity == 'high'",
+            [
+                "Field 'sevrity' not found in action 'merge_alternatives' output schema",
+                "Did you mean: severity?",
+            ],
+        ),
+        # `merge_alternatives` observes `source.page_content`; its namespace never holds it.
+        (
+            "merge_alternatives.page_content == 'two'",
+            ["Field 'page_content' not found in action 'merge_alternatives' output schema"],
+        ),
+    ],
+    ids=["unknown-action", "misspelt-field", "observed-only-field"],
+)
+def test_a_guard_naming_what_does_not_exist_is_refused_by_run(tmp_path, mode, condition, expected):
+    project = _project(tmp_path, condition, mode)
 
     output = _refused(project, "run", "-a", WORKFLOW, "--fresh")
 
-    assert "Referenced action 'nosuch' does not exist in workflow" in output, output
-    assert "Location: guard" in output, output
+    for needle in expected:
+        assert needle in output, output
 
 
-@pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_guard_naming_a_field_the_schema_lacks_is_refused(tmp_path, mode):
-    project = _project(tmp_path, "merge_alternatives.sevrity == 'high'", mode)
-
-    output = _refused(project, "run", "-a", WORKFLOW, "--fresh")
-
-    assert "Field 'sevrity' not found in action 'merge_alternatives' output schema" in output
-    assert "Did you mean: severity?" in output, output
-
-
-def test_a_misspelt_action_is_answered_with_the_closest_name(tmp_path):
-    project = _project(tmp_path, "merge_alternative.severity == 'high'")
+@pytest.mark.parametrize(
+    ("condition", "expected"),
+    [
+        (
+            "merge_alternative.severity == 'high'",
+            [
+                "Referenced action 'merge_alternative' does not exist in workflow",
+                "Did you mean 'merge_alternatives'?",
+            ],
+        ),
+        # `IS NULL` treats a name it cannot resolve as null, so this kept every record.
+        (
+            "merge_alternatives.sevrity IS NULL",
+            ["Field 'sevrity' not found in action 'merge_alternatives' output schema"],
+        ),
+    ],
+    ids=["misspelt-action", "is-null-misspelt-field"],
+)
+def test_a_guard_naming_what_does_not_exist_is_refused_by_inspect(tmp_path, condition, expected):
+    project = _project(tmp_path, condition)
 
     output = _refused(project, "inspect", "-a", WORKFLOW)
 
-    assert "Referenced action 'merge_alternative' does not exist in workflow" in output
-    assert "Did you mean 'merge_alternatives'?" in output, output
-
-
-def test_a_misspelt_field_under_is_null_is_refused(tmp_path):
-    """`IS NULL` treats a name it cannot resolve as null, so this kept every record."""
-    project = _project(tmp_path, "merge_alternatives.sevrity IS NULL")
-
-    output = _refused(project, "inspect", "-a", WORKFLOW)
-
-    assert "Field 'sevrity' not found in action 'merge_alternatives' output schema" in output
-
-
-@pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_field_the_upstream_only_observed_is_refused(tmp_path, mode):
-    """`merge_alternatives` observes `source.page_content`; its namespace never holds it."""
-    project = _project(tmp_path, "merge_alternatives.page_content == 'two'", mode)
-
-    output = _refused(project, "run", "-a", WORKFLOW, "--fresh")
-
-    assert "Field 'page_content' not found in action 'merge_alternatives' output schema" in output
+    for needle in expected:
+        assert needle in output, output
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])

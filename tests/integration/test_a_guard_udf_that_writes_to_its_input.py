@@ -182,24 +182,21 @@ def _batch_project(tmp_path, guard):
     return root
 
 
-def test_a_batch_action_whose_guard_writes_submits_nothing_and_fails(tmp_path):
-    """Batch evaluates the guard while preparing what it submits, not in a pre-filter, and
-    the first rows are prepared as a check before anything is submitted."""
-    root = _batch_project(tmp_path, TIDIES)
-
-    code, output = _agac(root, "run", "-a", BATCH_WORKFLOW, "--fresh")
-    output = _unwrapped(output)
-
-    assert code != 0, output
-    assert "run again" not in output, "a batch went to the provider past a guard with no answer"
-    assert f"Guard UDF '{GUARD}' wrote to its input" in output
-
-
-def test_a_batch_row_past_that_check_whose_guard_writes_also_fails_the_action(tmp_path):
-    """The preflight check only covers the leading rows up to the first one the guard
-    admits — here, just the first ("keep", already tidy, needs no write). A later row's
-    write (" Reject ", untidy) must fail the action the same way, not just that row."""
-    root = _batch_project(tmp_path, TIDIES_WHEN_UNTIDY)
+@pytest.mark.parametrize(
+    "guard",
+    [
+        # Batch evaluates the guard while preparing what it submits, not in a pre-filter,
+        # and the first rows are prepared as a check before anything is submitted.
+        TIDIES,
+        # The preflight check only covers the leading rows up to the first one the guard
+        # admits — here, just the first ("keep", already tidy, needs no write). A later
+        # row's write (" Reject ", untidy) must fail the action the same way.
+        TIDIES_WHEN_UNTIDY,
+    ],
+    ids=["first-row-writes", "later-row-writes"],
+)
+def test_a_batch_action_whose_guard_writes_submits_nothing_and_fails(tmp_path, guard):
+    root = _batch_project(tmp_path, guard)
 
     code, output = _agac(root, "run", "-a", BATCH_WORKFLOW, "--fresh")
     output = _unwrapped(output)

@@ -81,9 +81,24 @@ def _with_tool(tmp_path, mode: str, tool: str):
     return project
 
 
-@pytest.mark.parametrize("mode", ["online", "batch"])
-@pytest.mark.parametrize("tool", [EARLY_LITERAL, EARLY_LIST_OF_ONE], ids=["dict", "list_of_one"])
-def test_an_early_return_without_a_required_key_is_refused(tmp_path, mode, tool):
+@pytest.mark.parametrize(
+    ("mode", "tool", "line"),
+    [
+        ("online", EARLY_LITERAL, 10),
+        ("batch", EARLY_LITERAL, 10),
+        ("online", EARLY_LIST_OF_ONE, 10),
+        ("batch", EARLY_LIST_OF_ONE, 10),
+        ("online", EARLY_NAME, 11),
+    ],
+    ids=[
+        "dict-online",
+        "dict-batch",
+        "list_of_one-online",
+        "list_of_one-batch",
+        "dict_before_key_set-online",
+    ],
+)
+def test_an_early_return_without_a_required_key_is_refused(tmp_path, mode, tool, line):
     project = _with_tool(tmp_path, mode, tool)
 
     result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
@@ -91,19 +106,9 @@ def test_an_early_return_without_a_required_key_is_refused(tmp_path, mode, tool)
 
     assert result.returncode != 0, output
     assert "producer: output schema requires 'items'" in output, output
-    assert "returns without it at line 10 of fix1519b_every_return.py, inside an `if`" in output
-    assert _dispositions(project) == [], output
-
-
-def test_an_early_return_of_the_dict_before_the_key_is_set_is_refused(tmp_path):
-    project = _with_tool(tmp_path, "online", EARLY_NAME)
-
-    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
-    output = result.stdout + result.stderr
-
-    assert result.returncode != 0, output
-    assert "producer: output schema requires 'items'" in output, output
-    assert "returns without it at line 11 of fix1519b_every_return.py, inside an `if`" in output
+    assert (
+        f"returns without it at line {line} of fix1519b_every_return.py, inside an `if`" in output
+    )
     assert _dispositions(project) == [], output
 
 

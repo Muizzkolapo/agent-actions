@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.output.response.response_builder import (
     ResponseBuilder,
     UsageResult,
@@ -111,43 +113,27 @@ class TestUnwrap:
 class TestExtractUsage:
     """Test usage extraction for all 6 shapes."""
 
-    def test_openai_compat(self):
-        resp = _openai_response(10, 20, 30)
-        usage = ResponseBuilder.extract_usage(resp, "openai")
-        assert usage == UsageResult(10, 20, 30)
-
-    def test_openai_compat_groq(self):
-        resp = _openai_response(5, 15, 20)
-        usage = ResponseBuilder.extract_usage(resp, "groq")
-        assert usage == UsageResult(5, 15, 20)
-
-    def test_anthropic(self):
-        resp = _anthropic_response(10, 20)
-        usage = ResponseBuilder.extract_usage(resp, "anthropic")
-        assert usage == UsageResult(10, 20, 30)
-
-    def test_gemini(self):
-        resp = _gemini_response(10, 20, 30)
-        usage = ResponseBuilder.extract_usage(resp, "gemini")
-        assert usage == UsageResult(10, 20, 30)
-
-    def test_cohere(self):
-        resp = _cohere_response(10, 20)
-        usage = ResponseBuilder.extract_usage(resp, "cohere")
-        assert usage == UsageResult(10, 20, 30)
-
-    def test_ollama(self):
-        resp = _ollama_response(10, 20)
-        usage = ResponseBuilder.extract_usage(resp, "ollama_local")
-        assert usage == UsageResult(10, 20, 30)
-
-    def test_none_shape(self):
-        usage = ResponseBuilder.extract_usage(None, "agac-fake-provider")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_unknown_provider_returns_zeros(self):
-        usage = ResponseBuilder.extract_usage(None, "nonexistent")
-        assert usage == UsageResult(0, 0, 0)
+    @pytest.mark.parametrize(
+        ("resp", "provider", "expected"),
+        [
+            pytest.param(
+                _openai_response(10, 20, 30), "openai", UsageResult(10, 20, 30), id="openai"
+            ),
+            pytest.param(_openai_response(5, 15, 20), "groq", UsageResult(5, 15, 20), id="groq"),
+            pytest.param(
+                _anthropic_response(10, 20), "anthropic", UsageResult(10, 20, 30), id="anthropic"
+            ),
+            pytest.param(
+                _gemini_response(10, 20, 30), "gemini", UsageResult(10, 20, 30), id="gemini"
+            ),
+            pytest.param(_cohere_response(10, 20), "cohere", UsageResult(10, 20, 30), id="cohere"),
+            pytest.param(
+                _ollama_response(10, 20), "ollama_local", UsageResult(10, 20, 30), id="ollama"
+            ),
+        ],
+    )
+    def test_reads_each_provider_shape(self, resp, provider, expected):
+        assert ResponseBuilder.extract_usage(resp, provider) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -158,45 +144,32 @@ class TestExtractUsage:
 class TestExtractUsageEdgeCases:
     """Test graceful handling of missing or None usage data."""
 
-    def test_openai_no_usage(self):
-        resp = SimpleNamespace(usage=None)
-        usage = ResponseBuilder.extract_usage(resp, "openai")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_anthropic_no_usage(self):
-        resp = SimpleNamespace(usage=None)
-        usage = ResponseBuilder.extract_usage(resp, "anthropic")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_gemini_no_usage_metadata(self):
-        resp = SimpleNamespace()  # no usage_metadata attribute
-        usage = ResponseBuilder.extract_usage(resp, "gemini")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_gemini_none_usage_metadata(self):
-        resp = SimpleNamespace(usage_metadata=None)
-        usage = ResponseBuilder.extract_usage(resp, "gemini")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_cohere_no_usage(self):
-        resp = SimpleNamespace()  # no usage attribute
-        usage = ResponseBuilder.extract_usage(resp, "cohere")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_cohere_no_tokens(self):
-        resp = SimpleNamespace(usage=SimpleNamespace(tokens=None))
-        usage = ResponseBuilder.extract_usage(resp, "cohere")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_ollama_missing_attrs(self):
-        resp = SimpleNamespace()  # no prompt_eval_count or eval_count
-        usage = ResponseBuilder.extract_usage(resp, "ollama_local")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_ollama_none_values(self):
-        resp = SimpleNamespace(prompt_eval_count=None, eval_count=None)
-        usage = ResponseBuilder.extract_usage(resp, "ollama_local")
-        assert usage == UsageResult(0, 0, 0)
+    @pytest.mark.parametrize(
+        ("resp", "provider"),
+        [
+            pytest.param(SimpleNamespace(usage=None), "openai", id="openai-no-usage"),
+            pytest.param(SimpleNamespace(usage=None), "anthropic", id="anthropic-no-usage"),
+            pytest.param(SimpleNamespace(), "gemini", id="gemini-no-usage-metadata"),
+            pytest.param(SimpleNamespace(usage_metadata=None), "gemini", id="gemini-none-metadata"),
+            pytest.param(SimpleNamespace(), "cohere", id="cohere-no-usage"),
+            pytest.param(
+                SimpleNamespace(usage=SimpleNamespace(tokens=None)), "cohere", id="cohere-no-tokens"
+            ),
+            pytest.param(SimpleNamespace(usage=0), "cohere", id="cohere-falsy-usage"),
+            pytest.param(SimpleNamespace(), "ollama_local", id="ollama-missing-attrs"),
+            pytest.param(
+                SimpleNamespace(prompt_eval_count=None, eval_count=None),
+                "ollama_local",
+                id="ollama-none-values",
+            ),
+            pytest.param(None, "openai", id="openai-none-response"),
+            pytest.param(None, "anthropic", id="anthropic-none-response"),
+            pytest.param(None, "agac-fake-provider", id="none-shape"),
+            pytest.param(None, "nonexistent", id="unknown-provider"),
+        ],
+    )
+    def test_returns_zeros(self, resp, provider):
+        assert ResponseBuilder.extract_usage(resp, provider) == UsageResult(0, 0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -266,23 +239,7 @@ class TestRecordUsageAndEvent:
 class TestAdditionalEdgeCases:
     """Cover gaps identified in PR review."""
 
-    def test_extract_openai_compat_none_response(self):
-        """_extract_openai_compat handles None response without AttributeError."""
-        usage = ResponseBuilder.extract_usage(None, "openai")
-        assert usage == UsageResult(0, 0, 0)
-
-    def test_extract_anthropic_none_response(self):
-        """_extract_anthropic handles None response without AttributeError."""
-        usage = ResponseBuilder.extract_usage(None, "anthropic")
-        assert usage == UsageResult(0, 0, 0)
-
     def test_wrap_non_json_none_content(self):
         """wrap_non_json with None content produces {output_field: None}."""
         result = ResponseBuilder.wrap_non_json(None, {})
         assert result == [{"raw_response": None}]
-
-    def test_extract_cohere_usage_attr_exists_but_falsy(self):
-        """Cohere with usage=0 (falsy but present) returns zeros."""
-        resp = SimpleNamespace(usage=0)
-        usage = ResponseBuilder.extract_usage(resp, "cohere")
-        assert usage == UsageResult(0, 0, 0)

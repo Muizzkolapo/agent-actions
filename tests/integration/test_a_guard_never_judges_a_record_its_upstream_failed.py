@@ -334,12 +334,14 @@ MODES = ["online", "batch"]
 
 
 @pytest.mark.parametrize("run_mode", MODES)
-def test_a_skip_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_path, run_mode):
-    project = _after_alpha_failed(tmp_path, run_mode, LLM_PUBLISH, "skip")
+@pytest.mark.parametrize("on_false", ["skip", "filter"])
+def test_a_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_path, run_mode, on_false):
+    """Filtered, the record left every action below with nothing saying it failed."""
+    project = _after_alpha_failed(tmp_path, run_mode, LLM_PUBLISH, on_false)
     alpha = project.alpha()
 
     for action in BELOW:
-        assert project.states(action)[alpha] == "cascade_skipped", action
+        assert project.states(action).get(alpha) == "cascade_skipped", action
         assert project.dispositions(action)[alpha] == ("unprocessed", "upstream_unprocessed"), (
             action
         )
@@ -372,23 +374,23 @@ def test_the_retry_answers_it_at_every_action(tmp_path, run_mode):
     assert set(project.statuses().values()) == {"completed"}
 
 
-@pytest.mark.parametrize("run_mode", MODES)
-def test_a_filter_guard_below_the_failure_does_not_remove_it(tmp_path, run_mode):
-    """Filtered, the record left every action below with nothing saying it failed."""
-    project = _after_alpha_failed(tmp_path, run_mode, LLM_PUBLISH, "filter")
-    alpha = project.alpha()
-
-    for action in BELOW:
-        assert project.states(action).get(alpha) == "cascade_skipped", action
-        assert project.dispositions(action)[alpha] == ("unprocessed", "upstream_unprocessed"), (
-            action
-        )
-
-
-def test_a_file_tool_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_path):
+@pytest.mark.parametrize(
+    ("publish", "prefix", "run_mode"),
+    [
+        (FILE_TOOL_PUBLISH, "rolled", "online"),
+        (RECORD_TOOL_PUBLISH, "restated", "online"),
+        (RECORD_TOOL_PUBLISH, "restated", "batch"),
+    ],
+    ids=["file-tool", "record-tool-online", "record-tool-batch"],
+)
+def test_a_tool_guard_below_the_failure_leaves_it_to_the_quarantine(
+    tmp_path, publish, prefix, run_mode
+):
     """A FILE tool's guard reads the record as stored, paired by position with what the
-    tool is handed; the record it does not judge leaves both lists in step."""
-    project = _after_alpha_failed(tmp_path, "online", FILE_TOOL_PUBLISH, "skip")
+    tool is handed; the record it does not judge leaves both lists in step. A tool action
+    runs online under either run_mode, so its guard judged the record before the
+    quarantine under batch too."""
+    project = _after_alpha_failed(tmp_path, run_mode, publish, "skip")
     alpha = project.alpha()
 
     for action in BELOW:
@@ -400,33 +402,7 @@ def test_a_file_tool_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_pat
     # Each answer is stored under the record it rolled up: the pairing kept its step.
     upstream = project.summaries("summarize")
     assert project.summaries("publish") == {
-        guid: f"rolled {summary}" for guid, summary in upstream.items()
-    }
-    assert len(upstream) == 3
-
-    project.alpha_fails(on=False)
-    project.retry_to_the_end()
-
-    for action in ("summarize", *BELOW):
-        assert project.dispositions(action)[alpha] == ("success", None), action
-
-
-@pytest.mark.parametrize("run_mode", MODES)
-def test_a_record_tool_guard_below_the_failure_leaves_it_to_the_quarantine(tmp_path, run_mode):
-    """A tool action runs online under either run_mode, so its guard judged the record
-    before the quarantine under batch too."""
-    project = _after_alpha_failed(tmp_path, run_mode, RECORD_TOOL_PUBLISH, "skip")
-    alpha = project.alpha()
-
-    for action in BELOW:
-        assert project.states(action)[alpha] == "cascade_skipped", action
-        assert project.dispositions(action)[alpha] == ("unprocessed", "upstream_unprocessed"), (
-            action
-        )
-    assert "archive" not in project.sent_for_alpha()
-    upstream = project.summaries("summarize")
-    assert project.summaries("publish") == {
-        guid: f"restated {summary}" for guid, summary in upstream.items()
+        guid: f"{prefix} {summary}" for guid, summary in upstream.items()
     }
     assert len(upstream) == 3
 

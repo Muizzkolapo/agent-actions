@@ -118,50 +118,23 @@ class TestSequentialErrorEnrichment:
         assert captured_context["workflow"] == "test_workflow"
         assert captured_context["operation"] == "sequential_workflow_execution"
 
-    def test_enrichment_on_exception_without_context(self):
-        """Bare exception (no .context attr) gets a fresh dict."""
-        wf = _build_workflow()
-        error = ValueError("no context attr")
-
-        wf.services.core.action_executor.execute_action_sync.side_effect = error
-
-        with patch("agent_actions.workflow.coordinator.get_manager") as mock_gm:
-            mock_gm.return_value.context.return_value.__enter__ = MagicMock()
-            mock_gm.return_value.context.return_value.__exit__ = MagicMock(return_value=False)
-            wf.services.core.state_manager.is_completed.return_value = False
-
-            with pytest.raises(ValueError) as exc_info:
-                wf._run_workflow_with_context(datetime.now())
-
-        ctx = exc_info.value.context
-        assert isinstance(ctx, dict)
-        assert ctx["workflow"] == "test_workflow"
-
-    def test_enrichment_preserves_existing_context(self):
-        """Existing .context keys should not be lost."""
+    @pytest.mark.parametrize(
+        ("context", "kept"),
+        [
+            pytest.param(None, {}, id="no_context_gets_a_fresh_dict"),
+            pytest.param(
+                {"action_name": "agent_a", "custom": "data"},
+                {"custom": "data"},
+                id="existing_dict_keys_kept",
+            ),
+            pytest.param("I am a string, not a dict", {}, id="non_dict_context_replaced"),
+        ],
+    )
+    def test_the_raised_error_carries_the_workflow_context(self, context, kept):
         wf = _build_workflow()
         error = RuntimeError("fail")
-        error.context = {"action_name": "agent_a", "custom": "data"}
-
-        wf.services.core.action_executor.execute_action_sync.side_effect = error
-
-        with patch("agent_actions.workflow.coordinator.get_manager") as mock_gm:
-            mock_gm.return_value.context.return_value.__enter__ = MagicMock()
-            mock_gm.return_value.context.return_value.__exit__ = MagicMock(return_value=False)
-            wf.services.core.state_manager.is_completed.return_value = False
-
-            with pytest.raises(RuntimeError) as exc_info:
-                wf._run_workflow_with_context(datetime.now())
-
-        ctx = exc_info.value.context
-        assert ctx["custom"] == "data"
-        assert ctx["workflow"] == "test_workflow"
-
-    def test_non_dict_context_replaced(self):
-        """If .context is a string (not dict), it gets replaced safely."""
-        wf = _build_workflow()
-        error = RuntimeError("fail")
-        error.context = "I am a string, not a dict"
+        if context is not None:
+            error.context = context
 
         wf.services.core.action_executor.execute_action_sync.side_effect = error
 
@@ -176,3 +149,4 @@ class TestSequentialErrorEnrichment:
         ctx = exc_info.value.context
         assert isinstance(ctx, dict)
         assert ctx["workflow"] == "test_workflow"
+        assert kept.items() <= ctx.items()

@@ -71,9 +71,12 @@ class TestTally:
             RuleTally(id="len", type="not_null", severity="error", passed=1, failed=2, skipped=0),
         )
 
-    def test_a_skipped_outcome_counts_as_neither_pass_nor_fail(self):
-        records = [_stored("summarize", {}, _verdict(_outcome("tone", passed=False, skipped=True)))]
-        rule = tally_action("summarize", records).rules[0]
+    @pytest.mark.parametrize("passed", [False, True], ids=["skipped", "waived"])
+    def test_a_skipped_outcome_counts_as_neither_pass_nor_fail(self, passed):
+        """A rule waived by its row condition is stored passed=True, skipped=True. It
+        did not run, so it must not inflate a pass rate over records it never applied to."""
+        outcome = _outcome("tone", passed=passed, skipped=True)
+        rule = tally_action("summarize", [_stored("summarize", {}, _verdict(outcome))]).rules[0]
         assert (rule.passed, rule.failed, rule.skipped) == (0, 0, 1)
         assert rule.checked == 0
         assert rule.pass_rate is None, "a rule that never ran has no pass rate"
@@ -236,16 +239,6 @@ def test_a_verdict_is_read_from_its_own_action_namespace(tmp_path, monkeypatch):
     upstream = tally_action("resummarize", [shared])
     assert [r.id for r in upstream.rules] == ["upstream"]
     assert upstream.records_passed == 1
-
-
-def test_a_rule_waived_by_its_row_condition_counts_as_not_run(tmp_path):
-    """A waived rule is stored passed=True, skipped=True. It did not run, so it
-    must not inflate a pass rate over records it never applied to."""
-    waived = _outcome("only_when_quoted", passed=True, skipped=True)
-    tally = tally_action("summarize", [_stored("summarize", {}, _verdict(waived))])
-    rule = tally.rules[0]
-    assert (rule.passed, rule.failed, rule.skipped) == (0, 0, 1)
-    assert rule.pass_rate is None
 
 
 def test_records_that_produced_output_without_a_verdict_are_counted_apart():

@@ -183,38 +183,24 @@ class TestCircuitBreaker:
 
 
 class TestPassthroughBypass:
-    def test_semantic_error_ignores_passthrough_on_error(self):
-        """SEMANTIC errors apply on_false behavior even when passthrough_on_error=True."""
+    @pytest.mark.parametrize(
+        ("behavior", "should_execute"),
+        [
+            pytest.param("filter", False, id="filter"),
+            pytest.param("skip", False, id="skip"),
+            # warn executes but flags the record
+            pytest.param("warn", True, id="warn"),
+        ],
+    )
+    def test_semantic_error_applies_on_false_despite_passthrough(self, behavior, should_execute):
         result = FilterResult(
             success=False, error="unquoted string", error_category=ErrorCategory.SEMANTIC
         )
         guard_result = GuardResult.from_filter_result(
-            result, behavior="filter", passthrough_on_error=True
+            result, behavior=behavior, passthrough_on_error=True
         )
-        assert guard_result.should_execute is False
-        assert guard_result.behavior == "filter"
-
-    def test_semantic_error_with_skip_behavior(self):
-        """SEMANTIC + on_false=skip -> skipped, not passed through."""
-        result = FilterResult(
-            success=False, error="unquoted string", error_category=ErrorCategory.SEMANTIC
-        )
-        guard_result = GuardResult.from_filter_result(
-            result, behavior="skip", passthrough_on_error=True
-        )
-        assert guard_result.should_execute is False
-        assert guard_result.behavior == "skip"
-
-    def test_semantic_error_with_warn_behavior(self):
-        """SEMANTIC + on_false=warn -> warned (execute but flag)."""
-        result = FilterResult(
-            success=False, error="unquoted string", error_category=ErrorCategory.SEMANTIC
-        )
-        guard_result = GuardResult.from_filter_result(
-            result, behavior="warn", passthrough_on_error=True
-        )
-        assert guard_result.should_execute is True
-        assert guard_result.behavior == "warn"
+        assert guard_result.should_execute is should_execute
+        assert guard_result.behavior == behavior
 
     def test_data_error_still_respects_passthrough(self):
         """DATA errors with passthrough_on_error=True still pass through (existing behavior)."""

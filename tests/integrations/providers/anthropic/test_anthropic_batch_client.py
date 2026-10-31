@@ -181,20 +181,13 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         error = provider._extract_error_from_response(provider_success_response_json)
         assert error is None
 
-    def test_expired_result_returns_clear_error(self, provider):
-        """Expired results produce a clear error, not 'Unknown result type'."""
-        response = {"custom_id": "test", "result": {"type": "expired"}}
+    @pytest.mark.parametrize("rtype", ["expired", "canceled"])
+    def test_ended_result_returns_clear_error(self, provider, rtype):
+        """Expired and canceled results name what happened, not 'Unknown result type'."""
+        response = {"custom_id": "test", "result": {"type": rtype}}
         error = provider._extract_error_from_response(response)
         assert error is not None
-        assert "expired" in error.lower()
-        assert "Unknown result type" not in error
-
-    def test_canceled_result_returns_clear_error(self, provider):
-        """Canceled results produce a clear error."""
-        response = {"custom_id": "test", "result": {"type": "canceled"}}
-        error = provider._extract_error_from_response(response)
-        assert error is not None
-        assert "canceled" in error.lower()
+        assert rtype in error.lower()
         assert "Unknown result type" not in error
 
     def test_missing_result_returns_format_error(self, provider):
