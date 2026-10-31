@@ -747,3 +747,50 @@ class TestCommandAuthRuntime:
             compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
 
         assert pathlib.Path(where.read_text()).resolve() == tmp_path.resolve()
+
+    def test_twenty_parallel_refusals_renew_the_token_once(self, compatible, tmp_path):
+        from concurrent.futures import ThreadPoolExecutor
+
+        counter = tmp_path / "runs"
+        with FakeEndpoint(statuses=[401] * 20) as server:
+            _declare_full(server.base_url, auth={"command": _counting_command(counter, sleep=0.2)})
+            client = compatible.endpoint_client("lab")
+            with ThreadPoolExecutor(max_workers=20) as pool:
+                results = list(
+                    pool.map(lambda _: client.invoke(_agent_config(), "C", {}, SCHEMA), range(20))
+                )
+
+        assert len(results) == 20
+        assert _runs(counter) == 2
+        sent = [r["headers"]["authorization"] for r in server.requests]
+        assert len(sent) == 40
+        assert sent.count("Bearer token-number-1-abcdef") == 20
+        assert sent.count("Bearer token-number-2-abcdef") == 20
+
+    def test_an_error_other_than_401_does_not_renew_the_token(self, compatible, tmp_path):
+        from agent_actions.errors import VendorAPIError
+
+        counter = tmp_path / "runs"
+        with FakeEndpoint(statuses=[403]) as server:
+            _declare_full(server.base_url, auth={"command": _counting_command(counter)})
+
+            with pytest.raises(VendorAPIError):
+                compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert _runs(counter) == 1
+        assert len(server.requests) == 1
+
+    def test_the_command_runs_in_the_nearest_project_root(self, compatible, tmp_path, monkeypatch):
+        """A project installed inside another (agac example) runs its command from its own root."""
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        inner = tmp_path / "examples" / "quiz"
+        (inner / "agent_workflow" / "wf").mkdir(parents=True)
+        (inner / "agent_actions.yml").write_text("schema_path: schema\n")
+        monkeypatch.chdir(inner / "agent_workflow" / "wf")
+        where = tmp_path / "where"
+        script = f"import os, pathlib; pathlib.Path({str(where)!r}).write_text(os.getcwd()); print('cwd-token-abcdef')"
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"command": ["python3", "-c", script]})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert pathlib.Path(where.read_text()).resolve() == inner.resolve()
