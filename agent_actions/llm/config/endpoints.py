@@ -33,7 +33,7 @@ _CHAT_COMPLETIONS = "/chat/completions"
 _URL_HINT = f"give the base URL, for example http://gpu-box:8000/v1; agac adds {_CHAT_COMPLETIONS}"
 _ENV_HINT = "name the environment variable that holds the credential, for example AZURE_OPENAI_KEY"
 _COMMAND_HINT = (
-    "give the command as a non-empty list, for example [gcloud, auth, print-access-token]"
+    "give the command as a non-empty list of text, for example [gcloud, auth, print-access-token]"
 )
 
 # Texts for a value whose shape pydantic refuses, by the key it refused.
@@ -107,7 +107,10 @@ def parse_endpoints(raw: Any) -> dict[str, Endpoint]:
         return {}
     if not isinstance(raw, Mapping):
         _refuse("endpoints", "must be a mapping of endpoint name to its settings")
-    return {str(name): _parse_endpoint(str(name), settings) for name, settings in raw.items()}
+    for name in raw:
+        if not isinstance(name, str):
+            _refuse("endpoints", f"an endpoint name must be text; quote it, for example '{name}'")
+    return {name: _parse_endpoint(name, settings) for name, settings in raw.items()}
 
 
 def _parse_endpoint(name: str, settings: Any) -> Endpoint:
@@ -125,6 +128,11 @@ def _parse_endpoint(name: str, settings: Any) -> Endpoint:
     if "name" in settings:
         _refuse(key, "unknown key 'name'")
     _refuse_non_string_keys(key, settings)
+    headers = settings.get("headers")
+    if isinstance(headers, Mapping):
+        _refuse_non_string_keys(f"{key}.headers", headers)
+        if any(not header for header in headers):
+            _refuse(f"{key}.headers", "a header name must not be empty")
 
     fields = {**settings, "name": name, "auth": _parse_auth(f"{key}.auth", settings["auth"])}
     try:
@@ -144,6 +152,13 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
     if not isinstance(raw, Mapping):
         _refuse(key, "write 'auth: none', or a mapping with env or command")
     _refuse_non_string_keys(key, raw)
+    env, command = raw.get("env"), raw.get("command")
+    if env is not None and not (isinstance(env, str) and _ENV_VAR_NAME.match(env)):
+        _refuse(f"{key}.env", _ENV_HINT)
+    if command is not None and not (
+        isinstance(command, list) and command and all(isinstance(c, str) and c for c in command)
+    ):
+        _refuse(f"{key}.command", _COMMAND_HINT)
     try:
         auth = EndpointAuth.model_validate(raw)
     except ValidationError as exc:
@@ -151,10 +166,8 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
 
     if (auth.env is None) == (auth.command is None):
         _refuse(key, "give exactly one of env or command, or write 'auth: none'")
-    if auth.env is not None and not _ENV_VAR_NAME.match(auth.env):
-        _refuse(f"{key}.env", _ENV_HINT)
-    if auth.command is not None and not auth.command:
-        _refuse(f"{key}.command", _COMMAND_HINT)
+    if not auth.header.strip():
+        _refuse(f"{key}.header", "must be a header name")
     if auth.refresh_seconds is not None and auth.command is None:
         _refuse(key, "refresh_seconds applies to command auth only")
 
@@ -182,6 +195,10 @@ def _check_url_shape(key: str, url: str) -> None:
 def _check_literal_url(key: str, url: str) -> None:
     if not url.startswith(("http://", "https://")):
         _refuse(key, "must start with http:// or https://")
+    if any(c.isspace() for c in url):
+        _refuse(key, "must not contain whitespace")
+    if not urlsplit(url).netloc:
+        _refuse(key, "must name a host, for example http://gpu-box:8000/v1")
     if urlsplit(url).path.rstrip("/").endswith(_CHAT_COMPLETIONS):
         _refuse(key, _URL_HINT)
 

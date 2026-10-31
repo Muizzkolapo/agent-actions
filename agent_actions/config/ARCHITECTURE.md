@@ -64,6 +64,7 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  Step 3: get_user_agents()                                      │
 │  ┌────────────────────────────────────────────────────────┐     │
 │  │  Load project defaults (agent_actions.yml)              │     │
+│  │  Validate endpoints: → project endpoint registry       │     │
 │  │  WorkflowConfig.model_validate() ← Pydantic stage 1    │     │
 │  │  model_dump(exclude_unset=True) per action              │     │
 │  │  Merge: project_defaults ← workflow_defaults            │     │
