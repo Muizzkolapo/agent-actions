@@ -491,6 +491,22 @@ class TestMetadata:
         backend.save_metadata("key", "v2")
         assert backend.load_metadata("key") == "v2"
 
+    def test_saving_execution_order_replaces_the_cached_order(self, backend):
+        _set_execution_order(backend, ["a1", "a2"])
+        assert backend._get_execution_order() == ["a1", "a2"]
+
+        _set_execution_order(backend, ["a1", "b1", "a2"])
+
+        assert backend._get_execution_order() == ["a1", "b1", "a2"]
+
+    def test_saving_dependency_graph_replaces_the_cached_graph(self, backend):
+        backend.save_metadata("dependency_graph", json.dumps({"merge": ["branch_a"]}))
+        assert backend._get_upstream_actions("merge") == ["branch_a"]
+
+        backend.save_metadata("dependency_graph", json.dumps({"merge": ["branch_a", "branch_b"]}))
+
+        assert backend._get_upstream_actions("merge") == ["branch_a", "branch_b"]
+
 
 class TestFormatVersionCheck:
     """Format version prevents silent corruption on downgrade."""

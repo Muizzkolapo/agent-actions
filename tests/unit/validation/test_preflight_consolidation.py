@@ -136,7 +136,7 @@ class TestSchemaValidation:
         errors, _ = _validate_entry(
             {
                 "name": "test",
-                "agent_type": "llm",
+                "agent_type": "test",
                 "model_name": "gpt-4",
                 "schema": {"summary": "string", "score": "number"},
             }
@@ -149,7 +149,7 @@ class TestSchemaValidation:
         errors, _ = _validate_entry(
             {
                 "name": "test",
-                "agent_type": "llm",
+                "agent_type": "test",
                 "model_name": "gpt-4",
                 "schema": {"summary": "string", "bad_field": "foobar_type"},
             }
@@ -178,7 +178,7 @@ class TestSchemaValidation:
         _, warnings = _validate_entry(
             {
                 "name": "test",
-                "agent_type": "llm",
+                "agent_type": "test",
                 "model_name": "gpt-4",
                 "schema": {"summary": "string"},
                 "schema_name": "my_schema",
@@ -301,7 +301,7 @@ class TestTypeSpecificValidation:
         errors, _ = _validate_entry(
             {
                 "name": "extract",
-                "agent_type": "llm",
+                "agent_type": "extract",
                 "model_name": "n/a",
                 "kind": "llm",
                 "granularity": "file",
@@ -314,7 +314,7 @@ class TestTypeSpecificValidation:
         errors, _ = _validate_entry(
             {
                 "name": "extract",
-                "agent_type": "llm",
+                "agent_type": "extract",
                 "model_name": "n/a",
                 "granularity": "file",
             }
@@ -326,7 +326,7 @@ class TestTypeSpecificValidation:
         errors, _ = _validate_entry(
             {
                 "name": "review",
-                "agent_type": "llm",
+                "agent_type": "review",
                 "model_name": "n/a",
                 "kind": "hitl",
                 "granularity": "record",
@@ -340,7 +340,7 @@ class TestTypeSpecificValidation:
         errors, _ = _validate_entry(
             {
                 "name": "review",
-                "agent_type": "llm",
+                "agent_type": "review",
                 "model_name": "n/a",
                 "kind": "hitl",
                 "granularity": "file",
@@ -355,7 +355,7 @@ class TestTypeSpecificValidation:
         errors, _ = _validate_entry(
             {
                 "name": "review",
-                "agent_type": "llm",
+                "agent_type": "review",
                 "model_name": "n/a",
                 "kind": "hitl",
                 "hitl": {"instructions": "Review these records"},
@@ -374,7 +374,7 @@ class TestTypeSpecificValidation:
         errors, _ = _validate_entry(
             {
                 "name": "test",
-                "agent_type": "llm",
+                "agent_type": "test",
             }
         )
         assert any("model_name" in e.lower() for e in errors)
@@ -391,13 +391,13 @@ class TestActionableErrors:
         errors, _ = _validate_entry(
             {
                 "name": "my_special_action",
-                "agent_type": "llm",
+                "agent_type": "my_special_action",
+                "kind": "llm",
                 # missing model_name
             }
         )
-        assert len(errors) > 0
-        # At least one error should include the context (agent type + name)
-        assert any("my_special_action" in e or "llm" in e.lower() for e in errors)
+        assert errors
+        assert all("my_special_action" in e for e in errors)
 
     def test_every_error_suggests_fix(self):
         """Static analyzer errors include hints for fixing."""
@@ -430,7 +430,7 @@ class TestActionableErrors:
         errors, _ = _validate_entry(
             {
                 "name": "review",
-                "agent_type": "llm",
+                "agent_type": "review",
                 "model_name": "n/a",
                 "kind": "hitl",
                 "granularity": "record",

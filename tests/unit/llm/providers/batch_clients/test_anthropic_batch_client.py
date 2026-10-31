@@ -12,6 +12,7 @@ Total tests for Anthropic:
 from unittest.mock import Mock, patch
 
 import pytest
+from anthropic.types.messages import MessageBatchIndividualResponse
 
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
 from tests.unit.llm.providers.batch_clients.base_batch_client_tests import BaseBatchClientTests
@@ -45,9 +46,26 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
             mock_batch.results_url = "https://test.com/results"
             mock_client.messages.batches.create.return_value = mock_batch
             mock_client.messages.batches.retrieve.return_value = mock_batch
-            mock_results_response = Mock()
-            mock_results_response.text = '{"custom_id": "test-1", "result": {"type": "succeeded", "message": {"content": [{"type": "text", "text": "Hello"}]}}}'
-            mock_client.messages.batches.results.return_value = mock_results_response
+            mock_client.messages.batches.results.return_value = [
+                MessageBatchIndividualResponse.model_validate(
+                    {
+                        "custom_id": "test-1",
+                        "result": {
+                            "type": "succeeded",
+                            "message": {
+                                "id": "msg_01abc123",
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "Hello"}],
+                                "model": "claude-3-5-sonnet-20241022",
+                                "stop_reason": "end_turn",
+                                "stop_sequence": None,
+                                "usage": {"input_tokens": 10, "output_tokens": 5},
+                            },
+                        },
+                    }
+                )
+            ]
             yield provider
 
     @pytest.fixture
@@ -151,19 +169,12 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         assert isinstance(result["params"]["tools"], list), "Tools should be a list"
         assert len(result["params"]["tools"]) > 0, "Should have at least one tool"
 
-    def test_submit_and_retrieve_workflow(
+    def test_submit_batch_returns_the_anthropic_batch_id(
         self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode
     ):
-        """Test submit and retrieve workflow with Anthropic provider."""
-        # Prepare tasks
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
-        assert len(tasks) == 3
-
-        # Submit batch - returns (batch_id, status) tuple
-        result = provider.submit_batch(tasks, str(tmp_path))
-        batch_id = result[0] if isinstance(result, tuple) else result
-        assert batch_id is not None
-        assert "msgbatch" in batch_id
+        batch_id, _ = provider.submit_batch(tasks, "anthropic_batch", str(tmp_path))
+        assert batch_id == "msgbatch_test123"
 
     # -----------------------------------------------------------------
     # Error extraction tests

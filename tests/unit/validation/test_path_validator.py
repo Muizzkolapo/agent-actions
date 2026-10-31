@@ -438,5 +438,10 @@ class TestGetIssues:
 
     def test_returns_validation_issue_objects(self, validator):
         validator.validate({"paths": ["/nope"], "path_type": "file"})
-        for issue in validator.get_issues():
-            assert isinstance(issue, ValidationIssue)
+        issues = validator.get_issues()
+        assert len(issues) == 1
+        issue = issues[0]
+        assert isinstance(issue, ValidationIssue)
+        assert issue.issue_type == "error"
+        assert issue.category == "path"
+        assert issue.missing_refs == ["/nope"]
