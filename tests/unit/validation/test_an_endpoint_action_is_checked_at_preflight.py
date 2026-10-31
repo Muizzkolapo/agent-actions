@@ -115,6 +115,50 @@ def test_an_unset_url_variable_is_refused(monkeypatch):
     ]
 
 
+def test_a_url_variable_whose_value_breaks_a_url_rule_is_refused_as_a_value(monkeypatch):
+    monkeypatch.setenv("LAB_VLLM_URL", "gpu-box:8000/v1")
+    result = WorkflowResolutionService(action_configs={"classify": _action("lab-vllm")})
+
+    errors = result.resolve_all().errors
+    assert [e.message for e in errors] == [
+        "Action 'classify': endpoint 'lab-vllm' reads its url from LAB_VLLM_URL, "
+        "which must start with http:// or https://"
+    ]
+    assert "not set" not in errors[0].hint
+    assert "LAB_VLLM_URL" in errors[0].hint
+
+
+def test_two_broken_endpoints_are_both_reported(monkeypatch):
+    monkeypatch.delenv("LAB_VLLM_URL")
+    monkeypatch.delenv("AZURE_OPENAI_KEY")
+    actions = {"classify": _action("lab-vllm"), "review": _action("azure-gpt")}
+
+    assert _errors(actions) == [
+        "Action 'classify': endpoint 'lab-vllm' reads its url from LAB_VLLM_URL, which is not set",
+        "Action 'review': endpoint 'azure-gpt' reads AZURE_OPENAI_KEY, which is not set",
+    ]
+
+
+def test_each_variable_in_a_header_value_is_checked(monkeypatch):
+    load_project_endpoints(
+        {
+            "endpoints": {
+                "two": {
+                    "url": "http://h/v1",
+                    "auth": "none",
+                    "headers": {"X-Combo": "${FIRST_PART}-${SECOND_PART}"},
+                }
+            }
+        }
+    )
+    monkeypatch.setenv("FIRST_PART", "a")
+    monkeypatch.delenv("SECOND_PART", raising=False)
+
+    assert _errors({"classify": _action("two")}) == [
+        "Action 'classify': endpoint 'two' reads SECOND_PART for header X-Combo, which is not set"
+    ]
+
+
 def test_an_unset_credential_variable_is_refused(monkeypatch):
     monkeypatch.setenv("AZURE_OPENAI_KEY", "")
 
