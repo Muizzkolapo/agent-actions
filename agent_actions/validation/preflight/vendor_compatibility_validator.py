@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.preflight.error_formatter import (
     PreFlightErrorFormatter,
@@ -114,8 +115,8 @@ class VendorCompatibilityValidator(BaseValidator):
         vendor = agent_config.get("model_vendor", "").lower()
 
         if not vendor:
-            agent_type = agent_config.get("agent_type", "")
-            if agent_type != "tool":
+            kind = str(agent_config.get("kind", DEFAULT_ACTION_KIND)).lower()
+            if kind != "tool":
                 self.add_error("model_vendor is required for non-tool agents")
                 self.issues.append(
                     PreFlightErrorFormatter.create_vendor_config_issue(

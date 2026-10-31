@@ -80,7 +80,7 @@ ActionEntryValidationOrchestrator
   |
   1. ActionEntryStructureValidator    Must be a dict (critical failure stops chain)
   2. ActionRequiredFieldsValidator    Required keys present (name, prompt, etc.)
-  3. ActionTypeSpecificValidator      Type-specific rules (tool needs impl, etc.)
+  3. ActionTypeSpecificValidator      name and agent_type field checks
   4. VendorCompatibilityValidator     Vendor string valid, features supported
   5. OptionalFieldTypeValidator       Optional fields have correct types
   6. GranularityAndOutputFieldValidator  Granularity + output_field
@@ -358,7 +358,7 @@ schema is never valid output.
 | `action_validators/base_action_validator.py` | ABC for action validators (separate from BaseValidator) |
 | `action_validators/action_entry_structure_validator.py` | Checks entry is a dict (critical gate) |
 | `action_validators/action_required_fields_validator.py` | Required keys: name, prompt, etc. |
-| `action_validators/action_type_specific_validator.py` | Type-specific rules (tool needs impl) |
+| `action_validators/action_type_specific_validator.py` | name and agent_type field checks (reserved names, string type) |
 | `action_validators/vendor_compatibility_validator.py` | Vendor string valid, features supported |
 | `action_validators/optional_field_type_validator.py` | Optional field type correctness |
 | `action_validators/granularity_output_field_validator.py` | Granularity + output_field |
