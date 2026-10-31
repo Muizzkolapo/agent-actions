@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  An action named `function` now loads instead of being refused with "missing
+  type-specific key(s): code_path". Pre-flight checks that depend on an action's type
+  now read its `kind`, not its name.
+time: 2026-10-31T12:00:00Z
