@@ -507,27 +507,43 @@ class TestAnthropicSharedCallApi:
 class TestOllamaTokenCounts:
     """Ollama extracts token counts from response attributes."""
 
+    @pytest.mark.parametrize(
+        ("method", "content", "prompt_tokens", "completion_tokens", "total_tokens"),
+        [
+            pytest.param("call_json", '{"answer": "42"}', 50, 25, 75, id="call-json"),
+            pytest.param("call_non_json", "Hello world", 30, 15, 45, id="call-non-json"),
+        ],
+    )
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_call_json_extracts_token_counts(
-        self, mock_get_client, mock_inject, mock_fire, mock_rb_fire
+    def test_extracts_token_counts(
+        self,
+        mock_get_client,
+        mock_inject,
+        mock_fire,
+        mock_rb_fire,
+        method,
+        content,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
     ):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
         from agent_actions.logging.events import LLMResponseEvent
 
         mock_response = MagicMock()
-        mock_response.message.content = '{"answer": "42"}'
-        mock_response.prompt_eval_count = 50
-        mock_response.eval_count = 25
+        mock_response.message.content = content
+        mock_response.prompt_eval_count = prompt_tokens
+        mock_response.eval_count = completion_tokens
 
         mock_client = MagicMock()
         mock_client.chat.return_value = mock_response
         mock_get_client.return_value = mock_client
 
         config = {"model_name": "llama3"}
-        OllamaLocalClient.call_json(None, config, "prompt", "data")
+        getattr(OllamaLocalClient, method)(None, config, "prompt", "data")
 
         # LLMResponseEvent now fires from ResponseBuilder
         response_events = [
@@ -535,41 +551,9 @@ class TestOllamaTokenCounts:
         ]
         assert len(response_events) >= 1
         event = response_events[0][0][0]
-        assert event.prompt_tokens == 50
-        assert event.completion_tokens == 25
-        assert event.total_tokens == 75
-
-    @patch("agent_actions.output.response.response_builder.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
-    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_call_non_json_extracts_token_counts(
-        self, mock_get_client, mock_inject, mock_fire, mock_rb_fire
-    ):
-        from agent_actions.llm.providers.ollama.client import OllamaLocalClient
-        from agent_actions.logging.events import LLMResponseEvent
-
-        mock_response = MagicMock()
-        mock_response.message.content = "Hello world"
-        mock_response.prompt_eval_count = 30
-        mock_response.eval_count = 15
-
-        mock_client = MagicMock()
-        mock_client.chat.return_value = mock_response
-        mock_get_client.return_value = mock_client
-
-        config = {"model_name": "llama3"}
-        OllamaLocalClient.call_non_json(None, config, "prompt", "data")
-
-        # LLMResponseEvent now fires from ResponseBuilder
-        response_events = [
-            call for call in mock_rb_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
-        ]
-        assert len(response_events) >= 1
-        event = response_events[0][0][0]
-        assert event.prompt_tokens == 30
-        assert event.completion_tokens == 15
-        assert event.total_tokens == 45
+        assert event.prompt_tokens == prompt_tokens
+        assert event.completion_tokens == completion_tokens
+        assert event.total_tokens == total_tokens
 
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
@@ -1031,54 +1015,50 @@ class TestCallJsonDictWrapping:
 class TestOllamaSetLastUsage:
     """Ollama calls set_last_usage() when token counts are available."""
 
+    @pytest.mark.parametrize(
+        ("method", "content", "prompt_tokens", "completion_tokens", "total_tokens"),
+        [
+            pytest.param("call_json", '{"answer": "42"}', 50, 25, 75, id="call-json"),
+            pytest.param("call_non_json", "Hello", 30, 15, 45, id="call-non-json"),
+        ],
+    )
     @patch("agent_actions.output.response.response_builder.set_last_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_call_json_calls_set_last_usage(
-        self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
+    def test_calls_set_last_usage(
+        self,
+        mock_get_client,
+        mock_inject,
+        mock_fire,
+        _mock_rb_fire,
+        mock_set_usage,
+        method,
+        content,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
     ):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
 
         mock_response = MagicMock()
-        mock_response.message.content = '{"answer": "42"}'
-        mock_response.prompt_eval_count = 50
-        mock_response.eval_count = 25
+        mock_response.message.content = content
+        mock_response.prompt_eval_count = prompt_tokens
+        mock_response.eval_count = completion_tokens
 
         mock_client = MagicMock()
         mock_client.chat.return_value = mock_response
         mock_get_client.return_value = mock_client
 
-        OllamaLocalClient.call_json(None, {"model_name": "llama3"}, "prompt", "data")
+        getattr(OllamaLocalClient, method)(None, {"model_name": "llama3"}, "prompt", "data")
 
         mock_set_usage.assert_called_once_with(
-            {"input_tokens": 50, "output_tokens": 25, "total_tokens": 75}
-        )
-
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
-    @patch("agent_actions.output.response.response_builder.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
-    @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_call_non_json_calls_set_last_usage(
-        self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
-    ):
-        from agent_actions.llm.providers.ollama.client import OllamaLocalClient
-
-        mock_response = MagicMock()
-        mock_response.message.content = "Hello"
-        mock_response.prompt_eval_count = 30
-        mock_response.eval_count = 15
-
-        mock_client = MagicMock()
-        mock_client.chat.return_value = mock_response
-        mock_get_client.return_value = mock_client
-
-        OllamaLocalClient.call_non_json(None, {"model_name": "llama3"}, "prompt", "data")
-
-        mock_set_usage.assert_called_once_with(
-            {"input_tokens": 30, "output_tokens": 15, "total_tokens": 45}
+            {
+                "input_tokens": prompt_tokens,
+                "output_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+            }
         )
 
     @patch("agent_actions.output.response.response_builder.set_last_usage")

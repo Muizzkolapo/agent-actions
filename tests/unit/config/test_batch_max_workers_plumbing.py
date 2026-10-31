@@ -17,42 +17,45 @@ from agent_actions.output.response.config_fields import inherit_simple_fields
 class TestSchemaAcceptsBatchMaxWorkers:
     """ActionConfig and DefaultsConfig accept batch_max_workers."""
 
-    def test_action_config_accepts_batch_max_workers(self):
-        config = ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 12})
-        assert config.batch_max_workers == 12
-
     def test_action_config_batch_max_workers_survives_round_trip(self):
         config = ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 8})
         dumped = config.model_dump()
         assert dumped["batch_max_workers"] == 8
 
-    def test_action_config_rejects_zero(self):
-        with pytest.raises(ValidationError, match="batch_max_workers"):
-            ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 0})
-
-    def test_action_config_rejects_negative(self):
-        with pytest.raises(ValidationError, match="batch_max_workers"):
-            ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": -1})
-
     def test_action_config_none_by_default(self):
         config = ActionConfig.model_validate({"name": "a", "intent": "i"})
         assert config.batch_max_workers is None
 
-    def test_defaults_config_accepts_batch_max_workers(self):
-        config = DefaultsConfig.model_validate({"batch_max_workers": 6})
-        assert config.batch_max_workers == 6
 
-    def test_action_config_accepts_at_limit(self):
-        config = ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 32})
-        assert config.batch_max_workers == 32
+def _validate(model, value):
+    data = {"name": "a", "intent": "i"} if model is ActionConfig else {}
+    return model.model_validate({**data, "batch_max_workers": value})
 
-    def test_action_config_rejects_above_limit(self):
-        with pytest.raises(ValidationError, match="batch_max_workers"):
-            ActionConfig.model_validate({"name": "a", "intent": "i", "batch_max_workers": 33})
 
-    def test_defaults_config_rejects_zero(self):
-        with pytest.raises(ValidationError, match="batch_max_workers"):
-            DefaultsConfig.model_validate({"batch_max_workers": 0})
+@pytest.mark.parametrize(
+    ("model", "value"),
+    [
+        pytest.param(ActionConfig, 12, id="action_12"),
+        pytest.param(ActionConfig, 32, id="action_at_limit"),
+        pytest.param(DefaultsConfig, 6, id="defaults_6"),
+    ],
+)
+def test_in_range_value_accepted(model, value):
+    assert _validate(model, value).batch_max_workers == value
+
+
+@pytest.mark.parametrize(
+    ("model", "value"),
+    [
+        pytest.param(ActionConfig, 0, id="action_zero"),
+        pytest.param(ActionConfig, -1, id="action_negative"),
+        pytest.param(ActionConfig, 33, id="action_above_limit"),
+        pytest.param(DefaultsConfig, 0, id="defaults_zero"),
+    ],
+)
+def test_out_of_range_value_rejected(model, value):
+    with pytest.raises(ValidationError, match="batch_max_workers"):
+        _validate(model, value)
 
 
 class TestInheritanceBatchMaxWorkers:

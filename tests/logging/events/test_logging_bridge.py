@@ -163,53 +163,29 @@ class TestLoggingBridgeHandlerEmit:
 class TestCategoryExtraction:
     """Tests for category extraction from logger names."""
 
-    def test_extract_category_from_agent_actions_logger(self):
-        """Test category extraction from agent_actions.* loggers."""
+    @pytest.mark.parametrize(
+        ("logger_name", "category"),
+        [
+            pytest.param("agent_actions.workflow.coordinator", "workflow", id="agent-actions"),
+            pytest.param("other.module", "system", id="non-agent-actions"),
+            pytest.param("simple", "system", id="short-name"),
+        ],
+    )
+    def test_extract_category_from_logger_name(self, logger_name, category):
+        """agent_actions.* loggers take their second segment; any other logger is 'system'."""
         capture = MockEventCapture()
         manager = EventManager.get()
         manager.register(capture)
 
         handler = LoggingBridgeHandler()
-        logger = logging.getLogger("agent_actions.workflow.coordinator")
+        logger = logging.getLogger(logger_name)
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
         logger.propagate = False
 
         logger.info("Test")
 
-        assert capture.events[0].category == "workflow"
-
-    def test_extract_category_from_non_agent_actions_logger(self):
-        """Test category defaults to 'system' for non-agent_actions loggers."""
-        capture = MockEventCapture()
-        manager = EventManager.get()
-        manager.register(capture)
-
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("other.module")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test")
-
-        assert capture.events[0].category == "system"
-
-    def test_extract_category_from_short_logger_name(self):
-        """Test category extraction with single-part logger name."""
-        capture = MockEventCapture()
-        manager = EventManager.get()
-        manager.register(capture)
-
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("simple")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test")
-
-        assert capture.events[0].category == "system"
+        assert capture.events[0].category == category
 
     def test_extract_category_various_modules(self):
         """Test category extraction for various module names."""
@@ -225,8 +201,15 @@ class TestCategoryExtraction:
 class TestExtraFieldsCopying:
     """Tests for copying extra fields from log records."""
 
-    def test_copy_operation_extra(self):
-        """Test that 'operation' extra field is copied."""
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            pytest.param("operation", "fetch_data", id="operation"),
+            pytest.param("action_name", "extract_data", id="action_name"),
+            pytest.param("workflow_name", "my_workflow", id="workflow_name"),
+        ],
+    )
+    def test_copy_extra_field(self, key, value):
         capture = MockEventCapture()
         manager = EventManager.get()
         manager.register(capture)
@@ -237,41 +220,9 @@ class TestExtraFieldsCopying:
         logger.setLevel(logging.DEBUG)
         logger.propagate = False
 
-        logger.info("Test", extra={"operation": "fetch_data"})
+        logger.info("Test", extra={key: value})
 
-        assert capture.events[0].data.get("operation") == "fetch_data"
-
-    def test_copy_action_name_extra(self):
-        """Test that 'action_name' extra field is copied."""
-        capture = MockEventCapture()
-        manager = EventManager.get()
-        manager.register(capture)
-
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.extra")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test", extra={"action_name": "extract_data"})
-
-        assert capture.events[0].data.get("action_name") == "extract_data"
-
-    def test_copy_workflow_name_extra(self):
-        """Test that 'workflow_name' extra field is copied."""
-        capture = MockEventCapture()
-        manager = EventManager.get()
-        manager.register(capture)
-
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.extra")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test", extra={"workflow_name": "my_workflow"})
-
-        assert capture.events[0].data.get("workflow_name") == "my_workflow"
+        assert capture.events[0].data.get(key) == value
 
 
 class TestErrorHandling:

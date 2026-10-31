@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
 from agent_actions.errors import ConfigValidationError
 
@@ -22,50 +24,33 @@ class TestResolveProjectRoot:
         assert result == Path.cwd()
 
 
-class TestGetToolDirs:
-    """get_tool_dirs reads tool_path from project config."""
+@pytest.mark.parametrize(
+    ("config_text", "expected"),
+    [
+        pytest.param(None, ["tools"], id="no_file"),
+        pytest.param("schema_path: schema\n", ["tools"], id="key_absent"),
+        pytest.param("tool_path: my_tools\n", ["my_tools"], id="string"),
+        pytest.param(
+            "tool_path:\n  - tools\n  - extra_tools\n", ["tools", "extra_tools"], id="list"
+        ),
+        # an unexpected type is coerced, not refused
+        pytest.param("tool_path: 42\n", ["42"], id="int"),
+        pytest.param("tool_path: null\n", ["tools"], id="null"),
+    ],
+)
+def test_get_tool_dirs_reads_tool_path(tmp_path: Path, config_text, expected):
+    if config_text is not None:
+        (tmp_path / "agent_actions.yml").write_text(config_text)
+    assert get_tool_dirs(tmp_path) == expected
 
-    def test_returns_default_when_no_config(self, tmp_path: Path):
-        """No agent_actions.yml → default ["tools"]."""
-        assert get_tool_dirs(tmp_path) == ["tools"]
 
-    def test_returns_default_when_key_absent(self, tmp_path: Path):
-        """Config exists but tool_path key missing → default ["tools"]."""
-        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
-        assert get_tool_dirs(tmp_path) == ["tools"]
-
-    def test_returns_string_as_list(self, tmp_path: Path):
-        """tool_path: my_tools → ["my_tools"]."""
-        (tmp_path / "agent_actions.yml").write_text("tool_path: my_tools\n")
-        assert get_tool_dirs(tmp_path) == ["my_tools"]
-
-    def test_returns_list_as_list(self, tmp_path: Path):
-        """tool_path: [tools, extra_tools] → ["tools", "extra_tools"]."""
-        (tmp_path / "agent_actions.yml").write_text("tool_path:\n  - tools\n  - extra_tools\n")
-        assert get_tool_dirs(tmp_path) == ["tools", "extra_tools"]
-
-    def test_non_iterable_value_coerced_to_list(self, tmp_path: Path):
-        """tool_path: 42 → ["42"] (unexpected type handled gracefully)."""
-        (tmp_path / "agent_actions.yml").write_text("tool_path: 42\n")
-        assert get_tool_dirs(tmp_path) == ["42"]
-
-    def test_returns_default_on_os_error(self, tmp_path: Path):
-        """OSError during config load → default ["tools"]."""
-        with patch(
-            "agent_actions.config.path_config.load_project_config",
-            side_effect=OSError("disk error"),
-        ):
-            assert get_tool_dirs(tmp_path) == ["tools"]
-
-    def test_returns_default_on_config_validation_error(self, tmp_path: Path):
-        """ConfigValidationError during config load → default ["tools"]."""
-        with patch(
-            "agent_actions.config.path_config.load_project_config",
-            side_effect=ConfigValidationError("bad_config", "bad yaml"),
-        ):
-            assert get_tool_dirs(tmp_path) == ["tools"]
-
-    def test_returns_default_when_tool_path_is_none_explicitly(self, tmp_path: Path):
-        """tool_path: null → default ["tools"]."""
-        (tmp_path / "agent_actions.yml").write_text("tool_path: null\n")
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(OSError("disk error"), id="os_error"),
+        pytest.param(ConfigValidationError("bad_config", "bad yaml"), id="config_validation_error"),
+    ],
+)
+def test_get_tool_dirs_returns_default_when_config_load_fails(tmp_path: Path, error):
+    with patch("agent_actions.config.path_config.load_project_config", side_effect=error):
         assert get_tool_dirs(tmp_path) == ["tools"]

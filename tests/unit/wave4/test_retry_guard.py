@@ -1,15 +1,18 @@
 """Test retry() decorator edge cases from Wave 4 hardening."""
 
+import pytest
+
 from agent_actions.input.loaders.base import retry
 
 
 class TestRetryMaxAttemptsZero:
-    """retry(max_attempts=0) should invoke the function once without retrying."""
+    """retry(max_attempts<=0) should invoke the function once without retrying."""
 
-    def test_max_attempts_zero_calls_once(self):
+    @pytest.mark.parametrize("max_attempts", [0, -1], ids=["zero", "negative"])
+    def test_non_positive_max_attempts_calls_once(self, max_attempts):
         call_count = 0
 
-        @retry(max_attempts=0)
+        @retry(max_attempts=max_attempts)
         def fn():
             nonlocal call_count
             call_count += 1
@@ -23,19 +26,5 @@ class TestRetryMaxAttemptsZero:
         def fn():
             raise ValueError("boom")
 
-        import pytest
-
         with pytest.raises(ValueError, match="boom"):
             fn()
-
-    def test_max_attempts_negative_calls_once(self):
-        call_count = 0
-
-        @retry(max_attempts=-1)
-        def fn():
-            nonlocal call_count
-            call_count += 1
-            return "ok"
-
-        assert fn() == "ok"
-        assert call_count == 1

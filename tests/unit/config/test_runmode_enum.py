@@ -5,42 +5,31 @@ import pytest
 from agent_actions.config.types import RunMode
 
 
-class TestRunModeValid:
-    """Valid RunMode values are accepted (case-insensitive)."""
-
-    def test_lowercase_online(self):
-        assert RunMode("online") is RunMode.ONLINE
-
-    def test_lowercase_batch(self):
-        assert RunMode("batch") is RunMode.BATCH
-
-    def test_uppercase_online(self):
-        assert RunMode("ONLINE") is RunMode.ONLINE
-
-    def test_uppercase_batch(self):
-        assert RunMode("BATCH") is RunMode.BATCH
-
-    def test_mixed_case(self):
-        assert RunMode("Online") is RunMode.ONLINE
-        assert RunMode("Batch") is RunMode.BATCH
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param("online", RunMode.ONLINE, id="lowercase-online"),
+        pytest.param("batch", RunMode.BATCH, id="lowercase-batch"),
+        pytest.param("ONLINE", RunMode.ONLINE, id="uppercase-online"),
+        pytest.param("BATCH", RunMode.BATCH, id="uppercase-batch"),
+        pytest.param("Online", RunMode.ONLINE, id="mixed-case-online"),
+        pytest.param("Batch", RunMode.BATCH, id="mixed-case-batch"),
+    ],
+)
+def test_valid_value_is_accepted_case_insensitively(raw, expected):
+    assert RunMode(raw) is expected
 
 
-class TestRunModeInvalid:
-    """Invalid RunMode values raise ValueError."""
-
-    def test_invalid_string_raises(self):
-        with pytest.raises(ValueError):
-            RunMode("invalid")
-
-    def test_empty_string_raises(self):
-        with pytest.raises(ValueError):
-            RunMode("")
-
-    def test_realtime_rejected(self):
-        """'realtime' is not a valid RunMode — it was deprecated and removed."""
-        with pytest.raises(ValueError):
-            RunMode("realtime")
-
-    def test_none_raises(self):
-        with pytest.raises(ValueError):
-            RunMode(None)
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param("invalid", id="invalid"),
+        pytest.param("", id="empty"),
+        # deprecated and removed
+        pytest.param("realtime", id="realtime"),
+        pytest.param(None, id="none"),
+    ],
+)
+def test_invalid_value_raises(raw):
+    with pytest.raises(ValueError):
+        RunMode(raw)

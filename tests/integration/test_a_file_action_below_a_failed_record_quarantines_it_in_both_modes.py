@@ -75,8 +75,23 @@ def _is_quarantined_at_every_action_below(project) -> None:
 
 
 @pytest.mark.parametrize("run_mode", MODES)
-def test_a_file_tool_below_the_failure_quarantines_the_record(tmp_path, run_mode):
-    project = _failed_alpha(tmp_path, run_mode, FILE_TOOL_PUBLISH)
+@pytest.mark.parametrize(
+    ("publish", "archive", "env"),
+    [
+        (FILE_TOOL_PUBLISH, _LLM_ARCHIVE, {}),
+        (HITL_PUBLISH, _HITL_ARCHIVE, {"AGAC_HITL_AUTO_APPROVE": "true"}),
+        # `publish` is an LLM action, so batch stores alpha's tombstone there; the FILE
+        # tool below it reads both `publish` and `summarize`.
+        (LLM_PUBLISH, _FILE_TOOL_ARCHIVE, {}),
+    ],
+    ids=["file-tool", "hitl", "file-tool-two-down"],
+)
+def test_an_action_below_the_failure_quarantines_the_record(
+    tmp_path, monkeypatch, run_mode, publish, archive, env
+):
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    project = _failed_alpha(tmp_path, run_mode, publish, archive)
 
     _is_quarantined_at_every_action_below(project)
     assert project.statuses() == {
@@ -92,23 +107,6 @@ def test_the_record_is_not_reported_as_a_missing_observe_field(tmp_path, run_mod
 
     reasons = {reason for _, reason in project.dispositions("publish").values()}
     assert "observe_field_missing" not in reasons
-
-
-@pytest.mark.parametrize("run_mode", MODES)
-def test_a_hitl_action_below_the_failure_quarantines_the_record(tmp_path, monkeypatch, run_mode):
-    monkeypatch.setenv("AGAC_HITL_AUTO_APPROVE", "true")
-    project = _failed_alpha(tmp_path, run_mode, HITL_PUBLISH, _HITL_ARCHIVE)
-
-    _is_quarantined_at_every_action_below(project)
-
-
-@pytest.mark.parametrize("run_mode", MODES)
-def test_a_file_tool_two_levels_down_quarantines_it_too(tmp_path, run_mode):
-    """`publish` is an LLM action, so batch stores alpha's tombstone there; the FILE tool
-    below it reads both `publish` and `summarize`."""
-    project = _failed_alpha(tmp_path, run_mode, LLM_PUBLISH, _FILE_TOOL_ARCHIVE)
-
-    _is_quarantined_at_every_action_below(project)
 
 
 @pytest.mark.parametrize("run_mode", MODES)

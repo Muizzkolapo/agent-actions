@@ -1,5 +1,7 @@
 """Tests for WorkflowResolutionService pre-flight checks."""
 
+import pytest
+
 from agent_actions.validation.preflight.resolution_service import (
     WorkflowResolutionService,
 )
@@ -45,41 +47,22 @@ class TestApiKeyChecks:
         ]
         assert len(api_key_errors) == 0
 
-    def test_tool_vendor_skipped(self, monkeypatch):
-        """Tool vendor actions are skipped (NO_KEY_REQUIRED sentinel)."""
+    @pytest.mark.parametrize(
+        ("action", "vendor"),
+        [
+            # tool and hitl carry the NO_KEY_REQUIRED sentinel
+            pytest.param("my_tool", "tool", id="tool"),
+            pytest.param("review", "hitl", id="hitl"),
+            # no config to check an unknown vendor against
+            pytest.param("custom", "totally_unknown_vendor", id="unknown"),
+        ],
+    )
+    def test_vendor_without_key_requirement_skipped(self, monkeypatch, action, vendor):
         monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
 
         svc = WorkflowResolutionService(
             action_configs={
-                "my_tool": {"model_vendor": "tool"},
-            },
-        )
-        result = svc.resolve_all()
-
-        api_key_errors = [e for e in result.errors if "API key" in e.message]
-        assert len(api_key_errors) == 0
-
-    def test_hitl_vendor_skipped(self, monkeypatch):
-        """HITL vendor actions are skipped (NO_KEY_REQUIRED sentinel)."""
-        monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
-
-        svc = WorkflowResolutionService(
-            action_configs={
-                "review": {"model_vendor": "hitl"},
-            },
-        )
-        result = svc.resolve_all()
-
-        api_key_errors = [e for e in result.errors if "API key" in e.message]
-        assert len(api_key_errors) == 0
-
-    def test_unknown_vendor_skipped(self, monkeypatch):
-        """Unknown vendor produces no api-key error (no config to check against)."""
-        monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
-
-        svc = WorkflowResolutionService(
-            action_configs={
-                "custom": {"model_vendor": "totally_unknown_vendor"},
+                action: {"model_vendor": vendor},
             },
         )
         result = svc.resolve_all()
@@ -307,23 +290,18 @@ class TestVendorRunModeCompatibility:
         assert len(batch_errors) == 1
         assert "cohere" in batch_errors[0].message
 
-    def test_online_mode_passes_for_any_vendor(self):
-        """Online mode passes for any vendor (no batch mode check needed)."""
+    @pytest.mark.parametrize(
+        ("vendor", "run_mode"),
+        [
+            # online needs no batch check
+            pytest.param("ollama_local", "online", id="online-any-vendor"),
+            pytest.param("openai", "batch", id="batch-capable"),
+        ],
+    )
+    def test_supported_mode_and_vendor_pair_passes(self, vendor, run_mode):
         svc = WorkflowResolutionService(
             action_configs={
-                "my_action": {"model_vendor": "ollama_local", "run_mode": "online"},
-            },
-        )
-        result = svc.resolve_all()
-
-        batch_errors = [e for e in result.errors if "batch" in e.message.lower()]
-        assert len(batch_errors) == 0
-
-    def test_batch_mode_with_batch_capable_vendor_passes(self):
-        """Batch mode with a batch-capable vendor passes."""
-        svc = WorkflowResolutionService(
-            action_configs={
-                "my_action": {"model_vendor": "openai", "run_mode": "batch"},
+                "my_action": {"model_vendor": vendor, "run_mode": run_mode},
             },
         )
         result = svc.resolve_all()

@@ -1,5 +1,7 @@
 """Tests for RecordState enum and lifecycle state categories."""
 
+import pytest
+
 from agent_actions.record.state import (
     CASCADE_BLOCKING_STATES,
     PROCESSABLE_STATES,
@@ -37,14 +39,20 @@ class TestStateCategories:
             == frozenset(RecordState) - PROCESSABLE_STATES
         )
 
-    def test_guard_skipped_is_resettable(self):
-        assert RecordState.GUARD_SKIPPED in RESETTABLE_DOWNSTREAM_STATES
-
-    def test_cascade_skipped_blocks(self):
-        assert RecordState.CASCADE_SKIPPED in CASCADE_BLOCKING_STATES
-
-    def test_failed_blocks(self):
-        assert RecordState.FAILED in CASCADE_BLOCKING_STATES
-
-    def test_exhausted_blocks(self):
-        assert RecordState.EXHAUSTED in CASCADE_BLOCKING_STATES
+    @pytest.mark.parametrize(
+        ("state", "category"),
+        [
+            pytest.param(
+                RecordState.GUARD_SKIPPED,
+                RESETTABLE_DOWNSTREAM_STATES,
+                id="guard_skipped-resettable",
+            ),
+            pytest.param(
+                RecordState.CASCADE_SKIPPED, CASCADE_BLOCKING_STATES, id="cascade_skipped-blocks"
+            ),
+            pytest.param(RecordState.FAILED, CASCADE_BLOCKING_STATES, id="failed-blocks"),
+            pytest.param(RecordState.EXHAUSTED, CASCADE_BLOCKING_STATES, id="exhausted-blocks"),
+        ],
+    )
+    def test_state_belongs_to_its_category(self, state, category):
+        assert state in category

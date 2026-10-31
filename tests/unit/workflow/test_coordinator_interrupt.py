@@ -106,24 +106,24 @@ def _drive_async_until(wf, interrupt):
 class TestInterruptedRunRecordsTerminalStatus:
     """A run killed mid-action must not leave 'running' on disk forever."""
 
-    def test_keyboard_interrupt_marks_running_action_interrupted(self, tmp_path):
+    @pytest.mark.parametrize(
+        ("raised", "status"),
+        [
+            pytest.param(KeyboardInterrupt(), ActionStatus.INTERRUPTED, id="keyboard_interrupt"),
+            # SIGINT/SIGTERM reach the coordinator as SystemExit via the CLI handler.
+            pytest.param(SystemExit(130), ActionStatus.INTERRUPTED, id="system_exit"),
+            # A workflow error is a real failure, not an interruption.
+            pytest.param(RuntimeError("boom"), ActionStatus.FAILED, id="ordinary_exception_fails"),
+        ],
+    )
+    def test_a_raise_mid_action_records_its_terminal_status(self, tmp_path, raised, status):
         state_manager, status_file = _running_state_manager(tmp_path)
         wf = _build_workflow(state_manager)
 
-        with pytest.raises(KeyboardInterrupt):
-            _drive_until(wf, KeyboardInterrupt())
+        with pytest.raises(type(raised)):
+            _drive_until(wf, raised)
 
-        assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
-
-    def test_system_exit_marks_running_action_interrupted(self, tmp_path):
-        """SIGINT/SIGTERM reach the coordinator as SystemExit via the CLI handler."""
-        state_manager, status_file = _running_state_manager(tmp_path)
-        wf = _build_workflow(state_manager)
-
-        with pytest.raises(SystemExit):
-            _drive_until(wf, SystemExit(130))
-
-        assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
+        assert _persisted_status(status_file, "agent_a") == status
 
     def test_async_loop_records_interrupted_when_level_execution_is_cancelled(self, tmp_path):
         """The async loop needs its own handler; the sequential one cannot cover it.
@@ -168,16 +168,6 @@ class TestInterruptedRunRecordsTerminalStatus:
             _drive_until(wf, SystemExit(130))
 
         assert _persisted_status(status_file, "agent_a") == ActionStatus.INTERRUPTED
-
-    def test_ordinary_exception_still_marks_running_action_failed(self, tmp_path):
-        """A workflow error is a real failure, not an interruption — keep them distinct."""
-        state_manager, status_file = _running_state_manager(tmp_path)
-        wf = _build_workflow(state_manager)
-
-        with pytest.raises(RuntimeError):
-            _drive_until(wf, RuntimeError("boom"))
-
-        assert _persisted_status(status_file, "agent_a") == ActionStatus.FAILED
 
     def test_untouched_action_is_not_swept(self, tmp_path):
         """Only in-flight actions get swept; pending work stays pending."""

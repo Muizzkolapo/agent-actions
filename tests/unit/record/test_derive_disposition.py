@@ -11,24 +11,22 @@ from agent_actions.storage.backend import Disposition
 class TestDeriveDisposition:
     """Every RecordState maps to exactly one Disposition."""
 
-    def test_processed_maps_to_success(self):
-        assert derive_disposition({"_state": "processed"}) == Disposition.SUCCESS.value
-
-    def test_guard_skipped_maps_to_unprocessed(self):
-        # A guard skip answers nothing, so the next run puts the record to the guard again.
-        assert derive_disposition({"_state": "guard_skipped"}) == Disposition.UNPROCESSED.value
-
-    def test_cascade_skipped_maps_to_unprocessed(self):
-        assert derive_disposition({"_state": "cascade_skipped"}) == Disposition.UNPROCESSED.value
-
-    def test_failed_maps_to_failed(self):
-        assert derive_disposition({"_state": "failed"}) == Disposition.FAILED.value
-
-    def test_exhausted_maps_to_exhausted(self):
-        assert derive_disposition({"_state": "exhausted"}) == Disposition.EXHAUSTED.value
-
-    def test_active_maps_to_passthrough(self):
-        assert derive_disposition({"_state": "active"}) == Disposition.PASSTHROUGH.value
+    @pytest.mark.parametrize(
+        ("state", "disposition"),
+        [
+            pytest.param("processed", Disposition.SUCCESS, id="processed-success"),
+            # A guard skip answers nothing, so the next run puts the record to the guard again.
+            pytest.param("guard_skipped", Disposition.UNPROCESSED, id="guard_skipped-unprocessed"),
+            pytest.param(
+                "cascade_skipped", Disposition.UNPROCESSED, id="cascade_skipped-unprocessed"
+            ),
+            pytest.param("failed", Disposition.FAILED, id="failed-failed"),
+            pytest.param("exhausted", Disposition.EXHAUSTED, id="exhausted-exhausted"),
+            pytest.param("active", Disposition.PASSTHROUGH, id="active-passthrough"),
+        ],
+    )
+    def test_state_maps_to_its_disposition(self, state, disposition):
+        assert derive_disposition({"_state": state}) == disposition.value
 
     def test_all_states_covered(self):
         """Every RecordState has a mapping."""

@@ -33,6 +33,12 @@ def _make_filter(result: FakeFilterResult):
     return svc
 
 
+def _raising_filter(exc: Exception):
+    svc = MagicMock()
+    svc.filter_item.side_effect = exc
+    return svc
+
+
 # ── SkipConditionStrategy ──────────────────────────────────────────────
 
 
@@ -45,15 +51,6 @@ class TestSkipConditionStrategy:
 
     def test_no_condition_returns_false(self, strategy):
         assert strategy.should_skip({}, {}) is False
-
-    def test_dict_where_matched_does_not_skip(self, strategy):
-        """When filter matches, the condition is met → do NOT skip."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            result = strategy.should_skip(
-                {"skip_condition": {"where": "x > 1"}, "agent_type": "a"}, {}
-            )
-        assert result is False
 
     def test_dict_where_not_matched_skips(self, strategy):
         """When filter does not match, inverse logic → skip and fire AgentSkipEvent."""
@@ -76,21 +73,27 @@ class TestSkipConditionStrategy:
         assert result is True
         mock_fire.assert_called_once()
 
-    def test_filter_failure_returns_false(self, strategy):
-        """When filter evaluation fails, fail-open (don't skip)."""
-        filt = _make_filter(FakeFilterResult(success=False, error="parse error"))
+    @pytest.mark.parametrize(
+        ("filt", "where"),
+        [
+            pytest.param(
+                _make_filter(FakeFilterResult(success=True, matched=True)),
+                "x > 1",
+                id="condition_matched",
+            ),
+            pytest.param(
+                _make_filter(FakeFilterResult(success=False, error="parse error")),
+                "bad",
+                id="filter_failure_fails_open",
+            ),
+            pytest.param(_raising_filter(ValueError("boom")), "x", id="exception_fails_open"),
+        ],
+    )
+    def test_does_not_skip(self, strategy, filt, where):
         with patch(GUARD_FILTER_PATH, return_value=filt):
             result = strategy.should_skip(
-                {"skip_condition": {"where": "bad"}, "agent_type": "a"}, {}
+                {"skip_condition": {"where": where}, "agent_type": "a"}, {}
             )
-        assert result is False
-
-    def test_exception_returns_false(self, strategy):
-        """Exception in evaluation should fail-open."""
-        filt = MagicMock()
-        filt.filter_item.side_effect = ValueError("boom")
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            result = strategy.should_skip({"skip_condition": {"where": "x"}, "agent_type": "a"}, {})
         assert result is False
 
     def test_empty_where_clause_returns_false(self, strategy):
@@ -134,16 +137,6 @@ class TestGuardStrategy:
         assert event.action_name == "a"
         assert "guard" in event.skip_reason
 
-    def test_filter_error_passthrough_true(self, strategy):
-        """Error with passthrough_on_error=True → don't skip."""
-        filt = _make_filter(FakeFilterResult(success=False, error="oops"))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": True},
-            "agent_type": "a",
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            assert strategy.should_skip(cfg, {}) is False
-
     def test_filter_error_passthrough_false(self, strategy):
         """Error with passthrough_on_error=False → skip and fire event."""
         filt = _make_filter(FakeFilterResult(success=False, error="oops"))
@@ -158,10 +151,16 @@ class TestGuardStrategy:
         assert event.action_name == "a"
         assert "passthrough_on_error" in event.skip_reason
 
-    def test_exception_passthrough_true(self, strategy):
-        """Exception with passthrough_on_error=True → don't skip."""
-        filt = MagicMock()
-        filt.filter_item.side_effect = ValueError("boom")
+    @pytest.mark.parametrize(
+        "filt",
+        [
+            pytest.param(
+                _make_filter(FakeFilterResult(success=False, error="oops")), id="filter_error"
+            ),
+            pytest.param(_raising_filter(ValueError("boom")), id="exception"),
+        ],
+    )
+    def test_evaluation_error_with_passthrough_does_not_skip(self, strategy, filt):
         cfg = {
             "guard": {"scope": "action", "clause": "x", "passthrough_on_error": True},
             "agent_type": "a",
@@ -231,74 +230,46 @@ class TestGuardStrategy:
         assert "classify" in call_args.data
         assert "classify_meta" not in call_args.data
 
-    def test_reserved_key_collision_skips(self, strategy):
-        """Action named like a reserved key is not flattened to top-level."""
+    @pytest.mark.parametrize(
+        ("cfg_extra", "previous_outputs", "expected"),
+        [
+            # A reserved key keeps its config value rather than the action output.
+            pytest.param(
+                {"dependencies": ["b"]},
+                {"dependencies": [{"data": "value"}]},
+                {"dependencies": ["b"]},
+                id="reserved_key_not_overwritten",
+            ),
+            # A single-key dict is unwrapped from its list and its field promoted.
+            pytest.param(
+                {},
+                {"assess": [{"severity": "high"}]},
+                {"assess": {"severity": "high"}, "severity": "high"},
+                id="single_item_unwrapped_and_promoted",
+            ),
+            pytest.param({}, {"empty_action": []}, {"empty_action": []}, id="empty_list_kept"),
+            pytest.param(
+                {},
+                {"extract": [{"id": 1}, {"id": 2}]},
+                {"extract": [{"id": 1}, {"id": 2}]},
+                id="multi_item_list_kept",
+            ),
+        ],
+    )
+    def test_previous_outputs_reach_the_guard_context(
+        self, strategy, cfg_extra, previous_outputs, expected
+    ):
         filt = _make_filter(FakeFilterResult(success=True, matched=True))
         cfg = {
             "guard": {"scope": "action", "clause": "x > 1"},
             "agent_type": "a",
-            "dependencies": ["b"],
-        }
-        previous_outputs = {
-            "dependencies": [{"data": "value"}],
+            **cfg_extra,
         }
         with patch(GUARD_FILTER_PATH, return_value=filt):
             strategy.should_skip(cfg, previous_outputs)
 
-        call_args = filt.filter_item.call_args[0][0]
-        # Reserved key should keep original value, not be overwritten
-        assert call_args.data["dependencies"] == ["b"]
-
-    def test_promotes_output_field_values_to_top_level(self, strategy):
-        """Single-key dict outputs are promoted so guards can use bare field names."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-        }
-        previous_outputs = {
-            "assess": [{"severity": "high"}],
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        call_args = filt.filter_item.call_args[0][0]
-        # Single-key dict unwrapped from list, then field promoted to top-level
-        assert call_args.data["assess"] == {"severity": "high"}
-        assert call_args.data["severity"] == "high"
-
-    def test_empty_list_action_output(self, strategy):
-        """Empty list action output is stored as-is without unwrapping."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-        }
-        previous_outputs = {
-            "empty_action": [],
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        call_args = filt.filter_item.call_args[0][0]
-        assert call_args.data["empty_action"] == []
-
-    def test_multi_item_lists_not_unwrapped(self, strategy):
-        """Multi-item list outputs are kept as lists."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-        }
-        previous_outputs = {
-            "extract": [{"id": 1}, {"id": 2}],
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        call_args = filt.filter_item.call_args[0][0]
-        # Multi-item list should remain as-is
-        assert call_args.data["extract"] == [{"id": 1}, {"id": 2}]
+        data = filt.filter_item.call_args[0][0].data
+        assert {key: data[key] for key in expected} == expected
 
     # ── Missing field reclassification tests ──
 

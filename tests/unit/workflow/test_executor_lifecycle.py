@@ -663,32 +663,21 @@ class TestTrackActionStart:
             start_time=datetime.now(),
         )
 
-    def test_tool_action_type(self, executor):
-        """model_vendor='tool' should produce action_type='tool'."""
+    @pytest.mark.parametrize(
+        ("action_config", "action_type"),
+        [
+            pytest.param({"model_vendor": "tool"}, "tool", id="tool_vendor"),
+            pytest.param({"kind": "hitl"}, "hitl", id="hitl_kind"),
+            pytest.param({}, "llm", id="llm_by_default"),
+        ],
+    )
+    def test_action_type_is_detected(self, executor, action_config, action_type):
         executor.run_tracker = MagicMock()
         executor.run_id = "run_1"
-        executor._track_action_start(self._make_params({"model_vendor": "tool"}))
+        executor._track_action_start(self._make_params(action_config))
 
         call_kwargs = executor.run_tracker.record_action_start.call_args[1]
-        assert call_kwargs["action_type"] == "tool"
-
-    def test_hitl_action_type(self, executor):
-        """kind='hitl' should produce action_type='hitl'."""
-        executor.run_tracker = MagicMock()
-        executor.run_id = "run_1"
-        executor._track_action_start(self._make_params({"kind": "hitl"}))
-
-        call_kwargs = executor.run_tracker.record_action_start.call_args[1]
-        assert call_kwargs["action_type"] == "hitl"
-
-    def test_llm_action_type_default(self, executor):
-        """Default action type should be 'llm'."""
-        executor.run_tracker = MagicMock()
-        executor.run_id = "run_1"
-        executor._track_action_start(self._make_params({}))
-
-        call_kwargs = executor.run_tracker.record_action_start.call_args[1]
-        assert call_kwargs["action_type"] == "llm"
+        assert call_kwargs["action_type"] == action_type
 
 
 # ── ActionExecutionResult ──────────────────────────────────────────────

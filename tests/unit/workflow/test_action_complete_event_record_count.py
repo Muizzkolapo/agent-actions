@@ -3,6 +3,8 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.logging.events import ActionCompleteEvent
 from agent_actions.workflow.executor import (
     ActionExecutionResult,
@@ -27,6 +29,17 @@ def _build_successful_result(record_count: int):
     return result
 
 
+def _result_without_metrics():
+    result = MagicMock()
+    result.success = True
+    result.status = ActionStatus.COMPLETED
+    result.metrics = None
+    result.output_folder = ""
+    result.error = None
+    result.tokens = None
+    return result
+
+
 def _make_executor_with_backend(rows_collected=0, has_backend=True):
     executor = ActionExecutor.__new__(ActionExecutor)
     deps = MagicMock()
@@ -40,24 +53,35 @@ def _make_executor_with_backend(rows_collected=0, has_backend=True):
     return executor
 
 
-def test_parallel_mode_fires_event_with_record_count():
+RESULTS = pytest.mark.parametrize(
+    ("make_result", "expected"),
+    [
+        pytest.param(lambda: _build_successful_result(record_count=7), 7, id="with_metrics"),
+        pytest.param(_result_without_metrics, 0, id="missing_metrics_defaults_to_zero"),
+    ],
+)
+
+
+@RESULTS
+def test_parallel_mode_fires_event_with_record_count(make_result, expected):
     from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
 
     orch = ActionLevelOrchestrator(execution_order=["agent_a"], action_configs={"agent_a": {}})
-    result = _build_successful_result(record_count=7)
 
     with patch("agent_actions.workflow.parallel.action_executor.fire_event") as mock_fire:
-        orch._fire_action_result_event("agent_a", idx=0, total=1, result=result, run_mode="online")
+        orch._fire_action_result_event(
+            "agent_a", idx=0, total=1, result=make_result(), run_mode="online"
+        )
 
-    events = [c.args[0] for c in mock_fire.call_args_list]
-    complete = [e for e in events if isinstance(e, ActionCompleteEvent)]
-    assert len(complete) == 1, f"expected 1 ActionCompleteEvent, got {len(complete)}"
-    assert complete[0].record_count == 7, (
-        f"parallel mode shipped record_count={complete[0].record_count}, expected 7"
-    )
+    complete = [
+        c.args[0] for c in mock_fire.call_args_list if isinstance(c.args[0], ActionCompleteEvent)
+    ]
+    assert len(complete) == 1
+    assert complete[0].record_count == expected
 
 
-def test_serial_mode_fires_event_with_record_count():
+@RESULTS
+def test_serial_mode_fires_event_with_record_count(make_result, expected):
     from agent_actions.workflow.execution_events import WorkflowEventLogger
     from agent_actions.workflow.models import (
         ActionLogParams,
@@ -81,12 +105,11 @@ def test_serial_mode_fires_event_with_record_count():
         services=services,
     )
 
-    result = _build_successful_result(record_count=4)
     params = ActionLogParams(
         idx=0,
         action_name="agent_b",
         total_actions=1,
-        result=result,
+        result=make_result(),
         end_time=datetime.now(),
         duration=1.5,
         run_mode="online",
@@ -95,84 +118,11 @@ def test_serial_mode_fires_event_with_record_count():
     with patch("agent_actions.workflow.execution_events.fire_event") as mock_fire:
         event_logger.log_action_result(params)
 
-    events = [c.args[0] for c in mock_fire.call_args_list]
-    complete = [e for e in events if isinstance(e, ActionCompleteEvent)]
-    assert len(complete) == 1, f"expected 1 ActionCompleteEvent, got {len(complete)}"
-    assert complete[0].record_count == 4, (
-        f"serial mode shipped record_count={complete[0].record_count}, expected 4"
-    )
-
-
-def test_parallel_mode_missing_metrics_defaults_to_zero_explicitly():
-    from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
-
-    orch = ActionLevelOrchestrator(execution_order=["agent_a"], action_configs={"agent_a": {}})
-    result = MagicMock()
-    result.success = True
-    result.status = ActionStatus.COMPLETED
-    result.metrics = None
-    result.output_folder = ""
-    result.error = None
-
-    with patch("agent_actions.workflow.parallel.action_executor.fire_event") as mock_fire:
-        orch._fire_action_result_event("agent_a", idx=0, total=1, result=result, run_mode="online")
-
     complete = [
         c.args[0] for c in mock_fire.call_args_list if isinstance(c.args[0], ActionCompleteEvent)
     ]
     assert len(complete) == 1
-    assert complete[0].record_count == 0
-
-
-def test_serial_mode_missing_metrics_defaults_to_zero_explicitly():
-    from agent_actions.workflow.execution_events import WorkflowEventLogger
-    from agent_actions.workflow.models import (
-        ActionLogParams,
-        CoreServices,
-        SupportServices,
-        WorkflowRuntimeConfig,
-        WorkflowServices,
-    )
-
-    core = MagicMock(spec=CoreServices)
-    core.state_manager = MagicMock()
-    support = MagicMock(spec=SupportServices)
-    support.manifest_manager = MagicMock()
-    services = WorkflowServices(core=core, support=support)
-    config = MagicMock(spec=WorkflowRuntimeConfig)
-
-    event_logger = WorkflowEventLogger(
-        agent_name="test_workflow",
-        execution_order=["agent_b"],
-        config=config,
-        services=services,
-    )
-
-    result = MagicMock()
-    result.success = True
-    result.status = ActionStatus.COMPLETED
-    result.metrics = None
-    result.output_folder = ""
-    result.error = None
-    result.tokens = None
-    params = ActionLogParams(
-        idx=0,
-        action_name="agent_b",
-        total_actions=1,
-        result=result,
-        end_time=datetime.now(),
-        duration=0.5,
-        run_mode="online",
-    )
-
-    with patch("agent_actions.workflow.execution_events.fire_event") as mock_fire:
-        event_logger.log_action_result(params)
-
-    complete = [
-        c.args[0] for c in mock_fire.call_args_list if isinstance(c.args[0], ActionCompleteEvent)
-    ]
-    assert len(complete) == 1
-    assert complete[0].record_count == 0
+    assert complete[0].record_count == expected
 
 
 def test_count_records_for_action_reads_the_backend_tally():

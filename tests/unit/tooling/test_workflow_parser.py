@@ -1,5 +1,6 @@
 """I-6: Coverage of WorkflowParser.parse_workflow() — happy path and None on malformed input."""
 
+import pytest
 import yaml
 
 from agent_actions.tooling.docs.parser import WorkflowParser
@@ -54,30 +55,17 @@ class TestWorkflowParserHappyPath:
 class TestWorkflowParserMalformedInput:
     """parse_workflow returns None on malformed or missing YAML."""
 
-    def test_invalid_yaml_returns_none(self, tmp_path):
-        yml = tmp_path / "bad.yml"
-        yml.write_text("key: {not: valid: yaml: [")
+    @pytest.mark.parametrize(
+        "content",
+        ["key: {not: valid: yaml: [", "", "   \n\n  \n", "- item1\n- item2\n"],
+        ids=["invalid-yaml", "empty", "whitespace", "non-mapping"],
+    )
+    def test_unusable_content_returns_none(self, tmp_path, content):
+        yml = tmp_path / "workflow.yml"
+        yml.write_text(content)
         result = WorkflowParser.parse_workflow(str(yml))
         assert result is None
 
     def test_nonexistent_file_returns_none(self, tmp_path):
         result = WorkflowParser.parse_workflow(str(tmp_path / "nonexistent.yml"))
-        assert result is None
-
-    def test_empty_file_returns_none(self, tmp_path):
-        yml = tmp_path / "empty.yml"
-        yml.write_text("")
-        result = WorkflowParser.parse_workflow(str(yml))
-        assert result is None
-
-    def test_whitespace_only_file_returns_none(self, tmp_path):
-        yml = tmp_path / "blank.yml"
-        yml.write_text("   \n\n  \n")
-        result = WorkflowParser.parse_workflow(str(yml))
-        assert result is None
-
-    def test_non_mapping_file_returns_none(self, tmp_path):
-        yml = tmp_path / "list.yml"
-        yml.write_text("- item1\n- item2\n")
-        result = WorkflowParser.parse_workflow(str(yml))
         assert result is None

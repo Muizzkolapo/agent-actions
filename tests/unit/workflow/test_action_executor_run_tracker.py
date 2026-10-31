@@ -53,8 +53,15 @@ class TestExecutorRunTrackerInit:
         result = executor._track_action_start(params)
         assert result is None
 
-    def test_track_action_start_invokes_record_when_tracker_set(self, executor):
-        """Setting run_tracker/run_id and calling _track_action_start must invoke record_action_start."""
+    @pytest.mark.parametrize(
+        ("action_config", "action_type"),
+        [
+            pytest.param({"model_vendor": "openai", "model_name": "gpt-4"}, "llm", id="llm"),
+            pytest.param({"model_vendor": "tool"}, "tool", id="tool"),
+            pytest.param({"model_vendor": "hitl"}, "hitl", id="hitl"),
+        ],
+    )
+    def test_track_action_start_records_the_action_type(self, executor, action_config, action_type):
         mock_tracker = MagicMock()
         executor.run_tracker = mock_tracker
         executor.run_id = "run-abc-123"
@@ -62,7 +69,7 @@ class TestExecutorRunTrackerInit:
         params = ActionRunParams(
             action_name="enrich_data",
             action_idx=1,
-            action_config={"model_vendor": "openai", "model_name": "gpt-4"},
+            action_config=action_config,
             is_last_action=False,
             start_time=datetime.now(),
         )
@@ -71,42 +78,6 @@ class TestExecutorRunTrackerInit:
         mock_tracker.record_action_start.assert_called_once_with(
             run_id="run-abc-123",
             action_name="enrich_data",
-            action_type="llm",
-            action_config=params.action_config,
+            action_type=action_type,
+            action_config=action_config,
         )
-
-    def test_track_action_start_tool_type(self, executor):
-        """Action with model_vendor='tool' must record action_type='tool'."""
-        mock_tracker = MagicMock()
-        executor.run_tracker = mock_tracker
-        executor.run_id = "run-xyz"
-
-        params = ActionRunParams(
-            action_name="my_tool",
-            action_idx=0,
-            action_config={"model_vendor": "tool"},
-            is_last_action=True,
-            start_time=datetime.now(),
-        )
-        executor._track_action_start(params)
-
-        call_kwargs = mock_tracker.record_action_start.call_args.kwargs
-        assert call_kwargs["action_type"] == "tool"
-
-    def test_track_action_start_hitl_type(self, executor):
-        """Action with model_vendor='hitl' must record action_type='hitl'."""
-        mock_tracker = MagicMock()
-        executor.run_tracker = mock_tracker
-        executor.run_id = "run-hitl"
-
-        params = ActionRunParams(
-            action_name="human_review",
-            action_idx=2,
-            action_config={"model_vendor": "hitl"},
-            is_last_action=False,
-            start_time=datetime.now(),
-        )
-        executor._track_action_start(params)
-
-        call_kwargs = mock_tracker.record_action_start.call_args.kwargs
-        assert call_kwargs["action_type"] == "hitl"

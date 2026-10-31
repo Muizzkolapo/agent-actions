@@ -193,9 +193,10 @@ def test_a_run_that_sends_nothing_writes_the_file_holding_the_answers(tmp_path, 
 # A store written by an older version, which keyed the file by its basename.
 
 
-def test_a_file_stored_under_its_basename_before_keeps_that_name(tmp_path):
+@pytest.mark.parametrize("collect", [True, False], ids=["collected", "batch_still_out"])
+def test_a_file_stored_under_its_basename_before_keeps_that_name(tmp_path, collect):
     action = _Action(tmp_path)
-    _as_stored_before(action, "sub/page.json", A_PAGE)
+    _as_stored_before(action, "sub/page.json", A_PAGE, collect=collect)
 
     action.run({"sub/page.json": A_PAGE})
 
@@ -212,16 +213,6 @@ def test_a_run_that_sends_nothing_writes_a_file_kept_on_its_basename_there(tmp_p
 
     assert action.files() == {"page.json": ["guard_skipped:f1", *ANSWERED_IN_BATCH_1]}
     assert _each_record_held_once(action)
-
-
-def test_a_batch_out_for_a_file_stored_under_its_basename_is_collected_there(tmp_path):
-    action = _Action(tmp_path)
-    _as_stored_before(action, "sub/page.json", A_PAGE, collect=False)
-
-    action.run({"sub/page.json": A_PAGE})
-
-    assert len(action.provider.batches) == 1
-    assert action.files() == {"page.json": ANSWERED_IN_BATCH_1}
 
 
 def test_a_file_kept_on_its_basename_stays_there_when_a_reset_replaces_its_inputs(tmp_path):

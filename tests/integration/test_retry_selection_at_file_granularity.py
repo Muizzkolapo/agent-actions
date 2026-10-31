@@ -11,6 +11,7 @@ exception: its rows may each stand on every record of the file, so a repair
 reaching the file decides every record of it again, as a run would.
 """
 
+import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
@@ -111,9 +112,13 @@ def _unobservable(project, record_id):  # noqa: F811
 
 
 class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
-    def test_an_unnamed_record_keeps_its_disposition(self, project, monkeypatch):  # noqa: F811
+    @pytest.mark.parametrize(
+        "which", ["unnamed", "selected"], ids=["unnamed-keeps-its-disposition", "named-is-repaired"]
+    )
+    def test_the_repair_leaves_every_record_succeeded(self, project, monkeypatch, which):  # noqa: F811
         """The scope's `skipped` is terminal and is written above the gate, so a
-        record it drops loses the result it already had."""
+        record it drops loses the result it already had. The named record is the
+        control: keeping the others must not come from the repair doing nothing."""
         project = _under_review(project, monkeypatch)
         ids = _record_ids(project, ACTION)
         selected, unnamed = ids[0], ids[-1]
@@ -123,20 +128,8 @@ class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
         assert retry.exit_code == 0, retry.output
-        assert _disposition(project, unnamed, SECOND) == "success"
-
-    def test_the_named_record_is_still_repaired(self, project, monkeypatch):  # noqa: F811
-        """The control: keeping the others must not come from the repair doing nothing."""
-        project = _under_review(project, monkeypatch)
-        ids = _record_ids(project, ACTION)
-        selected, unnamed = ids[0], ids[-1]
-        _unobservable(project, unnamed)
-        _fail(project, selected, SECOND)
-
-        retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
-
-        assert retry.exit_code == 0, retry.output
-        assert _disposition(project, selected, SECOND) == "success"
+        checked = {"unnamed": unnamed, "selected": selected}[which]
+        assert _disposition(project, checked, SECOND) == "success"
 
 
 class TestAFileToolDecidesEveryRecordOfTheFileAgain:

@@ -217,26 +217,17 @@ def test_a_prompt_reading_another_reserved_name_is_refused(tmp_path, mode, name)
     _assert_refused(project, f"'{name}' is a reserved name, not a namespace")
 
 
-@pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_guard_reading_through_action_is_refused(tmp_path, mode):
-    project = _project(
-        tmp_path,
-        mode,
-        "{{ producer.severity }}",
-        guard="action.producer.severity == 'high'",
-    )
-
-    _assert_refused(
-        project,
-        "there is no 'action' namespace",
-        "Write 'producer.severity'",
-    )
-
-
-def test_a_context_scope_reading_through_action_is_refused(tmp_path):
-    project = _project(
-        tmp_path, "online", "{{ producer.severity }}", observe="action.producer.severity"
-    )
+@pytest.mark.parametrize(
+    ("mode", "read"),
+    [
+        ("online", {"guard": "action.producer.severity == 'high'"}),
+        ("batch", {"guard": "action.producer.severity == 'high'"}),
+        ("online", {"observe": "action.producer.severity"}),
+    ],
+    ids=["guard-online", "guard-batch", "context-scope"],
+)
+def test_a_guard_or_context_scope_reading_through_action_is_refused(tmp_path, mode, read):
+    project = _project(tmp_path, mode, "{{ producer.severity }}", **read)
 
     _assert_refused(project, "there is no 'action' namespace", "Write 'producer.severity'")
 

@@ -263,24 +263,20 @@ class TestRecordRun:
 
 
 class TestCalculateDuration:
-    def test_valid_timestamps(self, tmp_path):
+    @pytest.mark.parametrize(
+        ("started", "ended", "expected"),
+        [
+            ("2026-01-01T00:00:00", "2026-01-01T01:00:00", 3600.0),
+            ("2026-01-01T00:00:00Z", "2026-01-01T00:05:00Z", 300.0),
+            ("not-a-date", "also-bad", 0),
+            # Non-string input triggers AttributeError on .replace()
+            (None, None, 0),
+        ],
+        ids=["naive", "z-suffix", "invalid-returns-zero", "attribute-error-returns-zero"],
+    )
+    def test_duration(self, tmp_path, started, ended, expected):
         tracker = RunTracker(artefact_dir=tmp_path)
-        result = tracker._calculate_duration("2026-01-01T00:00:00", "2026-01-01T01:00:00")
-        assert result == 3600.0
-
-    def test_utc_z_suffix(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        result = tracker._calculate_duration("2026-01-01T00:00:00Z", "2026-01-01T00:05:00Z")
-        assert result == 300.0
-
-    def test_invalid_timestamps_return_zero(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        assert tracker._calculate_duration("not-a-date", "also-bad") == 0
-
-    def test_attribute_error_returns_zero(self, tmp_path):
-        tracker = RunTracker(artefact_dir=tmp_path)
-        # Non-string input triggers AttributeError on .replace()
-        assert tracker._calculate_duration(None, None) == 0
+        assert tracker._calculate_duration(started, ended) == expected
 
 
 # ---------------------------------------------------------------------------

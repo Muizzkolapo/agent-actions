@@ -266,35 +266,32 @@ class TestGuardResultWarnMode:
         assert result.behavior == "warn"
         assert result.matched is False
 
-    def test_from_filter_result_warn_not_matched(self):
+    @pytest.mark.parametrize(
+        ("filter_kwargs", "passthrough_on_error", "behavior"),
+        [
+            pytest.param({"success": True, "matched": False}, True, "warn", id="not-matched-warns"),
+            # Passed: no warn needed.
+            pytest.param({"success": True, "matched": True}, True, None, id="matched-passes"),
+            pytest.param(
+                {"success": False, "matched": False, "error": "eval error"},
+                False,
+                "warn",
+                id="error-warns",
+            ),
+        ],
+    )
+    def test_from_filter_result_in_warn_mode_always_executes(
+        self, filter_kwargs, passthrough_on_error, behavior
+    ):
         from agent_actions.input.preprocessing.filtering.guard_filter import FilterResult
 
-        filter_result = FilterResult(success=True, matched=False)
         guard_result = GuardResult.from_filter_result(
-            filter_result, behavior="warn", passthrough_on_error=True
+            FilterResult(**filter_kwargs),
+            behavior="warn",
+            passthrough_on_error=passthrough_on_error,
         )
         assert guard_result.should_execute is True
-        assert guard_result.behavior == "warn"
-
-    def test_from_filter_result_warn_matched(self):
-        from agent_actions.input.preprocessing.filtering.guard_filter import FilterResult
-
-        filter_result = FilterResult(success=True, matched=True)
-        guard_result = GuardResult.from_filter_result(
-            filter_result, behavior="warn", passthrough_on_error=True
-        )
-        assert guard_result.should_execute is True
-        assert guard_result.behavior is None  # passed — no warn needed
-
-    def test_from_filter_result_warn_on_error(self):
-        from agent_actions.input.preprocessing.filtering.guard_filter import FilterResult
-
-        filter_result = FilterResult(success=False, matched=False, error="eval error")
-        guard_result = GuardResult.from_filter_result(
-            filter_result, behavior="warn", passthrough_on_error=False
-        )
-        assert guard_result.should_execute is True
-        assert guard_result.behavior == "warn"
+        assert guard_result.behavior == behavior
 
 
 # ---------------------------------------------------------------------------

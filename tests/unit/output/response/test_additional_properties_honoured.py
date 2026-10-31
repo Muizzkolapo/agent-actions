@@ -11,24 +11,15 @@ from agent_actions.utils.udf_management.tooling import _validate_against_schema
 _UNIFIED = {"name": "s", "fields": [{"id": "a", "type": "string"}]}
 
 
-def test_openai_honours_true():
-    compiled = compile_unified_schema({**_UNIFIED, "additionalProperties": True}, "openai")
+@pytest.mark.parametrize("vendor", ["openai", "groq", "agac-provider"])
+def test_json_schema_vendor_honours_true(vendor):
+    compiled = compile_unified_schema({**_UNIFIED, "additionalProperties": True}, vendor)
     assert compiled["schema"]["additionalProperties"] is True
 
 
 def test_openai_defaults_false_when_absent():
     compiled = compile_unified_schema(_UNIFIED, "openai")
     assert compiled["schema"]["additionalProperties"] is False
-
-
-def test_groq_honours_true():
-    compiled = compile_unified_schema({**_UNIFIED, "additionalProperties": True}, "groq")
-    assert compiled["schema"]["additionalProperties"] is True
-
-
-def test_agac_provider_honours_true():
-    compiled = compile_unified_schema({**_UNIFIED, "additionalProperties": True}, "agac-provider")
-    assert compiled["schema"]["additionalProperties"] is True
 
 
 def test_anthropic_honours_true():

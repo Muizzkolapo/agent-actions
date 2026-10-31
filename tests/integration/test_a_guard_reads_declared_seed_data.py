@@ -236,33 +236,46 @@ def test_the_prompt_still_reads_the_seed_beside_a_guard_reading_it(tmp_path):
     assert prompts == ["Say high in on", "Say high in on"], prompts
 
 
-def test_a_guard_reading_an_undeclared_seed_key_is_refused(tmp_path):
-    project = _project(tmp_path, "seed.other.mode == 'on'")
+@pytest.mark.parametrize(
+    ("condition", "declared", "prompt_extra", "expected"),
+    [
+        (
+            "seed.other.mode == 'on'",
+            "conf",
+            "",
+            ["references seed.other but 'other' is not declared in context_scope.seed"],
+        ),
+        # No action declares a seed, and there is no seed directory to load one from.
+        (
+            "seed.conf.mode == 'on'",
+            None,
+            "",
+            [
+                "references seed.conf but 'conf' is not declared in context_scope.seed",
+                "Location: guard",
+            ],
+        ),
+        (
+            "source.page_content != ''",
+            None,
+            " {{ seed.conf.mode }}",
+            [
+                "references seed.conf but 'conf' is not declared in context_scope.seed",
+                "Location: prompt",
+            ],
+        ),
+    ],
+    ids=["undeclared-key", "guard-none-declared", "prompt-none-declared"],
+)
+def test_a_read_of_an_undeclared_seed_is_refused(
+    tmp_path, condition, declared, prompt_extra, expected
+):
+    project = _project(tmp_path, condition, declared=declared, prompt_extra=prompt_extra)
 
     output = _refused(project)
 
-    assert "references seed.other but 'other' is not declared in context_scope.seed" in output
-
-
-def test_a_guard_reading_seed_with_none_declared_anywhere_is_refused(tmp_path):
-    """No action declares a seed, and there is no seed directory to load one from."""
-    project = _project(tmp_path, "seed.conf.mode == 'on'", declared=None)
-
-    output = _refused(project)
-
-    assert "references seed.conf but 'conf' is not declared in context_scope.seed" in output
-    assert "Location: guard" in output, output
-
-
-def test_a_prompt_reading_seed_with_none_declared_anywhere_is_refused(tmp_path):
-    project = _project(
-        tmp_path, "source.page_content != ''", declared=None, prompt_extra=" {{ seed.conf.mode }}"
-    )
-
-    output = _refused(project)
-
-    assert "references seed.conf but 'conf' is not declared in context_scope.seed" in output
-    assert "Location: prompt" in output, output
+    for message in expected:
+        assert message in output, output
 
 
 def _parses_in_process(project: Path, monkeypatch) -> int:

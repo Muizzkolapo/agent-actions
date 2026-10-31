@@ -23,70 +23,42 @@ def _outputs(source_index):
     return [{"source_index": source_index, "data": {"g": "a"}}]
 
 
-class TestABoolIsNotAnIndex:
-    """``isinstance(True, int)`` is true, so a bool passes every check the readers
-    make and resolves to input 1 — a real row, the wrong one, silently.
-    """
-
-    def test_a_bool_element_is_refused(self):
+class TestAnIndexThatNamesNoInputIsRefused:
+    @pytest.mark.parametrize(
+        "source_index",
+        [
+            # ``isinstance(True, int)`` is true, so a bool passes every check the readers
+            # make and resolves to input 1 — a real row, the wrong one, silently.
+            pytest.param([True], id="bool-element"),
+            pytest.param(True, id="bare-true"),
+            # `False` is 0, so it resolves to the first input and looks correct.
+            pytest.param(False, id="bare-false"),
+            # Inside a list, ``None`` says a *contributor* is nothing, which names no input.
+            pytest.param([None], id="list-holding-only-none"),
+            pytest.param([None, 0], id="none-before-a-contributor"),
+            pytest.param([0, None], id="none-after-a-contributor"),
+            # Python would read a negative from the end of the list, so it names an input
+            # the tool did not mean and the two bounds rules disagree about whether it counts.
+            pytest.param([0, -1], id="negative-element"),
+            pytest.param(-1, id="negative-scalar"),
+            pytest.param([1, "0"], id="string-element"),
+            pytest.param([0, 1.5], id="float-element"),
+        ],
+    )
+    def test_it_is_refused(self, source_index):
         with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([True]))
-
-    def test_a_bare_true_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs(True))
-
-    def test_a_bare_false_is_refused(self):
-        """`False` is 0, so it resolves to the first input and looks correct."""
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs(False))
+            FileUDFResult(outputs=_outputs(source_index))
 
 
-class TestNoneInsideAList:
-    """A scalar ``None`` is the documented way to say no input produced a row.
-    Inside a list it says a *contributor* is nothing, which names no input.
-    """
-
-    def test_a_list_holding_only_none_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([None]))
-
-    def test_none_beside_a_real_contributor_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([None, 0]))
-
-    def test_none_after_a_real_contributor_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([0, None]))
+class TestAScalarNone:
+    """A scalar ``None`` is the documented way to say no input produced a row."""
 
     def test_a_scalar_none_is_still_accepted(self):
         """The synthetic-row declaration has to keep working."""
         assert FileUDFResult(outputs=_outputs(None)).outputs[0]["source_index"] is None
 
 
-class TestANegativeIndex:
-    """Python would read it from the end of the list, so it names an input the
-    tool did not mean and the two bounds rules disagree about whether it counts.
-    """
-
-    def test_a_negative_element_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([0, -1]))
-
-    def test_a_negative_scalar_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs(-1))
-
-
-class TestAnElementThatIsNotAnInteger:
-    def test_a_string_element_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([1, "0"]))
-
-    def test_a_float_element_is_refused(self):
-        with pytest.raises(ValueError, match="output\\[0\\]"):
-            FileUDFResult(outputs=_outputs([0, 1.5]))
-
+class TestAContainerOfPositions:
     @pytest.mark.parametrize(
         "source_index",
         [[[0, 1]], [(0,)], [{0}], [b"0"]],

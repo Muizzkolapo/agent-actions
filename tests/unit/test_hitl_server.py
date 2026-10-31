@@ -553,18 +553,23 @@ def test_approve_endpoint_sets_response_for_single_record():
     assert server.record_reviews[0]["hitl_status"] == "approved"
 
 
-def test_approve_endpoint_rejects_multi_record():
-    """POST /api/approve with multi-record context should return 400."""
+@pytest.mark.parametrize(
+    ("endpoint", "require_comment_on_reject", "comment"),
+    [("approve", True, "all good"), ("reject", False, "bad")],
+    ids=["approve", "reject"],
+)
+def test_decision_endpoint_rejects_multi_record(endpoint, require_comment_on_reject, comment):
+    """POST /api/approve or /api/reject with multi-record context should return 400."""
     server = HitlServer(
         port=3001,
         instructions="Review output",
         context_data=[{"id": 1}, {"id": 2}],
         timeout=30,
-        require_comment_on_reject=True,
+        require_comment_on_reject=require_comment_on_reject,
     )
     client = server.app.test_client()
 
-    response = _post(client, "/api/approve", server, json={"comment": "all good"})
+    response = _post(client, f"/api/{endpoint}", server, json={"comment": comment})
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -573,28 +578,13 @@ def test_approve_endpoint_rejects_multi_record():
     assert server.response is None
 
 
-def test_reject_endpoint_rejects_multi_record():
-    """POST /api/reject with multi-record context should return 400."""
-    server = HitlServer(
-        port=3001,
-        instructions="Review output",
-        context_data=[{"id": 1}, {"id": 2}],
-        timeout=30,
-        require_comment_on_reject=False,
-    )
-    client = server.app.test_client()
-
-    response = _post(client, "/api/reject", server, json={"comment": "bad"})
-
-    assert response.status_code == 400
-    payload = response.get_json()
-    assert payload["success"] is False
-    assert "multi-record" in payload["error"].lower()
-    assert server.response is None
-
-
-def test_review_record_rejects_non_integer_index():
-    """POST /api/review-record with non-integer index should return 400."""
+@pytest.mark.parametrize(
+    ("index", "error_fragment"),
+    [("abc", "integer"), (99, "out of range")],
+    ids=["non-integer", "out-of-range"],
+)
+def test_review_record_rejects_bad_index(index, error_fragment):
+    """POST /api/review-record with a non-integer or out-of-range index should return 400."""
     server = HitlServer(
         port=3001,
         instructions="Review output",
@@ -607,34 +597,12 @@ def test_review_record_rejects_non_integer_index():
         client,
         "/api/review-record",
         server,
-        json={"index": "abc", "hitl_status": "approved"},
+        json={"index": index, "hitl_status": "approved"},
     )
 
     assert response.status_code == 400
     payload = response.get_json()
-    assert "integer" in payload["error"].lower()
-
-
-def test_review_record_rejects_out_of_range_index():
-    """POST /api/review-record with out-of-range index should return 400."""
-    server = HitlServer(
-        port=3001,
-        instructions="Review output",
-        context_data=[{"id": 1}, {"id": 2}],
-        timeout=30,
-    )
-    client = server.app.test_client()
-
-    response = _post(
-        client,
-        "/api/review-record",
-        server,
-        json={"index": 99, "hitl_status": "approved"},
-    )
-
-    assert response.status_code == 400
-    payload = response.get_json()
-    assert "out of range" in payload["error"].lower()
+    assert error_fragment in payload["error"].lower()
 
 
 def test_review_record_rejects_missing_hitl_status():

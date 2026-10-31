@@ -23,18 +23,48 @@ def backend(tmp_path):
 class TestDispositionConflictClearing:
     """Verify that set_disposition clears prior conflicting dispositions."""
 
-    def test_success_replaces_failed(self, backend):
-        """Writing SUCCESS after FAILED leaves only SUCCESS — no phantom FAILED."""
-        backend.set_disposition("action_A", "rec1", "failed", reason="llm error")
-        backend.set_disposition("action_A", "rec1", "success")
+    @pytest.mark.parametrize(
+        ("writes", "record_id", "expected"),
+        [
+            pytest.param(
+                [("failed", "llm error"), ("success", None)],
+                "rec1",
+                "success",
+                id="success-replaces-failed",
+            ),
+            pytest.param(
+                [("success", None), ("failed", "retry failed")],
+                "rec1",
+                "failed",
+                id="failed-replaces-success",
+            ),
+            pytest.param(
+                [("failed", "first"), ("skipped", "second"), ("success", None)],
+                "rec1",
+                "success",
+                id="terminal-replaces-any-prior",
+            ),
+            pytest.param(
+                [("failed", "node fail"), ("success", None)],
+                "__node__",
+                "success",
+                id="node-level-sentinel",
+            ),
+        ],
+    )
+    def test_last_write_leaves_the_only_row(self, backend, writes, record_id, expected):
+        """The last disposition written clears every prior one for that record."""
+        for disposition, reason in writes:
+            backend.set_disposition("action_A", record_id, disposition, reason=reason)
 
         rows = backend.connection.execute(
             "SELECT disposition FROM record_disposition "
-            "WHERE action_name = 'action_A' AND record_id = 'rec1'"
+            "WHERE action_name = 'action_A' AND record_id = ?",
+            (record_id,),
         ).fetchall()
 
         assert len(rows) == 1
-        assert rows[0][0] == "success"
+        assert rows[0][0] == expected
 
     def test_no_phantom_failures_in_get_failed_items(self, backend):
         """After SUCCESS overwrites FAILED, get_failed_items returns empty."""
@@ -43,46 +73,6 @@ class TestDispositionConflictClearing:
 
         failed = backend.get_failed_items("action_A")
         assert failed == []
-
-    def test_failed_replaces_success(self, backend):
-        """Writing FAILED after SUCCESS leaves only FAILED."""
-        backend.set_disposition("action_A", "rec1", "success")
-        backend.set_disposition("action_A", "rec1", "failed", reason="retry failed")
-
-        rows = backend.connection.execute(
-            "SELECT disposition FROM record_disposition "
-            "WHERE action_name = 'action_A' AND record_id = 'rec1'"
-        ).fetchall()
-
-        assert len(rows) == 1
-        assert rows[0][0] == "failed"
-
-    def test_terminal_replaces_any_prior(self, backend):
-        """Any terminal disposition clears all prior dispositions for that record."""
-        backend.set_disposition("action_A", "rec1", "failed", reason="first")
-        backend.set_disposition("action_A", "rec1", "skipped", reason="second")
-        backend.set_disposition("action_A", "rec1", "success")
-
-        rows = backend.connection.execute(
-            "SELECT disposition FROM record_disposition "
-            "WHERE action_name = 'action_A' AND record_id = 'rec1'"
-        ).fetchall()
-
-        assert len(rows) == 1
-        assert rows[0][0] == "success"
-
-    def test_node_level_sentinel_also_cleared(self, backend):
-        """__node__ sentinel records also get cleared on overwrite."""
-        backend.set_disposition("action_A", "__node__", "failed", reason="node fail")
-        backend.set_disposition("action_A", "__node__", "success")
-
-        rows = backend.connection.execute(
-            "SELECT disposition FROM record_disposition "
-            "WHERE action_name = 'action_A' AND record_id = '__node__'"
-        ).fetchall()
-
-        assert len(rows) == 1
-        assert rows[0][0] == "success"
 
     def test_different_records_unaffected(self, backend):
         """Clearing for rec1 does not affect rec2 at the same action."""

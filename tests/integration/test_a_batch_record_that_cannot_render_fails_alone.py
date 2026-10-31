@@ -186,18 +186,10 @@ EXPECTED = {
 }
 
 
-def test_online_fails_the_record_that_cannot_render_and_answers_the_rest(tmp_path):
-    """The behaviour batch is held to."""
-    project = _project(tmp_path, "online", empty="p0")
-
-    _run_to_the_end(project, "--fresh")
-
-    assert _outcome(project) == EXPECTED
-
-
-def test_batch_fails_the_record_that_cannot_render_and_answers_the_rest(tmp_path):
-    """p0 comes first, so it is the first record the rehearsal renders."""
-    project = _project(tmp_path, "batch", empty="p0")
+@pytest.mark.parametrize("mode", ["online", "batch"])
+def test_the_record_that_cannot_render_fails_and_the_rest_are_answered(tmp_path, mode):
+    """Batch is held to online; p0 comes first, so it is the first record the rehearsal renders."""
+    project = _project(tmp_path, mode, empty="p0")
 
     output = _run_to_the_end(project, "--fresh")
 

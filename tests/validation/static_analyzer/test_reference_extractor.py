@@ -282,24 +282,12 @@ class TestReferenceExtractor:
         assert len(refs) == 1
         assert refs[0].source_agent == "extractor"
 
-    def test_jinja_keywords_skipped(self):
-        """Test Jinja2 control keywords are not treated as agents."""
-        config = {
-            "name": "agent",
-            "prompt": "{% if condition %}{{ real_agent.data }}{% endif %}",
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        # Should only have reference to real_agent, not 'if'
-        agent_names = {r.source_agent for r in refs}
-        assert "if" not in agent_names
-        assert "real_agent" in agent_names
-
-    def test_jinja_loop_variables_skipped(self):
-        """Test Jinja2 for-loop variables are not treated as external references."""
-        config = {
-            "name": "agent",
-            "prompt": """
+    @pytest.mark.parametrize(
+        ("prompt", "skipped", "real"),
+        [
+            ("{% if condition %}{{ real_agent.data }}{% endif %}", ("if",), "real_agent"),
+            (
+                """
             {% for ref in source.referenced_in %}
             Section: {{ ref.section_name }}
             Objective: {{ ref.objective }}
@@ -307,20 +295,11 @@ class TestReferenceExtractor:
 
             External: {{ extractor.data }}
             """,
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        # Should not include 'ref' as it's a loop variable
-        agent_names = {r.source_agent for r in refs}
-        assert "ref" not in agent_names
-        # Should include 'extractor' (external reference)
-        assert "extractor" in agent_names
-
-    def test_multiple_loop_variables_skipped(self):
-        """Test multiple for-loop variables are all skipped."""
-        config = {
-            "name": "agent",
-            "prompt": """
+                ("ref",),
+                "extractor",
+            ),
+            (
+                """
             {% for item in items_list %}
             Item: {{ item.name }}
             {% endfor %}
@@ -329,67 +308,50 @@ class TestReferenceExtractor:
             {% endfor %}
             Real ref: {{ extractor.summary }}
             """,
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        agent_names = {r.source_agent for r in refs}
-        # Loop variables should not be treated as external references
-        assert "item" not in agent_names
-        assert "resp" not in agent_names
-        # Real external references should be present
-        assert "extractor" in agent_names
-
-    def test_set_variable_skipped(self):
-        """Test {% set %} variables are not treated as external references."""
-        config = {
-            "name": "agent",
-            "prompt": """
+                ("item", "resp"),
+                "extractor",
+            ),
+            (
+                """
             {% set summary = source.text %}
             Result: {{ summary.truncated }}
             Real ref: {{ extractor.data }}
             """,
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        agent_names = {r.source_agent for r in refs}
-        assert "summary" not in agent_names
-        assert "extractor" in agent_names
-
-    def test_macro_param_skipped(self):
-        """Test {% macro %} parameters are not treated as external references."""
-        config = {
-            "name": "agent",
-            "prompt": """
+                ("summary",),
+                "extractor",
+            ),
+            (
+                """
             {% macro render_item(item) %}
             Name: {{ item.name }}
             Score: {{ item.score }}
             {% endmacro %}
             Real ref: {{ extractor.data }}
             """,
-        }
-        refs = self.extractor.extract_from_agent(config)
-
-        agent_names = {r.source_agent for r in refs}
-        assert "item" not in agent_names
-        assert "extractor" in agent_names
-
-    def test_tuple_unpacking_in_loop_skipped(self):
-        """Test tuple unpacking in for-loops skips all loop variables."""
-        config = {
-            "name": "agent",
-            "prompt": """
+                ("item",),
+                "extractor",
+            ),
+            (
+                """
             {% for key, value in source.items %}
             {{ key.name }}: {{ value.data }}
             {% endfor %}
             Real ref: {{ extractor.data }}
             """,
-        }
-        refs = self.extractor.extract_from_agent(config)
+                ("key", "value"),
+                "extractor",
+            ),
+        ],
+        ids=["keywords", "loop-var", "multi-loop", "set-var", "macro-param", "tuple-unpack"],
+    )
+    def test_template_local_names_skipped(self, prompt, skipped, real):
+        """Jinja keywords and template-local names are not agents; real references remain."""
+        refs = self.extractor.extract_from_agent({"name": "agent", "prompt": prompt})
 
         agent_names = {r.source_agent for r in refs}
-        assert "key" not in agent_names
-        assert "value" not in agent_names
-        assert "extractor" in agent_names
+        for name in skipped:
+            assert name not in agent_names
+        assert real in agent_names
 
 
 class TestADictMethodCallIsNotAFieldReference:

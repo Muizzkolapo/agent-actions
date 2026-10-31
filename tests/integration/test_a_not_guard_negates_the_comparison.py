@@ -154,21 +154,19 @@ def _ran(tmp_path: Path, run_mode: str, condition: str) -> Project:
     return project
 
 
-MODES = ["online", "batch"]
-
-
-@pytest.mark.parametrize("run_mode", MODES)
-def test_the_guard_keeps_the_record_not_named_by_the_comparison(tmp_path, run_mode):
-    """`NOT source.page_no == 1` should keep page 2, not decide by page_no's truthiness."""
-    project = _ran(tmp_path, run_mode, "NOT source.page_no == 1")
-
-    assert project.pages("publish", "filtered") == [1, 1]
-    for action in BELOW:
-        assert project.pages(action, "success") == [2, 2], action
-
-
-def test_the_parenthesised_form_already_worked_and_still_does(tmp_path):
-    project = _ran(tmp_path, "online", "NOT (source.page_no == 1)")
+@pytest.mark.parametrize(
+    ("run_mode", "condition"),
+    [
+        # Should keep page 2, not decide by page_no's truthiness.
+        ("online", "NOT source.page_no == 1"),
+        ("batch", "NOT source.page_no == 1"),
+        # The parenthesised form already worked and still does.
+        ("online", "NOT (source.page_no == 1)"),
+    ],
+    ids=["bare-online", "bare-batch", "parenthesised"],
+)
+def test_the_guard_keeps_the_record_not_named_by_the_comparison(tmp_path, run_mode, condition):
+    project = _ran(tmp_path, run_mode, condition)
 
     assert project.pages("publish", "filtered") == [1, 1]
     for action in BELOW:

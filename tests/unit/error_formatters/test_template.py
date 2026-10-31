@@ -1,5 +1,7 @@
 """Tests for TemplateErrorFormatter with enhanced namespace context."""
 
+import pytest
+
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.logging.errors.formatters.template import TemplateErrorFormatter
 
@@ -263,29 +265,19 @@ class TestTemplateErrorFormatter:
 class TestFindSimilar:
     """Tests for the _find_similar helper method."""
 
-    def test_finds_similar_field(self):
-        """Test that similar fields are found."""
+    @pytest.mark.parametrize(
+        ("name", "candidates", "expected"),
+        [
+            ("question_type", ["question_category", "tags"], "question_category"),
+            ("xyz", ["abc", "def"], None),
+            ("QUESTION_TYPE", ["question_category", "tags"], "question_category"),
+            ("field", [], None),
+        ],
+        ids=["exact-similar", "below-threshold", "case-insensitive", "empty-candidates"],
+    )
+    def test_find_similar(self, name, candidates, expected):
         formatter = TemplateErrorFormatter()
-        result = formatter._find_similar("question_type", ["question_category", "tags"])
-        assert result == "question_category"
-
-    def test_no_match_below_threshold(self):
-        """Test that no match is returned if below threshold."""
-        formatter = TemplateErrorFormatter()
-        result = formatter._find_similar("xyz", ["abc", "def"])
-        assert result is None
-
-    def test_case_insensitive_matching(self):
-        """Test that matching is case insensitive."""
-        formatter = TemplateErrorFormatter()
-        result = formatter._find_similar("QUESTION_TYPE", ["question_category", "tags"])
-        assert result == "question_category"
-
-    def test_empty_candidates(self):
-        """Test handling of empty candidates list."""
-        formatter = TemplateErrorFormatter()
-        result = formatter._find_similar("field", [])
-        assert result is None
+        assert formatter._find_similar(name, candidates) == expected
 
 
 class TestStorageHints:

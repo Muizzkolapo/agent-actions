@@ -37,29 +37,24 @@ class TestClientBaseAPIKeyValidation:
         assert error.context["env_var"] == "TEST_EMPTY_KEY_12345"
         assert "export" in error.context["hint"]
 
-    def test_api_key_env_var_success(self, monkeypatch):
-        """Test successful env var resolution with ${} syntax."""
-        monkeypatch.setenv("TEST_SUCCESS_KEY_12345", "test-api-key-value")
-        agent_config = {"agent_type": "test_agent", "api_key": "${TEST_SUCCESS_KEY_12345}"}
-        result = BaseClient.get_api_key(agent_config)
-        assert result == "test-api-key-value"
-
-    def test_api_key_legacy_format_success(self, monkeypatch):
-        """Test successful env var resolution with legacy format (no ${})."""
-        monkeypatch.setenv("TEST_LEGACY_KEY_12345", "legacy-api-key-value")
-        agent_config = {"agent_type": "test_agent", "api_key": "TEST_LEGACY_KEY_12345"}
-        result = BaseClient.get_api_key(agent_config)
-        assert result == "legacy-api-key-value"
-
-    def test_api_key_secret_str_is_unwrapped(self, monkeypatch):
-        """SecretStr api_key is unwrapped before startswith() — no AttributeError."""
-        monkeypatch.setenv("TEST_SECRET_STR_KEY_12345", "secret-api-key-value")
-        agent_config = {
-            "agent_type": "test_agent",
-            "api_key": SecretStr("TEST_SECRET_STR_KEY_12345"),
-        }
-        result = BaseClient.get_api_key(agent_config)
-        assert result == "secret-api-key-value"
+    @pytest.mark.parametrize(
+        ("api_key", "env", "value"),
+        [
+            ("${TEST_SUCCESS_KEY_12345}", "TEST_SUCCESS_KEY_12345", "test-api-key-value"),
+            ("TEST_LEGACY_KEY_12345", "TEST_LEGACY_KEY_12345", "legacy-api-key-value"),
+            (
+                SecretStr("TEST_SECRET_STR_KEY_12345"),
+                "TEST_SECRET_STR_KEY_12345",
+                "secret-api-key-value",
+            ),
+        ],
+        ids=["dollar-brace", "bare-name", "secretstr-unwrapped"],
+    )
+    def test_api_key_resolves_from_env_var(self, monkeypatch, api_key, env, value):
+        """`${NAME}`, a bare NAME and a SecretStr wrapping NAME all read the variable."""
+        monkeypatch.setenv(env, value)
+        agent_config = {"agent_type": "test_agent", "api_key": api_key}
+        assert BaseClient.get_api_key(agent_config) == value
 
     def test_api_key_missing_from_config(self):
         """Test error when api_key field is missing from config."""

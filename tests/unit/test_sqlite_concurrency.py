@@ -71,10 +71,12 @@ class TestSetDispositionValidatesRelativePath:
         backend.initialize()
         return backend
 
-    def test_valid_relative_path_accepted(self, tmp_path):
+    @pytest.mark.parametrize(
+        "relative_path", ["batch_0.json", None], ids=["relative-path", "none-path"]
+    )
+    def test_valid_or_absent_relative_path_accepted(self, tmp_path, relative_path):
         backend = self._make_backend(tmp_path)
-        # Should not raise
-        backend.set_disposition("agent_a", "__node__", "skipped", relative_path="batch_0.json")
+        backend.set_disposition("agent_a", "__node__", "skipped", relative_path=relative_path)
 
     def test_path_traversal_in_relative_path_raises(self, tmp_path):
         backend = self._make_backend(tmp_path)
@@ -82,11 +84,6 @@ class TestSetDispositionValidatesRelativePath:
             backend.set_disposition(
                 "agent_a", "__node__", "skipped", relative_path="../../../etc/passwd"
             )
-
-    def test_none_relative_path_is_allowed(self, tmp_path):
-        backend = self._make_backend(tmp_path)
-        # relative_path=None must not raise (it's optional)
-        backend.set_disposition("agent_a", "__node__", "skipped", relative_path=None)
 
 
 # ---------------------------------------------------------------------------

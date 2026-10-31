@@ -298,13 +298,25 @@ def _still_holding(before, after):
     return sorted(guid for guid, summary in after.items() if summary == before.get(guid))
 
 
+STOPS = pytest.mark.parametrize(
+    ("stop", "stopped_status"),
+    [
+        pytest.param(KeyboardInterrupt, "interrupted", id="interrupted"),
+        pytest.param(
+            lambda: ConfigurationError("the provider refused the key"), "failed", id="error"
+        ),
+    ],
+)
+
+
+@STOPS
 @EDITS
-def test_an_interrupted_action_asks_again_for_every_record_once_it_is_edited(
-    online, provider, edit, model
+def test_a_stopped_action_asks_again_for_every_record_once_it_is_edited(
+    online, provider, edit, model, stop, stopped_status
 ):
-    provider.stops(at_call=3, raising=KeyboardInterrupt())
+    provider.stops(at_call=3, raising=stop())
     _run("--fresh")
-    assert _status(online) == "interrupted"
+    assert _status(online) == stopped_status
 
     edit(online)
     provider.answers()
@@ -315,21 +327,13 @@ def test_an_interrupted_action_asks_again_for_every_record_once_it_is_edited(
     assert {asked_with for _, asked_with in provider.asked} == {model}
 
 
-def test_an_interrupted_action_asks_only_for_what_it_had_not_finished(online, provider):
-    provider.stops(at_call=3, raising=KeyboardInterrupt())
+@STOPS
+def test_a_stopped_action_asks_only_for_what_it_had_not_finished(
+    online, provider, stop, stopped_status
+):
+    provider.stops(at_call=3, raising=stop())
     _run("--fresh")
-
-    provider.answers()
-    result = _run()
-
-    assert result.exit_code == 0, result.output
-    assert provider.pages() == ["Page delta.", "Page gamma."]
-
-
-def test_an_action_stopped_by_an_error_does_not_ask_again_for_what_it_finished(online, provider):
-    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
-    _run("--fresh")
-    assert _status(online) == "failed"
+    assert _status(online) == stopped_status
 
     provider.answers()
     result = _run()
@@ -337,22 +341,6 @@ def test_an_action_stopped_by_an_error_does_not_ask_again_for_what_it_finished(o
     assert result.exit_code == 0, result.output
     assert provider.pages() == ["Page delta.", "Page gamma."]
     assert _status(online) == "completed"
-
-
-@EDITS
-def test_an_action_stopped_by_an_error_asks_again_for_every_record_once_it_is_edited(
-    online, provider, edit, model
-):
-    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
-    _run("--fresh")
-
-    edit(online)
-    provider.answers()
-    result = _run()
-
-    assert result.exit_code == 0, result.output
-    assert provider.pages() == EVERY_PAGE
-    assert {asked_with for _, asked_with in provider.asked} == {model}
 
 
 @pytest.mark.parametrize(
@@ -972,10 +960,18 @@ def test_a_collect_pass_stopped_by_an_error_answers_what_its_guard_skipped_once_
     assert _status(project) == "completed"
 
 
+@pytest.mark.parametrize(
+    "resume",
+    [
+        pytest.param(lambda: _run(), id="run"),
+        pytest.param(lambda: CliRunner().invoke(cli, ["retry", "-a", WORKFLOW]), id="retry"),
+    ],
+)
 def test_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_passes_it(
-    online, provider, guarded
+    online, provider, guarded, resume
 ):
-    """The online run of the one above: the skip it recorded must not read as done."""
+    """The online run of the one above, resumed by `agac run` or `agac retry`: the skip it
+    recorded must not read as done."""
     guarded(online, turned_away={"Page alpha."})
     provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
     _run("--fresh")
@@ -984,26 +980,7 @@ def test_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_pa
 
     guarded(online)
     provider.answers()
-    result = _run()
-
-    assert result.exit_code == 0, result.output
-    assert _states(online) == EVERY_PAGE_ANSWERED
-    assert "Page alpha." in provider.pages()
-    assert _status(online) == "completed"
-
-
-def test_a_retry_of_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_passes_it(
-    online, provider, guarded
-):
-    """`agac retry` resumes the halted action in full, through the same gate."""
-    guarded(online, turned_away={"Page alpha."})
-    provider.stops(at_call=3, raising=ConfigurationError("the provider refused the key"))
-    _run("--fresh")
-    assert _status(online) == "failed"
-
-    guarded(online)
-    provider.answers()
-    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
+    result = resume()
 
     assert result.exit_code == 0, result.output
     assert _states(online) == EVERY_PAGE_ANSWERED

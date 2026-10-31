@@ -70,19 +70,17 @@ def _seed(backend, action: str, *, inputs: int, outputs: int) -> None:
 
 
 class TestOutputCountIsShown:
-    def test_an_expansion_shows_what_it_produced(self, backend):
-        """The live shape: one input fanned out to five records, one row."""
-        _seed(backend, "flatten", inputs=1, outputs=5)
+    @pytest.mark.parametrize(
+        ("action", "inputs", "outputs"),
+        [("flatten", 1, 5), ("tag_concept", 5, 3)],
+        ids=["expansion", "collapse"],
+    )
+    def test_the_output_column_shows_what_was_produced(self, backend, action, inputs, outputs):
+        """One input fanned out to five records, or five inputs collapsed to three."""
+        _seed(backend, action, inputs=inputs, outputs=outputs)
 
-        row = _row(_render(backend, ["flatten"]), "flatten")
-        assert _output_column(row) == "5", row
-
-    def test_a_collapse_shows_fewer_records_than_inputs(self, backend):
-        """The other direction: five inputs consumed, three records written."""
-        _seed(backend, "tag_concept", inputs=5, outputs=3)
-
-        row = _row(_render(backend, ["tag_concept"]), "tag_concept")
-        assert _output_column(row) == "3", row
+        row = _row(_render(backend, [action]), action)
+        assert _output_column(row) == str(outputs), row
 
     def test_the_counts_are_distinguishable(self, backend):
         """Consumed and produced must be separate cells — showing one twice

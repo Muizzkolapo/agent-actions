@@ -123,15 +123,17 @@ class TestTransitionIllegalEdges:
         with pytest.raises(RecordEnvelopeError, match=f"{from_state.value!r}.*active"):
             RecordEnvelope.transition(rec, RecordState.ACTIVE, "act", "reset")
 
-    def test_processed_cannot_go_to_failed(self):
+    @pytest.mark.parametrize(
+        "to_state",
+        [
+            pytest.param(RecordState.FAILED, id="failed"),
+            pytest.param(RecordState.GUARD_SKIPPED, id="guard_skipped"),
+        ],
+    )
+    def test_processed_cannot_move_to(self, to_state):
         rec = _record(RecordState.PROCESSED)
-        with pytest.raises(RecordEnvelopeError, match="'processed'.*'failed'"):
-            RecordEnvelope.transition(rec, RecordState.FAILED, "act", "oops")
-
-    def test_processed_cannot_go_to_guard_skipped(self):
-        rec = _record(RecordState.PROCESSED)
-        with pytest.raises(RecordEnvelopeError, match="'processed'.*'guard_skipped'"):
-            RecordEnvelope.transition(rec, RecordState.GUARD_SKIPPED, "act", "reason")
+        with pytest.raises(RecordEnvelopeError, match=f"'processed'.*{to_state.value!r}"):
+            RecordEnvelope.transition(rec, to_state, "act", "reason")
 
     def test_unknown_state_value_raises_envelope_error(self):
         rec = {"_state": "bogus_state", "content": {}}

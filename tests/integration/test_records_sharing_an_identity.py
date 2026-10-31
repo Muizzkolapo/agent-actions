@@ -213,40 +213,26 @@ def _retry_after_marking_failed(root, record_id):
     return CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", record_id])
 
 
-class TestRetryingTheRepeatSideOfACollision:
+class TestRetryingEitherSideOfACollision:
     """A repair narrows its walk to the file(s) naming the retried record — but a
     record sharing identity with content in another file needs that sibling
     file re-derived too, or the narrowed walk recomputes a colliding identity
-    and silently drops the record it was asked to repair."""
+    and silently drops the record it was asked to repair. The base identity's own
+    row carries no repeat_of_source_guid — only the OTHER file's row points back at
+    it — so the original side needs its own case, not just the mirror."""
 
-    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize("prefix", ["b_pages", "a_pages"], ids=["repeat-side", "original-side"])
+    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch, prefix):
         root = _stage_two_colliding_files(tmp_path, monkeypatch)
         before = _counts(root)
         assert before == {"source": 2, "dispositions": 2, "target": 2}, before
 
         rows = _source_rows(root)
-        repeat_side = next(guid for rp, guid in rows if rp.startswith("b_pages"))
+        side = next(guid for rp, guid in rows if rp.startswith(prefix))
 
-        retry = _retry_after_marking_failed(root, repeat_side)
-
-        assert retry.exit_code == 0, retry.output
-        assert _counts(root) == before, "retrying the repeat side dropped the other file's record"
-
-
-class TestRetryingTheOriginalSideOfACollision:
-    """The base identity's own row carries no repeat_of_source_guid — only the
-    OTHER file's row points back at it — so retrying the original side needs
-    its own coverage, not just the mirror of the repeat side above."""
-
-    def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch):
-        root = _stage_two_colliding_files(tmp_path, monkeypatch)
-        before = _counts(root)
-        assert before == {"source": 2, "dispositions": 2, "target": 2}, before
-
-        rows = _source_rows(root)
-        original_side = next(guid for rp, guid in rows if rp.startswith("a_pages"))
-
-        retry = _retry_after_marking_failed(root, original_side)
+        retry = _retry_after_marking_failed(root, side)
 
         assert retry.exit_code == 0, retry.output
-        assert _counts(root) == before, "retrying the original side dropped the other file's record"
+        assert _counts(root) == before, (
+            f"retrying the {prefix} side dropped the other file's record"
+        )

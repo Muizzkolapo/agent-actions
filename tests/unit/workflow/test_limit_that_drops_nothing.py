@@ -54,37 +54,23 @@ class TestTheStampCarriesTheOutcome:
     """The stamp has to answer "could the record set differ now", which takes
     what the slice saw — the only place that knows whether anything was dropped."""
 
-    def test_it_records_the_count_a_run_with_no_limit_saw(self, executor):
+    @pytest.mark.parametrize(
+        ("config", "processed", "truncated"),
+        [
+            pytest.param({}, 6, False, id="no_limit"),
+            pytest.param({"record_limit": 1000}, 6, False, id="limit_too_large_to_bite"),
+            pytest.param({"record_limit": 2}, 2, True, id="limit_that_dropped_records"),
+        ],
+    )
+    def test_it_stamps_what_the_slice_saw(self, executor, config, processed, truncated):
         backend = _Backend()
         executor.deps.action_runner.storage_backend = backend
-        record_indices_to_process(_records(6), {}, "act", storage_backend=backend)
+        record_indices_to_process(_records(6), config, "act", storage_backend=backend)
 
-        stamp = executor._completion_metadata("act", {})
+        stamp = executor._completion_metadata("act", config)
 
-        assert stamp["records_processed"] == 6
-        assert stamp["truncated"] is False
-
-    def test_a_limit_too_large_to_bite_stamps_not_truncated(self, executor):
-        backend = _Backend()
-        executor.deps.action_runner.storage_backend = backend
-        record_indices_to_process(
-            _records(6), {"record_limit": 1000}, "act", storage_backend=backend
-        )
-
-        stamp = executor._completion_metadata("act", {"record_limit": 1000})
-
-        assert stamp["records_processed"] == 6
-        assert stamp["truncated"] is False
-
-    def test_a_limit_that_dropped_records_stamps_truncated(self, executor):
-        backend = _Backend()
-        executor.deps.action_runner.storage_backend = backend
-        record_indices_to_process(_records(6), {"record_limit": 2}, "act", storage_backend=backend)
-
-        stamp = executor._completion_metadata("act", {"record_limit": 2})
-
-        assert stamp["records_processed"] == 2
-        assert stamp["truncated"] is True
+        assert stamp["records_processed"] == processed
+        assert stamp["truncated"] is truncated
 
     def test_counts_accumulate_across_the_files_of_one_action(self, executor):
         """The limit applies per file, so a later limit at or above the total
@@ -231,106 +217,98 @@ class TestALimitThatCouldNotHaveDroppedAnything:
         assert status == ActionStatus.COMPLETED
         storage.clear_disposition.assert_not_called()
 
-    def test_a_limit_below_what_it_processed_re_runs_it(self, monkeypatch, executor):
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "3")
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            records_processed=6, truncated=False
-        )
-
-        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
-
-        assert status == ActionStatus.PENDING
-
-    def test_a_limit_exactly_the_count_it_processed_leaves_it_completed(
-        self, monkeypatch, executor
+    @pytest.mark.parametrize(
+        ("env_limit", "stamp", "config", "marker", "expected"),
+        [
+            pytest.param(
+                "3",
+                _stamp(records_processed=6, truncated=False),
+                {},
+                False,
+                ActionStatus.PENDING,
+                id="limit_below_what_it_processed",
+            ),
+            pytest.param(
+                "6",
+                _stamp(records_processed=6, truncated=False),
+                {},
+                False,
+                ActionStatus.COMPLETED,
+                id="limit_exactly_the_count_it_processed",
+            ),
+            # It saw only part of the input, so removing the limit changes the set.
+            pytest.param(
+                None,
+                _stamp(record_limit=2, records_processed=2, truncated=True),
+                {},
+                False,
+                ActionStatus.PENDING,
+                id="lifting_a_limit_that_truncated",
+            ),
+            pytest.param(
+                None,
+                _stamp(record_limit=10, records_processed=6, truncated=False),
+                {},
+                False,
+                ActionStatus.COMPLETED,
+                id="lifting_a_limit_that_did_not_truncate",
+            ),
+            pytest.param(
+                None,
+                _stamp(record_limit=100, records_processed=6, truncated=False),
+                {"record_limit": 200},
+                False,
+                ActionStatus.COMPLETED,
+                id="raising_a_configured_limit_that_never_bit",
+            ),
+            # Grandfathering: unknown must re-run, or 609's silent skip returns.
+            pytest.param(
+                "1000",
+                _stamp(),
+                {},
+                False,
+                ActionStatus.PENDING,
+                id="stamp_that_cannot_say_keeps_coarse_behaviour",
+            ),
+            # The two guards sit on separate branches: a stamp that says truncated
+            # returns at the first and never reaches the missing-count one.
+            pytest.param(
+                "1000",
+                _stamp(truncated=False),
+                {},
+                False,
+                ActionStatus.PENDING,
+                id="stamp_untruncated_without_count_keeps_coarse_behaviour",
+            ),
+            # 609's marker says the run that wrote the stamp was itself capped below
+            # its config, so precision about the new limit must not suppress it.
+            pytest.param(
+                None,
+                _stamp(records_processed=6, truncated=False),
+                {"record_limit": 1000},
+                True,
+                ActionStatus.PENDING,
+                id="recorded_cap_reopens_even_when_new_limit_could_not_bite",
+            ),
+            # The file_limit term has no count to reason from.
+            pytest.param(
+                None,
+                _stamp(file_limit=2, records_processed=6, truncated=False),
+                {"file_limit": 5},
+                False,
+                ActionStatus.PENDING,
+                id="changed_file_limit_still_invalidates",
+            ),
+        ],
+    )
+    def test_a_limit_change_re_runs_only_when_it_could_change_the_records(
+        self, monkeypatch, executor, env_limit, stamp, config, marker, expected
     ):
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "6")
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            records_processed=6, truncated=False
-        )
+        if env_limit is not None:
+            monkeypatch.setenv("AGAC_RECORD_LIMIT", env_limit)
+        executor.deps.state_manager.adopt_truncation_marker.return_value = marker
+        executor.deps.state_manager.get_status_details.return_value = stamp
 
-        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
+        status = executor._maybe_invalidate_completed_status("act", config, ActionStatus.COMPLETED)
 
-        assert status == ActionStatus.COMPLETED
-
-    def test_lifting_a_limit_that_truncated_re_runs_it(self, executor):
-        """It saw only part of the input, so removing the limit changes the set."""
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            record_limit=2, records_processed=2, truncated=True
-        )
-
-        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
-
-        assert status == ActionStatus.PENDING
-
-    def test_lifting_a_limit_that_did_not_truncate_leaves_it_completed(self, executor):
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            record_limit=10, records_processed=6, truncated=False
-        )
-
-        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
-
-        assert status == ActionStatus.COMPLETED
-
-    def test_raising_a_configured_limit_that_never_bit_leaves_it_completed(self, executor):
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            record_limit=100, records_processed=6, truncated=False
-        )
-
-        status = executor._maybe_invalidate_completed_status(
-            "act", {"record_limit": 200}, ActionStatus.COMPLETED
-        )
-
-        assert status == ActionStatus.COMPLETED
-
-    def test_a_stamp_that_cannot_say_keeps_the_coarse_behaviour(self, monkeypatch, executor):
-        """Grandfathering: unknown must re-run, or 609's silent skip returns."""
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
-        executor.deps.state_manager.get_status_details.return_value = _stamp()
-
-        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
-
-        assert status == ActionStatus.PENDING
-
-    def test_a_stamp_that_says_untruncated_but_has_no_count_keeps_the_coarse_behaviour(
-        self, monkeypatch, executor
-    ):
-        """Named for the data it uses. The two guards sit on separate branches —
-        a stamp that says truncated returns at the first and never reaches the
-        missing-count one — so data matching the old name would have left this
-        guard unpinned with the test still green."""
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1000")
-        executor.deps.state_manager.get_status_details.return_value = _stamp(truncated=False)
-
-        status = executor._maybe_invalidate_completed_status("act", {}, ActionStatus.COMPLETED)
-
-        assert status == ActionStatus.PENDING
-
-    def test_a_recorded_cap_reopens_it_even_when_the_new_limit_could_not_bite(self, executor):
-        """609's marker answers a different question than this check does. It
-        says the run that wrote the stamp was itself capped below its config, so
-        that run's output is short whatever the new limit could do — precision
-        about the new limit must not suppress it."""
-        executor.deps.state_manager.adopt_truncation_marker.return_value = True
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            records_processed=6, truncated=False
-        )
-
-        status = executor._maybe_invalidate_completed_status(
-            "act", {"record_limit": 1000}, ActionStatus.COMPLETED
-        )
-
-        assert status == ActionStatus.PENDING
-
-    def test_a_changed_file_limit_still_invalidates(self, executor):
-        """Precision about the record limit does not loosen the file_limit term,
-        which has no count to reason from."""
-        executor.deps.state_manager.get_status_details.return_value = _stamp(
-            file_limit=2, records_processed=6, truncated=False
-        )
-
-        status = executor._maybe_invalidate_completed_status(
-            "act", {"file_limit": 5}, ActionStatus.COMPLETED
-        )
-
-        assert status == ActionStatus.PENDING
+        assert status == expected

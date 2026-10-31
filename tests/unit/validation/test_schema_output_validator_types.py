@@ -4,55 +4,71 @@ Ensures that malformed 'properties' values (null, string, list, etc.) produce a
 validation error instead of crashing with an AttributeError or TypeError.
 """
 
+import pytest
+
 from agent_actions.validation.schema_output_validator import (
     validate_output_against_schema,
 )
 
-# ---------------------------------------------------------------------------
-# Direct 'properties' field on a JSON-Schema-style schema
-# ---------------------------------------------------------------------------
 
-
-class TestPropertiesNull:
-    """Schema with properties: null should produce a validation error, not crash."""
-
-    def test_returns_non_compliant_report(self):
-        schema = {"name": "test_schema", "properties": None}
-        report = validate_output_against_schema(
-            llm_output={"foo": "bar"},
-            schema=schema,
-            action_name="test_action",
-        )
-        assert not report.is_compliant
-        assert any("properties" in e and "dict" in e for e in report.validation_errors)
-
-
-class TestPropertiesInvalidString:
-    """Schema with properties: "invalid" should produce a validation error, not crash."""
-
-    def test_returns_non_compliant_report(self):
-        schema = {"name": "test_schema", "properties": "invalid"}
-        report = validate_output_against_schema(
-            llm_output={"foo": "bar"},
-            schema=schema,
-            action_name="test_action",
-        )
-        assert not report.is_compliant
-        assert any("properties" in e and "str" in e for e in report.validation_errors)
-
-
-class TestPropertiesInvalidList:
-    """Schema with properties: [1, 2] should produce a validation error, not crash."""
-
-    def test_returns_non_compliant_report(self):
-        schema = {"name": "test_schema", "properties": [1, 2]}
-        report = validate_output_against_schema(
-            llm_output={},
-            schema=schema,
-            action_name="test_action",
-        )
-        assert not report.is_compliant
-        assert any("properties" in e and "list" in e for e in report.validation_errors)
+@pytest.mark.parametrize(
+    ("schema", "llm_output", "fragments"),
+    [
+        pytest.param(
+            {"name": "test_schema", "properties": None},
+            {"foo": "bar"},
+            ("properties", "dict"),
+            id="null",
+        ),
+        pytest.param(
+            {"name": "test_schema", "properties": "invalid"},
+            {"foo": "bar"},
+            ("properties", "str"),
+            id="string",
+        ),
+        pytest.param(
+            {"name": "test_schema", "properties": [1, 2]},
+            {},
+            ("properties", "list"),
+            id="list",
+        ),
+        pytest.param(
+            {
+                "name": "array_schema",
+                "type": "array",
+                "items": {"type": "object", "properties": None},
+            },
+            [{"foo": "bar"}],
+            ("items", "properties"),
+            id="items-null",
+        ),
+        pytest.param(
+            {
+                "name": "array_schema",
+                "type": "array",
+                "items": {"type": "object", "properties": "bad"},
+            },
+            [{"foo": "bar"}],
+            ("items", "str"),
+            id="items-string",
+        ),
+        # nested schema wrapper, e.g. the OpenAI compiled format
+        pytest.param(
+            {"name": "nested_schema", "schema": {"properties": None}},
+            {"foo": "bar"},
+            ("properties",),
+            id="nested-null",
+        ),
+    ],
+)
+def test_malformed_properties_returns_non_compliant_report(schema, llm_output, fragments):
+    report = validate_output_against_schema(
+        llm_output=llm_output,
+        schema=schema,
+        action_name="test_action",
+    )
+    assert not report.is_compliant
+    assert any(all(f in e for f in fragments) for e in report.validation_errors)
 
 
 class TestPropertiesValidEmptyDict:
@@ -114,66 +130,3 @@ class TestPropertiesValidPopulatedDict:
         )
         assert not report.is_compliant
         assert report.missing_required == ["name"]
-
-
-# ---------------------------------------------------------------------------
-# Nested 'properties' inside array items
-# ---------------------------------------------------------------------------
-
-
-class TestArrayItemsPropertiesNull:
-    """Array schema with items.properties: null should produce a validation error."""
-
-    def test_returns_non_compliant_report(self):
-        schema = {
-            "name": "array_schema",
-            "type": "array",
-            "items": {"type": "object", "properties": None},
-        }
-        report = validate_output_against_schema(
-            llm_output=[{"foo": "bar"}],
-            schema=schema,
-            action_name="test_action",
-        )
-        assert not report.is_compliant
-        assert any("items" in e and "properties" in e for e in report.validation_errors)
-
-
-class TestArrayItemsPropertiesInvalidString:
-    """Array schema with items.properties: "bad" should produce a validation error."""
-
-    def test_returns_non_compliant_report(self):
-        schema = {
-            "name": "array_schema",
-            "type": "array",
-            "items": {"type": "object", "properties": "bad"},
-        }
-        report = validate_output_against_schema(
-            llm_output=[{"foo": "bar"}],
-            schema=schema,
-            action_name="test_action",
-        )
-        assert not report.is_compliant
-        assert any("items" in e and "str" in e for e in report.validation_errors)
-
-
-# ---------------------------------------------------------------------------
-# Nested schema wrapper (e.g., OpenAI compiled format)
-# ---------------------------------------------------------------------------
-
-
-class TestNestedSchemaPropertiesNull:
-    """Nested schema wrapper with inner properties: null should be caught."""
-
-    def test_returns_non_compliant_report(self):
-        schema = {
-            "name": "nested_schema",
-            "schema": {"properties": None},
-        }
-        report = validate_output_against_schema(
-            llm_output={"foo": "bar"},
-            schema=schema,
-            action_name="test_action",
-        )
-        assert not report.is_compliant
-        assert any("properties" in e for e in report.validation_errors)

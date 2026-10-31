@@ -116,16 +116,26 @@ class TestTheHaltIsRecorded:
 
         assert HALT_MESSAGE in _node_row(backend, HALTED)["reason"]
 
-    def test_an_ordinary_failure_is_not_marked(self, backend, state_manager):
-        _fail_through_the_executor(
-            backend, state_manager, ORDINARY, RuntimeError("provider timed out")
-        )
-
-        assert _node_row(backend, ORDINARY)["detail"] != HALT_MARKER
-
-    def test_an_error_that_did_not_raise_by_policy_is_not_marked(self, backend, state_manager):
-        """return_last carries the same context key with a different value."""
-        error = AgentActionsError("exhausted", context={"on_exhausted": "return_last"})
+    @pytest.mark.parametrize(
+        "error",
+        [
+            pytest.param(RuntimeError("provider timed out"), id="plain_error"),
+            # return_last carries the same context key with a different value.
+            pytest.param(
+                AgentActionsError("exhausted", context={"on_exhausted": "return_last"}),
+                id="return_last_policy",
+            ),
+            pytest.param(
+                DependencyError(
+                    "Action 'author_stem': a.json: boom (Found 1 files but failed to process any.)",
+                    context={"action": ORDINARY, "files_found": 1},
+                    cause=RuntimeError("boom"),
+                ),
+                id="unrelated_wrapped_failure",
+            ),
+        ],
+    )
+    def test_a_failure_not_halted_by_policy_is_not_marked(self, backend, state_manager, error):
         _fail_through_the_executor(backend, state_manager, ORDINARY, error)
 
         assert _node_row(backend, ORDINARY)["detail"] != HALT_MARKER
@@ -145,16 +155,6 @@ class TestTheHaltIsRecorded:
         _fail_through_the_executor(backend, state_manager, HALTED, wrapped)
 
         assert _node_row(backend, HALTED)["detail"] == HALT_MARKER
-
-    def test_an_unrelated_wrapped_failure_is_not_marked(self, backend, state_manager):
-        wrapped = DependencyError(
-            "Action 'author_stem': a.json: boom (Found 1 files but failed to process any.)",
-            context={"action": ORDINARY, "files_found": 1},
-            cause=RuntimeError("boom"),
-        )
-        _fail_through_the_executor(backend, state_manager, ORDINARY, wrapped)
-
-        assert _node_row(backend, ORDINARY)["detail"] != HALT_MARKER
 
 
 class TestTheStartupResetLeavesItAlone:

@@ -3,6 +3,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.models.action_schema import ActionKind, ActionSchema, FieldSource
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -422,30 +424,42 @@ class TestLookupInProperties:
 
     _lookup = staticmethod(WorkflowSchemaService._lookup_in_properties)
 
-    def test_found_required(self):
-        props = {"name": {"type": "string", "description": "Name"}}
-        result = self._lookup(props, ["name"], "name")
-        assert result == ("string", "Name", True)
-
-    def test_found_optional(self):
-        props = {"name": {"type": "string", "description": "Name"}}
-        result = self._lookup(props, [], "name")
-        assert result == ("string", "Name", False)
-
-    def test_not_found(self):
-        props = {"name": {"type": "string"}}
-        result = self._lookup(props, ["name"], "missing")
-        assert result is None
-
-    def test_missing_type_defaults_unknown(self):
-        props = {"name": {"description": "Name"}}
-        result = self._lookup(props, [], "name")
-        assert result == ("unknown", "Name", False)
-
-    def test_missing_description_defaults_empty(self):
-        props = {"name": {"type": "string"}}
-        result = self._lookup(props, [], "name")
-        assert result == ("string", "", False)
+    @pytest.mark.parametrize(
+        ("props", "required", "name", "expected"),
+        [
+            pytest.param(
+                {"name": {"type": "string", "description": "Name"}},
+                ["name"],
+                "name",
+                ("string", "Name", True),
+                id="found-required",
+            ),
+            pytest.param(
+                {"name": {"type": "string", "description": "Name"}},
+                [],
+                "name",
+                ("string", "Name", False),
+                id="found-optional",
+            ),
+            pytest.param({"name": {"type": "string"}}, ["name"], "missing", None, id="not-found"),
+            pytest.param(
+                {"name": {"description": "Name"}},
+                [],
+                "name",
+                ("unknown", "Name", False),
+                id="missing-type-defaults-unknown",
+            ),
+            pytest.param(
+                {"name": {"type": "string"}},
+                [],
+                "name",
+                ("string", "", False),
+                id="missing-description-defaults-empty",
+            ),
+        ],
+    )
+    def test_lookup(self, props, required, name, expected):
+        assert self._lookup(props, required, name) == expected
 
 
 class TestFromActionConfigs:

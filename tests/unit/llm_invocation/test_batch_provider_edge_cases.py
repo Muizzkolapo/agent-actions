@@ -269,7 +269,19 @@ class TestSubmitToProviderErrorPath:
 class TestCohereNullableTokens:
     """Cohere client token extraction handles None token values via or 0."""
 
-    def test_none_input_tokens_defaults_to_zero(self):
+    @pytest.mark.parametrize(
+        ("method", "text", "extra"),
+        [
+            pytest.param(
+                "call_json",
+                '{"result": "ok"}',
+                {"schema": {"properties": {"result": {"type": "string"}}}},
+                id="call-json",
+            ),
+            pytest.param("call_non_json", "plain text response", {}, id="call-non-json"),
+        ],
+    )
+    def test_none_input_tokens_defaults_to_zero(self, method, text, extra):
         """When tokens.input_tokens is None, prompt_tokens defaults to 0.
 
         Exercises the ``or 0`` coercion in ResponseBuilder._extract_cohere().
@@ -277,7 +289,7 @@ class TestCohereNullableTokens:
         skipped; we verify the coercion via ``extract_usage`` directly.
         """
         mock_response = MagicMock()
-        mock_response.message.content = [MagicMock(text='{"result": "ok"}')]
+        mock_response.message.content = [MagicMock(text=text)]
         mock_response.usage.tokens.input_tokens = None
         mock_response.usage.tokens.output_tokens = None
 
@@ -291,18 +303,16 @@ class TestCohereNullableTokens:
 
             from agent_actions.llm.providers.cohere.client import CohereClient
 
-            CohereClient.call_json(
+            getattr(CohereClient, method)(
                 api_key="test-key",
                 agent_config={"model_name": "command-r-plus"},
                 prompt_config="test prompt",
                 context_data="test data",
-                schema={"properties": {"result": {"type": "string"}}},
+                **extra,
             )
 
-        # All tokens are zero after coercion — set_last_usage is skipped
         mock_usage.assert_not_called()
 
-        # Verify the or-0 coercion via extract_usage directly
         usage = ResponseBuilder.extract_usage(mock_response, "cohere")
         assert usage.prompt_tokens == 0
         assert usage.completion_tokens == 0
@@ -362,39 +372,3 @@ class TestCohereNullableTokens:
             )
 
         mock_usage.assert_not_called()
-
-    def test_none_input_tokens_defaults_to_zero_call_non_json(self):
-        """call_non_json: None token values default to 0 via ``or 0``.
-
-        Same as call_json — coercion verified via ``extract_usage``;
-        ``set_last_usage`` is skipped for all-zero usage.
-        """
-        mock_response = MagicMock()
-        mock_response.message.content = [MagicMock(text="plain text response")]
-        mock_response.usage.tokens.input_tokens = None
-        mock_response.usage.tokens.output_tokens = None
-
-        with (
-            patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
-            patch(f"{_RB}.fire_event"),
-            patch("agent_actions.llm.providers.cohere.client.fire_event"),
-        ):
-            mock_cohere.ClientV2.return_value.chat.return_value = mock_response
-
-            from agent_actions.llm.providers.cohere.client import CohereClient
-
-            CohereClient.call_non_json(
-                api_key="test-key",
-                agent_config={"model_name": "command-r-plus"},
-                prompt_config="test prompt",
-                context_data="test data",
-            )
-
-        # All tokens are zero after coercion — set_last_usage is skipped
-        mock_usage.assert_not_called()
-
-        # Verify the or-0 coercion via extract_usage directly
-        usage = ResponseBuilder.extract_usage(mock_response, "cohere")
-        assert usage.prompt_tokens == 0
-        assert usage.completion_tokens == 0

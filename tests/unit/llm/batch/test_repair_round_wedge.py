@@ -15,6 +15,8 @@ is still running.
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.services import processing_recovery as pr
@@ -63,17 +65,17 @@ class TestADeadRoundDoesNotOwnTheRecordsForever:
 
 
 class TestALiveRoundStillOwnsThem:
-    def test_a_running_round_is_in_flight(self):
-        context, identity = _round(BatchStatus.IN_PROGRESS)
-        assert pr._repair_round_in_flight(context, identity) is True
-
-    def test_a_submitted_round_is_in_flight(self):
-        context, identity = _round(BatchStatus.SUBMITTED)
-        assert pr._repair_round_in_flight(context, identity) is True
-
-    def test_a_completed_round_still_owns_them_until_it_is_processed(self):
-        """Its results have not been folded in yet; another round would duplicate."""
-        context, identity = _round(BatchStatus.COMPLETED)
+    @pytest.mark.parametrize(
+        "status",
+        [
+            pytest.param(BatchStatus.IN_PROGRESS, id="running"),
+            pytest.param(BatchStatus.SUBMITTED, id="submitted"),
+            # Its results have not been folded in yet; another round would duplicate.
+            pytest.param(BatchStatus.COMPLETED, id="completed-not-yet-folded"),
+        ],
+    )
+    def test_a_live_round_is_in_flight(self, status):
+        context, identity = _round(status)
         assert pr._repair_round_in_flight(context, identity) is True
 
 

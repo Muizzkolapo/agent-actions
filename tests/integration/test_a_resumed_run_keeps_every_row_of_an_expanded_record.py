@@ -235,7 +235,20 @@ def _asked(root):
     return sorted((root / "asked.txt").read_text().split())
 
 
-def test_a_resumed_run_stores_every_row_of_the_records_its_checkpoint_holds(project, monkeypatch):
+@pytest.mark.parametrize(
+    "config",
+    # The staging pipeline runs a workflow's first action, a route of its own to the
+    # checkpoint the carry reads.
+    [None, FIRST_STAGE_CONFIG],
+    ids=["below-the-first", "first-action"],
+)
+def test_a_resumed_run_stores_every_row_of_the_records_its_checkpoint_holds(
+    project, monkeypatch, config
+):
+    if config is not None:
+        (project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml").write_text(
+            config
+        )
     _interrupted_at_gamma(project, monkeypatch)
 
     result = _run()
@@ -262,26 +275,6 @@ def test_a_record_answered_with_several_rows_is_asked_again_and_one_with_a_row_i
     assert result.exit_code == 0, result.output
     assert _tags(_stored(project, ACTION)) == ["alpha-a", "alpha-b", "beta", "gamma-a", "gamma-b"]
     assert _asked(project) == ["alpha", "gamma"]
-
-
-def test_a_resumed_first_action_stores_every_row_of_the_records_its_checkpoint_holds(
-    project, monkeypatch
-):
-    """The staging pipeline runs a workflow's first action, a route of its own to the
-    checkpoint the carry reads."""
-    (project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml").write_text(
-        FIRST_STAGE_CONFIG
-    )
-    _interrupted_at_gamma(project, monkeypatch)
-
-    result = _run()
-
-    assert result.exit_code == 0, result.output
-    assert _status(project) == "completed"
-    rows = _stored(project, ACTION)
-    assert _tags(rows) == ["alpha-a", "alpha-b", "beta-a", "beta-b", "gamma-a", "gamma-b"]
-    assert len({row["source_guid"] for row in rows}) == len(rows), "rows share an identity"
-    assert _seen(_stored(project, READER)) == _tags(rows)
 
 
 def test_a_run_an_earlier_version_stopped_asks_again_for_the_records_it_checkpointed(

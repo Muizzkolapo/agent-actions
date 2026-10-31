@@ -206,15 +206,9 @@ def _notes(rows: list[dict]) -> list[tuple[int, str]]:
 EXPECTED = [(2, f"direct-{item}") for item in ITEMS]
 
 
-def test_a_record_tool_merging_versions_reads_its_sibling_dependency(tmp_path):
-    root = _project(tmp_path, _RECORD_TOOL)
-    _agac(root, "run", "--fresh")
-
-    assert _notes(_tally_rows(root)) == EXPECTED
-
-
-def test_a_file_tool_merging_versions_reads_its_sibling_dependency(tmp_path):
-    root = _project(tmp_path, _FILE_TOOL)
+@pytest.mark.parametrize("tally", [_RECORD_TOOL, _FILE_TOOL], ids=["record-tool", "file-tool"])
+def test_a_tool_merging_versions_reads_its_sibling_dependency(tmp_path, tally):
+    root = _project(tmp_path, tally)
     _agac(root, "run", "--fresh")
 
     assert _notes(_tally_rows(root)) == EXPECTED

@@ -17,7 +17,7 @@ from agent_actions.workflow.runner import ActionRunner
 
 
 class TestDependencyPatterns:
-    """Test all 4 dependency patterns with clear examples."""
+    """Single, parallel, fan-in and versioned dependencies all resolve to input directories."""
 
     @pytest.fixture
     def agent_runner(self):
@@ -37,128 +37,54 @@ class TestDependencyPatterns:
         yield temp_dir
         shutil.rmtree(temp_dir)
 
-    def test_pattern_1_single_dependency(self, agent_runner, temp_folder):
-        """
-        Pattern 1: Single Dependency
-
-        Config: dependencies: extract_data
-        Result: Output becomes input
-        """
-        (temp_folder / "target" / "extract_data").mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder, ["extract_data"], "validate_data"
-        )
-
-        assert len(result) == 1
-        assert result[0].name == "extract_data"
-
-    def test_pattern_2_parallel_branches(self, agent_runner, temp_folder):
-        """
-        Pattern 2: Parallel Branches
-
-        Config:
-          - name: research
-            versions:
-              range: [1, 3]
-
-          - name: synthesize
-            dependencies: [research_1, research_2, research_3]
-
-        Result: All outputs merged into combined records
-        """
-        for i in [1, 2, 3]:
-            (temp_folder / "target" / f"research_{i}").mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["research_1", "research_2", "research_3"],
-            "synthesize",
-        )
-
-        # All directories returned for merging
-        assert len(result) == 3
-        assert {r.name for r in result} == {"research_1", "research_2", "research_3"}
-
-    def test_pattern_3_fan_in(self, agent_runner, temp_folder):
-        """
-        Pattern 3: Fan-in (Multiple Different Actions)
-
-        Config:
-          - name: generate_report
-            dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
-            context_scope:
-              observe:
-                - analyze_sentiment.*
-                - analyze_entities.*
-                - analyze_topics.*
-
-        Result: All dependencies are input sources — records merge by root_target_id
-        """
-        for action in ["analyze_sentiment", "analyze_entities", "analyze_topics"]:
-            (temp_folder / "target" / action).mkdir()
+    @pytest.mark.parametrize(
+        ("dependencies", "action_name"),
+        [
+            pytest.param(["extract_data"], "validate_data", id="pattern1-single"),
+            pytest.param(
+                ["research_1", "research_2", "research_3"], "synthesize", id="pattern2-parallel-3"
+            ),
+            pytest.param(
+                ["analyze_sentiment", "analyze_entities", "analyze_topics"],
+                "generate_report",
+                id="pattern3-fan-in-3",
+            ),
+            pytest.param(["action_a", "action_b"], "test_action", id="fan-in-2"),
+            pytest.param(
+                ["research_1", "research_2", "research_3", "summarize"],
+                "final_report",
+                id="versioned-with-fan-in-4",
+            ),
+            pytest.param(
+                ["research_1", "research_2", "summarize"],
+                "final_report",
+                id="versioned-and-unversioned-3",
+            ),
+            pytest.param(["action_A"], "test_action", id="single-action-a"),
+            pytest.param(["action_A", "action_B", "action_C"], "test_action", id="fan-in-abc"),
+            pytest.param(
+                ["classify_1", "classify_2", "classify_3"], "test_action", id="parallel-classify-3"
+            ),
+            pytest.param(["add_answer_text"], "generate_distractor_1", id="distractor-single"),
+            pytest.param(
+                ["validate_1", "validate_2", "validate_3"], "aggregate", id="aggregate-votes-3"
+            ),
+            pytest.param(
+                ["get_authoring_prompt"], "write_scenario_question", id="write-scenario-single"
+            ),
+        ],
+    )
+    def test_every_dependency_is_an_input_directory(
+        self, agent_runner, temp_folder, dependencies, action_name
+    ):
+        for dep in dependencies:
+            (temp_folder / "target" / dep).mkdir()
 
         result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-            "generate_report",
+            temp_folder, dependencies, action_name
         )
 
-        # All dependencies returned — bus model merges records by root_target_id
-        assert len(result) == 3
-        assert {r.name for r in result} == {
-            "analyze_sentiment",
-            "analyze_entities",
-            "analyze_topics",
-        }
-
-    def test_fan_in_of_two_returns_both_directories(self, agent_runner, temp_folder):
-        """All deps are input sources in bus model."""
-        for action in ["action_a", "action_b"]:
-            (temp_folder / "target" / action).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["action_a", "action_b"],
-            "test_action",
-        )
-
-        assert len(result) == 2
-        assert {r.name for r in result} == {"action_a", "action_b"}
-
-    def test_versioned_with_fan_in_all_input(self, agent_runner, temp_folder):
-        """
-        Fan-in with versioned + non-versioned: all are input sources.
-
-        Bus model: all dependencies become input sources, merged by root_target_id.
-        """
-        for action in ["research_1", "research_2", "research_3", "summarize"]:
-            (temp_folder / "target" / action).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["research_1", "research_2", "research_3", "summarize"],
-            "final_report",
-        )
-
-        # All dependencies are input sources in bus model
-        assert len(result) == 4
-        assert {r.name for r in result} == {"research_1", "research_2", "research_3", "summarize"}
-
-    def test_versioned_and_unversioned_dependencies_are_all_input(self, agent_runner, temp_folder):
-        """Bus model: every dependency is an input source at the runner level."""
-        for action in ["research_1", "research_2", "summarize"]:
-            (temp_folder / "target" / action).mkdir()
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["research_1", "research_2", "summarize"],
-            "final_report",
-        )
-
-        # All dependencies are input sources
-        assert len(result) == 3
-        assert {r.name for r in result} == {"research_1", "research_2", "summarize"}
+        assert result == [temp_folder / "target" / dep for dep in dependencies]
 
 
 class TestResolveDependencyDirectories:
@@ -190,49 +116,6 @@ class TestResolveDependencyDirectories:
         # Cleanup
         shutil.rmtree(temp_dir)
 
-    def test_single_dependency_returns_single_directory(self, agent_runner, temp_agent_folder):
-        """Test single dependency returns its directory."""
-        dependencies = ["action_A"]
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, "test_action"
-        )
-
-        assert len(result) == 1
-        assert result[0] == temp_agent_folder / "target" / "action_A"
-
-    def test_multiple_dependencies_fan_in_returns_all(self, agent_runner, temp_agent_folder):
-        """Test fan-in pattern: all dependencies are input sources (bus model)."""
-        dependencies = ["action_A", "action_B", "action_C"]
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, "test_action"
-        )
-
-        # Bus model: all dependencies are input sources, merged by root_target_id
-        assert len(result) == 3
-        assert {r.name for r in result} == {"action_A", "action_B", "action_C"}
-
-    def test_multiple_dependencies_parallel_returns_all_directories(
-        self, agent_runner, temp_agent_folder
-    ):
-        """Test parallel branches: multiple deps with same base name returns all."""
-        # Create parallel branch directories
-        for suffix in ["1", "2", "3"]:
-            (temp_agent_folder / "target" / f"classify_{suffix}").mkdir(parents=True, exist_ok=True)
-
-        dependencies = ["classify_1", "classify_2", "classify_3"]
-
-        result = agent_runner._resolve_dependency_directories(
-            temp_agent_folder, dependencies, "test_action"
-        )
-
-        # Parallel branches: all directories returned for merging
-        assert len(result) == 3
-        assert temp_agent_folder / "target" / "classify_1" in result
-        assert temp_agent_folder / "target" / "classify_2" in result
-        assert temp_agent_folder / "target" / "classify_3" in result
-
     def test_missing_first_dependency_directory_raises_error(self, agent_runner, temp_agent_folder):
         """Test that a missing first dependency's directory raises DependencyError."""
         # action_A is listed first but doesn't exist, action_B exists
@@ -261,118 +144,6 @@ class TestResolveDependencyDirectories:
         )
 
         assert result == []
-
-
-class TestResolveDependencyDirectoriesIntegration:
-    """Integration tests for dependency resolution with real workflow patterns."""
-
-    @pytest.fixture
-    def temp_workflow_folder(self):
-        """Create temporary folder mimicking real workflow structure."""
-        temp_dir = Path(tempfile.mkdtemp())
-        target_dir = temp_dir / "target"
-        target_dir.mkdir(parents=True)
-
-        # Create quiz generation workflow directories
-        actions = [
-            "extract_raw_qa",
-            "flatten_raw_questions",
-            "classify_question_type",
-            "get_authoring_prompt",
-            "write_scenario_question",
-            "fix_options_format",
-            "suggest_distractor_counts",
-            "add_answer_text",
-            "generate_distractor_1",
-        ]
-        for action in actions:
-            (target_dir / action).mkdir()
-
-        yield temp_dir
-
-        shutil.rmtree(temp_dir)
-
-    @pytest.fixture
-    def agent_runner_with_workflow(self, temp_workflow_folder):
-        """Create ActionRunner with workflow indices."""
-        runner = ActionRunner.__new__(ActionRunner)
-        runner.storage_backend = None
-        runner.action_indices = {
-            "extract_raw_qa": 0,
-            "flatten_raw_questions": 1,
-            "classify_question_type": 2,
-            "get_authoring_prompt": 3,
-            "write_scenario_question": 4,
-            "fix_options_format": 5,
-            "suggest_distractor_counts": 6,
-            "add_answer_text": 7,
-            "generate_distractor_1": 8,
-        }
-        runner.manifest_manager = None  # No manifest manager for simple tests
-        return runner
-
-    def test_generate_distractor_pattern_single_input(
-        self, agent_runner_with_workflow, temp_workflow_folder
-    ):
-        """Test generate_distractor_1 pattern: single input source.
-
-        In new model:
-        - dependencies: add_answer_text (single input)
-        - Context deps (suggest_distractor_counts, write_scenario_question) auto-inferred
-        """
-        dependencies = ["add_answer_text"]
-
-        result = agent_runner_with_workflow._resolve_dependency_directories(
-            temp_workflow_folder, dependencies, "generate_distractor_1"
-        )
-
-        # Should only return add_answer_text directory
-        assert len(result) == 1
-        assert result[0] == temp_workflow_folder / "target" / "add_answer_text"
-
-    def test_aggregate_votes_pattern_multiple_inputs(
-        self, agent_runner_with_workflow, temp_workflow_folder
-    ):
-        """Test aggregate pattern: multiple input sources for merging.
-
-        Pattern: dependencies: [validate_1, validate_2, validate_3]
-        All are input sources, merged by their shared identity.
-        """
-        # Create validate directories
-        for i in range(1, 4):
-            (temp_workflow_folder / "target" / f"validate_{i}").mkdir()
-
-        runner = ActionRunner.__new__(ActionRunner)
-        runner.action_indices = {"validate_1": 0, "validate_2": 1, "validate_3": 2, "aggregate": 3}
-        runner.manifest_manager = None
-        runner.storage_backend = None
-
-        dependencies = ["validate_1", "validate_2", "validate_3"]
-        result = runner._resolve_dependency_directories(
-            temp_workflow_folder, dependencies, "aggregate"
-        )
-
-        # Should return all 3 directories for merging
-        assert len(result) == 3
-
-    def test_write_scenario_question_pattern_single_input(
-        self, agent_runner_with_workflow, temp_workflow_folder
-    ):
-        """Test write_scenario_question pattern after migration.
-
-        Old: dependencies: [get_authoring_prompt, flatten_raw_questions, classify_question_type]
-        New: dependencies: get_authoring_prompt (single input)
-        Context deps (flatten_raw_questions, classify_question_type) auto-inferred from context_scope.
-        """
-        dependencies = ["get_authoring_prompt"]
-
-        result = agent_runner_with_workflow._resolve_dependency_directories(
-            temp_workflow_folder, dependencies, "write_scenario_question"
-        )
-
-        # Single dependency: returns its directory
-        assert len(result) == 1
-        assert result[0] == temp_workflow_folder / "target" / "get_authoring_prompt"
 
 
 class TestStrategySelectionByDependencies:

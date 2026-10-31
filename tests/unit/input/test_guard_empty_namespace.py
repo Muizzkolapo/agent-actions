@@ -123,26 +123,22 @@ class TestNullNamespace:
 class TestStrictBehaviorPreserved:
     """MissingFieldError still raised for actual config errors."""
 
-    def test_non_empty_namespace_missing_field_raises(self):
-        """ns.nonexistent where ns has data → MissingFieldError (likely typo)."""
-        node = FieldNode("upstream.nonexistent")
-        data = {"upstream": {"actual_field": "value"}}
+    @pytest.mark.parametrize(
+        ("path", "data"),
+        [
+            # the namespace has data, so a missing field is likely a typo
+            pytest.param(
+                "upstream.nonexistent",
+                {"upstream": {"actual_field": "value"}},
+                id="non-empty-namespace",
+            ),
+            pytest.param("ghost.field", {"source": {"text": "hello"}}, id="absent-namespace"),
+            pytest.param("nonexistent", {"name": "Alice"}, id="non-dotted"),
+        ],
+    )
+    def test_missing_field_raises(self, path, data):
         with pytest.raises(MissingFieldError, match="does not exist"):
-            evaluate_node(node, data)
-
-    def test_absent_namespace_raises(self):
-        """ghost.field where ghost is not in data → MissingFieldError."""
-        node = FieldNode("ghost.field")
-        data = {"source": {"text": "hello"}}
-        with pytest.raises(MissingFieldError, match="does not exist"):
-            evaluate_node(node, data)
-
-    def test_non_dotted_missing_field_raises(self):
-        """Plain field (no dot) missing → MissingFieldError (existing behavior)."""
-        node = FieldNode("nonexistent")
-        data = {"name": "Alice"}
-        with pytest.raises(MissingFieldError, match="does not exist"):
-            evaluate_node(node, data)
+            evaluate_node(FieldNode(path), data)
 
     def test_non_empty_namespace_preserves_suggestions(self):
         """Flat field that exists as sub-field still gets 'Did you mean' suggestion."""

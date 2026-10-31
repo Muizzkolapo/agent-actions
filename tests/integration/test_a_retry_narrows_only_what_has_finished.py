@@ -310,16 +310,12 @@ def _every_file_of_the_reader_fails():
         yield
 
 
-@pytest.mark.parametrize(
-    "fault",
-    [pytest.param(_every_file_of_the_reader_fails, id="every_file")],
-)
-def test_a_reader_that_failed_everything_after_a_reset_refuses(chained, fault):  # noqa: F811
+def test_a_reader_that_failed_everything_after_a_reset_refuses(chained):  # noqa: F811
     """The reset deletes no row, and a run whose every file fails before it is processed
     writes none, so the reader still holds the row of the page its source now filters.
     Nothing would reach that row again once a retry carried it."""
     _filter_the_first_page(chained)
-    with fault():
+    with _every_file_of_the_reader_fails():
         _run()
     assert _status(chained) == "failed"
     named = _a_failure_at_the_first_action(chained)

@@ -103,10 +103,6 @@ class TestTheChecksCanActuallyFail:
 
     KINDS = {"Bug Fix", "Under the Hood"}
 
-    def test_an_unclosed_quoted_scalar_is_reported(self):
-        raw = 'kind: Bug Fix\nbody: "never closed\ntime: 2026-01-01T00:00:00Z\n'
-        assert any("does not parse as YAML" in p for p in _problems(raw, self.KINDS))
-
     def test_a_plain_timestamp_changie_rejects_is_reported(self):
         """`changie batch` exits 1 on this. PyYAML raises a bare ValueError, not a
         YAMLError, so a narrower except lets it through."""
@@ -123,31 +119,47 @@ class TestTheChecksCanActuallyFail:
         found = _problems(raw, self.KINDS)
         assert any("not a timestamp changie can parse" in p for p in found), found
 
-    def test_a_time_that_is_not_a_date_at_all_is_reported(self):
-        raw = "kind: Bug Fix\nbody: a real body\ntime: TBD\n"
-        assert any("not a timestamp" in p for p in _problems(raw, self.KINDS)), raw
+    @pytest.mark.parametrize(
+        ("raw", "problem"),
+        [
+            (
+                'kind: Bug Fix\nbody: "never closed\ntime: 2026-01-01T00:00:00Z\n',
+                "does not parse as YAML",
+            ),
+            ("kind: Bug Fix\nbody: a real body\ntime: TBD\n", "not a timestamp"),
+            # changie accepts an absent time; the check is repo convention, and says so.
+            ("kind: Bug Fix\nbody: a real body\n", "time is absent"),
+            (
+                "kind: Documentation\nbody: a real body\ntime: 2026-01-01T00:00:00Z\n",
+                "is not one of the labels",
+            ),
+            (
+                "kind: Bug Fix\nbody: '   '\ntime: 2026-01-01T00:00:00Z\n",
+                "body is missing or empty",
+            ),
+            ("just a string\n", "is not a mapping"),
+        ],
+        ids=[
+            "unclosed-quote",
+            "time-not-a-date",
+            "absent-time-convention",
+            "undeclared-kind",
+            "empty-body",
+            "bare-scalar",
+        ],
+    )
+    def test_a_defective_entry_is_reported(self, raw, problem):
+        found = _problems(raw, self.KINDS)
+        assert any(problem in p for p in found), found
 
-    def test_a_date_only_time_is_accepted(self):
-        """changie accepts it, so this check must not over-reject."""
-        raw = "kind: Bug Fix\nbody: a real body\ntime: 2026-01-01\n"
-        assert _problems(raw, self.KINDS) == []
-
-    def test_an_absent_time_is_reported_as_convention(self):
-        """changie accepts this one -- the check is repo convention, and says so."""
-        raw = "kind: Bug Fix\nbody: a real body\n"
-        assert any("time is absent" in p for p in _problems(raw, self.KINDS))
-
-    def test_an_undeclared_kind_is_reported(self):
-        raw = "kind: Documentation\nbody: a real body\ntime: 2026-01-01T00:00:00Z\n"
-        assert any("is not one of the labels" in p for p in _problems(raw, self.KINDS))
-
-    def test_an_empty_body_is_reported(self):
-        raw = "kind: Bug Fix\nbody: '   '\ntime: 2026-01-01T00:00:00Z\n"
-        assert any("body is missing or empty" in p for p in _problems(raw, self.KINDS))
-
-    def test_a_bare_scalar_file_is_reported(self):
-        assert any("is not a mapping" in p for p in _problems("just a string\n", self.KINDS))
-
-    def test_a_well_formed_entry_reports_nothing(self):
-        raw = "kind: Bug Fix\nbody: a real body\ntime: 2026-01-01T00:00:00Z\n"
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            # changie accepts a date-only time, so this check must not over-reject.
+            "kind: Bug Fix\nbody: a real body\ntime: 2026-01-01\n",
+            "kind: Bug Fix\nbody: a real body\ntime: 2026-01-01T00:00:00Z\n",
+        ],
+        ids=["date-only-time", "well-formed"],
+    )
+    def test_an_acceptable_entry_reports_nothing(self, raw):
         assert _problems(raw, self.KINDS) == []

@@ -6,6 +6,8 @@ than action_status (which may contain stale orphan entries from removed
 actions).
 """
 
+import pytest
+
 from agent_actions.workflow.managers.state import (
     ActionStateManager,
     ActionStatus,
@@ -27,41 +29,46 @@ def _make_state_manager(tmp_path, execution_order, extra_statuses=None):
 class TestOrphanEntriesIgnored:
     """Orphan entries in action_status must not affect workflow-level queries."""
 
-    def test_is_workflow_complete_ignores_orphan_failed(self, tmp_path):
-        sm = _make_state_manager(
-            tmp_path,
-            execution_order=["action_a"],
-            extra_statuses={"orphan_action": ActionStatus.FAILED},
-        )
-        sm.update_status("action_a", ActionStatus.COMPLETED)
+    @pytest.mark.parametrize(
+        ("query", "orphans", "current", "expected"),
+        [
+            pytest.param(
+                "is_workflow_complete",
+                {"orphan_action": ActionStatus.FAILED},
+                ActionStatus.COMPLETED,
+                True,
+                id="complete_ignores_orphan_failed",
+            ),
+            pytest.param(
+                "is_workflow_done",
+                {"orphan_action": ActionStatus.PENDING},
+                ActionStatus.COMPLETED,
+                True,
+                id="done_ignores_orphan_pending",
+            ),
+            pytest.param(
+                "is_workflow_done",
+                None,
+                ActionStatus.RUNNING,
+                False,
+                id="not_done_while_current_running",
+            ),
+            pytest.param(
+                "has_any_failed",
+                {"orphan_action": ActionStatus.FAILED},
+                ActionStatus.COMPLETED,
+                False,
+                id="no_failure_from_orphan_failed",
+            ),
+        ],
+    )
+    def test_workflow_query_reads_only_current_actions(
+        self, tmp_path, query, orphans, current, expected
+    ):
+        sm = _make_state_manager(tmp_path, execution_order=["action_a"], extra_statuses=orphans)
+        sm.update_status("action_a", current)
 
-        assert sm.is_workflow_complete() is True
-
-    def test_is_workflow_done_ignores_orphan_pending(self, tmp_path):
-        sm = _make_state_manager(
-            tmp_path,
-            execution_order=["action_a"],
-            extra_statuses={"orphan_action": ActionStatus.PENDING},
-        )
-        sm.update_status("action_a", ActionStatus.COMPLETED)
-
-        assert sm.is_workflow_done() is True
-
-    def test_is_workflow_done_false_when_current_running(self, tmp_path):
-        sm = _make_state_manager(tmp_path, execution_order=["action_a"])
-        sm.update_status("action_a", ActionStatus.RUNNING)
-
-        assert sm.is_workflow_done() is False
-
-    def test_has_any_failed_ignores_orphan_failed(self, tmp_path):
-        sm = _make_state_manager(
-            tmp_path,
-            execution_order=["action_a"],
-            extra_statuses={"orphan_action": ActionStatus.FAILED},
-        )
-        sm.update_status("action_a", ActionStatus.COMPLETED)
-
-        assert sm.has_any_failed() is False
+        assert getattr(sm, query)() is expected
 
     def test_get_summary_excludes_orphans(self, tmp_path):
         sm = _make_state_manager(

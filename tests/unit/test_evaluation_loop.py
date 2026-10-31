@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent_actions.processing.evaluation.loop import EvaluationLoop
 from agent_actions.processing.types import (
     EvaluationMetadata,
@@ -305,27 +307,19 @@ class TestTypedMetadataRoundtrip:
         assert result.recovery_metadata.retry.attempts == 3
         assert result.recovery_metadata.retry.failures == 2
 
-    def test_is_already_graduated_with_typed_metadata(self):
-        """_is_already_graduated must detect typed EvaluationMetadata, not only raw dicts."""
+    @pytest.mark.parametrize(
+        ("passed", "expected"), [(True, True), (False, False)], ids=["graduated", "not-passed"]
+    )
+    def test_is_already_graduated_reads_typed_metadata(self, passed, expected):
+        """_is_already_graduated reads typed EvaluationMetadata, not only raw dicts."""
         strategy = _make_strategy()
         loop = EvaluationLoop(strategy)
         meta = RecoveryMetadata(
-            evaluation=EvaluationMetadata(passed=True, strategy_name="test"),
+            evaluation=EvaluationMetadata(passed=passed, strategy_name="test"),
         )
         result = _make_result("r1", recovery_metadata=meta)
 
-        assert loop._is_already_graduated(result) is True
-
-    def test_is_already_graduated_false_when_not_passed(self):
-        """evaluation.passed=False means not graduated."""
-        strategy = _make_strategy()
-        loop = EvaluationLoop(strategy)
-        meta = RecoveryMetadata(
-            evaluation=EvaluationMetadata(passed=False, strategy_name="test"),
-        )
-        result = _make_result("r1", recovery_metadata=meta)
-
-        assert loop._is_already_graduated(result) is False
+        assert loop._is_already_graduated(result) is expected
 
     def test_tag_then_split_with_typed_metadata(self):
         """Full roundtrip: tag → split correctly skips graduated with typed metadata."""

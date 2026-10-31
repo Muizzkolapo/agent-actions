@@ -1,5 +1,7 @@
 """Tests for executor boundary reset (P5-040)."""
 
+import pytest
+
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.lifecycle_read import reset_for_downstream
 from agent_actions.record.state import RecordState
@@ -15,35 +17,21 @@ def _record(state: str) -> dict:
 class TestResetForDownstream:
     """Tests for reset_for_downstream() — executor boundary reset."""
 
-    def test_processed_resets_to_active(self):
-        records = [_record("processed")]
+    @pytest.mark.parametrize(
+        ("state", "after"),
+        [
+            pytest.param("processed", "active", id="processed-resets-to-active"),
+            pytest.param("guard_skipped", "active", id="guard_skipped-resets-to-active"),
+            pytest.param("cascade_skipped", "cascade_skipped", id="cascade_skipped-stays"),
+            pytest.param("failed", "failed", id="failed-stays"),
+            pytest.param("exhausted", "exhausted", id="exhausted-stays"),
+            pytest.param("active", "active", id="active-stays"),
+        ],
+    )
+    def test_reset_moves_state(self, state, after):
+        records = [_record(state)]
         reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "active"
-
-    def test_guard_skipped_resets_to_active(self):
-        records = [_record("guard_skipped")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "active"
-
-    def test_cascade_skipped_stays(self):
-        records = [_record("cascade_skipped")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "cascade_skipped"
-
-    def test_failed_stays(self):
-        records = [_record("failed")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "failed"
-
-    def test_exhausted_stays(self):
-        records = [_record("exhausted")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "exhausted"
-
-    def test_active_stays(self):
-        records = [_record("active")]
-        reset_for_downstream(records, action_name="downstream")
-        assert records[0]["_state"] == "active"
+        assert records[0]["_state"] == after
 
     def test_reset_appends_history(self):
         records = [_record("processed")]

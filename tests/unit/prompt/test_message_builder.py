@@ -105,9 +105,19 @@ class TestStringEquivalence:
         )
         assert env.messages[0].content == expected
 
-    def test_anthropic_non_json(self):
-        expected = _original_anthropic(PROMPT, CONTEXT_STR)
-        env = MessageBuilder.build("anthropic", PROMPT, CONTEXT_STR, json_mode=False)
+    @pytest.mark.parametrize(
+        ("provider", "original"),
+        [
+            ("anthropic", _original_anthropic),
+            ("openai", _original_openai_non_json),
+            ("groq", _original_groq_non_json),
+            ("cohere", _original_cohere_non_json),
+        ],
+        ids=["anthropic", "openai", "groq", "cohere"],
+    )
+    def test_non_json(self, provider, original):
+        expected = original(PROMPT, CONTEXT_STR)
+        env = MessageBuilder.build(provider, PROMPT, CONTEXT_STR, json_mode=False)
         assert env.messages[0].content == expected
 
     def test_openai_json(self):
@@ -120,11 +130,6 @@ class TestStringEquivalence:
         # The tagged body is still available in prompt_body
         expected = _original_openai_json(PROMPT, CONTEXT_STR)
         assert env.prompt_body == expected
-
-    def test_openai_non_json(self):
-        expected = _original_openai_non_json(PROMPT, CONTEXT_STR)
-        env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=False)
-        assert env.messages[0].content == expected
 
     def test_gemini_json(self):
         expected = _original_gemini_json(PROMPT, CONTEXT_STR, SCHEMA_DICT)
@@ -146,11 +151,6 @@ class TestStringEquivalence:
         assert base.strip() in content
         assert "JSON" in content
 
-    def test_groq_non_json(self):
-        expected = _original_groq_non_json(PROMPT, CONTEXT_STR)
-        env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=False)
-        assert env.messages[0].content == expected
-
     def test_cohere_json_with_schema(self):
         # Reproduce original schema_instruction for Cohere
         fields_str = ", ".join([f"'{f}'" for f in SCHEMA_DICT["properties"].keys()])
@@ -167,11 +167,6 @@ class TestStringEquivalence:
         env = MessageBuilder.build("cohere", PROMPT, CONTEXT_STR, json_mode=True, schema=None)
         assert env.messages[0].content == expected
 
-    def test_cohere_non_json(self):
-        expected = _original_cohere_non_json(PROMPT, CONTEXT_STR)
-        env = MessageBuilder.build("cohere", PROMPT, CONTEXT_STR, json_mode=False)
-        assert env.messages[0].content == expected
-
 
 # ---------------------------------------------------------------------------
 # Tests — structural correctness
@@ -185,38 +180,21 @@ class TestMessageBuilderStructure:
         with pytest.raises(ValueError, match="Unknown provider"):
             MessageBuilder.build("nonexistent", PROMPT, CONTEXT_STR)
 
-    def test_anthropic_json_single_user_message(self):
-        env = MessageBuilder.build("anthropic", PROMPT, CONTEXT_STR, json_mode=True)
-        assert len(env.messages) == 1
-        assert env.messages[0].role == "user"
-
-    def test_openai_json_system_message(self):
-        # After prompt-injection fix: system + user (two messages)
-        env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=True)
-        assert len(env.messages) == 2
-        assert env.messages[0].role == "system"
-        assert env.messages[1].role == "user"
-
-    def test_openai_non_json_user_message(self):
-        env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=False)
-        assert len(env.messages) == 1
-        assert env.messages[0].role == "user"
-
-    def test_ollama_system_plus_user(self):
-        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR, json_mode=True)
-        assert len(env.messages) == 2
-        assert env.messages[0].role == "system"
-        assert env.messages[1].role == "user"
-
-    def test_groq_json_system_role(self):
-        env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=True)
-        assert len(env.messages) == 1
-        assert env.messages[0].role == "system"
-
-    def test_groq_non_json_system_role(self):
-        env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=False)
-        assert len(env.messages) == 1
-        assert env.messages[0].role == "system"
+    @pytest.mark.parametrize(
+        ("provider", "json_mode", "roles"),
+        [
+            pytest.param("anthropic", True, ["user"], id="anthropic-json-single-user"),
+            # After prompt-injection fix: system + user (two messages)
+            pytest.param("openai", True, ["system", "user"], id="openai-json-system-plus-user"),
+            pytest.param("openai", False, ["user"], id="openai-non-json-single-user"),
+            pytest.param("ollama_local", True, ["system", "user"], id="ollama-system-plus-user"),
+            pytest.param("groq", True, ["system"], id="groq-json-single-system"),
+            pytest.param("groq", False, ["system"], id="groq-non-json-single-system"),
+        ],
+    )
+    def test_message_roles(self, provider, json_mode, roles):
+        env = MessageBuilder.build(provider, PROMPT, CONTEXT_STR, json_mode=json_mode)
+        assert [m.role for m in env.messages] == roles
 
     def test_batch_always_system_plus_user(self):
         env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
@@ -272,19 +250,16 @@ class TestTaggedContent:
         content = env.messages[0].content
         assert "RULES:" not in content
 
-    def test_anthropic_no_rules(self):
+    @pytest.mark.parametrize(
+        "fragment",
+        ["RULES:", "<|begin_of_output_schema|>"],
+        ids=["no-rules", "no-inline-schema"],
+    )
+    def test_anthropic_json_omits(self, fragment):
         env = MessageBuilder.build(
             "anthropic", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
         )
-        content = env.messages[0].content
-        assert "RULES:" not in content
-
-    def test_anthropic_no_inline_schema(self):
-        env = MessageBuilder.build(
-            "anthropic", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
-        )
-        content = env.messages[0].content
-        assert "<|begin_of_output_schema|>" not in content
+        assert fragment not in env.messages[0].content
 
     def test_gemini_json_no_schema_skips_schema_tag(self):
         env = MessageBuilder.build("gemini", PROMPT, CONTEXT_STR, json_mode=True, schema=None)
@@ -300,20 +275,19 @@ class TestTaggedContent:
 class TestGroqFormat:
     """Verify Groq's unique formats for json and non-json."""
 
-    def test_groq_json_no_space_after_instruction_colon(self):
+    @pytest.mark.parametrize(
+        "fragment",
+        [
+            pytest.param(f"<|begin_of_user_instruction|>:{PROMPT}", id="no-space-after-colon"),
+            pytest.param(f"<|begin_of_text|>:: {CONTEXT_STR}", id="double-colon-before-text"),
+            pytest.param(
+                ":<|end_of_user_instruction|>\n\n<|begin_of_text|>", id="blank-line-between-tags"
+            ),
+        ],
+    )
+    def test_groq_json_format(self, fragment):
         env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=True)
-        content = env.messages[0].content
-        assert f"<|begin_of_user_instruction|>:{PROMPT}" in content
-
-    def test_groq_json_double_colon_before_text(self):
-        env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=True)
-        content = env.messages[0].content
-        assert f"<|begin_of_text|>:: {CONTEXT_STR}" in content
-
-    def test_groq_json_blank_line_between_tags(self):
-        env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=True)
-        content = env.messages[0].content
-        assert ":<|end_of_user_instruction|>\n\n<|begin_of_text|>" in content
+        assert fragment in env.messages[0].content
 
     def test_groq_non_json_plain_text_format(self):
         env = MessageBuilder.build("groq", PROMPT, CONTEXT_STR, json_mode=False)

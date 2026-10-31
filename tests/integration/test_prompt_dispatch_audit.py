@@ -248,25 +248,18 @@ class TestDispatchTask:
 class TestMessageBuilder:
     """Tests for provider-specific message building."""
 
-    def test_anthropic_format_correct(self):
-        """Anthropic messages use SINGLE_USER role for JSON mode."""
-        config = PROVIDER_MESSAGE_CONFIGS["anthropic"]
-        assert config.json_role == MessageRole.SINGLE_USER
-
-    def test_openai_format_correct(self):
-        """OpenAI JSON mode uses SYSTEM_ONLY role."""
-        config = PROVIDER_MESSAGE_CONFIGS["openai"]
-        assert config.json_role == MessageRole.SYSTEM_ONLY
-
-    def test_groq_format_correct(self):
-        """Groq uses TAGGED_GROQ style and SYSTEM_ONLY role for JSON."""
-        config = PROVIDER_MESSAGE_CONFIGS["groq"]
-        assert config.json_role == MessageRole.SYSTEM_ONLY
-
-    def test_ollama_format_correct(self):
-        """Ollama uses RAW style and SYSTEM_PLUS_USER role."""
-        config = PROVIDER_MESSAGE_CONFIGS["ollama_local"]
-        assert config.json_role == MessageRole.SYSTEM_PLUS_USER
+    @pytest.mark.parametrize(
+        ("vendor", "role"),
+        [
+            ("anthropic", MessageRole.SINGLE_USER),
+            ("openai", MessageRole.SYSTEM_ONLY),
+            ("groq", MessageRole.SYSTEM_ONLY),
+            ("ollama_local", MessageRole.SYSTEM_PLUS_USER),
+        ],
+        ids=["anthropic", "openai", "groq", "ollama_local"],
+    )
+    def test_json_mode_role_per_vendor(self, vendor, role):
+        assert PROVIDER_MESSAGE_CONFIGS[vendor].json_role == role
 
     def test_all_providers_have_config(self):
         """Every expected provider has a MessageBuilder config entry."""

@@ -78,16 +78,15 @@ def _batch_events(fired: list) -> list:
 class TestTheDuplicatesAreGone:
     """submission.py and finalize_batch_output already fire these, populated."""
 
-    def test_a_completed_batch_fires_no_duplicate_complete_event(self, state_manager):
+    @pytest.mark.parametrize(
+        "status",
+        ["completed", "in_progress"],
+        ids=["completed_no_duplicate_complete", "in_progress_no_claimed_submission"],
+    )
+    def test_a_batch_check_fires_no_batch_event(self, state_manager, status):
         executor = _executor(state_manager)
 
-        assert _batch_events(_fire(executor, "completed")) == []
-
-    def test_an_in_progress_batch_does_not_claim_a_submission(self, state_manager):
-        """Nothing was submitted — the poll found the job still running."""
-        executor = _executor(state_manager)
-
-        assert _batch_events(_fire(executor, "in_progress")) == []
+        assert _batch_events(_fire(executor, status)) == []
 
 
 class TestTheOneRealSignalCarriesRealData:

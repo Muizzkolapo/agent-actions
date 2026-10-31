@@ -1,35 +1,27 @@
 """Unit tests for validate_guard_conditions() — all 6 branches."""
 
+import pytest
+
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 
 
 class TestValidateGuardConditions:
     """Tests for the module-level validate_guard_conditions helper."""
 
-    def test_no_guard_key(self):
-        """Action with no guard at all → no errors."""
-        configs = {"action_a": {"model": "gpt-4"}}
-        assert validate_guard_conditions(configs) == []
-
-    def test_guard_is_none(self):
-        """guard: null/None → skipped, no error."""
-        configs = {"action_a": {"guard": None}}
-        assert validate_guard_conditions(configs) == []
-
-    def test_guard_not_dict(self):
-        """guard as a non-dict value (e.g. leftover string) → skipped, no error."""
-        configs = {"action_a": {"guard": "passes_filter"}}
-        assert validate_guard_conditions(configs) == []
-
-    def test_guard_dict_missing_clause(self):
-        """guard dict with no 'clause' key → skipped, no error."""
-        configs = {"action_a": {"guard": {"scope": "item", "behavior": "filter"}}}
-        assert validate_guard_conditions(configs) == []
-
-    def test_guard_dict_empty_clause(self):
-        """guard dict with empty clause string → skipped, no error."""
-        configs = {"action_a": {"guard": {"clause": "", "scope": "item"}}}
-        assert validate_guard_conditions(configs) == []
+    @pytest.mark.parametrize(
+        "action_config",
+        [
+            pytest.param({"model": "gpt-4"}, id="no_guard_key"),
+            pytest.param({"guard": None}, id="guard_is_none"),
+            pytest.param({"guard": "passes_filter"}, id="guard_not_dict"),
+            pytest.param(
+                {"guard": {"scope": "item", "behavior": "filter"}}, id="guard_dict_missing_clause"
+            ),
+            pytest.param({"guard": {"clause": "", "scope": "item"}}, id="guard_dict_empty_clause"),
+        ],
+    )
+    def test_guard_without_a_clause_is_skipped(self, action_config):
+        assert validate_guard_conditions({"action_a": action_config}) == []
 
     def test_valid_clause_produces_no_errors(self):
         """Well-formed guard clause → no errors."""

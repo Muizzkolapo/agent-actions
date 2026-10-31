@@ -6,6 +6,8 @@ record 1 — answering success while the record the reviewer meant stayed
 unreviewed.
 """
 
+import pytest
+
 from agent_actions.llm.providers.hitl.server import HitlServer
 
 
@@ -51,17 +53,8 @@ class TestTheIndexesThatStillWork:
         assert server.record_reviews[1] is not None
         assert server.record_reviews[0] is None
 
-    def test_an_index_past_the_end_is_still_refused(self):
+    @pytest.mark.parametrize("index", [3, -1, "1"], ids=["past-end", "negative", "string"])
+    def test_an_out_of_range_or_non_int_index_is_still_refused(self, index):
         server, client = _client()
 
-        assert _post(client, 3).status_code == 400
-
-    def test_a_negative_index_is_still_refused(self):
-        server, client = _client()
-
-        assert _post(client, -1).status_code == 400
-
-    def test_a_string_index_is_still_refused(self):
-        server, client = _client()
-
-        assert _post(client, "1").status_code == 400
+        assert _post(client, index).status_code == 400

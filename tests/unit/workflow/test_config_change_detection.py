@@ -20,39 +20,55 @@ class TestComputeActionConfigHash:
         config = {"prompt": "Summarize", "model": "gpt-4", "schema": "s.yml"}
         assert _compute_action_config_hash(config) == _compute_action_config_hash(config)
 
-    def test_different_model_produces_different_hash(self):
-        base = {"prompt": "Summarize", "model": "gpt-4", "schema": "s.yml"}
-        changed = {**base, "model": "gpt-4o"}
+    @pytest.mark.parametrize(
+        ("base", "changed"),
+        [
+            pytest.param(
+                {"prompt": "Summarize", "model": "gpt-4", "schema": "s.yml"},
+                {"prompt": "Summarize", "model": "gpt-4o", "schema": "s.yml"},
+                id="model",
+            ),
+            pytest.param(
+                {"prompt": "Summarize", "model": "gpt-4"},
+                {"prompt": "Analyze", "model": "gpt-4"},
+                id="prompt",
+            ),
+            pytest.param(
+                {"prompt": "Summarize", "model": "gpt-4", "schema": "old.yml"},
+                {"prompt": "Summarize", "model": "gpt-4", "schema": "new.yml"},
+                id="schema",
+            ),
+            pytest.param(
+                {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "skip"}},
+                {"prompt": "X", "guard": {"clause": "a > 2", "behavior": "skip"}},
+                id="guard_clause",
+            ),
+            pytest.param(
+                {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "skip"}},
+                {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "warn"}},
+                id="guard_behavior",
+            ),
+        ],
+    )
+    def test_a_behavioural_change_produces_a_different_hash(self, base, changed):
         assert _compute_action_config_hash(base) != _compute_action_config_hash(changed)
 
-    def test_different_prompt_produces_different_hash(self):
-        base = {"prompt": "Summarize", "model": "gpt-4"}
-        changed = {**base, "prompt": "Analyze"}
-        assert _compute_action_config_hash(base) != _compute_action_config_hash(changed)
-
-    def test_different_schema_produces_different_hash(self):
-        base = {"prompt": "Summarize", "model": "gpt-4", "schema": "old.yml"}
-        changed = {**base, "schema": "new.yml"}
-        assert _compute_action_config_hash(base) != _compute_action_config_hash(changed)
-
-    def test_different_guard_clause_produces_different_hash(self):
-        base = {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "skip"}}
-        changed = {"prompt": "X", "guard": {"clause": "a > 2", "behavior": "skip"}}
-        assert _compute_action_config_hash(base) != _compute_action_config_hash(changed)
-
-    def test_different_guard_behavior_produces_different_hash(self):
-        base = {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "skip"}}
-        changed = {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "warn"}}
-        assert _compute_action_config_hash(base) != _compute_action_config_hash(changed)
-
-    def test_cosmetic_description_change_does_not_change_hash(self):
-        base = {"prompt": "X", "model": "m", "description": "Old desc"}
-        changed = {**base, "description": "New desc"}
-        assert _compute_action_config_hash(base) == _compute_action_config_hash(changed)
-
-    def test_limit_change_does_not_change_hash(self):
-        base = {"prompt": "X", "model": "m", "record_limit": 10}
-        changed = {**base, "record_limit": 20}
+    @pytest.mark.parametrize(
+        ("base", "changed"),
+        [
+            pytest.param(
+                {"prompt": "X", "model": "m", "description": "Old desc"},
+                {"prompt": "X", "model": "m", "description": "New desc"},
+                id="description",
+            ),
+            pytest.param(
+                {"prompt": "X", "model": "m", "record_limit": 10},
+                {"prompt": "X", "model": "m", "record_limit": 20},
+                id="record_limit",
+            ),
+        ],
+    )
+    def test_a_cosmetic_or_limit_change_keeps_the_hash(self, base, changed):
         assert _compute_action_config_hash(base) == _compute_action_config_hash(changed)
 
     def test_guard_string_normalized_to_dict(self):
@@ -61,15 +77,12 @@ class TestComputeActionConfigHash:
         dict_guard = {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "skip"}}
         assert _compute_action_config_hash(string_guard) == _compute_action_config_hash(dict_guard)
 
-    def test_guard_none_handled(self):
-        """guard: null should not crash."""
-        config = {"prompt": "X", "guard": None}
-        h = _compute_action_config_hash(config)
-        assert isinstance(h, str) and len(h) == 16
-
-    def test_missing_fields_produce_stable_hash(self):
-        """Config with no prompt/model/schema/guard should still hash."""
-        config = {}
+    @pytest.mark.parametrize(
+        "config",
+        [{"prompt": "X", "guard": None}, {}],
+        ids=["guard_none", "no_fields"],
+    )
+    def test_a_sparse_config_still_hashes(self, config):
         h = _compute_action_config_hash(config)
         assert isinstance(h, str) and len(h) == 16
 

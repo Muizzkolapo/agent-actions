@@ -57,15 +57,17 @@ class TestSerializeSnapshot:
         result = _serialize_snapshot({"a": 1, "b": "hello"})
         assert json.loads(result) == {"a": 1, "b": "hello"}
 
-    def test_none_input(self):
-        assert _serialize_snapshot(None) is None
-
-    def test_empty_dict_returns_none(self):
-        assert _serialize_snapshot({}) is None
-
-    def test_non_dict_returns_none(self):
-        assert _serialize_snapshot("not a dict") is None  # type: ignore[arg-type]
-        assert _serialize_snapshot([1, 2]) is None  # type: ignore[arg-type]
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(None, id="none"),
+            pytest.param({}, id="empty-dict"),
+            pytest.param("not a dict", id="string"),
+            pytest.param([1, 2], id="list"),
+        ],
+    )
+    def test_no_snapshot_for_empty_or_non_dict(self, value):
+        assert _serialize_snapshot(value) is None
 
     def test_non_serializable_uses_default_str(self):
         """datetime and other non-JSON types fall back to str via default=str."""
@@ -317,36 +319,26 @@ class TestExhaustedBothPathsIdentical:
 
 
 class TestNonTerminalNoSnapshot:
-    def test_success_no_input_snapshot(self):
+    @pytest.mark.parametrize(
+        "make_result",
+        [
+            pytest.param(
+                lambda: ProcessingResult.success(data=[{"content": {"v": 1}}], source_guid="sg-ok"),
+                id="success",
+            ),
+            pytest.param(lambda: ProcessingResult.filtered(source_guid="sg-filt"), id="filtered"),
+            pytest.param(
+                lambda: ProcessingResult.unprocessed(
+                    data=[{"content": {}}], reason="upstream_unprocessed", source_guid="sg-un"
+                ),
+                id="unprocessed",
+            ),
+        ],
+    )
+    def test_non_terminal_disposition_has_no_input_snapshot(self, make_result):
         backend = _make_backend()
-        success = ProcessingResult.success(
-            data=[{"content": {"v": 1}}],
-            source_guid="sg-ok",
-        )
         ResultCollector.collect_results(
-            [success], {}, "agent", is_first_stage=False, storage_backend=backend
-        )
-        call_kwargs = backend.set_disposition.call_args[1]
-        assert "input_snapshot" not in call_kwargs
-
-    def test_filtered_no_input_snapshot(self):
-        backend = _make_backend()
-        filtered = ProcessingResult.filtered(source_guid="sg-filt")
-        ResultCollector.collect_results(
-            [filtered], {}, "agent", is_first_stage=False, storage_backend=backend
-        )
-        call_kwargs = backend.set_disposition.call_args[1]
-        assert "input_snapshot" not in call_kwargs
-
-    def test_unprocessed_no_input_snapshot(self):
-        backend = _make_backend()
-        unprocessed = ProcessingResult.unprocessed(
-            data=[{"content": {}}],
-            reason="upstream_unprocessed",
-            source_guid="sg-un",
-        )
-        ResultCollector.collect_results(
-            [unprocessed], {}, "agent", is_first_stage=False, storage_backend=backend
+            [make_result()], {}, "agent", is_first_stage=False, storage_backend=backend
         )
         call_kwargs = backend.set_disposition.call_args[1]
         assert "input_snapshot" not in call_kwargs

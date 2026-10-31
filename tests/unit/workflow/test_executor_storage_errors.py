@@ -41,18 +41,12 @@ def executor(mock_deps):
 
 
 class TestResolveCompletionStatusStorageErrors:
-    def test_operational_error_from_has_disposition_propagates(self, executor, mock_deps):
-        mock_deps.action_runner.storage_backend.has_disposition.side_effect = (
-            sqlite3.OperationalError("database is locked")
-        )
-        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-            executor._resolve_completion_status("agent_a")
-
-    def test_operational_error_from_get_failed_items_propagates(self, executor, mock_deps):
-        mock_deps.action_runner.storage_backend.has_disposition.return_value = False
-        mock_deps.action_runner.storage_backend.get_failed_items.side_effect = (
-            sqlite3.OperationalError("database is locked")
-        )
+    @pytest.mark.parametrize("method", ["has_disposition", "get_failed_items"])
+    def test_operational_error_from_the_backend_propagates(self, executor, mock_deps, method):
+        backend = mock_deps.action_runner.storage_backend
+        backend.has_disposition.return_value = False
+        backend.get_failed_items.return_value = []
+        getattr(backend, method).side_effect = sqlite3.OperationalError("database is locked")
         with pytest.raises(sqlite3.OperationalError, match="database is locked"):
             executor._resolve_completion_status("agent_a")
 

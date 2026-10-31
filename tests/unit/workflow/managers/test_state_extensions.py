@@ -1,109 +1,70 @@
 """Tests for ActionStateManager extension methods (is_workflow_done, get_pending_actions, get_skipped_actions, etc.)."""
 
+import pytest
+
 from agent_actions.workflow.managers.state import ActionStateManager
 
 
+def _manager(tmp_path, statuses: dict[str, str]) -> ActionStateManager:
+    mgr = ActionStateManager(tmp_path / "status.json", list(statuses))
+    for action, status in statuses.items():
+        if status != "pending":
+            mgr.update_status(action, status)
+    return mgr
+
+
 class TestIsWorkflowDone:
-    """Tests for is_workflow_done()."""
-
-    def test_true_when_all_completed(self, tmp_path):
-        """is_workflow_done returns True when all actions are completed."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "completed")
-
-        assert mgr.is_workflow_done() is True
-
-    def test_true_when_mix_of_completed_and_failed(self, tmp_path):
-        """is_workflow_done returns True when all actions are completed or failed."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-        mgr.update_status("c", "completed")
-
-        assert mgr.is_workflow_done() is True
-
-    def test_false_when_some_still_pending(self, tmp_path):
-        """is_workflow_done returns False when some actions are still pending."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-        # c stays pending
-
-        assert mgr.is_workflow_done() is False
-
-    def test_false_when_some_still_running(self, tmp_path):
-        """is_workflow_done returns False when some actions are still running."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "running")
-
-        assert mgr.is_workflow_done() is False
+    @pytest.mark.parametrize(
+        ("statuses", "done"),
+        [
+            pytest.param({"a": "completed", "b": "completed"}, True, id="all_completed"),
+            pytest.param(
+                {"a": "completed", "b": "failed", "c": "completed"}, True, id="completed_and_failed"
+            ),
+            pytest.param(
+                {"a": "completed", "b": "failed", "c": "skipped"},
+                True,
+                id="completed_failed_and_skipped",
+            ),
+            pytest.param(
+                {"a": "completed_with_failures", "b": "failed"}, True, id="partial_and_failed"
+            ),
+            pytest.param(
+                {"a": "completed", "b": "failed", "c": "pending"}, False, id="some_still_pending"
+            ),
+            pytest.param({"a": "completed", "b": "running"}, False, id="some_still_running"),
+        ],
+    )
+    def test_is_workflow_done(self, tmp_path, statuses, done):
+        assert _manager(tmp_path, statuses).is_workflow_done() is done
 
 
-class TestGetPendingActionsExcludesFailed:
-    """Tests for get_pending_actions() excluding both completed AND failed."""
+class TestGetPendingActions:
+    """get_pending_actions() excludes every terminal status."""
 
-    def test_excludes_completed(self, tmp_path):
-        """get_pending_actions excludes completed actions."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-
-        pending = mgr.get_pending_actions(["a", "b", "c"])
-        assert "a" not in pending
-        assert "b" in pending
-        assert "c" in pending
-
-    def test_excludes_failed(self, tmp_path):
-        """get_pending_actions excludes failed actions."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-
-        pending = mgr.get_pending_actions(["a", "b", "c"])
-        assert "a" not in pending
-        assert "b" not in pending
-        assert "c" in pending
-
-    def test_excludes_both_completed_and_failed(self, tmp_path):
-        """get_pending_actions excludes both completed and failed."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c", "d"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-        mgr.update_status("c", "running")
-        # d stays pending
-
-        pending = mgr.get_pending_actions(["a", "b", "c", "d"])
-        assert pending == ["c", "d"]
-
-    def test_excludes_skipped(self, tmp_path):
-        """get_pending_actions excludes skipped actions."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "skipped")
-
-        pending = mgr.get_pending_actions(["a", "b", "c"])
-        assert "a" not in pending
-        assert "b" not in pending
-        assert "c" in pending
-
-    def test_all_terminal_returns_empty(self, tmp_path):
-        """When all are completed/failed/skipped, returns empty list."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-
-        pending = mgr.get_pending_actions(["a", "b"])
-        assert pending == []
+    @pytest.mark.parametrize(
+        ("statuses", "pending"),
+        [
+            pytest.param(
+                {"a": "completed", "b": "pending", "c": "pending"}, ["b", "c"], id="completed"
+            ),
+            pytest.param({"a": "completed", "b": "failed", "c": "pending"}, ["c"], id="failed"),
+            pytest.param(
+                {"a": "completed", "b": "failed", "c": "running", "d": "pending"},
+                ["c", "d"],
+                id="completed_and_failed_keep_running",
+            ),
+            pytest.param({"a": "completed", "b": "skipped", "c": "pending"}, ["c"], id="skipped"),
+            pytest.param(
+                {"a": "completed_with_failures", "b": "pending"},
+                ["b"],
+                id="completed_with_failures",
+            ),
+            pytest.param({"a": "completed", "b": "failed"}, [], id="all_terminal"),
+        ],
+    )
+    def test_excludes_terminal_actions(self, tmp_path, statuses, pending):
+        assert _manager(tmp_path, statuses).get_pending_actions(list(statuses)) == pending
 
 
 class TestIsSkipped:
@@ -132,16 +93,6 @@ class TestIsSkipped:
 class TestWorkflowDoneWithSkipped:
     """Tests for is_workflow_done() with skipped status."""
 
-    def test_done_with_skipped(self, tmp_path):
-        """is_workflow_done returns True when mix of completed, failed, and skipped."""
-        status_file = tmp_path / "status.json"
-        mgr = ActionStateManager(status_file, ["a", "b", "c"])
-        mgr.update_status("a", "completed")
-        mgr.update_status("b", "failed")
-        mgr.update_status("c", "skipped")
-
-        assert mgr.is_workflow_done() is True
-
     def test_summary_with_skipped(self, tmp_path):
         """get_summary correctly counts skipped actions."""
         status_file = tmp_path / "status.json"
@@ -169,22 +120,11 @@ class TestCompletedWithFailures:
         assert mgr.is_completed_with_failures("a") is False
         assert mgr.is_completed_with_failures("b") is False
 
-    def test_get_pending_excludes_completed_with_failures(self, tmp_path):
-        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
-        mgr.update_status("a", "completed_with_failures")
-        assert mgr.get_pending_actions(["a", "b"]) == ["b"]
-
     def test_is_workflow_complete_with_partial(self, tmp_path):
         mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
         mgr.update_status("a", "completed")
         mgr.update_status("b", "completed_with_failures")
         assert mgr.is_workflow_complete() is True
-
-    def test_is_workflow_done_with_partial(self, tmp_path):
-        mgr = ActionStateManager(tmp_path / "s.json", ["a", "b"])
-        mgr.update_status("a", "completed_with_failures")
-        mgr.update_status("b", "failed")
-        assert mgr.is_workflow_done() is True
 
     def test_summary_with_partial(self, tmp_path):
         mgr = ActionStateManager(tmp_path / "s.json", ["a", "b", "c"])

@@ -33,41 +33,34 @@ def handler(tmp_path):
 
 
 class TestPathTraversal:
-    def test_normal_docs_path(self, handler):
-        result = handler.translate_path("/index.html")
-        assert result.endswith("index.html")
-        assert "docs_site" in result
+    @pytest.mark.parametrize(
+        ("path", "suffix", "root"),
+        [
+            ("/index.html", "index.html", "docs_site"),
+            ("/artefact/catalog.json", "catalog.json", "artefact"),
+            ("/artefact", "artefact", "artefact"),
+            ("/", "docs_site", "docs_site"),
+        ],
+        ids=["docs", "artefact", "artefact-root", "docs-root"],
+    )
+    def test_a_path_inside_a_root_resolves_there(self, handler, path, suffix, root):
+        result = handler.translate_path(path)
+        assert result.endswith(suffix)
+        assert root in result
 
-    def test_normal_artefact_path(self, handler):
-        result = handler.translate_path("/artefact/catalog.json")
-        assert result.endswith("catalog.json")
-        assert "artefact" in result
-
-    def test_artefact_root(self, handler):
-        result = handler.translate_path("/artefact")
-        assert result.endswith("artefact")
-
-    def test_docs_root(self, handler):
-        result = handler.translate_path("/")
-        assert result.endswith("docs_site")
-
-    def test_traversal_via_dotdot_blocked(self, handler):
-        """../../etc/passwd should resolve outside root → empty string (404)."""
-        result = handler.translate_path("/../../etc/passwd")
-        assert result == ""
-
-    def test_traversal_via_artefact_dotdot_blocked(self, handler):
-        result = handler.translate_path("/artefact/../../etc/passwd")
-        assert result == ""
-
-    def test_url_encoded_traversal_blocked(self, handler):
-        """URL-decoded ../ segments should still be caught."""
-        result = handler.translate_path("/%2e%2e/%2e%2e/etc/passwd")
-        assert result == ""
-
-    def test_artefact_url_encoded_traversal_blocked(self, handler):
-        result = handler.translate_path("/artefact/%2e%2e/%2e%2e/etc/passwd")
-        assert result == ""
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/../../etc/passwd",
+            "/artefact/../../etc/passwd",
+            "/%2e%2e/%2e%2e/etc/passwd",
+            "/artefact/%2e%2e/%2e%2e/etc/passwd",
+        ],
+        ids=["dotdot", "artefact-dotdot", "url-encoded", "artefact-url-encoded"],
+    )
+    def test_traversal_outside_the_root_is_blocked(self, handler, path):
+        """A path resolving outside its root, URL-encoded or not, yields '' (404)."""
+        assert handler.translate_path(path) == ""
 
 
 class TestLocalhostBinding:

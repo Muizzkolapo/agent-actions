@@ -59,8 +59,17 @@ def _recorded_completion(state: MagicMock) -> dict:
     return completed[-1].kwargs
 
 
-@pytest.mark.parametrize("kind", ["tool", "hitl"])
-def test_an_online_only_action_under_batch_records_its_execution_time(kind):
+@pytest.mark.parametrize(
+    ("action", "kind", "vendor", "records_time"),
+    [
+        pytest.param("split", "tool", "tool", True, id="tool_runs_online"),
+        pytest.param("split", "hitl", "hitl", True, id="hitl_runs_online"),
+        pytest.param("define", "llm", "openai", False, id="llm_takes_the_passthrough_path"),
+    ],
+)
+def test_only_an_online_only_action_under_batch_records_its_execution_time(
+    action, kind, vendor, records_time
+):
     executor, state = _executor(_storage_with_passthrough())
 
     with (
@@ -71,30 +80,10 @@ def test_an_online_only_action_under_batch_records_its_execution_time(kind):
         ),
     ):
         executor.execute_action_sync(
-            "split",
+            action,
             action_idx=0,
-            action_config={"kind": kind, "model_vendor": kind, "run_mode": RunMode.BATCH},
+            action_config={"kind": kind, "model_vendor": vendor, "run_mode": RunMode.BATCH},
             is_last_action=False,
         )
 
-    assert "execution_time" in _recorded_completion(state)
-
-
-def test_an_llm_action_under_batch_with_a_passthrough_takes_the_passthrough_path():
-    executor, state = _executor(_storage_with_passthrough())
-
-    with (
-        patch("agent_actions.workflow.executor.get_last_usage", return_value=None),
-        patch(
-            "agent_actions.llm.batch.infrastructure.registry.BatchRegistryManager.has_uncollected_jobs",
-            return_value=False,
-        ),
-    ):
-        executor.execute_action_sync(
-            "define",
-            action_idx=0,
-            action_config={"kind": "llm", "model_vendor": "openai", "run_mode": RunMode.BATCH},
-            is_last_action=False,
-        )
-
-    assert "execution_time" not in _recorded_completion(state)
+    assert ("execution_time" in _recorded_completion(state)) is records_time

@@ -17,66 +17,33 @@ class TestExtractVariables:
         """Create analyzer instance."""
         return PromptASTAnalyzer()
 
-    def test_extracts_nested_attribute_path(self, analyzer):
-        """Should extract full nested attribute path."""
-        template = "{{ seed.exam_syllabus.platform_name }}"
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {"seed.exam_syllabus.platform_name"}
-
-    def test_extracts_single_level_attribute(self, analyzer):
-        """Should extract single-level attribute access."""
-        template = "{{ source.url }}"
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {"source.url"}
-
-    def test_extracts_standalone_variable(self, analyzer):
-        """Should extract standalone variables without attributes."""
-        template = "{{ seed }}"
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {"seed"}
-
-    def test_extracts_multiple_variables(self, analyzer):
-        """Should extract all variables from template."""
-        template = """
+    @pytest.mark.parametrize(
+        ("template", "expected"),
+        [
+            pytest.param(
+                "{{ seed.exam_syllabus.platform_name }}",
+                {"seed.exam_syllabus.platform_name"},
+                id="nested-attr",
+            ),
+            pytest.param("{{ source.url }}", {"source.url"}, id="single-attr"),
+            pytest.param("{{ seed }}", {"seed"}, id="standalone-var"),
+            pytest.param(
+                """
         Extract facts about {{ seed.exam_syllabus.platform_name }}
         {% if source.url %}
         Source: {{ source.url }}
         {% endif %}
-        """
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {"seed.exam_syllabus.platform_name", "source.url"}
-
-    def test_extracts_bracket_notation(self, analyzer):
-        """Should handle bracket notation access."""
-        template = '{{ data["key"] }}'
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {'data["key"]'}
-
-    def test_extracts_mixed_bracket_and_dot(self, analyzer):
-        """Should handle mixed bracket and dot notation."""
-        template = "{{ items[0].name }}"
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {"items[0].name"}
-
-    def test_extracts_from_if_blocks(self, analyzer):
-        """Should extract variables from control flow blocks."""
-        template = "{% if target.ready %}ready{% endif %}"
-
-        result = analyzer.extract_variables(template)
-
-        assert result == {"target.ready"}
+        """,
+                {"seed.exam_syllabus.platform_name", "source.url"},
+                id="multiple",
+            ),
+            pytest.param('{{ data["key"] }}', {'data["key"]'}, id="bracket"),
+            pytest.param("{{ items[0].name }}", {"items[0].name"}, id="mixed-bracket-dot"),
+            pytest.param("{% if target.ready %}ready{% endif %}", {"target.ready"}, id="if-block"),
+        ],
+    )
+    def test_extracts_full_paths(self, analyzer, template, expected):
+        assert analyzer.extract_variables(template) == expected
 
     def test_extracts_from_for_loops(self, analyzer):
         """Should extract source variable from for loops."""

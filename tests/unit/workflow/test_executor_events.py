@@ -39,59 +39,54 @@ class TestHandleBatchCheckEventFiring:
         """Create executor with mock dependencies."""
         return ActionExecutor(mock_deps)
 
-    def test_batch_complete_fires_no_duplicate_event(self, executor, mock_deps):
-        """finalize_batch_output already fired a populated one on this condition."""
-        mock_deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
+    @pytest.mark.parametrize(
+        ("handle_result", "action_config", "success", "status", "forbidden_event"),
+        [
+            # finalize_batch_output already fired a populated one on this condition.
+            pytest.param(
+                ("/output", "completed"),
+                {},
+                True,
+                ActionStatus.COMPLETED,
+                BatchCompleteEvent,
+                id="completed_fires_no_duplicate_complete",
+            ),
+            # A poll that found the job still running submitted nothing.
+            pytest.param(
+                (None, "in_progress"),
+                {"model_vendor": "openai"},
+                True,
+                ActionStatus.BATCH_SUBMITTED,
+                BatchSubmittedEvent,
+                id="in_progress_claims_no_submission",
+            ),
+            # The registry holds no record count, so a BatchCompleteEvent could only
+            # invent a total; ActionFailedEvent carries the failure.
+            pytest.param(
+                (None, "failed"),
+                {},
+                False,
+                ActionStatus.FAILED,
+                BatchCompleteEvent,
+                id="failed_fires_no_complete",
+            ),
+        ],
+    )
+    def test_batch_check_resolves_without_a_spurious_batch_event(
+        self, executor, mock_deps, handle_result, action_config, success, status, forbidden_event
+    ):
+        mock_deps.batch_manager.handle_batch_agent.return_value = handle_result
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor._handle_batch_check(
                 action_name="test_agent",
                 action_idx=0,
-                action_config={},
+                action_config=action_config,
                 start_time=datetime.now(),
             )
 
-        assert result.success is True
-        assert result.status == ActionStatus.COMPLETED
+        assert result.success is success
+        assert result.status == status
 
         fired = [c[0][0] for c in mock_fire.call_args_list]
-        assert not [e for e in fired if isinstance(e, BatchCompleteEvent)]
-
-    def test_batch_in_progress_claims_no_submission(self, executor, mock_deps):
-        """A poll that found the job still running submitted nothing."""
-        mock_deps.batch_manager.handle_batch_agent.return_value = (None, "in_progress")
-
-        with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
-            result = executor._handle_batch_check(
-                action_name="test_agent",
-                action_idx=0,
-                action_config={"model_vendor": "openai"},
-                start_time=datetime.now(),
-            )
-
-        assert result.success is True
-        assert result.status == ActionStatus.BATCH_SUBMITTED
-
-        fired = [c[0][0] for c in mock_fire.call_args_list]
-        assert not [e for e in fired if isinstance(e, BatchSubmittedEvent)]
-
-    def test_batch_failed_fires_event(self, executor, mock_deps):
-        """Should fire BatchCompleteEvent with failed count when batch fails."""
-        mock_deps.batch_manager.handle_batch_agent.return_value = (None, "failed")
-
-        with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
-            result = executor._handle_batch_check(
-                action_name="test_agent",
-                action_idx=0,
-                action_config={},
-                start_time=datetime.now(),
-            )
-
-        assert result.success is False
-        assert result.status == ActionStatus.FAILED
-
-        # The registry holds no record count, so there is no honest total to
-        # report. ActionFailedEvent carries the failure; a BatchCompleteEvent
-        # here could only invent one.
-        fired = [c[0][0] for c in mock_fire.call_args_list]
-        assert [e for e in fired if isinstance(e, BatchCompleteEvent)] == []
+        assert [e for e in fired if isinstance(e, forbidden_event)] == []

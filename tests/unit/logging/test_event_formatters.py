@@ -53,20 +53,17 @@ class TestFormatterInit:
         fmt = AgentActionsFormatter(show_timestamp=False)
         assert fmt.show_timestamp is False
 
-    @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
-    def test_use_color_enabled_when_rich_available(self):
-        fmt = AgentActionsFormatter(use_color=True)
-        assert fmt.use_color is True
-
-    @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", False)
-    def test_use_color_disabled_when_rich_unavailable(self):
-        fmt = AgentActionsFormatter(use_color=True)
-        assert fmt.use_color is False
-
-    @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
-    def test_use_color_disabled_explicitly(self):
-        fmt = AgentActionsFormatter(use_color=False)
-        assert fmt.use_color is False
+    @pytest.mark.parametrize(
+        ("rich_available", "use_color", "expected"),
+        [(True, True, True), (False, True, False), (True, False, False)],
+        ids=["rich-available", "rich-unavailable", "disabled-explicitly"],
+    )
+    def test_use_color(self, monkeypatch, rich_available, use_color, expected):
+        monkeypatch.setattr(
+            "agent_actions.logging.events.formatters.RICH_AVAILABLE", rich_available
+        )
+        fmt = AgentActionsFormatter(use_color=use_color)
+        assert fmt.use_color is expected
 
 
 # ---------------------------------------------------------------------------
@@ -77,19 +74,18 @@ class TestFormatterInit:
 class TestTimestamp:
     """Tests for _timestamp helper."""
 
-    @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
-    def test_timestamp_with_color(self):
+    @pytest.mark.parametrize(
+        ("rich_available", "expected"),
+        [(True, "[dim]13:45:59[/dim] | "), (False, "13:45:59 | ")],
+        ids=["color", "no-color"],
+    )
+    def test_timestamp(self, monkeypatch, rich_available, expected):
+        monkeypatch.setattr(
+            "agent_actions.logging.events.formatters.RICH_AVAILABLE", rich_available
+        )
         fmt = AgentActionsFormatter(show_timestamp=True, use_color=True)
         event = _make_event("X", timestamp=datetime(2025, 1, 2, 13, 45, 59, tzinfo=UTC))
-        ts = fmt._timestamp(event)
-        assert "[dim]13:45:59[/dim] | " == ts
-
-    @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", False)
-    def test_timestamp_without_color(self):
-        fmt = AgentActionsFormatter(show_timestamp=True, use_color=True)
-        event = _make_event("X", timestamp=datetime(2025, 1, 2, 13, 45, 59, tzinfo=UTC))
-        ts = fmt._timestamp(event)
-        assert "13:45:59 | " == ts
+        assert fmt._timestamp(event) == expected
 
     def test_timestamp_hidden(self):
         fmt = AgentActionsFormatter(show_timestamp=False)
@@ -443,34 +439,23 @@ class TestBatchCompleteEvent:
         assert fmt.format(event).startswith("Batch batches/abc123def456 ")
 
     @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
-    def test_no_failures(self):
+    @pytest.mark.parametrize(
+        ("elapsed_time", "failed", "fragments"),
+        [
+            (5.5, 0, ["[green]OK[/green]", "5.50s"]),
+            (3.0, 2, ["[yellow]WARN[/yellow]", "(2 failed)"]),
+        ],
+        ids=["no-failures", "with-failures"],
+    )
+    def test_status_reflects_failures(self, elapsed_time, failed, fragments):
         fmt = AgentActionsFormatter(show_timestamp=False, use_color=True)
         event = _make_event(
             "BatchCompleteEvent",
-            data={
-                "batch_id": "12345678",
-                "elapsed_time": 5.5,
-                "failed": 0,
-            },
+            data={"batch_id": "12345678", "elapsed_time": elapsed_time, "failed": failed},
         )
         result = fmt.format(event)
-        assert "[green]OK[/green]" in result
-        assert "5.50s" in result
-
-    @patch("agent_actions.logging.events.formatters.RICH_AVAILABLE", True)
-    def test_with_failures(self):
-        fmt = AgentActionsFormatter(show_timestamp=False, use_color=True)
-        event = _make_event(
-            "BatchCompleteEvent",
-            data={
-                "batch_id": "12345678",
-                "elapsed_time": 3.0,
-                "failed": 2,
-            },
-        )
-        result = fmt.format(event)
-        assert "[yellow]WARN[/yellow]" in result
-        assert "(2 failed)" in result
+        for fragment in fragments:
+            assert fragment in result
 
 
 # ---------------------------------------------------------------------------

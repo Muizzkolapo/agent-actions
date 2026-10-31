@@ -64,20 +64,19 @@ class TestWorkflowNamespaceRuntimeResolution:
         prompt_context, _, _ = apply_context_scope(field_context, {}, action_name="my_action")
         return _render(template, prompt_context)
 
-    def test_workflow_name_resolves(self):
+    @pytest.mark.parametrize(
+        ("template", "rendered"),
+        [
+            ("Name: {{ workflow.name }}", "Name: my_workflow"),
+            ("Run: {{ workflow.run_id }}", "Run: run_42"),
+        ],
+        ids=["workflow_name", "workflow_run_id"],
+    )
+    def test_workflow_field_resolves(self, template, rendered):
         field_context = self._context_for(
             build_workflow_metadata(name="my_workflow", run_id="run_42")
         )
-        assert (
-            self._scope_and_render("Name: {{ workflow.name }}", field_context)
-            == "Name: my_workflow"
-        )
-
-    def test_workflow_run_id_resolves(self):
-        field_context = self._context_for(
-            build_workflow_metadata(name="my_workflow", run_id="run_42")
-        )
-        assert self._scope_and_render("Run: {{ workflow.run_id }}", field_context) == "Run: run_42"
+        assert self._scope_and_render(template, field_context) == rendered
 
     def test_workflow_both_fields_resolve_in_one_template(self):
         field_context = self._context_for(

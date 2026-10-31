@@ -46,17 +46,15 @@ def executor(mock_deps):
 class TestCheckUpstreamHealth:
     """Tests for _check_upstream_health()."""
 
-    def test_no_dependencies_returns_none(self, executor):
-        """No dependencies means all healthy — returns None."""
-        config = {"dependencies": []}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result is None
-
-    def test_no_dependencies_key_returns_none(self, executor):
-        """Missing dependencies key means all healthy — returns None."""
-        config = {}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result is None
+    @pytest.mark.parametrize(
+        "config",
+        [
+            pytest.param({"dependencies": []}, id="empty_dependency_list"),
+            pytest.param({}, id="missing_dependencies_key"),
+        ],
+    )
+    def test_no_dependencies_returns_none(self, executor, config):
+        assert executor._check_upstream_health("agent_b", config) is None
 
     def test_all_deps_healthy_returns_none(self, executor, mock_deps):
         """All dependencies healthy — returns None."""
@@ -68,23 +66,21 @@ class TestCheckUpstreamHealth:
         result = executor._check_upstream_health("agent_b", config)
         assert result is None
 
-    def test_dep_failed_via_state_manager(self, executor, mock_deps):
-        """One dep failed (state_manager.is_failed) returns dep name."""
-        mock_deps.state_manager.is_failed.return_value = True
-        mock_deps.state_manager.is_skipped.return_value = False
+    @pytest.mark.parametrize(
+        ("failed", "skipped"),
+        [
+            pytest.param(True, False, id="failed"),
+            pytest.param(False, True, id="skipped"),
+        ],
+    )
+    def test_unhealthy_dep_via_state_manager_returns_its_name(
+        self, executor, mock_deps, failed, skipped
+    ):
+        mock_deps.state_manager.is_failed.return_value = failed
+        mock_deps.state_manager.is_skipped.return_value = skipped
 
         config = {"dependencies": ["agent_a"]}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result == "agent_a"
-
-    def test_dep_skipped_via_state_manager(self, executor, mock_deps):
-        """One dep skipped (state_manager.is_skipped) returns dep name."""
-        mock_deps.state_manager.is_failed.return_value = False
-        mock_deps.state_manager.is_skipped.return_value = True
-
-        config = {"dependencies": ["agent_a"]}
-        result = executor._check_upstream_health("agent_b", config)
-        assert result == "agent_a"
+        assert executor._check_upstream_health("agent_b", config) == "agent_a"
 
     def test_dep_failed_disposition_cleared_when_upstream_has_output(self, executor, mock_deps):
         """Stale FAILED disposition on upstream with output is cleared — downstream proceeds."""
@@ -323,72 +319,60 @@ class TestHandleDependencySkip:
         assert result.status == ActionStatus.SKIPPED
 
 
-class TestWriteFailedDisposition:
-    """Tests for _write_failed_disposition()."""
+WRITERS = pytest.mark.parametrize(
+    ("writer", "action", "reason", "disposition"),
+    [
+        pytest.param(
+            "_write_failed_disposition", "agent_a", "Some error", DISPOSITION_FAILED, id="failed"
+        ),
+        pytest.param(
+            "_write_skipped_disposition",
+            "agent_b",
+            "Upstream failed",
+            DISPOSITION_SKIPPED,
+            id="skipped",
+        ),
+    ],
+)
 
-    def test_writes_disposition_when_storage_available(self, executor, mock_deps):
-        """Writes disposition when storage backend is available."""
+
+class TestWriteNodeDisposition:
+    """Tests for _write_failed_disposition() and _write_skipped_disposition()."""
+
+    @WRITERS
+    def test_writes_disposition_when_storage_available(
+        self, executor, mock_deps, writer, action, reason, disposition
+    ):
         storage = MagicMock()
         mock_deps.action_runner.storage_backend = storage
 
-        executor._write_failed_disposition("agent_a", "Some error")
+        getattr(executor, writer)(action, reason)
 
         storage.set_disposition.assert_called_once_with(
-            action_name="agent_a",
+            action_name=action,
             record_id=NODE_LEVEL_RECORD_ID,
-            disposition=DISPOSITION_FAILED,
-            reason="Some error",
+            disposition=disposition,
+            reason=reason,
             detail=None,
         )
 
-    def test_logs_warning_on_storage_error(self, executor, mock_deps, caplog):
-        """Logs warning on storage error (doesn't raise)."""
+    @WRITERS
+    def test_storage_error_does_not_raise(
+        self, executor, mock_deps, writer, action, reason, disposition
+    ):
         storage = MagicMock()
         storage.set_disposition.side_effect = RuntimeError("DB error")
         mock_deps.action_runner.storage_backend = storage
 
-        # Should not raise
-        executor._write_failed_disposition("agent_a", "Some error")
+        getattr(executor, writer)(action, reason)
 
-    def test_noops_when_storage_backend_is_none(self, executor, mock_deps):
-        """No-ops when storage backend is None."""
+    @WRITERS
+    def test_noops_when_storage_backend_is_none(
+        self, executor, mock_deps, writer, action, reason, disposition
+    ):
         mock_deps.action_runner.storage_backend = None
 
-        # Should not raise; nothing happens
-        executor._write_failed_disposition("agent_a", "Some error")
-
-
-class TestWriteSkippedDisposition:
-    """Tests for _write_skipped_disposition()."""
-
-    def test_writes_disposition_when_storage_available(self, executor, mock_deps):
-        """Writes DISPOSITION_SKIPPED when storage backend is available."""
-        storage = MagicMock()
-        mock_deps.action_runner.storage_backend = storage
-
-        executor._write_skipped_disposition("agent_b", "Upstream failed")
-
-        storage.set_disposition.assert_called_once_with(
-            action_name="agent_b",
-            record_id=NODE_LEVEL_RECORD_ID,
-            disposition=DISPOSITION_SKIPPED,
-            reason="Upstream failed",
-            detail=None,
-        )
-
-    def test_logs_warning_on_storage_error(self, executor, mock_deps, caplog):
-        """Logs warning on storage error (doesn't raise)."""
-        storage = MagicMock()
-        storage.set_disposition.side_effect = RuntimeError("DB error")
-        mock_deps.action_runner.storage_backend = storage
-
-        executor._write_skipped_disposition("agent_b", "Upstream failed")
-
-    def test_noops_when_storage_backend_is_none(self, executor, mock_deps):
-        """No-ops when storage backend is None."""
-        mock_deps.action_runner.storage_backend = None
-
-        executor._write_skipped_disposition("agent_b", "Upstream failed")
+        getattr(executor, writer)(action, reason)
 
 
 class TestZeroSuccessCircuitBreakerChain:

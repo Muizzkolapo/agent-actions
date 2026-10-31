@@ -87,16 +87,15 @@ def _multi_action_project(tmp_path, monkeypatch):
     return load_workflow(MULTI, paths, root, read_only=True, record_limit=5).action_configs
 
 
-def test_a_cap_does_not_raise_an_action_configured_lower(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("action", "resolved"),
+    [("summarize", 1), ("resummarize", 5)],
+    ids=["configured-lower-is-kept", "configured-higher-is-capped"],
+)
+def test_a_cap_only_lowers_a_configured_limit(tmp_path, monkeypatch, action, resolved):
     configs = _multi_action_project(tmp_path, monkeypatch)
 
-    assert resolve_record_limit(configs["summarize"])[0] == 1, "the cap raised a smaller limit"
-
-
-def test_a_cap_lowers_an_action_configured_higher(tmp_path, monkeypatch):
-    configs = _multi_action_project(tmp_path, monkeypatch)
-
-    assert resolve_record_limit(configs["resummarize"])[0] == 5
+    assert resolve_record_limit(configs[action])[0] == resolved
 
 
 def test_an_action_that_configures_a_limit_still_carries_the_cap(tmp_path, monkeypatch):

@@ -12,32 +12,19 @@ from agent_actions.workflow.runner_file_processing import process_from_storage_b
 class TestMergeRecordsByKey:
     """Tests for merge_records_by_key function."""
 
-    def test_merges_records_with_same_source_guid(self):
-        """Should merge records with the same source_guid."""
+    @pytest.mark.parametrize("key", ["source_guid", "parent_target_id"])
+    def test_merges_records_sharing_a_correlation_key(self, key):
         records = [
-            {"source_guid": "abc123", "field_1": "value_1"},
-            {"source_guid": "abc123", "field_2": "value_2"},
+            {key: "abc123", "field_1": "value_1"},
+            {key: "abc123", "field_2": "value_2"},
         ]
 
         result = merge_records_by_key(records)
 
         assert len(result) == 1
-        assert result[0]["source_guid"] == "abc123"
+        assert result[0][key] == "abc123"
         assert result[0]["field_1"] == "value_1"
         assert result[0]["field_2"] == "value_2"
-
-    def test_merges_records_with_parent_target_id(self):
-        """Should merge records using parent_target_id as correlation key."""
-        records = [
-            {"parent_target_id": "xyz", "answer_1": "A"},
-            {"parent_target_id": "xyz", "answer_2": "B"},
-        ]
-
-        result = merge_records_by_key(records)
-
-        assert len(result) == 1
-        assert result[0]["answer_1"] == "A"
-        assert result[0]["answer_2"] == "B"
 
     def test_keeps_separate_records_with_different_keys(self):
         """Should keep records separate when they have different correlation keys."""

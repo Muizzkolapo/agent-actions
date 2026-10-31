@@ -31,15 +31,10 @@ class TestFileWriterInit:
         assert writer.storage_backend is None
         assert writer.action_name is None
 
-    def test_csv_file_type(self, tmp_path):
-        fp = str(tmp_path / "out.csv")
-        writer = FileWriter(fp)
-        assert writer.file_type == ".csv"
-
-    def test_txt_file_type(self, tmp_path):
-        fp = str(tmp_path / "out.txt")
-        writer = FileWriter(fp)
-        assert writer.file_type == ".txt"
+    @pytest.mark.parametrize("ext", [".csv", ".txt"], ids=["csv", "txt"])
+    def test_file_type_follows_extension(self, tmp_path, ext):
+        writer = FileWriter(str(tmp_path / f"out{ext}"))
+        assert writer.file_type == ext
 
     def test_with_backend_and_action_name(self, tmp_path):
         backend = MagicMock()

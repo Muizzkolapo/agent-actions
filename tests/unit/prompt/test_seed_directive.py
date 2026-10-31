@@ -43,16 +43,18 @@ class TestSeedDirectiveLoads:
 
 
 class TestRemovedDirectivesFailLoud:
-    def test_seed_path_directive_is_rejected(self):
-        """The renamed-away seed_path key must fail loud, not silently load nothing."""
+    @pytest.mark.parametrize(
+        "scope",
+        [
+            pytest.param(
+                {"seed_path": {"exam_syllabus": "$file:refs.json"}}, id="renamed-seed_path"
+            ),
+            pytest.param({"static_data": {"x": "$file:refs.json"}}, id="retired-static_data"),
+        ],
+    )
+    def test_removed_directive_is_rejected(self, scope):
         with pytest.raises(ConfigurationError) as excinfo:
-            normalize_context_scope({"seed_path": {"exam_syllabus": "$file:refs.json"}}, {})
-        assert "seed" in str(excinfo.value)
-
-    def test_static_data_directive_is_rejected(self):
-        """The retired static_data key must fail loud."""
-        with pytest.raises(ConfigurationError) as excinfo:
-            normalize_context_scope({"static_data": {"x": "$file:refs.json"}}, {})
+            normalize_context_scope(scope, {})
         assert "seed" in str(excinfo.value)
 
     def test_seed_directive_is_accepted_and_preserved(self):

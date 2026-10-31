@@ -140,6 +140,13 @@ class _Online(_Mode):
         return answers(self.held())
 
 
+@pytest.fixture
+def modes(tmp_path) -> tuple[_Online, _Batch]:
+    (tmp_path / "online").mkdir()
+    (tmp_path / "batch").mkdir()
+    return _Online(tmp_path / "online"), _Batch(tmp_path / "batch")
+
+
 def _traced(mode: _Mode) -> list[Any]:
     """Whose prompt was rendered for the model: a trace is written as it is."""
     return [trace["source_guid"] for trace in mode.backend.get_prompt_traces(ACTION)]
@@ -250,21 +257,28 @@ def test_every_failure_agac_retry_names_is_one_its_repair_can_select(tmp_path, u
     assert sorted(named) == (["a1"] if unnamed == "no_source_guid" else ["a1", "a3"])
 
 
-@pytest.mark.parametrize("inputs", [answered(), unpreparable()], ids=["answered", "not_preparable"])
+@pytest.mark.parametrize(
+    "inputs, answer",
+    [
+        (answered(), None),
+        (unpreparable(), None),
+        # An answer of several rows was kept, each row given an identity of its own,
+        # while the record it answered still had none, so no run could carry it.
+        (answered(), Answerer({"t-n1": 2})),
+    ],
+    ids=["answered", "not_preparable", "multi_row_answer"],
+)
 def test_batch_holds_and_records_what_online_does_for_a_record_with_no_source_guid(
-    tmp_path, inputs
+    modes, inputs, answer
 ):
     """Both refuse it: a failed row with no identity, and no disposition.
 
     So the action reads complete in both, with the refusal in the run log and the row.
     """
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
 
-    online_held = online.run(inputs)
-    batch_held = batch.run(1, inputs, extra=EXTRA)
+    online_held = online.run(inputs, answer=answer)
+    batch_held = batch.run(1, inputs, answer=answer, extra=EXTRA)
 
     assert (batch.raised[-1], online.raised[-1]) == (None, None)
     assert online_held == ["failed:None", "processed:a1:0@run1"]
@@ -274,15 +288,10 @@ def test_batch_holds_and_records_what_online_does_for_a_record_with_no_source_gu
 
 
 @pytest.mark.parametrize("inputs", [answered(), unpreparable()], ids=["answered", "not_preparable"])
-def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_with(
-    tmp_path, inputs
-):
+def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_with(modes, inputs):
     """Its target_id and what the action above said are all that tell a reader which
     record it was, and the reason names it by that target_id."""
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
 
     online.run(inputs)
     batch.run(1, inputs, extra=EXTRA)
@@ -299,12 +308,9 @@ def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_wi
     )
 
 
-def test_a_record_with_no_source_guid_the_guard_skips_is_stored_alike_in_both_modes(tmp_path):
+def test_a_record_with_no_source_guid_the_guard_skips_is_stored_alike_in_both_modes(modes):
     """Both refuse it at enrichment, and batch's row keeps what it arrived with."""
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
 
     online.run(skipped())
     batch.run(1, skipped(), extra=EXTRA)
@@ -316,15 +322,12 @@ _DELETED = object()
 
 
 @pytest.mark.parametrize("lost", [_DELETED, None, ""], ids=["deleted", "null", "empty"])
-def test_a_record_with_no_source_guid_is_neither_prepared_nor_sent_in_either_mode(tmp_path, lost):
+def test_a_record_with_no_source_guid_is_neither_prepared_nor_sent_in_either_mode(modes, lost):
     """It was refused only once its answer came back: paid for, and the answer thrown
     away. The prompt trace written as its prompt was rendered was the one sign left that
     it had been sent. An edit can drop the field or blank it, and a blank one names no
     record either."""
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
     inputs = answered()
     if lost is not _DELETED:
         inputs[1]["source_guid"] = lost
@@ -335,22 +338,6 @@ def test_a_record_with_no_source_guid_is_neither_prepared_nor_sent_in_either_mod
     assert online.model.asked == ["a1"]
     assert [task["custom_id"] for task in batch.provider.submitted[-1]] == ["t-a1"]
     assert _traced(online) == _traced(batch) == ["a1"]
-
-
-def test_a_record_with_no_source_guid_is_refused_whatever_its_answer_would_have_been(tmp_path):
-    """An answer of several rows was kept, each row given an identity of its own, while
-    the record it answered still had none, so no run could carry it."""
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
-    answer = Answerer({"t-n1": 2})
-
-    online_held = online.run(answered(), answer=answer)
-    batch_held = batch.run(1, answered(), answer=answer, extra=EXTRA)
-
-    assert online_held == batch_held == ["failed:None", "processed:a1:0@run1"]
-    assert _recorded(online) == _recorded(batch) == {"a1": "success"}
 
 
 def test_a_record_with_no_source_guid_does_not_stop_a_batch_at_its_preflight(tmp_path):
@@ -404,14 +391,11 @@ def test_the_preflight_passes_over_a_record_with_no_source_guid_and_one_that_fai
     ],
     ids=["filtered", "skipped"],
 )
-def test_the_guard_decides_a_record_with_no_source_guid_before_it_is_refused(tmp_path, guard, held):
+def test_the_guard_decides_a_record_with_no_source_guid_before_it_is_refused(modes, guard, held):
     """Online's guard runs above its strategy and batch's inside preparation; the refusal
     comes after both. A record the guard filters leaves nothing, and one it skips is
     refused at enrichment, in both modes."""
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
     extra = {**guard, **PREPARED}
 
     online_held = online.run(skipped(), extra=extra)
@@ -422,15 +406,12 @@ def test_the_guard_decides_a_record_with_no_source_guid_before_it_is_refused(tmp
 
 
 def test_a_batch_none_of_whose_records_has_a_source_guid_fails_the_action_as_online_does(
-    tmp_path,
+    modes,
 ):
     """Recorded nowhere, its records leave no disposition to read the action failed by.
     Refused before anything is sent, the run sends nothing and raises online's breaker
     once the file is written."""
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
     inputs = [nameless(topic="dbt")]
 
     online.run(inputs)
@@ -443,7 +424,7 @@ def test_a_batch_none_of_whose_records_has_a_source_guid_fails_the_action_as_onl
 
 
 def test_collecting_such_records_from_an_earlier_release_fails_the_action_as_online_does(
-    tmp_path,
+    modes,
 ):
     """Sent by an earlier release, they left no disposition either, so the action read
     complete and the action below went on. Online's breaker stops it there.
@@ -451,10 +432,7 @@ def test_collecting_such_records_from_an_earlier_release_fails_the_action_as_onl
     Raised once the file is written, as a batch's other halts are, and the executor
     records the action failed on it rather than leaving it to re-poll a collected batch.
     """
-    (tmp_path / "online").mkdir()
-    (tmp_path / "batch").mkdir()
-    online = _Online(tmp_path / "online")
-    batch = _Batch(tmp_path / "batch")
+    online, batch = modes
     inputs = [nameless(topic="dbt")]
 
     online.run(inputs)

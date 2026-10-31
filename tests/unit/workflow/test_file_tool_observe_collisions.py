@@ -5,6 +5,8 @@ Enrichment already warns on collision and promises qualified keys; the tool
 input must honor that promise so every observed namespace's value is delivered.
 """
 
+import pytest
+
 from agent_actions.prompt.context.scope_application import (
     apply_context_scope_for_records,
 )
@@ -40,41 +42,57 @@ class TestCollidingNamespacesQualify:
         assert business["gen_code_3.language"] == "rust"
         assert "code" not in business  # a bare key would hide two of three values
 
-    def test_specific_colliding_refs_qualify(self):
-        record = {"content": {"review_a": {"title": "A"}, "review_b": {"title": "B"}}}
-        cs = {"observe": ["review_a.title", "review_b.title"]}
+    @pytest.mark.parametrize(
+        ("content", "observe", "expected"),
+        [
+            pytest.param(
+                {"review_a": {"title": "A"}, "review_b": {"title": "B"}},
+                ["review_a.title", "review_b.title"],
+                {"review_a.title": "A", "review_b.title": "B"},
+                id="specific_colliding_refs",
+            ),
+            # Qualification follows the declared refs, not which upstreams produced
+            # output, so tool code can rely on stable key shapes.
+            pytest.param(
+                {"gen_code_1": {"code": "V1"}},
+                ["gen_code_1.*", "gen_code_2.*"],
+                {"gen_code_1.code": "V1"},
+                id="declared_but_absent_wildcard_namespace",
+            ),
+        ],
+    )
+    def test_declared_collisions_qualify(self, content, observe, expected):
+        record = {"content": content}
+        cs = {"observe": observe}
 
-        business = extract_tool_input(_enriched(record, cs), cs)
-
-        assert business == {"review_a.title": "A", "review_b.title": "B"}
-
-    def test_declared_but_absent_wildcard_namespace_still_qualifies(self):
-        """Qualification follows the declared refs, not which upstreams produced
-        output — tool code must be able to rely on stable key shapes."""
-        record = {"content": {"gen_code_1": {"code": "V1"}}}
-        cs = {"observe": ["gen_code_1.*", "gen_code_2.*"]}
-
-        business = extract_tool_input(_enriched(record, cs), cs)
-
-        assert business == {"gen_code_1.code": "V1"}
+        assert extract_tool_input(_enriched(record, cs), cs) == expected
 
 
 class TestNonCollidingStayBare:
-    def test_single_wildcard_namespace_bare_keys(self):
-        record = {"content": {"extract": {"q": "Q1", "a": "A1"}}}
-        cs = {"observe": ["extract.*"]}
+    @pytest.mark.parametrize(
+        ("content", "observe", "expected"),
+        [
+            pytest.param(
+                {"extract": {"q": "Q1", "a": "A1"}},
+                ["extract.*"],
+                {"q": "Q1", "a": "A1"},
+                id="single_wildcard_namespace_bare",
+            ),
+            # Whether `extract.*` expands onto `category` is a property of the data, so
+            # the only key shape stable across runs qualifies the explicit ref.
+            pytest.param(
+                {"extract": {"q": "Q1"}, "classify": {"category": "FAQ", "x": 1}},
+                ["extract.*", "classify.category"],
+                {"q": "Q1", "classify.category": "FAQ"},
+                id="explicit_ref_beside_wildcard_qualified",
+            ),
+        ],
+    )
+    def test_observed_keys_follow_the_declared_refs(self, content, observe, expected):
+        record = {"content": content}
+        cs = {"observe": observe}
 
-        assert extract_tool_input(_enriched(record, cs), cs) == {"q": "Q1", "a": "A1"}
-
-    def test_explicit_ref_is_qualified_when_a_wildcard_could_reach_it(self):
-        """Whether `extract.*` expands onto `category` is a property of the data,
-        so the only key shape stable across runs qualifies the explicit ref."""
-        record = {"content": {"extract": {"q": "Q1"}, "classify": {"category": "FAQ", "x": 1}}}
-        cs = {"observe": ["extract.*", "classify.category"]}
-
-        business = extract_tool_input(_enriched(record, cs), cs)
-
-        assert business == {"q": "Q1", "classify.category": "FAQ"}
+        assert extract_tool_input(_enriched(record, cs), cs) == expected
 
     def test_no_observe_flattens_all_namespaces(self):
         record = {"content": {"extract": {"q": "Q1"}, "classify": {"category": "FAQ"}}}

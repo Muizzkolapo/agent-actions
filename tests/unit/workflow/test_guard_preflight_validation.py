@@ -18,26 +18,18 @@ def parser():
 class TestFindComparisonNodes:
     """_find_comparison_nodes() recursively collects ComparisonNode instances."""
 
-    def test_simple_comparison(self, parser):
-        """Single comparison returns one node."""
-        result = parser.parse('status == "active"')
+    @pytest.mark.parametrize(
+        ("clause", "count"),
+        [
+            pytest.param('status == "active"', 1, id="simple_comparison"),
+            pytest.param('a == "x" AND b >= 5', 2, id="and_of_two_comparisons"),
+            pytest.param("passes_filter", 0, id="bare_truthy_check"),
+        ],
+    )
+    def test_counts_comparison_nodes(self, parser, clause, count):
+        result = parser.parse(clause)
         assert result.success
-        nodes = _find_comparison_nodes(result.ast.root)
-        assert len(nodes) == 1
-
-    def test_logical_and_with_two_comparisons(self, parser):
-        """AND expression returns both comparisons."""
-        result = parser.parse('a == "x" AND b >= 5')
-        assert result.success
-        nodes = _find_comparison_nodes(result.ast.root)
-        assert len(nodes) == 2
-
-    def test_bare_truthy_check_returns_empty(self, parser):
-        """Standalone field (no comparison) returns no ComparisonNodes."""
-        result = parser.parse("passes_filter")
-        assert result.success
-        nodes = _find_comparison_nodes(result.ast.root)
-        assert len(nodes) == 0
+        assert len(_find_comparison_nodes(result.ast.root)) == count
 
 
 class TestCheckBareIdentifierRhs:
@@ -51,24 +43,17 @@ class TestCheckBareIdentifierRhs:
         assert '"approved"' in errors[0]
         assert "quote it" in errors[0].lower()
 
-    def test_quoted_string_passes(self, parser):
-        """'status == \"approved\"' should not flag anything."""
-        clause = 'status == "approved"'
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            pytest.param('status == "approved"', id="quoted_string"),
+            pytest.param("score >= 6", id="number"),
+            pytest.param("flag == true", id="boolean_keyword"),
+        ],
+    )
+    def test_a_literal_rhs_is_not_flagged(self, parser, clause):
         result = parser.parse(clause)
-        errors = _check_bare_identifier_rhs(result.ast.root, clause, "test_action")
-        assert errors == []
-
-    def test_number_rhs_passes(self, parser):
-        """'score >= 6' should not flag anything."""
-        result = parser.parse("score >= 6")
-        errors = _check_bare_identifier_rhs(result.ast.root, "score >= 6", "test_action")
-        assert errors == []
-
-    def test_boolean_rhs_passes(self, parser):
-        """'flag == true' should not flag — true is a keyword (LiteralNode)."""
-        result = parser.parse("flag == true")
-        errors = _check_bare_identifier_rhs(result.ast.root, "flag == true", "test_action")
-        assert errors == []
+        assert _check_bare_identifier_rhs(result.ast.root, clause, "test_action") == []
 
     def test_nested_in_logical_expression(self, parser):
         """Bare identifier nested inside AND/OR is still detected."""

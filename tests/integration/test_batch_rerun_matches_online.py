@@ -1206,6 +1206,12 @@ CARRIED_AS_DONE_AND_TURNED_AWAY = {
     "one_skipped_beside_one_to_send": ([_PASSES, [*_NOW_FILTERED, rec("a3", keep=True)]], SKIP),
     "one_skipped_that_then_passes_again": ([_PASSES, _NOW_FILTERED, _PASSES], SKIP),
     "a_new_input_skipped_that_then_passes": ([_NOW_FILTERED, _PASSES], SKIP),
+    # Preparation puts no blocked record to the guard, so judging one must not turn it
+    # away: prepared again, its answer would be replaced by a cascade tombstone.
+    "one_blocked_above_keeps_its_answer": (
+        [_PASSES, [{**rec("a1", keep=True), "_state": "failed"}, rec("a2", keep=False)]],
+        FILTER,
+    ),
 }
 
 
@@ -1269,16 +1275,6 @@ def test_a_carried_input_the_guard_still_passes_is_neither_prepared_nor_sent_aga
     assert held == ["processed:a1:0@run1"]
     assert batch.sent[1] == []
     assert batch.backend.get_prompt_traces(ACTION) == traced
-
-
-def test_a_carried_input_the_action_above_blocked_keeps_its_answer_as_online(tmp_path):
-    """Preparation puts no blocked record to the guard, so judging one must not turn it
-    away: prepared again, its answer would be replaced by a cascade tombstone."""
-    blocked = {**rec("a1", keep=True), "_state": "failed"}
-
-    for run in compare(tmp_path, [_PASSES, [blocked, rec("a2", keep=False)]], FILTER):
-        assert run["batch"] == run["online"], f"run {run['run']}"
-        assert run["batch_sent"] == run["online_sent"], f"run {run['run']}"
 
 
 BLOCKED_AND_TURNED_AWAY = {"filter": FILTER, "skip": SKIP}

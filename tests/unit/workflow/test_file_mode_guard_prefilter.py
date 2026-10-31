@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.input.preprocessing.filtering.evaluator import GuardResult
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.processing.unified import UnifiedProcessor
@@ -52,14 +54,24 @@ class TestPrefilterByGuard:
         assert passing == data
         assert original_passing == raw
 
-    def test_filter_removes_failing_records(self):
-        """behavior: filter -> failing records excluded from both lists."""
-        data = [
-            {"content": {"score": 90}},
-            {"content": {"score": 40}},
-            {"content": {"score": 85}},
-        ]
-        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
+    @pytest.mark.parametrize(
+        ("scores", "behavior", "passing_scores", "skipped_scores", "filtered_scores"),
+        [
+            pytest.param([90, 40, 85], "filter", [90, 85], [], [40], id="filter-mixed"),
+            pytest.param([90, 40, 85], "skip", [90, 85], [40], [], id="skip-mixed"),
+            pytest.param([90, 95], "filter", [90, 95], [], [], id="all-pass"),
+            pytest.param([10, 20], "filter", [], [], [10, 20], id="all-filtered"),
+            pytest.param([10, 20], "skip", [], [10, 20], [], id="all-skipped"),
+            pytest.param([90, 40], None, [90], [], [40], id="default-is-filter"),
+        ],
+    )
+    def test_failing_records_go_to_the_bucket_their_behavior_names(
+        self, scores, behavior, passing_scores, skipped_scores, filtered_scores
+    ):
+        data = [{"content": {"score": score}} for score in scores]
+        guard = {"clause": "score >= 80"}
+        if behavior is not None:
+            guard["behavior"] = behavior
         evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
 
         with patch(
@@ -67,92 +79,13 @@ class TestPrefilterByGuard:
             return_value=evaluator,
         ):
             passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
+                data, {"guard": guard}, "test"
             )
 
-        assert len(passing) == 2
-        assert passing[0]["content"]["score"] == 90
-        assert passing[1]["content"]["score"] == 85
-        assert skipped == []
+        assert [r["content"]["score"] for r in passing] == passing_scores
+        assert [r["content"]["score"] for r in skipped] == skipped_scores
+        assert [r["content"]["score"] for r in filtered] == filtered_scores
         assert original_passing == passing
-        assert len(filtered) == 1
-        assert filtered[0]["content"]["score"] == 40
-
-    def test_skip_preserves_failing_records(self):
-        """behavior: skip -> failing records in skipped list."""
-        data = [
-            {"content": {"score": 90}},
-            {"content": {"score": 40}},
-            {"content": {"score": 85}},
-        ]
-        config = {"guard": {"clause": "score >= 80", "behavior": "skip"}}
-        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
-            return_value=evaluator,
-        ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
-            )
-
-        assert len(passing) == 2
-        assert len(skipped) == 1
-        assert skipped[0]["content"]["score"] == 40
-
-    def test_all_pass(self):
-        """All records pass guard -> all in passing, none skipped."""
-        data = [{"content": {"score": 90}}, {"content": {"score": 95}}]
-        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
-        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
-            return_value=evaluator,
-        ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
-            )
-
-        assert len(passing) == 2
-        assert skipped == []
-
-    def test_all_filtered(self):
-        """All records fail with filter -> both lists empty."""
-        data = [{"content": {"score": 10}}, {"content": {"score": 20}}]
-        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
-        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
-            return_value=evaluator,
-        ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
-            )
-
-        assert passing == []
-        assert skipped == []
-        assert original_passing == []
-        assert len(filtered) == 2
-
-    def test_all_skipped(self):
-        """All records fail with skip -> all in skipped."""
-        data = [{"content": {"score": 10}}, {"content": {"score": 20}}]
-        config = {"guard": {"clause": "score >= 80", "behavior": "skip"}}
-        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
-            return_value=evaluator,
-        ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
-            )
-
-        assert passing == []
-        assert len(skipped) == 2
-        assert original_passing == []
 
     def test_does_not_mutate_input(self):
         """Pre-filter must not mutate the input list."""
@@ -171,26 +104,6 @@ class TestPrefilterByGuard:
             prefilter_by_guard(data, config, "test")
 
         assert len(data) == original_len
-
-    def test_default_behavior_is_filter(self):
-        """When behavior is not specified, default is filter."""
-        data = [
-            {"content": {"score": 90}},
-            {"content": {"score": 40}},
-        ]
-        config = {"guard": {"clause": "score >= 80"}}
-        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
-            return_value=evaluator,
-        ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
-            )
-
-        assert len(passing) == 1
-        assert skipped == []
 
     # -- original_data preservation tests --
 
@@ -272,9 +185,15 @@ class TestPrefilterByGuard:
         assert skipped == []
         assert original_passing == []
 
-    def test_non_dict_content(self):
-        """Non-dict content yields empty eval_item — guard cannot match."""
-        data = [{"content": "plain-text-value"}]
+    @pytest.mark.parametrize(
+        "record",
+        [
+            pytest.param({"content": "plain-text-value"}, id="non-dict-content"),
+            pytest.param({"score": 90, "name": "Alice"}, id="missing-content-key"),
+        ],
+    )
+    def test_a_record_without_dict_content_cannot_match_the_guard(self, record):
+        """No dict content yields an empty eval_item, which no guard can match."""
         config = {"guard": {"clause": "always_true", "behavior": "filter"}}
         evaluator = _make_evaluator(lambda item: bool(item))
 
@@ -283,23 +202,7 @@ class TestPrefilterByGuard:
             return_value=evaluator,
         ):
             passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
-            )
-
-        assert len(passing) == 0
-
-    def test_missing_content_key(self):
-        """Item without content key yields empty eval_item — guard cannot match."""
-        data = [{"score": 90, "name": "Alice"}]
-        config = {"guard": {"clause": "score >= 80", "behavior": "filter"}}
-        evaluator = _make_evaluator(lambda item: item.get("score", 0) >= 80)
-
-        with patch(
-            "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
-            return_value=evaluator,
-        ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
-                data, config, "test"
+                [record], config, "test"
             )
 
         assert len(passing) == 0
@@ -385,11 +288,23 @@ class TestPrefilterByGuard:
         assert skipped == []
         assert filtered == []
 
-    def test_a_raising_udf_is_skipped_under_passthrough_false_for_real(self):
+    @pytest.mark.parametrize(
+        ("passthrough_config", "n_passing", "n_skipped"),
+        [
+            pytest.param(
+                {"conditional_clause_passthrough_on_error": False},
+                0,
+                1,
+                id="passthrough-false-skips",
+            ),
+            pytest.param({}, 1, 0, id="passthrough-default-passes"),
+        ],
+    )
+    def test_a_raising_udf_follows_passthrough_on_error_for_real(
+        self, passthrough_config, n_passing, n_skipped
+    ):
         """FILE-mode threads conditional_clause_passthrough_on_error to the real
-        evaluator, not just a mock standing in for it (1315): a raising UDF
-        with passthrough_on_error: false must be skipped by the real
-        GuardEvaluator, no evaluator.evaluate() call ever stubbed out."""
+        GuardEvaluator, with no evaluator.evaluate() call stubbed out (1315)."""
         from agent_actions.utils.udf_management import registry as registry_module
         from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 
@@ -401,41 +316,14 @@ class TestPrefilterByGuard:
         registry_module.udf_tool(raises_for_file_mode_1315)
         try:
             data = [{"content": {"val": "x"}}]
-            config = {
-                "conditional_clause": "raises_for_file_mode_1315",
-                "conditional_clause_passthrough_on_error": False,
-            }
+            config = {"conditional_clause": "raises_for_file_mode_1315", **passthrough_config}
             passing, skipped, _, filtered, failed = prefilter_by_guard(data, config, "test")
-            assert passing == []
-            assert len(skipped) == 1
+            assert len(passing) == n_passing
+            assert len(skipped) == n_skipped
             assert filtered == []
             assert failed == []
         finally:
             UDF_REGISTRY.pop("raises_for_file_mode_1315", None)
-            registry_module._registered_modules.intersection_update(modules_before)
-
-    def test_a_raising_udf_still_passes_under_passthrough_true_for_real(self):
-        """Same real-UDF path as above, default passthrough_on_error: true
-        (today's unchanged default) still passes the record."""
-        from agent_actions.utils.udf_management import registry as registry_module
-        from agent_actions.utils.udf_management.registry import UDF_REGISTRY
-
-        modules_before = set(registry_module._registered_modules)
-
-        def raises_for_file_mode_1315_default(data):
-            raise RuntimeError("boom")
-
-        registry_module.udf_tool(raises_for_file_mode_1315_default)
-        try:
-            data = [{"content": {"val": "x"}}]
-            config = {"conditional_clause": "raises_for_file_mode_1315_default"}
-            passing, skipped, _, filtered, failed = prefilter_by_guard(data, config, "test")
-            assert len(passing) == 1
-            assert skipped == []
-            assert filtered == []
-            assert failed == []
-        finally:
-            UDF_REGISTRY.pop("raises_for_file_mode_1315_default", None)
             registry_module._registered_modules.intersection_update(modules_before)
 
 

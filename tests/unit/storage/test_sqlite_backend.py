@@ -362,40 +362,32 @@ class TestValidation:
         yield backend
         backend.close()
 
-    def test_path_traversal_rejected_in_write_target(self, backend):
-        """Test that path traversal components are rejected."""
-        with pytest.raises(ValueError, match="Path traversal"):
-            backend.write_target("node_1", "../../etc/passwd", [{}])
+    @pytest.mark.parametrize(
+        ("action", "path", "match"),
+        [
+            pytest.param("node_1", "../../etc/passwd", "Path traversal", id="traversal-path"),
+            pytest.param("../evil", "file.json", "Path traversal", id="traversal-action"),
+            pytest.param("node_1", "   ", "Empty", id="whitespace-only-path"),
+            pytest.param(" ", "file.json", "Empty", id="whitespace-only-action"),
+            pytest.param("node_1", "file;name.json", "Invalid characters", id="invalid-character"),
+        ],
+    )
+    def test_write_target_rejects_unsafe_name(self, backend, action, path, match):
+        with pytest.raises(ValueError, match=match):
+            backend.write_target(action, path, [{}])
 
-    def test_path_traversal_rejected_in_action_name(self, backend):
-        """Test that path traversal is also rejected in action_name."""
-        with pytest.raises(ValueError, match="Path traversal"):
-            backend.write_target("../evil", "file.json", [{}])
-
-    def test_path_with_dots_but_no_traversal_allowed(self, backend):
-        """Test that paths with dots (but not ..) are still valid."""
-        backend.write_target("node_1", "file.v2.json", [{"_state": "active", "id": 1}])
-        assert backend.read_target("node_1", "file.v2.json") == [{"_state": "active", "id": 1}]
-
-    def test_relative_path_with_spaces_allowed(self, backend):
-        """Test that filenames with spaces are accepted."""
-        backend.write_target("node_1", "my file.json", [{"_state": "active", "id": 1}])
-        assert backend.read_target("node_1", "my file.json") == [{"_state": "active", "id": 1}]
-
-    def test_whitespace_only_path_rejected(self, backend):
-        """Test that whitespace-only relative_path is rejected."""
-        with pytest.raises(ValueError, match="Empty"):
-            backend.write_target("node_1", "   ", [{}])
-
-    def test_whitespace_only_action_name_rejected(self, backend):
-        """Test that whitespace-only action_name is rejected."""
-        with pytest.raises(ValueError, match="Empty"):
-            backend.write_target(" ", "file.json", [{}])
-
-    def test_leading_trailing_spaces_in_path_allowed(self, backend):
-        """Test that leading/trailing spaces in paths are accepted."""
-        backend.write_target("node_1", " file.json ", [{"_state": "active", "id": 1}])
-        assert backend.read_target("node_1", " file.json ") == [{"_state": "active", "id": 1}]
+    @pytest.mark.parametrize(
+        ("action", "path"),
+        [
+            pytest.param("node_1", "file.v2.json", id="dots-without-traversal"),
+            pytest.param("node_1", "my file.json", id="space-in-path"),
+            pytest.param("node_1", " file.json ", id="leading-trailing-spaces-in-path"),
+            pytest.param("node 1", "file.json", id="space-in-action"),
+        ],
+    )
+    def test_write_target_accepts_safe_name(self, backend, action, path):
+        backend.write_target(action, path, [{"_state": "active", "id": 1}])
+        assert backend.read_target(action, path) == [{"_state": "active", "id": 1}]
 
     def test_a_file_is_listed_under_the_name_stored_path_gives(self, backend):
         """A caller comparing its own names with the listing goes through it."""
@@ -409,16 +401,6 @@ class TestValidation:
     def test_a_name_the_store_refuses_is_given_back_unchanged(self, backend):
         assert backend.stored_path("../x.json") == "../x.json"
 
-    def test_space_in_action_name_allowed(self, backend):
-        """Test that spaces in action_name are accepted."""
-        backend.write_target("node 1", "file.json", [{"_state": "active", "id": 1}])
-        assert backend.read_target("node 1", "file.json") == [{"_state": "active", "id": 1}]
-
-    def test_invalid_character_rejected(self, backend):
-        """Test that characters outside the allowlist are rejected."""
-        with pytest.raises(ValueError, match="Invalid characters"):
-            backend.write_target("node_1", "file;name.json", [{}])
-
 
 class TestWriteSourceDropGuard:
     """Tests for write_source raising on silently dropped records."""
@@ -431,18 +413,20 @@ class TestWriteSourceDropGuard:
         yield backend
         backend.close()
 
-    def test_all_records_missing_source_guid_raises(self, backend):
-        """write_source raises when every record lacks source_guid."""
-        data = [{"content": "no_guid"}, {"content": "also_no_guid"}]
-        with pytest.raises(DataValidationError, match="no source_guid"):
-            backend.write_source("batch_001", data)
-
-    def test_mix_valid_and_invalid_records_raises(self, backend):
-        """A guid-less record in a mixed batch fails loud — no silent partial drop."""
-        data = [
-            {"source_guid": "g1", "content": "valid"},
-            {"content": "no_guid"},
-        ]
+    @pytest.mark.parametrize(
+        "data",
+        [
+            pytest.param(
+                [{"content": "no_guid"}, {"content": "also_no_guid"}], id="all-missing-guid"
+            ),
+            # A guid-less record in a mixed batch fails loud — no silent partial drop.
+            pytest.param(
+                [{"source_guid": "g1", "content": "valid"}, {"content": "no_guid"}],
+                id="mixed-valid-and-missing",
+            ),
+        ],
+    )
+    def test_record_without_source_guid_raises(self, backend, data):
         with pytest.raises(DataValidationError, match="no source_guid"):
             backend.write_source("batch_001", data)
 
@@ -477,9 +461,17 @@ class TestSaveCheckpointRecordsDropGuard:
         yield backend
         backend.close()
 
-    def test_all_records_missing_source_guid_raises(self, backend):
-        """save_checkpoint_records raises when every record lacks source_guid."""
-        records = [{"content": "no_guid"}, {"content": "also_no_guid"}]
+    @pytest.mark.parametrize(
+        "records",
+        [
+            pytest.param(
+                [{"content": "no_guid"}, {"content": "also_no_guid"}], id="all-missing-guid"
+            ),
+            # A blank-string source_guid is an upstream invariant violation, not a routine skip.
+            pytest.param([{"source_guid": "", "content": "blank_guid"}], id="blank-guid"),
+        ],
+    )
+    def test_record_without_source_guid_raises(self, backend, records):
         with pytest.raises(DataValidationError, match="no source_guid"):
             backend.save_checkpoint_records("action_a", "output.json", records)
 
@@ -493,12 +485,6 @@ class TestSaveCheckpointRecordsDropGuard:
             backend.save_checkpoint_records("action_a", "output.json", records)
         assert exc_info.value.context["record_index"] == 1
         assert backend.read_checkpoint_records("action_a", "output.json") == []
-
-    def test_blank_source_guid_raises(self, backend):
-        """A blank-string source_guid is an upstream invariant violation, not a routine skip."""
-        records = [{"source_guid": "", "content": "blank_guid"}]
-        with pytest.raises(DataValidationError, match="no source_guid"):
-            backend.save_checkpoint_records("action_a", "output.json", records)
 
     def test_two_blank_guids_would_have_collapsed_now_raise(self, backend):
         """The exact bug: two blank-guid records would collide on UNIQUE + INSERT OR REPLACE."""
@@ -708,41 +694,48 @@ class TestSetDispositionRecordIdValidation:
         yield backend
         backend.close()
 
-    def test_path_traversal_record_id_rejected(self, backend):
-        """set_disposition rejects path-traversal record_id."""
-        with pytest.raises(ValueError, match="Path traversal"):
-            backend.set_disposition("node_1", "../../etc/passwd", "filtered")
-
-    def test_empty_record_id_rejected(self, backend):
-        """set_disposition rejects empty record_id."""
-        with pytest.raises(ValueError, match="Empty"):
-            backend.set_disposition("node_1", "", "filtered")
-
-    def test_invalid_chars_in_record_id_rejected(self, backend):
-        """set_disposition rejects record_id with invalid characters."""
-        with pytest.raises(ValueError, match="Invalid characters"):
-            backend.set_disposition("node_1", "rec;id", "filtered")
+    @pytest.mark.parametrize(
+        ("call", "match"),
+        [
+            pytest.param(
+                lambda b: b.set_disposition("node_1", "../../etc/passwd", "filtered"),
+                "Path traversal",
+                id="set-traversal",
+            ),
+            pytest.param(
+                lambda b: b.set_disposition("node_1", "", "filtered"), "Empty", id="set-empty"
+            ),
+            pytest.param(
+                lambda b: b.set_disposition("node_1", "rec;id", "filtered"),
+                "Invalid characters",
+                id="set-invalid-chars",
+            ),
+            pytest.param(
+                lambda b: b.get_disposition("node_1", record_id="../../etc/passwd"),
+                "Path traversal",
+                id="get-filter",
+            ),
+            pytest.param(
+                lambda b: b.has_disposition("node_1", "filtered", record_id="rec;id"),
+                "Invalid characters",
+                id="has-filter",
+            ),
+            pytest.param(
+                lambda b: b.clear_disposition("node_1", record_id="../../etc/passwd"),
+                "Path traversal",
+                id="clear-filter",
+            ),
+        ],
+    )
+    def test_invalid_record_id_rejected(self, backend, call, match):
+        with pytest.raises(ValueError, match=match):
+            call(backend)
 
     def test_uuid_style_record_id_accepted(self, backend):
         """set_disposition accepts UUID-style record_id (hyphens allowed)."""
         backend.set_disposition("node_1", "550e8400-e29b-41d4-a716-446655440000", "filtered")
         results = backend.get_disposition("node_1")
         assert len(results) == 1
-
-    def test_get_disposition_validates_record_id(self, backend):
-        """get_disposition rejects invalid record_id filter."""
-        with pytest.raises(ValueError, match="Path traversal"):
-            backend.get_disposition("node_1", record_id="../../etc/passwd")
-
-    def test_has_disposition_validates_record_id(self, backend):
-        """has_disposition rejects invalid record_id filter."""
-        with pytest.raises(ValueError, match="Invalid characters"):
-            backend.has_disposition("node_1", "filtered", record_id="rec;id")
-
-    def test_clear_disposition_validates_record_id(self, backend):
-        """clear_disposition rejects invalid record_id filter."""
-        with pytest.raises(ValueError, match="Path traversal"):
-            backend.clear_disposition("node_1", record_id="../../etc/passwd")
 
 
 class TestCloseThreadSafety:

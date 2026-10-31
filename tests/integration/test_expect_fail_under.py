@@ -106,8 +106,16 @@ def gate(tmp_path, monkeypatch):
     return _gate
 
 
-def test_a_pass_rate_above_the_threshold_exits_zero(gate):
-    result = gate([True, True, False], "--fail-under", "50")
+@pytest.mark.parametrize(
+    ("verdicts", "threshold"),
+    [
+        pytest.param([True, True, False], "50", id="above"),
+        pytest.param([True, False], "50", id="exactly-at-is-not-under"),
+        pytest.param([False, False], "0", id="zero-passes-whenever-anything-ran"),
+    ],
+)
+def test_a_pass_rate_not_under_the_threshold_exits_zero(gate, verdicts, threshold):
+    result = gate(verdicts, "--fail-under", threshold)
     assert result.exit_code == 0, result.output
 
 
@@ -115,11 +123,6 @@ def test_a_pass_rate_below_the_threshold_exits_nonzero(gate):
     result = gate([True, False, False], "--fail-under", "50")
     assert result.exit_code != 0
     assert "summarize" in result.output
-
-
-def test_a_pass_rate_exactly_at_the_threshold_is_not_under_it(gate):
-    result = gate([True, False], "--fail-under", "50")
-    assert result.exit_code == 0, result.output
 
 
 def test_the_failure_names_the_rate_that_fell_short(gate):
@@ -142,10 +145,6 @@ def test_without_the_flag_an_empty_store_is_not_an_error(gate):
 def test_without_the_flag_a_failing_rate_still_exits_zero(gate):
     """The report annotates unless asked to gate."""
     assert gate([False, False]).exit_code == 0
-
-
-def test_a_threshold_of_zero_passes_whenever_anything_ran(gate):
-    assert gate([False, False], "--fail-under", "0").exit_code == 0
 
 
 def test_a_threshold_above_a_hundred_is_refused(gate):

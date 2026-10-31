@@ -62,27 +62,22 @@ def event_logger(mock_services, mock_config):
 
 
 class TestLogWorkflowStart:
-    def test_sequential_mode(self, event_logger, mock_config):
+    @pytest.mark.parametrize(
+        ("is_async", "mode"),
+        [(False, "sequential"), (True, "async")],
+        ids=["sequential", "async"],
+    )
+    def test_start_event_names_the_execution_mode(self, event_logger, is_async, mode):
         mgr = MagicMock()
         mgr.get_context.return_value = "abcd1234"
         with patch(FIRE_EVENT_PATH) as mock_fire, patch(GET_MANAGER_PATH, return_value=mgr):
-            event_logger.log_workflow_start(datetime.now(), is_async=False)
+            event_logger.log_workflow_start(datetime.now(), is_async=is_async)
 
         event = mock_fire.call_args[0][0]
         assert isinstance(event, WorkflowStartEvent)
         assert event.workflow_name == "test_workflow"
-        assert event.execution_mode == "sequential"
+        assert event.execution_mode == mode
         assert event.action_count == 2
-
-    def test_async_mode(self, event_logger):
-        mgr = MagicMock()
-        mgr.get_context.return_value = "abcd1234"
-        with patch(FIRE_EVENT_PATH) as mock_fire, patch(GET_MANAGER_PATH, return_value=mgr):
-            event_logger.log_workflow_start(datetime.now(), is_async=True)
-
-        event = mock_fire.call_args[0][0]
-        assert isinstance(event, WorkflowStartEvent)
-        assert event.execution_mode == "async"
 
 
 # ── fire_action_start ───────────────────────────────────────────────────

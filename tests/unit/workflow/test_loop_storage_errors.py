@@ -25,11 +25,33 @@ def loop_manager():
 
 
 class TestLoadFromStorageBackendErrors:
-    def test_operational_error_from_list_target_files_propagates(self, loop_manager):
-        loop_manager.storage_backend.list_target_files.side_effect = sqlite3.OperationalError(
-            "database is locked"
-        )
-        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
+    @pytest.mark.parametrize(
+        ("method", "error", "match"),
+        [
+            pytest.param(
+                "list_target_files",
+                sqlite3.OperationalError("database is locked"),
+                "database is locked",
+                id="list_locked",
+            ),
+            pytest.param(
+                "read_target",
+                sqlite3.OperationalError("database is locked"),
+                "database is locked",
+                id="read_locked",
+            ),
+            pytest.param(
+                "read_target",
+                json.JSONDecodeError("Expecting value", "", 0),
+                None,
+                id="read_bad_json",
+            ),
+        ],
+    )
+    def test_a_storage_error_propagates(self, loop_manager, method, error, match):
+        loop_manager.storage_backend.list_target_files.return_value = ["file_a.json"]
+        getattr(loop_manager.storage_backend, method).side_effect = error
+        with pytest.raises(type(error), match=match):
             loop_manager._load_from_storage_backend("version_agent_1")
 
     def test_file_not_found_for_single_file_skips_and_continues(self, loop_manager):
@@ -43,22 +65,6 @@ class TestLoadFromStorageBackendErrors:
         assert outputs[0]["id"] == "rec1"
         assert "file_b.json" in filenames
         assert "file_a.json" not in filenames
-
-    def test_operational_error_from_read_target_propagates(self, loop_manager):
-        loop_manager.storage_backend.list_target_files.return_value = ["file_a.json"]
-        loop_manager.storage_backend.read_target.side_effect = sqlite3.OperationalError(
-            "database is locked"
-        )
-        with pytest.raises(sqlite3.OperationalError, match="database is locked"):
-            loop_manager._load_from_storage_backend("version_agent_1")
-
-    def test_json_decode_error_from_read_target_propagates(self, loop_manager):
-        loop_manager.storage_backend.list_target_files.return_value = ["file_a.json"]
-        loop_manager.storage_backend.read_target.side_effect = json.JSONDecodeError(
-            "Expecting value", "", 0
-        )
-        with pytest.raises(json.JSONDecodeError):
-            loop_manager._load_from_storage_backend("version_agent_1")
 
     def test_no_storage_backend_returns_empty(self, loop_manager):
         loop_manager.storage_backend = None

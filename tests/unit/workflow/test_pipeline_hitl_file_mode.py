@@ -257,13 +257,55 @@ def test_file_mode_hitl_sets_identity_source_mapping():
     assert result.source_mapping == {0: 0, 1: 1, 2: 2}
 
 
-def test_file_mode_hitl_timeout_raises_with_record_count():
-    """HITL timeout raises AgentActionsError with correct record count."""
-    input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
-        {"source_guid": "sg-3", "content": {"id": 3}},
-    ]
+@pytest.mark.parametrize(
+    ("n_records", "payload", "match"),
+    [
+        pytest.param(
+            3,
+            {
+                "hitl_status": "timeout",
+                "record_reviews": [{"hitl_status": "approved"}, None, None],
+            },
+            "1/3 records reviewed",
+            id="timeout_reports_record_count",
+        ),
+        # The server emits "error" when it cannot bind a port; applying it as a verdict
+        # stamps every record reviewed while downstream guards discard the dataset.
+        pytest.param(
+            2,
+            {
+                "hitl_status": "error",
+                "user_comment": "Server failed to start: [Errno 48] Address already in use",
+                "timestamp": "2026-02-12T10:00:00Z",
+            },
+            "error",
+            id="server_error",
+        ),
+        pytest.param(
+            1,
+            {"hitl_status": "pending", "timestamp": "2026-02-12T10:00:00Z"},
+            "pending",
+            id="unknown_status",
+        ),
+        # Per-record reviews overwrite the broadcast status, so the allowlist must
+        # hold per record too.
+        pytest.param(
+            2,
+            {
+                "hitl_status": "approved",
+                "record_reviews": [
+                    {"hitl_status": "approved", "user_comment": ""},
+                    {"hitl_status": "error", "user_comment": "ui died"},
+                ],
+            },
+            "error",
+            id="per_record_non_decision",
+        ),
+    ],
+)
+def test_file_mode_hitl_non_decision_fails_the_action(n_records, payload, match):
+    """Only approved/rejected are decisions; anything else must raise, never be applied."""
+    input_data = [{"source_guid": f"sg-{i}", "content": {"id": i}} for i in range(1, n_records + 1)]
     context = ProcessingContext(
         agent_config={"kind": "hitl", "granularity": "file"},
         agent_name="review_data",
@@ -273,106 +315,9 @@ def test_file_mode_hitl_timeout_raises_with_record_count():
     with (
         patch(
             "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-            return_value=(
-                {
-                    "hitl_status": "timeout",
-                    "record_reviews": [{"hitl_status": "approved"}, None, None],
-                },
-                True,
-            ),
+            return_value=(payload, True),
         ),
-        pytest.raises(AgentActionsError, match="1/3 records reviewed"),
-    ):
-        HITLStrategy().invoke(input_data, context)
-
-
-def test_file_mode_hitl_server_error_is_not_broadcast_as_a_decision():
-    """A failed approval UI must fail the action, never be applied as a verdict.
-
-    The server emits ``hitl_status="error"`` when it cannot bind a port. Treating
-    that as a decision stamps every record reviewed and lets the run report
-    success while downstream guards silently discard the whole dataset.
-    """
-    input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
-    ]
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-        source_data=input_data,
-    )
-
-    with (
-        patch(
-            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-            return_value=(
-                {
-                    "hitl_status": "error",
-                    "user_comment": "Server failed to start: [Errno 48] Address already in use",
-                    "timestamp": "2026-02-12T10:00:00Z",
-                },
-                True,
-            ),
-        ),
-        pytest.raises(AgentActionsError, match="error"),
-    ):
-        HITLStrategy().invoke(input_data, context)
-
-
-def test_file_mode_hitl_unknown_status_is_not_broadcast_as_a_decision():
-    """Only approved/rejected are decisions; anything else must fail the action."""
-    input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-        source_data=input_data,
-    )
-
-    with (
-        patch(
-            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-            return_value=(
-                {"hitl_status": "pending", "timestamp": "2026-02-12T10:00:00Z"},
-                True,
-            ),
-        ),
-        pytest.raises(AgentActionsError, match="pending"),
-    ):
-        HITLStrategy().invoke(input_data, context)
-
-
-def test_file_mode_hitl_per_record_non_decision_status_raises():
-    """The allowlist must hold per record, not only for the file-level status.
-
-    Per-record reviews overwrite the broadcast status, so a non-decision value
-    here reaches records through the same door layer 1 closed one level up.
-    """
-    input_data = [
-        {"source_guid": "sg-1", "content": {"id": 1}},
-        {"source_guid": "sg-2", "content": {"id": 2}},
-    ]
-    context = ProcessingContext(
-        agent_config={"kind": "hitl", "granularity": "file"},
-        agent_name="review_data",
-        source_data=input_data,
-    )
-
-    with (
-        patch(
-            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-            return_value=(
-                {
-                    "hitl_status": "approved",
-                    "record_reviews": [
-                        {"hitl_status": "approved", "user_comment": ""},
-                        {"hitl_status": "error", "user_comment": "ui died"},
-                    ],
-                },
-                True,
-            ),
-        ),
-        pytest.raises(AgentActionsError, match="error"),
+        pytest.raises(AgentActionsError, match=match),
     ):
         HITLStrategy().invoke(input_data, context)
 
@@ -562,55 +507,19 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     assert result.data[1]["content"]["upstream"]["selectedAnswerer"] == "Bob"
 
 
-def test_file_mode_hitl_no_observe_flattens_all_namespaces():
-    """Without observe config, HITL receives all content fields flattened."""
+@pytest.mark.parametrize(
+    ("context_scope", "expected"),
+    [
+        pytest.param(None, {"question": "What?", "answer": "Yes"}, id="no_observe_flattens_all"),
+        # No directive keys passes everything through; `observe: []` is a declared gate
+        # to framework namespaces only.
+        pytest.param({"observe": []}, {}, id="empty_observe_gates_all"),
+    ],
+)
+def test_file_mode_hitl_reviewer_context_follows_observe(context_scope, expected):
     action_config = {"kind": "hitl", "granularity": "file"}
-
-    records = [
-        {
-            "source_guid": "sg-1",
-            "content": {
-                "upstream": {"question": "What?", "answer": "Yes"},
-            },
-        },
-    ]
-
-    context = ProcessingContext(
-        agent_config=action_config,
-        agent_name="review",
-        source_data=records,
-    )
-
-    captured_context = {}
-
-    def mock_run(**kwargs):
-        captured_context["context"] = kwargs["context"]
-        return ({"hitl_status": "approved", "timestamp": "2026-01-01T00:00:00Z"}, True)
-
-    with patch(
-        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-        side_effect=mock_run,
-    ):
-        HITLStrategy().invoke(records, context)
-
-    # All fields flattened (no observe = show everything)
-    assert captured_context["context"][0] == {"question": "What?", "answer": "Yes"}
-
-
-def test_file_mode_hitl_empty_observe_gates_all():
-    """observe: [] is a declared gate — the reviewer sees no business fields.
-
-    The previous assertion pinned flatten-all and justified it by the
-    implementation ("Empty observe = falsy"), not by intent,
-    which contradicts the contract the prompt path documents at
-    scope_application.py:152-153: no directive keys at all = pass everything
-    through, distinct from {"observe": []} = gate to framework namespaces only.
-    """
-    action_config = {
-        "kind": "hitl",
-        "granularity": "file",
-        "context_scope": {"observe": []},
-    }
+    if context_scope is not None:
+        action_config["context_scope"] = context_scope
 
     records = [
         {
@@ -637,8 +546,7 @@ def test_file_mode_hitl_empty_observe_gates_all():
     ):
         HITLStrategy().invoke(records, context)
 
-    # Declared gate — nothing upstream reaches the reviewer.
-    assert captured_context["context"][0] == {}
+    assert captured_context["context"][0] == expected
 
 
 def test_file_mode_hitl_intentional_gate_does_not_warn(caplog):

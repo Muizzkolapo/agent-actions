@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.prompt.service import PromptPreparationService
 from agent_actions.utils.module_loader import clear_module_cache
 
@@ -57,7 +58,30 @@ def _stub_raw_prompt(text):
 class TestDispatchTaskEndToEnd:
     """Full pipeline: real UDF on disk, no mocks on the dispatch path."""
 
-    def test_dispatch_passes_context_to_udf(self, tools_dir):
+    @pytest.mark.parametrize(
+        ("prompt", "field_context", "expected"),
+        [
+            # source.* observe produces {"source": {...}} in llm_context — 1 top-level key.
+            # "0 fields" would mean empty context wasn't passed; "1 fields" proves it was.
+            pytest.param(
+                "Result: dispatch_task('summarize')",
+                {"source": {"text": "hello", "category": "test"}},
+                "Summary of 1 fields",
+                id="passes-context-to-udf",
+            ),
+            # No tools_path is passed below: it must be auto-resolved from config, or
+            # "dispatch_task('get_opener')" is sent as literal text.
+            pytest.param(
+                "Opener: dispatch_task('get_opener')",
+                {"source": {"text": "hello"}},
+                "During monitoring, you notice an anomaly",
+                id="auto-resolves-without-explicit-tools-path",
+            ),
+        ],
+    )
+    def test_dispatch_replaces_the_call_with_what_the_udf_returns(
+        self, tools_dir, prompt, field_context, expected
+    ):
         """The UDF receives the LLM context (with observed fields) as its first argument."""
         config = {
             "agent_type": "test",
@@ -65,9 +89,8 @@ class TestDispatchTaskEndToEnd:
             "context_scope": {"observe": ["source.*"]},
             "tool_path": [str(tools_dir)],
         }
-        field_context = {"source": {"text": "hello", "category": "test"}}
 
-        with _stub_raw_prompt("Result: dispatch_task('summarize')"):
+        with _stub_raw_prompt(prompt):
             result = PromptPreparationService.prepare_prompt_with_field_context(
                 agent_config=config,
                 agent_name="test",
@@ -76,14 +99,26 @@ class TestDispatchTaskEndToEnd:
             )
 
         assert "dispatch_task" not in result.formatted_prompt
-        # source.* observe produces {"source": {...}} in llm_context — 1 top-level key.
-        # "0 fields" would mean empty context wasn't passed; "1 fields" proves it was.
-        assert "Summary of 1 fields" in result.formatted_prompt
+        assert expected in result.formatted_prompt
 
-    def test_dispatch_none_return_raises(self, tools_dir):
-        """UDF returning None raises AgentActionsError, not silent passthrough."""
-        from agent_actions.errors import AgentActionsError
-
+    @pytest.mark.parametrize(
+        ("prompt", "error", "match"),
+        [
+            pytest.param(
+                "Value: dispatch_task('bad_udf')",
+                AgentActionsError,
+                "returned None",
+                id="none-return-raises-not-silent-passthrough",
+            ),
+            pytest.param(
+                "Value: dispatch_task('nonexistent_func')",
+                ConfigurationError,
+                "nonexistent_func",
+                id="missing-function-raises-not-literal-passthrough",
+            ),
+        ],
+    )
+    def test_dispatch_raises(self, tools_dir, prompt, error, match):
         config = {
             "agent_type": "test",
             "prompt": "inline",
@@ -92,63 +127,13 @@ class TestDispatchTaskEndToEnd:
         }
         field_context = {"source": {"text": "hello"}}
 
-        with (
-            _stub_raw_prompt("Value: dispatch_task('bad_udf')"),
-            pytest.raises(AgentActionsError, match="returned None"),
-        ):
+        with _stub_raw_prompt(prompt), pytest.raises(error, match=match):
             PromptPreparationService.prepare_prompt_with_field_context(
                 agent_config=config,
                 agent_name="test",
                 contents={},
                 field_context=field_context,
             )
-
-    def test_dispatch_missing_function_raises(self, tools_dir):
-        """Referencing a non-existent UDF raises, not literal passthrough."""
-        from agent_actions.errors import ConfigurationError
-
-        config = {
-            "agent_type": "test",
-            "prompt": "inline",
-            "context_scope": {"observe": ["source.*"]},
-            "tool_path": [str(tools_dir)],
-        }
-        field_context = {"source": {"text": "hello"}}
-
-        with (
-            _stub_raw_prompt("Value: dispatch_task('nonexistent_func')"),
-            pytest.raises(ConfigurationError, match="nonexistent_func"),
-        ):
-            PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-            )
-
-    def test_dispatch_auto_resolves_without_explicit_tools_path(self, tools_dir):
-        """The fix: tools_path auto-resolved from config, not passed by caller."""
-        config = {
-            "agent_type": "test",
-            "prompt": "inline",
-            "context_scope": {"observe": ["source.*"]},
-            "tool_path": [str(tools_dir)],
-        }
-        field_context = {"source": {"text": "hello"}}
-
-        # Call prepare_prompt_with_field_context WITHOUT tools_path arg.
-        # Before the fix, this would pass "dispatch_task('get_opener')" as literal.
-        with _stub_raw_prompt("Opener: dispatch_task('get_opener')"):
-            result = PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-                # tools_path intentionally omitted — auto-resolution under test
-            )
-
-        assert "dispatch_task" not in result.formatted_prompt
-        assert "During monitoring, you notice an anomaly" in result.formatted_prompt
 
     def test_dispatch_resolves_function_in_subdirectory(self, tools_dir):
         """dispatch_task() finds a UDF located in a subdirectory of tools_path."""

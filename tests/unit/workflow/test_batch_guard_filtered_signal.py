@@ -152,13 +152,16 @@ class TestTheRealBatchSignalReachesTheUser:
 class TestTheDiscriminatorIsWhetherTheActionHoldsARow:
     """M-2: prove write_target([]) really is what leaves the action holding no row."""
 
-    def test_an_empty_tombstone_holds_no_row(self, backend):
-        _batch_filtered_every_record(backend)
-        assert backend.has_target_rows(ACTION) is False
-
-    def test_a_populated_tombstone_does(self, backend):
-        _batch_filtered_every_record(backend, records=[{"id": 1}, {"id": 2}])
-        assert backend.has_target_rows(ACTION) is True
+    @pytest.mark.parametrize(
+        ("records", "expected"),
+        [
+            pytest.param((), False, id="empty_tombstone_holds_no_row"),
+            pytest.param([{"id": 1}, {"id": 2}], True, id="populated_tombstone_holds_a_row"),
+        ],
+    )
+    def test_has_target_rows_follows_the_tombstone(self, backend, records, expected):
+        _batch_filtered_every_record(backend, records=records)
+        assert backend.has_target_rows(ACTION) is expected
 
 
 class TestNothingElseBecomesASkip:

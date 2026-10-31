@@ -39,6 +39,21 @@ class TestResolveFileLimit:
     """The file axis reads the same precedence rules as the record axis, so a
     run is reachable from outside the project along both."""
 
+    @pytest.mark.parametrize(
+        ("variable", "config", "expected"),
+        [
+            pytest.param("2", {"file_limit": 9}, 2, id="bounds-a-larger-config"),
+            pytest.param("9", {"file_limit": 2}, 2, id="does-not-raise-a-smaller-config"),
+            pytest.param("2", {}, 2, id="applies-where-config-sets-none"),
+        ],
+    )
+    def test_the_variable_bounds_the_configured_limit(
+        self, monkeypatch, variable, config, expected
+    ):
+        monkeypatch.setenv("AGAC_FILE_LIMIT", variable)
+
+        assert resolve_file_limit(config)[0] == expected
+
     def test_a_configured_limit_is_returned(self):
         assert resolve_file_limit({"file_limit": 3})[0] == 3
 
@@ -48,21 +63,6 @@ class TestResolveFileLimit:
     @pytest.mark.parametrize("value", [None, 0, -1, "3", 3.0, True])
     def test_a_value_that_cannot_bound_anything_is_unlimited(self, value):
         assert resolve_file_limit({"file_limit": value})[0] is None
-
-    def test_the_variable_bounds_a_larger_configured_limit(self, monkeypatch):
-        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
-
-        assert resolve_file_limit({"file_limit": 9})[0] == 2
-
-    def test_the_variable_does_not_raise_a_smaller_configured_limit(self, monkeypatch):
-        monkeypatch.setenv("AGAC_FILE_LIMIT", "9")
-
-        assert resolve_file_limit({"file_limit": 2})[0] == 2
-
-    def test_the_variable_applies_where_the_config_sets_none(self, monkeypatch):
-        monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
-
-        assert resolve_file_limit({})[0] == 2
 
     @pytest.mark.parametrize("value", ["nonsense", "0", "-1", "2.5"])
     def test_a_variable_that_cannot_bound_anything_is_refused_loudly(self, monkeypatch, value):
@@ -199,25 +199,20 @@ class TestTheRetiredEnvironmentName:
 class TestTheEnvironmentLimit:
     """AGAC_RECORD_LIMIT caps a run from outside the project's config."""
 
-    def test_it_caps_a_larger_configured_limit(self, monkeypatch):
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
+    @pytest.mark.parametrize(
+        ("variable", "config", "expected"),
+        [
+            pytest.param("2", {"record_limit": 23}, 2, id="caps-a-larger-config"),
+            pytest.param("50", {"record_limit": 3}, 3, id="does-not-raise-a-smaller-config"),
+            pytest.param("2", {}, 2, id="applies-where-config-sets-none"),
+            pytest.param(None, {"record_limit": 23}, 23, id="unset-leaves-config-alone"),
+        ],
+    )
+    def test_it_caps_the_configured_limit(self, monkeypatch, variable, config, expected):
+        if variable is not None:
+            monkeypatch.setenv("AGAC_RECORD_LIMIT", variable)
 
-        assert resolve_record_limit({"record_limit": 23})[0] == 2
-
-    def test_it_does_not_raise_a_smaller_configured_limit(self, monkeypatch):
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "50")
-
-        assert resolve_record_limit({"record_limit": 3})[0] == 3
-
-    def test_it_applies_where_the_config_sets_no_limit(self, monkeypatch):
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
-
-        assert resolve_record_limit({})[0] == 2
-
-    def test_an_unset_variable_leaves_the_config_alone(self, monkeypatch):
-        monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-
-        assert resolve_record_limit({"record_limit": 23})[0] == 23
+        assert resolve_record_limit(config)[0] == expected
 
     @pytest.mark.parametrize("value", ["nonsense", "0", "-1", "2.5"])
     def test_a_value_that_cannot_be_a_limit_is_refused_loudly(self, monkeypatch, value):
@@ -235,32 +230,37 @@ class TestTheEnvironmentLimit:
 class TestTheRunCeiling:
     """A cap asked for on the command line, carried on the action's config."""
 
-    def test_it_caps_a_larger_configured_limit(self):
-        assert resolve_record_limit({"record_limit": 23, RECORD_LIMIT_KEY: 2})[0] == 2
+    @pytest.mark.parametrize(
+        ("config", "expected"),
+        [
+            pytest.param({"record_limit": 23, RECORD_LIMIT_KEY: 2}, 2, id="caps-a-larger-config"),
+            pytest.param(
+                {"record_limit": 3, RECORD_LIMIT_KEY: 50}, 3, id="does-not-raise-a-smaller-config"
+            ),
+            pytest.param({RECORD_LIMIT_KEY: 2}, 2, id="applies-where-config-sets-none"),
+        ],
+    )
+    def test_it_caps_the_configured_limit(self, config, expected):
+        assert resolve_record_limit(config)[0] == expected
 
-    def test_it_does_not_raise_a_smaller_configured_limit(self):
-        assert resolve_record_limit({"record_limit": 3, RECORD_LIMIT_KEY: 50})[0] == 3
+    @pytest.mark.parametrize(
+        ("variable", "config", "expected"),
+        [
+            # typed for this run, so more specific than ambient configuration
+            pytest.param(
+                "50", {"record_limit": 23, RECORD_LIMIT_KEY: 2}, 2, id="beats-the-variable"
+            ),
+            # precedence is by source, not by which number is smaller
+            pytest.param(
+                "2", {"record_limit": 23, RECORD_LIMIT_KEY: 10}, 10, id="beats-a-stricter-variable"
+            ),
+            pytest.param("2", {"record_limit": 23}, 2, id="absent-leaves-the-variable-in-charge"),
+        ],
+    )
+    def test_it_outranks_the_environment_variable(self, monkeypatch, variable, config, expected):
+        monkeypatch.setenv("AGAC_RECORD_LIMIT", variable)
 
-    def test_it_applies_where_the_config_sets_no_limit(self):
-        assert resolve_record_limit({RECORD_LIMIT_KEY: 2})[0] == 2
-
-    def test_it_wins_over_the_environment_variable(self, monkeypatch):
-        """Typed for this run, so more specific than ambient configuration."""
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "50")
-
-        assert resolve_record_limit({"record_limit": 23, RECORD_LIMIT_KEY: 2})[0] == 2
-
-    def test_it_wins_even_when_the_variable_is_stricter(self, monkeypatch):
-        """Precedence is by source, not by which number is smaller — otherwise
-        ambient state could silently overrule what was asked for."""
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
-
-        assert resolve_record_limit({"record_limit": 23, RECORD_LIMIT_KEY: 10})[0] == 10
-
-    def test_an_absent_run_limit_leaves_the_variable_in_charge(self, monkeypatch):
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
-
-        assert resolve_record_limit({"record_limit": 23})[0] == 2
+        assert resolve_record_limit(config)[0] == expected
 
     @pytest.mark.parametrize("value", [0, -1, "2", 2.5, True])
     def test_a_value_that_cannot_be_a_limit_is_refused_loudly(self, value):

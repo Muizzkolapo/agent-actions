@@ -39,23 +39,23 @@ def _executor(backend):
     )
 
 
-def test_an_upstream_holding_only_an_empty_file_takes_the_readers_rows(backend):
-    """A guard that filters every record still stores the empty list."""
-    backend.write_target("up", "a.json", [])
+@pytest.mark.parametrize(
+    ("up_rows", "reader_keeps_rows"),
+    [
+        # A guard that filters every record still stores the empty list.
+        pytest.param([], False, id="upstream_holds_only_an_empty_file"),
+        pytest.param([{"summary": "x"}], True, id="upstream_rows_without_identity"),
+    ],
+)
+def test_the_readers_rows_go_only_when_the_upstream_holds_no_row(
+    backend, up_rows, reader_keeps_rows
+):
+    backend.write_target("up", "a.json", up_rows)
     backend.write_target("reader", "a.json", [{"source_guid": "g0"}])
 
     _executor(backend)._drop_rows_read_from_nothing("reader", READER_CONFIG)
 
-    assert backend.has_target_rows("reader") is False
-
-
-def test_an_upstream_holding_rows_without_an_identity_leaves_the_readers_rows(backend):
-    backend.write_target("up", "a.json", [{"summary": "x"}])
-    backend.write_target("reader", "a.json", [{"source_guid": "g0"}])
-
-    _executor(backend)._drop_rows_read_from_nothing("reader", READER_CONFIG)
-
-    assert backend.has_target_rows("reader") is True
+    assert backend.has_target_rows("reader") is reader_keeps_rows
 
 
 def test_a_source_named_only_in_the_context_scope_is_not_an_upstream(backend):

@@ -60,12 +60,13 @@ class TestValidateLifecycleBatch:
     def test_empty_list_passes(self):
         validate_lifecycle_batch([], action_name="act")
 
-    def test_first_invalid_raises(self):
-        records = [_record(), {"source_guid": "bad"}, _record()]
-        with pytest.raises(ConfigurationError, match="_state"):
-            validate_lifecycle_batch(records, action_name="act")
-
-    def test_last_invalid_raises(self):
-        records = [_record(), _record(), {"source_guid": "bad-last"}]
+    @pytest.mark.parametrize(
+        "records",
+        [
+            pytest.param([_record(), {"source_guid": "bad"}, _record()], id="middle"),
+            pytest.param([_record(), _record(), {"source_guid": "bad-last"}], id="last"),
+        ],
+    )
+    def test_an_invalid_record_raises(self, records):
         with pytest.raises(ConfigurationError, match="_state"):
             validate_lifecycle_batch(records, action_name="act")

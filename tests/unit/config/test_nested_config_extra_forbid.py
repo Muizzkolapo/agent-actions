@@ -11,28 +11,24 @@ from agent_actions.config.schema import (
 )
 
 
-def test_retry_rejects_typo():
+@pytest.mark.parametrize(
+    ("model", "kwargs", "typo"),
+    [
+        pytest.param(RetryConfig, {"max_retires": 3}, "max_retires", id="retry"),
+        pytest.param(VersionConfig, {"parem": "i", "range": [0, 1, 2]}, "parem", id="version"),
+        pytest.param(
+            VersionConsumptionConfig,
+            {"source": "vote_quality", "sorce": "vote_quality"},
+            "sorce",
+            id="version_consumption",
+        ),
+        pytest.param(HitlConfig, {"instructions": "Review", "tiemout": 600}, "tiemout", id="hitl"),
+    ],
+)
+def test_nested_block_rejects_typo(model, kwargs, typo):
     with pytest.raises(ValidationError) as excinfo:
-        RetryConfig(max_retires=3)
-    assert "max_retires" in str(excinfo.value)
-
-
-def test_version_rejects_typo():
-    with pytest.raises(ValidationError) as excinfo:
-        VersionConfig(parem="i", range=[0, 1, 2])
-    assert "parem" in str(excinfo.value)
-
-
-def test_version_consumption_rejects_typo():
-    with pytest.raises(ValidationError) as excinfo:
-        VersionConsumptionConfig(source="vote_quality", sorce="vote_quality")
-    assert "sorce" in str(excinfo.value)
-
-
-def test_hitl_rejects_typo():
-    with pytest.raises(ValidationError) as excinfo:
-        HitlConfig(instructions="Review", tiemout=600)
-    assert "tiemout" in str(excinfo.value)
+        model(**kwargs)
+    assert typo in str(excinfo.value)
 
 
 def test_valid_configs_still_parse():

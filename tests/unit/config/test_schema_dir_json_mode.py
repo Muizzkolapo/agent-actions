@@ -6,55 +6,41 @@ should skip schema directory validation entirely.
 
 from __future__ import annotations
 
+import pytest
+
 from agent_actions.prompt.renderer import ConfigRenderingService
 
 
-class TestWorkflowNeedsSchema:
-    """Unit tests for ConfigRenderingService._workflow_needs_schema."""
-
-    def test_returns_true_when_json_mode_unset(self):
-        """No json_mode in defaults → defaults to True at runtime."""
-        config = {"defaults": {"model_name": "gpt-4"}, "actions": []}
-        assert ConfigRenderingService._workflow_needs_schema(config) is True
-
-    def test_returns_true_when_json_mode_true(self):
-        """Explicit json_mode: true in defaults."""
-        config = {"defaults": {"json_mode": True}, "actions": []}
-        assert ConfigRenderingService._workflow_needs_schema(config) is True
-
-    def test_returns_false_when_json_mode_false(self):
-        """json_mode: false in defaults, no action overrides."""
-        config = {"defaults": {"json_mode": False}, "actions": [{"name": "step1"}]}
-        assert ConfigRenderingService._workflow_needs_schema(config) is False
-
-    def test_returns_true_when_default_false_but_action_overrides(self):
-        """json_mode: false in defaults but one action sets json_mode: true."""
-        config = {
-            "defaults": {"json_mode": False},
-            "actions": [
-                {"name": "step1"},
-                {"name": "step2", "json_mode": True},
-            ],
-        }
-        assert ConfigRenderingService._workflow_needs_schema(config) is True
-
-    def test_returns_false_when_all_actions_also_false(self):
-        """json_mode: false everywhere — no schema needed."""
-        config = {
-            "defaults": {"json_mode": False},
-            "actions": [
-                {"name": "step1", "json_mode": False},
-                {"name": "step2"},
-            ],
-        }
-        assert ConfigRenderingService._workflow_needs_schema(config) is False
-
-    def test_returns_true_when_no_defaults_section(self):
-        """No defaults section at all → json_mode defaults to True."""
-        config = {"actions": [{"name": "step1"}]}
-        assert ConfigRenderingService._workflow_needs_schema(config) is True
-
-    def test_returns_true_when_defaults_is_none(self):
-        """defaults: null in config."""
-        config = {"defaults": None, "actions": []}
-        assert ConfigRenderingService._workflow_needs_schema(config) is True
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        # no json_mode in defaults: defaults to True at runtime
+        pytest.param({"defaults": {"model_name": "gpt-4"}, "actions": []}, True, id="unset"),
+        pytest.param({"defaults": {"json_mode": True}, "actions": []}, True, id="true"),
+        pytest.param(
+            {"defaults": {"json_mode": False}, "actions": [{"name": "step1"}]},
+            False,
+            id="false",
+        ),
+        pytest.param(
+            {
+                "defaults": {"json_mode": False},
+                "actions": [{"name": "step1"}, {"name": "step2", "json_mode": True}],
+            },
+            True,
+            id="action_override",
+        ),
+        pytest.param(
+            {
+                "defaults": {"json_mode": False},
+                "actions": [{"name": "step1", "json_mode": False}, {"name": "step2"}],
+            },
+            False,
+            id="all_false",
+        ),
+        pytest.param({"actions": [{"name": "step1"}]}, True, id="no_defaults"),
+        pytest.param({"defaults": None, "actions": []}, True, id="defaults_none"),
+    ],
+)
+def test_workflow_needs_schema(config, expected):
+    assert ConfigRenderingService._workflow_needs_schema(config) is expected

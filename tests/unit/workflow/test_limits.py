@@ -63,23 +63,24 @@ _WALK_LOG = "agent_actions.workflow.runner_file_processing"
 
 
 class TestFileLimitReached:
-    def test_none_means_no_limit(self):
-        assert _stops({}, 100) is False
-
-    def test_below_limit(self):
-        assert _stops({"file_limit": 5}, 3) is False
-
-    def test_at_limit(self):
-        assert _stops({"file_limit": 5}, 5) is True
-
-    def test_above_limit(self):
-        assert _stops({"file_limit": 5}, 10) is True
-
-    def test_a_run_level_limit_applies_where_the_config_sets_none(self):
-        assert _stops({FILE_LIMIT_KEY: 2}, 2) is True
-
-    def test_a_run_level_limit_does_not_raise_a_smaller_configured_one(self):
-        assert _stops({"file_limit": 1, FILE_LIMIT_KEY: 5}, 1) is True
+    @pytest.mark.parametrize(
+        ("action_config", "count", "stops"),
+        [
+            pytest.param({}, 100, False, id="no_limit"),
+            pytest.param({"file_limit": 5}, 3, False, id="below_limit"),
+            pytest.param({"file_limit": 5}, 5, True, id="at_limit"),
+            pytest.param({"file_limit": 5}, 10, True, id="above_limit"),
+            pytest.param({FILE_LIMIT_KEY: 2}, 2, True, id="run_level_limit_where_config_sets_none"),
+            pytest.param(
+                {"file_limit": 1, FILE_LIMIT_KEY: 5},
+                1,
+                True,
+                id="run_level_limit_does_not_raise_a_smaller_configured_one",
+            ),
+        ],
+    )
+    def test_the_walk_stops_once_the_count_reaches_the_limit(self, action_config, count, stops):
+        assert _stops(action_config, count) is stops
 
     def test_the_environment_applies_where_the_config_sets_none(self, monkeypatch):
         monkeypatch.setenv("AGAC_FILE_LIMIT", "2")
@@ -162,10 +163,20 @@ class TestFileLimitDirectoryFiles:
         for i in range(count):
             (tmp_path / f"file_{i:03d}.json").write_text(json.dumps([{"id": i}]))
 
-    def test_file_limit_caps_files_processed(self, tmp_path):
+    @pytest.mark.parametrize(
+        ("file_count", "action_config", "expected"),
+        [
+            pytest.param(5, {"file_limit": 2}, 2, id="limit_caps_files"),
+            pytest.param(5, {}, 5, id="no_limit_processes_all"),
+            pytest.param(3, {"file_limit": 100}, 3, id="limit_above_total"),
+        ],
+    )
+    def test_the_directory_walk_processes_files_up_to_the_limit(
+        self, tmp_path, file_count, action_config, expected
+    ):
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        self._setup_files(input_dir, 5)
+        self._setup_files(input_dir, file_count)
         output = tmp_path / "output"
         output.mkdir()
 
@@ -176,7 +187,7 @@ class TestFileLimitDirectoryFiles:
         runner.retried_records = frozenset()
 
         params = MagicMock()
-        params.action_config = {"file_limit": 2}
+        params.action_config = action_config
         params.action_name = "test"
         params.strategy = MagicMock()
         params.idx = 0
@@ -185,52 +196,8 @@ class TestFileLimitDirectoryFiles:
         _found, processed, _errors = process_directory_files(
             runner, input_dir, output, str(input_dir), params, set()
         )
-        assert processed == 2
-        assert runner._process_single_file.call_count == 2
-
-    def test_no_file_limit_processes_all(self, tmp_path):
-        input_dir = tmp_path / "input"
-        input_dir.mkdir()
-        self._setup_files(input_dir, 5)
-        output = tmp_path / "output"
-        output.mkdir()
-
-        runner = MagicMock()
-        runner.retried_records = frozenset()
-
-        params = MagicMock()
-        params.action_config = {}
-        params.action_name = "test"
-        params.strategy = MagicMock()
-        params.idx = 0
-        params.file_type_filter = None
-
-        _found, processed, _errors = process_directory_files(
-            runner, input_dir, output, str(input_dir), params, set()
-        )
-        assert processed == 5
-
-    def test_file_limit_greater_than_total(self, tmp_path):
-        input_dir = tmp_path / "input"
-        input_dir.mkdir()
-        self._setup_files(input_dir, 3)
-        output = tmp_path / "output"
-        output.mkdir()
-
-        runner = MagicMock()
-        runner.retried_records = frozenset()
-
-        params = MagicMock()
-        params.action_config = {"file_limit": 100}
-        params.action_name = "test"
-        params.strategy = MagicMock()
-        params.idx = 0
-        params.file_type_filter = None
-
-        _found, processed, _errors = process_directory_files(
-            runner, input_dir, output, str(input_dir), params, set()
-        )
-        assert processed == 3
+        assert processed == expected
+        assert runner._process_single_file.call_count == expected
 
 
 class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
@@ -244,10 +211,19 @@ class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
     def _quiet(self, caplog):
         return [r for r in caplog.records if "stopped after" in r.message]
 
-    def test_the_directory_walk_is_silent_when_it_took_every_file(self, tmp_path, caplog):
+    @pytest.mark.parametrize(
+        ("file_count", "messages"),
+        [
+            pytest.param(2, 0, id="silent_when_it_took_every_file"),
+            pytest.param(3, 1, id="speaks_when_a_file_was_left"),
+        ],
+    )
+    def test_the_directory_walk_speaks_only_when_a_file_was_left(
+        self, tmp_path, caplog, file_count, messages
+    ):
         input_dir = tmp_path / "input"
         input_dir.mkdir()
-        for i in range(2):
+        for i in range(file_count):
             (input_dir / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
         output = tmp_path / "output"
         output.mkdir()
@@ -266,29 +242,7 @@ class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
             )
 
         assert processed == 2
-        assert self._quiet(caplog) == []
-
-    def test_the_directory_walk_speaks_when_a_file_was_left(self, tmp_path, caplog):
-        """The control for the test above, through the same closure."""
-        input_dir = tmp_path / "input"
-        input_dir.mkdir()
-        for i in range(3):
-            (input_dir / f"file_{i}.json").write_text(json.dumps([{"id": i}]))
-        output = tmp_path / "output"
-        output.mkdir()
-        runner = MagicMock()
-        runner.retried_records = frozenset()
-        params = MagicMock()
-        params.action_config = {"file_limit": 2}
-        params.action_name = "act"
-        params.strategy = MagicMock()
-        params.idx = 0
-        params.file_type_filter = None
-
-        with caplog.at_level("INFO", logger=_WALK_LOG):
-            process_directory_files(runner, input_dir, output, str(input_dir), params, set())
-
-        assert len(self._quiet(caplog)) == 1
+        assert len(self._quiet(caplog)) == messages
 
     def test_the_directory_walk_is_silent_when_only_skippable_entries_remain(
         self, tmp_path, caplog
@@ -332,21 +286,22 @@ class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
         params.idx = 0
         return runner, params
 
-    def test_the_merged_walk_is_silent_when_it_took_every_group(self, tmp_path, caplog):
-        runner, params = self._merged(tmp_path, count=2, limit=2)
+    @pytest.mark.parametrize(
+        ("group_count", "messages"),
+        [
+            pytest.param(2, 0, id="silent_when_it_took_every_group"),
+            pytest.param(3, 1, id="speaks_when_a_group_was_left"),
+        ],
+    )
+    def test_the_merged_walk_speaks_only_when_a_group_was_left(
+        self, tmp_path, caplog, group_count, messages
+    ):
+        runner, params = self._merged(tmp_path, count=group_count, limit=2)
 
         with caplog.at_level("INFO", logger=_WALK_LOG):
             process_merged_files(runner, params)
 
-        assert self._quiet(caplog) == []
-
-    def test_the_merged_walk_speaks_when_a_group_was_left(self, tmp_path, caplog):
-        runner, params = self._merged(tmp_path, count=3, limit=2)
-
-        with caplog.at_level("INFO", logger=_WALK_LOG):
-            process_merged_files(runner, params)
-
-        assert len(self._quiet(caplog)) == 1
+        assert len(self._quiet(caplog)) == messages
 
     def _stored(self, tmp_path, names, limit):
         backend = MagicMock()
@@ -365,21 +320,22 @@ class TestTheWalksThemselvesStaySilentWhenNothingWasLeft:
         params.action_name = "act"
         return runner, params
 
-    def test_the_stored_walk_is_silent_when_it_took_every_entry(self, tmp_path, caplog):
-        runner, params = self._stored(tmp_path, ["a.json", "b.json"], limit=2)
+    @pytest.mark.parametrize(
+        ("names", "messages"),
+        [
+            pytest.param(["a.json", "b.json"], 0, id="silent_when_it_took_every_entry"),
+            pytest.param(["a.json", "b.json", "c.json"], 1, id="speaks_when_an_entry_was_left"),
+        ],
+    )
+    def test_the_stored_walk_speaks_only_when_an_entry_was_left(
+        self, tmp_path, caplog, names, messages
+    ):
+        runner, params = self._stored(tmp_path, names, limit=2)
 
         with caplog.at_level("INFO", logger=_WALK_LOG):
             process_from_storage_backend(runner, params)
 
-        assert self._quiet(caplog) == []
-
-    def test_the_stored_walk_speaks_when_an_entry_was_left(self, tmp_path, caplog):
-        runner, params = self._stored(tmp_path, ["a.json", "b.json", "c.json"], limit=2)
-
-        with caplog.at_level("INFO", logger=_WALK_LOG):
-            process_from_storage_backend(runner, params)
-
-        assert len(self._quiet(caplog)) == 1
+        assert len(self._quiet(caplog)) == messages
 
 
 class TestWhatTheFileLimitCounts:
@@ -550,6 +506,14 @@ class TestFileLimitBackendEntries:
 
 
 class TestRecordLimitInitialStage:
+    @pytest.mark.parametrize(
+        ("agent_config", "record_count", "expected"),
+        [
+            pytest.param({"record_limit": 10, "run_mode": "online"}, 50, 10, id="limit_slices"),
+            pytest.param({"run_mode": "online"}, 50, 50, id="no_limit_passes_all"),
+            pytest.param({"record_limit": 100, "run_mode": "online"}, 5, 5, id="limit_above_total"),
+        ],
+    )
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._prepare_online_data")
@@ -559,15 +523,23 @@ class TestRecordLimitInitialStage:
         "._process_online_mode_with_record_processor"
     )
     def test_record_limit_slices_data_before_source_save(
-        self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
+        self,
+        mock_process,
+        mock_reader,
+        mock_prep,
+        mock_validate,
+        mock_save,
+        agent_config,
+        record_count,
+        expected,
     ):
         from agent_actions.input.preprocessing.staging.initial_pipeline import (
             InitialStageContext,
             process_initial_stage,
         )
 
-        all_records = [{"id": i} for i in range(50)]
-        all_src = [{"source_guid": f"guid_{i}", "content": str(i)} for i in range(50)]
+        all_records = [{"id": i} for i in range(record_count)]
+        all_src = [{"source_guid": f"guid_{i}", "content": str(i)} for i in range(record_count)]
         mock_prep.return_value = (all_records, all_src)
 
         reader_instance = MagicMock()
@@ -578,7 +550,7 @@ class TestRecordLimitInitialStage:
         mock_process.return_value = "/output/file.json"
 
         ctx = InitialStageContext(
-            agent_config={"record_limit": 10, "run_mode": "online"},
+            agent_config=agent_config,
             agent_name="test",
             file_path="/input/data.json",
             base_directory="/input",
@@ -588,17 +560,17 @@ class TestRecordLimitInitialStage:
 
         process_initial_stage(ctx)
 
-        # Source save should receive only 10 records (sliced BEFORE save)
+        # Source save receives the sliced records (sliced BEFORE save)
         save_args = mock_save.call_args
         saved_src = save_args[0][0]  # first positional arg = src_text
         saved_data = save_args[0][1]  # second positional arg = data_chunk
-        assert len(saved_data) == 10
-        assert len(saved_src) == 10
+        assert len(saved_data) == expected
+        assert len(saved_src) == expected
 
-        # Processing should also receive 10 records
+        # Processing receives the same records
         process_args = mock_process.call_args
         processed_data = process_args[0][0]  # first positional arg = data_chunk
-        assert len(processed_data) == 10
+        assert len(processed_data) == expected
 
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
@@ -648,88 +620,6 @@ class TestRecordLimitInitialStage:
         saved_src, saved_data = mock_save.call_args[0][0], mock_save.call_args[0][1]
         assert [r["source_guid"] for r in saved_data] == ["g5"]
         assert [r["source_guid"] for r in saved_src] == ["g5"]
-
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._prepare_online_data")
-    @patch("agent_actions.input.loaders.file_reader.FileReader")
-    @patch(
-        "agent_actions.input.preprocessing.staging.initial_pipeline"
-        "._process_online_mode_with_record_processor"
-    )
-    def test_record_limit_none_passes_all(
-        self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
-    ):
-        from agent_actions.input.preprocessing.staging.initial_pipeline import (
-            InitialStageContext,
-            process_initial_stage,
-        )
-
-        all_records = [{"id": i} for i in range(50)]
-        mock_prep.return_value = (all_records, [])
-
-        reader_instance = MagicMock()
-        reader_instance.read.return_value = [{"page": "raw"}]
-        reader_instance.file_type = ".json"
-        mock_reader.return_value = reader_instance
-
-        mock_process.return_value = "/output/file.json"
-
-        ctx = InitialStageContext(
-            agent_config={"run_mode": "online"},
-            agent_name="test",
-            file_path="/input/data.json",
-            base_directory="/input",
-            output_directory="/output",
-            storage_backend=_backend_holding_nothing(),
-        )
-
-        process_initial_stage(ctx)
-
-        save_args = mock_save.call_args
-        saved_data = save_args[0][1]
-        assert len(saved_data) == 50
-
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._validate_staged_data")
-    @patch("agent_actions.input.preprocessing.staging.initial_pipeline._prepare_online_data")
-    @patch("agent_actions.input.loaders.file_reader.FileReader")
-    @patch(
-        "agent_actions.input.preprocessing.staging.initial_pipeline"
-        "._process_online_mode_with_record_processor"
-    )
-    def test_record_limit_greater_than_total_is_noop(
-        self, mock_process, mock_reader, mock_prep, mock_validate, mock_save
-    ):
-        from agent_actions.input.preprocessing.staging.initial_pipeline import (
-            InitialStageContext,
-            process_initial_stage,
-        )
-
-        all_records = [{"id": i} for i in range(5)]
-        mock_prep.return_value = (all_records, [])
-
-        reader_instance = MagicMock()
-        reader_instance.read.return_value = [{"page": "raw"}]
-        reader_instance.file_type = ".json"
-        mock_reader.return_value = reader_instance
-
-        mock_process.return_value = "/output/file.json"
-
-        ctx = InitialStageContext(
-            agent_config={"record_limit": 100, "run_mode": "online"},
-            agent_name="test",
-            file_path="/input/data.json",
-            base_directory="/input",
-            output_directory="/output",
-            storage_backend=_backend_holding_nothing(),
-        )
-
-        process_initial_stage(ctx)
-
-        save_args = mock_save.call_args
-        saved_data = save_args[0][1]
-        assert len(saved_data) == 5
 
 
 # ── Status invalidation when limits change ────────────────────────────
@@ -996,30 +886,27 @@ class TestTheCompletionStamp:
             "staged_input",
         }
 
-    def test_a_changed_file_limit_invalidates(self, executor):
-        """Its own term in the comparison, not carried by record_limit."""
+    @pytest.mark.parametrize(
+        ("config_file_limit", "expected"),
+        [
+            # The file limit is its own term in the comparison, not carried by record_limit.
+            pytest.param(5, ActionStatus.PENDING, id="changed_file_limit_invalidates"),
+            pytest.param(2, ActionStatus.COMPLETED, id="unchanged_limits_stay_completed"),
+        ],
+    )
+    def test_a_file_limit_change_alone_decides_invalidation(
+        self, executor, config_file_limit, expected
+    ):
         executor.deps.state_manager.get_status_details.return_value = {
             "record_limit": 10,
             "file_limit": 2,
         }
 
         status = executor._maybe_invalidate_completed_status(
-            "act", {"record_limit": 10, "file_limit": 5}, ActionStatus.COMPLETED
+            "act", {"record_limit": 10, "file_limit": config_file_limit}, ActionStatus.COMPLETED
         )
 
-        assert status == ActionStatus.PENDING
-
-    def test_unchanged_limits_leave_the_action_completed(self, executor):
-        executor.deps.state_manager.get_status_details.return_value = {
-            "record_limit": 10,
-            "file_limit": 2,
-        }
-
-        status = executor._maybe_invalidate_completed_status(
-            "act", {"record_limit": 10, "file_limit": 2}, ActionStatus.COMPLETED
-        )
-
-        assert status == ActionStatus.COMPLETED
+        assert status == expected
 
     def test_a_retry_lets_a_changed_limit_stand(self, executor):
         """A retry asks for named records, not for a different amount of work.
@@ -1334,38 +1221,37 @@ class TestAFileLimitMeetingAConfigChange:
         assert len(said) == 1
         assert "previous configuration" in said[0]
 
-    def test_a_model_change_under_a_file_limit_is_announced(self, executor, caplog):
-        said = self._reset_under(
-            executor,
-            caplog,
-            {"file_limit": 2, "model_name": "new-model"},
-            {"record_limit": None, "file_limit": 2, "model_name": "old-model"},
-        )
+    @pytest.mark.parametrize(
+        ("action_config", "stored", "messages"),
+        [
+            pytest.param(
+                {"file_limit": 2, "model_name": "new-model"},
+                {"record_limit": None, "file_limit": 2, "model_name": "old-model"},
+                1,
+                id="model_change_under_a_limit_is_announced",
+            ),
+            # Controls: without a limit every file is walked; a limit change alone
+            # changes nothing semantic, so the untouched files are still valid.
+            pytest.param(
+                {"prompt": "new"},
+                {"record_limit": None, "file_limit": None, "config_hash": "stale"},
+                0,
+                id="config_change_without_a_limit_says_nothing",
+            ),
+            pytest.param(
+                {"file_limit": 1},
+                {"record_limit": None, "file_limit": 5},
+                0,
+                id="limit_change_alone_says_nothing",
+            ),
+        ],
+    )
+    def test_a_reset_warns_only_when_a_limit_leaves_stale_answers(
+        self, executor, caplog, action_config, stored, messages
+    ):
+        said = self._reset_under(executor, caplog, action_config, stored)
 
-        assert len(said) == 1
-
-    def test_a_config_change_without_a_file_limit_says_nothing(self, executor, caplog):
-        """The control: every file is walked, so the whole output is rebuilt."""
-        said = self._reset_under(
-            executor,
-            caplog,
-            {"prompt": "new"},
-            {"record_limit": None, "file_limit": None, "config_hash": "stale"},
-        )
-
-        assert said == []
-
-    def test_a_limit_change_alone_says_nothing(self, executor, caplog):
-        """The control: nothing semantic changed, so the untouched files still
-        hold answers this configuration would produce."""
-        said = self._reset_under(
-            executor,
-            caplog,
-            {"file_limit": 1},
-            {"record_limit": None, "file_limit": 5},
-        )
-
-        assert said == []
+        assert len(said) == messages
 
 
 class TestTheBatchPauseWiring:
@@ -1605,41 +1491,21 @@ class TestTheBatchPauseIsAProcessBoundary:
 
 
 class TestLimitSchemaValidation:
-    def test_record_limit_rejects_zero(self):
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            pytest.param("record_limit", 0, id="record_limit_zero"),
+            pytest.param("record_limit", -5, id="record_limit_negative"),
+            pytest.param("file_limit", 0, id="file_limit_zero"),
+        ],
+    )
+    def test_a_limit_below_one_is_rejected(self, field, value):
         from pydantic import ValidationError
 
         from agent_actions.config.schema import ActionConfig
 
         with pytest.raises(ValidationError, match="greater than or equal to 1"):
-            ActionConfig(
-                name="test",
-                intent="test",
-                record_limit=0,
-            )
-
-    def test_record_limit_rejects_negative(self):
-        from pydantic import ValidationError
-
-        from agent_actions.config.schema import ActionConfig
-
-        with pytest.raises(ValidationError, match="greater than or equal to 1"):
-            ActionConfig(
-                name="test",
-                intent="test",
-                record_limit=-5,
-            )
-
-    def test_file_limit_rejects_zero(self):
-        from pydantic import ValidationError
-
-        from agent_actions.config.schema import ActionConfig
-
-        with pytest.raises(ValidationError, match="greater than or equal to 1"):
-            ActionConfig(
-                name="test",
-                intent="test",
-                file_limit=0,
-            )
+            ActionConfig(name="test", intent="test", **{field: value})
 
     def test_limits_accept_none(self):
         from agent_actions.config.schema import ActionConfig

@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+import pytest
 from click.testing import CliRunner
 
 from agent_actions.errors import (
@@ -30,37 +31,33 @@ def _run_cli(monkeypatch, tmp_path: Path, validate_return: dict) -> click.testin
     return CliRunner().invoke(validate_udfs_cmd, ["-a", "wf", "-u", str(tmp_path)])
 
 
-def test_missing_impl_function_exits_non_zero(monkeypatch, tmp_path):
-    nf = FunctionNotFoundError(
-        "Function 'nonexistent_fn' not found",
-        context={"function_name": "nonexistent_fn", "available_functions": []},
-    )
+@pytest.mark.parametrize(
+    ("error", "error_type"),
+    [
+        (
+            FunctionNotFoundError(
+                "Function 'nonexistent_fn' not found",
+                context={"function_name": "nonexistent_fn", "available_functions": []},
+            ),
+            "not_found",
+        ),
+        (UDFLoadError(module="bad_module", file="bad.py", error="SyntaxError"), "load_error"),
+        (
+            DuplicateFunctionError(
+                function_name="dup_func",
+                existing_location="a",
+                existing_file="a.py",
+                new_location="b",
+                new_file="b.py",
+            ),
+            "duplicate",
+        ),
+    ],
+    ids=["not_found", "load_error", "duplicate"],
+)
+def test_validation_failure_exits_non_zero(monkeypatch, tmp_path, error, error_type):
     result = _run_cli(
-        monkeypatch, tmp_path, {"valid": False, "error": nf, "error_type": "not_found"}
-    )
-    assert result.exit_code == 1, result.output
-
-
-def test_udf_load_error_exits_non_zero(monkeypatch, tmp_path):
-    load_err = UDFLoadError(module="bad_module", file="bad.py", error="SyntaxError")
-    result = _run_cli(
-        monkeypatch,
-        tmp_path,
-        {"valid": False, "error": load_err, "error_type": "load_error"},
-    )
-    assert result.exit_code == 1, result.output
-
-
-def test_duplicate_function_error_exits_non_zero(monkeypatch, tmp_path):
-    dup = DuplicateFunctionError(
-        function_name="dup_func",
-        existing_location="a",
-        existing_file="a.py",
-        new_location="b",
-        new_file="b.py",
-    )
-    result = _run_cli(
-        monkeypatch, tmp_path, {"valid": False, "error": dup, "error_type": "duplicate"}
+        monkeypatch, tmp_path, {"valid": False, "error": error, "error_type": error_type}
     )
     assert result.exit_code == 1, result.output
 

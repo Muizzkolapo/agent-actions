@@ -4,6 +4,7 @@ Verifies that the manager routes passthrough checks through
 has_disposition on the storage backend (always required).
 """
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -38,12 +39,24 @@ def mock_processing_service():
 class TestHandleBatchAgentPassthrough:
     """Test handle_batch_agent routes passthrough through DB when backend is set."""
 
-    def test_no_batches_checks_db_disposition(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    @pytest.mark.parametrize(
+        ("has_disposition", "expected_folder", "expected_status"),
+        [
+            pytest.param(True, "/output/extract", "completed", id="passthrough-completes"),
+            pytest.param(False, None, "failed", id="no-disposition-fails"),
+        ],
+    )
+    def test_no_batches_reads_the_passthrough_disposition_from_the_db(
+        self,
+        mock_job_manager,
+        mock_processing_service,
+        mock_storage_backend,
+        has_disposition,
+        expected_folder,
+        expected_status,
     ):
-        """When registry says no_batches, checks DB for passthrough disposition."""
         mock_job_manager.get_registry_status.return_value = "no_batches"
-        mock_storage_backend.has_disposition.return_value = True
+        mock_storage_backend.has_disposition.return_value = has_disposition
 
         manager = BatchLifecycleManager(
             mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
@@ -51,23 +64,8 @@ class TestHandleBatchAgentPassthrough:
         output_folder, status = manager.handle_batch_agent("extract", "/output/extract")
 
         mock_storage_backend.has_disposition.assert_called_once_with("extract", "passthrough")
-        assert status == "completed"
-        assert output_folder == "/output/extract"
-
-    def test_no_batches_no_disposition_returns_failed(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
-    ):
-        """When registry says no_batches and no DB disposition, returns failed."""
-        mock_job_manager.get_registry_status.return_value = "no_batches"
-        mock_storage_backend.has_disposition.return_value = False
-
-        manager = BatchLifecycleManager(
-            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
-        )
-        output_folder, status = manager.handle_batch_agent("extract", "/output/extract")
-
-        assert status == "failed"
-        assert output_folder is None
+        assert status == expected_status
+        assert output_folder == expected_folder
 
     def test_no_batches_fails_without_backend(self, mock_job_manager, mock_processing_service):
         """Without storage_backend, construction raises ConfigurationError."""
@@ -119,8 +117,6 @@ class TestCheckBatchSubmission:
         the run to collect a batch with nothing left to give, and the action never
         reaches its completion handling. The stamp is what says so — see the test
         below for why the COMPLETED status cannot."""
-        import json
-
         mock_storage_backend.load_metadata.return_value = json.dumps(
             {
                 "pages.json": {
@@ -141,84 +137,64 @@ class TestCheckBatchSubmission:
 
         assert result is None
 
-    def test_a_batch_finished_at_the_provider_but_never_collected_still_pauses(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
-    ):
-        """COMPLETED does not mean collected. `are_all_jobs_completed` persists the
-        status a provider poll returned, so an entry reads COMPLETED from the moment
-        the batch finishes — before any result is retrieved. Treating that as spent
-        completes the action with none of its records and strands the batch, which
-        nothing can collect afterwards."""
-        import json
+    _SPENT = {
+        "batch_id": "b_spent",
+        "status": "completed",
+        "timestamp": "t",
+        "provider": "p",
+        "collected_at": "2026-01-01T00:00:00Z",
+    }
 
-        mock_storage_backend.load_metadata.return_value = json.dumps(
-            {
-                "pages.json": {
-                    "batch_id": "b_ready",
-                    "status": "completed",
-                    "timestamp": "t",
-                    "provider": "p",
-                }
-            }
-        )
-        manager = BatchLifecycleManager(
-            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
-        )
-
-        result = manager.check_batch_submission("extract", 0, Path("/tmp/fake_agent_io"))
-
-        assert result == "batch_submitted"
-
-    def test_an_uncollected_batch_beside_a_spent_one_still_pauses(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
-    ):
-        """The spent entry must not mask the live one. Asserted separately from the
-        case above so a fix that simply stops reading the registry cannot hold both."""
-        import json
-
-        mock_storage_backend.load_metadata.return_value = json.dumps(
-            {
-                "done.json": {
-                    "batch_id": "b_spent",
-                    "status": "completed",
-                    "timestamp": "t",
-                    "provider": "p",
-                    "collected_at": "2026-01-01T00:00:00Z",
+    @pytest.mark.parametrize(
+        "registry",
+        [
+            # COMPLETED does not mean collected: the status a provider poll returned is
+            # persisted before any result is retrieved. Treating it as spent completes
+            # the action with none of its records and strands the batch.
+            pytest.param(
+                {
+                    "pages.json": {
+                        "batch_id": "b_ready",
+                        "status": "completed",
+                        "timestamp": "t",
+                        "provider": "p",
+                    }
                 },
-                "live.json": {
-                    "batch_id": "b_live",
-                    "status": "submitted",
-                    "timestamp": "t",
-                    "provider": "p",
+                id="completed-but-never-collected",
+            ),
+            # The spent entry must not mask the live one. Kept apart from the case above
+            # so a fix that simply stops reading the registry cannot hold both.
+            pytest.param(
+                {
+                    "done.json": _SPENT,
+                    "live.json": {
+                        "batch_id": "b_live",
+                        "status": "submitted",
+                        "timestamp": "t",
+                        "provider": "p",
+                    },
                 },
-            }
-        )
-        manager = BatchLifecycleManager(
-            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
-        )
-
-        result = manager.check_batch_submission("extract", 0, Path("/tmp/fake_agent_io"))
-
-        assert result == "batch_submitted"
-
-    def test_a_failed_batch_still_pauses(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
+                id="uncollected-beside-spent",
+            ),
+            # A FAILED entry has delivered nothing and is resubmitted, so it is not
+            # spent. Pinned so narrowing the check to in-flight statuses cannot pass.
+            pytest.param(
+                {
+                    "f.json": {
+                        "batch_id": "b_failed",
+                        "status": "failed",
+                        "timestamp": "t",
+                        "provider": "p",
+                    }
+                },
+                id="failed",
+            ),
+        ],
+    )
+    def test_a_batch_not_yet_collected_still_pauses(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend, registry
     ):
-        """Only COMPLETED means collected. A FAILED entry has delivered nothing and
-        is resubmitted by the framework, so it is not spent — pinned so that
-        narrowing this check to the in-flight statuses cannot pass."""
-        import json
-
-        mock_storage_backend.load_metadata.return_value = json.dumps(
-            {
-                "f.json": {
-                    "batch_id": "b_failed",
-                    "status": "failed",
-                    "timestamp": "t",
-                    "provider": "p",
-                }
-            }
-        )
+        mock_storage_backend.load_metadata.return_value = json.dumps(registry)
         manager = BatchLifecycleManager(
             mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
         )
@@ -247,33 +223,6 @@ class TestCheckBatchSubmissionRunMode:
 
         assert result is None
 
-    def test_batch_mode_respects_registry(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
-    ):
-        """Backend has batch jobs + run_mode=BATCH -> returns 'batch_submitted'."""
-        import json
-
-        mock_storage_backend.load_metadata.return_value = json.dumps(
-            {
-                "file.json": {
-                    "batch_id": "b1",
-                    "status": "pending",
-                    "timestamp": "t",
-                    "provider": "p",
-                }
-            }
-        )
-        manager = BatchLifecycleManager(
-            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
-        )
-        agent_io = Path("/tmp/fake_agent_io")
-
-        result = manager.check_batch_submission(
-            "extract", 0, agent_io, configured_run_mode=RunMode.BATCH
-        )
-
-        assert result == "batch_submitted"
-
     def test_no_registry_online_mode(
         self, mock_job_manager, mock_processing_service, mock_storage_backend
     ):
@@ -294,12 +243,13 @@ class TestCheckBatchSubmissionRunMode:
         # Should not even check filesystem or dispositions
         mock_storage_backend.has_disposition.assert_not_called()
 
-    def test_none_run_mode_preserves_existing_behavior(
-        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    @pytest.mark.parametrize(
+        "run_mode",
+        [pytest.param(RunMode.BATCH, id="batch-mode"), pytest.param(None, id="run-mode-unset")],
+    )
+    def test_a_pending_batch_in_the_backend_is_reported_as_submitted(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend, run_mode
     ):
-        """configured_run_mode=None (default) with jobs in backend -> batch_submitted."""
-        import json
-
         mock_storage_backend.load_metadata.return_value = json.dumps(
             {
                 "file.json": {
@@ -313,8 +263,9 @@ class TestCheckBatchSubmissionRunMode:
         manager = BatchLifecycleManager(
             mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
         )
-        agent_io = Path("/tmp/fake_agent_io")
 
-        result = manager.check_batch_submission("extract", 0, agent_io)
+        result = manager.check_batch_submission(
+            "extract", 0, Path("/tmp/fake_agent_io"), configured_run_mode=run_mode
+        )
 
         assert result == "batch_submitted"

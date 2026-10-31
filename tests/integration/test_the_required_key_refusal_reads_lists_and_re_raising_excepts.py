@@ -76,45 +76,38 @@ def _with_tool(tmp_path, mode: str, tool: str):
     return project
 
 
-@pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_key_set_only_in_a_branch_of_a_list_returning_tool_is_refused(tmp_path, mode):
-    project = _with_tool(tmp_path, mode, LIST_OF_ONE)
+@pytest.mark.parametrize(
+    ("mode", "tool", "says"),
+    [
+        ("online", LIST_OF_ONE, "line 11 of produce.py, inside an `if`"),
+        ("batch", LIST_OF_ONE, "line 11 of produce.py, inside an `if`"),
+        ("online", REMOVED, "removes it at line 11 of produce.py"),
+    ],
+    ids=["set-in-a-branch-of-a-list-online", "set-in-a-branch-of-a-list-batch", "removed-online"],
+)
+def test_a_required_key_a_return_may_lack_is_refused(tmp_path, mode, tool, says):
+    project = _with_tool(tmp_path, mode, tool)
 
     result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
     output = result.stdout + result.stderr
 
     assert result.returncode != 0, output
     assert "producer: output schema requires 'items'" in output, output
-    assert "line 11 of produce.py, inside an `if`" in output, output
+    assert says in output, output
     assert _dispositions(project) == [], output
 
 
-def test_a_removed_key_is_refused(tmp_path):
-    project = _with_tool(tmp_path, "online", REMOVED)
-
-    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
-    output = result.stdout + result.stderr
-
-    assert result.returncode != 0, output
-    assert "producer: output schema requires 'items'" in output, output
-    assert "removes it at line 11 of produce.py" in output, output
-    assert _dispositions(project) == [], output
-
-
-@pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_key_set_in_a_try_whose_except_re_raises_runs(tmp_path, mode):
-    project = _with_tool(tmp_path, mode, RE_RAISES)
-
-    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
-    output = result.stdout + result.stderr
-
-    assert result.returncode == 0, output
-    assert "output schema requires" not in output, output
-    assert _dispositions(project) == ["success", "success"], output
-
-
-def test_a_key_a_loop_removes_and_sets_again_runs(tmp_path):
-    project = _with_tool(tmp_path, "online", LOOP_SETS_AGAIN)
+@pytest.mark.parametrize(
+    ("mode", "tool"),
+    [("online", RE_RAISES), ("batch", RE_RAISES), ("online", LOOP_SETS_AGAIN)],
+    ids=[
+        "set-in-a-try-whose-except-re-raises-online",
+        "set-in-a-try-whose-except-re-raises-batch",
+        "loop-removes-and-sets-again-online",
+    ],
+)
+def test_a_key_every_return_carries_runs(tmp_path, mode, tool):
+    project = _with_tool(tmp_path, mode, tool)
 
     result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
     output = result.stdout + result.stderr

@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from agent_actions.workflow.runner_file_processing import (
     process_directory_files,
     process_merged_files,
@@ -31,9 +33,15 @@ def _make_params(upstream_dirs, output_dir, action_config=None):
 class TestProcessMergedFilesDoesNotMutateUpstream:
     """Upstream files must remain untouched after processing."""
 
-    def test_upstream_file_unchanged_after_merge(self, tmp_path):
-        """Upstream file content should be identical before and after merge."""
-        # Set up two upstream dirs with overlapping file
+    # Errors are caught per file, so a failing file is counted, not raised.
+    @pytest.mark.parametrize(
+        ("side_effect", "processed"),
+        [
+            pytest.param(None, 1, id="processing_succeeds"),
+            pytest.param(RuntimeError("processing failed"), 0, id="processing_raises"),
+        ],
+    )
+    def test_upstream_files_unchanged_after_merge(self, tmp_path, side_effect, processed):
         upstream_a = tmp_path / "upstream_a"
         upstream_b = tmp_path / "upstream_b"
         output = tmp_path / "output"
@@ -50,41 +58,14 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         # read as a repair in progress and narrow the walk. State the empty set a
         # runner that is not repairing actually carries.
         runner.retried_records = frozenset()
-        runner._process_single_file = MagicMock()
+        runner._process_single_file.side_effect = side_effect
 
         params = _make_params([str(upstream_a), str(upstream_b)], output)
 
-        process_merged_files(runner, params)
-
-        # Upstream files must be unchanged
-        assert json.loads((upstream_a / "data.json").read_text()) == original_a
-        assert json.loads((upstream_b / "data.json").read_text()) == original_b
-
-    def test_upstream_file_unchanged_even_on_processing_error(self, tmp_path):
-        """Even if _process_single_file raises, upstream files must not be corrupted."""
-        upstream_a = tmp_path / "upstream_a"
-        upstream_b = tmp_path / "upstream_b"
-        output = tmp_path / "output"
-        for d in [upstream_a, upstream_b, output]:
-            d.mkdir()
-
-        original_a = [{"id": 1}]
-        original_b = [{"id": 2}]
-        (upstream_a / "data.json").write_text(json.dumps(original_a))
-        (upstream_b / "data.json").write_text(json.dumps(original_b))
-
-        runner = MagicMock()
-        runner.retried_records = frozenset()
-        runner._process_single_file.side_effect = RuntimeError("processing failed")
-
-        params = _make_params([str(upstream_a), str(upstream_b)], output)
-
-        # Error is now caught per-file (no propagation), returns 0 processed
         files_found, files_processed, _errors = process_merged_files(runner, params)
-        assert files_processed == 0
         assert files_found == 1
+        assert files_processed == processed
 
-        # Upstream files must still be unchanged
         assert json.loads((upstream_a / "data.json").read_text()) == original_a
         assert json.loads((upstream_b / "data.json").read_text()) == original_b
 

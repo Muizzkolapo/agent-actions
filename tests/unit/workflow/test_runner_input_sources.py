@@ -31,22 +31,19 @@ def _make_agent_folder(tmp_path: Path) -> Path:
 
 
 class TestStagingDataSource:
-    def test_missing_data_source_defaults_to_staging(self, tmp_path):
+    @pytest.mark.parametrize(
+        "data_source",
+        [
+            pytest.param(None, id="missing"),
+            pytest.param("", id="empty-string"),
+            pytest.param("staging", id="staging-shorthand"),
+        ],
+    )
+    def test_data_source_resolves_to_staging(self, tmp_path, data_source):
         agent_folder = _make_agent_folder(tmp_path)
-        result = resolve_start_node_data_source(agent_folder, None, "start")
-        assert len(result.directories) == 1
-        assert result.directories[0] == agent_folder / "staging"
+        result = resolve_start_node_data_source(agent_folder, data_source, "start")
+        assert result.directories == [agent_folder / "staging"]
         assert result.file_type_filter is None
-
-    def test_empty_string_defaults_to_staging(self, tmp_path):
-        agent_folder = _make_agent_folder(tmp_path)
-        result = resolve_start_node_data_source(agent_folder, "", "start")
-        assert result.directories[0] == agent_folder / "staging"
-
-    def test_string_shorthand_staging(self, tmp_path):
-        agent_folder = _make_agent_folder(tmp_path)
-        result = resolve_start_node_data_source(agent_folder, "staging", "start")
-        assert result.directories[0] == agent_folder / "staging"
 
 
 # ---------------------------------------------------------------------------
@@ -107,17 +104,12 @@ class TestLocalDataSource:
                 "start",
             )
 
-    def test_bare_local_string_raises_helpful_error(self, tmp_path):
+    @pytest.mark.parametrize("kind", ["local", "api"])
+    def test_bare_kind_string_raises_helpful_error(self, tmp_path, kind):
         agent_folder = _make_agent_folder(tmp_path)
 
         with pytest.raises(ConfigurationError, match="requires a dict config"):
-            resolve_start_node_data_source(agent_folder, "local", "start")
-
-    def test_bare_api_string_raises_helpful_error(self, tmp_path):
-        agent_folder = _make_agent_folder(tmp_path)
-
-        with pytest.raises(ConfigurationError, match="requires a dict config"):
-            resolve_start_node_data_source(agent_folder, "api", "start")
+            resolve_start_node_data_source(agent_folder, kind, "start")
 
     def test_string_shorthand_local(self, tmp_path):
         agent_folder = _make_agent_folder(tmp_path)
@@ -179,26 +171,23 @@ class TestAPIDataSource:
             resolve_start_node_data_source(agent_folder, ds, "fetcher")
             assert mock_urlopen.call_count == 1
 
-    def test_api_rejects_non_http_scheme(self, tmp_path):
-        agent_folder = _make_agent_folder(tmp_path)
-
-        with pytest.raises(ConfigurationError, match="http or https"):
-            resolve_start_node_data_source(
-                agent_folder,
+    @pytest.mark.parametrize(
+        ("config", "match"),
+        [
+            pytest.param(
                 {"type": "api", "url": "ftp://example.com/data"},
-                "start",
-            )
-
-    def test_api_rejects_non_json_file_type(self, tmp_path):
+                "http or https",
+                id="non-http-scheme",
+            ),
+            pytest.param(
+                {"type": "api", "url": "https://example.com/data", "file_type": ["csv"]},
+                "only supports JSON",
+                id="non-json-file-type",
+            ),
+        ],
+    )
+    def test_api_rejects_an_unsupported_config(self, tmp_path, config, match):
         agent_folder = _make_agent_folder(tmp_path)
 
-        with pytest.raises(ConfigurationError, match="only supports JSON"):
-            resolve_start_node_data_source(
-                agent_folder,
-                {
-                    "type": "api",
-                    "url": "https://example.com/data",
-                    "file_type": ["csv"],
-                },
-                "start",
-            )
+        with pytest.raises(ConfigurationError, match=match):
+            resolve_start_node_data_source(agent_folder, config, "start")

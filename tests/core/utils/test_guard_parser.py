@@ -13,51 +13,53 @@ from agent_actions.guards import (
 class TestGuardParser:
     """Test suite for GuardParser."""
 
-    def test_parse_sql_guard(self):
-        """Test parsing SQL-like guard expressions."""
-        guard = 'questionable != "Low Value"'
+    @pytest.mark.parametrize(
+        ("guard", "guard_type", "expression"),
+        [
+            pytest.param(
+                'questionable != "Low Value"',
+                GuardType.SQL,
+                'questionable != "Low Value"',
+                id="sql",
+            ),
+            pytest.param(
+                'questionable == "High Value" AND confidence > 0.8',
+                GuardType.SQL,
+                'questionable == "High Value" AND confidence > 0.8',
+                id="sql-complex",
+            ),
+            pytest.param(
+                "udf:get_answer_length_flag_value",
+                GuardType.UDF,
+                "get_answer_length_flag_value",
+                id="udf",
+            ),
+            pytest.param(
+                "  udf:  check_eligibility  ",
+                GuardType.UDF,
+                "check_eligibility",
+                id="udf-whitespace",
+            ),
+        ],
+    )
+    def test_parse_guard_expression(self, guard, guard_type, expression):
         result = GuardParser.parse(guard)
-        assert result.type == GuardType.SQL
-        assert result.expression == 'questionable != "Low Value"'
+        assert result.type == guard_type
+        assert result.expression == expression
         assert result.original == guard
 
-    def test_parse_udf_guard(self):
-        """Test parsing UDF guard expressions."""
-        guard = "udf:get_answer_length_flag_value"
-        result = GuardParser.parse(guard)
-        assert result.type == GuardType.UDF
-        assert result.expression == "get_answer_length_flag_value"
-        assert result.original == guard
-
-    def test_parse_udf_guard_with_whitespace(self):
-        """Test parsing UDF guard with extra whitespace."""
-        guard = "  udf:  check_eligibility  "
-        result = GuardParser.parse(guard)
-        assert result.type == GuardType.UDF
-        assert result.expression == "check_eligibility"
-        assert result.original == guard
-
-    def test_parse_complex_sql_guard(self):
-        """Test parsing complex SQL-like expressions."""
-        guard = 'questionable == "High Value" AND confidence > 0.8'
-        result = GuardParser.parse(guard)
-        assert result.type == GuardType.SQL
-        assert result.expression == guard
-        assert result.original == guard
-
-    def test_parse_empty_guard_raises_error(self):
-        """Test that empty guard raises ValidationError."""
-        with pytest.raises(ValidationError, match="Guard expression must be a non-empty string"):
-            GuardParser.parse("")
-        with pytest.raises(ValidationError, match="Guard expression must be a non-empty string"):
-            GuardParser.parse(None)
-
-    def test_parse_empty_udf_expression_raises_error(self):
-        """Test that UDF with empty expression raises ValidationError."""
-        with pytest.raises(ValidationError, match="UDF guard expression cannot be empty"):
-            GuardParser.parse("udf:")
-        with pytest.raises(ValidationError, match="UDF guard expression cannot be empty"):
-            GuardParser.parse("udf:   ")
+    @pytest.mark.parametrize(
+        ("guard", "match"),
+        [
+            pytest.param("", "Guard expression must be a non-empty string", id="empty-string"),
+            pytest.param(None, "Guard expression must be a non-empty string", id="none"),
+            pytest.param("udf:", "UDF guard expression cannot be empty", id="udf-empty"),
+            pytest.param("udf:   ", "UDF guard expression cannot be empty", id="udf-whitespace"),
+        ],
+    )
+    def test_parse_empty_guard_raises_error(self, guard, match):
+        with pytest.raises(ValidationError, match=match):
+            GuardParser.parse(guard)
 
     def test_validate_udf_expression_invalid_patterns(self):
         """Test invalid UDF expression patterns."""

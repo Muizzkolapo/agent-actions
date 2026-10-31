@@ -47,6 +47,21 @@ class TestActionStrategyBase:
         assert "StandardStrategy" in repr(StandardStrategy())
 
 
+class TestStrategyEquality:
+    @pytest.mark.parametrize(
+        ("a", "b", "equal"),
+        [
+            pytest.param(InitialStrategy(), InitialStrategy(), True, id="initial_same_type"),
+            pytest.param(InitialStrategy(), StandardStrategy(), False, id="initial_vs_standard"),
+            pytest.param(StandardStrategy(), StandardStrategy(), True, id="standard_same_type"),
+            pytest.param(StandardStrategy(), InitialStrategy(), False, id="standard_vs_initial"),
+        ],
+    )
+    def test_strategies_are_equal_only_to_the_same_type(self, a, b, equal):
+        assert (a == b) is equal
+        assert (a != b) is not equal
+
+
 # ── InitialStrategy ────────────────────────────────────────────────────
 
 
@@ -132,14 +147,6 @@ class TestInitialStrategy:
         )
 
         assert strategy.execute.call_args[0][0].file_type_filter == {"json"}
-
-    def test_equality_same_type(self):
-        assert InitialStrategy() == InitialStrategy()
-
-    def test_equality_different_type(self):
-        a = InitialStrategy()
-        b = StandardStrategy()
-        assert a != b
 
 
 # ── StandardStrategy ───────────────────────────────────────────────────
@@ -243,16 +250,6 @@ class TestStandardStrategy:
             "name": "my_wf",
             "run_id": "run_7",
         }
-
-    def test_equality_same_factory(self):
-        a = StandardStrategy()
-        b = StandardStrategy()
-        assert a == b
-
-    def test_equality_different_type(self):
-        a = StandardStrategy()
-        b = InitialStrategy()
-        assert a != b
 
     def test_equality_with_non_strategy(self):
         a = StandardStrategy()

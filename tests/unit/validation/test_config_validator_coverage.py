@@ -21,23 +21,18 @@ def validator():
 class TestValidateDispatch:
     """Test the top-level validate() routing logic."""
 
-    def test_non_dict_data_returns_false(self, validator):
-        """Non-dict data should fail validation."""
-        result = validator.validate("not a dict")
+    @pytest.mark.parametrize(
+        ("data", "fragment"),
+        [
+            pytest.param("not a dict", "dictionary", id="non-dict"),
+            pytest.param({"agent_name": "foo"}, "operation", id="missing-op"),
+            pytest.param({"operation": "does_not_exist"}, "unknown operation", id="unknown-op"),
+        ],
+    )
+    def test_bad_request_returns_false_with_error(self, validator, data, fragment):
+        result = validator.validate(data)
         assert result is False
-        assert any("dictionary" in e.lower() for e in validator.get_errors())
-
-    def test_missing_operation_adds_error(self, validator):
-        """Missing operation key should produce an error."""
-        result = validator.validate({"agent_name": "foo"})
-        assert result is False
-        assert any("operation" in e.lower() for e in validator.get_errors())
-
-    def test_unknown_operation_adds_error(self, validator):
-        """Unknown operation string should produce an error."""
-        result = validator.validate({"operation": "does_not_exist"})
-        assert result is False
-        assert any("unknown operation" in e.lower() for e in validator.get_errors())
+        assert any(fragment in e.lower() for e in validator.get_errors())
 
     def test_validate_agent_entries_missing_fields(self, validator):
         """validate_agent_entries without required fields should error."""
@@ -307,6 +302,39 @@ class TestCheckCircularDependenciesLogic:
 class TestValidateOperationalDependenciesLogic:
     """Test operational dependency validation."""
 
+    @pytest.mark.parametrize(
+        ("cfgs", "fragment"),
+        [
+            pytest.param(
+                {
+                    "agent1": {"is_operational": True, "dependencies": ["agent2"]},
+                    "agent2": {"is_operational": False, "dependencies": []},
+                },
+                "inactive",
+                id="inactive-dep",
+            ),
+            pytest.param(
+                {"agent1": {"is_operational": True, "dependencies": ["ghost"]}},
+                "non-existent",
+                id="dangling-dep",
+            ),
+            pytest.param(
+                {"agent1": {"is_operational": True, "dependencies": [123]}},
+                "non-string",
+                id="non-string-dep",
+            ),
+            pytest.param(
+                {"agent1": {"is_operational": True, "dependencies": "agent2"}},
+                "not a list",
+                id="deps-not-a-list",
+            ),
+        ],
+    )
+    def test_bad_dependency_adds_error(self, validator, cfgs, fragment):
+        validator._validate_operational_dependencies_logic(cfgs)
+        assert validator.has_errors()
+        assert any(fragment in e.lower() for e in validator.get_errors())
+
     def test_active_depends_on_active_ok(self, validator):
         cfgs = {
             "agent1": {"is_operational": True, "dependencies": ["agent2"]},
@@ -315,45 +343,12 @@ class TestValidateOperationalDependenciesLogic:
         validator._validate_operational_dependencies_logic(cfgs)
         assert not validator.has_errors()
 
-    def test_active_depends_on_inactive_error(self, validator):
-        cfgs = {
-            "agent1": {"is_operational": True, "dependencies": ["agent2"]},
-            "agent2": {"is_operational": False, "dependencies": []},
-        }
-        validator._validate_operational_dependencies_logic(cfgs)
-        assert validator.has_errors()
-        assert any("inactive" in e.lower() for e in validator.get_errors())
-
-    def test_active_depends_on_nonexistent_error(self, validator):
-        cfgs = {
-            "agent1": {"is_operational": True, "dependencies": ["ghost"]},
-        }
-        validator._validate_operational_dependencies_logic(cfgs)
-        assert validator.has_errors()
-        assert any("non-existent" in e.lower() for e in validator.get_errors())
-
     def test_inactive_agent_deps_not_checked(self, validator):
         cfgs = {
             "agent1": {"is_operational": False, "dependencies": ["ghost"]},
         }
         validator._validate_operational_dependencies_logic(cfgs)
         assert not validator.has_errors()
-
-    def test_non_string_dependency_error(self, validator):
-        cfgs = {
-            "agent1": {"is_operational": True, "dependencies": [123]},
-        }
-        validator._validate_operational_dependencies_logic(cfgs)
-        assert validator.has_errors()
-        assert any("non-string" in e.lower() for e in validator.get_errors())
-
-    def test_deps_not_a_list_error(self, validator):
-        cfgs = {
-            "agent1": {"is_operational": True, "dependencies": "agent2"},
-        }
-        validator._validate_operational_dependencies_logic(cfgs)
-        assert validator.has_errors()
-        assert any("not a list" in e.lower() for e in validator.get_errors())
 
 
 # ---------------------------------------------------------------------------
