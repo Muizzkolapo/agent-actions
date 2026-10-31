@@ -16,7 +16,7 @@ from agent_actions.validation.schema_validator import SchemaValidator
 
 # D-2 covered `SchemaExtractor._extract_field_name`, which discarded a ref's namespace.
 # Every directive now parses through the runtime's `parse_field_reference`, the method is
-# gone, and `tests/validation/static_analyzer/test_schema_extractor.py` pins its successor.
+# gone, and `tests/unit/validation/static_analyzer/test_schema_extractor.py` pins its successor.
 
 # ---------------------------------------------------------------------------
 # D-3  ·  ProjectValidator — _complete_validation fires at all exit points

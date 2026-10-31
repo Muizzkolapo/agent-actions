@@ -1,0 +1,54 @@
+"""How observe and passthrough treat a field that is not there.
+
+- Null namespace (guard-skipped): the field resolves to None.
+- Present namespace, missing field: observe raises RecordContextError, so the
+  prompt never renders a None it did not expect.
+- Absent namespace: observe raises RecordContextError (a config error).
+
+Passthrough still resolves a missing field to None, as guards do, since
+passthrough fields are not rendered into prompts.
+"""
+
+import pytest
+
+from agent_actions.errors import ConfigurationError
+from agent_actions.prompt.context.scope_application import apply_context_scope
+
+
+def _make_field_context(**namespaces):
+    """Build a field_context dict from namespace kwargs."""
+    return dict(namespaces)
+
+
+class TestObserveNullSafety:
+    """Observe raises for missing fields in present namespaces."""
+
+    def test_observe_missing_field_raises(self):
+        """Observing a field that doesn't exist in a present namespace → raises."""
+        fc = _make_field_context(upstream_step={"field_a": "value"})
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=fc,
+                context_scope={"observe": ["upstream_step.field_b"]},
+                action_name="downstream",
+            )
+
+    def test_observe_missing_field_raises_even_with_present_fields(self):
+        """Missing field raises even when other fields in the namespace exist."""
+        fc = _make_field_context(dep={"real_field": "real_value"})
+        with pytest.raises(ConfigurationError, match="not found in namespace"):
+            apply_context_scope(
+                field_context=fc,
+                context_scope={"observe": ["dep.real_field", "dep.ghost_field"]},
+                action_name="downstream",
+            )
+
+    def test_passthrough_missing_field_returns_none(self):
+        """Passthrough still resolves missing field to None (not rendered in prompts)."""
+        fc = _make_field_context(ns={"existing": "value"})
+        _prompt_ctx, _llm_ctx, pt = apply_context_scope(
+            field_context=fc,
+            context_scope={"passthrough": ["ns.missing"]},
+            action_name="downstream",
+        )
+        assert pt["ns"]["missing"] is None

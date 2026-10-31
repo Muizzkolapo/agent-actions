@@ -19,7 +19,7 @@ def _only_the_name_check():
     `description` and the action no `intent`, both required. The structural pass
     correctly rejects them, and `agac run` raises the same pydantic error.
     That pass is covered against a real workflow in
-    tests/validation/test_validate_udfs_is_a_complete_gate.py.
+    tests/unit/validation/test_validate_udfs_is_a_complete_gate.py.
     """
     with patch(
         "agent_actions.validation.validate_udfs.ValidateUDFsCommand._run_structural_preflight",

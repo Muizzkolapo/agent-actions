@@ -318,7 +318,7 @@ _PROBES = (
 def _register_probes():
     """Registered per test, not at import.
 
-    Any earlier test calling `clear_registry()` -- tests/cli/test_list_udfs.py does, around
+    Any earlier test calling `clear_registry()` -- tests/unit/cli/test_list_udfs.py does, around
     every test in it -- wiped an import-time registration, and a guard whose UDF is missing
     used to be swallowed as a warning and passed through. The record was then unmutated
     because the UDF never ran, so these tests passed without the view doing anything.
