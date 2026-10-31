@@ -145,10 +145,10 @@ Where each symbol is used in production code:
 Test files that exercise the models directly:
 
 - `tests/unit/models/test_action_schema.py`
-- `tests/services/test_workflow_schema_service.py`
-- `tests/cli/renderers/test_schema_renderer.py`
-- `tests/cli/test_inspect_commands_integration.py`
-- `tests/cli/test_cli_hardening.py`
+- `tests/unit/services/test_workflow_schema_service.py`
+- `tests/unit/cli/renderers/test_schema_renderer.py`
+- `tests/unit/cli/test_inspect_commands_integration.py`
+- `tests/unit/cli/test_cli_hardening.py`
 
 ---
 
