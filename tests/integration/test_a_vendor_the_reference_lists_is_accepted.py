@@ -86,9 +86,6 @@ class TestTheNameTheReferenceGivesForGemini:
 
 class TestEveryNameTheReferenceListsLoads:
     def test_each_listed_vendor_is_accepted(self):
-        if not REFERENCE.exists():
-            pytest.skip("docs not present")
-
         refused = []
         for vendor in _vendors_the_reference_lists():
             try:
@@ -100,9 +97,6 @@ class TestEveryNameTheReferenceListsLoads:
 
     def test_the_reference_lists_vendors_it_can_be_read_for(self):
         """Control: the parse above is not vacuous."""
-        if not REFERENCE.exists():
-            pytest.skip("docs not present")
-
         listed = _vendors_the_reference_lists()
 
         assert {"openai", "anthropic", "groq", "cohere"} <= set(listed)

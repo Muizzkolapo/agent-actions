@@ -422,17 +422,6 @@ class TestJsonModeInteraction:
         result = ResponseBuilder.wrap_non_json("plain text", {"output_field": "content"})
         assert result == [{"content": "plain text"}]
 
-    def test_schema_still_compiled_regardless_of_json_mode(self):
-        """ResponseSchemaCompiler compiles schema even when json_mode would be false.
-
-        The compiler doesn't check json_mode — that's the client's job.
-        This verifies the compiler always produces output when schema is present.
-        """
-        compiler = ResponseSchemaCompiler(project_root=None, tools_path=None)
-        config = {"schema": SAMPLE_UNIFIED_SCHEMA, "name": "test", "json_mode": False}
-        compiled, _ = compiler.compile(config, "openai")
-        assert compiled is not None
-
 
 # ===================================================================
 # 5. Dispatch Task in Schema

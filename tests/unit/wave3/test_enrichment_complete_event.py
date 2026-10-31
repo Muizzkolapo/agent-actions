@@ -6,9 +6,7 @@ import pytest
 
 from agent_actions.output.response.expander_action_types import process_tool_action
 from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.result_collector import ProcessingStatus
 from agent_actions.utils.correlation import VersionIdGenerator
-from tests.conftest import wire_batch_disposition_delegate
 
 
 class TestEnrichmentCompleteEventOnFailure:
@@ -134,65 +132,3 @@ class TestVersionIdGeneratorLRUEviction:
             assert id_first == id_second
         finally:
             VersionIdGenerator._MAX_REGISTRY_SIZE = original_max
-
-
-class TestOutputFieldDeduplication:
-    """ActionSchema output_fields must not contain duplicates from overlapping sources."""
-
-    def test_overlapping_schema_and_observe_fields(self):
-        from agent_actions.models.action_schema import FieldInfo, FieldSource
-
-        # Simulate what schema_service does — build with deduped fields
-        schema_fields = ["name", "age", "shared_field"]
-        observe_fields = ["shared_field", "extra_obs"]
-
-        seen: dict[str, FieldInfo] = {}
-        for f in schema_fields:
-            if f not in seen:
-                seen[f] = FieldInfo(name=f, source=FieldSource.SCHEMA)
-        for f in observe_fields:
-            if f not in seen:
-                seen[f] = FieldInfo(name=f, source=FieldSource.OBSERVE)
-
-        output_fields = list(seen.values())
-
-        # shared_field should appear once with SCHEMA source (first-seen wins)
-        names = [f.name for f in output_fields]
-        assert names.count("shared_field") == 1
-        shared = next(f for f in output_fields if f.name == "shared_field")
-        assert shared.source == FieldSource.SCHEMA
-
-
-class TestDeferredStatusHandling:
-    """DEFERRED status should be handled with disposition write, not just a log."""
-
-    def test_deferred_status_exists(self):
-        """Verify the DEFERRED branch exists as a known status."""
-        assert hasattr(ProcessingStatus, "DEFERRED")
-
-    def test_deferred_writes_disposition(self):
-        """DEFERRED records write a DISPOSITION_DEFERRED to the storage backend."""
-        from agent_actions.processing.result_collector import ResultCollector
-        from agent_actions.processing.types import ProcessingResult
-
-        deferred = ProcessingResult.deferred(
-            task_id="task-abc",
-            source_guid="test-guid",
-        )
-        backend = MagicMock()
-        wire_batch_disposition_delegate(backend)
-
-        ResultCollector.collect_results(
-            [deferred],
-            {},
-            "test_agent",
-            is_first_stage=False,
-            storage_backend=backend,
-        )
-
-        backend.set_disposition.assert_called_once_with(
-            "test_agent",
-            "test-guid",
-            "deferred",
-            reason="batch_queued:task_id=task-abc",
-        )

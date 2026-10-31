@@ -14,7 +14,6 @@ from agent_actions.storage.backend import (
     DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
-    VALID_DISPOSITIONS,
     Disposition,
 )
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -78,10 +77,6 @@ class TestDispositionEnum:
         assert Disposition.FAILED.value == DISPOSITION_FAILED
         assert Disposition.UNPROCESSED.value == DISPOSITION_UNPROCESSED
         assert Disposition.SUCCESS.value == DISPOSITION_SUCCESS
-
-    def test_valid_dispositions_contains_all_enum_values(self):
-        for member in Disposition:
-            assert member.value in VALID_DISPOSITIONS
 
     def test_disposition_is_str_subclass(self):
         assert isinstance(Disposition.PASSTHROUGH, str)

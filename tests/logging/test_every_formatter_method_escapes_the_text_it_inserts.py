@@ -5,12 +5,9 @@ only identifiers, which is what a name or a batch id is until one holds a bracke
 """
 
 import pytest
+from rich.text import Text
 
-pytest.importorskip("rich")
-
-from rich.text import Text  # noqa: E402
-
-from agent_actions.logging.events import (  # noqa: E402
+from agent_actions.logging.events import (
     ActionCachedEvent,
     ActionCompleteEvent,
     ActionFailedEvent,
@@ -21,7 +18,7 @@ from agent_actions.logging.events import (  # noqa: E402
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
-from agent_actions.logging.events.formatters import AgentActionsFormatter  # noqa: E402
+from agent_actions.logging.events.formatters import AgentActionsFormatter
 
 NAME = "[fragile]_[/x]"
 

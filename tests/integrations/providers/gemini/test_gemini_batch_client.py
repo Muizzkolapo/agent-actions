@@ -194,24 +194,13 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         assert len(tasks) == 3
         assert all("key" in task for task in tasks)
 
-    def test_submit_and_retrieve_workflow(
-        self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode
-    ):
-        """Test submit and retrieve workflow with Gemini client."""
-        # Prepare tasks
-        tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
-        assert len(tasks) == 3
-
-        # Submit batch
-        batch_id = provider.submit_batch(tasks, str(tmp_path))
-        assert batch_id is not None
-
-    def test_retrieve_invalid_batch_id_raises_error(self, provider, tmp_path):
+    def test_retrieve_invalid_batch_id_raises_error(self, provider, tmp_path, monkeypatch):
         """Test error handling for invalid batch ID."""
         from agent_actions.errors import VendorAPIError
 
         provider.client.batches.get.side_effect = VendorAPIError(
             vendor="gemini", endpoint="batches.get", context={"message": "Batch not found"}
         )
+        monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
         with pytest.raises(VendorAPIError):
             provider.retrieve_results("nonexistent-batch-id", str(tmp_path))

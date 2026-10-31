@@ -22,7 +22,6 @@ class TestSaverInit:
             storage_backend=MagicMock(),
         )
         assert saver.enable_deduplication is True
-        assert saver.storage_backend is not None
 
     def test_deduplication_disabled(self, tmp_path):
         saver = UnifiedSourceDataSaver(

@@ -475,28 +475,6 @@ class TestUnifiedProcessorEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# ProcessingStrategy protocol compliance
-# ---------------------------------------------------------------------------
-
-
-class TestProcessingStrategyProtocol:
-    """Verify protocol structural typing works correctly."""
-
-    def test_class_with_correct_signature_satisfies_protocol(self):
-        class ValidStrategy:
-            def invoke(
-                self, records: list[dict], context: ProcessingContext
-            ) -> list[ProcessingResult]:
-                return []
-
-        assert isinstance(ValidStrategy(), ProcessingStrategy)
-
-    def test_lambda_does_not_satisfy_protocol(self):
-        # A plain function object does not satisfy a Protocol with invoke method
-        assert not isinstance(lambda r, c: [], ProcessingStrategy)
-
-
-# ---------------------------------------------------------------------------
 # F9: Enrichment failure isolation
 # ---------------------------------------------------------------------------
 

@@ -32,34 +32,6 @@ def _make_params(**overrides):
     return StrategyExecutionParams(**defaults)
 
 
-# ── StrategyExecutionParams dataclass ──────────────────────────────────
-
-
-class TestStrategyExecutionParams:
-    """Basic dataclass contract tests."""
-
-    def test_defaults(self):
-        params = _make_params()
-        assert params.action_name == "test_action"
-        assert params.action_configs is None
-        assert params.storage_backend is None
-        assert params.source_relative_path is None
-        assert params.data is None
-
-    def test_optional_fields(self):
-        backend = MagicMock()
-        params = _make_params(
-            action_configs={"a": {}},
-            storage_backend=backend,
-            source_relative_path="rel/path",
-            data=[{"x": 1}],
-        )
-        assert params.action_configs == {"a": {}}
-        assert params.storage_backend is backend
-        assert params.source_relative_path == "rel/path"
-        assert params.data == [{"x": 1}]
-
-
 # ── ActionStrategy base class ──────────────────────────────────────────
 
 

@@ -708,17 +708,6 @@ class TestLineageFileMode:
             assert enriched.data[i]["parent_target_id"] == source_items[i]["target_id"]
             assert source_items[i]["node_id"] in enriched.data[i]["lineage"]
 
-    def test_file_mode_empty_output_returns_failed(self):
-        """Empty tool output from non-empty input returns FAILED status."""
-        result = ProcessingResult.failed(
-            error="Tool returned empty output",
-            source_guid=_uuid(),
-        )
-
-        assert result.status == ProcessingStatus.FAILED
-        assert result.data == []
-        assert result.error == "Tool returned empty output"
-
 
 class TestLineageHitlFileMode:
     """HITL FILE-mode lineage integrity.

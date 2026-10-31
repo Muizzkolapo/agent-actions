@@ -107,7 +107,7 @@ class TestGroqBatchClient(BaseBatchClientTests):
             },
         }
 
-    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
+    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path, monkeypatch):
         """Override: configure mock to raise for invalid batch ID."""
         from agent_actions.errors import VendorAPIError
 
@@ -119,6 +119,7 @@ class TestGroqBatchClient(BaseBatchClientTests):
             endpoint="batches.retrieve",
             context={"message": "Batch not found", "batch_id": "nonexistent"},
         )
+        monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
         with pytest.raises(VendorAPIError):
             provider.retrieve_results("nonexistent-batch-id-12345", str(tmp_path))
 

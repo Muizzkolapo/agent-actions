@@ -135,15 +135,6 @@ class TestTheHaltNeedNotFailFirst:
         assert _halt_marker(raised) is None
 
 
-class TestEveryRaiseSiteAttachesThePolicy:
-    """A halt is a halt whichever recovery loop exhausted.
-
-    Driven through each site's real callable.  Only ``result_collector``
-    attached the policy, so the other three produced a bare RuntimeError that
-    the next run read as an ordinary, resettable failure.
-    """
-
-
 class TestABatchHaltIsNotLeftRetryable:
     """A batch halt escaped the failure handler entirely and kept CHECKING_BATCH."""
 

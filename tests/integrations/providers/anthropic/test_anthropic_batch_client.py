@@ -217,7 +217,7 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         assert error is not None
         assert "errored" in error.lower()
 
-    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
+    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path, monkeypatch):
         """Override to test error handling with proper mock."""
         from agent_actions.errors import VendorAPIError
 
@@ -233,5 +233,6 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
                 endpoint="messages.batches.results",
                 context={"message": "Batch not found"},
             )
+            monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
             with pytest.raises(VendorAPIError):
                 provider.retrieve_results("nonexistent-batch-id", str(tmp_path))

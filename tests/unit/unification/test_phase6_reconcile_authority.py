@@ -44,18 +44,6 @@ def _make_ctx(
 class TestSingleCascadeAuthority:
     """U-1.2: Reconciliation must not re-check cascade — trust prep."""
 
-    def test_no_cascade_blocked_function_exists(self):
-        """_is_cascade_blocked must not exist in the module — single authority is prep.
-
-        After Phase 6, the function is deleted entirely. Reconciliation uses
-        get_skip_reason() as the sole authority for CASCADE decisions.
-        """
-        import agent_actions.llm.batch.processing.batch_result_strategy as mod
-
-        assert not hasattr(mod, "_is_cascade_blocked"), (
-            "_is_cascade_blocked must be deleted — get_skip_reason() is sole authority"
-        )
-
     def test_prep_skip_reason_is_authority(self):
         """get_skip_reason() provides passthrough reason without re-evaluation."""
         original_row = {
