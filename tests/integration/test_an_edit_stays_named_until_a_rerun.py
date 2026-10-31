@@ -1,13 +1,9 @@
 """An edit stays named, and traceable, until a rerun answers every record under it.
 
-An edit re-runs nothing, so an action can hold answers from two configs. Three things say
-so. Each prompt trace row records the config it was answered under, under a retry too,
-where the action's own stamp still names the earlier config. An action stopped partway
-that resumes under an edit keeps its stamp at the config its kept answers were given
-under, so every later run names the edit until ``--rerun``. And a reset under a file
-limit says that the files the walk does not reach keep output from an earlier run.
-
-Every run is an ``agac`` command through the CLI, executor, store and mock provider.
+An action can hold answers from two configs. Trace rows name each record's config, retries
+included; a resumed or retried action keeps naming the edit, even once it is reverted; an
+edit under a batch still out is named on collection; a reset under a file limit says the
+files it skips keep older output. Every run goes through the CLI and the mock provider.
 """
 
 import json
@@ -172,3 +168,79 @@ def test_an_edit_reset_by_a_new_file_limit_says_the_files_it_skips_keep_older_ou
     assert result.exit_code == 0, result.output
     assert f"{FILE_LIMIT} an edit (model): files the walk does not reach" in _printed(result)
     assert STILL_NAMED not in _printed(result)
+
+
+def test_an_action_stopped_before_it_stored_a_file_still_names_the_edit_it_resumed_under(
+    online,  # noqa: F811
+    provider,  # noqa: F811
+):
+    """The answer it kept is only a disposition: no file was stored before the stop."""
+    provider.stops(at_call=2, raising=KeyboardInterrupt())
+    _run("--fresh")
+    assert _status(online) == "interrupted"
+    assert _stored(online) == {}
+    _edit_model(online, EDITED_MODEL)
+    provider.answers()
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert len(provider.asked) == len(EVERY_PAGE) - 1
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert STILL_NAMED in _printed(result)
+
+
+def test_an_edit_reverted_after_a_resume_still_says_the_answers_come_from_two_configs(
+    online,  # noqa: F811
+    provider,  # noqa: F811
+):
+    provider.stops(at_call=3, raising=KeyboardInterrupt())
+    _run("--fresh")
+    _edit_model(online, EDITED_MODEL)
+    provider.answers()
+    assert _run().exit_code == 0
+    assert sorted(model for _, model in provider.asked) == [EDITED_MODEL, EDITED_MODEL]
+    config = online / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().replace(EDITED_MODEL, MODEL))
+    provider.answers()
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.asked == []
+    assert "was edited since" not in _printed(result)
+    assert f"{ACTION} holds answers given under more than one config" in _printed(result)
+
+    result = _run("--rerun", ACTION)
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == EVERY_PAGE
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert "more than one config" not in _printed(result)
+
+
+def test_an_edit_while_the_batch_is_out_is_named_by_the_run_that_collects_it(project):  # noqa: F811
+    result = _run("--fresh")
+    assert result.exit_code == 0, result.output
+    assert _status(project) == "batch_submitted"
+    _edit_model(project, EDITED_MODEL)
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert (
+        f"{ACTION} was edited since its batch was sent (model): the batch is collected as it "
+        "was sent"
+    ) in _printed(result)
+    assert _status(project) == "completed"
+    assert len(_stored(project)) == len(EVERY_PAGE)
+
+    result = _run()
+
+    assert STILL_NAMED in _printed(result)

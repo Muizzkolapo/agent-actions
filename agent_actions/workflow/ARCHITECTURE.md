@@ -95,8 +95,9 @@ Every action has a status that controls what happens on the current run and on r
     │                        │  retryable)       │
     │                   ┌────┴─────┐             │
     └───────────────────│COMPLETED │─────────────┘
-       (only via config └──────────┘
-        change or         (survives re-run)
+       (only via limit, └──────────┘
+        staged input,     (survives re-run)
+        --rerun or
         missing output)
 ```
 
@@ -241,12 +242,15 @@ Every action goes through this decision tree before any code runs:
 execute_action_sync(action_name)
     │
     ▼
-Config or staged input changed since last run?
-(prompt, model, schema, guard, limits; or, for a first stage,
- a staged file added, removed or rewritten)
+Limits or staged input changed since last run?
+(record/file limit; or, for a first stage, a staged file added,
+ removed or rewritten)
     YES → invalidate COMPLETED, reset to PENDING
           and reset every action that reads its output, in any state,
           directly or through other actions (see below)
+Config edited (prompt, model, schema, guard, context scope,
+dependencies)?
+    YES → warn, naming the edit and `--rerun`; nothing is reset
     │
     ▼
 Already COMPLETED?
@@ -353,9 +357,10 @@ next run does all of it again; one that dies after it leaves all of them pending
 done when the action is reset and not as each reader is reached, because a batch action
 pauses the run and the next process no longer knows which action was reset.
 
-An action stopped partway is reset the same way when its config differs from the one its
-run recorded as it started, at the start of the next run (`_reset_retryable_actions`); see
-"A stopped action keeps what it finished while its config is unchanged".
+An action stopped partway keeps what it finished whether or not its config differs from
+the one its run recorded as it started (`_reset_retryable_actions`); see "A stopped action
+keeps what it finished, edited or not". `agac run --rerun <action>` resets it and its
+readers the same way as above.
 
 A completed action that carries a node-level failure runs again and leaves its readers
 alone. It still holds its rows and its records' dispositions, so it would answer what
@@ -376,7 +381,7 @@ A run that is repairing records (`agac retry` with records to re-run) acts on no
 comparison and resets no reader. It answers only the records it named, so a reset under it clears
 every other record's disposition with nothing run to replace them. It warns when it
 meets an edited action, one it is about to re-run included, and it keeps the completion stamp it found on each action it
-completes, so the next plain run still finds the edit and applies it. A retry with no
+completes, so the next plain run still names the edit; `--rerun` applies it. A retry with no
 record to re-run (only a node-level failure, or one resuming a halt) is a plain run for
 this purpose.
 
@@ -803,8 +808,13 @@ After an edit the gate carries answers given under the old config, and
 a batch still out is collected as it is. The action is then stamped
 complete under the new config. Each prompt trace row records the config
 its record was answered under (`answered_under`, from config_in_force),
-so the mix stays readable record by record. `agac run --rerun <action>`
-(reopen_with_readers) answers every record under the edit.
+so the mix stays readable record by record. A completion whose stamp is held
+to another config than the one in force (a resume under an edit, a repair)
+also records ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, so a later run still warns
+once the edit is reverted and the stamp matches again. A BATCH_SUBMITTED
+action edited since its submission is named at startup; its batch is
+collected as sent. `agac run --rerun <action>` (reopen_with_readers, which
+drops both markers) answers every record under the edit.
 ```
 
 ### The reset decides before it writes a status

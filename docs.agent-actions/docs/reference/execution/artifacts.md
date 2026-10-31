@@ -151,7 +151,9 @@ dependencies was edited in between — the same edits as for a completed action,
 the run names the edit and answers only the rest under it. When the action kept any
 answer, its stamps stay at the config those answers were given under
 (`kept_answers_under` in the status file), so every later run names the edit until
-`--rerun` answers every record under it. A change to a tool's code or to the contents of
+`--rerun` answers every record under it. An action that completes holding answers from more
+than one config is marked so (`answers_under_more_than_one_config`), and each run says so
+even after the edit is undone. A change to a tool's code or to the contents of
 a seed data file is not seen, so run `agac run --rerun <action>` or `--fresh` to answer
 everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
 record to the guard again, so a record its code now skips is skipped, and one it now
@@ -181,7 +183,7 @@ before the reset, and `agac retry` asks for them again. Outside a reset, a run t
 answers nothing in a file and fails some of it leaves what that file held.
 
 Staged input is the source of truth for what an action holds. An action reset after
-its input was removed — by an edit applied with `--rerun`, or by a limit or model given on the command
+its input was removed — by an edit applied with `--rerun`, or by a limit given on the command
 line — finds no input file, is skipped, and its stored output is deleted along with
 its readers'. Restore the input and run again to rebuild them. A reset after only
 some of its input files were removed deletes what it stored for those files, once it

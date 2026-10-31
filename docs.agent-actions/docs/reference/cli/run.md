@@ -133,6 +133,22 @@ action and every action that reads its output, and keeps every other action's an
 agac run -a my_agent --rerun classify
 ```
 
+An action that holds answers from more than one config keeps saying so, even after the
+config is changed back:
+
+```
+classify holds answers given under more than one config. Run again with --rerun classify to
+answer every record under the config in force
+```
+
+An edit made while an action's batch is out is named by the run that collects it. The batch
+is collected as it was sent:
+
+```
+classify was edited since its batch was sent (model): the batch is collected as it was sent.
+Run again with --rerun classify to answer every record under the edit
+```
+
 Under a file limit, `--rerun` reaches only the files the walk opens. The run warns that
 the files it does not reach keep output from an earlier run, and the action still reads as
 complete. The same warning comes when a changed limit resets an edited action. Pass

@@ -337,8 +337,8 @@ the batch is collected, [below](#retrying-an-action-that-runs-in-batch-mode).
 
 Carrying what an action holds for the records the retry did not name is only
 right when that is an answer for each of them. An action that did not finish its
-last run — added since then, put back to pending because something it reads was
-edited, or stopped partway through its records by an interrupt, a kill or an
+last run — added since then, put back to pending by `agac run --rerun` of something
+it reads, or stopped partway through its records by an interrupt, a kill or an
 error — holds none for the records that run had not reached. Nor does a
 completed action whose stored output is gone. A retry that narrowed it would
 complete it without them, and nothing would run it again.

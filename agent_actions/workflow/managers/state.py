@@ -71,6 +71,11 @@ REPAIRED_BY = "repaired_by"
 # still name the edit. Removed when a reset answers everything again.
 KEPT_ANSWERS_UNDER = "kept_answers_under"
 
+# Status detail: the action completed holding answers given under more than one config,
+# so its stamp, which names one, cannot say every answer is from the config in force.
+# Removed when a reset answers everything again.
+ANSWERS_UNDER_MORE_THAN_ONE_CONFIG = "answers_under_more_than_one_config"
+
 
 def _as_count(value: Any) -> int | None:
     """*value* as a record count, or None if it is not one."""
@@ -195,6 +200,7 @@ class ActionStateManager:
                 details.pop("max_records", None)
                 details.pop(REPAIRED_BY, None)
                 details.pop(KEPT_ANSWERS_UNDER, None)
+                details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
             self._save_status()
 
     def is_completed(self, action_name: str) -> bool:

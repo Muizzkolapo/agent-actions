@@ -275,6 +275,9 @@ class AgentWorkflow:
         keeps = set()
         for name in state_mgr.execution_order:
             status = state_mgr.get_status(name)
+            if status == ActionStatus.BATCH_SUBMITTED:
+                self._name_an_edit_under_a_batch_out(name)
+                continue
             if status not in stopped_partway or name in halted:
                 continue
             edits = edits_since_its_work_began(
@@ -315,6 +318,21 @@ class AgentWorkflow:
             if action_name not in keeps:
                 self._clear_prompt_traces(action_name)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
+
+    def _name_an_edit_under_a_batch_out(self, action_name: str) -> None:
+        """Warn of an edit made while the action's batch is out; it is collected as sent."""
+        edits = edits_since_its_work_began(
+            self.services.core.state_manager.get_status_details(action_name),
+            self.action_configs.get(action_name),
+        )
+        if edits:
+            logger.warning(
+                "%s was edited since its batch was sent (%s): the batch is collected as it "
+                "was sent. Run again with --rerun %s to answer every record under the edit",
+                action_name,
+                ", ".join(edits),
+                action_name,
+            )
 
     def _holds_answers(self, action_name: str) -> bool:
         """Whether a stopped action keeps an answer through the reset: a stored row or a

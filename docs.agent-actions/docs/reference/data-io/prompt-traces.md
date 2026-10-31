@@ -48,7 +48,9 @@ A [config edit](../cli/run#when-you-edit-the-workflow) re-runs nothing, so one a
 hold answers from more than one config. `answered_under` says which config answered each
 record. It holds the same keys as the `answered_under` stamp of the action in
 `agent_io/.agent_status.json`, so the two compare directly. Rows written before this column
-existed leave it `NULL`.
+existed leave it `NULL`. A row is written when its prompt is built, before the model is
+called, so a row with no `response_text` was prompted under that config but not answered:
+the run stopped before the answer came back.
 
 ```sql
 SELECT source_guid, json_extract(answered_under, '$.model_name') AS model

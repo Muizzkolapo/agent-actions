@@ -58,6 +58,7 @@ from agent_actions.utils.limits import (
 )
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import (
+    ANSWERS_UNDER_MORE_THAN_ONE_CONFIG,
     COMPLETED_STATUSES,
     KEPT_ANSWERS_UNDER,
     ActionStatus,
@@ -579,6 +580,10 @@ class ActionExecutor:
             ),
         }
         if not keep_stored:
+            # Held to an earlier config while this run answered under another one.
+            held = {key: did_the_work[key] for key in config_in_force(action_config)}
+            if _edits_since(held, action_config):
+                did_the_work[ANSWERS_UNDER_MORE_THAN_ONE_CONFIG] = True
             return did_the_work
         submitted = self.deps.state_manager.get_status_details(action_name)
         return {key: submitted.get(key, value) for key, value in did_the_work.items()}
@@ -686,6 +691,13 @@ class ActionExecutor:
                 "record under the edit",
                 action_name,
                 ", ".join(edits),
+                action_name,
+            )
+        elif details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
+            logger.warning(
+                "%s holds answers given under more than one config. Run again with --rerun %s "
+                "to answer every record under the config in force",
+                action_name,
                 action_name,
             )
         return current_status
