@@ -388,3 +388,14 @@ def test_an_action_cleared_in_bulk_drops_the_marker_of_answers_it_no_longer_hold
 
     assert _held(backend) == {}
     assert "kept_answers_under" not in state.get_status_details("define")
+
+
+def test_an_action_cleared_in_bulk_drops_its_mixed_mark(tmp_path, backend):
+    _stopped(tmp_path, backend, _Killed())
+    state = _next_run_resets(tmp_path, backend)
+    state.mark_mixed_answers(["define"])
+    state.update_status("define", ActionStatus.SKIPPED)
+
+    state = _next_run_resets(tmp_path, backend)
+
+    assert "answers_under_more_than_one_config" not in state.get_status_details("define")

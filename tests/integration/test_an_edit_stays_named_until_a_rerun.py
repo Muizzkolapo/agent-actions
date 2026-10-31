@@ -392,3 +392,27 @@ def test_a_rerun_of_an_edited_stopped_action_does_not_say_its_answers_stand(onli
     assert result.exit_code == 0, result.output
     assert "edited since its last run started" not in _printed(result)
     assert provider.pages() == EVERY_PAGE
+
+
+def test_an_edit_reset_by_a_record_limit_answers_everything_and_names_no_mix(online):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    _edit_model(online, EDITED_MODEL)
+    assert _run("--record-limit", "1").exit_code == 0
+    assert _flags(online) is None
+
+    result = _run("--record-limit", "1")
+
+    assert result.exit_code == 0, result.output
+    assert "more than one config" not in _printed(result)
+    assert "was edited since" not in _printed(result)
+
+
+def test_a_mixed_action_reset_again_under_a_file_limit_stays_marked(online):  # noqa: F811
+    assert _run("--fresh").exit_code == 0
+    _edit_model(online, EDITED_MODEL)
+    assert _run("--file-limit", "1").exit_code == 0
+    assert _flags(online) is True
+
+    assert _run("--file-limit", "1", "--record-limit", "1").exit_code == 0
+
+    assert _flags(online) is True
