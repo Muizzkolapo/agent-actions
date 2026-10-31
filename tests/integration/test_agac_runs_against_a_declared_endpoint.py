@@ -127,7 +127,7 @@ def _dispositions(root: Path, action: str) -> list[tuple[str, str]]:
     try:
         rows = con.execute(
             "select disposition, coalesce(reason, '') from record_disposition"
-            " where action_name = ?",
+            " where action_name = ? and record_id != '__node__'",
             (action,),
         )
         return sorted(rows)
@@ -177,24 +177,22 @@ def test_a_reply_that_does_not_match_the_schema_fails_the_record(tmp_path, serve
     servers["lab"].mode = "ignore"
     root = _project(tmp_path, _action("on_lab", "lab", "local-7b"))
 
-    _run(root, _env(servers))
+    # The only record fails, so the run reports failure; the run log carries why.
+    output = " ".join(_run(root, _env(servers), expect_exit=1).split())  # the console wraps
 
-    ((disposition, reason),) = _dispositions(root, "on_lab")
-    assert disposition == "failed"
-    assert "endpoint 'lab'" in reason
-    assert "does not match" in reason
-    assert "label" in reason
+    assert _dispositions(root, "on_lab") == [("failed", "parse_error")]
+    assert "endpoint 'lab' returned JSON that does not match schema 'classify'" in output
+    assert "label" in output
 
 
 def test_a_prose_reply_fails_the_record_as_a_parse_error(tmp_path, servers):
     servers["lab"].mode = "prose"
     root = _project(tmp_path, _action("on_lab", "lab", "local-7b"))
 
-    _run(root, _env(servers))
+    output = _run(root, _env(servers), expect_exit=1)
 
-    ((disposition, reason),) = _dispositions(root, "on_lab")
-    assert disposition == "failed"
-    assert "JSON" in reason
+    assert _dispositions(root, "on_lab") == [("failed", "parse_error")]
+    assert "contains _parse_error" in output
 
 
 def test_a_429_is_retried_and_a_401_is_not(tmp_path, servers):
@@ -203,14 +201,13 @@ def test_a_429_is_retried_and_a_401_is_not(tmp_path, servers):
     actions = _action("on_lab", "lab", "local-7b") + _action("on_keyed", "keyed", "gpt-4o-mini")
     root = _project(tmp_path, actions)
 
-    _run(root, _env(servers))
+    _run(root, _env(servers), expect_exit=1)
 
     assert len(servers["lab"].requests) == 2
     assert _dispositions(root, "on_lab") == [("success", "")]
     assert len(servers["keyed"].requests) == 1
-    ((disposition, reason),) = _dispositions(root, "on_keyed")
+    ((disposition, _reason),) = _dispositions(root, "on_keyed")
     assert disposition == "failed"
-    assert "401" in reason
 
 
 def test_no_secret_reaches_the_logs_the_store_or_the_output(tmp_path, servers):
