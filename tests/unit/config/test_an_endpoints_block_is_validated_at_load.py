@@ -186,12 +186,12 @@ REFUSALS = [
     ),
     (
         "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: [] }\n",
-        "endpoints.lab-vllm.auth.command: give the command as a non-empty list, "
+        "endpoints.lab-vllm.auth.command: give the command as a non-empty list of text, "
         "for example [gcloud, auth, print-access-token]",
     ),
     (
         "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: gcloud }\n",
-        "endpoints.lab-vllm.auth.command: give the command as a non-empty list, "
+        "endpoints.lab-vllm.auth.command: give the command as a non-empty list of text, "
         "for example [gcloud, auth, print-access-token]",
     ),
     (
@@ -293,6 +293,47 @@ REFUSALS = [
     (
         "endpoints:\n  lab-vllm: http://gpu-box:8000/v1\n",
         "endpoints.lab-vllm: must be a mapping with url and auth",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: [1] }\n",
+        "endpoints.lab-vllm.auth.command: give the command as a non-empty list of text, "
+        "for example [gcloud, auth, print-access-token]",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: ['', ''] }\n",
+        "endpoints.lab-vllm.auth.command: give the command as a non-empty list of text, "
+        "for example [gcloud, auth, print-access-token]",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: 123 }\n",
+        "endpoints.lab-vllm.auth.env: name the environment variable that holds the "
+        "credential, for example AZURE_OPENAI_KEY",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, header: '' }\n",
+        "endpoints.lab-vllm.auth.header: must be a header name",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n"
+        "    headers: { 1: x }\n",
+        "endpoints.lab-vllm.headers: unknown key '1'",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n"
+        "    headers: { '': x }\n",
+        "endpoints.lab-vllm.headers: a header name must not be empty",
+    ),
+    (
+        "endpoints:\n  8080:\n    url: http://gpu-box:8000/v1\n    auth: none\n",
+        "endpoints: an endpoint name must be text; quote it, for example '8080'",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: 'http://gpu-box:8000/v1 '\n    auth: none\n",
+        "endpoints.lab-vllm.url: must not contain whitespace",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: 'http://'\n    auth: none\n",
+        "endpoints.lab-vllm.url: must name a host, for example http://gpu-box:8000/v1",
     ),
     (
         "endpoints:\n  a:\n    url: http://h/v1\n    auth: none\n"
@@ -433,3 +474,53 @@ def test_the_refusal_reaches_the_user_through_agac_inspect_and_not_the_boot_line
     helped = run_agac(root, "--help")
     assert helped.returncode == 0
     assert "endpoints." not in helped.stdout + helped.stderr
+
+
+def _manager(root: Path, user_config: dict, agent_name: str | None = None):
+    from agent_actions.config.manager import ConfigManager
+
+    manager = ConfigManager(
+        constructor_path=str(root / "wf.yml"),
+        default_path=str(root / "default.yml"),
+        project_root=root,
+    )
+    manager.user_config = user_config
+    manager.agent_name = agent_name
+    return manager
+
+
+LEGACY = {"legacy": {"agents": [{"agent_type": "flatten", "model_vendor": "tool"}]}}
+
+
+def test_a_workflow_in_the_legacy_shape_is_held_to_the_block_too(tmp_path, endpoints):
+    root = _project(tmp_path, BAD_BLOCK)
+
+    with pytest.raises(ConfigValidationError) as info:
+        _manager(root, LEGACY, "legacy").get_user_agents()
+
+    assert info.value.context["reason"] == "endpoints.lab-vllm: unknown key 'format'"
+    assert endpoints.project_endpoints() == {}
+
+
+def test_a_workflow_in_the_legacy_shape_registers_a_valid_block(tmp_path, endpoints):
+    root = _project(tmp_path, VALID)
+
+    agents = _manager(root, LEGACY, "legacy").get_user_agents()
+
+    assert agents == LEGACY["legacy"]["agents"]
+    assert set(endpoints.project_endpoints()) == {"lab-vllm", "azure-gpt", "vertex-gemini"}
+
+
+def test_a_project_refused_before_its_block_is_read_leaves_no_stale_registry(
+    tmp_path, endpoints, load
+):
+    load(_project(tmp_path / "a", VALID))
+    # max_iterations is bounded to 1-10, so this project is refused before endpoints are read.
+    root = _project(
+        tmp_path / "b", "default_agent_config:\n  expect: { max_iterations: 99 }\n" + VALID
+    )
+
+    with pytest.raises(ConfigurationError):
+        _manager(root, {"name": "wf", "actions": []}).get_user_agents()
+
+    assert endpoints.project_endpoints() == {}
