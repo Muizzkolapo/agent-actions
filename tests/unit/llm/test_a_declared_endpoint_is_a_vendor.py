@@ -568,3 +568,35 @@ class TestCommandCache:
 
         sent = [r["headers"]["authorization"] for r in server.requests]
         assert sent == ["Bearer token-a-1234567", "Bearer token-b-1234567"]
+
+
+class TestHeaderSafeValues:
+    def test_whitespace_around_an_exported_secret_is_trimmed(self, compatible, monkeypatch):
+        monkeypatch.setenv("LAB_KEY", f"  {SECRET}\n")
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"env": "LAB_KEY"})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["authorization"] == f"Bearer {SECRET}"
+
+    def test_a_line_break_inside_a_secret_is_refused_by_name(self, compatible, monkeypatch):
+        monkeypatch.setenv("LAB_KEY", "first-half-1234\nsecond-half")
+        _declare_full("http://127.0.0.1:1/v1", auth={"env": "LAB_KEY"})
+
+        with pytest.raises(ConfigValidationError) as info:
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert info.value.context["reason"] == (
+            "endpoint 'lab' reads LAB_KEY, whose value holds a line break"
+        )
+
+    def test_a_line_break_inside_a_header_value_is_refused_by_name(self, compatible, monkeypatch):
+        monkeypatch.setenv("TRACE_TOKEN", "a\rb")
+        _declare_full("http://127.0.0.1:1/v1", auth="none", headers={"X-Trace": "${TRACE_TOKEN}"})
+
+        with pytest.raises(ConfigValidationError) as info:
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert info.value.context["reason"] == (
+            "endpoint 'lab' reads TRACE_TOKEN for header X-Trace, whose value holds a line break"
+        )
