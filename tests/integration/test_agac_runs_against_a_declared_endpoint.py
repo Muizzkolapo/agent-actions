@@ -206,8 +206,9 @@ def test_a_429_is_retried_and_a_401_is_not(tmp_path, servers):
     assert len(servers["lab"].requests) == 2
     assert _dispositions(root, "on_lab") == [("success", "")]
     assert len(servers["keyed"].requests) == 1
-    ((disposition, _reason),) = _dispositions(root, "on_keyed")
+    ((disposition, reason),) = _dispositions(root, "on_keyed")
     assert disposition == "failed"
+    assert "401" in reason
 
 
 def test_no_secret_reaches_the_logs_the_store_or_the_output(tmp_path, servers):

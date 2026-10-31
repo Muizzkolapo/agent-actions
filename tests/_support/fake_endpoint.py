@@ -49,6 +49,8 @@ class FakeEndpoint:
         self.echo_headers = echo_headers
         # When set, every 200 reply carries exactly this text as the content.
         self.content: str | None = None
+        # When set, every error reply carries exactly this message.
+        self.error_message: str | None = None
         self.requests: list[dict[str, Any]] = []
         self._server: ThreadingHTTPServer | None = None
 
@@ -71,6 +73,8 @@ class FakeEndpoint:
                     {
                         "path": self.path,
                         "headers": {k.lower(): v for k, v in self.headers.items()},
+                        # Every header line as sent, so a duplicate shows.
+                        "raw_headers": [(k.lower(), v) for k, v in self.headers.items()],
                         "body": body,
                     }
                 )
@@ -100,7 +104,7 @@ class FakeEndpoint:
         if self.statuses:
             status = self.statuses.pop(0)
             if status != 200:
-                message = f"stub answered {status}"
+                message = self.error_message or f"stub answered {status}"
                 if self.echo_headers:
                     message += " for request headers " + json.dumps(self.requests[-1]["headers"])
                 return status, {"error": {"message": message, "type": "stub"}}

@@ -276,7 +276,7 @@ class TestEndpointClient:
 
     def test_every_secret_the_client_reads_is_redacted_afterwards(self, compatible, monkeypatch):
         monkeypatch.setenv("LAB_KEY", SECRET)
-        monkeypatch.setenv("LAB_TRACE", "trace-value-xyz-1234567890")
+        monkeypatch.setenv("LAB_TRACE_TOKEN", "trace-value-xyz-1234567890")
         with FakeEndpoint() as server:
             load_project_endpoints(
                 {
@@ -284,7 +284,7 @@ class TestEndpointClient:
                         "lab": {
                             "url": server.base_url,
                             "auth": {"env": "LAB_KEY"},
-                            "headers": {"X-Trace": "${LAB_TRACE}"},
+                            "headers": {"X-Trace": "${LAB_TRACE_TOKEN}"},
                         }
                     }
                 }
@@ -485,5 +485,86 @@ class TestRedactionRules:
                 compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
 
         assert SECRET not in str(info.value)
-        assert "[REDACTED]" in str(info.value)
-        assert SECRET in server.requests[0]["headers"]["api-key"]  # it was sent, and echoed
+        assert "[REDACTED]" in str(info.value)  # the echo reached the message, masked
+        assert SECRET in server.requests[0]["headers"]["api-key"]  # and it was sent
+
+    def test_the_cli_error_block_masks_a_registered_value_in_the_root_cause(self):
+        """The translator walks to the root cause, whose text wrap_vendor_error never saw."""
+        from agent_actions.errors import VendorAPIError
+        from agent_actions.logging.errors import format_user_error
+        from agent_actions.logging.filters import register_secret
+
+        root = RuntimeError(f"gateway said: api-key {SECRET} refused")
+        wrapped = VendorAPIError("lab API error", cause=root)
+
+        shown_before = format_user_error(wrapped)
+        register_secret(SECRET)
+        shown_after = format_user_error(wrapped)
+
+        assert SECRET in shown_before  # the root text is what this path prints
+        assert SECRET not in shown_after
+        assert "[REDACTED]" in shown_after
+
+    def test_a_server_text_that_names_a_key_is_not_mangled(self, compatible, monkeypatch):
+        from agent_actions.errors import VendorAPIError
+
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        with FakeEndpoint(statuses=[400]) as server:
+            server.error_message = "Invalid value for api_key: expected a string"
+            _declare_full(server.base_url, auth={"env": "LAB_KEY"})
+            with pytest.raises(VendorAPIError) as info:
+                compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert "Invalid value for api_key: expected a string" in str(info.value)
+
+    def test_a_non_credential_header_value_is_not_registered(self, compatible, monkeypatch):
+        monkeypatch.setenv("REGION", "us-east-1-region")
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth="none", headers={"X-Region": "${REGION}"})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert server.requests[0]["headers"]["x-region"] == "us-east-1-region"
+        assert redact_text("connect to us-east-1-region") == "connect to us-east-1-region"
+
+
+class TestOneAuthorizationHeader:
+    @pytest.mark.parametrize("spelling", ["authorization", "AUTHORIZATION", "Authorization"])
+    def test_the_auth_header_in_any_spelling_is_sent_once(self, compatible, monkeypatch, spelling):
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"env": "LAB_KEY", "header": spelling})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        sent = [v for k, v in server.requests[0]["raw_headers"] if k == "authorization"]
+        assert sent == [f"Bearer {SECRET}"]
+
+    def test_a_user_authorization_header_in_lower_case_is_sent_once(self, compatible, monkeypatch):
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        monkeypatch.setenv("USER_JWT", "user-jwt-value-1234567890")
+        with FakeEndpoint() as server:
+            _declare_full(
+                server.base_url,
+                auth={"env": "LAB_KEY", "header": "X-Api-Key"},
+                headers={"authorization": "${USER_JWT}"},
+            )
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        sent = [v for k, v in server.requests[0]["raw_headers"] if k == "authorization"]
+        assert sent == ["user-jwt-value-1234567890"]
+        assert server.requests[0]["headers"]["x-api-key"] == SECRET
+
+
+class TestCommandCache:
+    def test_a_changed_command_is_run_not_served_from_the_old_cache(self, compatible):
+        with FakeEndpoint() as server:
+            _declare_full(
+                server.base_url, auth={"command": ["python3", "-c", "print('token-a-1234567')"]}
+            )
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+            _declare_full(
+                server.base_url, auth={"command": ["python3", "-c", "print('token-b-1234567')"]}
+            )
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        sent = [r["headers"]["authorization"] for r in server.requests]
+        assert sent == ["Bearer token-a-1234567", "Bearer token-b-1234567"]
