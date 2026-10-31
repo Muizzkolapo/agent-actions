@@ -327,3 +327,104 @@ endpoints:
     sent = [r["headers"]["authorization"] for r in servers["lab"].requests]
     assert sent[0] == "Bearer cmd-token-number-1-abcdef"
     assert sent[1:] == ["Bearer cmd-token-number-2-abcdef"] * 3
+
+
+def _run_verified(root: Path, env: dict[str, str], *, expect_exit: int) -> str:
+    result = run_agac(root, "run", "-a", WORKFLOW, "--fresh", "--verify-keys", env=env)
+    output = result.stdout + result.stderr
+    assert result.returncode == expect_exit, output
+    return output
+
+
+def test_verify_keys_refuses_an_endpoint_that_ignores_the_schema_before_any_record(
+    tmp_path, servers
+):
+    servers["lab"].mode = "ignore"
+    root = _project(tmp_path, _action("on_lab", "lab", "local-7b"))
+
+    output = " ".join(_run_verified(root, _env(servers), expect_exit=1).split())
+
+    assert (
+        "endpoint 'lab' does not honour response_format json_schema; "
+        "agac supports only endpoints with OpenAI structured output"
+    ) in output
+    assert len(servers["lab"].requests) == 1  # the probe, and no record
+    assert servers["lab"].requests[0]["body"]["max_tokens"] == 16
+
+
+def test_verify_keys_lets_an_endpoint_that_honours_the_schema_run(tmp_path, servers):
+    root = _project(tmp_path, _action("on_lab", "lab", "local-7b"))
+
+    _run_verified(root, _env(servers), expect_exit=0)
+
+    assert _dispositions(root, "on_lab") == [("success", "")]
+    models = [r["body"]["model"] for r in servers["lab"].requests]
+    assert models == ["local-7b", "local-7b"]  # the probe, then the record
+    assert servers["lab"].requests[0]["body"]["response_format"]["json_schema"]["name"] == (
+        "agac_probe"
+    )
+
+
+SAMPLE = Path(__file__).resolve().parents[3] / "sample-project"
+
+
+def _sample_probe_project(base: Path) -> Path:
+    """The sample project's ql_endpoint_probe and only what it needs, in a scratch copy."""
+    root = base / "sample"
+    (root / "agent_workflow").mkdir(parents=True)
+    shutil.copytree(
+        SAMPLE / "agent_workflow" / "ql_endpoint_probe",
+        root / "agent_workflow" / "ql_endpoint_probe",
+        ignore=shutil.ignore_patterns("logs", "store", "target", ".agent_status.json"),
+    )
+    shutil.copy(SAMPLE / "agent_actions.yml", root / "agent_actions.yml")
+    (root / "prompt_store").mkdir()
+    shutil.copy(SAMPLE / "prompt_store" / "ql_endpoint_probe.md", root / "prompt_store")
+    for folder in ("tools", "schema", "seed_data", "shared_seeds"):
+        (root / folder).mkdir()
+    return root
+
+
+@pytest.mark.skipif(not SAMPLE.exists(), reason="the orchestrator's sample project is not here")
+def test_the_sample_project_probe_shows_each_endpoint_its_own_credential(tmp_path):
+    with FakeEndpoint(mode="honour") as honour, FakeEndpoint(mode="ignore") as ignore:
+        root = _sample_probe_project(tmp_path)
+        env = {
+            "QL_HONOUR_URL": honour.base_url,
+            "QL_IGNORE_URL": ignore.base_url,
+            "QL_HONOUR_KEY": "honour-secret-value-0001",
+            "QL_IGNORE_KEY": "ignore-secret-value-0002",
+            "OPENAI_API_KEY": "sk-unused-control-key-00000000000",
+        }
+        result = run_agac(root, "run", "-a", "ql_endpoint_probe", "--fresh", env=env)
+        output = result.stdout + result.stderr
+        assert result.returncode == 1, output  # every on_ignore record fails
+
+        (db,) = (root / "agent_workflow" / "ql_endpoint_probe" / "agent_io" / "store").glob("*.db")
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            rows = sorted(
+                con.execute(
+                    "select action_name, disposition, coalesce(reason, '') from record_disposition"
+                    " where record_id != '__node__'"
+                )
+            )
+        finally:
+            con.close()
+        assert (
+            rows
+            == [("on_honour", "success", "")] * 3 + [("on_ignore", "failed", "parse_error")] * 3
+        )
+
+        honour_headers = [r["headers"] for r in honour.requests]
+        ignore_headers = [r["headers"] for r in ignore.requests]
+        assert len(honour_headers) == 3 and len(ignore_headers) == 3
+        assert {h["x-api-key"] for h in honour_headers} == {"honour-secret-value-0001"}
+        assert all("authorization" not in h for h in honour_headers)
+        assert {h["authorization"] for h in ignore_headers} == {"Bearer ignore-secret-value-0002"}
+        assert all("x-api-key" not in h for h in ignore_headers)
+        assert "honour-secret-value-0001" not in output
+        assert "ignore-secret-value-0002" not in output
+
+        stored = run_agac(root, "records", "-w", "ql_endpoint_probe", "-a", "on_honour").stdout
+        assert all(f"row-{i}" in stored for i in (1, 2, 3))

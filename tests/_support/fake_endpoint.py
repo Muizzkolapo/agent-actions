@@ -4,6 +4,11 @@ Each reply is built from the request: `honour` mode returns an object with every
 property of the schema the request carried, `ignore` returns JSON that matches no
 schema, and `prose` returns text that is not JSON. A queue of status codes answers
 the next requests before the mode does, so a 429 followed by a 200 is one line.
+
+As a program it serves the probe workflow of the sample project:
+`python -m tests._support.fake_endpoint --honour 8701 --ignore 8702` starts one server
+per mode and prints every request's headers, so the terminal shows which server
+received which credential.
 """
 
 from __future__ import annotations
@@ -62,40 +67,13 @@ class FakeEndpoint:
         assert self._server is not None
         return f"http://127.0.0.1:{self._server.server_address[1]}/v1"
 
-    def __enter__(self) -> FakeEndpoint:
-        endpoint = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self) -> None:
-                raw = self.rfile.read(int(self.headers.get("content-length", 0)))
-                try:
-                    body: Any = json.loads(raw)
-                except ValueError:
-                    body = raw.decode(errors="replace")
-                request = {
-                    "path": self.path,
-                    "headers": {k.lower(): v for k, v in self.headers.items()},
-                    # Every header line as sent, so a duplicate shows.
-                    "raw_headers": [(k.lower(), v) for k, v in self.headers.items()],
-                    "body": body,
-                }
-                endpoint.requests.append(request)
-                status, payload = endpoint._answer(body, request["headers"])
-                data = json.dumps(payload).encode()
-                self.send_response(status)
-                self.send_header("content-type", "application/json")
-                if status == 429:
-                    self.send_header("retry-after", "0")
-                self.send_header("content-length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-
-            def log_message(self, *args: object) -> None:
-                pass
-
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    def start(self, port: int = 0) -> FakeEndpoint:
+        self._server = ThreadingHTTPServer(("127.0.0.1", port), _handler_for(self))
         threading.Thread(target=self._server.serve_forever, daemon=True).start()
         return self
+
+    def __enter__(self) -> FakeEndpoint:
+        return self.start()
 
     def __exit__(self, *exc: object) -> None:
         assert self._server is not None
@@ -111,7 +89,7 @@ class FakeEndpoint:
         self.refuse_authorization = authorization
         self._refusal_barrier = threading.Barrier(together) if together > 1 else None
 
-    def _answer(self, body: Any, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
+    def answer(self, body: Any, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
         if self.refuse_authorization and headers.get("authorization") == self.refuse_authorization:
             if self._refusal_barrier is not None:
                 try:
@@ -153,3 +131,67 @@ class FakeEndpoint:
             ],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
         }
+
+
+def _handler_for(endpoint: FakeEndpoint) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            raw = self.rfile.read(int(self.headers.get("content-length", 0)))
+            try:
+                body: Any = json.loads(raw)
+            except ValueError:
+                body = raw.decode(errors="replace")
+            request = {
+                "path": self.path,
+                "headers": {k.lower(): v for k, v in self.headers.items()},
+                # Every header line as sent, so a duplicate shows.
+                "raw_headers": [(k.lower(), v) for k, v in self.headers.items()],
+                "body": body,
+            }
+            endpoint.requests.append(request)
+            status, payload = endpoint.answer(body, request["headers"])
+            data = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            if status == 429:
+                self.send_header("retry-after", "0")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+    return Handler
+
+
+def main(args: list[str]) -> None:
+    """Serve one stub per mode on the given ports and print each request's headers."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Stub OpenAI-compatible servers for a probe.")
+    parser.add_argument("--honour", type=int, help="port for a server that honours the schema")
+    parser.add_argument("--ignore", type=int, help="port for a server that ignores the schema")
+    options = parser.parse_args(args)
+    chosen = [(m, p) for m, p in (("honour", options.honour), ("ignore", options.ignore)) if p]
+    if not chosen:
+        parser.error("give --honour PORT and/or --ignore PORT")
+    running = [(mode, FakeEndpoint(mode=mode).start(port)) for mode, port in chosen]
+    for mode, endpoint in running:
+        print(f"{mode}: {endpoint.base_url}", flush=True)
+    printed = dict.fromkeys(range(len(running)), 0)
+    stop = threading.Event()
+    try:
+        while not stop.wait(0.5):
+            for index, (mode, endpoint) in enumerate(running):
+                for request in endpoint.requests[printed[index] :]:
+                    print(f"{mode} {json.dumps(request['headers'])}", flush=True)
+                printed[index] = len(endpoint.requests)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    import sys
+
+    main(sys.argv[1:])
