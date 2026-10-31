@@ -618,3 +618,17 @@ class TestEdgeCases:
             records=data, context_scope=context_scope, action_name="test"
         )
         assert "text" not in result[0]["content"]
+
+    def test_empty_content_source_ref_resolves_from_source_data(self):
+        """Record with empty content {} — source.url still resolves from source_data."""
+        data = [{"source_guid": "sg-1", "node_id": "node-1", "content": {}}]
+        source_data = [{"source_guid": "sg-1", "content": {"url": "https://example.com"}}]
+        context_scope = {"observe": ["source.url"]}
+        enriched, skipped = apply_context_scope_for_records(
+            records=data,
+            context_scope=context_scope,
+            action_name="downstream",
+            source_data=source_data,
+        )
+        assert skipped == []
+        assert enriched[0]["content"]["url"] == "https://example.com"

@@ -127,18 +127,11 @@ class TestDropDirective:
             "observe": ["dep.name"],
             "passthrough": ["dep.api_key"],
         }
-        # The dropped field should either raise ConfigurationError
-        # (because it's missing from post-drop context) or be absent from passthrough.
-        # Either outcome is correct — the key invariant is NO LEAK.
-        try:
-            _, _, pt = apply_context_scope(field_context, scope, action_name="act")
-            # If no error, passthrough must NOT contain the dropped field
-            assert "api_key" not in pt.get("dep", {}), (
-                "SECURITY: dropped field 'api_key' leaked into passthrough"
-            )
-        except ConfigurationError:
-            # Also acceptable: error because field was dropped before passthrough
-            pass
+        prompt_ctx, _, pt = apply_context_scope(field_context, scope, action_name="act")
+        assert prompt_ctx["dep"]["name"] == "safe"
+        assert "api_key" not in pt.get("dep", {}), (
+            "SECURITY: dropped field 'api_key' leaked into passthrough"
+        )
 
 
 # ---------------------------------------------------------------------------

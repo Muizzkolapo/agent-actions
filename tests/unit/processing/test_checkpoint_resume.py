@@ -9,10 +9,14 @@ import logging
 from unittest.mock import MagicMock
 
 from agent_actions.processing.disposition_gate import (
+    DispositionGate,
     answered_since_stored,
     build_carry_forward,
     checkpointed_answers,
 )
+from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
+from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 
 def _make_record(guid: str) -> dict:
@@ -124,6 +128,51 @@ class TestCheckpointResume:
             )
 
         assert "using 1 checkpointed records for carry-forward" in caplog.text
+
+
+class TestFirstStageCheckpointResume:
+    def test_a_checkpointed_first_stage_record_is_carried_and_the_rest_reprocessed(self, tmp_path):
+        backend = SQLiteBackend.create(db_path=str(tmp_path / "test.db"), workflow_name="wf")
+        backend.initialize()
+        action, relative_path = "summarize", "pages.json"
+        records = [{"source_guid": f"g{i}", "id": f"page{i}"} for i in range(3)]
+        try:
+            context = ProcessingContext(
+                agent_config={},
+                agent_name=action,
+                is_first_stage=True,
+                storage_backend=backend,
+                file_path=str(tmp_path / "output" / relative_path),
+                output_directory=str(tmp_path / "output"),
+                target_relative_path=relative_path,
+                source_data=records,
+            )
+            answered = {
+                "source_guid": "g0",
+                "content": {"summary": "Summary of page0"},
+                "target_id": "t0",
+                "node_id": action,
+            }
+            OnlineLLMStrategy._checkpoint_record(
+                ProcessingResult(
+                    status=ProcessingStatus.SUCCESS, data=[answered], source_guid="g0"
+                ),
+                context,
+            )
+
+            to_process, carry_ids = DispositionGate(storage_backend=backend).filter(
+                [dict(r) for r in records], action
+            )
+            carried, missing = build_carry_forward(carry_ids, action, relative_path, backend)
+        finally:
+            backend.close()
+
+        assert carry_ids == {"g0"}
+        assert [r["source_guid"] for r in to_process] == ["g1", "g2"]
+        assert missing == set()
+        assert [(r["source_guid"], r["content"]) for r in carried] == [
+            ("g0", {"summary": "Summary of page0"})
+        ]
 
 
 class TestAnsweredSinceStored:

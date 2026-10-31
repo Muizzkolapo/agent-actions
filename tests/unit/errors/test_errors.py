@@ -1,53 +1,29 @@
-"""H-5: Parametrized coverage of all 38 exception classes in agent_actions.errors."""
+"""Parametrized coverage of every exception class exported by agent_actions.errors."""
 
 from __future__ import annotations
 
 import pytest
 
+import agent_actions.errors as errors_pkg
 from agent_actions.errors import (
     AgentActionsError,
-    AgentExecutionError,
-    AgentNotFoundError,
-    AnthropicError,
-    ConfigurationError,
+    AmbiguousAgentName,
     ConfigValidationError,
-    DataValidationError,
-    DependencyError,
-    DirectoryError,
-    DuplicateFunctionError,
-    EmptyOutputError,
-    ExternalServiceError,
-    FileLoadError,
-    FileSystemError,
-    FileWriteError,
-    FunctionNotFoundError,
-    GenerationError,
-    InvalidParameterError,
-    NetworkError,
-    OperationalError,
-    PathValidationError,
-    PreFlightValidationError,
-    ProcessingError,
-    ProjectNotFoundError,
-    PromptValidationError,
-    RateLimitError,
-    ResourceError,
     SchemaValidationError,
-    SerializationError,
-    TemplateRenderingError,
-    TransformationError,
-    UDFLoadError,
-    ValidationError,
-    VendorAPIError,
-    VendorConfigError,
-    WorkflowError,
+    TemplateVariableError,
 )
-from agent_actions.errors.operations import TemplateVariableError
-from agent_actions.errors.preflight import ContextStructureError
 
-# ---------------------------------------------------------------------------
-# Factory helpers for classes with non-standard __init__ signatures
-# ---------------------------------------------------------------------------
+ALL_CLASSES = sorted(
+    (
+        obj
+        for obj in (getattr(errors_pkg, name) for name in errors_pkg.__all__)
+        if isinstance(obj, type) and issubclass(obj, Exception)
+    ),
+    key=lambda c: c.__name__,
+)
+
+# Classes whose constructor does not take (message, context=...).
+_NO_CONTEXT_PARAM = {TemplateVariableError, AmbiguousAgentName}
 
 
 def _make(cls):
@@ -60,73 +36,14 @@ def _make(cls):
             mode="batch",
             cause=ValueError("oops"),
         )
-    if cls is ConfigValidationError:
-        return cls(message="test message", context={"k": "v"})
-    if cls is DuplicateFunctionError:
-        return cls(message="test message", context={"k": "v"})
-    if cls is UDFLoadError:
-        return cls(message="test message", context={"k": "v"})
-    if cls is VendorAPIError:
-        return cls(message="test message", context={"k": "v"})
-    if cls is AnthropicError:
-        return cls(message="test message", context={"k": "v"})
-    if cls is RateLimitError:
-        return cls(message="test message", context={"k": "v"})
-    if cls is PreFlightValidationError:
-        return cls("test message", context={"k": "v"})
-    if cls is VendorConfigError:
-        return cls("test message", context={"k": "v"})
-    if cls is ContextStructureError:
-        return cls("test message", context={"k": "v"})
-    if cls is PathValidationError:
-        return cls("test message", context={"k": "v"})
-    if cls is SchemaValidationError:
-        return cls("test message", context={"k": "v"})
-    # All simple subclasses accept (message, context=None)
+    if cls is AmbiguousAgentName:
+        return cls("agent", ["wf_a/agent_config/agent", "wf_b/agent_config/agent"])
     return cls("test message", context={"k": "v"})
 
 
-# All 38 exception classes
-ALL_CLASSES = [
-    AgentActionsError,
-    InvalidParameterError,
-    ConfigurationError,
-    ConfigValidationError,
-    DuplicateFunctionError,
-    FunctionNotFoundError,
-    UDFLoadError,
-    AgentNotFoundError,
-    ProjectNotFoundError,
-    ValidationError,
-    PromptValidationError,
-    DataValidationError,
-    SchemaValidationError,
-    ProcessingError,
-    TransformationError,
-    GenerationError,
-    WorkflowError,
-    SerializationError,
-    EmptyOutputError,
-    ExternalServiceError,
-    VendorAPIError,
-    AnthropicError,
-    NetworkError,
-    RateLimitError,
-    FileSystemError,
-    FileLoadError,
-    FileWriteError,
-    DirectoryError,
-    ResourceError,
-    DependencyError,
-    OperationalError,
-    AgentExecutionError,
-    TemplateRenderingError,
-    TemplateVariableError,
-    PreFlightValidationError,
-    ContextStructureError,
-    VendorConfigError,
-    PathValidationError,
-]
+def test_all_classes_covers_the_known_exports():
+    names = {c.__name__ for c in ALL_CLASSES}
+    assert {"ProjectNotFoundError", "DispositionsNotStoredError", "TemplateVariableError"} <= names
 
 
 @pytest.mark.parametrize("cls", ALL_CLASSES, ids=[c.__name__ for c in ALL_CLASSES])
@@ -136,9 +53,7 @@ def test_is_exception_subclass(cls):
     assert issubclass(cls, AgentActionsError)
 
 
-# Classes that expose a `context` parameter at construction time
-# (TemplateVariableError stores context internally but doesn't expose the param)
-_CONTEXT_CAPABLE_CLASSES = [c for c in ALL_CLASSES if c is not TemplateVariableError]
+_CONTEXT_CAPABLE_CLASSES = [c for c in ALL_CLASSES if c not in _NO_CONTEXT_PARAM]
 
 
 @pytest.mark.parametrize(
@@ -158,11 +73,7 @@ def test_context_dict_is_copied_on_construction(cls):
     )
 
 
-@pytest.mark.parametrize(
-    "cls",
-    [c for c in ALL_CLASSES if c is not TemplateVariableError],
-    ids=[c.__name__ for c in ALL_CLASSES if c is not TemplateVariableError],
-)
+@pytest.mark.parametrize("cls", ALL_CLASSES, ids=[c.__name__ for c in ALL_CLASSES])
 def test_message_is_str(cls):
     """str(exc) must return a string and not raise."""
     exc = _make(cls)
