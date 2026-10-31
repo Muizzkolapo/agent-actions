@@ -365,7 +365,12 @@ def test_verify_keys_lets_an_endpoint_that_honours_the_schema_run(tmp_path, serv
     )
 
 
-SAMPLE = Path(__file__).resolve().parents[3] / "sample-project"
+# Every clone carries the orchestrator's sample project as qanalabs-quiz-maker beside the repo.
+_CLONE = Path(__file__).resolve().parents[3]
+SAMPLE = next(
+    (p for p in (_CLONE / "qanalabs-quiz-maker", _CLONE.parent / "sample-project") if p.exists()),
+    _CLONE / "qanalabs-quiz-maker",
+)
 
 
 def _sample_probe_project(base: Path) -> Path:

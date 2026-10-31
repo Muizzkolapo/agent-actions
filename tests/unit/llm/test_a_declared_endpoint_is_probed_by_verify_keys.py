@@ -19,7 +19,7 @@ from tests._support.fake_endpoint import FakeEndpoint
 
 SECRET = "probe-secret-value-abcdef123456"
 NOT_HONOURED = (
-    "endpoint 'lab' does not honour response_format json_schema; "
+    "does not honour response_format json_schema; "
     "agac supports only endpoints with OpenAI structured output"
 )
 SCHEMA = {"name": "classify", "fields": [{"id": "label", "type": "string"}]}
@@ -70,7 +70,7 @@ class TestTheProbe:
             result = probe.probe_endpoint("lab", "stub-7b")
 
         assert not result.ok
-        assert result.error == NOT_HONOURED
+        assert result.error == f"endpoint 'lab' {NOT_HONOURED}"
 
     def test_a_reply_with_an_extra_field_does_not_count_as_honoured(self, probe):
         with FakeEndpoint() as server:
@@ -79,7 +79,7 @@ class TestTheProbe:
 
             result = probe.probe_endpoint("lab", "stub-7b")
 
-        assert result.error == NOT_HONOURED
+        assert result.error == f"endpoint 'lab' {NOT_HONOURED}"
 
     @pytest.mark.parametrize("status", [401, 403])
     def test_a_refused_credential_is_an_error_with_the_status(self, probe, status, monkeypatch):
@@ -92,12 +92,50 @@ class TestTheProbe:
         assert result.error == f"endpoint 'lab' refused the credential (HTTP {status})"
         assert server.requests[0]["headers"]["x-api-key"] == SECRET
 
+    def test_a_false_answer_is_still_an_honoured_schema(self, probe):
+        with FakeEndpoint() as server:
+            server.content = '{"ok": false}'
+            _declare(server.base_url)
+
+            assert probe.probe_endpoint("lab", "stub-7b").ok
+
+    @pytest.mark.parametrize("status", [400, 422])
+    def test_a_server_that_rejects_the_request_does_not_honour_the_schema(self, probe, status):
+        with FakeEndpoint(statuses=[status]) as server:
+            server.error_message = "response_format is not supported"
+            _declare(server.base_url)
+
+            result = probe.probe_endpoint("lab", "stub-7b")
+
+        assert result.kind == "not_honoured"
+        assert result.error.startswith(f"endpoint 'lab' {NOT_HONOURED} (HTTP {status}: ")
+        assert "response_format is not supported" in result.error
+
+    @pytest.mark.parametrize("status", [404, 500])
+    def test_any_other_answer_is_reported_with_its_status(self, probe, status):
+        with FakeEndpoint(statuses=[status] * 3) as server:
+            _declare(server.base_url)
+
+            result = probe.probe_endpoint("lab", "stub-7b")
+
+        assert result.kind == "answered"
+        assert result.error.startswith(f"endpoint 'lab' answered HTTP {status}: ")
+        assert "could not be reached" not in result.error
+
+    def test_a_failing_auth_command_is_a_config_error(self, probe):
+        _declare("http://127.0.0.1:1/v1", command=["python3", "-c", "import sys; sys.exit(3)"])
+
+        result = probe.probe_endpoint("lab", "stub-7b")
+
+        assert result.kind == "config"
+        assert result.error == "endpoint 'lab' auth command 'python3' exited with 3"
+
     def test_a_server_that_cannot_be_reached_is_an_error_naming_the_endpoint(self, probe):
         _declare("http://127.0.0.1:1/v1")
 
         result = probe.probe_endpoint("lab", "stub-7b")
 
-        assert not result.ok
+        assert result.kind == "unreachable"
         assert result.error.startswith("endpoint 'lab' could not be reached: ")
 
 
@@ -115,7 +153,7 @@ class TestPreflightWiring:
                 action_configs=actions, verify_keys=True
             ).resolve_all()
 
-        assert [e.message for e in result.errors] == [NOT_HONOURED]
+        assert [e.message for e in result.errors] == [f"endpoint 'lab' {NOT_HONOURED}"]
         assert result.errors[0].location.agent_name == "(workflow)"
         assert len(server.requests) == 1
         assert server.requests[0]["body"]["model"] == "stub-7b"
@@ -164,7 +202,7 @@ class TestPreflightWiring:
         assert result.errors == []
         assert server.requests == []
 
-    def test_a_built_in_vendor_beside_an_endpoint_is_not_probed_as_an_endpoint(self, monkeypatch):
+    def test_without_the_flag_neither_a_vendor_nor_an_endpoint_is_probed(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-000000000000000000000")
         with FakeEndpoint() as server:
             _declare(server.base_url)
@@ -179,3 +217,65 @@ class TestPreflightWiring:
 
         assert result.errors == []
         assert server.requests == []
+
+
+class TestTwoEndpoints:
+    def test_each_endpoint_is_probed_once_with_its_own_model_and_each_outcome_has_its_hint(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
+        with FakeEndpoint() as good, FakeEndpoint(mode="ignore") as bad:
+            load_project_endpoints(
+                {
+                    "endpoints": {
+                        "good": {"url": good.base_url, "auth": "none"},
+                        "bad": {"url": bad.base_url, "auth": "none"},
+                    }
+                }
+            )
+            actions = {
+                "a": _action("good", model_name="good-model"),
+                "b": _action("good", model_name="other-model"),
+                "c": _action("bad", model_name="bad-model"),
+            }
+
+            result = WorkflowResolutionService(
+                action_configs=actions, verify_keys=True
+            ).resolve_all()
+
+        assert [r["body"]["model"] for r in good.requests] == ["good-model"]
+        assert [r["body"]["model"] for r in bad.requests] == ["bad-model"]
+        (error,) = result.errors
+        assert error.message == f"endpoint 'bad' {NOT_HONOURED}"
+        assert error.hint.startswith("Use a server that honours response_format json_schema")
+
+    @pytest.mark.parametrize(
+        ("statuses", "hint_start"),
+        [
+            ([401], "Check the credential in endpoints.lab.auth."),
+            ([404], "The server answered, but not with a completion"),
+            ([400], "Use a server that honours response_format json_schema"),
+        ],
+    )
+    def test_the_hint_follows_the_outcome(self, monkeypatch, statuses, hint_start):
+        monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
+        with FakeEndpoint(statuses=statuses) as server:
+            _declare(server.base_url)
+
+            result = WorkflowResolutionService(
+                action_configs={"classify": _action()}, verify_keys=True
+            ).resolve_all()
+
+        (error,) = result.errors
+        assert error.hint.startswith(hint_start)
+
+    def test_an_unreachable_endpoint_gets_the_server_hint(self, monkeypatch):
+        monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
+        _declare("http://127.0.0.1:1/v1")
+
+        result = WorkflowResolutionService(
+            action_configs={"classify": _action()}, verify_keys=True
+        ).resolve_all()
+
+        (error,) = result.errors
+        assert error.hint == "Check endpoints.lab.url and that the server is running."
