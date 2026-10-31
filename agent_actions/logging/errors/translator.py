@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from agent_actions.logging.filters import redact_known_secrets
 from agent_actions.utils.safe_format import extract_root_cause, safe_get_exception_message
 
 from .formatters import (
@@ -50,7 +51,8 @@ class ErrorTranslator:
         merged_context = ErrorContextService.merge_exception_context(exc, context)
 
         root_cause = extract_root_cause(exc)
-        root_message = safe_get_exception_message(root_cause)
+        # Values only: the key-shape rules would mangle a message that names a config key.
+        root_message = redact_known_secrets(safe_get_exception_message(root_cause))
 
         logger.debug(
             "Translating error: %s -> %s: %s",

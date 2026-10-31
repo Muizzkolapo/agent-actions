@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 from typing import Any, ClassVar, NoReturn
 
 from openai import Omit
@@ -99,7 +100,7 @@ ENDPOINT_CAPABILITIES: dict[str, Any] = {
 _OMIT = Omit()
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _COMMAND_TIMEOUT_SECONDS = 30
-_COMMAND_SECRETS: dict[str, str] = {}
+_COMMAND_SECRETS: dict[str, tuple[str, float]] = {}
 
 
 class EndpointClient(OpenAIClient):
@@ -121,28 +122,29 @@ class EndpointClient(OpenAIClient):
                 cls.ENDPOINT,
                 "runs with structured output only; set json_mode: true and add a schema",
             )
-        # The project-wide api_key and an inherited base_url never reach an endpoint.
-        config = {k: v for k, v in agent_config.items() if k not in ("api_key", "base_url")}
-        return super().invoke(config, prompt_config, context_data, schema)
+        return super().invoke(agent_config, prompt_config, context_data, schema)
 
     @classmethod
     def get_api_key(cls, agent_config: dict[str, Any]) -> str | None:
-        """The SDK's key: the secret when it travels in Authorization, else a placeholder."""
-        auth = cls.ENDPOINT.auth
-        if auth is None or auth.header.lower() != AUTHORIZATION_HEADER.lower():
-            return NO_KEY_PLACEHOLDER
-        return _secret(cls.ENDPOINT)
+        """The SDK's placeholder: the credential travels as a header the client sets itself."""
+        return NO_KEY_PLACEHOLDER
 
     @classmethod
     def _client_options(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        """The endpoint's url, headers and timeout; an inherited base_url plays no part."""
         endpoint = cls.ENDPOINT
         headers: dict[str, Any] = {
             name: _resolve_header(endpoint, name, value) for name, value in endpoint.headers.items()
         }
         auth = endpoint.auth
-        if auth is not None and auth.header.lower() != AUTHORIZATION_HEADER.lower():
+        if auth is not None:
+            # The SDK's own Authorization header gives way to the declared one, so the
+            # prefix is honoured; a user header named Authorization beside another
+            # auth header stays as the user wrote it.
             headers[auth.header] = f"{auth.prefix}{_secret(endpoint)}"
-            headers[AUTHORIZATION_HEADER] = _OMIT
+            declared = {name.lower() for name in headers}
+            if AUTHORIZATION_HEADER.lower() not in declared:
+                headers[AUTHORIZATION_HEADER] = _OMIT
         return {
             "base_url": endpoint.resolved_url(),
             "default_headers": headers,
@@ -159,13 +161,19 @@ class EndpointClient(OpenAIClient):
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
         records = super().call_json(api_key, agent_config, prompt_config, context_data, schema)
-        if schema is None or any("_parse_error" in record for record in records):
+        if schema is None or any(
+            isinstance(record, dict) and "_parse_error" in record for record in records
+        ):
             return records
         from agent_actions.validation.schema_output_validator import validate_output_against_schema
 
         action_name = str(agent_config.get("agent_type") or agent_config.get("name") or "")
         failures: list[str] = []
-        for record in records:
+        # The base client's type says dict, but a scalar or list reply arrives as it is.
+        for record in list[Any](records):
+            if not isinstance(record, dict):
+                failures.append(f"reply was {type(record).__name__}, expected a JSON object")
+                continue
             report = validate_output_against_schema(record, schema, action_name, strict_mode=False)
             if not report.is_compliant:
                 failures.extend(report.validation_errors or ["schema mismatch"])
@@ -230,9 +238,12 @@ def _secret(endpoint: Endpoint) -> str:
 
 
 def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
+    """The command's output, run again once refresh_seconds have passed since the last run."""
+    assert endpoint.auth is not None
     cached = _COMMAND_SECRETS.get(endpoint.name)
-    if cached is not None:
-        return cached
+    refresh_after = endpoint.auth.refresh_seconds or 0
+    if cached is not None and time.monotonic() - cached[1] < refresh_after:
+        return cached[0]
     try:
         completed = subprocess.run(  # noqa: S603 — argv from the project config, no shell
             command, capture_output=True, text=True, timeout=_COMMAND_TIMEOUT_SECONDS, check=False
@@ -243,6 +254,8 @@ def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
         _refuse(
             endpoint, f"auth command '{command[0]}' did not finish in {_COMMAND_TIMEOUT_SECONDS}s"
         )
+    except OSError as exc:
+        _refuse(endpoint, f"auth command '{command[0]}' could not be run: {exc.strerror}")
     # stderr stays out of the message: it can hold the secret.
     if completed.returncode != 0:
         _refuse(endpoint, f"auth command '{command[0]}' exited with {completed.returncode}")
@@ -250,7 +263,7 @@ def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
     if not value:
         _refuse(endpoint, f"auth command '{command[0]}' printed nothing")
     register_secret(value)
-    _COMMAND_SECRETS[endpoint.name] = value
+    _COMMAND_SECRETS[endpoint.name] = (value, time.monotonic())
     return value
 
 

@@ -23,10 +23,14 @@ def clear_registered_secrets() -> None:
     _REGISTERED_SECRETS.clear()
 
 
-def _redact_registered(text: str) -> str:
+def redact_known_secrets(text: str) -> str:
+    """Mask the registered values only: for text whose key names are not secrets."""
     for value in sorted(_REGISTERED_SECRETS, key=len, reverse=True):
         text = text.replace(value, "[REDACTED]")
     return text
+
+
+_redact_registered = redact_known_secrets
 
 
 def _redact_sensitive_data(

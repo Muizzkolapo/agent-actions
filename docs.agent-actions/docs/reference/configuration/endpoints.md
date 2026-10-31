@@ -82,7 +82,7 @@ The action keeps everything agac gives a built-in vendor: prompt templates, cont
 
 **Online only.** `run_mode: batch` on an endpoint action is refused: `vendor '<name>' does not support run_mode: batch`.
 
-**Secrets never reach a log.** Every value agac reads for an endpoint (the `env` value, the command output, each `${NAME}` header value) is masked as `[REDACTED]` in logs, events and prompt traces.
+**Secrets are masked by value.** Every value agac reads for an endpoint (the `env` value, the command output, each `${NAME}` header value) is masked as `[REDACTED]` in log messages, events, error texts and record reasons, including a server's error body that echoes the request headers. A value shorter than 8 characters is masked only by the key-name and key-shape rules. Every `${NAME}` header value is treated as a secret, so a non-secret value such as an API version is masked too; write a non-secret header as a literal.
 
 ## Preflight
 
