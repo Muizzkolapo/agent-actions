@@ -15,7 +15,7 @@ import httpx
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMErrorEvent, RateLimitEvent
-from agent_actions.logging.filters import redact_text
+from agent_actions.logging.filters import _redact_sensitive_data
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +109,9 @@ def wrap_vendor_error(
     """
     vendor = mapping.vendor_name
     context: dict[str, object] = {"vendor": vendor, "model": model_name}
-    # An SDK's text can quote the response body, and a gateway's body can echo the
-    # request headers; it is masked here, the one place vendor text enters the framework.
-    text = redact_text(str(e))
+    # A server body can echo the request headers; masked by value and key shape only,
+    # since the key-name rules would mangle the server's own text ("api_key: expected").
+    text = _redact_sensitive_data(str(e))
 
     # --- Type-based rate-limit detection ---
     if mapping.rate_limit_types and isinstance(e, mapping.rate_limit_types):

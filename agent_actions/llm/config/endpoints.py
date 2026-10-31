@@ -213,9 +213,13 @@ def _check_headers(key: str, endpoint: Endpoint) -> None:
         header_key = f"{key}.headers.{header}"
         if header.lower() == auth_header:
             _refuse(header_key, "this header is set by auth; remove it from headers")
-        looks_like_credential = any(word in header.lower() for word in _CREDENTIAL_WORDS)
-        if looks_like_credential and "${" not in value:
+        if looks_like_credential(header) and "${" not in value:
             _refuse(header_key, "write a credential as ${ENV_VAR}, not as a literal value")
+
+
+def looks_like_credential(header: str) -> bool:
+    """Whether a header name says it carries a credential."""
+    return any(word in header.lower() for word in _CREDENTIAL_WORDS)
 
 
 def _refuse_non_string_keys(key: str, mapping: Mapping[Any, Any]) -> None:

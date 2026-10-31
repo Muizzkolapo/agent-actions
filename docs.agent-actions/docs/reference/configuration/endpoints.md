@@ -39,7 +39,7 @@ endpoints:
 |-----|----------|---------|
 | `url` | yes | The base URL, `http` or `https`, or exactly one `${ENV_VAR}` that holds it. A URL that ends in `/chat/completions` is refused. |
 | `auth` | yes | `none`, or a mapping with exactly one of `env: NAME` (an environment variable) or `command: [argv, ...]` (a program whose output is the secret, run without a shell). |
-| `auth.header` | no | The header that carries the secret. Default `Authorization`. With another header, agac sends no `Authorization` header. |
+| `auth.header` | no | The header that carries the secret. Default `Authorization`. With another header, agac sends no `Authorization` header unless `headers:` declares one. |
 | `auth.prefix` | no | Text before the secret. Default `Bearer ` for `Authorization`, empty otherwise. |
 | `auth.refresh_seconds` | no | `command` only: run the command again after this many seconds. Default 3000. |
 | `headers` | no | Extra headers. A value can read a variable with `${NAME}`. A literal value is refused when the header name contains `authorization`, `key`, `token` or `secret`. |
@@ -82,7 +82,7 @@ The action keeps everything agac gives a built-in vendor: prompt templates, cont
 
 **Online only.** `run_mode: batch` on an endpoint action is refused: `vendor '<name>' does not support run_mode: batch`.
 
-**Secrets are masked by value.** Every value agac reads for an endpoint (the `env` value, the command output, each `${NAME}` header value) is masked as `[REDACTED]` in log messages, events, error texts and record reasons, including a server's error body that echoes the request headers. A value shorter than 8 characters is masked only by the key-name and key-shape rules. Every `${NAME}` header value is treated as a secret, so a non-secret value such as an API version is masked too; write a non-secret header as a literal.
+**Secrets are masked by value.** The credential agac reads for an endpoint (the `env` value, the command output, and a `${NAME}` header value whose header name or variable name contains `authorization`, `key`, `token` or `secret`) is masked as `[REDACTED]` in log messages, events, record reasons and the CLI's error block, including a server's error body that echoes the request headers. A value shorter than 8 characters is masked only by the key-shape rules. A `${NAME}` value in another header (a region, an API version) is not treated as a secret.
 
 ## Preflight
 

@@ -282,7 +282,7 @@ Safety:   Catches all exceptions in emit() -- falls back to handleError()
 
 ## Redaction System
 
-Two independent layers ensure sensitive data does not appear in logs.
+Two independent layers ensure sensitive data does not appear in logs, and both also mask every value registered at run time with `register_secret` (an endpoint's credential), longest first, before their pattern rules run. The CLI error translator masks registered values only.
 
 ### Layer 1: RedactingFilter (stdlib logging)
 
@@ -299,7 +299,7 @@ Standalone function in `filters.py` used by code that builds event data dicts di
 - Dict keys matching: `api_key`, `key`, `token`, `password`, `secret`, `authorization`
 - String values matching vendor key regex patterns
 
-Both layers use the same regex patterns but operate at different stages -- Layer 1 on stdlib LogRecords, Layer 2 on event data dicts before they reach handlers.
+Both layers use the same regex patterns and the same registered values but operate at different stages -- Layer 1 on stdlib LogRecords, Layer 2 on event data dicts before they reach handlers, and on a vendor SDK's error text in `wrap_vendor_error` before it becomes a record reason.
 
 ---
 

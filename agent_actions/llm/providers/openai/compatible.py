@@ -20,7 +20,12 @@ from typing import Any, ClassVar, NoReturn
 from openai import Omit
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError
-from agent_actions.llm.config.endpoints import AUTHORIZATION_HEADER, Endpoint, project_endpoint
+from agent_actions.llm.config.endpoints import (
+    AUTHORIZATION_HEADER,
+    Endpoint,
+    looks_like_credential,
+    project_endpoint,
+)
 from agent_actions.llm.config.runtime_profiles import (
     NO_KEY_PLACEHOLDER,
     RUNTIME_PROFILES,
@@ -100,7 +105,7 @@ ENDPOINT_CAPABILITIES: dict[str, Any] = {
 _OMIT = Omit()
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _COMMAND_TIMEOUT_SECONDS = 30
-_COMMAND_SECRETS: dict[str, tuple[str, float]] = {}
+_COMMAND_SECRETS: dict[tuple[str, tuple[str, ...]], tuple[str, float]] = {}
 
 
 class EndpointClient(OpenAIClient):
@@ -138,12 +143,11 @@ class EndpointClient(OpenAIClient):
         }
         auth = endpoint.auth
         if auth is not None:
-            # The SDK's own Authorization header gives way to the declared one, so the
-            # prefix is honoured; a user header named Authorization beside another
-            # auth header stays as the user wrote it.
+            # The SDK's own Authorization header (under exactly this key) gives way to
+            # the declared one, so the prefix is honoured and no second copy is sent; a
+            # header the user wrote as Authorization stays as written.
             headers[auth.header] = f"{auth.prefix}{_secret(endpoint)}"
-            declared = {name.lower() for name in headers}
-            if AUTHORIZATION_HEADER.lower() not in declared:
+            if AUTHORIZATION_HEADER not in headers:
                 headers[AUTHORIZATION_HEADER] = _OMIT
         return {
             "base_url": endpoint.resolved_url(),
@@ -240,7 +244,8 @@ def _secret(endpoint: Endpoint) -> str:
 def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
     """The command's output, run again once refresh_seconds have passed since the last run."""
     assert endpoint.auth is not None
-    cached = _COMMAND_SECRETS.get(endpoint.name)
+    key = (endpoint.name, tuple(command))
+    cached = _COMMAND_SECRETS.get(key)
     refresh_after = endpoint.auth.refresh_seconds or 0
     if cached is not None and time.monotonic() - cached[1] < refresh_after:
         return cached[0]
@@ -263,7 +268,7 @@ def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
     if not value:
         _refuse(endpoint, f"auth command '{command[0]}' printed nothing")
     register_secret(value)
-    _COMMAND_SECRETS[endpoint.name] = (value, time.monotonic())
+    _COMMAND_SECRETS[key] = (value, time.monotonic())
     return value
 
 
@@ -277,7 +282,10 @@ def _resolve_header(endpoint: Endpoint, header: str, value: str) -> str:
         resolved = os.environ.get(variable, "")
         if not resolved:
             _refuse(endpoint, f"reads {variable} for header {header}, which is not set")
-        register_secret(resolved)
+        # A region or an API version read from a variable is not a secret to mask;
+        # the header's name or the variable's name says which it is.
+        if looks_like_credential(header) or looks_like_credential(variable):
+            register_secret(resolved)
         return resolved
 
     return _HEADER_ENV_VAR.sub(substitute, value)
