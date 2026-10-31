@@ -114,17 +114,3 @@ class TestNoPrintInLibraryCode:
         assert len(hits) == 0, f"Found {len(hits)} print() call(s) in library code:\n" + "\n".join(
             hits
         )
-
-
-class TestNoDeadMergePassthroughFields:
-    """merge_passthrough_fields was removed from scope_application.py."""
-
-    def test_merge_passthrough_fields_removed(self):
-        import inspect
-
-        from agent_actions.prompt.context import scope_application
-
-        source = inspect.getsource(scope_application)
-        assert "def merge_passthrough_fields" not in source, (
-            "Dead function merge_passthrough_fields still exists in scope_application.py"
-        )

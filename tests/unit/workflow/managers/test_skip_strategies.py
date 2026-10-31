@@ -454,13 +454,6 @@ class TestSkipEvaluator:
         result = evaluator.should_skip_action({"agent_type": "a"}, {})
         assert result is True
 
-    def test_none_previous_outputs_normalized_to_empty_dict(self):
-        """None previous_outputs should be treated as empty dict."""
-        evaluator = SkipEvaluator()
-        with patch(GUARD_FILTER_PATH, return_value=MagicMock()):
-            result = evaluator.should_skip_action({"agent_type": "a"}, None)
-            assert isinstance(result, bool)
-
     def test_repr(self):
         evaluator = SkipEvaluator()
         assert "2" in repr(evaluator)

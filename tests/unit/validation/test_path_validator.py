@@ -469,9 +469,6 @@ class TestValidateAgentPaths:
 class TestGetIssues:
     """Test get_issues() returns correct issue objects."""
 
-    def test_returns_list(self, validator):
-        assert isinstance(validator.get_issues(), list)
-
     def test_returns_validation_issue_objects(self, validator):
         validator.validate({"paths": ["/nope"], "path_type": "file"})
         for issue in validator.get_issues():

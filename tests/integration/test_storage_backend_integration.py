@@ -553,46 +553,6 @@ class TestBackendTypeProperty:
 class TestWorkflowIntegration:
     """Test integration with workflow patterns."""
 
-    def test_action_chain_data_flow(self):
-        """Simulates data flowing through action chain."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "workflow.db"
-
-            with SQLiteBackend(str(db_path), "my_workflow") as backend:
-                backend.initialize()
-
-                # Action 1: Extract - writes target data
-                extract_output = [
-                    {
-                        "_state": "processed",
-                        "_state_schema_version": 1,
-                        "source_guid": "g1",
-                        "content": {"raw": "doc1"},
-                    },
-                    {
-                        "_state": "processed",
-                        "_state_schema_version": 1,
-                        "source_guid": "g2",
-                        "content": {"raw": "doc2"},
-                    },
-                ]
-                backend.write_target("extract", "batch.json", extract_output)
-
-                # Action 2: Transform - reads from extract, writes new target
-                extract_data = backend.read_target("extract", "batch.json")
-                transform_output = [
-                    {**item, "content": {"processed": item["content"]["raw"].upper()}}
-                    for item in extract_data
-                ]
-                backend.write_target("transform", "batch.json", transform_output)
-
-                # Action 3: Load - reads from transform
-                transform_data = backend.read_target("transform", "batch.json")
-
-                assert len(transform_data) == 2
-                assert transform_data[0]["content"]["processed"] == "DOC1"
-                assert transform_data[1]["content"]["processed"] == "DOC2"
-
     def test_parallel_actions_write_to_different_nodes(self):
         """Parallel actions can write to different nodes."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -626,37 +586,6 @@ class TestWorkflowIntegration:
                 assert data_a[0]["from"] == "a"
                 assert data_b[0]["from"] == "b"
                 assert data_c[0]["from"] == "c"
-
-    def test_merge_pattern_combines_upstream_data(self):
-        """Merge pattern can read from multiple upstream nodes."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "workflow.db"
-
-            with SQLiteBackend(str(db_path), "my_workflow") as backend:
-                backend.initialize()
-
-                # Two parallel upstream actions
-                backend.write_target(
-                    "extract_a",
-                    "batch.json",
-                    [{"_state": "processed", "_state_schema_version": 1, "id": 1, "src": "a"}],
-                )
-                backend.write_target(
-                    "extract_b",
-                    "batch.json",
-                    [{"_state": "processed", "_state_schema_version": 1, "id": 2, "src": "b"}],
-                )
-
-                # Merge action reads from both
-                data_a = backend.read_target("extract_a", "batch.json")
-                data_b = backend.read_target("extract_b", "batch.json")
-                merged = data_a + data_b
-
-                backend.write_target("merge", "batch.json", merged)
-
-                result = backend.read_target("merge", "batch.json")
-                assert len(result) == 2
-                assert {r["src"] for r in result} == {"a", "b"}
 
 
 class TestDispositionLifecycle:

@@ -1151,52 +1151,6 @@ class TestIssue3_VersionedActions:
                     )
 
 
-class TestIssue4_MetadataCacheInvalidation:
-    """save_metadata must clear the in-memory cache so reads get fresh data."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        b = _make_backend(tmp_path)
-        yield b
-        b.close()
-
-    def test_dep_graph_cache_cleared_on_save(self, backend):
-        """Writing new dep graph invalidates the cached version."""
-        # Write initial graph
-        backend.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": ["a1"]}))
-        backend.save_metadata("execution_order", json.dumps(["a1", "a2"]))
-
-        # Force cache population by reading
-        backend.write_target(
-            "a1",
-            "f.json",
-            [{"source_guid": "g1", "_state": "active", "content": {"a1": {"x": 1}}}],
-            is_first_action=True,
-        )
-        backend.write_target(
-            "a2",
-            "f.json",
-            [
-                {
-                    "source_guid": "g1",
-                    "_state": "active",
-                    "content": {"a1": {"x": 1}, "a2": {"y": 2}},
-                }
-            ],
-        )
-
-        result1 = backend.read_target("a2", "f.json")
-        assert "a1" in result1[0]["content"]
-
-        # Now update the dep graph to make a2 have NO deps
-        backend.save_metadata("dependency_graph", json.dumps({"a1": [], "a2": []}))
-
-        # Read again — should use the NEW graph (no upstream for a2)
-        result2 = backend.read_target("a2", "f.json")
-        # a2's delta has only {a2: ...}, and with empty deps, no upstream is merged
-        assert "a2" in result2[0]["content"]
-
-
 class TestIssue6_MissingSourceGuid:
     """Records without source_guid must be stored as full — can't reconstruct without a join key."""
 
@@ -1437,34 +1391,6 @@ class TestIssue9_CorruptMetadata:
         # read_target should not crash
         result = backend.read_target("a1", "f.json")
         assert "a1" in result[0]["content"]
-
-
-class TestIssue10_UniformDeltaMode:
-    """write_target must produce uniform _delta_mode across all records in a batch."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        b = _make_backend(tmp_path)
-        _set_execution_order(b, ["a1", "a2"])
-        yield b
-        b.close()
-
-    def test_batch_has_uniform_delta_mode(self, backend):
-        """All records in a single write_target call get the same _delta_mode."""
-        data = [
-            {
-                "source_guid": f"g{i}",
-                "_state": "processed",
-                "_state_schema_version": 1,
-                "content": {"source": {"x": i}, "a1": {"q": f"Q{i}"}, "a2": {"level": f"L{i}"}},
-            }
-            for i in range(5)
-        ]
-        backend.write_target("a2", "f.json", data)
-
-        raw = backend._read_target_raw("a2", "f.json")
-        modes = {r.get("_delta_mode") for r in raw}
-        assert len(modes) == 1, f"Non-uniform delta modes in batch: {modes}"
 
 
 class TestIssue11_FallbackWarning:

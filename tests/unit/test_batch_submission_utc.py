@@ -1,6 +1,6 @@
 """Wave 9 Group E regression tests — LLM batch service P1 fixes."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,19 +16,6 @@ from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
 class TestBatchEntryTimestampIsUTCAware:
     """E-1 — datetime.now(UTC) is used — timestamp is timezone-aware."""
-
-    def test_submission_module_imports_utc(self):
-        """UTC must be importable via the submission module (proves the import was added)."""
-        import agent_actions.llm.batch.services.submission as submission_mod
-
-        assert hasattr(submission_mod, "UTC"), "submission module must import UTC from datetime"
-
-    def test_utc_isoformat_is_timezone_aware(self):
-        """datetime.now(UTC).isoformat() produces a timezone-aware string."""
-        ts = datetime.now(UTC).isoformat()
-        parsed = datetime.fromisoformat(ts)
-        assert parsed.tzinfo is not None
-        assert parsed.utcoffset().total_seconds() == 0
 
     def test_batch_job_entry_timestamp_is_utc_aware(self, tmp_path):
         """BatchJobEntry.timestamp set during _submit_to_provider is UTC-aware."""

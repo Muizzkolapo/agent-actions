@@ -156,7 +156,9 @@ class TestBatchContentAssembly:
         )
 
         action_ns = results[0].data[0]["content"]["verify_answer"]
-        assert "_parse_error" in action_ns or "verified_answer" in action_ns
+        assert action_ns["_parse_error"] == "Failed to parse JSON from LLM response"
+        assert action_ns["raw_response"] == '{"verified_answer": "C"}'
+        assert "verified_answer" not in action_ns
 
     def test_framework_fields_carried(self, action_config, batch_result, context_map):
         strategy = BatchResultStrategy()

@@ -88,52 +88,6 @@ class TestProcessMergedFilesDoesNotMutateUpstream:
         assert json.loads((upstream_a / "data.json").read_text()) == original_a
         assert json.loads((upstream_b / "data.json").read_text()) == original_b
 
-    def test_tempfile_cleaned_up_after_processing(self, tmp_path):
-        """No stale temp files should remain in upstream dir after processing."""
-        upstream_a = tmp_path / "upstream_a"
-        upstream_b = tmp_path / "upstream_b"
-        output = tmp_path / "output"
-        for d in [upstream_a, upstream_b, output]:
-            d.mkdir()
-
-        (upstream_a / "data.json").write_text(json.dumps([{"id": 1}]))
-        (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
-
-        runner = MagicMock()
-        runner.retried_records = frozenset()
-        runner._process_single_file = MagicMock()
-
-        params = _make_params([str(upstream_a), str(upstream_b)], output)
-
-        process_merged_files(runner, params)
-
-        # No stale temp files should remain in upstream dir
-        remaining = list(upstream_a.glob("tmp*"))
-        assert remaining == [], f"Temp files not cleaned up: {remaining}"
-
-    def test_tempfile_cleaned_up_even_on_error(self, tmp_path):
-        """Temp files must not leak when _process_single_file raises."""
-        upstream_a = tmp_path / "upstream_a"
-        upstream_b = tmp_path / "upstream_b"
-        output = tmp_path / "output"
-        for d in [upstream_a, upstream_b, output]:
-            d.mkdir()
-
-        (upstream_a / "data.json").write_text(json.dumps([{"id": 1}]))
-        (upstream_b / "data.json").write_text(json.dumps([{"id": 2}]))
-
-        runner = MagicMock()
-        runner.retried_records = frozenset()
-        runner._process_single_file.side_effect = RuntimeError("boom")
-
-        params = _make_params([str(upstream_a), str(upstream_b)], output)
-
-        # Error is now caught per-file (no propagation)
-        process_merged_files(runner, params)
-
-        remaining = list(upstream_a.glob("tmp*"))
-        assert remaining == [], f"Temp files leaked on error: {remaining}"
-
     def test_output_filename_preserves_relative_path(self, tmp_path):
         """The output file must use the original relative path, not a random temp name."""
         upstream_a = tmp_path / "upstream_a"

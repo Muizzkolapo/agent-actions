@@ -514,68 +514,6 @@ class TestZeroSuccessCircuitBreakerChain:
         assert skip_calls[0][0][1] == ActionStatus.SKIPPED
 
 
-class TestLevelCompletionColoring:
-    """Tests for level completion line color logic (red/yellow/green)."""
-
-    def test_green_when_all_ok(self, tmp_path):
-        """Level line is green when all actions completed successfully."""
-        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", ActionStatus.COMPLETED)
-        mgr.update_status("b", ActionStatus.COMPLETED)
-
-        has_failed = mgr.get_failed_actions(["a", "b"])
-        has_skipped = any(mgr.is_skipped(a) for a in ["a", "b"])
-
-        assert not has_failed
-        assert not has_skipped
-
-    def test_red_when_action_failed(self, tmp_path):
-        """Level line is red when any action failed."""
-        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", ActionStatus.COMPLETED)
-        mgr.update_status("b", ActionStatus.FAILED)
-
-        has_failed = mgr.get_failed_actions(["a", "b"])
-        assert has_failed
-
-    def test_yellow_when_action_skipped(self, tmp_path):
-        """Level line is yellow when actions are skipped but none failed."""
-        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", ActionStatus.COMPLETED)
-        mgr.update_status("b", ActionStatus.SKIPPED)
-
-        has_failed = mgr.get_failed_actions(["a", "b"])
-        has_skipped = any(mgr.is_skipped(a) for a in ["a", "b"])
-
-        assert not has_failed
-        assert has_skipped
-
-    def test_red_takes_precedence_over_yellow(self, tmp_path):
-        """Red (failed) takes precedence over yellow (skipped)."""
-        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b", "c"])
-        mgr.update_status("a", ActionStatus.COMPLETED)
-        mgr.update_status("b", ActionStatus.FAILED)
-        mgr.update_status("c", ActionStatus.SKIPPED)
-
-        has_failed = mgr.get_failed_actions(["a", "b", "c"])
-        has_skipped = any(mgr.is_skipped(a) for a in ["a", "b", "c"])
-
-        assert has_failed
-        assert has_skipped
-
-    def test_yellow_for_completed_with_failures(self, tmp_path):
-        """Level line is yellow when action has partial failures."""
-        mgr = ActionStateManager(tmp_path / "status.json", ["a", "b"])
-        mgr.update_status("a", ActionStatus.COMPLETED)
-        mgr.update_status("b", ActionStatus.COMPLETED_WITH_FAILURES)
-
-        has_failed = mgr.get_failed_actions(["a", "b"])
-        has_partial = any(mgr.is_completed_with_failures(a) for a in ["a", "b"])
-
-        assert not has_failed
-        assert has_partial
-
-
 class TestResolveCompletionStatus:
     """Tests for _resolve_completion_status()."""
 

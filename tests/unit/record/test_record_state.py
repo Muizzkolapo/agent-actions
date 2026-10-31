@@ -20,10 +20,6 @@ class TestRecordStateEnum:
         assert isinstance(RecordState.ACTIVE, str)
         assert RecordState.ACTIVE == "active"
 
-    def test_all_members_have_unique_values(self):
-        values = [s.value for s in RecordState]
-        assert len(values) == len(set(values))
-
     def test_member_count(self):
         assert len(RecordState) == 6
 

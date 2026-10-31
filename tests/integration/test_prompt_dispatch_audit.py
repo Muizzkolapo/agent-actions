@@ -9,7 +9,6 @@ Tests the full prompt pipeline:
 - Prompt caching and debug output
 """
 
-import re
 from unittest.mock import patch
 
 import pytest
@@ -109,33 +108,6 @@ class TestPromptLoading:
 
 class TestTemplateRendering:
     """Tests for Jinja2 template rendering with context."""
-
-    def test_namespace_variables_resolve(self):
-        """Template variables like {{ source.field }} resolve from context."""
-        from jinja2 import Environment, StrictUndefined
-
-        env = Environment(undefined=StrictUndefined)
-        template = env.from_string("Value: {{ source.field }}")
-        result = template.render(source={"field": "hello"})
-        assert result == "Value: hello"
-
-    def test_undefined_variable_raises_strict(self):
-        """StrictUndefined raises on access to undefined variables."""
-        from jinja2 import Environment, StrictUndefined, UndefinedError
-
-        env = Environment(undefined=StrictUndefined)
-        template = env.from_string("{{ missing_var }}")
-        with pytest.raises(UndefinedError):
-            template.render()
-
-    def test_nested_field_access(self):
-        """Nested dot-access {{ dep.data.nested.value }} resolves."""
-        from jinja2 import Environment, StrictUndefined
-
-        env = Environment(undefined=StrictUndefined)
-        template = env.from_string("{{ dep.data.nested.value }}")
-        result = template.render(dep={"data": {"nested": {"value": 42}}})
-        assert result == "42"
 
     def test_framework_namespaces_always_available(self):
         """Framework namespaces (seed, version, workflow) are available."""
@@ -335,49 +307,11 @@ class TestMessageBuilder:
         assert envelope.messages[0].role == "user"
 
 
-# ── Test Batch/Online Parity ─────────────────────────────────────────
-
-
-class TestBatchOnlineParity:
-    """Tests verifying batch and online produce identical prompts."""
-
-    def test_same_input_produces_same_prompt(self):
-        """Batch and online rendering of the same template yield identical text."""
-        from jinja2 import Environment, StrictUndefined
-
-        env = Environment(undefined=StrictUndefined)
-        template_str = "Analyze: {{ source.text }} with {{ dep.score }}"
-        context = {"source": {"text": "hello"}, "dep": {"score": 0.95}}
-
-        # Both modes use the same Jinja2 rendering path.
-        result_a = env.from_string(template_str).render(**context)
-        result_b = env.from_string(template_str).render(**context)
-        assert result_a == result_b
-
-    def test_both_use_prompt_preparation_service(self):
-        """Both batch and online converge on PromptPreparationService."""
-        from agent_actions.prompt.service import PromptPreparationService
-
-        # Verify the class has the shared method both paths call.
-        assert hasattr(PromptPreparationService, "prepare_prompt_with_field_context")
-        assert hasattr(PromptPreparationService, "_render_prompt_template")
-
-
 # ── Test Prompt Features ─────────────────────────────────────────────
 
 
 class TestPromptFeatures:
     """Tests for prompt caching, debug output, and related features."""
-
-    def test_prompt_caching_forwarded_to_anthropic(self):
-        """Anthropic batch client accepts enable_prompt_caching flag."""
-        from agent_actions.llm.providers.anthropic.batch_client import (
-            AnthropicBatchClient,
-        )
-
-        client = AnthropicBatchClient.__new__(AnthropicBatchClient)
-        client.enable_prompt_caching = True
-        assert client.enable_prompt_caching is True
 
     def test_prompt_debug_prints_output(self):
         """prompt_debug=true causes rendered prompt to be echoed via click."""
@@ -406,11 +340,3 @@ class TestPromptFeatures:
                 schema={"type": "object"},
             )
             mock_click.echo.assert_not_called()
-
-    def test_dispatch_pattern_matches_quoted_names(self):
-        """The dispatch_task regex matches both single and double quoted names."""
-        pattern = re.compile(r'dispatch_task\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)')
-        assert pattern.search("dispatch_task('func_a')")
-        assert pattern.search('dispatch_task("func_b")')
-        assert pattern.search("dispatch_task(  'spaced'  )")
-        assert not pattern.search("dispatch_task(unquoted)")

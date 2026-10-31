@@ -6,7 +6,6 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
 from click.testing import CliRunner
 from rich.console import Console
 
@@ -222,24 +221,6 @@ class TestContextCommandOutput:
 
         output = cmd.console.file.getvalue()
         assert "extract" in output
-
-
-# ── Regression: spec= mock enforces attribute names (B-1/B-5) ────────────────
-
-
-class TestWorkflowMockSpecEnforcement:
-    """MagicMock(spec=AgentWorkflow) raises AttributeError on .agent_configs access."""
-
-    def test_spec_mock_raises_on_old_attribute(self):
-        wf = _make_workflow_mock()
-        with pytest.raises(AttributeError):
-            _ = wf.agent_configs  # renamed to action_configs; spec enforces this
-        # Durable guard: fails immediately if agent_configs is ever re-added as an alias
-        assert not hasattr(AgentWorkflow, "agent_configs")
-
-    def test_spec_mock_allows_new_attribute(self):
-        wf = _make_workflow_mock()
-        assert wf.action_configs is not None
 
 
 # ── End-to-end: prompt-required cross-check through real `agac inspect` ───────

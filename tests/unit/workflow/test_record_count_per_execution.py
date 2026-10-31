@@ -12,10 +12,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.workflow.executor import (
-    ActionExecutionResult,
     ActionExecutor,
     ActionRunParams,
-    ExecutionMetrics,
     ExecutorDependencies,
 )
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
@@ -140,19 +138,3 @@ class TestMissingBackendRaises:
         executor.deps = deps
         with pytest.raises(RuntimeError, match="no storage backend"):
             executor._count_records_for_action("agent_a")
-
-
-class TestCachedCompletionShipsZero:
-    """The cached-completion path (_check_prior_output) didn't run the
-    action this execution, so record_count for THIS execution is 0."""
-
-    def test_cached_completion_metrics_default_to_zero(self):
-        # ExecutionMetrics() default is 0; result objects constructed for the
-        # cached path should not be back-filling a cumulative SUM.
-        metrics = ExecutionMetrics()
-        assert metrics.record_count == 0
-        # Sanity: a result built with default metrics propagates 0.
-        result = ActionExecutionResult(
-            success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics()
-        )
-        assert result.metrics.record_count == 0

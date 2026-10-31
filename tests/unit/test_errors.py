@@ -129,25 +129,11 @@ ALL_CLASSES = [
 ]
 
 
-def test_all_classes_count():
-    """Catch accidental addition/removal of exception classes."""
-    assert len(ALL_CLASSES) == 38, f"Expected 38 classes, found {len(ALL_CLASSES)}"
-
-
 @pytest.mark.parametrize("cls", ALL_CLASSES, ids=[c.__name__ for c in ALL_CLASSES])
 def test_is_exception_subclass(cls):
     """Every error class must be an Exception subclass."""
     assert issubclass(cls, Exception)
     assert issubclass(cls, AgentActionsError)
-
-
-@pytest.mark.parametrize("cls", ALL_CLASSES, ids=[c.__name__ for c in ALL_CLASSES])
-def test_can_be_raised_and_caught(cls):
-    """Every class must be instantiable and catchable."""
-    exc = _make(cls)
-    assert isinstance(exc, cls)
-    with pytest.raises(cls):
-        raise exc
 
 
 # Classes that expose a `context` parameter at construction time

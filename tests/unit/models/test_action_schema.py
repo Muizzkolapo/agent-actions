@@ -41,12 +41,7 @@ class TestActionKind:
         assert ActionKind("Tool") is ActionKind.TOOL
 
     def test_is_str_enum(self):
-        assert isinstance(ActionKind.LLM, str)
         assert ActionKind.LLM == "llm"
-
-    def test_members_are_unique(self):
-        values = [m.value for m in ActionKind]
-        assert len(values) == len(set(values))
 
 
 # ---------------------------------------------------------------------------

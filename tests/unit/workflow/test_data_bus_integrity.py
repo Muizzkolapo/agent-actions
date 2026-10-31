@@ -3,11 +3,10 @@
 These tests verify that content flowing through the pipeline bus does NOT
 leak or duplicate upstream namespaces across any workflow topology:
 
-1. Linear pipeline — bus accumulates one namespace per action
-2. Fan-in / diamond — parallel branches merge without duplicating shared upstream
-3. Parallel branches (same action) — merge without duplicating shared upstream
-4. Version merge — only version's own namespace extracted, upstream once
-5. Deep pipeline version merge — upstream duplication scales with depth
+1. Fan-in / diamond — parallel branches merge without duplicating shared upstream
+2. Parallel branches (same action) — merge without duplicating shared upstream
+3. Version merge — only version's own namespace extracted, upstream once
+4. Deep pipeline version merge — upstream duplication scales with depth
 
 Each test constructs realistic record shapes and asserts:
 - Exact expected namespace keys at each stage
@@ -56,30 +55,7 @@ def _make_upstream(size: int = 100) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 1. Linear pipeline — A → B → C
-# ---------------------------------------------------------------------------
-
-
-class TestLinearPipelineBus:
-    """Bus accumulates exactly one namespace per action, no duplication."""
-
-    def test_linear_accumulation(self):
-        """Each action adds its own namespace; upstream stays flat."""
-        # After 3 stages (extract → analyze → write), the bus has one namespace per action.
-        content = {
-            "extract": {"facts": "important stuff"},
-            "analyze": {"depth": "deep", "score": 9},
-            "write": {"question": "What is X?", "options": ["A", "B"]},
-        }
-        assert set(content.keys()) == {"extract", "analyze", "write"}
-        assert _count_key_occurrences(content, "extract") == 1
-        assert _count_key_occurrences(content, "analyze") == 1
-        assert content["extract"]["facts"] == "important stuff"
-        assert content["write"]["question"] == "What is X?"
-
-
-# ---------------------------------------------------------------------------
-# 2. Fan-in / diamond — A → B, A → C, B+C → D
+# 1. Fan-in / diamond — A → B, A → C, B+C → D
 # ---------------------------------------------------------------------------
 
 
@@ -173,7 +149,7 @@ class TestFanInDiamondBus:
 
 
 # ---------------------------------------------------------------------------
-# 3. Parallel branches (same action) — A_1, A_2 → B
+# 2. Parallel branches (same action) — A_1, A_2 → B
 # ---------------------------------------------------------------------------
 
 
@@ -235,7 +211,7 @@ class TestParallelBranchesBus:
 
 
 # ---------------------------------------------------------------------------
-# 4. Version merge — the bug we just fixed
+# 3. Version merge — the bug we just fixed
 # ---------------------------------------------------------------------------
 
 
@@ -342,7 +318,7 @@ class TestVersionMergeBus:
 
 
 # ---------------------------------------------------------------------------
-# 5. Deep pipeline + version merge — the production scenario from the bug
+# 4. Deep pipeline + version merge — the production scenario from the bug
 # ---------------------------------------------------------------------------
 
 

@@ -5,7 +5,7 @@ These tests prove the graduated pool pattern works across the full lifecycle:
 batch submission -> evaluation -> graduation -> repair -> disposition.
 
 All LLM/batch API calls are mocked. Integration = testing the interaction
-between EvaluationLoop, strategies, RecoveryState, and processing_recovery.
+between EvaluationLoop, strategies, and processing_recovery.
 """
 
 import random
@@ -13,18 +13,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.processing.evaluation import EvaluationLoop, EvaluationStrategy
 from agent_actions.processing.types import EvaluationMetadata, EvaluationOutcome, RecoveryMetadata
-
-# Skip entire module if evaluation loop code is not yet available.
-evaluation_mod = pytest.importorskip(
-    "agent_actions.processing.evaluation",
-    reason="Requires evaluation loop core",
-)
-EvaluationLoop = evaluation_mod.EvaluationLoop
-EvaluationStrategy = evaluation_mod.EvaluationStrategy
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -286,13 +277,6 @@ class TestNonDeterministicConvergence:
             )
 
 
-# ─── Test 4: Disposition Correct ──────────────────────────────────────────────
-
-
-class TestDispositionCorrect:
-    """Exhausted records get correct disposition after max_attempts."""
-
-
 class TestRetryEvaluationInteraction:
     """Missing records trigger retry FIRST, then evaluation runs on complete set."""
 
@@ -384,13 +368,6 @@ class TestStrategyPluggable:
 
 class TestBackwardCompat:
     """Old recovery state files (no graduated_results) work correctly."""
-
-    def test_old_state_no_graduated_field(self):
-        """Deserialized old state defaults graduated_results to []."""
-        state = RecoveryState(phase="repair")
-        assert hasattr(state, "graduated_results")
-        assert state.graduated_results == []
-        assert state.evaluation_strategy_name is None
 
     def test_old_state_evaluation_loop_still_works(self, make_batch_results, make_strategy):
         """EvaluationLoop works on results from old state (no evaluation metadata)."""

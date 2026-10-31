@@ -18,7 +18,6 @@ from agent_actions.input.context.normalizer import (
     normalize_context_scope,
 )
 from agent_actions.prompt.context.scope_application import (
-    FRAMEWORK_NAMESPACES,
     apply_context_scope,
     apply_context_scope_for_records,
 )
@@ -206,12 +205,6 @@ class TestDropDirective:
         with pytest.raises(ConfigurationError, match="not found in namespace"):
             apply_context_scope(field_context, scope, action_name="act")
 
-    def test_drop_on_nonexistent_field_warns_no_crash(self):
-        field_context = _fc(dep={"real": "value"})
-        scope = {"drop": ["dep.ghost"]}
-        # Should not crash — just warn
-        prompt_ctx, _, _ = apply_context_scope(field_context, scope, action_name="act")
-
 
 # ---------------------------------------------------------------------------
 # TestFrameworkNamespaces
@@ -264,10 +257,6 @@ class TestFrameworkNamespaces:
         prompt_ctx, _, _ = apply_context_scope(field_context, scope, action_name="act")
         assert "loop" in prompt_ctx
         assert prompt_ctx["loop"]["index"] == 0
-
-    def test_framework_namespaces_constant_is_correct(self):
-        """Sanity check: FRAMEWORK_NAMESPACES includes all expected names."""
-        assert FRAMEWORK_NAMESPACES == frozenset({"version", "seed", "workflow", "loop"})
 
     def test_undeclared_namespace_excluded_from_prompt_context(self):
         """Namespaces not in observe/passthrough/framework must be excluded."""

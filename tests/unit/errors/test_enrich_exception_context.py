@@ -1,7 +1,6 @@
 """Tests for enrich_exception_context helper."""
 
 from agent_actions.errors import AgentActionsError, enrich_exception_context
-from agent_actions.errors.base import enrich_exception_context as base_enrich
 
 
 class TestEnrichAgentActionsError:
@@ -58,8 +57,3 @@ class TestEnrichBareException:
         enrich_exception_context(e, key="val")
         assert isinstance(e.context, dict)  # type: ignore[attr-defined]
         assert e.context["key"] == "val"  # type: ignore[attr-defined]
-
-
-class TestReExport:
-    def test_importable_from_package(self):
-        assert enrich_exception_context is base_enrich

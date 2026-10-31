@@ -6,18 +6,16 @@ action at the start of a message as a style tag there too.
 
 import io
 
-import pytest
+from rich.console import Console
 
 from agent_actions.logging.core.events import EventLevel
 from agent_actions.logging.core.handlers.bridge import LogEvent
 from agent_actions.logging.core.handlers.console import ConsoleEventHandler
 
-rich_console = pytest.importorskip("rich.console")
-
 
 def _handler():
     stream = io.StringIO()
-    console = rich_console.Console(
+    console = Console(
         file=stream, width=200, force_terminal=False, color_system=None, highlight=False
     )
     return stream, ConsoleEventHandler(show_timestamp=False, console=console)

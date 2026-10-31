@@ -6,7 +6,7 @@ line, rather than the event's text, would print that tag as characters.
 
 import io
 
-import pytest
+from rich.console import Console
 
 from agent_actions.logging.core.events import EventLevel
 from agent_actions.logging.core.handlers.bridge import LogEvent
@@ -14,12 +14,10 @@ from agent_actions.logging.core.handlers.progress import ProgressRenderer
 from agent_actions.logging.events import BatchSubmittedEvent
 from agent_actions.logging.events.formatters import AgentActionsFormatter
 
-rich_console = pytest.importorskip("rich.console")
-
 
 def _printed(event) -> str:
     stream = io.StringIO()
-    console = rich_console.Console(
+    console = Console(
         file=stream, width=200, force_terminal=False, color_system=None, highlight=False
     )
     renderer = ProgressRenderer(

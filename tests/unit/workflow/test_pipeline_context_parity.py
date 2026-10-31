@@ -4,7 +4,7 @@ Verifies that _build_pipeline_context() produces correct results and that
 both batch and online paths receive the same context fields.
 """
 
-from agent_actions.workflow.pipeline import BatchPipelineParams, ProcessingPipeline
+from agent_actions.workflow.pipeline import ProcessingPipeline
 
 
 class TestBuildPipelineContext:
@@ -85,18 +85,6 @@ class TestBuildPipelineContext:
 
 class TestBatchPathReceivesVersionContext:
     """Verify that the batch path forwards version_context through the chain."""
-
-    def test_batch_pipeline_params_carries_version_context(self):
-        """BatchPipelineParams should carry version_context to _handle_batch_generation."""
-        params = BatchPipelineParams(
-            pipeline_action_config={"agent_type": "test"},
-            pipeline_action_name="test_action",
-            batch_file_path="/tmp/input.json",
-            batch_base_directory="/tmp",
-            batch_output_directory="/tmp/output",
-            version_context={"i": 1, "length": 4},
-        )
-        assert params.version_context == {"i": 1, "length": 4}
 
     def test_build_pipeline_context_called_before_batch_fork(self):
         """_process_by_strategy should call _build_pipeline_context before the batch fork.

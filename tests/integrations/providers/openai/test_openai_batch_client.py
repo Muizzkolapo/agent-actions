@@ -161,7 +161,7 @@ class TestOpenAIBatchClient(BaseBatchClientTests):
         assert result.metadata["finish_reason"] == "stop"
         assert result.metadata["system_fingerprint"] == "fp_test123"
 
-    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
+    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path, monkeypatch):
         """
         Test error handling for invalid batch ID (OpenAI-specific override).
 
@@ -178,5 +178,6 @@ class TestOpenAIBatchClient(BaseBatchClientTests):
             endpoint="batches.retrieve",
             context={"message": "Batch not found", "batch_id": "nonexistent"},
         )
+        monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
         with pytest.raises(VendorAPIError):
             provider.retrieve_results("nonexistent-batch-id-12345", str(tmp_path))
