@@ -2,9 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
-from agent_actions.errors import AgentActionsError
 from agent_actions.llm.providers.hitl.server import HitlServer
 from agent_actions.processing.strategies.hitl import HITLStrategy
 from agent_actions.processing.types import ProcessingContext
@@ -38,14 +35,13 @@ def test_timed_out_server_response_drives_reviewed_count_in_error():
         source_data=input_data,
     )
 
-    with (
-        patch(
-            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
-            return_value=(response, True),
-        ),
-        pytest.raises(AgentActionsError, match="1/3 records reviewed"),
+    with patch(
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+        return_value=(response, True),
     ):
-        HITLStrategy().invoke(input_data, context)
+        results = HITLStrategy().invoke(input_data, context)
+
+    assert all("1/3 records reviewed" in result.error for result in results)
 
 
 def test_non_timeout_terminal_response_keeps_explicit_payload_only():

@@ -77,6 +77,9 @@ The browser UI provides:
 - **Progress tracking**: Visual progress bar and stats (pending/approved/rejected)
 - **State persistence**: Refresh the page without losing your reviews
 - **Auto-shutdown**: Server closes automatically after submission
+- **One tab for every file**: The action reviews its input one file at a time,
+  each on a new server at the same address. After you submit a file (or its
+  timeout runs out), the tab loads the next file as soon as it is ready
 
 ## Configuration
 
@@ -96,7 +99,7 @@ hitl:
 |-------|------|---------|-------------|
 | `port` | int | 3001 | Server port (1024-65535). If busy, tries up to 5 consecutive ports. |
 | `instructions` | str | *(required)* | Instructions displayed in review UI. Be clear and specific. |
-| `timeout` | int | 300 | Seconds before timeout. Server shuts down, partial reviews are saved, and the action fails so a re-run can resume. |
+| `timeout` | int | 300 | Seconds each file waits for its review. On a timeout the server shuts down, partial reviews are saved, and that file's records are marked failed so `agac retry` can resume. |
 | `require_comment_on_reject` | bool | true | If true, rejecting a record requires a comment explaining why. |
 
 ### Workflow-Level Default Timeout
@@ -226,8 +229,9 @@ guard:
 ```
 
 :::note No guard is needed for timeouts or server failures
-A review that does not complete never produces a record. The HITL action fails
-instead, so `hitl_status` downstream is always `approved` or `rejected` — a
+A review that does not complete never produces a reviewed record. A file that
+times out has its records marked failed, and a server that cannot start fails
+the action, so `hitl_status` downstream is always `approved` or `rejected` — a
 guard like `hitl_status != 'timeout'` can never fire.
 :::
 
@@ -438,17 +442,18 @@ hitl:
   timeout: 300  # 5 minutes
 ```
 
-After timeout:
-- Server shuts down
-- Decisions you already made are saved to disk
-- **The action fails** — the workflow stops rather than continuing with an
-  unreviewed dataset
-- Re-running the workflow reopens the UI with your earlier decisions restored,
-  so you resume where you left off
+The timeout applies to each input file separately. After a file times out:
+- Its server shuts down, and the review moves on to the next file
+- Decisions you already made on it are saved to disk
+- **Its records are marked failed**, with a warning naming the file. The run
+  never carries them downstream as reviewed: the action ends completed with
+  failures (`partial` in the run summary), or failed when no file was reviewed
+- `agac retry -a <workflow>` reopens the UI for those files only, with your
+  earlier decisions restored, so you resume where you left off
 
-The same applies when the approval UI cannot start (for example, every port in
-its range is taken). No decision was made, so nothing is written to the records
-and the action fails with the reason. Fix the cause and re-run.
+When the approval UI cannot start (for example, every port in its range is
+taken), no decision was made, so nothing is written to the records and the
+action fails with the reason. Fix the cause and re-run.
 
 ## Advanced Topics
 
@@ -477,12 +482,16 @@ actions:
 
 After clicking "Submit Reviews":
 
-1. ✅ **Server shuts down automatically** (1.5s delay)
-2. ✅ **Browser tab attempts to close** (may not work due to browser security)
-3. ✅ **Workflow continues immediately** (doesn't wait for browser)
-4. Message shown: "✅ Complete! Workflow is continuing. You can close this tab now."
+1. ✅ **Workflow continues immediately**, and the file's server shuts down
+2. ✅ **The tab waits for the next file** and loads it when its server is up,
+   at the same address
+3. Message shown: "Submitted. This tab loads the next file when one is ready;
+   close it once the run has finished."
 
-The workflow continues as soon as you submit, even if the browser tab stays open.
+Each page carries the review session it was served for. A request it sends
+after its file's review has ended is refused by the next file's server and
+changes nothing there: a tab left open on an earlier file cannot submit,
+time out or shut down the file under review.
 
 ### Security Notes
 
