@@ -1,9 +1,12 @@
 """UDF (User-Defined Function) registry for Agent Actions."""
 
+import hashlib
 import inspect
+import logging
 import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, cast
 
 from agent_actions.config.types import Granularity
@@ -70,6 +73,18 @@ class FileUDFResult:
         self.outputs = outputs
 
 
+logger = logging.getLogger(__name__)
+
+
+def _source_digest(source_file: str) -> str | None:
+    """A digest of the file a UDF was loaded from, as it is when the UDF registers."""
+    try:
+        return hashlib.sha256(Path(source_file).read_bytes()).hexdigest()[:16]
+    except OSError:
+        logger.debug("No source digest for %s", source_file, exc_info=True)
+        return None
+
+
 # Thread safety
 _registry_lock = threading.RLock()
 
@@ -118,6 +133,7 @@ def udf_tool(
                 "module": f.__module__,
                 "name": f.__name__,
                 "file": source_file,
+                "source_digest": _source_digest(source_file),
                 "docstring": f.__doc__,
                 "signature": inspect.signature(f),
                 "granularity": granularity,

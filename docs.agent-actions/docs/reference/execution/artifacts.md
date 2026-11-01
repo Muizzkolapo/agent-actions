@@ -109,11 +109,14 @@ reads has digests of its own: `context_scope_hash` over its `context_scope` (obs
 passthrough, drop and seed) and `dependencies_hash` over its `dependencies`, and how it
 is asked has one too: `generation_hash` over the generation settings an LLM action sends
 (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty` and `presence_penalty`;
-empty for a tool or hitl action, which sends none). The model and these three are deliberately outside `config_hash`, so adding them could not rotate
+empty for a tool or hitl action, which sends none). The code it runs has one as well:
+`udf_source_hash` over the files its tool (`impl`) and its UDF guard were loaded from, as
+they were when the run loaded them. The model and these four are deliberately outside `config_hash`, so adding them could not rotate
 every stored digest at once and name every completed action as edited after an upgrade.
 
 These are what count as an edit to a completed action: its prompt, schema, guard,
-model, context scope, dependencies or generation settings. An edit re-runs nothing: the action keeps its
+model, context scope, dependencies, generation settings, or the code of its tool or UDF
+guard. An edit re-runs nothing: the action keeps its
 answers, and so does every action reading it. Each run names the edit, for example
 `recap was edited since it completed (context scope): its answers stand, and only records
 it has not answered use the edit. Run again with --rerun recap to answer every record under
@@ -121,8 +124,9 @@ the edit`, until `agac run --rerun recap` answers the action and every action re
 under the new config (see [When you edit the workflow](../cli/run#when-you-edit-the-workflow)).
 Reordering or repeating the entries of an `observe`, `passthrough` or `drop` list is not
 an edit; reordering `dependencies` is, since a fan-in merges its inputs in that order. A
-change to a tool's code or to the contents of a seed data file is not seen at all, so use
-`--rerun` or `--fresh` after one. A stamp written before a digest existed holds no value
+tool or guard is tracked by its whole file, so an edit anywhere in that file names every
+action whose tool or guard it defines; a module the file imports is not tracked, and neither
+are the contents of a seed data file, so use `--rerun` or `--fresh` after changing one. A stamp written before a digest existed holds no value
 for it, so an edit it would have caught is not named until the action next completes.
 
 A changed `record_limit` re-runs the action only when it could have held
@@ -146,16 +150,16 @@ left alone until the action next completes.
 
 An action also records, when it starts work, what that work is answered under:
 `answered_under`, holding the same `config_hash`, `model_name`, `model_vendor`,
-`context_scope_hash`, `dependencies_hash` and `generation_hash`. A run that stops partway
+`context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash`. A run that stops partway
 through an action — killed, interrupted, or stopped by an error — leaves the records it
 finished, and the next run keeps them. If the prompt, schema, guard, model, context scope,
-dependencies or generation settings were edited in between — the same edits as for a completed action, above —
+dependencies, generation settings or tool or guard code were edited in between — the same edits as for a completed action, above —
 the run names the edit and answers only the rest under it. When the action kept any
 answer, its stamps stay at the config those answers were given under
 (`kept_answers_under` in the status file), so every later run names the edit until
 `--rerun` answers every record under it. An action that may hold answers from more than one
 config is marked so (`answers_under_more_than_one_config`), and each run says so even after
-the edit is undone. A change to a tool's code or to the contents of
+the edit is undone. A change to a module a tool imports or to the contents of
 a seed data file is not seen, so run `agac run --rerun <action>` or `--fresh` to answer
 everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
 record to the guard again, so a record its code now skips is skipped, and one it now

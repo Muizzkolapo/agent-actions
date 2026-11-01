@@ -434,3 +434,104 @@ def test_a_store_stamped_before_generation_settings_names_no_edit(completed):
 
     assert result.returncode == 0, result.printed
     assert "was edited since" not in result.printed
+
+
+TOOLS_FILE = Path("tools") / WORKFLOW / "logged.py"
+RECAP_RETURNS = 'return {"saw": item + ":" + staged.get("text", "-")}'
+GUARD = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool()
+def summary_gate(data: dict[str, Any]) -> bool:
+    return True
+"""
+
+
+def _edit_tools(root, old, new):
+    path = root / TOOLS_FILE
+    text = path.read_text()
+    assert text.count(old) == 1, f"the tools no longer have exactly one {old!r}"
+    path.write_text(text.replace(old, new))
+
+
+def test_an_edit_to_a_tools_code_is_named_at_every_action_its_file_serves(completed):
+    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert _ran(completed) == {}
+    assert _recap_saw(completed) == SAW_THE_ID
+    for action in ("recap", "after_recap", "bystander"):
+        assert f"{action} was edited since it completed (tool/guard code)" in result.printed
+    assert "stage_items was edited" not in result.printed
+    assert "summary was edited" not in result.printed
+
+
+def test_rerun_answers_under_the_edited_code_and_restamps_it(completed):
+    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "recap")
+    assert result.returncode == 0, result.printed
+    assert _recap_saw(completed) == [f"{item}:edited" for item in ITEMS]
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "recap was edited" not in result.printed
+    assert "after_recap was edited" not in result.printed
+    assert "bystander was edited since it completed (tool/guard code)" in result.printed
+
+
+def test_an_edit_to_a_tool_file_no_action_uses_is_not_an_edit(project):
+    unrelated = project / "tools" / WORKFLOW / "unrelated.py"
+    unrelated.write_text(GUARD)
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode == 0
+    unrelated.write_text(GUARD.replace("return True", "return False"))
+
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_an_edit_to_a_guard_udfs_code_is_named(project):
+    (project / "tools" / WORKFLOW / "gate.py").write_text(GUARD)
+    _edit(project, SUMMARY_INTENT, f'{SUMMARY_INTENT}    guard: "udf:summary_gate"\n')
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode == 0
+    (project / "tools" / WORKFLOW / "gate.py").write_text(GUARD.replace("True", "1 == 1"))
+
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (tool/guard code)" in result.printed
+
+
+def test_an_action_stopped_partway_names_a_code_edit(project):
+    (project / FAULT).write_text(json.dumps({"item": "beta"}))
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode != 0
+    _ran(project)
+
+    (project / FAULT).unlink()
+    _edit_tools(project, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "recap was edited since its last run started (tool/guard code)" in result.printed
+    assert _recap_saw(project) == ["alpha:-", "beta:edited", "gamma:edited"]
+
+
+def test_a_store_stamped_before_code_digests_names_no_edit(completed):
+    path = _workflow(completed) / "agent_io" / ".agent_status.json"
+    statuses = json.loads(path.read_text())
+    for details in statuses.values():
+        details.pop("udf_source_hash", None)
+        (details.get("answered_under") or {}).pop("udf_source_hash", None)
+    path.write_text(json.dumps(statuses))
+    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed

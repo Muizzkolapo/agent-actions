@@ -11,6 +11,7 @@ from agent_actions.workflow.executor import (
     _compute_context_scope_hash,
     _compute_dependencies_hash,
     _compute_generation_hash,
+    _compute_udf_source_hash,
     _edits_since,
     edits_since_its_work_began,
 )
@@ -143,3 +144,57 @@ class TestTheGenerationDigest:
         assert _edits_since(stamp, edited) == ["generation settings"]
         del stamp["generation_hash"]
         assert _edits_since(stamp, edited) == []
+
+
+class TestTheUdfSourceDigest:
+    """The files a tool and a UDF guard were loaded from are stamped (1600)."""
+
+    @staticmethod
+    def _registered(monkeypatch, **digests):
+        from agent_actions.workflow import executor
+
+        monkeypatch.setattr(
+            executor,
+            "UDF_REGISTRY",
+            {name: {"source_digest": digest} for name, digest in digests.items()},
+        )
+
+    def test_a_tool_and_its_guard_each_count(self, monkeypatch):
+        tool = {"model_vendor": "tool", "model_name": "Tag", "conditional_clause": "gate"}
+        self._registered(monkeypatch, tag="t1", gate="g1")
+        base = _compute_udf_source_hash(tool)
+        self._registered(monkeypatch, tag="t2", gate="g1")
+        assert _compute_udf_source_hash(tool) != base
+        self._registered(monkeypatch, tag="t1", gate="g2")
+        assert _compute_udf_source_hash(tool) != base
+
+    def test_an_llm_action_without_a_udf_guard_has_none(self, monkeypatch):
+        self._registered(monkeypatch, gpt="x")
+        assert _compute_udf_source_hash({"model_vendor": "openai", "model_name": "gpt"}) == ""
+
+    def test_a_udf_not_loaded_is_not_compared(self, monkeypatch):
+        self._registered(monkeypatch)
+        tool = {"model_vendor": "tool", "model_name": "tag"}
+        assert _compute_udf_source_hash(tool) is None
+        assert _edits_since({"udf_source_hash": "old"}, tool) == []
+
+    def test_an_edit_is_named_and_an_old_stamp_names_none(self, monkeypatch):
+        tool = {"model_vendor": "tool", "model_name": "tag"}
+        self._registered(monkeypatch, tag="t1")
+        stamp = {"udf_source_hash": _compute_udf_source_hash(tool)}
+        self._registered(monkeypatch, tag="t2")
+
+        assert _edits_since(stamp, tool) == ["tool/guard code"]
+        assert _edits_since({}, tool) == []
+
+
+def test_a_udf_registers_with_the_digest_of_its_file(tmp_path):
+    from agent_actions.utils.udf_management.registry import _source_digest
+
+    source = tmp_path / "tool.py"
+    source.write_text("a")
+    first = _source_digest(str(source))
+    source.write_text("b")
+
+    assert first is not None and _source_digest(str(source)) != first
+    assert _source_digest(str(tmp_path / "missing.py")) is None

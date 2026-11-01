@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  An edit to the code of a tool or UDF guard is now named as an edit of every action its file
+  serves, until --rerun answers the action under it. The whole file the UDF was loaded from
+  counts; modules it imports do not. A stamp written before this is left alone.
+time: 2026-11-01T15:00:00Z
