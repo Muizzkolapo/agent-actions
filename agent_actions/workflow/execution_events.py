@@ -75,6 +75,18 @@ def fire_step_complete(
     )
 
 
+def _holds_a_record(backend, action_name: str) -> bool:
+    """Whether a stored file of *action_name* holds a record that is not a tombstone."""
+    for relative_path in backend.list_target_files(action_name):
+        try:
+            rows = backend.read_target(action_name, relative_path)
+        except FileNotFoundError:
+            continue
+        if any(isinstance(row, dict) and not row.get("_tombstone") for row in rows):
+            return True
+    return False
+
+
 class WorkflowEventLogger:
     """Encapsulates all event-firing and structured logging for a workflow run."""
 
@@ -189,6 +201,16 @@ class WorkflowEventLogger:
     def finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""
         summary = self.services.core.state_manager.get_summary()
+        empty = self._final_actions_left_empty()
+        if empty:
+            logger.warning(
+                "No records reached the final output of %s: %s. Every record was filtered, "
+                "skipped or failed before it; agac dispositions -a %s --action %s says why",
+                self.agent_name,
+                ", ".join(empty),
+                self.agent_name,
+                empty[0],
+            )
 
         fire_event(
             WorkflowCompleteEvent(
@@ -198,11 +220,36 @@ class WorkflowEventLogger:
                 actions_partial=summary.get("completed_with_failures", 0),
                 actions_skipped=summary.get("skipped", 0),
                 actions_failed=summary.get("failed", 0),
+                empty_final_actions=empty,
             )
         )
 
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_completed()
+
+    def _final_actions_left_empty(self) -> list[str]:
+        """Actions nothing reads that completed or were skipped holding no record.
+
+        A failed one is reported as failed already, and one still waiting on a batch has
+        not finished.
+        """
+        executor = getattr(self.services.core, "action_executor", None)
+        runner = getattr(getattr(executor, "deps", None), "action_runner", None)
+        backend = getattr(runner, "storage_backend", None)
+        if executor is None or backend is None:
+            return []
+        state = self.services.core.state_manager
+        finished = {*COMPLETED_STATUSES, ActionStatus.SKIPPED}
+        empty: list[str] = []
+        for name in self.execution_order:
+            if state.get_status(name) not in finished or executor.readers_of(name):
+                continue
+            try:
+                if not _holds_a_record(backend, name):
+                    empty.append(name)
+            except Exception as error:
+                logger.debug("Could not count the records of %s: %s", name, error)
+        return empty
 
     def handle_workflow_error(
         self, error: Exception, elapsed_time: float = 0.0, failed_action: str = ""

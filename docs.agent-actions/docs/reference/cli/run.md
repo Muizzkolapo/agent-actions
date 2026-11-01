@@ -31,6 +31,17 @@ agac run -a my_workflow -u ./user_code --use-tools
 agac run -a my_workflow --execution-mode parallel
 ```
 
+The last line counts actions, not records. When a final action (one nothing else reads)
+completes or is skipped holding no record, because every record was filtered, skipped or
+failed on the way to it, the run says so under that line and names it:
+
+```
+✓ 0.3s — 1 completed, 1 skipped
+⚠ No records reached the final output: write_out
+```
+
+The log line before it names the `agac dispositions` command that shows why.
+
 ## Options
 
 | Option | Description |
