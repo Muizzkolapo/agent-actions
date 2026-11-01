@@ -1,0 +1,5 @@
+kind: Under the Hood
+body: >-
+  agac run --rerun logs "<action> is running again: resetting what reads it" once per reset,
+  not three times: only the code that resets the readers logs it.
+time: 2026-11-01T16:40:00Z

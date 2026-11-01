@@ -762,9 +762,8 @@ class ActionExecutor:
     def reopen_with_readers(self, action_name: str) -> list[str]:
         """Forget what *action_name* and everything reading it hold, and put them all back
         to pending, about to answer everything again. Returns the names put back."""
-        reopened = [*self._stale_readers(action_name), action_name]
-        for name in reopened:
-            self._forget_what_it_did(name)
+        reopened = [*self._reset_readers(action_name), action_name]
+        self._forget_what_it_did(action_name)
         self.deps.state_manager.reopen(reopened)
         return reopened
 
@@ -811,13 +810,19 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             return []
-        readers = self.readers_of(action_name)
+        return self.readers_of(action_name)
+
+    def _reset_readers(self, action_name: str) -> list[str]:
+        """Forget what reads *action_name*, saying so once; returns the readers."""
+        readers = self._stale_readers(action_name)
         if readers:
             logger.info(
                 "%s is running again: resetting what reads it (%s)",
                 action_name,
                 ", ".join(readers),
             )
+        for name in readers:
+            self._forget_what_it_did(name)
         return readers
 
     def readers_of(self, action_name: str) -> list[str]:
@@ -938,9 +943,7 @@ class ActionExecutor:
             # Its output is gone, the one route that leaves it completed here, so it will
             # answer everything again. Outside the try: a failure part-way through the
             # reset is not a failure to verify.
-            readers = self._stale_readers(action_name)
-            for name in readers:
-                self._forget_what_it_did(name)
+            readers = self._reset_readers(action_name)
             if not getattr(self.deps.action_runner, "retried_records", ()):
                 storage_backend.clear_prompt_traces(action_name)
             self.deps.state_manager.reopen([*readers, action_name])
