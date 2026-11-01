@@ -68,9 +68,10 @@ they describe are replaced:
 - `agac run --fresh` clears every action's traces.
 - An action that runs again over every record clears its own traces, and those
   of every action reading it that runs again with it. That happens on
-  `agac run --rerun`, when its stored output is gone, and when its limits or its
-  staged input changed. A config edit alone clears nothing: the traces of the
-  answers that stand are kept, each naming the config it was answered under.
+  `agac run --rerun`, when its stored output is gone, and when its limits
+  changed. A config edit or a change to the staged input clears nothing: the
+  traces of the answers that stand are kept, each naming the config it was
+  answered under, and so are those of a record no longer staged.
 - A failed or skipped action that runs again from the start clears its traces.
 
 Otherwise, storage maintenance keeps the traces of the most recent

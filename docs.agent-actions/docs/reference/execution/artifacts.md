@@ -136,10 +136,14 @@ action reading it.
 
 A first-stage action (one with no `dependencies`) also stores `staged_input`: the
 relative path, size and modification time of every input file it read. When a later
-run finds a file added, removed or changed, it logs which, resets that action and
-every action reading it to `pending`, and runs them again over all input, so a new
-file's records reach every action and a removed file's rows are dropped. Untouched
-staging still skips. A stamp written before this key existed holds no value and is
+run finds a file added, removed or changed, it logs which and puts that action and
+every completed action reading it back to `pending`, keeping their answers. They run
+again and answer only the records the change added or changed (a changed record has a
+new `source_guid`, so it is a new record). A record no staged file holds any more
+loses its rows, its dispositions and its checkpoints at that action and at every action
+reading it, once a walk has read every staged file; its prompt traces stay. Nothing is
+forgotten under a file limit, after a file failed to read, or by `agac retry`.
+`--rerun` answers every record again. Untouched staging still skips. A stamp written before this key existed holds no value and is
 left alone until the action next completes.
 
 An action also records, when it starts work, what that work is answered under:
@@ -209,7 +213,7 @@ resumed after it stopped, keeps them for each record it does not ask again.
 | `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
 
-Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished, edited or not. A completed first-stage action whose staged input files changed runs again, with everything reading it.
+Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished, edited or not. A completed first-stage action whose staged input files changed runs again, with everything reading it, answering only the records the change added or changed.
 
 ### Run Results (`run_results.json`)
 

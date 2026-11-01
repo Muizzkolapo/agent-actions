@@ -242,12 +242,14 @@ Every action goes through this decision tree before any code runs:
 execute_action_sync(action_name)
     │
     ▼
-Limits or staged input changed since last run?
-(record/file limit; or, for a first stage, a staged file added,
- removed or rewritten)
+Limits changed since last run? (record/file limit, or a recorded cap)
     YES → invalidate COMPLETED, reset to PENDING
           and reset every action that reads its output, in any state,
           directly or through other actions (see below)
+Staged input changed? (first stage: a staged file added, removed or rewritten)
+    YES → reopen it and every completed reader to PENDING, keeping their
+          answers; after its walk, records no staged file holds lose their
+          dispositions and checkpoints there and at every reader
 Config edited (prompt, model, schema, guard, context scope,
 dependencies)?
     YES → warn, naming the edit and `--rerun`; nothing is reset
@@ -331,7 +333,7 @@ readers are skipped and the other branches run on. Only `AllVersionsFilteredErro
 answered differently, by skipping the merge.
 
 **A reset reaches everything that reads it.** A completed action put back to pending
-by `--rerun`, because a limit or its staged input changed, or because its output is gone, is about to
+by `--rerun`, because a limit changed, or because its output is gone, is about to
 answer everything again. Whatever an action that reads that output holds was computed
 from what is being replaced: the answers of a completed one, the batch of one still out,
 the records an interrupted or halted one had finished. Left as it is, it ends holding
@@ -853,13 +855,19 @@ If you change one of these fields and re-run WITHOUT --fresh:
     An action stopped partway is compared at the start of the next run,
     against the `answered_under` its run recorded (_edits_since serves
     both), and resumes under the edit.
-    Limits, staged input and a recorded truncation still reset the
-    action and its readers: those change which records exist, not how
-    one is answered.
+    Limits and a recorded truncation still reset the action and its
+    readers: those change which records exist, not how one is answered.
 
 A first stage also stamps `staged_input` (path, size, mtime of each file
-it read, taken as its work began). A different set on a later run resets
-it and every reader the same way. A stamp without the key never differs;
+it read, taken as its work began). A different set on a later run puts it
+and every completed reader back to pending with their answers kept
+(_reopen_keeping_answers); an edit met there is named and held to
+(kept_answers_under). The walk notes every record it finds staged
+(note_staged_records, before a repair or record limit narrows them), and
+once a complete walk ends (no file lost, no file limit, not a repair) a
+record the action holds that some run staged and this one did not loses
+its dispositions and checkpoints there and at every reader
+(_forget_records_no_longer_staged). A stamp without the key never differs;
 an API data source is not fingerprinted, since resolving it can fetch.
 
 If you add a new config field that affects output but don't stamp it:

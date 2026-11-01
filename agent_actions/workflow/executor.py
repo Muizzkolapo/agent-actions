@@ -243,6 +243,17 @@ def config_in_force(action_config: ActionConfigDict) -> dict[str, Any]:
     }
 
 
+def _warn_of_an_edit(action_name: str, edits: list[str]) -> None:
+    logger.warning(
+        "%s was edited since it completed (%s): its answers stand, and only records "
+        "it has not answered use the edit. Run again with --rerun %s to answer every "
+        "record under the edit",
+        action_name,
+        ", ".join(edits),
+        action_name,
+    )
+
+
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
     """True when the stamp proves *record_limit* leaves the stored record set whole.
 
@@ -608,10 +619,12 @@ class ActionExecutor:
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
     ) -> ActionStatus:
-        """Reset to pending if its limits, its staged input or a cap it ran under changed.
+        """Reset to pending if its limits or a cap it ran under changed.
 
         A config edit resets nothing: the answers the action holds stand, and a warning
-        names the edit until ``--rerun`` answers every record under it.
+        names the edit until ``--rerun`` answers every record under it. Nor does a change
+        to its staged input: it and its readers run again, keeping their answers, to
+        answer the records added or changed.
         """
         repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
         if current_status not in COMPLETED_STATUSES and not repairing:
@@ -662,20 +675,25 @@ class ActionExecutor:
             )
             logger.warning(
                 "The input files of %s changed since it completed (added: %s; removed: %s; "
-                "changed: %s). It and every action reading it run again over all input",
+                "changed: %s). %s",
                 action_name,
                 ", ".join(added) or "none",
                 ", ".join(removed) or "none",
                 ", ".join(changed) or "none",
+                "It and every action reading it run again over all input"
+                if limits_changed or was_truncated
+                else "Records the change left alone keep their answers, here and at every "
+                "action reading it; records added or changed are answered, and records no "
+                f"longer staged are forgotten. Run again with --rerun {action_name} to answer "
+                "every record",
             )
 
-        if limits_changed or was_truncated or input_changed:
+        if input_changed and not (limits_changed or was_truncated):
+            self._reopen_keeping_answers(action_name)
+            return ActionStatus.PENDING
+        if limits_changed or was_truncated:
             reason = (
-                "staged input"
-                if input_changed
-                else "limit config"
-                if limits_changed
-                else "a cap recorded by the run that completed it"
+                "limit config" if limits_changed else "a cap recorded by the run that completed it"
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
             mixed_before = bool(edits) or bool(details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG))
@@ -689,14 +707,7 @@ class ActionExecutor:
                 self.deps.state_manager.mark_mixed_answers([action_name])
             return ActionStatus.PENDING
         if edits:
-            logger.warning(
-                "%s was edited since it completed (%s): its answers stand, and only records "
-                "it has not answered use the edit. Run again with --rerun %s to answer every "
-                "record under the edit",
-                action_name,
-                ", ".join(edits),
-                action_name,
-            )
+            _warn_of_an_edit(action_name, edits)
         elif details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
             logger.warning(
                 "%s may hold answers given under more than one config. Run again with --rerun "
@@ -757,6 +768,81 @@ class ActionExecutor:
             action_name,
             file_limit,
             why,
+        )
+
+    def _reopen_keeping_answers(self, action_name: str) -> None:
+        """Put *action_name* and what reads it back to pending, keeping every answer held.
+
+        Only the completed ones: any other runs anyway. One edited since it completed answers
+        beside answers given before the edit, so its stamps stay held to that config and each
+        later run names the edit, until ``--rerun``.
+        """
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        names = [
+            name
+            for name in [*self._stale_readers(action_name), action_name]
+            if self.deps.state_manager.get_status(name) in COMPLETED_STATUSES
+        ]
+        held: dict[str, dict[str, Any]] = {}
+        mixed = []
+        for name in names:
+            details = self.deps.state_manager.get_status_details(name)
+            if details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
+                mixed.append(name)
+            edits = _edits_since(details, configs[name]) if name in configs else []
+            if edits:
+                _warn_of_an_edit(name, edits)
+                held[name] = {key: details.get(key) for key in config_in_force(configs[name])}
+        self.deps.state_manager.reopen(names)
+        for name, stamp in held.items():
+            self.deps.state_manager.update_status(
+                name, ActionStatus.PENDING, **{KEPT_ANSWERS_UNDER: stamp}
+            )
+        if mixed:
+            self.deps.state_manager.mark_mixed_answers(mixed)
+
+    def _forget_records_no_longer_staged(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> None:
+        """Forget, here and at every action reading it, the records no staged file holds.
+
+        Their dispositions and checkpoints go; the answers of every other record stand.
+        Only after a walk that read every staged file, counted by its slices: a file lost
+        or left unread under a file limit may still hold a record the walk did not see.
+        Not under a repair, and only for a record some run staged.
+        """
+        runner = self.deps.action_runner
+        backend = getattr(runner, "storage_backend", None)
+        if backend is None or getattr(runner, "retried_records", None):
+            return
+        staged = backend.records_staged_this_run(action_name)
+        if (
+            not isinstance(staged, set)
+            or slice_observation(backend, action_name) is None
+            or resolve_file_limit(action_config)[0] is not None
+        ):
+            return
+        try:
+            held = {
+                row["record_id"] for row in backend.get_disposition(action_name, snapshots=False)
+            }
+            gone = backend.source_guids_among(held - staged)
+            if not gone:
+                return
+            readers = self.readers_of(action_name)
+            for name in [action_name, *readers]:
+                backend.clear_dispositions_batch(name, gone)
+                backend.clear_checkpoint_records(name, source_guids=gone)
+        except Exception as e:
+            logger.warning(
+                "Could not forget the records no longer staged for %s: %s", action_name, e
+            )
+            return
+        logger.info(
+            "%d record(s) of %s are no longer staged: forgot them there%s",
+            len(gone),
+            action_name,
+            f" and at {', '.join(readers)}" if readers else "",
         )
 
     def reopen_with_readers(self, action_name: str) -> list[str]:
@@ -2397,6 +2483,7 @@ class ActionExecutor:
         except Exception as e:
             return self._handle_run_failure(params, e)
 
+        self._forget_records_no_longer_staged(params.action_name, params.action_config)
         duration = (datetime.now() - params.start_time).total_seconds()
         batch_status = self._check_batch_submission(
             params.action_name,
@@ -2429,6 +2516,7 @@ class ActionExecutor:
         except Exception as e:
             return self._handle_run_failure(params, e)
 
+        self._forget_records_no_longer_staged(params.action_name, params.action_config)
         duration = (datetime.now() - params.start_time).total_seconds()
         batch_status = self._check_batch_submission(
             params.action_name,
