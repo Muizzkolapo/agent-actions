@@ -94,8 +94,15 @@ one run.
 A workflow that has completed is skipped on the next run unless its limits or its staged
 input changed (a config edit re-runs nothing; see
 [When you edit the workflow](#when-you-edit-the-workflow)). Staged input counts: adding, removing or changing a file under the first stage's
-input re-runs that action and every action reading it over all input, and the run log names
-the files that changed. `--fresh` is not needed to pick up new input.
+input runs that action and every action reading it again, and the run log names the files
+that changed. As for an edit, the records the change left alone keep their answers. A record
+added, or one whose content changed (it is then a new record), is answered. A record no
+staged file holds any more leaves nothing behind: its rows, its disposition (a failure
+included, so `agac retry` no longer offers it) and its checkpoints go, at that action and at
+every action reading it. Its prompt traces stay. A record is only forgotten after a walk that
+read every staged file: not under a file limit, nor when a file could not be read, nor under
+`agac retry`. A record a record limit leaves out is still staged and keeps what it holds.
+`--fresh` is not needed to pick up new input, and `--rerun` answers every record again.
 
 Neither flag holds back [`agac retry`](./retry): a repair walks every file holding a record it
 named. Stopping short of one would leave that record's cleared disposition unwritten, which is
@@ -126,6 +133,9 @@ classify was edited since its last run started (model): the records it finished 
 batch already sent is collected as it was sent, and the rest are answered under the edit. Run
 again with --rerun classify to answer every record under the edit
 ```
+
+An edit made beside a change to the staged input is named the same way: the change answers
+the records it added or changed under the edit, and every other record keeps its answer.
 
 To answer every record under the edit, pass `--rerun` with the action's name. It re-runs that
 action and every action that reads its output, and keeps every other action's answers:
