@@ -134,6 +134,15 @@ batch already sent is collected as it was sent, and the rest are answered under 
 again with --rerun classify to answer every record under the edit
 ```
 
+A batch sent before the edit and not yet collected counts as records it finished: once
+collected, its answers are from before the edit, and each later run names it. An action
+that kept nothing, not even a batch, answers every record under the edit, and says so:
+
+```
+classify was edited since its last run started (model): it kept no answers, so every
+record is answered under the edit
+```
+
 An edit made beside a change to the staged input is named the same way: the change answers
 the records it added or changed under the edit, and every other record keeps its answer.
 
