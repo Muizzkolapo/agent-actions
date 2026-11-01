@@ -17,7 +17,11 @@ from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
-from agent_actions.utils.udf_management.registry import get_udf_metadata
+from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf_metadata
+from agent_actions.validation.bus_namespace_validator import (
+    bus_namespace_warnings,
+    promoted_version_names,
+)
 from agent_actions.validation.dag_schema_fit_validator import (
     DAG_FIT_REMEDY,
     find_dag_schema_compatibility_gaps,
@@ -168,6 +172,34 @@ class PreflightService:
         # 10. Expect blocks: registered types, accepted parameters, and fields
         # the action actually produces.
         self._check_expectation_defects()
+
+        # 11. A tool or guard UDF reading a bus key no action is named, such as its impl
+        # name, reads an empty dict without a word. (warn-only, as validate-udfs.)
+        self._warn_unknown_bus_namespace_reads()
+
+    def _warn_unknown_bus_namespace_reads(self) -> None:
+        configs = list(self.action_configs.values())
+        action_names = set(self.action_configs) | {
+            c["version_base_name"] for c in configs if c.get("version_base_name")
+        }
+        impl_refs = {
+            c["model_name"]
+            for c in configs
+            if c.get("model_vendor") == "tool" and isinstance(c.get("model_name"), str)
+        }
+        guard_refs = {
+            c["conditional_clause"] for c in configs if isinstance(c.get("conditional_clause"), str)
+        }
+        self._warn_findings(
+            "bus namespaces",
+            bus_namespace_warnings(
+                UDF_REGISTRY,
+                impl_refs,
+                guard_refs,
+                action_names,
+                promoted_version_names(self.action_configs),
+            ),
+        )
 
     def _collect_prompts(self) -> dict[str, str]:
         """Resolved prompt text per prompt-bearing action, keyed by action name."""
