@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="hitl-timeout" content="{{ hitl_timeout }}">
+    <meta name="hitl-session" content="{{ hitl_session }}">
     <title>HITL Review</title>
     <script nonce="{{ csp_nonce }}">
         (function(){
@@ -514,7 +515,7 @@ h4.md-heading { font-size: 13.5px; }
     border-bottom-color: #fecaca;
     font-weight: 600;
 }
-#hitl-stale-session-error {
+#hitl-stale-session-error, #hitl-next-file-wait {
     position: fixed; top: 0; left: 0; right: 0;
     z-index: 9999;
     background: #991b1b; color: #ffffff;
@@ -525,6 +526,7 @@ h4.md-heading { font-size: 13.5px; }
     font-size: 14px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
+#hitl-next-file-wait { background: #166534; }
     </style>
 </head>
 <body>
@@ -718,6 +720,40 @@ h4.md-heading { font-size: 13.5px; }
             document.body.appendChild(el);
         }
 
+        /* Each file is reviewed on a new server at the same address. This page's
+           writes carry its session, so the next file's server refuses them, and
+           the page waits for that server to come up and loads it. */
+        var HITL_SESSION = (document.querySelector('meta[name="hitl-session"]') || {}).content || '';
+        var _hitlWaitingForNextFile = false;
+        function _hitlWaitForNextFile(message) {
+            var el = document.getElementById('hitl-next-file-wait');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'hitl-next-file-wait';
+                document.body.appendChild(el);
+            }
+            el.textContent = message;
+            if (_hitlWaitingForNextFile) return;
+            _hitlWaitingForNextFile = true;
+            (async function poll() {
+                try {
+                    var resp = await fetch('/api/session', { cache: 'no-store' });
+                    if (resp.ok) {
+                        var p = await resp.json();
+                        if (p.session && p.session !== HITL_SESSION) { window.location.reload(); return; }
+                    }
+                } catch(_) { /* no server between files, or the run is over */ }
+                setTimeout(poll, 1000);
+            })();
+        }
+
+        async function _hitlRaiseFor(resp, fallback) {
+            var p = await resp.json().catch(function() { return {}; });
+            var err = new Error(p.error || fallback);
+            err.staleSession = !!p.stale_session;
+            throw err;
+        }
+
         function _hitlIsConnectionRefused(err) {
             /* Browsers reject `fetch` with TypeError('Failed to fetch') when
                the server socket is gone. response.status === 0 covers the
@@ -748,6 +784,8 @@ h4.md-heading { font-size: 13.5px; }
                 if (remaining <= 0) {
                     span.textContent = 'expired';
                     clearInterval(timer);
+                    _hitlWaitForNextFile('Time ran out for this file and it was left unreviewed. ' +
+                        'This tab loads the next file when one is ready.');
                 }
             }
             tick();
@@ -1685,7 +1723,7 @@ h4.md-heading { font-size: 13.5px; }
         function apiPost(url, data) {
             return fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-HITL-Session': HITL_SESSION },
                 body: JSON.stringify(data),
             });
         }
@@ -1696,10 +1734,7 @@ h4.md-heading { font-size: 13.5px; }
                 hitl_status: decision.hitl_status,
                 user_comment: decision.user_comment || '',
             });
-            if (!resp.ok) {
-                var p = await resp.json().catch(function() { return {}; });
-                throw new Error(p.error || 'Failed to save');
-            }
+            if (!resp.ok) await _hitlRaiseFor(resp, 'Failed to save');
         }
 
         async function markCurrentRecord(status) {
@@ -1726,6 +1761,10 @@ h4.md-heading { font-size: 13.5px; }
             } catch(error) {
                 recordDecisions[currentIndex] = prev;
                 renderAll();
+                if (error.staleSession) {
+                    _hitlWaitForNextFile('This file\'s review has ended. Loading the file under review now…');
+                    return;
+                }
                 if (_hitlIsConnectionRefused(error)) {
                     _hitlShowStaleSessionError();
                     return;
@@ -1761,17 +1800,15 @@ h4.md-heading { font-size: 13.5px; }
                     record_reviews: recordDecisions,
                     comment: commentInput.value.trim(),
                 });
-                if (!resp.ok) {
-                    var p = await resp.json().catch(function() { return {}; });
-                    throw new Error(p.error || 'Submit failed');
-                }
+                if (!resp.ok) await _hitlRaiseFor(resp, 'Submit failed');
                 showToast('Submitted — workflow continuing', 'g');
-                setTimeout(async function() {
-                    try { await apiPost('/api/shutdown', {}); } catch(_) {}
-                    window.close();
-                    setTimeout(function() { showToast('Complete! You can close this tab.', 'g'); }, 500);
-                }, 1500);
+                _hitlWaitForNextFile('Submitted. This tab loads the next file when one is ready; ' +
+                    'close it once the run has finished.');
             } catch(error) {
+                if (error.staleSession) {
+                    _hitlWaitForNextFile('This file\'s review has ended. Loading the file under review now…');
+                    return;
+                }
                 if (_hitlIsConnectionRefused(error)) {
                     _hitlShowStaleSessionError();
                     return;

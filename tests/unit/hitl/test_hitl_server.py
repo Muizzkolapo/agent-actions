@@ -5,11 +5,11 @@ import threading
 import pytest
 
 from agent_actions.errors import NetworkError
-from agent_actions.llm.providers.hitl.server import HitlServer
+from agent_actions.llm.providers.hitl.server import SESSION_HEADER, HitlServer
 
 
 def _post(client, url, server, **kwargs):
-    return client.post(url, **kwargs)
+    return client.post(url, headers={SESSION_HEADER: server.session_id}, **kwargs)
 
 
 def _get(client, url, server, **kwargs):
