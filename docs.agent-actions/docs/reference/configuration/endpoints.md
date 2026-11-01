@@ -92,6 +92,7 @@ A server cannot report whether it honours `json_schema`; only a request proves i
 - `endpoint 'lab-vllm' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (a reply that is not the probe's object, or a server that rejects the request with HTTP 400 or 422, the usual way a server declines `response_format`)
 - `endpoint 'lab-vllm' answered HTTP 404: ...` (any other status the server answered with, 5xx included)
 - `endpoint 'lab-vllm' could not be reached: ...` (no answer at all)
+- the auth command's own failure, for example `endpoint 'vertex-gemini' auth command 'gcloud' exited with 1`
 
 The probe costs one model call per endpoint, so it runs only under `--verify-keys`, never on a plain `agac run`. A pass proves the server honours a small schema, not every schema; the check on each reply at run time stays the guard.
 

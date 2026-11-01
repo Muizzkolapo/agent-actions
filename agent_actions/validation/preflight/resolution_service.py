@@ -289,7 +289,8 @@ class WorkflowResolutionService:
             "refused": "Check the credential in endpoints.{name}.auth.",
             "not_honoured": (
                 "Use a server that honours response_format json_schema, or put one "
-                "(vLLM, TGI, a LiteLLM proxy) in front of this one."
+                "(vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean "
+                "a wrong model name or parameter: read the server's text in the message."
             ),
             "answered": (
                 "The server answered, but not with a completion: check endpoints.{name}.url, "

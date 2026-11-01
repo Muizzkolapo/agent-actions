@@ -306,7 +306,8 @@ The texts most often met from the `endpoints:` block of `agent_actions.yml` and 
 | `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys` | Check the credential in `endpoints.<name>.auth`. At record time a 401 shows as the vendor's own error text; with `command` auth the command is run once more before the record fails. |
 | `endpoint '<name>' could not be reached: ...` | `--verify-keys` | Check `endpoints.<name>.url` and that the server is running. |
 | `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion: check the url, the model name and the server's own log. |
-| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` | `--verify-keys` | Use a server that honours `json_schema`, or put one (vLLM, TGI, a LiteLLM proxy) in front of this one. |
+| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` when the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`, or put one (vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean a wrong model name or parameter: read the server's text. |
+| `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed; run it by hand from the project root and fix `endpoints.<name>.auth`. Its stderr is never shown, since it can hold the secret. |
 | `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema; the record is dispositioned `parse_error`. Check the model and the schema. |
 
 ## Debugging with Prompt Traces
