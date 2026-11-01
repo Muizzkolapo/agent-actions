@@ -87,6 +87,7 @@ Key Functions
 | `PathManager.get_standard_path` | `agent_io/target/{action}/` | Reads | — |
 | `PathManager.clean_path` | `agent_io/target/{action}/` | Writes | — |
 | `load_project_config` | `agent_actions.yml` | Reads | `project_name`, `schema_path`, `tool_path`, `seed_data_path`, `seed_data_paths`, `logging` |
+| `ConfigManager.get_user_agents` | `agent_actions.yml` | Validates | `endpoints` (each entry's `url`, `auth`, `headers`, `timeout_seconds`; refused with the endpoint name and key by `llm.config.endpoints.load_project_endpoints`, which also fills the per-project endpoint registry) |
 | `get_tool_dirs` | `agent_actions.yml` | Reads | `tool_path` |
 | `get_schema_path` | `agent_actions.yml` | Reads | `schema_path` |
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |
@@ -111,6 +112,7 @@ Key Functions
 | `agent_actions/output` | inbound | Uses path resolution to locate IO and schema artifacts. |
 | `agent_actions/cli` | inbound | Reads config and project paths to render/run workflows. |
 | `agent_actions/errors` | outbound | Raises `ConfigurationError`, `ConfigValidationError`, `FileSystemError`, `FileLoadError`, `TemplateRenderingError`. |
+| `agent_actions/llm/config` | outbound | `ConfigManager.get_user_agents` validates the project's `endpoints:` block with `load_project_endpoints`. |
 | `agent_actions/guards` | outbound | `GuardParser`/`parse_guard_config` used by `ActionConfig.validate_guard`. |
 | `agent_actions/logging` | outbound | Fires config load and validation events via `fire_event`. |
 | `agent_actions/utils` | outbound | Uses `FileHandler`, `resolve_absolute_path`, constants. |
