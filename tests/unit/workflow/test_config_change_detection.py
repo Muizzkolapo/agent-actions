@@ -109,8 +109,8 @@ class TestConfigChangeInvalidation:
         )
         return ActionExecutor(deps)
 
-    def test_config_change_resets_to_pending(self, tmp_path):
-        """Changed model triggers invalidation when stored hash exists."""
+    def test_a_config_change_keeps_it_completed_and_names_the_edit(self, tmp_path, caplog):
+        """The answers it holds stand; a warning names the edit and how to apply it."""
         status_file = tmp_path / "status.json"
         state_mgr = ActionStateManager(status_file, ["action_a"])
 
@@ -122,10 +122,16 @@ class TestConfigChangeInvalidation:
 
         new_config = {"prompt": "X", "model": "gpt-4o", "record_limit": 10}
         executor = self._make_executor(state_mgr)
-        result = executor._maybe_invalidate_completed_status(
-            "action_a", new_config, ActionStatus.COMPLETED
-        )
-        assert result == ActionStatus.PENDING
+        with caplog.at_level(logging.WARNING, logger="agent_actions"):
+            result = executor._maybe_invalidate_completed_status(
+                "action_a", new_config, ActionStatus.COMPLETED
+            )
+        assert result == ActionStatus.COMPLETED
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+            "action_a was edited since it completed (action config (prompt/schema/guard)): "
+            "its answers stand, and only records it has not answered use the edit. Run again "
+            "with --rerun action_a to answer every record under the edit"
+        ]
 
     def test_same_config_stays_completed(self, tmp_path):
         """Identical config should not invalidate."""
@@ -185,8 +191,20 @@ class TestConfigChangeInvalidation:
         )
         assert result == ActionStatus.PENDING
 
-    def test_clear_disposition_called_on_config_invalidation(self, tmp_path):
-        """Dispositions must be cleared when config change triggers reset."""
+    @pytest.mark.parametrize(
+        ("new_config", "cleared"),
+        [
+            pytest.param({"prompt": "X", "model": "gpt-4o", "record_limit": 10}, [], id="edit"),
+            pytest.param(
+                {"prompt": "X", "model": "gpt-4", "record_limit": 20},
+                ["action_a"],
+                id="limit_change",
+            ),
+        ],
+    )
+    def test_dispositions_are_cleared_for_a_limit_change_and_kept_for_an_edit(
+        self, tmp_path, new_config, cleared
+    ):
         status_file = tmp_path / "status.json"
         state_mgr = ActionStateManager(status_file, ["action_a"])
 
@@ -196,13 +214,11 @@ class TestConfigChangeInvalidation:
             "action_a", ActionStatus.COMPLETED, record_limit=10, config_hash=old_hash
         )
 
-        new_config = {"prompt": "X", "model": "gpt-4o", "record_limit": 10}
         executor = self._make_executor(state_mgr)
         executor._maybe_invalidate_completed_status("action_a", new_config, ActionStatus.COMPLETED)
 
-        executor.deps.action_runner.storage_backend.clear_disposition.assert_called_once_with(
-            "action_a"
-        )
+        clear = executor.deps.action_runner.storage_backend.clear_disposition
+        assert [call.args[0] for call in clear.call_args_list] == cleared
 
 
 class TestAResetActionCanSubmitItsBatchAgain:
@@ -245,9 +261,8 @@ class TestAResetActionCanSubmitItsBatchAgain:
         ("stored", "now"),
         [
             ({"prompt": "X", "model": "m", "record_limit": 1}, {"prompt": "X", "model": "m"}),
-            ({"prompt": "X", "model": "m"}, {"prompt": "Y", "model": "m"}),
         ],
-        ids=["the_record_limit_changed", "the_prompt_changed"],
+        ids=["the_record_limit_changed"],
     )
     def test_the_reset_clears_the_actions_batch_state(self, tmp_path, stored, now):
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -270,7 +285,13 @@ class TestAResetActionCanSubmitItsBatchAgain:
         other = f"{BatchRegistryManager.METADATA_KEY_PREFIX}other"
         assert backend.load_metadata(other) == "{}", "another action's batch state was cleared"
 
-    def test_an_action_that_is_not_reset_keeps_its_batch_state(self, tmp_path):
+    @pytest.mark.parametrize(
+        "now",
+        [{"prompt": "X", "model": "m"}, {"prompt": "Y", "model": "m"}],
+        ids=["the_config_is_unchanged", "the_prompt_changed"],
+    )
+    def test_an_action_that_is_not_reset_keeps_its_batch_state(self, tmp_path, now):
+        """An edit resets nothing; the record limit case above clears the same keys."""
         backend, keys = self._backend_with_a_finished_batch(tmp_path)
         config = {"prompt": "X", "model": "m"}
         state_mgr = ActionStateManager(tmp_path / "status.json", ["action_a"])
@@ -279,7 +300,7 @@ class TestAResetActionCanSubmitItsBatchAgain:
         )
 
         status = self._executor(state_mgr, backend)._maybe_invalidate_completed_status(
-            "action_a", config, ActionStatus.COMPLETED
+            "action_a", now, ActionStatus.COMPLETED
         )
 
         assert status == ActionStatus.COMPLETED
@@ -287,7 +308,7 @@ class TestAResetActionCanSubmitItsBatchAgain:
 
 
 class TestAResetReachesEveryActionThatReadsWhatItWrites:
-    """A reset action writes new output. What was computed from the old output is stale:
+    """A reset action (``--rerun``, or a limit change) writes new output. What was computed from the old output is stale:
     left complete, it holds answers for records that are gone and none for the new ones."""
 
     PROMPT = {"prompt": "X", "model": "m"}
@@ -328,7 +349,17 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
     @staticmethod
     def _reset(executor, name, configs):
+        """What ``--rerun <name>`` does after the startup reset."""
+        return executor.reopen_with_readers(name)
+
+    @staticmethod
+    def _edit(executor, name, configs):
         changed = {**configs[name], "prompt": "Y"}
+        return executor._maybe_invalidate_completed_status(name, changed, ActionStatus.COMPLETED)
+
+    @staticmethod
+    def _limit_change(executor, name, configs):
+        changed = {**configs[name], "record_limit": 5}
         return executor._maybe_invalidate_completed_status(name, changed, ActionStatus.COMPLETED)
 
     def test_everything_below_it_is_reset_and_nothing_beside_it(self, tmp_path):
@@ -434,11 +465,12 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
     def test_a_repair_resets_nothing(self, tmp_path):
         """It answers only the records it named. A reset would clear every other
-        record's disposition, a failure among them, with nothing run to replace it."""
+        record's disposition, a failure among them, with nothing run to replace it.
+        Outside a repair the same limit change resets all three (see the test below)."""
         executor, state_mgr, backend = self._workflow(tmp_path)
         executor.deps.action_runner.retried_records = frozenset({"r9"})
 
-        status = self._reset(executor, "split", self.CONFIGS)
+        status = self._limit_change(executor, "split", self.CONFIGS)
 
         assert status == ActionStatus.COMPLETED
         assert {name: state_mgr.get_status(name) for name in self.CONFIGS} == dict.fromkeys(
@@ -472,7 +504,7 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
         setattr(backend, stopped_at, killed_at_grade)
         with pytest.raises(RuntimeError, match="killed"):
-            self._reset(executor, "split", self.CONFIGS)
+            self._limit_change(executor, "split", self.CONFIGS)
         next_process = ActionStateManager(tmp_path / "status.json", list(self.CONFIGS))
         assert {name: next_process.get_status(name) for name in names} == dict.fromkeys(
             names, ActionStatus.COMPLETED
@@ -480,7 +512,7 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
         setattr(backend, stopped_at, working)
         executor.deps.state_manager = next_process
-        self._reset(executor, "split", self.CONFIGS)
+        self._limit_change(executor, "split", self.CONFIGS)
 
         assert {name: next_process.get_status(name) for name in names} == dict.fromkeys(
             names, ActionStatus.PENDING
@@ -583,15 +615,21 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
         assert stamp["config_hash"] == _compute_action_config_hash(edited)
 
-    def test_a_repair_says_which_edit_it_left_for_a_plain_run(self, tmp_path, caplog):
+    def test_a_repair_names_the_edit_it_leaves_and_the_rerun_that_applies_it(
+        self, tmp_path, caplog
+    ):
         executor, _, _ = self._workflow(tmp_path)
         executor.deps.action_runner.retried_records = frozenset({"r9"})
 
         with caplog.at_level(logging.WARNING, logger="agent_actions"):
-            self._reset(executor, "split", self.CONFIGS)
+            status = self._edit(executor, "split", self.CONFIGS)
 
-        assert "split" in caplog.text
-        assert "agac run" in caplog.text
+        assert status == ActionStatus.COMPLETED
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+            "split was edited since it completed (action config (prompt/schema/guard)). A retry "
+            "answers only the records it names and leaves the rest as they are: run again with "
+            "--rerun split to answer every record under the edit"
+        ]
 
     def test_the_order_the_configs_are_held_in_does_not_matter(self, tmp_path):
         configs = dict(reversed(list(self.CONFIGS.items())))

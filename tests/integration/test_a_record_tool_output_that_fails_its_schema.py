@@ -4,7 +4,7 @@ A `kind: tool` action checks each record's output against its schema. One record
 output failing it left the record loop and was caught for the whole file: every record
 of that file was lost, the valid ones with it, no disposition named any of them, and the
 action read `completed` with exit 0. `agac retry` found nothing to retry, the next run
-found the action complete, and after an edit the file kept its rows from before it.
+found the action complete, and on a `--rerun` the file kept its rows from before it.
 
 Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
 provider. Only the fault is stood in for: while a flag file exists, the tool answers
@@ -27,7 +27,6 @@ PAGES = {
 }
 BAD_PAGE = "Page alpha."
 FLAG = "alpha_breaks"
-SCHEMA = Path("schema") / "tool_action" / "tool_action_output.yml"
 
 # Answers each page with its text, tagged with what the `tag` file says; while the flag
 # file exists, page alpha's summary is a number, which the schema refuses.
@@ -242,23 +241,18 @@ def test_a_retry_answers_the_bad_record_again(project):
     assert project.status() == "completed"
 
 
-def test_after_an_edit_the_file_keeps_no_row_from_before_it(project):
-    """The schema edit resets the tool, and its answers change with the tag."""
+def test_after_a_rerun_the_file_keeps_no_row_from_before_it(project):
+    """`--rerun` reopens the tool, and its answers change with the tag."""
     project.run("--fresh")
     assert project.status() == "completed"
-    schema = project.root / SCHEMA
-    field = "  - id: exam_density\n"
-    described = field + "    description: How densely the page carries exam material\n"
-    assert field in schema.read_text()
-    schema.write_text(schema.read_text().replace(field, described))
     project.tag("v2")
     project.breaks()
 
-    project.run()
+    project.run("--rerun", project.action)
 
     assert project.summaries() == {
         "pages1.json": ["v2 Page beta."],
         "pages2.json": ["v2 Page delta.", "v2 Page gamma."],
-    }, "a row from before the edit"
+    }, "a row from before the rerun"
     assert project.dispositions()[BAD_PAGE][0] == "failed"
     assert project.status() == "completed_with_failures"

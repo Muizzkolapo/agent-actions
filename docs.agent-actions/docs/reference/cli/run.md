@@ -43,6 +43,7 @@ agac run -a my_workflow --execution-mode parallel
 | `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, naming this flag and the counts, since a truncated run otherwise looks complete |
 | `--file-limit N` | Stop each action after N input files — the same unit `file_limit` uses — whatever the workflow config sets. It counts files the action got through, so a file that fails does not spend the budget and a directory of unreadable files is attempted in full. Applies to actions that set no limit of their own, and takes precedence over `AGAC_FILE_LIMIT`. An action whose walk actually stops says so, naming this flag, since a shortened run otherwise looks complete. Never holds back `agac retry` |
 | `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json` and their earlier-run rotations) before execution, and discard what the provider recorded locally about every batch this workflow submitted, collected or not. Gives a clean slate for debugging. |
+| `--rerun ACTION` | Answer every record of `ACTION`, and of every action that reads its output, again under the config as it is now. The name of a versioned action as the config writes it re-runs every version of it. Every other action keeps its answers. Use it after a config edit: an edit alone re-runs nothing (see [When you edit the workflow](#when-you-edit-the-workflow)). A name the workflow does not have stops the run before it starts |
 | `--verify-keys` | Verify API keys before execution. Each vendor is probed once per endpoint: an `openai` action with `base_url` is probed at that URL with `models.list()`, and an action without one at the OpenAI endpoint. A server that does not answer is logged as a warning and the run continues. A local server may serve `/v1/models` without checking the key (llamafile 0.10.6 does), so a passing probe there shows the server is reachable, not that the key is right. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) the workflow uses gets one structured-output request too; there a refused credential, a server that cannot be reached and a reply that does not match the probe's schema are errors |
 
 ## Running a project smaller than it is
@@ -87,18 +88,77 @@ surplus records are dropped and what remains is that limit's work. `--file-limit
 files are opened at all, and a file it does not reach keeps the output the previous run wrote
 there — the point of not walking it. So a bounded run over a project that has already been run is
 not a fresh smaller copy of it: it is the earlier output with the walked files replaced. That is
-usually what you want for a quick pass, and it is not what you want if the workflow's prompts or
-schema also changed, since the files outside the walk keep their older answers while the action
-reads as complete. Pass `--fresh` when the whole output has to come from one version.
+usually what you want for a quick pass. Pass `--fresh` when the whole output has to come from
+one run.
 
-A workflow that has completed is skipped on the next run unless something it ran under
-changed. Staged input counts: adding, removing or changing a file under the first stage's
+A workflow that has completed is skipped on the next run unless its limits or its staged
+input changed (a config edit re-runs nothing; see
+[When you edit the workflow](#when-you-edit-the-workflow)). Staged input counts: adding, removing or changing a file under the first stage's
 input re-runs that action and every action reading it over all input, and the run log names
 the files that changed. `--fresh` is not needed to pick up new input.
 
 Neither flag holds back [`agac retry`](./retry): a repair walks every file holding a record it
 named. Stopping short of one would leave that record's cleared disposition unwritten, which is
 the erasure a limit exists to avoid.
+
+## When you edit the workflow
+
+An edit to an action's config does not re-run anything. That covers its model
+(`model_name`, `model_vendor`, in the action or in `defaults`), prompt, schema, guard,
+`context_scope` and `dependencies`. The records the action already answered keep their
+answers, and so do the actions that read them. Records it has not answered yet are answered
+under the edit. So you can switch the model of a long run partway through, and nothing it
+already paid for is asked again.
+
+Each run that meets an edited action says so, and names what changed:
+
+```
+classify was edited since it completed (model): its answers stand, and only records it has
+not answered use the edit. Run again with --rerun classify to answer every record under the edit
+```
+
+An action that stopped partway (killed, interrupted, or stopped by an error) keeps the
+records it finished and answers the rest under the edit. Once it completes, each later run
+names the edit as for a completed action, since it still holds answers from before it:
+
+```
+classify was edited since its last run started (model): the records it finished stand, a
+batch already sent is collected as it was sent, and the rest are answered under the edit. Run
+again with --rerun classify to answer every record under the edit
+```
+
+To answer every record under the edit, pass `--rerun` with the action's name. It re-runs that
+action and every action that reads its output, and keeps every other action's answers:
+
+```bash
+agac run -a my_agent --rerun classify
+```
+
+An action that may hold answers from more than one config keeps saying so, even after the
+config is changed back. That covers a resume under an edit, a retry under an edit, and a reset
+under a file limit that leaves files from an earlier config:
+
+```
+classify may hold answers given under more than one config. Run again with --rerun classify
+to answer every record under the config in force
+```
+
+An edit made while an action's batch is out is named by the run that collects it. The batch
+is collected as it was sent:
+
+```
+classify was edited since its batch was sent (model): the batch is collected as it was sent.
+Run again with --rerun classify to answer every record under the edit
+```
+
+Under a file limit, `--rerun` reaches only the files the walk opens. The run warns that
+the files it does not reach keep output from an earlier run, and the action still reads as
+complete. The same warning comes when a changed limit resets an edited action. Pass
+`--fresh` when the whole output has to come from one config.
+
+`--fresh` starts the whole workflow again. Each [prompt trace](../data-io/prompt-traces) row
+records the config its record was answered under, so a workflow that holds answers from more
+than one config can be read record by record.
 
 
 ## Parallel Execution

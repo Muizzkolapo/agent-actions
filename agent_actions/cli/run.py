@@ -75,6 +75,7 @@ class RunCommand:
             user_code_path=str(self.args.user_code) if self.args.user_code else None,
             use_tools=self.args.use_tools,
             fresh=self.args.fresh,
+            rerun=self.args.rerun,
             verify_keys=self.args.verify_keys,
             record_limit=self.args.record_limit,
             file_limit=self.args.file_limit,
@@ -238,6 +239,16 @@ class RunCommand:
     help="Clear stored results and status before execution (useful after failed runs)",
 )
 @click.option(
+    "--rerun",
+    metavar="ACTION",
+    default=None,
+    help=(
+        "Answer every record of ACTION and of every action that reads it again, under "
+        "the config as it is now. Other actions keep their answers. A config edit alone "
+        "re-runs nothing"
+    ),
+)
+@click.option(
     "--verify-keys",
     is_flag=True,
     default=False,
@@ -254,6 +265,7 @@ def run(
     record_limit: int | None = None,
     file_limit: int | None = None,
     fresh: bool = False,
+    rerun: str | None = None,
     verify_keys: bool = False,
     project_root: Path | None = None,
 ) -> None:
@@ -265,6 +277,7 @@ def run(
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
+        agac run -a my_agent --rerun classify
         agac run -a my_agent --record-limit 2 --file-limit 1
     """
     args = RunCommandArgs(
@@ -276,6 +289,7 @@ def run(
         record_limit=record_limit,
         file_limit=file_limit,
         fresh=fresh,
+        rerun=rerun,
         verify_keys=verify_keys,
     )
     command = RunCommand(args)

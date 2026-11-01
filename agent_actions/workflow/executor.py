@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -57,7 +57,12 @@ from agent_actions.utils.limits import (
     slice_observation,
 )
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
-from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
+from agent_actions.workflow.managers.state import (
+    ANSWERS_UNDER_MORE_THAN_ONE_CONFIG,
+    COMPLETED_STATUSES,
+    KEPT_ANSWERS_UNDER,
+    ActionStatus,
+)
 from agent_actions.workflow.runner_file_processing import NoInputFilesError
 
 logger = logging.getLogger(__name__)
@@ -197,7 +202,7 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     """
     edits: list[str] = []
     # The hash reads a "model" key and configs write model_name/model_vendor; adding
-    # them would change every stored digest and re-run every workflow.
+    # them would change every stored digest and name an edit at every completed action.
     if any(
         stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
         for key in ("model_name", "model_vendor")
@@ -213,10 +218,10 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     return edits
 
 
-def edited_since_its_work_began(
+def edits_since_its_work_began(
     details: dict[str, Any], action_config: ActionConfigDict | None
-) -> bool | None:
-    """Whether *action_config* differs from the one the action's records were answered under.
+) -> list[str] | None:
+    """What differs from the config the action's records were answered under, by label.
 
     None when that is unknown: nothing was recorded when its work began, or it has no
     config now.
@@ -224,7 +229,18 @@ def edited_since_its_work_began(
     stamp = details.get(ANSWERED_UNDER)
     if not isinstance(stamp, dict) or stamp.get("config_hash") is None or action_config is None:
         return None
-    return bool(_edits_since(stamp, action_config))
+    return _edits_since(stamp, action_config)
+
+
+def config_in_force(action_config: ActionConfigDict) -> dict[str, Any]:
+    """The config *action_config* answers a record under, as ``answered_under`` records it."""
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    return {
+        "config_hash": _compute_action_config_hash(action_config),
+        "model_name": cfg.get("model_name"),
+        "model_vendor": cfg.get("model_vendor"),
+        **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
+    }
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -469,32 +485,31 @@ class ActionExecutor:
         return in_force
 
     def _held_to_earlier_answers(self, action_name: str, key: str, in_force: Any) -> Any:
-        """*in_force*, unless a repair answers beside records answered under another config.
+        """*in_force*, unless this run answers beside records answered under another config.
 
-        Those were answered under the completion stamp the repair keeps or, for an action
-        that never completed, under what its last run recorded as it started. Held to that,
-        an edit is the next plain run's to apply, to every record.
+        A repair answers beside the records of the completion stamp it keeps or, for an
+        action that never completed, of what its last run recorded as it started. An action
+        that stopped partway and resumes under an edit answers beside the records it kept
+        (``KEPT_ANSWERS_UNDER``). Held to that, each later run still names the edit, until
+        ``--rerun`` answers every record under it.
         """
+        details = self.deps.state_manager.get_status_details(action_name)
         if self._repair_is_keeping_an_earlier_stamp(action_name):
-            return self.deps.state_manager.get_status_details(action_name).get(key)
+            return details.get(key)
         if getattr(self.deps.action_runner, "retried_records", ()):
-            earlier = self.deps.state_manager.get_status_details(action_name).get(ANSWERED_UNDER)
+            earlier = details.get(ANSWERED_UNDER)
             if isinstance(earlier, dict) and earlier.get("config_hash") is not None:
                 return earlier.get(key)
+        kept = details.get(KEPT_ANSWERS_UNDER)
+        if isinstance(kept, dict):
+            return kept.get(key)
         return in_force
 
     def _answered_under(self, action_name: str, action_config: ActionConfigDict) -> dict[str, Any]:
-        """The config the work this run starts is answered under, for a later reset to compare."""
-        cfg: dict[str, Any] = action_config  # type: ignore[assignment]
-        in_force = {
-            "config_hash": _compute_action_config_hash(action_config),
-            "model_name": cfg.get("model_name"),
-            "model_vendor": cfg.get("model_vendor"),
-            **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
-        }
+        """The config the work this run starts is answered under, for a later run to compare."""
         return {
             key: self._held_to_earlier_answers(action_name, key, value)
-            for key, value in in_force.items()
+            for key, value in config_in_force(action_config).items()
         }
 
     def _stamped_slice_outcome(self, action_name: str) -> tuple[int | None, bool | None]:
@@ -565,6 +580,10 @@ class ActionExecutor:
             ),
         }
         if not keep_stored:
+            # Held to an earlier config while this run answered under another one.
+            held = {key: did_the_work[key] for key in config_in_force(action_config)}
+            if _edits_since(held, action_config):
+                did_the_work[ANSWERS_UNDER_MORE_THAN_ONE_CONFIG] = True
             return did_the_work
         submitted = self.deps.state_manager.get_status_details(action_name)
         return {key: submitted.get(key, value) for key, value in did_the_work.items()}
@@ -589,25 +608,28 @@ class ActionExecutor:
     def _maybe_invalidate_completed_status(
         self, action_name: str, action_config: ActionConfigDict, current_status: ActionStatus
     ) -> ActionStatus:
-        """Reset to pending if limit or semantic config changed since last completion."""
+        """Reset to pending if its limits, its staged input or a cap it ran under changed.
+
+        A config edit resets nothing: the answers the action holds stand, and a warning
+        names the edit until ``--rerun`` answers every record under it.
+        """
         repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
         edits = _edits_since(details, action_config)
-        model_changed = MODEL_EDIT in edits
-        config_changed = any(edit != MODEL_EDIT for edit in edits)
 
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
         # reads this action, with nothing run to replace it. The stamp stays as it is.
         if repairing:
-            # Said for an action the retry is about to re-run as well: it answers the
-            # named records under the edit and the rest still hold what came before.
-            if config_changed or model_changed:
+            if edits:
                 logger.warning(
-                    "%s was edited since it completed. A retry answers only the records it "
-                    "names and leaves the rest as they are: `agac run` applies the edit",
+                    "%s was edited since it completed (%s). A retry answers only the records "
+                    "it names and leaves the rest as they are: run again with --rerun %s to "
+                    "answer every record under the edit",
+                    action_name,
+                    ", ".join(edits),
                     action_name,
                 )
             return current_status
@@ -647,37 +669,95 @@ class ActionExecutor:
                 ", ".join(changed) or "none",
             )
 
-        if limits_changed or config_changed or model_changed or was_truncated or input_changed:
+        if limits_changed or was_truncated or input_changed:
             reason = (
                 "staged input"
                 if input_changed
                 else "limit config"
                 if limits_changed
-                else "model"
-                if model_changed
                 else "a cap recorded by the run that completed it"
-                if was_truncated
-                else " and ".join(edits)
             )
             logger.info("%s changed for %s, resetting to pending", reason, action_name)
-            if file_limit is not None and (config_changed or model_changed):
-                # A record limit rewrites every file it walks; a file limit stops
-                # the walk, and a file it never opens keeps what the last run put
-                # there. Harmless on its own, but the answers under it were
-                # produced by the configuration this reset is replacing, and the
-                # action reads as complete either way.
-                logger.warning(
-                    "%s is re-running under a file limit of %d after a %s change: files the "
-                    "walk does not reach keep output produced by the previous configuration, "
-                    "and the action will still be recorded as complete. Use --fresh for an "
-                    "output that comes from one configuration throughout",
-                    action_name,
-                    file_limit,
-                    reason,
+            mixed_before = bool(edits) or bool(details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG))
+            if edits:
+                self._warn_of_output_beyond_a_file_limit(
+                    action_name, action_config, f"an edit ({', '.join(edits)})"
                 )
             self.reopen_with_readers(action_name)
+            if mixed_before and file_limit is not None:
+                # The files the walk does not reach keep the answers of the other config.
+                self.deps.state_manager.mark_mixed_answers([action_name])
             return ActionStatus.PENDING
+        if edits:
+            logger.warning(
+                "%s was edited since it completed (%s): its answers stand, and only records "
+                "it has not answered use the edit. Run again with --rerun %s to answer every "
+                "record under the edit",
+                action_name,
+                ", ".join(edits),
+                action_name,
+            )
+        elif details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
+            logger.warning(
+                "%s may hold answers given under more than one config. Run again with --rerun "
+                "%s to answer every record under the config in force",
+                action_name,
+                action_name,
+            )
         return current_status
+
+    def rerun(self, action_names: Iterable[str]) -> list[str]:
+        """Answer every record of *action_names* and of what reads them again (``--rerun``).
+
+        Returns the names put back, each once.
+        """
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        names = list(action_names)
+        mixed_before = set()
+        for name in [*names, *(r for n in names for r in self._stale_readers(n))]:
+            details = self.deps.state_manager.get_status_details(name)
+            if name in configs and (
+                _edits_since(details, configs[name])
+                or details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG)
+            ):
+                mixed_before.add(name)
+        reopened: list[str] = []
+        for name in names:
+            reopened += self.reopen_with_readers(name)
+        reopened = list(dict.fromkeys(reopened))
+        still_mixed = []
+        for name in reopened:
+            if name in configs:
+                self._warn_of_output_beyond_a_file_limit(name, configs[name], "--rerun")
+                if name in mixed_before and resolve_file_limit(configs[name])[0] is not None:
+                    still_mixed.append(name)
+        if still_mixed:
+            # The files the walk does not reach keep the answers of the other config.
+            self.deps.state_manager.mark_mixed_answers(still_mixed)
+        return reopened
+
+    @staticmethod
+    def _warn_of_output_beyond_a_file_limit(
+        action_name: str, action_config: ActionConfigDict, why: str
+    ) -> None:
+        """Warn that a reset under a file limit leaves older output in the files it skips.
+
+        A record limit rewrites every file it walks; a file limit stops the walk, and a
+        file it never opens keeps what an earlier run put there while the action reads
+        as complete.
+        """
+        file_limit, _ = resolve_file_limit(action_config)
+        if file_limit is None:
+            return
+        logger.warning(
+            "%s is re-running under a file limit of %d after %s: files the walk does not "
+            "reach keep output produced by an earlier run, and the action will still be "
+            "recorded as complete. Use --fresh for an output that comes from one "
+            "configuration throughout",
+            action_name,
+            file_limit,
+            why,
+        )
 
     def reopen_with_readers(self, action_name: str) -> list[str]:
         """Forget what *action_name* and everything reading it hold, and put them all back
@@ -805,7 +885,7 @@ class ActionExecutor:
         return should_skip
 
     def _still_matches_its_config(self, action_name: str) -> bool:
-        """False if the action's config changed since it completed (and resets it)."""
+        """False if a limit or its staged input changed since it completed (and resets it)."""
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         action_config = configs.get(action_name)
         if action_config is None:
@@ -2193,12 +2273,19 @@ class ActionExecutor:
     def _start_work(self, params: ActionRunParams) -> None:
         """Set the action running, recording what the work it starts is answered under."""
         self._clear_stale_node_disposition(params.action_name)
+        answered_under = self._answered_under(params.action_name, params.action_config)
+        details = self.deps.state_manager.get_status_details(params.action_name)
+        # Resuming beside answers kept from another config: what this run answers mixes in.
+        mixed = isinstance(details.get(KEPT_ANSWERS_UNDER), dict) and bool(
+            _edits_since(answered_under, params.action_config)
+        )
         self.deps.state_manager.update_status(
             params.action_name,
             ActionStatus.RUNNING,
             **{
-                ANSWERED_UNDER: self._answered_under(params.action_name, params.action_config),
+                ANSWERED_UNDER: answered_under,
                 INPUT_AT_START: self._staged_input(params.action_name, params.action_config),
+                **({ANSWERS_UNDER_MORE_THAN_ONE_CONFIG: True} if mixed else {}),
             },
         )
         self._track_action_start(params)

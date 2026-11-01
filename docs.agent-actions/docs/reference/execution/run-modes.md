@@ -79,7 +79,7 @@ Each input file is sent as its own batch. If the provider refuses one (a quota, 
 error, a request it rejects), the run fails the action once every file has been walked,
 even when the batches of its other files were taken. Run again: the records of the refused
 file that have no answer yet are sent again. The records the action had already answered,
-in that file or any other, are kept while its config is unchanged, and a batch still out
+in that file or any other, are kept, and a batch still out
 for another file is kept and collected rather than sent again.
 
 A run collects batches only after a run that got every file sent, so while the provider
@@ -192,10 +192,10 @@ batch run sends those records again with the rest of the file, so each is answer
 for, a second time. Resumed online instead, the action keeps those answers and sends only
 the records it had not finished.
 
-This holds when an earlier run stored the file too, as when the action was edited after it
-completed and the run after the edit was stopped: resumed online, each record that run
-answered keeps that answer in place of the row stored before the edit; switched to batch,
-it is sent again. The row stored before the edit is kept for neither.
+This holds when an earlier run stored the file too, as when `agac run --rerun` answered a
+completed action again and that run was stopped: resumed online, each record that run
+answered keeps that answer in place of the row stored before it; switched to batch, it is
+sent again. The row stored before the rerun is kept for neither.
 
 ## See Also
 

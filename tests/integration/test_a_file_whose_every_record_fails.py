@@ -1,10 +1,11 @@
-"""A file whose every record fails after an edit keeps no answer from before it (1283).
+"""A file whose every record fails on a rerun keeps no answer from before it (1283).
 
 A run in which nothing of a file was answered and something failed does not write that
 file, so whatever an earlier run stored for it stands. A reset relies on the re-run writing
-each file again, so after an edit such a file still held the answers the edit replaced. The
-action was recorded partly complete, with exit 0, over them; a reader reset with it ran on
-them and was recorded complete; and no later plain run asked for them again.
+each file again, so after `--rerun` under an edit such a file still held the answers the
+edit replaced. The action was recorded partly complete, with exit 0, over them; a reader
+reset with it ran on them and was recorded complete; and no later plain run asked for them
+again. The edit changes what the provider answers, so an answer from before it shows.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 provider's answers are stood in for, for the pages of one file: answers that do not parse,
@@ -131,7 +132,7 @@ def _checkpointed(root, name):
 
 
 @pytest.mark.parametrize("nested", [False, True], ids=["at_the_top", "in_a_subfolder"])
-def test_a_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_from_before_it(
+def test_a_file_whose_every_answer_fails_on_a_rerun_keeps_no_answer_from_before_it(
     online,  # noqa: F811
     nested,
 ):
@@ -147,7 +148,7 @@ def test_a_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_from_befo
 
     _edit_prompt(online)
     with _unparsed():
-        result = _run()
+        result = _run("--rerun", ACTION)
 
     assert result.exit_code == 0, result.output
     assert f"Failed to process file {folder}{FAILING}" in result.output
@@ -160,7 +161,7 @@ def test_a_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_from_befo
     assert _checkpointed(online, FAILING) == []
 
 
-def test_a_reader_whose_every_record_of_a_file_fails_keeps_nothing_made_before_the_edit(
+def test_a_reader_whose_every_record_of_a_file_fails_on_a_rerun_keeps_nothing_made_before_it(
     online,  # noqa: F811
 ):
     """Its source answers that file again, and the reader's tool raises on both records."""
@@ -170,7 +171,7 @@ def test_a_reader_whose_every_record_of_a_file_fails_keeps_nothing_made_before_t
 
     _edit_prompt(online)
     with _answering_the_failing_file({"summary": BREAKS_THE_READER, "exam_density": "low"}):
-        result = _run()
+        result = _run("--rerun", ACTION)
 
     assert result.exit_code == 0, result.output
     assert _status(online, READER) == "completed_with_failures"
@@ -179,7 +180,7 @@ def test_a_reader_whose_every_record_of_a_file_fails_keeps_nothing_made_before_t
     )
 
 
-def test_a_batch_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_from_before_it(
+def test_a_batch_file_whose_every_answer_fails_on_a_rerun_keeps_no_answer_from_before_it(
     project,  # noqa: F811
 ):
     assert _run("--fresh").exit_code == 0
@@ -189,7 +190,7 @@ def test_a_batch_file_whose_every_answer_fails_after_an_edit_keeps_no_answer_fro
 
     _edit_prompt(project)
     with _batch_answers_unparsed():
-        assert _run().exit_code == 0
+        assert _run("--rerun", ACTION).exit_code == 0
         result = _run()
 
     assert result.exit_code == 0, result.output
@@ -229,7 +230,7 @@ def test_a_retry_answers_the_file_again_and_its_reader_with_it(
     assert _run("--fresh").exit_code == 0
     _edit_prompt(online)
     with _unparsed():
-        assert _run().exit_code == 0
+        assert _run("--rerun", ACTION).exit_code == 0
 
     provider.answers()
     assert _run().exit_code == 0

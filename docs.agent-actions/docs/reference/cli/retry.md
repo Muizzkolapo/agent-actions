@@ -337,8 +337,8 @@ the batch is collected, [below](#retrying-an-action-that-runs-in-batch-mode).
 
 Carrying what an action holds for the records the retry did not name is only
 right when that is an answer for each of them. An action that did not finish its
-last run — added since then, put back to pending because something it reads was
-edited, or stopped partway through its records by an interrupt, a kill or an
+last run — added since then, put back to pending by `agac run --rerun` of something
+it reads, or stopped partway through its records by an interrupt, a kill or an
 error — holds none for the records that run had not reached. Nor does a
 completed action whose stored output is gone. A retry that narrowed it would
 complete it without them, and nothing would run it again.
@@ -398,9 +398,9 @@ the retry carries those records rather than asking for them again. A plain `retr
 does this when the halt is the earliest failure.
 
 A retry clears what it wrote down only for the records whose failures it clears.
-A record keeping its `success` keeps its answer, so one answered after an edit
+A record keeping its `success` keeps its answer, so one answered after a `--rerun`
 replaced the stored file is answered again, as a plain run answers it, rather
-than carried from the stored file the edit made stale.
+than carried from the stored file the rerun made stale.
 
 ```bash
 agac retry -a my_workflow --from extract_facts

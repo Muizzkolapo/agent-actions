@@ -1,8 +1,8 @@
 """A record with no source_guid is refused before the action below is asked about it.
 
 Driven through `agac run` against the real store, as such a record arises: a row the
-action above stored loses its source_guid, and the action below is edited, so it runs
-again over that row. The model is the provider mock, and the tool a local one that
+action above stored loses its source_guid, and the action below is run again over that
+row with `--rerun`. The model is the provider mock, and the tool a local one that
 notes each call.
 """
 
@@ -60,19 +60,13 @@ NOTED = """  - name: ask
     expect: { repair: none }
 """
 
-# Added to the tool, it edits it without turning any record away.
-PASSING_GUARD = """    guard:
-      condition: "flatten.summary != 'never'"
-      on_false: filter
-"""
-
 
 def _config(root):
     return root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
 
 
-def _run():
-    return CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+def _run(*args):
+    return CliRunner().invoke(cli, ["run", "-a", WORKFLOW, *args])
 
 
 def _add(root, action):
@@ -132,9 +126,8 @@ def test_an_llm_action_neither_renders_nor_sends_a_prompt_for_such_a_record(
     first = _run()
     assert first.exit_code == 0, first.output
     nameless = _strip_last_source_guid(project)
-    prompt.write_text(ASK_PROMPT % "Ask one question about this summary.")
 
-    result = _run()
+    result = _run("--rerun", BELOW)
 
     assert result.exit_code == 0, result.output
     assert _traced_with_no_source_guid(project) == []
@@ -148,11 +141,10 @@ def test_a_record_level_tool_is_not_called_for_such_a_record(project):  # noqa: 
     first = _run()
     assert first.exit_code == 0, first.output
     nameless = _strip_last_source_guid(project)
-    _add(project, PASSING_GUARD)
     calls = project / "calls.jsonl"
     calls.unlink()
 
-    result = _run()
+    result = _run("--rerun", BELOW)
 
     assert result.exit_code == 0, result.output
     assert len(calls.read_text().splitlines()) == RECORDS - 1

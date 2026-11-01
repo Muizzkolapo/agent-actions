@@ -25,6 +25,7 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `attempt` | Attempt number (0 = initial, 1+ = repair iterations) |
 | `source_guid` | Durable identity of the record that was prompted |
 | `run_id` | The workflow run that wrote the row |
+| `answered_under` | JSON: the config the record was answered under. Holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash` and `dependencies_hash` |
 
 Traces carry two identifiers, and which one to join on depends on the question
 you are asking.
@@ -43,6 +44,20 @@ you are asking.
 Both apply to online and batch alike. Rows written before `source_guid` and
 `run_id` existed leave them `NULL`.
 
+A [config edit](../cli/run#when-you-edit-the-workflow) re-runs nothing, so one action can
+hold answers from more than one config. `answered_under` says which config answered each
+record. It holds the same keys as the `answered_under` stamp of the action in
+`agent_io/.agent_status.json`, so the two compare directly. Rows written before this column
+existed leave it `NULL`. A row is written when its prompt is built, before the model is
+called, so a row with no `response_text` was prompted under that config but not answered:
+the run stopped before the answer came back.
+
+```sql
+SELECT source_guid, json_extract(answered_under, '$.model_name') AS model
+FROM prompt_trace
+WHERE action_name = 'classify';
+```
+
 ## How Long Traces Are Kept
 
 Traces stay across runs that build on what an action already answered: a
@@ -52,9 +67,10 @@ they describe are replaced:
 
 - `agac run --fresh` clears every action's traces.
 - An action that runs again over every record clears its own traces, and those
-  of every action reading it that runs again with it. That happens when its
-  prompt, schema, guard, model, context scope or dependencies was edited, when
-  its stored output is gone, and when it failed or was stopped and then edited.
+  of every action reading it that runs again with it. That happens on
+  `agac run --rerun`, when its stored output is gone, and when its limits or its
+  staged input changed. A config edit alone clears nothing: the traces of the
+  answers that stand are kept, each naming the config it was answered under.
 - A failed or skipped action that runs again from the start clears its traces.
 
 Otherwise, storage maintenance keeps the traces of the most recent

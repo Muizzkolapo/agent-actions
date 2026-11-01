@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -22,6 +22,7 @@ from agent_actions.llm.providers.local_batch_records import (
 from agent_actions.logging.core.handlers.json_file import RUN_LOG_NAMES
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
+from agent_actions.prompt.context.scope_inference import expand_version_base_names
 from agent_actions.storage.backend import RUNNING_CLEAR_DISPOSITIONS
 from agent_actions.validation.preflight.guard_validation import validate_guard_conditions
 from agent_actions.workflow.config_pipeline import load_workflow_configs
@@ -31,8 +32,16 @@ from agent_actions.workflow.execution_events import (
     fire_step_complete,
     fire_step_start,
 )
-from agent_actions.workflow.executor import action_is_halted, edited_since_its_work_began
-from agent_actions.workflow.managers.state import MID_PROCESSING_STATUSES, ActionStatus
+from agent_actions.workflow.executor import (
+    ANSWERED_UNDER,
+    action_is_halted,
+    edits_since_its_work_began,
+)
+from agent_actions.workflow.managers.state import (
+    KEPT_ANSWERS_UNDER,
+    MID_PROCESSING_STATUSES,
+    ActionStatus,
+)
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
@@ -59,6 +68,7 @@ class AgentWorkflow:
 
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
+        self._check_rerun_names_an_action()
         self._run_static_validation()
         strip_unreachable_drops(self.action_configs)
 
@@ -114,8 +124,38 @@ class AgentWorkflow:
             return
         if self.config.fresh:
             self._clear_for_fresh_run()
-        else:
+            return
+        if self.config.rerun is None:
             self._reset_retryable_actions()
+            return
+        # A batch out at an action --rerun resets is given up, not collected: name no edit
+        # as collected as sent.
+        executor = self.services.core.action_executor
+        self._reset_retryable_actions(
+            {
+                reset
+                for name in self._rerun_actions()
+                for reset in (name, *executor._stale_readers(name))
+            }
+        )
+        reopened = self.services.core.action_executor.rerun(self._rerun_actions())
+        logger.info("--rerun: %s answer every record again", ", ".join(reopened))
+
+    def _rerun_actions(self) -> list[str]:
+        """The actions ``--rerun`` names: the action, or every version of a versioned one."""
+        if self.config.rerun is None:
+            return []
+        return expand_version_base_names([self.config.rerun], list(self.action_configs))
+
+    def _check_rerun_names_an_action(self) -> None:
+        if self.config.rerun is not None and not set(self._rerun_actions()) & set(
+            self.action_configs
+        ):
+            raise ConfigurationError(
+                f"--rerun: '{self.config.rerun}' is not an action of {self.agent_name}. "
+                f"Actions: {', '.join(self.action_configs)}",
+                context={"rerun": self.config.rerun, "workflow": self.agent_name},
+            )
 
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
@@ -217,14 +257,14 @@ class AgentWorkflow:
             ]
         )
 
-    def _reset_retryable_actions(self) -> None:
+    def _reset_retryable_actions(self, about_to_rerun: Container[str] = ()) -> None:
         """Put failed, skipped and stopped actions back to pending so this run retries them.
 
         An action whose run stopped partway (killed, interrupted, or stopped by an error)
-        keeps the records it finished, and their prompt traces, while its config is the one
-        they were answered under: only failure dispositions are cleared, and the
-        DispositionGate carries the rest. Edited since, it and everything reading it are
-        forgotten and answer everything again. Any other action is cleared in bulk.
+        keeps the records it finished, and their prompt traces: only failure dispositions
+        are cleared, and the DispositionGate carries the rest. Edited since, it keeps them
+        too and answers the rest under the edit, with a warning. Any other action is
+        cleared in bulk.
         """
         state_mgr = self.services.core.state_manager
         halted = {
@@ -245,27 +285,41 @@ class AgentWorkflow:
         keeps = set()
         for name in state_mgr.execution_order:
             status = state_mgr.get_status(name)
+            if status == ActionStatus.BATCH_SUBMITTED:
+                if name not in about_to_rerun:
+                    self._name_an_edit_under_a_batch_out(name)
+                continue
             if status not in stopped_partway or name in halted:
                 continue
-            edited = edited_since_its_work_began(
+            edits = edits_since_its_work_began(
                 state_mgr.get_status_details(name), self.action_configs.get(name)
             )
-            if edited:
-                # Before any status below is written, so a process that dies in between
-                # finds the edit again and repeats this.
-                logger.info(
-                    "%s was edited since its last run started: it and what reads it "
-                    "answer everything again",
+            if edits and name not in about_to_rerun:
+                logger.warning(
+                    "%s was edited since its last run started (%s): the records it finished "
+                    "stand, a batch already sent is collected as it was sent, and the rest are "
+                    "answered under the edit. Run again with --rerun %s to answer every record "
+                    "under the edit",
+                    name,
+                    ", ".join(edits),
                     name,
                 )
-                self.services.core.action_executor.reopen_with_readers(name)
-            elif edited is False or status in MID_PROCESSING_STATUSES:
-                # Written before the config was recorded as work began, the state is reset
-                # as it was then: by its status alone.
+                if self._holds_answers(name):
+                    # Its stamps are then held to the config those answers were given
+                    # under, so the run that completes it does not stamp them as edited.
+                    details = state_mgr.get_status_details(name)
+                    state_mgr.update_status(
+                        name, status, **{KEPT_ANSWERS_UNDER: details[ANSWERED_UNDER]}
+                    )
+            # With no config recorded as its work began, the state is reset as it was
+            # then: by its status alone.
+            if edits is not None or status in MID_PROCESSING_STATUSES:
                 keeps.add(name)
         reset_actions = state_mgr.reset_retryable(exclude=halted)
         if not reset_actions:
             return
+        # Cleared in bulk, these answer every record again: no answer of another config stays.
+        state_mgr.forget_mixed_answers(name for name in reset_actions if name not in keeps)
         for action_name in reset_actions:
             try:
                 if action_name in keeps:
@@ -278,6 +332,36 @@ class AgentWorkflow:
             if action_name not in keeps:
                 self._clear_prompt_traces(action_name)
         logger.info("Reset %d action(s) for retry: %s", len(reset_actions), reset_actions)
+
+    def _name_an_edit_under_a_batch_out(self, action_name: str) -> None:
+        """Warn of an edit made while the action's batch is out; it is collected as sent.
+
+        Not for an action held to answers it kept from another config: its stamp names that
+        config, not the one the batch was sent under, and the mix is named once it completes.
+        """
+        details = self.services.core.state_manager.get_status_details(action_name)
+        if isinstance(details.get(KEPT_ANSWERS_UNDER), dict):
+            return
+        edits = edits_since_its_work_began(details, self.action_configs.get(action_name))
+        if edits:
+            logger.warning(
+                "%s was edited since its batch was sent (%s): the batch is collected as it "
+                "was sent. Run again with --rerun %s to answer every record under the edit",
+                action_name,
+                ", ".join(edits),
+                action_name,
+            )
+
+    def _holds_answers(self, action_name: str) -> bool:
+        """Whether a stopped action keeps an answer through the reset: a stored row or a
+        verdict that is not a failure. An answer only checkpointed, in a file the run
+        never stored, is not seen here."""
+        if self.storage_backend.has_target_rows(action_name):
+            return True
+        return any(
+            row.get("disposition") not in RUNNING_CLEAR_DISPOSITIONS
+            for row in self.storage_backend.get_disposition(action_name, snapshots=False)
+        )
 
     def _clear_prompt_traces(self, action_name: str) -> None:
         try:

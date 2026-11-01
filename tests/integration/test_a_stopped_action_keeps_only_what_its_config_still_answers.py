@@ -1,12 +1,12 @@
-"""What a run stopped partway through an action finished is kept only while its config is
-unchanged (1222).
+"""What a run stopped partway through an action finished is kept, edited or not (1222).
 
 The next run resets the action, and what that reset kept depended on the status the action
-was left in alone. One interrupted, killed or stopped while collecting kept its finished
-records even when its prompt or model had been edited since, and was then recorded as
-complete under the new config. One stopped by an error kept nothing even when nothing had
-changed, so every finished record was asked again, and paid for again. What is kept still
-meets the guard: its code can turn a record away with no edit to the config.
+was left in alone. One stopped by an error kept nothing even when nothing had changed, so
+every finished record was asked again, and paid for again. Now every stopped action keeps
+what it finished, and a config edit since its run started changes only what the rest are
+answered under; ``--rerun`` asks every record again under the edit. What is kept still
+meets the guard: its code can turn a record away with no edit to the config. A record
+answered under ``--rerun`` is never carried from a file stored before it.
 
 Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
 fault that stops a run is stood in for, raised where the provider is called or, for a
@@ -311,7 +311,30 @@ STOPS = pytest.mark.parametrize(
 
 @STOPS
 @EDITS
-def test_a_stopped_action_asks_again_for_every_record_once_it_is_edited(
+def test_a_stopped_action_keeps_what_it_finished_and_asks_only_the_rest_under_its_edit(
+    online, provider, edit, model, stop, stopped_status
+):
+    provider.stops(at_call=3, raising=stop())
+    _run("--fresh")
+    assert _status(online) == stopped_status
+    finished = _stored(online)
+
+    edit(online)
+    provider.answers()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert provider.pages() == ["Page delta.", "Page gamma."]
+    assert {asked_with for _, asked_with in provider.asked} == {model}
+    assert _status(online) == "completed"
+    after = _stored(online)
+    assert len(after) == len(EVERY_PAGE)
+    assert len(_still_holding(finished, after)) == len(finished) == 2
+
+
+@STOPS
+@EDITS
+def test_a_stopped_action_rerun_after_its_edit_asks_every_record_under_it(
     online, provider, edit, model, stop, stopped_status
 ):
     provider.stops(at_call=3, raising=stop())
@@ -320,11 +343,12 @@ def test_a_stopped_action_asks_again_for_every_record_once_it_is_edited(
 
     edit(online)
     provider.answers()
-    result = _run()
+    result = _run("--rerun", ACTION)
 
     assert result.exit_code == 0, result.output
-    assert provider.pages() == EVERY_PAGE, "answers given under the old config were kept"
+    assert provider.pages() == EVERY_PAGE
     assert {asked_with for _, asked_with in provider.asked} == {model}
+    assert _status(online) == "completed"
 
 
 @STOPS
@@ -350,10 +374,10 @@ def test_a_stopped_action_asks_only_for_what_it_had_not_finished(
         pytest.param(KeyboardInterrupt(), id="interrupt"),
     ],
 )
-def test_an_action_stopped_partway_through_a_file_after_an_edit_keeps_no_answer_from_before_it(
+def test_an_action_stopped_partway_through_a_file_on_a_rerun_keeps_no_answer_from_before_it(
     online, provider, fault
 ):
-    """The run after the edit answers the first page and stops on the second, before it
+    """The --rerun after the edit answers the first page and stops on the second, before it
     writes their file, which still holds what the old prompt answered. The record that
     run finished must not be carried from that file, nor from the checkpoint, whose row
     lacks the lineage the stored one is given."""
@@ -363,7 +387,7 @@ def test_an_action_stopped_partway_through_a_file_after_an_edit_keeps_no_answer_
 
     _edit_prompt(online)
     provider.stops(at_call=2, raising=fault)
-    _run()
+    _run("--rerun", ACTION)
     provider.answers()
     result = _run()
 
@@ -397,10 +421,10 @@ def _storing_the_first_checkpoint_row_fails(raising):
         pytest.param(sqlite3.OperationalError("disk I/O error"), 2, id="not-stored"),
     ],
 )
-def test_an_answer_whose_checkpoint_row_was_not_stored_after_an_edit_is_asked_for_again(
+def test_an_answer_whose_checkpoint_row_was_not_stored_on_a_rerun_is_asked_for_again(
     online, provider, fault, then_stopped_at_call
 ):
-    """The run after the edit answers the first page, and its checkpoint row never lands:
+    """The --rerun after the edit answers the first page, and its checkpoint row never lands:
     the run is stopped while storing it, or the write fails and the run is stopped on the
     next page. That row is all that says the file, stored before the edit, is older than
     the answer, so the record must not be marked answered without it."""
@@ -412,7 +436,7 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_after_an_edit_is_asked_fo
     if then_stopped_at_call:
         provider.stops(at_call=then_stopped_at_call, raising=KeyboardInterrupt())
     with _storing_the_first_checkpoint_row_fails(fault):
-        _run()
+        _run("--rerun", ACTION)
     assert _status(online) == "interrupted"
     provider.answers()
     result = _run()
@@ -450,7 +474,7 @@ def _stopped_once_a_checkpoint_row_is_stored():
         yield stored
 
 
-@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "after-an-edit"])
+@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "rerun-after-an-edit"])
 def test_a_record_stopped_between_storing_its_row_and_marking_it_answered_is_asked_again(
     online, provider, edited
 ):
@@ -464,7 +488,7 @@ def test_a_record_stopped_between_storing_its_row_and_marking_it_answered_is_ask
         before_the_edit = _stored(online)
         _edit_prompt(online)
     with _stopped_once_a_checkpoint_row_is_stored() as stored:
-        _run()
+        _run(*(["--rerun", ACTION] if edited else []))
     assert stored and _status(online) == "interrupted"
     provider.answers()
     result = _run()
@@ -479,10 +503,10 @@ def test_a_record_stopped_between_storing_its_row_and_marking_it_answered_is_ask
     assert all(row.get("lineage") for row in rows)
 
 
-def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_made_before_it(
+def test_a_reader_stopped_by_an_error_after_its_source_was_rerun_keeps_nothing_made_before_it(
     online,
 ):
-    """The edit resets the reader with its source. The run after it stops the reader on
+    """--rerun resets the reader with its source. The run after it stops the reader on
     its second record, partway through the first file, and goes on to write the second:
     the first file still holds rows made from the summaries the edit replaced."""
     config = _config(online)
@@ -502,7 +526,7 @@ def test_a_reader_stopped_by_an_error_after_its_source_was_edited_keeps_nothing_
 
     with pytest.MonkeyPatch.context() as patched:
         patched.setattr(AgacClient, "call_json", staticmethod(refused_at_the_readers_second_record))
-        _run()
+        _run("--rerun", ACTION)
     assert _status(online, PUBLISHER) == "failed"
     result = _run()
 
@@ -547,10 +571,10 @@ def _storing_fails(action, raising, *, after=0):
         pytest.param(KeyboardInterrupt(), "interrupted", id="interrupt"),
     ],
 )
-def test_a_file_reader_not_stored_after_its_source_was_edited_keeps_nothing_made_before_it(
+def test_a_file_reader_not_stored_after_its_source_was_rerun_keeps_nothing_made_before_it(
     online, fault, left
 ):
-    """The edit resets the reader with its source. The run after it hands the reader every
+    """--rerun resets the reader with its source. The run after it hands the reader every
     record and fails as it stores each file, which still holds rows made from the summaries
     the edit replaced. A file tool leaves no checkpoint row to say the file is older."""
     _with_a_file_reader(online)
@@ -559,7 +583,7 @@ def test_a_file_reader_not_stored_after_its_source_was_edited_keeps_nothing_made
 
     _edit_prompt(online)
     with _storing_fails(FILE_READER, fault):
-        _run()
+        _run("--rerun", ACTION)
     assert _status(online, FILE_READER) == left
     result = _run()
 
@@ -579,7 +603,7 @@ def _summaries_in(root, path):
     return sorted(((row.get("content") or {}).get(ACTION) or {}).get("summary") for row in rows)
 
 
-@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "after-an-edit"])
+@pytest.mark.parametrize("edited", [False, True], ids=["first-run", "rerun-after-an-edit"])
 def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_other(online, edited):
     """The file it stored before it stopped holds what its records were answered with, so
     the next run carries them and hands the tool only the file it did not store."""
@@ -588,7 +612,7 @@ def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_ot
         assert _run("--fresh").exit_code == 0
         _edit_prompt(online)
     with _storing_fails(FILE_READER, KeyboardInterrupt(), after=1):
-        _run(*([] if edited else ["--fresh"]))
+        _run(*(["--rerun", ACTION] if edited else ["--fresh"]))
     assert _status(online, FILE_READER) == "interrupted"
     handed = online / "handed.jsonl"
     handed.unlink()
@@ -674,7 +698,7 @@ def test_an_answer_collection_fails_is_asked_again_though_its_file_was_not_store
 def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its_file_was_collected(
     online, provider
 ):
-    """The run after the edit answers both pages of the first file, but the first page's
+    """The --rerun after the edit answers both pages of the first file, but the first page's
     checkpoint row is not stored, and the run is stopped as it stores the file. Collecting
     the file must not mark that page answered while the stored file holds its old answer.
     The second page's checkpoint row stands as its answer (1273)."""
@@ -687,7 +711,7 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its
         _storing_the_first_checkpoint_row_fails(sqlite3.OperationalError("disk I/O error")),
         _storing_fails(ACTION, KeyboardInterrupt()),
     ):
-        _run()
+        _run("--rerun", ACTION)
     assert _status(online) == "interrupted"
     provider.answers()
     result = _run()
@@ -810,17 +834,40 @@ def test_a_collect_pass_stopped_by_an_error_does_not_send_what_it_collected_agai
     assert _status(project) == "completed"
 
 
-def test_a_collect_pass_stopped_by_an_error_sends_everything_again_once_its_model_is_edited(
+def test_a_collect_pass_stopped_by_an_error_once_its_model_is_edited_sends_nothing_again(
     project,
 ):
-    """The second file's job is finished and waiting under the old model: collecting it
-    would serve old answers under the new one."""
+    """Its collected file stands under the edit as an online action's finished records do,
+    and the second file's job, finished and waiting, is collected rather than sent again."""
+    _stop_collecting_after_the_first_file()
+    assert _status(project) == "failed"
+    collected = _stored(project)
+    assert len(collected) == len(PAGES["pages1.json"])
+
+    _edit_model(project, "other-model:1b")
+    before = _sent(project)
+    _run()
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert _sent_since(project, before) == []
+    assert _status(project) == "completed"
+    after = _stored(project)
+    assert len(after) == len(EVERY_PAGE)
+    assert _still_holding(collected, after) == sorted(collected)
+
+
+def test_a_collect_pass_stopped_by_an_error_rerun_after_its_model_is_edited_sends_everything(
+    project,
+):
+    """The second file's job is finished and waiting under the old model: --rerun gives it
+    up and sends every page under the new one."""
     _stop_collecting_after_the_first_file()
     assert _status(project) == "failed"
 
     _edit_model(project, "other-model:1b")
     before = _sent(project)
-    _run()
+    _run("--rerun", ACTION)
     result = _run()
 
     assert result.exit_code == 0, result.output
@@ -988,12 +1035,30 @@ def test_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_pa
     assert _status(online) == "completed"
 
 
-def test_an_interrupted_retry_of_an_edited_action_leaves_the_edit_and_its_readers_to_the_next_run(
+EDITED_PROMPT = (
+    f"{ACTION} was edited since its last run started (action config (prompt/schema/guard))"
+)
+
+
+def _printed(result):
+    return " ".join(result.output.split())
+
+
+def _answers_and_echoed(root):
+    backend = _backend(root)
+    try:
+        return _stored_summaries(backend, ACTION), _stored_summaries(backend, READER)
+    finally:
+        backend.close()
+
+
+def test_an_interrupted_retry_of_an_edited_action_leaves_the_next_run_only_what_it_never_answered(
     online, provider
 ):
-    """A retry answers only the records it names, and keeps the stamp it found so the next
-    run still sees the edit. Stopped partway, that run must still apply the edit to every
-    record, and to what reads them: the reader holds what it made from the old answers."""
+    """A retry answers only the records it names, and keeps the stamp it found, so the next
+    run still names the edit. Stopped partway, that run keeps the records answered before
+    the edit and asks only the one the retry never answered; the reader builds on each
+    answer, and --rerun asks every record again and the reader with it."""
     config = _config(online)
     config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
     (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
@@ -1011,6 +1076,7 @@ def test_an_interrupted_retry_of_an_edited_action_leaves_the_edit_and_its_reader
         patched.setattr(AgacClient, "call_json", staticmethod(one_empty_answer))
         assert _run("--fresh").exit_code == 0
     assert _status(online) == "completed_with_failures"
+    before_the_edit = _stored(online)
 
     _edit_prompt(online)
     provider.stops(at_call=1, raising=KeyboardInterrupt())
@@ -1021,24 +1087,31 @@ def test_an_interrupted_retry_of_an_edited_action_leaves_the_edit_and_its_reader
     result = _run()
 
     assert result.exit_code == 0, result.output
+    assert EDITED_PROMPT in _printed(result)
+    assert provider.pages() == ["Page beta."]
+    answers, echoed = _answers_and_echoed(online)
+    assert len(answers) == len(EVERY_PAGE)
+    assert len(_still_holding(before_the_edit, answers)) == len(EVERY_PAGE) - 1
+    assert echoed == answers, "the reader holds what it made from answers that were replaced"
+
+    provider.answers()
+    result = _run("--rerun", ACTION)
+
+    assert result.exit_code == 0, result.output
     assert provider.pages() == EVERY_PAGE
-    backend = _backend(online)
-    try:
-        answers = _stored_summaries(backend, ACTION)
-        echoed = _stored_summaries(backend, READER)
-    finally:
-        backend.close()
+    answers, echoed = _answers_and_echoed(online)
     assert len(answers) == len(EVERY_PAGE)
     assert echoed == answers, "the reader holds what it made from answers that were replaced"
 
 
 @pytest.mark.parametrize("retry_stops", [True, False], ids=["retry-interrupted", "retry-finished"])
-def test_a_retry_of_an_edited_action_that_never_completed_leaves_the_edit_to_the_next_run(
+def test_a_retry_of_an_edited_action_that_never_completed_leaves_the_edit_named_to_the_next_run(
     online, provider, retry_stops
 ):
     """No completion stamp holds this retry to the old config. The records it does not
     name were answered under what the interrupted run recorded as it started, and must
-    still read so once the retry has run, or the next run carries them under the edit."""
+    still read so once the retry has run: the next run names the edit, keeps the record
+    the first run finished and asks the rest under the edit."""
     answer = AgacClient.call_json
     calls = []
 
@@ -1065,4 +1138,6 @@ def test_a_retry_of_an_edited_action_that_never_completed_leaves_the_edit_to_the
     result = _run()
 
     assert result.exit_code == 0, result.output
-    assert provider.pages() == EVERY_PAGE
+    assert EDITED_PROMPT in _printed(result)
+    assert provider.pages() == ["Page beta.", "Page delta.", "Page gamma."]
+    assert len(_stored(online)) == len(EVERY_PAGE)

@@ -1,9 +1,10 @@
-"""A reader whose batch is really out when the action it reads is edited.
+"""A reader whose batch is really out when the action it reads is answered again.
 
 `summarize` and `publish` both run under `run_mode: batch` against the provider mock.
 `publish` reads what `summarize` writes. The edit lands while `publish` has a batch
 submitted and not yet collected: that batch was sent the four rows `summarize` held
-before the edit.
+before the edit. A limit edit reopens `summarize` by itself; a guard or model edit
+reopens it only on `--rerun summarize`.
 """
 
 import json
@@ -33,15 +34,18 @@ READER_ACTION = """  - name: publish
 """
 
 ANCHOR = "    prompt: $p.Summarize\n"
-# edit -> (what replaces the anchor, requests the provider is sent after the edit)
+RERUN = ("--rerun", FIRST)
+# edit -> (what replaces the anchor, requests the provider is sent after the edit,
+#          what the run after the edit is given to answer summarize again)
 EDITS = {
     "guard": (
         ANCHOR
         + '    guard: { condition: \'source.page_content != "page 0"\', on_false: "filter" }\n',
         [RECORDS - 1, RECORDS - 1],
+        RERUN,
     ),
-    "record_limit": (ANCHOR + "    record_limit: 3\n", [3, RECORDS]),
-    "model": (ANCHOR + "    model_name: another-model\n", [RECORDS, RECORDS]),
+    "record_limit": (ANCHOR + "    record_limit: 3\n", [3, RECORDS], ()),
+    "model": (ANCHOR + "    model_name: another-model\n", [RECORDS, RECORDS], RERUN),
 }
 
 
@@ -77,11 +81,12 @@ def _run(project, *extra):
     return output
 
 
-def _run_to_the_end(project, *extra):
-    transcript = [_run(project, *extra)]
+def _run_to_the_end(project, *first):
+    """Run until nothing asks to be run again, passing *first* to the first run alone."""
+    transcript = [_run(project, *first)]
     while "run again" in transcript[-1]:
         assert len(transcript) <= 6, "the workflow never stopped asking to be run again"
-        transcript.append(_run(project, *extra))
+        transcript.append(_run(project))
     return "\n".join(transcript)
 
 
@@ -113,14 +118,14 @@ def reader_has_a_batch_out(tmp_path):
 
 
 @pytest.mark.parametrize("edit", sorted(EDITS))
-def test_a_reader_with_a_batch_out_is_sent_what_the_edited_action_writes_now(
+def test_a_reader_with_a_batch_out_is_sent_what_the_reopened_action_writes_now(
     reader_has_a_batch_out, edit
 ):
     """Counted at the provider: the batch already out is not what the reader ends on."""
     project = reader_has_a_batch_out
     _edit(project, edit)
 
-    transcript = _run_to_the_end(project)
+    transcript = _run_to_the_end(project, *EDITS[edit][2])
 
     assert _statuses(project) == {
         FIRST: ActionStatus.COMPLETED.value,
@@ -138,7 +143,7 @@ def test_a_reader_with_a_batch_out_does_not_keep_the_row_the_new_guard_filters(
     everything = _guids(project, FIRST)
     _edit(project, "guard")
 
-    transcript = _run_to_the_end(project)
+    transcript = _run_to_the_end(project, *RERUN)
 
     assert _guids(project, READER) == sorted(set(everything) - {filtered}), transcript
 
@@ -147,7 +152,7 @@ def test_nothing_more_is_sent_or_collected_by_the_run_after(reader_has_a_batch_o
     """The batch given up is still sitting complete at the provider."""
     project = reader_has_a_batch_out
     _edit(project, "guard")
-    _run_to_the_end(project)
+    _run_to_the_end(project, *RERUN)
     held = _rows(project, READER)
 
     again = _run(project)

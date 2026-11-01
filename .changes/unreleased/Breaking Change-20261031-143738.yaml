@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: A config edit no longer re-runs anything. An edit to an action's model, prompt, schema, guard, context_scope or dependencies used to reset the action and every action reading it, so the next run answered every record again. Now the answers they hold stand, records not yet answered use the edit, and each run warns which action was edited and what changed. Use the new `agac run --rerun <action>` to answer an action and its readers again under the edit, or `--fresh` for the whole workflow. Each prompt trace row now records the config it was answered under (`answered_under`).
+time: 2026-10-31T14:37:38.775594Z

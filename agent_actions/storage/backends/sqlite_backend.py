@@ -111,6 +111,7 @@ class SQLiteBackend(StorageBackend):
             prompt_length INTEGER,
             context_length INTEGER,
             response_length INTEGER,
+            answered_under TEXT,          -- JSON: the config this record was answered under
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(action_name, record_id, attempt)
         )
@@ -192,6 +193,7 @@ class SQLiteBackend(StorageBackend):
             "prompt_length",
             "context_length",
             "response_length",
+            "answered_under",
             "created_at",
         },
     }
@@ -1681,6 +1683,7 @@ class SQLiteBackend(StorageBackend):
         attempt: int = 0,
         source_guid: str | None = None,
         run_id: str | None = None,
+        answered_under: str | None = None,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record.
 
@@ -1719,8 +1722,9 @@ class SQLiteBackend(StorageBackend):
                     (action_name, record_id, source_guid, run_id, attempt,
                      compiled_prompt, llm_context,
                      response_text, model_name, model_vendor, run_mode,
-                     prompt_length, context_length, response_length, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     prompt_length, context_length, response_length, answered_under,
+                     created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         action_name,
@@ -1737,6 +1741,7 @@ class SQLiteBackend(StorageBackend):
                         prompt_length,
                         context_length,
                         response_length,
+                        answered_under,
                     ),
                 )
                 self.connection.commit()
@@ -1849,6 +1854,7 @@ class SQLiteBackend(StorageBackend):
         "prompt_length",
         "context_length",
         "response_length",
+        "answered_under",
         "created_at",
     )
 

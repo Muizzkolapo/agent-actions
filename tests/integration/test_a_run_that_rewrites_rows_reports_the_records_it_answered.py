@@ -2,8 +2,8 @@
 
 The completion line and `ActionCompleteEvent.record_count` are the records this
 execution wrote. They were worked out as the action's stored row count after the run
-minus the count before, so a run that replaced N stored rows reported 0: a re-run after
-an edit, and `agac retry`.
+minus the count before, so a run that replaced N stored rows reported 0: `agac run
+--rerun`, and `agac retry`.
 
 Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
 provider.
@@ -99,25 +99,16 @@ def _completions(root) -> dict[str, int]:
     }
 
 
-def _edit_prompt(root):
-    prompts = root / "prompt_store" / "p.md"
-    text = prompts.read_text()
-    edited = text.replace("Summarise the page in one sentence", "Summarise the page in five words")
-    assert edited != text
-    prompts.write_text(edited)
-
-
 def test_a_first_run_reports_the_records_it_stored(online):
     _run("--fresh")
 
     assert _completions(online) == {ACTION: 4, PUBLISHER: 4}
 
 
-def test_a_rerun_after_an_edit_reports_the_records_it_answered_again(online):
+def test_a_rerun_reports_the_records_it_answered_again(online):
     _run("--fresh")
-    _edit_prompt(online)
 
-    result = _run()
+    result = _run("--rerun", ACTION)
 
     assert _completions(online) == {ACTION: 4, PUBLISHER: 4}
     assert f"✓ {ACTION} 4 records" in " ".join(result.output.split())
@@ -150,12 +141,11 @@ def _run_batch_to_completion(*args):
     return result
 
 
-def test_a_batch_rerun_after_an_edit_reports_the_records_it_collected(project):
+def test_a_batch_rerun_reports_the_records_it_collected(project):
     _run_batch_to_completion("--fresh")
     assert _completions(project) == {ACTION: 4, PUBLISHER: 4}
-    _edit_prompt(project)
 
-    result = _run_batch_to_completion()
+    result = _run_batch_to_completion("--rerun", ACTION)
 
     assert _completions(project) == {ACTION: 4, PUBLISHER: 4}
     assert f"✓ {PUBLISHER} 4 records" in " ".join(result.output.split())
@@ -183,7 +173,7 @@ def echo_summary(data: Any, *args) -> list[dict]:
 """
 
 
-def test_a_tool_action_reports_the_rows_it_stored_and_again_after_an_edit(online):
+def test_a_tool_action_reports_the_rows_it_stored_and_again_on_a_rerun(online):
     config = _config(online)
     config.write_text(config.read_text().rstrip("\n") + "\n" + READER_ACTION)
     (online / "tools" / WORKFLOW).mkdir(parents=True, exist_ok=True)
@@ -192,7 +182,7 @@ def test_a_tool_action_reports_the_rows_it_stored_and_again_after_an_edit(online
     _run("--fresh")
     assert _completions(online)[READER] == 4
 
-    _edit_prompt(online)
-    _run()
+    result = _run("--rerun", ACTION)
 
     assert _completions(online)[READER] == 4
+    assert f"✓ {READER} 4 records" in " ".join(result.output.split())
