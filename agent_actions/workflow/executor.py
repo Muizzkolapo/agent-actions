@@ -57,6 +57,7 @@ from agent_actions.utils.limits import (
     resolve_record_limit,
     slice_observation,
 )
+from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import (
     ANSWERS_UNDER_MORE_THAN_ONE_CONFIG,
@@ -152,12 +153,33 @@ def _compute_generation_hash(action_config: ActionConfigDict) -> str:
     return _digest({key: cfg[key] for key in GENERATION_PARAMS if cfg.get(key) is not None})
 
 
+def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
+    """A digest of the files its tool and its UDF guard were loaded from; "" with neither.
+
+    None when one of them has not been loaded, so that its code is not compared at all.
+    The whole file counts, so an edit to a helper beside the UDF is seen; a module the
+    file imports is not.
+    """
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    names = [cfg.get("conditional_clause")]
+    if cfg.get("model_vendor") == "tool":
+        names.append(cfg.get("model_name"))
+    digests: dict[str, str] = {}
+    for name in filter(None, names):
+        digest = (UDF_REGISTRY.get(str(name).lower()) or {}).get("source_digest")
+        if digest is None:
+            return None
+        digests[str(name)] = digest
+    return _digest(digests) if digests else ""
+
+
 # What an action reads and how it is asked, each stamped under its own key and named
 # by its label when an edit is logged.
-_READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str]], ...] = (
+_READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], ...] = (
     ("context_scope_hash", "context scope", _compute_context_scope_hash),
     ("dependencies_hash", "dependencies", _compute_dependencies_hash),
     ("generation_hash", "generation settings", _compute_generation_hash),
+    ("udf_source_hash", "tool/guard code", _compute_udf_source_hash),
 )
 
 
@@ -187,6 +209,7 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "context_scope_hash",
         "dependencies_hash",
         "generation_hash",
+        "udf_source_hash",
         "records_processed",
         "truncated",
         "max_records",
@@ -212,7 +235,7 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     """What differs from the config *stamp* recorded, by label; empty when nothing does.
 
     A key the stamp holds no value for never differs, so state written before a key
-    was recorded is left alone.
+    was recorded is left alone; nor does one the config cannot compute now.
     """
     edits: list[str] = []
     # The hash reads a "model" key and configs write model_name/model_vendor; adding
@@ -226,8 +249,8 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     if stored_hash is not None and stored_hash != _compute_action_config_hash(action_config):
         edits.append(CONFIG_EDIT)
     for key, label, compute in _READS_STAMPS:
-        stored = stamp.get(key)
-        if stored is not None and stored != compute(action_config):
+        stored, current = stamp.get(key), compute(action_config)
+        if stored is not None and current is not None and stored != current:
             edits.append(label)
     return edits
 
