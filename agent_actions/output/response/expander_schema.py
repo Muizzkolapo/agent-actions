@@ -82,8 +82,13 @@ def compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None
         # This path assigns the schema straight through, so it does its own
         # stripping — rule blocks are for the author, never for a provider.
         items_schema = _without_rules(schema_fields["items"])
-        if isinstance(items_schema, dict) and items_schema.get("type") == "object":
-            items_schema.setdefault("additionalProperties", False)
+        if isinstance(items_schema, dict) and (
+            items_schema.get("type", "object" if "properties" in items_schema else None) == "object"
+        ):
+            # The schema describes one record, so a flag at its root covers the records.
+            items_schema.setdefault(
+                "additionalProperties", schema_fields.get("additionalProperties", False)
+            )
         agent["output_schema"] = _without_rules(unified_schema)
         agent["json_output_schema"] = items_schema
         return

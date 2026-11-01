@@ -93,6 +93,13 @@ values, or `type: object` with `properties` for a list of records. An `items` wi
 `Array schema '<name>' has 'items' with no 'type'`, rather than taken for a list of
 objects that would reject every string the model returns.
 
+A record may hold only the fields its schema lists, unless the schema sets
+`additionalProperties: true`. That lets a tool carry fields through without listing them:
+set it at the root of an object schema, or at the root of an array schema or under its
+`items` (where `items` says otherwise, `items` wins). An action that reads such a field is
+not refused, but preflight warns that the field cannot be checked; list it in the schema
+to have it checked.
+
 A schema file may also be a JSON Schema object. Its properties are the record's
 fields, the same as `fields:` entries. A property is required only when it is
 listed under `required:`; the project's `required_by_default` does not apply.
