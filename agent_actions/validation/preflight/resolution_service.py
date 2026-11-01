@@ -2,6 +2,7 @@
 
 Performs a single comprehensive resolution pass across all actions:
 - API key environment variable presence
+- Declared endpoint rules: structured output, variables set, command auth on PATH
 - Seed file ($file:) reference existence and field validation
 - Provider capability / run_mode compatibility
 
@@ -10,6 +11,8 @@ Uses the same resolution utilities that runtime uses, ensuring no divergence.
 
 import logging
 import os
+import re
+import shutil
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
@@ -23,6 +26,7 @@ from agent_actions.config.path_config import (
     seed_search_folders,
 )
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.config.endpoints import Endpoint, project_endpoint
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
 from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.llm.providers.client_base import api_key_env_name
@@ -96,6 +100,75 @@ def _get_api_key_env_name(vendor: str) -> str | None:
     return str(default) if default is not None else None
 
 
+_HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _endpoint_error(action_name: str, field: str, message: str, hint: str) -> StaticTypeError:
+    return StaticTypeError(
+        message=message,
+        location=FieldLocation(agent_name=action_name, config_field=field),
+        referenced_agent=action_name,
+        referenced_field=field,
+        hint=hint,
+    )
+
+
+def _endpoint_environment_errors(
+    action_name: str, subject: str, endpoint: Endpoint
+) -> list[StaticTypeError]:
+    """The variables and the command an endpoint reads, checked against this environment."""
+    errors: list[StaticTypeError] = []
+
+    def unset(message: str, variable: str) -> None:
+        errors.append(
+            _endpoint_error(
+                action_name,
+                "model_vendor",
+                message,
+                f"Set the environment variable: export {variable}=...",
+            )
+        )
+
+    variable = endpoint.url_env_var
+    if variable is not None and not os.environ.get(variable):
+        unset(f"{subject} reads its url from {variable}, which is not set", variable)
+    else:
+        try:
+            endpoint.resolved_url()
+        except ConfigurationError as exc:
+            # A literal url was checked at load; only a variable's value can fail here.
+            rule = exc.context["reason"].split(": ", 1)[-1]
+            errors.append(
+                _endpoint_error(
+                    action_name,
+                    "model_vendor",
+                    f"{subject} reads its url from {variable}: {rule}",
+                    f"Fix the value of {variable}: it is the base URL, for example "
+                    "http://gpu-box:8000/v1.",
+                )
+            )
+
+    auth = endpoint.auth
+    if auth is not None and auth.env is not None and not os.environ.get(auth.env):
+        unset(f"{subject} reads {auth.env}, which is not set", auth.env)
+    if auth is not None and auth.command is not None and shutil.which(auth.command[0]) is None:
+        errors.append(
+            _endpoint_error(
+                action_name,
+                "model_vendor",
+                f"{subject} auth command '{auth.command[0]}' is not on PATH",
+                "Install the command or add its directory to PATH.",
+            )
+        )
+
+    for header, value in endpoint.headers.items():
+        for variable in _HEADER_ENV_VAR.findall(value):
+            if not os.environ.get(variable):
+                unset(f"{subject} reads {variable} for header {header}, which is not set", variable)
+
+    return errors
+
+
 _SEED_FORMATS = {".json": "JSON", ".yml": "YAML", ".yaml": "YAML", ".csv": "CSV"}
 
 
@@ -140,6 +213,8 @@ class WorkflowResolutionService:
 
         # Before the key probe, so a refused action is never probed at the wrong endpoint.
         for error in self._check_vendor_base_url():
+            result.add_error(error)
+        for error in self._check_endpoint_actions():
             result.add_error(error)
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
@@ -199,6 +274,52 @@ class WorkflowResolutionService:
                     )
                 )
 
+    # ── Declared endpoints ─────────────────────────────────────────────
+
+    def _check_endpoint_actions(self) -> list[StaticTypeError]:
+        """Hold an action on a declared endpoint to the endpoint rules.
+
+        An endpoint runs with structured output only, so the action needs json_mode
+        and a schema. Its url, credential and header variables must be set and a
+        command auth must be on PATH; those are reported once per endpoint.
+        """
+        errors: list[StaticTypeError] = []
+        check_environment = os.environ.get("AA_SKIP_ENV_VALIDATION") != "1"
+        checked: set[str] = set()
+
+        for action_name, config in self.action_configs.items():
+            vendor = (config.get("model_vendor") or "").lower()
+            endpoint = project_endpoint(vendor)
+            if endpoint is None:
+                continue
+            subject = f"Action '{action_name}': endpoint '{vendor}'"
+
+            if not config.get("json_mode", True):
+                errors.append(
+                    _endpoint_error(
+                        action_name,
+                        "json_mode",
+                        f"{subject} runs with structured output only; "
+                        "set json_mode: true and add a schema",
+                        "Set json_mode: true and add a schema to this action.",
+                    )
+                )
+            elif not (config.get(SCHEMA_KEY) or config.get("schema_name")):
+                errors.append(
+                    _endpoint_error(
+                        action_name,
+                        "schema",
+                        f"{subject} runs with structured output only; add a schema to this action",
+                        "Add a schema to this action.",
+                    )
+                )
+
+            if check_environment and vendor not in checked:
+                checked.add(vendor)
+                errors.extend(_endpoint_environment_errors(action_name, subject, endpoint))
+
+        return errors
+
     # ── API key checks ─────────────────────────────────────────────────
 
     def _check_api_keys(
@@ -222,6 +343,9 @@ class WorkflowResolutionService:
 
             profile = RUNTIME_PROFILES.get(vendor)
             if profile is not None and not profile.api_key_required:
+                continue
+            # A declared endpoint takes its credential from its own auth block.
+            if project_endpoint(vendor) is not None:
                 continue
 
             # Resolve the expected env var name from vendor config
