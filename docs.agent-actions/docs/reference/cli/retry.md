@@ -469,7 +469,7 @@ the file it reads them from. `--dry-run` lists them too.
 
 ```
 The interrupted retry's snapshot replaces 1 row(s) changed since it was taken, each shown as live then restored:
-  label / 9873aae5-ffca-5e5e-bf5c-daee1ed053b6: filtered (excluded_by_hand) -> failed (Error executing UDF 'mp_label': mp_label refuses row-bad)
+  label / 9873aae5-ffca-5e5e-bf5c-daee1ed053b6: filtered (excluded_by_hand) -> failed (Error executing UDF 'mp_label': ValueError: mp_label refuses row-bad)
 To keep a live value, edit its entry in .../agent_io/store/my_workflow/_retry_manifest.json before you retry.
 ```
 

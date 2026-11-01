@@ -79,7 +79,8 @@ def execute_user_defined_function(
         result = udf(input_data, **kwargs)
     except Exception as e:
         raise AgentActionsError(
-            f"Error executing UDF '{udf_name}': {safe_format_error(e)}",
+            # The type too: a KeyError's message is only the key it missed.
+            f"Error executing UDF '{udf_name}': {type(e).__name__}: {safe_format_error(e)}",
             context={
                 "function": udf_name,
                 "operation": "execute_udf",
