@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  A tool file that fails to import no longer stops every workflow from starting: agac run
+  skips it with a warning naming the file. A workflow naming a tool or guard UDF that is not
+  loaded is refused at preflight, before any action runs, by an error naming the action and
+  each skipped file. validate-udfs and list-udfs still stop at a broken file.
+time: 2026-11-01T17:00:00Z

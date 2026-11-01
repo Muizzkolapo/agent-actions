@@ -43,6 +43,13 @@ class FunctionNotFoundFormatter(ErrorFormatter):
         details = (
             f"The function '{function_name}' is not registered as a UDF (User Defined Function)."
         )
+        if context.get("action_name"):
+            details += f" Action '{context['action_name']}' names it."
+        skipped = context.get("skipped_tool_files") or {}
+        if skipped:
+            details += "\n\nThese tool files failed to import and were skipped:\n" + "\n".join(
+                f"  {file}: {error}" for file, error in sorted(skipped.items())
+            )
 
         similar = self._find_similar_functions(function_name, available_functions)
 
