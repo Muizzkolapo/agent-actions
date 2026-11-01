@@ -27,7 +27,10 @@ from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     wrap_vendor_error,
 )
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_kwargs,
+)
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
 )
@@ -76,7 +79,8 @@ def _build_ollama_client(
     *,
     cloud: bool = False,
 ) -> Client:
-    """Build an ``ollama.Client`` with correct host and optional Bearer auth."""
+    """Build an ``ollama.Client`` with correct host, optional Bearer auth and timeout."""
+    timeout = request_timeout_kwargs(agent_config)
     if cloud:
         host = agent_config.get("base_url") or os.getenv(
             "OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL
@@ -92,10 +96,10 @@ def _build_ollama_client(
                     ),
                 },
             )
-        return Client(host=host, headers={"Authorization": f"Bearer {api_key}"})
+        return Client(host=host, headers={"Authorization": f"Bearer {api_key}"}, **timeout)
 
     host = agent_config.get("base_url") or os.getenv("OLLAMA_HOST")
-    return Client(host=host) if host else Client()
+    return Client(host=host, **timeout) if host else Client(**timeout)
 
 
 def _extract_ollama_schema(schema: dict[str, Any] | None) -> dict[str, Any] | None:

@@ -43,7 +43,7 @@ endpoints:
 | `auth.prefix` | no | Text before the secret. Default `Bearer ` for `Authorization`, empty otherwise. |
 | `auth.refresh_seconds` | no | `command` only: run the command again after this many seconds. Default 3000. |
 | `headers` | no | Extra headers. A value can read a variable with `${NAME}`. A literal value is refused when the header name contains `authorization`, `key`, `token` or `secret`. |
-| `timeout_seconds` | no | Request timeout. Default 120. |
+| `timeout_seconds` | no | Request timeout. Default 120. An action's [`request_timeout`](./index.md#request-timeout) outranks it. |
 
 An endpoint name MUST be lowercase (`a-z`, `0-9`, `-`, `_`) and MUST NOT be a built-in vendor name such as `openai` or `llamafile`. A project can declare any number of endpoints.
 

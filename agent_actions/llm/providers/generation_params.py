@@ -49,3 +49,13 @@ def extract_generation_params(
         result[mapping.get(param, param)] = value
 
     return result
+
+
+def request_timeout_kwargs(agent_config: dict[str, Any]) -> dict[str, Any]:
+    """The action's ``request_timeout`` as an SDK's ``timeout`` kwarg, or nothing when unset.
+
+    Nothing, not ``None``: the openai, anthropic and groq SDKs read
+    ``timeout=None`` as no timeout at all rather than as their own default.
+    """
+    timeout = agent_config.get("request_timeout")
+    return {} if timeout is None else {"timeout": timeout}
