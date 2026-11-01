@@ -363,3 +363,74 @@ def test_each_prompt_trace_row_records_the_config_it_was_answered_under(complete
     assert [json.loads(row["answered_under"]) for row in _traces(completed, "summary")] == [
         after
     ] * len(ITEMS)
+
+
+def _project_default(root, line):
+    config = root / "agent_actions.yml"
+    text = config.read_text()
+    assert text.count("default_agent_config:\n") == 1
+    config.write_text(text.replace("default_agent_config:\n", f"default_agent_config:\n  {line}\n"))
+
+
+SUMMARY_INTENT = '    intent: "Say what the item is"\n'
+
+
+@pytest.mark.parametrize(
+    "setting",
+    ["temperature: 0.9", "max_tokens: 50", "top_p: 0.5", "stop: END", "presence_penalty: 1.0"],
+)
+def test_a_generation_setting_on_the_action_is_named_as_an_edit(completed, setting):
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    {setting}\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (generation settings)" in result.printed
+    assert "--rerun summary" in result.printed
+    assert _statuses(completed)["summary"]["status"] == "completed"
+
+
+def test_a_project_default_max_tokens_names_only_the_llm_actions(completed):
+    _project_default(completed, "max_tokens: 50")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (generation settings)" in result.printed
+    assert "recap was edited" not in result.printed
+    assert "stage_items was edited" not in result.printed
+
+
+def test_rerun_restamps_the_generation_settings(completed):
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    temperature: 0.9\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "summary")
+    assert result.returncode == 0, result.printed
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_a_reworded_intent_is_not_an_edit(completed):
+    _edit(completed, SUMMARY_INTENT, '    intent: "Name the item"\n')
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_a_store_stamped_before_generation_settings_names_no_edit(completed):
+    path = _workflow(completed) / "agent_io" / ".agent_status.json"
+    statuses = json.loads(path.read_text())
+    for details in statuses.values():
+        details.pop("generation_hash", None)
+        (details.get("answered_under") or {}).pop("generation_hash", None)
+    path.write_text(json.dumps(statuses))
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    temperature: 0.9\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed

@@ -106,12 +106,14 @@ asks for. Alongside them are `records_processed` and `truncated`, which say what
 the run actually did rather than what it was asked for, and `model_name`,
 `model_vendor` and a `config_hash` over the prompt, schema and guard. What the action
 reads has digests of its own: `context_scope_hash` over its `context_scope` (observe,
-passthrough, drop and seed) and `dependencies_hash` over its `dependencies`. The model
-and these two are deliberately outside `config_hash`, so adding them could not rotate
+passthrough, drop and seed) and `dependencies_hash` over its `dependencies`, and how it
+is asked has one too: `generation_hash` over the generation settings an LLM action sends
+(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty` and `presence_penalty`;
+empty for a tool or hitl action, which sends none). The model and these three are deliberately outside `config_hash`, so adding them could not rotate
 every stored digest at once and name every completed action as edited after an upgrade.
 
 These are what count as an edit to a completed action: its prompt, schema, guard,
-model, context scope or dependencies. An edit re-runs nothing: the action keeps its
+model, context scope, dependencies or generation settings. An edit re-runs nothing: the action keeps its
 answers, and so does every action reading it. Each run names the edit, for example
 `recap was edited since it completed (context scope): its answers stand, and only records
 it has not answered use the edit. Run again with --rerun recap to answer every record under
@@ -144,10 +146,10 @@ left alone until the action next completes.
 
 An action also records, when it starts work, what that work is answered under:
 `answered_under`, holding the same `config_hash`, `model_name`, `model_vendor`,
-`context_scope_hash` and `dependencies_hash`. A run that stops partway through an
-action — killed, interrupted, or stopped by an error — leaves the records it finished,
-and the next run keeps them. If the prompt, schema, guard, model, context scope or
-dependencies was edited in between — the same edits as for a completed action, above —
+`context_scope_hash`, `dependencies_hash` and `generation_hash`. A run that stops partway
+through an action — killed, interrupted, or stopped by an error — leaves the records it
+finished, and the next run keeps them. If the prompt, schema, guard, model, context scope,
+dependencies or generation settings were edited in between — the same edits as for a completed action, above —
 the run names the edit and answers only the rest under it. When the action kept any
 answer, its stamps stay at the config those answers were given under
 (`kept_answers_under` in the status file), so every later run names the edit until

@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  An edit to a generation setting (temperature, max_tokens, top_p, stop, frequency_penalty,
+  presence_penalty) is now named as an edit, like a model or prompt edit, until
+  --rerun answers the action under it; a stamp written before this is left alone.
+time: 2026-11-01T14:00:00Z
