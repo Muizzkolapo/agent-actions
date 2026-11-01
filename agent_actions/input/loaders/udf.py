@@ -90,7 +90,9 @@ def discover_tool_files(tool_dir: Path) -> list[Path]:
     )
 
 
-def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
+def discover_udfs(
+    user_code_path: Path, skipped: list[UDFLoadError] | None = None
+) -> dict[str, dict[str, Any]]:
     """Discover and register all UDFs in the user code directory.
 
     Only files that declare a tool-registering decorator (``udf_tool``,
@@ -103,7 +105,9 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             (``module == UDFLoadError.DISCOVERY_SENTINEL``), if path-to-module
             derivation fails for a discovered file (also routed through the
             sentinel), or if a UDF-declaring file fails to import (module set
-            to the failing dotted import name).
+            to the failing dotted import name). Given *skipped*, such a file is
+            appended to it instead and discovery goes on without the UDFs it
+            registered before failing.
         DuplicateFunctionError: If duplicate function names are detected.
     """
     user_code_path = Path(user_code_path)
@@ -162,11 +166,22 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             raise
         except Exception as e:
             error_context = {"error_type": type(e).__name__}
-            raise UDFLoadError(
+            failure = UDFLoadError(
                 module=module_name, file=str(py_file), error=str(e), context=error_context, cause=e
-            ) from e
+            )
+            if skipped is None:
+                raise failure from e
+            _forget_a_broken_file(py_file, module_name)
+            skipped.append(failure)
 
     return UDF_REGISTRY
+
+
+def _forget_a_broken_file(py_file: Path, module_name: str) -> None:
+    """Drop what a file that failed partway through its import registered."""
+    sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
+    for name in [n for n, meta in UDF_REGISTRY.items() if meta.get("file") == str(py_file)]:
+        del UDF_REGISTRY[name]
 
 
 def guard_udf_name(guard: Any) -> str | None:

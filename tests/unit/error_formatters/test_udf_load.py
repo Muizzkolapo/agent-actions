@@ -151,7 +151,8 @@ class TestImportFailureFormatting:
             str(udf_import_error),
             _context_for(udf_import_error),
         )
-        assert "single broken file blocks" in result.fix
+        assert "A broken file stops validate-udfs and list-udfs" in result.fix
+        assert "agac run skips it with a warning" in result.fix
 
     def test_dotted_submodule_preserved_in_missing_module_hint(self, formatter):
         cause = ModuleNotFoundError("No module named 'google.cloud.storage'")

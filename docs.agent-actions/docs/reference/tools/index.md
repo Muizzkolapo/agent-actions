@@ -240,6 +240,19 @@ What does not work:
 
 If you need shared logic across multiple tool files, extract it into an installable package and add it to your project dependencies.
 
+### A tool file that fails to import
+
+`agac run` skips a tool file that raises while it is imported and says so, so one broken file
+does not stop workflows that use none of its tools:
+
+```
+Skipped tool file tools/other/broken.py: it failed to import (boom at import). A workflow using a tool from it fails until it imports.
+```
+
+A workflow that names a tool or guard UDF that is not loaded, one from a skipped file
+included, is refused before any action runs. The error names the action and each skipped file.
+`agac validate-udfs` and `agac list-udfs` still stop at the first file that fails to import.
+
 ## Best Practices
 
 ### Handle Missing Fields

@@ -234,3 +234,37 @@ def test_undecodable_file_declaring_a_udf_still_raises_attributed(tmp_path):
     with pytest.raises(UDFLoadError) as exc_info:
         discover_udfs(tmp_path)
     assert "ghost_udf.py" in exc_info.value.context["file"]
+
+
+_REGISTERS_THEN_FAILS = (
+    "from agent_actions import udf_tool\n"
+    "\n"
+    "@udf_tool()\n"
+    "def half_loaded(data):\n"
+    "    return data\n"
+    "\n"
+    "raise RuntimeError('boom at import')\n"
+)
+
+
+def test_given_a_skipped_list_a_broken_file_is_collected_and_the_rest_load(tmp_path):
+    """A run discovers this way (1608): one broken file must not block every workflow."""
+    (tmp_path / "good.py").write_text(_GOOD_UDF)
+    (tmp_path / "metrics_udf.py").write_text(_BROKEN_UDF)
+    skipped: list[UDFLoadError] = []
+
+    discover_udfs(tmp_path, skipped=skipped)
+
+    assert "normalize_text" in UDF_REGISTRY
+    assert [str(tmp_path / "metrics_udf.py")] == [e.context["file"] for e in skipped]
+
+
+def test_a_skipped_file_leaves_nothing_it_registered_before_failing(tmp_path):
+    (tmp_path / "half_udf.py").write_text(_REGISTERS_THEN_FAILS)
+    skipped: list[UDFLoadError] = []
+
+    discover_udfs(tmp_path, skipped=skipped)
+
+    assert "half_loaded" not in UDF_REGISTRY
+    assert "boom at import" in skipped[0].context["error"]
+    assert not any(name.endswith("half_udf") for name in sys.modules)

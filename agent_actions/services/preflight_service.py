@@ -82,6 +82,10 @@ class PreflightService:
         self.schema_service: WorkflowSchemaService | None = None
 
     def validate(self) -> None:
+        # 0. Every tool and UDF guard named was loaded. A missing one would fail only when
+        # its action runs, after every action before it has run.
+        self._check_udfs_are_loaded()
+
         # 1. Schema validation
         self.schema_service = WorkflowSchemaService.from_action_configs(
             self.agent_name,
@@ -271,6 +275,18 @@ class PreflightService:
                 **self._tool_udf_location(impl),
             }
         return inputs
+
+    def _check_udfs_are_loaded(self) -> None:
+        for action, config in self.action_configs.items():
+            names = [config.get("conditional_clause")]
+            if config.get("model_vendor") == "tool":
+                names.append(config.get("model_name"))
+            for name in filter(None, names):
+                try:
+                    get_udf_metadata(str(name))
+                except FunctionNotFoundError as exc:
+                    exc.context["action_name"] = action
+                    raise
 
     @staticmethod
     def _tool_udf_source(action: str, impl: str) -> str | None:
