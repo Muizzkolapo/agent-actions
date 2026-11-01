@@ -52,6 +52,19 @@ existed leave it `NULL`. A row is written when its prompt is built, before the m
 called, so a row with no `response_text` was prompted under that config but not answered:
 the run stopped before the answer came back.
 
+An action stopped partway keeps its traces when it resumes, the rows of attempts that
+failed included: they are the record of what was asked, and under which config. So a record
+can hold a failed attempt under the old config beside its answer under the new one. The
+latest row of each record is the one its answer came from:
+
+```sql
+SELECT source_guid, attempt, json_extract(answered_under, '$.model_name') AS model
+FROM prompt_trace
+WHERE id IN (
+  SELECT MAX(id) FROM prompt_trace WHERE action_name = 'classify' GROUP BY source_guid
+);
+```
+
 ```sql
 SELECT source_guid, json_extract(answered_under, '$.model_name') AS model
 FROM prompt_trace
