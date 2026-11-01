@@ -84,6 +84,18 @@ The action keeps everything agac gives a built-in vendor: prompt templates, cont
 
 **Secrets are masked by value.** The credential agac reads for an endpoint (the `env` value, the command output, and a `${NAME}` header value whose header name or variable name contains `authorization`, `key`, `token` or `secret`) is masked as `[REDACTED]` in log messages, events, record reasons and the CLI's error block, including a server's error body that echoes the request headers. A value shorter than 8 characters is masked only by the key-shape rules. A `${NAME}` value in another header (a region, an API version) is not treated as a secret.
 
+## Verify an endpoint
+
+A server cannot report whether it honours `json_schema`; only a request proves it. `agac run --verify-keys` sends one small request to each endpoint the workflow uses, with the first `model_name` named for it, `max_tokens: 16` and a one-field schema. A credential the server refuses, a server that cannot be reached, and a reply that does not match the schema are errors:
+
+- `endpoint 'azure-gpt' refused the credential (HTTP 401)` (or 403)
+- `endpoint 'lab-vllm' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (a reply that is not the probe's object, or a server that rejects the request with HTTP 400 or 422, the usual way a server declines `response_format`)
+- `endpoint 'lab-vllm' answered HTTP 404: ...` (any other status the server answered with, 5xx included)
+- `endpoint 'lab-vllm' could not be reached: ...` (no answer at all)
+- the auth command's own failure, for example `endpoint 'vertex-gemini' auth command 'gcloud' exited with 1`
+
+The probe costs one model call per endpoint, so it runs only under `--verify-keys`, never on a plain `agac run`. A pass proves the server honours a small schema, not every schema; the check on each reply at run time stays the guard.
+
 ## Preflight
 
 Before the first request, preflight refuses an endpoint action whose url, credential or header variable is unset, or whose auth command is not on `PATH`:

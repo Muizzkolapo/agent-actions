@@ -287,6 +287,29 @@ expect:
   on_exhausted: return_last
 ```
 
+## Declared Endpoints
+
+The texts most often met from the `endpoints:` block of `agent_actions.yml` and from an action that selects one with `model_vendor`. Every load rule is on the [Endpoints](../reference/configuration/endpoints.md) page.
+
+| Message | Stage | What to do |
+|---------|-------|------------|
+| `endpoints.<name>: unknown key 'format'` | load | Remove the key; an endpoint has `url`, `auth`, `headers` and `timeout_seconds` only. |
+| `endpoints.<name>: '<name>' is a built-in vendor; choose another endpoint name` | load | Rename the endpoint; built-in names (`openai`, `llamafile`, ...) are taken. |
+| `endpoints.<name>: auth is required; write 'auth: none' for an endpoint that takes no credential` | load | Add `auth: none`, `auth: { env: NAME }` or `auth: { command: [...] }`. |
+| `endpoints.<name>.url: give the base URL, for example http://gpu-box:8000/v1; agac adds /chat/completions` | load | Drop `/chat/completions` from the url. |
+| `endpoints.<name>.headers.<H>: write a credential as ${ENV_VAR}, not as a literal value` | load | Put the value in an environment variable and write `${NAME}`. |
+| `Action '<a>': endpoint '<name>' runs with structured output only; set json_mode: true and add a schema` | preflight | Endpoints run with structured output only; give the action a schema. |
+| `Action '<a>': endpoint '<name>' reads NAME, which is not set` | preflight | Export the variable the endpoint reads for its credential, url or header. |
+| `Action '<a>': endpoint '<name>' auth command 'x' is not on PATH` | preflight | Install the command or add its directory to PATH. |
+| `Action '<a>': endpoint '<name>' takes its credential from endpoints.<name>.auth; remove api_key from the action` | load | Remove `api_key` (or `base_url`) from the action; the endpoint carries them. |
+| `Action '<a>': vendor '<name>' does not support run_mode: batch.` | preflight | Set `run_mode: online`; endpoints run online only. |
+| `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys` | Check the credential in `endpoints.<name>.auth`. At record time a 401 shows as the vendor's own error text; with `command` auth the command is run once more before the record fails. |
+| `endpoint '<name>' could not be reached: ...` | `--verify-keys` | Check `endpoints.<name>.url` and that the server is running. |
+| `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion: check the url, the model name and the server's own log. |
+| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` when the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`, or put one (vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean a wrong model name or parameter: read the server's text. |
+| `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed; run it by hand from the project root and fix `endpoints.<name>.auth`. Its stderr is never shown, since it can hold the secret. |
+| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema; the record is dispositioned `parse_error`. Check the model and the schema. |
+
 ## Debugging with Prompt Traces
 
 When an LLM action produces unexpected output, the fastest path to understanding "why" is inspecting the compiled prompt and raw response. Agent Actions captures both automatically.

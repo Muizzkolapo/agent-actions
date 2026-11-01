@@ -241,7 +241,7 @@ class RunCommand:
     "--verify-keys",
     is_flag=True,
     default=False,
-    help="Verify API keys are valid by probing vendor endpoints before execution",
+    help="Verify API keys by probing vendor endpoints, and declared endpoints with one structured-output request, before execution",
 )
 @handles_user_errors("run")
 @requires_project
