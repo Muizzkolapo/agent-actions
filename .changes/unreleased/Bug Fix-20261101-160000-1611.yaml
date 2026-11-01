@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  An array schema whose items has no type is refused with a message naming the schema,
+  instead of being read as a list of objects that rejected every string the model returned.
+  Items with properties and no type are still read as objects.
+time: 2026-11-01T16:00:00Z
