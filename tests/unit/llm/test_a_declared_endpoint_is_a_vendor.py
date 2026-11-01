@@ -752,7 +752,9 @@ class TestCommandAuthRuntime:
         from concurrent.futures import ThreadPoolExecutor
 
         counter = tmp_path / "runs"
-        with FakeEndpoint(statuses=[401] * 20) as server:
+        with FakeEndpoint() as server:
+            # Every record sends the first token, and all twenty are refused at once.
+            server.refuse_credential("Bearer token-number-1-abcdef", together=20)
             _declare_full(server.base_url, auth={"command": _counting_command(counter, sleep=0.2)})
             client = compatible.endpoint_client("lab")
             with ThreadPoolExecutor(max_workers=20) as pool:

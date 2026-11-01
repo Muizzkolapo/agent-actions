@@ -51,6 +51,9 @@ class FakeEndpoint:
         self.content: str | None = None
         # When set, every error reply carries exactly this message.
         self.error_message: str | None = None
+        # A credential the server no longer takes: every request carrying it gets a 401.
+        self.refuse_authorization: str | None = None
+        self._refusal_barrier: threading.Barrier | None = None
         self.requests: list[dict[str, Any]] = []
         self._server: ThreadingHTTPServer | None = None
 
@@ -69,16 +72,15 @@ class FakeEndpoint:
                     body: Any = json.loads(raw)
                 except ValueError:
                     body = raw.decode(errors="replace")
-                endpoint.requests.append(
-                    {
-                        "path": self.path,
-                        "headers": {k.lower(): v for k, v in self.headers.items()},
-                        # Every header line as sent, so a duplicate shows.
-                        "raw_headers": [(k.lower(), v) for k, v in self.headers.items()],
-                        "body": body,
-                    }
-                )
-                status, payload = endpoint._answer(body)
+                request = {
+                    "path": self.path,
+                    "headers": {k.lower(): v for k, v in self.headers.items()},
+                    # Every header line as sent, so a duplicate shows.
+                    "raw_headers": [(k.lower(), v) for k, v in self.headers.items()],
+                    "body": body,
+                }
+                endpoint.requests.append(request)
+                status, payload = endpoint._answer(body, request["headers"])
                 data = json.dumps(payload).encode()
                 self.send_response(status)
                 self.send_header("content-type", "application/json")
@@ -100,7 +102,23 @@ class FakeEndpoint:
         self._server.shutdown()
         self._server.server_close()
 
-    def _answer(self, body: Any) -> tuple[int, dict[str, Any]]:
+    def refuse_credential(self, authorization: str, together: int = 1) -> None:
+        """Refuse every request carrying *authorization* with a 401.
+
+        With *together* above one, each such request is held until that many have arrived,
+        so parallel callers are refused at once rather than one renewing before the rest send.
+        """
+        self.refuse_authorization = authorization
+        self._refusal_barrier = threading.Barrier(together) if together > 1 else None
+
+    def _answer(self, body: Any, headers: dict[str, str]) -> tuple[int, dict[str, Any]]:
+        if self.refuse_authorization and headers.get("authorization") == self.refuse_authorization:
+            if self._refusal_barrier is not None:
+                try:
+                    self._refusal_barrier.wait(timeout=10)
+                except threading.BrokenBarrierError:
+                    pass
+            return 401, {"error": {"message": "credential no longer accepted", "type": "stub"}}
         if self.statuses:
             status = self.statuses.pop(0)
             if status != 200:
