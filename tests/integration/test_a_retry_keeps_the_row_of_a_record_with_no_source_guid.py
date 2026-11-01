@@ -1,16 +1,12 @@
 """A retry of one record keeps the failed row an action stored for a record with no identity.
 
-A record that reaches an action without a source_guid is refused: the action stores a
-failed row with no source_guid and records no disposition for it, so that row and the run
-log are the only record of the refusal. A repair names records by source_guid, so it can
-never name that one, and it replaced the file with what it produced plus the stored rows
-it handed back -- none of them without a source_guid. The row was gone after the retry
-of any other record, and the action read complete, so no later run wrote it again.
+A record reaching an action without a source_guid is refused with a failed row and no
+disposition, so that row and the run log are its only record. A repair names records by
+source_guid and can never name it, so a retry of any other record must keep the row: the
+action reads complete, and no later run would write it again.
 
-Each run is its own `agac` process. `flatten` is a tool; `stamp` reads it, a tool online
-and an LLM action under batch. One stored `flatten` row loses its source_guid, as an
-upstream file edited by hand would leave it, and `stamp`'s schema is edited and the next
-run names it with ``--rerun`` so it answers every record again.
+`flatten` is a tool; `stamp` reads it (a tool online, an LLM action under batch). One stored
+`flatten` row loses its source_guid, as a hand-edited upstream file would.
 """
 
 from __future__ import annotations

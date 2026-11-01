@@ -1,13 +1,12 @@
-"""A version merge skipped because its versions hold nothing holds nothing either (1230).
+"""A version merge skipped because its versions hold nothing holds nothing either.
 
-Two roads lead a merge to a skip: a version that is itself skipped trips the
-circuit breaker, and versions that completed with no rows raise
-AllVersionsFilteredError. Neither rewrites the merge's output, so rows it stored
-before must be removed by the skip — or they outlive the output they merged.
+Two roads lead a merge to a skip: a version that is itself skipped trips the circuit
+breaker, and versions that completed with no rows raise AllVersionsFilteredError. Neither
+rewrites the merge's output, so the skip must remove rows it stored before, or they
+outlive the output they merged.
 
 A guard edit on the versions is applied by ``--rerun vote_direct``, which answers every
-version and what reads them again; a change to the staged input resets everything on
-its own.
+version and what reads them again; a change to the staged input resets everything.
 """
 
 import json

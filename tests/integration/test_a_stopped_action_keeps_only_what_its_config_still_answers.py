@@ -1,17 +1,12 @@
-"""What a run stopped partway through an action finished is kept, edited or not (1222).
+"""What a run stopped partway through an action finished is kept, edited or not.
 
-The next run resets the action, and what that reset kept depended on the status the action
-was left in alone. One stopped by an error kept nothing even when nothing had changed, so
-every finished record was asked again, and paid for again. Now every stopped action keeps
-what it finished, and a config edit since its run started changes only what the rest are
-answered under; ``--rerun`` asks every record again under the edit. What is kept still
-meets the guard: its code can turn a record away with no edit to the config. A record
-answered under ``--rerun`` is never carried from a file stored before it.
-
-Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
-fault that stops a run is stood in for, raised where the provider is called or, for a
-record's checkpoint row (1226), where the store saves it, or where the store writes a
-target file (1262). And a guard's code is forgotten between runs, as a new process would.
+The next run resets the action but keeps every record it finished, whatever status the
+stop left it in, so none is asked or paid for again. A config edit since that run started
+changes only what the rest are answered under; ``--rerun`` asks every record again. What
+is kept still meets the guard, whose code can turn a record away without a config edit,
+and a record answered under ``--rerun`` is never carried from a file stored before it.
+Only the stop is stood in for: raised at the provider call, the checkpoint-row save or the
+target-file write. A guard's code is forgotten between runs, as in a new process.
 """
 
 import json
