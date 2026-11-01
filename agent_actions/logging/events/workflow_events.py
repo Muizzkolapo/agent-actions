@@ -54,6 +54,8 @@ class WorkflowCompleteEvent(BaseEvent):
     actions_skipped: int = 0
     actions_failed: int = 0
     total_tokens: int = 0
+    # Final actions (nothing reads them) that completed or were skipped holding no record.
+    empty_final_actions: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -71,6 +73,7 @@ class WorkflowCompleteEvent(BaseEvent):
             "actions_skipped": self.actions_skipped,
             "actions_failed": self.actions_failed,
             "total_tokens": self.total_tokens,
+            "empty_final_actions": list(self.empty_final_actions),
         }
 
     @property
