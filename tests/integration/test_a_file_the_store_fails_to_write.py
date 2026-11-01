@@ -1,19 +1,11 @@
-"""A file the store fails to write fails its action, and the next run answers it (1265).
+"""A file the store fails to write fails its action, and the next run answers it.
 
-A failure confined to one input file costs only that file: the walk records it, goes on
-with the others, and the action completes holding fewer records. A store that failed to
-write one file of several was treated the same way. On `--rerun` under an edit, the reset
-leaves each file's rows in place until the run writes it again, so the action was recorded
-complete, with exit 0, over the rows that file held from before the edit; its readers ran
-on them, and nothing asked for them again. On a first run the file was simply never stored.
-
-A batch collect pass took the failure the same way, and recorded the action partly
-complete over that file's earlier rows.
-
-Either way the run reported it first as a failed load of the file it was writing (1284).
-
-Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
-store's failure is stood in for, raised where it writes the one target file.
+A failure confined to one input file costs only that file, but a store that fails to
+write a file is not such a failure. On a first run the file would never be stored; after a
+`--rerun` reset it still holds its rows from before the edit, so the action would read
+complete with exit 0 over stale rows its readers then run on. A batch collect pass must
+fail the same way, and the run reports the failed write, not a failed load of the file.
+Only the store's failure is stood in for, raised where it writes the one target file.
 """
 
 import json

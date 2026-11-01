@@ -1,13 +1,10 @@
 """An action answered again keeps no prompt trace from before; one left as it is keeps them.
 
 ``--rerun``, or an action's output gone missing, asks every record again, so the traces of
-the run it replaces describe answers that no longer stand. They were left beside the new
-ones, for the action and every reader reset with it, until retention pruned them. A config
-edit alone asks nothing again, so the traces of the answers that stand stay. A retry, which
-answers only what failed, keeps the traces of what it does not ask again.
-
-Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
-provider.
+the run it replaces describe answers that no longer stand, for the action and every reader
+reset with it. A config edit alone asks nothing again, so the traces of the answers that
+stand stay. A retry, which answers only what failed, keeps the traces of what it does not
+ask again.
 """
 
 import json

@@ -1,16 +1,11 @@
 """An edit to what an action reads is named, and waits for ``--rerun`` to run it again.
 
-An edit to an action's `context_scope` or `dependencies` is recorded with its answers
-(1332). A run after one keeps those answers and those of what reads it, and warns which
-action was edited; ``--rerun <action>`` answers it and its readers again under the edit.
-What counts as such an edit, a retry after one, a batch action under one and an action
-stopped partway then rerun are pinned here; the plain keep is pinned by
-`test_a_config_edit_keeps_the_answers.py`.
-
-`recap` reads one field of `stage_items` and writes what it saw; `after_recap` reads
-`recap`; `bystander` reads `stage_items` and nothing the edits touch. Each tool writes a
-line to `calls.log` per record, so a test sees which actions ran. Every run is its own
-`agac` process. Only the fault is stood in for: a tool raising for a named item.
+An edit to an action's `context_scope` or `dependencies` is recorded with its answers. A run
+after one keeps those answers and those of its readers and warns which action was edited;
+``--rerun <action>`` answers it and its readers again under the edit. This module pins what
+counts as such an edit, a retry after one, a batch action under one, and an action stopped
+partway then rerun; `test_a_config_edit_keeps_the_answers.py` pins the plain keep.
+`bystander` reads nothing the edits touch; each tool logs a line per record to `calls.log`.
 """
 
 import json
