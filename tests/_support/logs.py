@@ -1,12 +1,10 @@
 """Collect a framework logger's records from that logger itself.
 
-``caplog`` reads the Python root logger, which a record reaches only while the
-``agent_actions`` logger propagates and keeps its handlers. Logging setup turns
-propagation off and clears those handlers. In full-suite runs, edit warnings asserted
-through ``caplog`` or through a handler on ``agent_actions`` were missing from some tests
-while the same tests passed alone; a handler on the logger that emits the record is
-touched by
-neither.
+``caplog`` reads the root logger, which a record reaches only while the
+``agent_actions`` logger propagates; the suite's fixture keeps it propagating through
+every logging setup (#1627). A setup also clears the handlers on ``agent_actions``, so a
+handler added there is lost when a command runs in-process; one on the logger that emits
+the record is not touched.
 """
 
 from __future__ import annotations

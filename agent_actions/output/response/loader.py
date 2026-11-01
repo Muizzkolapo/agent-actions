@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import logging
 from pathlib import Path
 
 from agent_actions.errors import (
@@ -16,12 +17,11 @@ from agent_actions.logging.events import (
     SchemaLoadedEvent,
     SchemaLoadingStartedEvent,
 )
-from agent_actions.logging.factory import LoggerFactory
 from agent_actions.utils.constants import SCHEMA_SUFFIXES
 from agent_actions.utils.file_utils import load_structured_file
 from agent_actions.utils.path_utils import resolve_relative_to
 
-logger = LoggerFactory.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # Collision pairs already warned about, so repeated discovery walks do not
 # repeat the same warning.

@@ -52,3 +52,18 @@ def test_absence_assertions_are_not_vacuous(caplog):
     assert "propagation-probe-gamma" not in caplog.text
     logging.getLogger("agent_actions.probe").warning("propagation-probe-gamma")
     assert "propagation-probe-gamma" in caplog.text
+
+
+def test_caplog_still_sees_a_warning_after_logging_is_set_up_mid_test(caplog):
+    """A command run in-process sets the framework's logging up partway through a test.
+
+    That setup turns ``propagate`` off again after the fixture turned it on, so a caplog
+    assertion made after a ``CliRunner`` call saw nothing (#1627). The fixture keeps it on.
+    """
+    from agent_actions.logging.factory import LoggerFactory
+
+    LoggerFactory.initialize(force=True)
+    caplog.set_level(logging.WARNING)
+    logging.getLogger("agent_actions.workflow.coordinator").warning("propagation-probe-delta")
+
+    assert "propagation-probe-delta" in caplog.text
