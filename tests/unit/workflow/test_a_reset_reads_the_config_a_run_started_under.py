@@ -399,3 +399,29 @@ def test_an_action_cleared_in_bulk_drops_its_mixed_mark(tmp_path, backend):
     state = _next_run_resets(tmp_path, backend)
 
     assert "answers_under_more_than_one_config" not in state.get_status_details("define")
+
+
+@STOPS
+def test_a_stopped_action_that_kept_nothing_is_not_said_to_keep_what_it_finished(
+    tmp_path, backend, stop
+):
+    state, executor = _process(tmp_path, backend)
+
+    def work(*_args: Any, **_kwargs: Any) -> None:
+        backend.set_disposition("define", "r1", DISPOSITION_FAILED)
+        raise stop
+
+    executor.deps.action_runner.run_action.side_effect = work
+    try:
+        executor._execute_action_run(ActionRunParams("define", 0, DEFINE, False, datetime.now()))
+    except _Killed:
+        pass
+
+    with framework_records("agent_actions.workflow.coordinator") as records:
+        state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"))
+
+    assert _edit_warnings(records) == [
+        f"define was edited since its last run started ({PROMPT_EDIT}): it kept no answers, "
+        "so every record is answered under the edit"
+    ]
+    assert "kept_answers_under" not in state.get_status_details("define")

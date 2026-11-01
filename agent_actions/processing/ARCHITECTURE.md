@@ -1044,6 +1044,9 @@ Why:
   row names the config its record was answered under, and the stamps stay
   at the config of the kept answers (KEPT_ANSWERS_UNDER), so later runs
   name the edit until `agac run --rerun` answers every record under it.
+  A batch sent and not yet collected counts as kept: every answer it
+  brings was given under the config it was sent under. An action that
+  kept nothing is told so, and its stamps are not held.
 
   A batch the provider refuses fails the action, and the walk raises it once
   every file is walked. The refusal sent and stored nothing, so what the action

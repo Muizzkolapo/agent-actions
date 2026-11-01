@@ -295,21 +295,28 @@ class AgentWorkflow:
                 state_mgr.get_status_details(name), self.action_configs.get(name)
             )
             if edits and name not in about_to_rerun:
-                logger.warning(
-                    "%s was edited since its last run started (%s): the records it finished "
-                    "stand, a batch already sent is collected as it was sent, and the rest are "
-                    "answered under the edit. Run again with --rerun %s to answer every record "
-                    "under the edit",
-                    name,
-                    ", ".join(edits),
-                    name,
-                )
                 if self._holds_answers(name):
+                    logger.warning(
+                        "%s was edited since its last run started (%s): the records it "
+                        "finished stand, a batch already sent is collected as it was sent, and "
+                        "the rest are answered under the edit. Run again with --rerun %s to "
+                        "answer every record under the edit",
+                        name,
+                        ", ".join(edits),
+                        name,
+                    )
                     # Its stamps are then held to the config those answers were given
                     # under, so the run that completes it does not stamp them as edited.
                     details = state_mgr.get_status_details(name)
                     state_mgr.update_status(
                         name, status, **{KEPT_ANSWERS_UNDER: details[ANSWERED_UNDER]}
+                    )
+                else:
+                    logger.warning(
+                        "%s was edited since its last run started (%s): it kept no answers, "
+                        "so every record is answered under the edit",
+                        name,
+                        ", ".join(edits),
                     )
             # With no config recorded as its work began, the state is reset as it was
             # then: by its status alone.
@@ -353,10 +360,17 @@ class AgentWorkflow:
             )
 
     def _holds_answers(self, action_name: str) -> bool:
-        """Whether a stopped action keeps an answer through the reset: a stored row or a
-        verdict that is not a failure. An answer only checkpointed, in a file the run
-        never stored, is not seen here."""
+        """Whether a stopped action keeps an answer through the reset: a stored row, a
+        verdict that is not a failure, or a batch sent and not yet collected.
+
+        An answer checkpointed in a file the run never stored is carried only under its
+        verdict, so the verdict sees it.
+        """
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
         if self.storage_backend.has_target_rows(action_name):
+            return True
+        if BatchRegistryManager.uncollected_batch_ids(self.storage_backend, action_name):
             return True
         return any(
             row.get("disposition") not in RUNNING_CLEAR_DISPOSITIONS
