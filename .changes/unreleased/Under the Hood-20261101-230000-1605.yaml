@@ -1,0 +1,5 @@
+kind: Under the Hood
+body: >-
+  A test pins that every consumer of a version merge holds every record across repeated
+  parallel runs: five versions over three staged files, every merge holding all five votes.
+time: 2026-11-01T23:00:00Z
