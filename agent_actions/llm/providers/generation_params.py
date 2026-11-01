@@ -12,6 +12,9 @@ from typing import Any
 # Core generation parameters checked by all providers
 _CORE_PARAMS = ("temperature", "max_tokens", "top_p", "stop")
 
+# Every generation setting a client sends, under its canonical name.
+GENERATION_PARAMS = (*_CORE_PARAMS, "frequency_penalty", "presence_penalty")
+
 
 def extract_generation_params(
     agent_config: dict[str, Any],
