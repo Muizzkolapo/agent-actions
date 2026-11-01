@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  additionalProperties: true at the root of an array schema now lets a tool's records carry
+  fields the schema does not list; it was ignored, and every such record failed validation.
+  A flag under items still wins.
+time: 2026-11-01T16:10:00Z
