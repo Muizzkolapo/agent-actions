@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  The retry reference quotes the warning a retry gives for an edited action and says how
+  --rerun follows it; processing notes no longer describe a stopped action's clear as
+  depending on its config.
+time: 2026-11-01T16:30:00Z
