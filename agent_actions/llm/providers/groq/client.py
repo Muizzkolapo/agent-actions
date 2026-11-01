@@ -24,7 +24,10 @@ from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_kwargs,
+)
 from agent_actions.llm.providers.mixins import JSONResponseMixin
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -96,6 +99,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
             **extract_generation_params(
                 agent_config, extra_params=("frequency_penalty", "presence_penalty")
             ),
+            **request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()
@@ -148,6 +152,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
             "messages": envelope.to_dicts(),
             "model": model_name,
             **params,
+            **request_timeout_kwargs(agent_config),
         }
 
         # Generate request ID for correlation

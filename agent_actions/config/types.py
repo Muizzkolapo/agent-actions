@@ -137,6 +137,7 @@ class ActionConfigDict(TypedDict, total=False):
     # Generation parameters
     temperature: float
     max_tokens: int
+    request_timeout: float  # seconds per LLM request; unset keeps the SDK's own
 
     # Dependencies & flow
     dependencies: list[str]

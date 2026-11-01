@@ -22,7 +22,10 @@ from agent_actions.llm.providers.anthropic import (
 )
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_kwargs,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -136,7 +139,7 @@ class AnthropicClient(BaseClient):
 
         start_time = time.perf_counter()
         try:
-            response = client.messages.create(**api_args)
+            response = client.messages.create(**api_args, **request_timeout_kwargs(agent_config))
         except anthropic.APIError as e:
             raise wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id) from e
         latency_ms = (time.perf_counter() - start_time) * 1000

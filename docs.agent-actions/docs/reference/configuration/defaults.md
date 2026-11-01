@@ -55,6 +55,7 @@ actions:
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | Stop sequence(s) to end generation |
+| `request_timeout` | number | Seconds one LLM request may take (greater than 0); a request that takes longer fails that attempt and `retry` retries it. Unset, each provider SDK keeps its own — see [Request timeout](./index.md#request-timeout) |
 | `record_limit` | integer | Max records per file (default: unlimited). `AGAC_RECORD_LIMIT` caps this from the environment |
 | `file_limit` | integer | Max files to walk per action (default: unlimited). `AGAC_FILE_LIMIT` bounds this from the environment. Does not hold back [`agac retry`](../cli/retry), which walks the files holding the records it named rather than stopping at N |
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |

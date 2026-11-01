@@ -23,7 +23,10 @@ from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     wrap_vendor_error,
 )
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_kwargs,
+)
 from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
     JSONResponseMixin,
@@ -93,7 +96,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = time.perf_counter()
         try:
-            co = cohere.ClientV2(api_key=api_key)
+            co = cohere.ClientV2(api_key=api_key, **request_timeout_kwargs(agent_config))
             envelope = MessageBuilder.build(
                 "cohere", prompt_config, context_data, schema=schema, json_mode=True
             )
@@ -169,7 +172,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = time.perf_counter()
         try:
-            co = cohere.ClientV2(api_key=api_key)
+            co = cohere.ClientV2(api_key=api_key, **request_timeout_kwargs(agent_config))
             envelope = MessageBuilder.build("cohere", prompt_config, context_data, json_mode=False)
             messages = envelope.to_dicts()
             non_json_kwargs = {

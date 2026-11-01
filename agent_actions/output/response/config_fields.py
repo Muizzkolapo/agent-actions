@@ -42,6 +42,7 @@ SIMPLE_CONFIG_FIELDS = {
     "constraints": (),  # Default: empty tuple (immutable — no cross-agent mutation)
     # Retry configuration (transport-layer failure handling)
     "retry": None,  # Default: None (retry disabled unless configured)
+    "request_timeout": None,  # Default: None (each SDK's own per-request timeout)
     # Runtime-consumed fields (providers and managers read these from agent dict)
     "anthropic_version": None,
     "enable_prompt_caching": None,
