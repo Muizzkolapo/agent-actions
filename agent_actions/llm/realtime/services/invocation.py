@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Any
 
+from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES, wire_vendor
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.hitl.client import HitlClient
@@ -52,6 +53,22 @@ CLIENT_REGISTRY: dict[str, Any] = {
 
 def _resolve_client(model_vendor: str) -> Any:
     """Resolve provider client from registry, importing lazy entries on demand."""
+    if model_vendor not in CLIENT_REGISTRY:
+        # A declared endpoint: its client is built from the endpoint row, not registered.
+        try:
+            from agent_actions.llm.providers.openai.compatible import endpoint_client
+        except ImportError as err:
+            from agent_actions.errors import DependencyError
+
+            raise DependencyError(
+                f"{model_vendor} provider requires the 'openai' package",
+                context={
+                    "client_type": model_vendor,
+                    "package": "openai",
+                    "install_command": "uv pip install openai",
+                },
+            ) from err
+        return endpoint_client(model_vendor)
     entry = CLIENT_REGISTRY[model_vendor]
     if isinstance(entry, str):
         module_path, class_name = entry.split(":", 1)
@@ -115,7 +132,7 @@ class ClientInvocationService:
             ConfigurationError: If client is not supported
             DependencyError: If the provider's SDK package is not installed
         """
-        if model_vendor not in CLIENT_REGISTRY:
+        if model_vendor not in CLIENT_REGISTRY and project_endpoint(model_vendor) is None:
             from agent_actions.errors import ConfigurationError
 
             raise ConfigurationError(

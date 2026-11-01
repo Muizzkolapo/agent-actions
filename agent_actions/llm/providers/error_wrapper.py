@@ -15,6 +15,7 @@ import httpx
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMErrorEvent, RateLimitEvent
+from agent_actions.logging.filters import _redact_sensitive_data
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,9 @@ def wrap_vendor_error(
     """
     vendor = mapping.vendor_name
     context: dict[str, object] = {"vendor": vendor, "model": model_name}
+    # A server body can echo the request headers; masked by value and key shape only,
+    # since the key-name rules would mangle the server's own text ("api_key: expected").
+    text = _redact_sensitive_data(str(e))
 
     # --- Type-based rate-limit detection ---
     if mapping.rate_limit_types and isinstance(e, mapping.rate_limit_types):
@@ -120,7 +124,7 @@ def wrap_vendor_error(
                 request_id=request_id,
             )
         )
-        return RateLimitError(f"{vendor} rate limit: {e}", context=context, cause=e)
+        return RateLimitError(f"{vendor} rate limit: {text}", context=context, cause=e)
 
     # --- Type-based network-error detection ---
     if mapping.network_error_types and isinstance(e, mapping.network_error_types):
@@ -130,11 +134,11 @@ def wrap_vendor_error(
                 provider=vendor,
                 model=model_name,
                 error_type=error_type,
-                error_message=str(e),
+                error_message=text,
                 request_id=request_id,
             )
         )
-        return NetworkError(f"{vendor} network error: {e}", context=context, cause=e)
+        return NetworkError(f"{vendor} network error: {text}", context=context, cause=e)
 
     # --- Status-code-based classification (Cohere, Ollama HTTP) ---
     if mapping.status_code_error_types and isinstance(e, mapping.status_code_error_types):
@@ -155,7 +159,7 @@ def wrap_vendor_error(
                     request_id=request_id,
                 )
             )
-            return RateLimitError(f"{vendor} rate limit: {e}", context=context, cause=e)
+            return RateLimitError(f"{vendor} rate limit: {text}", context=context, cause=e)
 
         if status_code in (500, 502, 503, 504):
             fire_event(
@@ -163,12 +167,12 @@ def wrap_vendor_error(
                     provider=vendor,
                     model=model_name,
                     error_type=f"HTTP{status_code}",
-                    error_message=str(e),
+                    error_message=text,
                     request_id=request_id,
                 )
             )
             return NetworkError(
-                f"{vendor} server error ({status_code}): {e}", context=context, cause=e
+                f"{vendor} server error ({status_code}): {text}", context=context, cause=e
             )
 
         # Other status codes → VendorAPIError
@@ -177,11 +181,11 @@ def wrap_vendor_error(
                 provider=vendor,
                 model=model_name,
                 error_type=type(e).__name__,
-                error_message=str(e),
+                error_message=text,
                 request_id=request_id,
             )
         )
-        return VendorAPIError(f"{vendor} API error: {e}", context=context, cause=e)
+        return VendorAPIError(f"{vendor} API error: {text}", context=context, cause=e)
 
     # --- Transport failures and extra network types (Python builtins, httpx) ---
     if isinstance(e, TRANSPORT_ERRORS + mapping.extra_network_types):
@@ -190,11 +194,11 @@ def wrap_vendor_error(
                 provider=vendor,
                 model=model_name,
                 error_type=type(e).__name__,
-                error_message=str(e),
+                error_message=text,
                 request_id=request_id,
             )
         )
-        return NetworkError(f"{vendor} network error: {e}", context=context, cause=e)
+        return NetworkError(f"{vendor} network error: {text}", context=context, cause=e)
 
     # --- Catch-all base API error type ---
     if mapping.base_api_error_type and isinstance(e, mapping.base_api_error_type):
@@ -203,11 +207,11 @@ def wrap_vendor_error(
                 provider=vendor,
                 model=model_name,
                 error_type="APIError",
-                error_message=str(e),
+                error_message=text,
                 request_id=request_id,
             )
         )
-        return VendorAPIError(f"{vendor} API error: {e}", context=context, cause=e)
+        return VendorAPIError(f"{vendor} API error: {text}", context=context, cause=e)
 
     # Unknown exception type — return as-is for caller to handle
     return e

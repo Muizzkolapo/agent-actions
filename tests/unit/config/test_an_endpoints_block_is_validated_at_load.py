@@ -311,7 +311,25 @@ REFUSALS = [
     ),
     (
         "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, header: '' }\n",
-        "endpoints.lab-vllm.auth.header: must be a header name",
+        "endpoints.lab-vllm.auth.header: must be a header name: letters, digits and - _ .",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, header: 'X Api Key' }\n",
+        "endpoints.lab-vllm.auth.header: must be a header name: letters, digits and - _ .",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n"
+        "    headers: { 'X Trace': x }\n",
+        "endpoints.lab-vllm.headers.X Trace: must be a header name: letters, digits and - _ .",
+    ),
+    (
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n"
+        '    auth: { env: A, header: "api-key\\n" }\n',
+        "endpoints.lab-vllm.auth.header: must be a header name: letters, digits and - _ .",
+    ),
+    (
+        'endpoints:\n  "lab\\n":\n    url: http://gpu-box:8000/v1\n    auth: none\n',
+        "endpoints.lab\n: use a lowercase name of letters, digits, '-' and '_'",
     ),
     (
         "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n"

@@ -66,6 +66,11 @@ class OpenAIClient(BaseClient):
         return replace(_ERROR_MAPPING, vendor_name=cls.VENDOR)
 
     @classmethod
+    def _client_options(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        """Constructor kwargs for the SDK client; a declared endpoint adds headers and a timeout."""
+        return {"base_url": agent_config.get("base_url")}
+
+    @classmethod
     def call_json(
         cls,
         api_key: str | None,
@@ -76,7 +81,7 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, Any]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, base_url=agent_config.get("base_url"))
+        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "openai",
@@ -180,7 +185,7 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, str]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, base_url=agent_config.get("base_url"))
+        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]

@@ -29,6 +29,8 @@ _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _ENV_VAR_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _WHOLE_ENV_VAR = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 _CREDENTIAL_WORDS = ("authorization", "key", "token", "secret")
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")
+_HEADER_NAME_HINT = "must be a header name: letters, digits and - _ ."
 _CHAT_COMPLETIONS = "/chat/completions"
 _URL_HINT = f"give the base URL, for example http://gpu-box:8000/v1; agac adds {_CHAT_COMPLETIONS}"
 _ENV_HINT = "name the environment variable that holds the credential, for example AZURE_OPENAI_KEY"
@@ -78,7 +80,7 @@ class Endpoint(BaseModel):
     @property
     def url_env_var(self) -> str | None:
         """The variable a `${NAME}` url reads, or None for a literal url."""
-        match = _WHOLE_ENV_VAR.match(self.url)
+        match = _WHOLE_ENV_VAR.fullmatch(self.url)
         return match.group(1) if match else None
 
     def resolved_url(self, environ: Mapping[str, str] = os.environ) -> str:
@@ -120,7 +122,7 @@ def _parse_endpoint(name: str, settings: Any) -> Endpoint:
     key = f"endpoints.{name}"
     if name in builtin_vendor_names():
         _refuse(key, f"'{name}' is a built-in vendor; choose another endpoint name")
-    if not _NAME.match(name):
+    if not _NAME.fullmatch(name):
         _refuse(key, "use a lowercase name of letters, digits, '-' and '_'")
     if not isinstance(settings, Mapping):
         _refuse(key, "must be a mapping with url and auth")
@@ -136,6 +138,9 @@ def _parse_endpoint(name: str, settings: Any) -> Endpoint:
         _refuse_non_string_keys(f"{key}.headers", headers)
         if any(not header for header in headers):
             _refuse(f"{key}.headers", "a header name must not be empty")
+        for header in headers:
+            if not _HEADER_NAME.fullmatch(header):
+                _refuse(f"{key}.headers.{header}", _HEADER_NAME_HINT)
 
     fields = {**settings, "name": name, "auth": _parse_auth(f"{key}.auth", settings["auth"])}
     try:
@@ -156,7 +161,7 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
         _refuse(key, "write 'auth: none', or a mapping with env or command")
     _refuse_non_string_keys(key, raw)
     env, command = raw.get("env"), raw.get("command")
-    if env is not None and not (isinstance(env, str) and _ENV_VAR_NAME.match(env)):
+    if env is not None and not (isinstance(env, str) and _ENV_VAR_NAME.fullmatch(env)):
         _refuse(f"{key}.env", _ENV_HINT)
     if command is not None and not (
         isinstance(command, list) and command and all(isinstance(c, str) and c for c in command)
@@ -169,8 +174,8 @@ def _parse_auth(key: str, raw: Any) -> EndpointAuth | None:
 
     if (auth.env is None) == (auth.command is None):
         _refuse(key, "give exactly one of env or command, or write 'auth: none'")
-    if not auth.header.strip():
-        _refuse(f"{key}.header", "must be a header name")
+    if not _HEADER_NAME.fullmatch(auth.header):
+        _refuse(f"{key}.header", _HEADER_NAME_HINT)
     if auth.refresh_seconds is not None and auth.command is None:
         _refuse(key, "refresh_seconds applies to command auth only")
 
@@ -213,9 +218,13 @@ def _check_headers(key: str, endpoint: Endpoint) -> None:
         header_key = f"{key}.headers.{header}"
         if header.lower() == auth_header:
             _refuse(header_key, "this header is set by auth; remove it from headers")
-        looks_like_credential = any(word in header.lower() for word in _CREDENTIAL_WORDS)
-        if looks_like_credential and "${" not in value:
+        if looks_like_credential(header) and "${" not in value:
             _refuse(header_key, "write a credential as ${ENV_VAR}, not as a literal value")
+
+
+def looks_like_credential(header: str) -> bool:
+    """Whether a header name says it carries a credential."""
+    return any(word in header.lower() for word in _CREDENTIAL_WORDS)
 
 
 def _refuse_non_string_keys(key: str, mapping: Mapping[Any, Any]) -> None:

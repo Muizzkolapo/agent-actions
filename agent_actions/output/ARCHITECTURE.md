@@ -239,10 +239,14 @@ Both delegate to `PromptUtils.process_dispatch_in_text()` with `preserve_type_on
 │       (only if action doesn't explicitly override)           │
 │                                                              │
 │   4.  validate_vendor_exists()                               │
-│       → checks against VendorType enum                       │
+│       → checks against vendor_names(): types, profiles,      │
+│         and the project's declared endpoints                 │
 │                                                              │
-│   5.  validate_required_fields()                             │
-│       → model_vendor + model_name + api_key (LLM only)      │
+│   5.  validate_endpoint_action()                             │
+│       → no api_key/base_url written on an endpoint action    │
+│       validate_required_fields()                             │
+│       → model_vendor + model_name + api_key (LLM only;      │
+│         an endpoint action needs no api_key)                 │
 │                                                              │
 │   6.  process_schema_config()                                │
 │       → compiled schema passthrough OR template replacement  │

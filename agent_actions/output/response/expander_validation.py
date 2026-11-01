@@ -3,6 +3,7 @@
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
+from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import vendor_names
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, RUNTIME_BUS_NAMESPACES
@@ -77,6 +78,9 @@ def validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
         "model_name": agent.get("model_name"),
         "api_key": agent.get("api_key"),
     }
+    # A declared endpoint carries its own credential source.
+    if project_endpoint(str(agent.get("model_vendor") or "")) is not None:
+        del required_fields["api_key"]
     missing_fields = [field for field, value in required_fields.items() if not value]
     if missing_fields:
         field_display_names = {
@@ -99,6 +103,31 @@ def validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
                 ),
             },
         )
+
+
+def validate_endpoint_action(
+    action: dict[str, Any], agent: dict[str, Any], action_name: str
+) -> None:
+    """Refuse api_key or base_url written on an action that names a declared endpoint.
+
+    The action as written is checked, not the merged agent: a value inherited from the
+    workflow or project defaults is ignored for an endpoint, not refused.
+    """
+    vendor = str(agent.get("model_vendor") or "")
+    if project_endpoint(vendor) is None:
+        return
+    sources = {
+        "api_key": ("credential", f"endpoints.{vendor}.auth"),
+        "base_url": ("URL", f"endpoints.{vendor}.url"),
+    }
+    for key, (what, source) in sources.items():
+        if key in action:
+            raise ConfigValidationError(
+                key,
+                f"Action '{action_name}': endpoint '{vendor}' takes its {what} from {source}; "
+                f"remove {key} from the action",
+                context={"action": action_name, "vendor": vendor},
+            )
 
 
 def _declared_output_fields(agent: dict[str, Any]) -> set[str]:
