@@ -233,10 +233,10 @@ class WorkflowEventLogger:
         A failed one is reported as failed already, and one still waiting on a batch has
         not finished.
         """
-        executor = self.services.core.action_executor
-        backend = getattr(getattr(executor, "deps", None), "action_runner", None)
-        backend = getattr(backend, "storage_backend", None)
-        if backend is None:
+        executor = getattr(self.services.core, "action_executor", None)
+        runner = getattr(getattr(executor, "deps", None), "action_runner", None)
+        backend = getattr(runner, "storage_backend", None)
+        if executor is None or backend is None:
             return []
         state = self.services.core.state_manager
         finished = {*COMPLETED_STATUSES, ActionStatus.SKIPPED}
