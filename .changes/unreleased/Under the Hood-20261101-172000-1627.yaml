@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  Importing agent_actions.output.response.loader no longer sets the framework's logging up,
+  which turned agent_actions propagation off and cleared its handlers wherever that import
+  first ran. The test fixture also keeps caplog propagation on through any setup a command
+  run in-process makes.
+time: 2026-11-01T17:20:00Z
