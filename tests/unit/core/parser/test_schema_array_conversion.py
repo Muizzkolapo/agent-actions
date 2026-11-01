@@ -365,3 +365,25 @@ class TestRequiredFieldTypeHandling:
         }
         with pytest.raises(SchemaValidationError):
             _convert_json_schema_to_unified(schema)
+
+
+class TestItemsWithoutAType:
+    """An ``items`` with no ``type`` is not taken for an object (1611)."""
+
+    def test_items_with_no_type_and_no_properties_is_refused(self):
+        schema = {"name": "tags", "type": "array", "items": {"description": "a tag"}}
+
+        with pytest.raises(SchemaValidationError, match="'items' with no 'type'"):
+            compile_unified_schema(schema, "openai")
+
+    def test_items_with_properties_and_no_type_are_objects(self):
+        schema = {
+            "name": "facts",
+            "type": "array",
+            "items": {"properties": {"fact": {"type": "string"}}, "required": ["fact"]},
+        }
+
+        props = compile_unified_schema(schema, "openai")["schema"]["properties"]
+
+        assert props["facts"]["items"]["type"] == "object"
+        assert "fact" in props["facts"]["items"]["properties"]
