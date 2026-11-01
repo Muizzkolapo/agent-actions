@@ -76,7 +76,7 @@ Provider-specific errors are normalized into unified `RateLimitError` and `Netwo
 | Anthropic | Retried | Any HTTP 5xx retried, 529 (overloaded) included |
 | Gemini, Cohere, Ollama | Retried | HTTP 500, 502, 503, 504 retried |
 
-A status the table does not mark as retried is not retried.
+A status the table does not mark as retried is not retried. One exception: a [declared endpoint](../configuration/endpoints.md) with `auth.command` answers a 401 by running the command once more and retrying that call once, so an expired token is renewed; a second 401 fails the record.
 
 ## Best Practices
 

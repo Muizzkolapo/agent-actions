@@ -295,3 +295,35 @@ def test_a_server_error_that_echoes_the_credential_is_masked_everywhere(tmp_path
     ((disposition, reason),) = _dispositions(root, "on_keyed")
     assert disposition == "failed"
     assert SECRET not in reason
+
+
+def test_command_auth_runs_once_per_run_and_recovers_from_a_401(tmp_path, servers):
+    counter = tmp_path / "runs"
+    script = (
+        "import pathlib; "
+        f"p = pathlib.Path({str(counter)!r}); "
+        "n = len(p.read_text().splitlines()) + 1 if p.exists() else 1; "
+        "p.open('a').write('run\\n'); "
+        "print(f'cmd-token-number-{n}-abcdef')"
+    )
+    endpoints = f"""
+endpoints:
+  cmd:
+    url: ${{LAB_URL}}
+    auth:
+      command: [python3, -c, {json.dumps(script)}]
+"""
+    servers["lab"].statuses = [401]
+    root = _project(tmp_path, _action("on_cmd", "cmd", "local-7b"), endpoints=endpoints)
+    pages = [{"page_id": f"p{i}", "page_content": f"Page {i}."} for i in range(3)]
+    (root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "pages.json").write_text(
+        json.dumps(pages)
+    )
+
+    _run(root, _env(servers))
+
+    assert _dispositions(root, "on_cmd") == [("success", "")] * 3
+    assert len(counter.read_text().splitlines()) == 2
+    sent = [r["headers"]["authorization"] for r in servers["lab"].requests]
+    assert sent[0] == "Bearer cmd-token-number-1-abcdef"
+    assert sent[1:] == ["Bearer cmd-token-number-2-abcdef"] * 3

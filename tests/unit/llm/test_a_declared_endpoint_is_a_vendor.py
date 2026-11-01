@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib
 import logging
+import pathlib
 from typing import Any
 
 import pytest
@@ -613,3 +614,185 @@ class TestHeaderSafeValues:
         assert info.value.context["reason"] == (
             "endpoint 'lab' runs auth command 'python3', whose value holds a line break"
         )
+
+
+def _counting_command(
+    counter: pathlib.Path, prefix: str = "token", sleep: float = 0.0
+) -> list[str]:
+    """A command that appends one line per run and prints a token numbered by that run."""
+    script = (
+        "import pathlib, time; "
+        f"time.sleep({sleep}); p = pathlib.Path({str(counter)!r}); "
+        "n = len(p.read_text().splitlines()) + 1 if p.exists() else 1; "
+        "p.open('a').write('run\\n'); "
+        f"print(f'{prefix}-number-{{n}}-abcdef')"
+    )
+    return ["python3", "-c", script]
+
+
+def _runs(counter: pathlib.Path) -> int:
+    return len(counter.read_text().splitlines()) if counter.exists() else 0
+
+
+class TestCommandAuthRuntime:
+    def test_twenty_parallel_records_run_the_command_once(self, compatible, tmp_path):
+        from concurrent.futures import ThreadPoolExecutor
+
+        counter = tmp_path / "runs"
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"command": _counting_command(counter, sleep=0.3)})
+            client = compatible.endpoint_client("lab")
+            with ThreadPoolExecutor(max_workers=20) as pool:
+                results = list(
+                    pool.map(lambda _: client.invoke(_agent_config(), "C", {}, SCHEMA), range(20))
+                )
+
+        assert len(results) == 20
+        assert _runs(counter) == 1
+        sent = {r["headers"]["authorization"] for r in server.requests}
+        assert sent == {"Bearer token-number-1-abcdef"}
+        assert len(server.requests) == 20
+
+    def test_a_401_with_command_auth_refreshes_once_then_succeeds(self, compatible, tmp_path):
+        counter = tmp_path / "runs"
+        with FakeEndpoint(statuses=[401]) as server:
+            _declare_full(server.base_url, auth={"command": _counting_command(counter)})
+
+            records = compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert records == [{"label": "label from local-7b", "score": 1}]
+        assert _runs(counter) == 2
+        assert [r["headers"]["authorization"] for r in server.requests] == [
+            "Bearer token-number-1-abcdef",
+            "Bearer token-number-2-abcdef",
+        ]
+
+    def test_a_second_401_after_the_refresh_fails_the_call(self, compatible, tmp_path):
+        from agent_actions.errors import VendorAPIError
+
+        counter = tmp_path / "runs"
+        with FakeEndpoint(statuses=[401, 401]) as server:
+            _declare_full(server.base_url, auth={"command": _counting_command(counter)})
+
+            with pytest.raises(VendorAPIError) as info:
+                compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert "401" in str(info.value)
+        assert _runs(counter) == 2
+        assert len(server.requests) == 2
+
+    def test_a_401_with_env_auth_is_not_retried(self, compatible, monkeypatch):
+        from agent_actions.errors import VendorAPIError
+
+        monkeypatch.setenv("LAB_KEY", SECRET)
+        with FakeEndpoint(statuses=[401]) as server:
+            _declare_full(server.base_url, auth={"env": "LAB_KEY"})
+
+            with pytest.raises(VendorAPIError):
+                compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert len(server.requests) == 1
+
+    def test_each_endpoint_refreshes_on_its_own_clock(self, compatible, tmp_path, monkeypatch):
+        counter_a, counter_b = tmp_path / "a", tmp_path / "b"
+        with FakeEndpoint() as server:
+            load_project_endpoints(
+                {
+                    "endpoints": {
+                        "fast": {
+                            "url": server.base_url,
+                            "auth": {
+                                "command": _counting_command(counter_a, "a"),
+                                "refresh_seconds": 60,
+                            },
+                        },
+                        "slow": {
+                            "url": server.base_url,
+                            "auth": {
+                                "command": _counting_command(counter_b, "b"),
+                                "refresh_seconds": 1000,
+                            },
+                        },
+                    }
+                }
+            )
+            fast, slow = compatible.endpoint_client("fast"), compatible.endpoint_client("slow")
+            now = [1000.0]
+            monkeypatch.setattr(compatible.time, "monotonic", lambda: now[0])
+
+            fast.invoke(_agent_config(model_vendor="fast"), "C", {}, SCHEMA)
+            slow.invoke(_agent_config(model_vendor="slow"), "C", {}, SCHEMA)
+            now[0] += 61
+            fast.invoke(_agent_config(model_vendor="fast"), "C", {}, SCHEMA)
+            slow.invoke(_agent_config(model_vendor="slow"), "C", {}, SCHEMA)
+
+        assert _runs(counter_a) == 2
+        assert _runs(counter_b) == 1
+        sent = [r["headers"]["authorization"] for r in server.requests]
+        assert sent == [
+            "Bearer a-number-1-abcdef",
+            "Bearer b-number-1-abcdef",
+            "Bearer a-number-2-abcdef",
+            "Bearer b-number-1-abcdef",
+        ]
+
+    def test_the_command_runs_in_the_project_root(self, compatible, tmp_path, monkeypatch):
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        (tmp_path / "sub" / "deep").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path / "sub" / "deep")
+        where = tmp_path / "where"
+        script = f"import os, pathlib; pathlib.Path({str(where)!r}).write_text(os.getcwd()); print('cwd-token-abcdef')"
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"command": ["python3", "-c", script]})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert pathlib.Path(where.read_text()).resolve() == tmp_path.resolve()
+
+    def test_twenty_parallel_refusals_renew_the_token_once(self, compatible, tmp_path):
+        from concurrent.futures import ThreadPoolExecutor
+
+        counter = tmp_path / "runs"
+        with FakeEndpoint() as server:
+            # Every record sends the first token, and all twenty are refused at once.
+            server.refuse_credential("Bearer token-number-1-abcdef", together=20)
+            _declare_full(server.base_url, auth={"command": _counting_command(counter, sleep=0.2)})
+            client = compatible.endpoint_client("lab")
+            with ThreadPoolExecutor(max_workers=20) as pool:
+                results = list(
+                    pool.map(lambda _: client.invoke(_agent_config(), "C", {}, SCHEMA), range(20))
+                )
+
+        assert len(results) == 20
+        assert _runs(counter) == 2
+        sent = [r["headers"]["authorization"] for r in server.requests]
+        assert len(sent) == 40
+        assert sent.count("Bearer token-number-1-abcdef") == 20
+        assert sent.count("Bearer token-number-2-abcdef") == 20
+
+    def test_an_error_other_than_401_does_not_renew_the_token(self, compatible, tmp_path):
+        from agent_actions.errors import VendorAPIError
+
+        counter = tmp_path / "runs"
+        with FakeEndpoint(statuses=[403]) as server:
+            _declare_full(server.base_url, auth={"command": _counting_command(counter)})
+
+            with pytest.raises(VendorAPIError):
+                compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert _runs(counter) == 1
+        assert len(server.requests) == 1
+
+    def test_the_command_runs_in_the_nearest_project_root(self, compatible, tmp_path, monkeypatch):
+        """A project installed inside another (agac example) runs its command from its own root."""
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        inner = tmp_path / "examples" / "quiz"
+        (inner / "agent_workflow" / "wf").mkdir(parents=True)
+        (inner / "agent_actions.yml").write_text("schema_path: schema\n")
+        monkeypatch.chdir(inner / "agent_workflow" / "wf")
+        where = tmp_path / "where"
+        script = f"import os, pathlib; pathlib.Path({str(where)!r}).write_text(os.getcwd()); print('cwd-token-abcdef')"
+        with FakeEndpoint() as server:
+            _declare_full(server.base_url, auth={"command": ["python3", "-c", script]})
+            compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
+
+        assert pathlib.Path(where.read_text()).resolve() == inner.resolve()

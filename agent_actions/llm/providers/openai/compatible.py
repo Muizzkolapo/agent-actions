@@ -14,12 +14,14 @@ import logging
 import os
 import re
 import subprocess
+import threading
 import time
+from pathlib import Path
 from typing import Any, ClassVar, NoReturn
 
 from openai import Omit
 
-from agent_actions.errors import ConfigurationError, ConfigValidationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError, VendorAPIError
 from agent_actions.llm.config.endpoints import (
     AUTHORIZATION_HEADER,
     Endpoint,
@@ -34,6 +36,7 @@ from agent_actions.llm.config.runtime_profiles import (
 from agent_actions.llm.providers.openai.client import OpenAIClient
 from agent_actions.logging.filters import register_secret
 from agent_actions.utils.constants import JSON_MODE_KEY
+from agent_actions.utils.project_root import find_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +108,11 @@ ENDPOINT_CAPABILITIES: dict[str, Any] = {
 _OMIT = Omit()
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _COMMAND_TIMEOUT_SECONDS = 30
-_COMMAND_SECRETS: dict[tuple[str, tuple[str, ...]], tuple[str, float]] = {}
+_CommandKey = tuple[str, tuple[str, ...]]
+_COMMAND_SECRETS: dict[_CommandKey, tuple[str, float]] = {}
+# One lock per command, so parallel records wait for one run instead of each running it.
+_COMMAND_LOCKS: dict[_CommandKey, threading.Lock] = {}
+_COMMAND_LOCKS_GUARD = threading.Lock()
 
 
 class EndpointClient(OpenAIClient):
@@ -164,7 +171,17 @@ class EndpointClient(OpenAIClient):
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
-        records = super().call_json(api_key, agent_config, prompt_config, context_data, schema)
+        auth = cls.ENDPOINT.auth
+        # The token this call sends, so a 401 renews that one and not a sibling's renewal.
+        sent = _secret(cls.ENDPOINT) if auth is not None and auth.command is not None else None
+        try:
+            records = super().call_json(api_key, agent_config, prompt_config, context_data, schema)
+        except VendorAPIError as exc:
+            if sent is None or auth is None or auth.command is None or not _is_unauthorized(exc):
+                raise
+            # An expired token: run the command once more, then let a second 401 stand.
+            _command_secret(cls.ENDPOINT, auth.command, stale=sent)
+            records = super().call_json(api_key, agent_config, prompt_config, context_data, schema)
         if schema is None or any(
             isinstance(record, dict) and "_parse_error" in record for record in records
         ):
@@ -241,17 +258,43 @@ def _secret(endpoint: Endpoint) -> str:
     return _command_secret(endpoint, auth.command)
 
 
-def _command_secret(endpoint: Endpoint, command: list[str]) -> str:
-    """The command's output, run again once refresh_seconds have passed since the last run."""
+def _is_unauthorized(exc: VendorAPIError) -> bool:
+    return getattr(exc.__cause__, "status_code", None) == 401
+
+
+def _command_secret(endpoint: Endpoint, command: list[str], stale: str | None = None) -> str:
+    """The command's output, run again once refresh_seconds have passed or *stale* was refused.
+
+    Under one lock per command: parallel records wait for one run, and a record that
+    found its token refused takes a token another record has already renewed.
+    """
     assert endpoint.auth is not None
     key = (endpoint.name, tuple(command))
-    cached = _COMMAND_SECRETS.get(key)
-    refresh_after = endpoint.auth.refresh_seconds or 0
-    if cached is not None and time.monotonic() - cached[1] < refresh_after:
-        return cached[0]
+    with _COMMAND_LOCKS_GUARD:
+        lock = _COMMAND_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        cached = _COMMAND_SECRETS.get(key)
+        refresh_after = endpoint.auth.refresh_seconds or 0
+        if (
+            cached is not None
+            and cached[0] != stale
+            and time.monotonic() - cached[1] < refresh_after
+        ):
+            return cached[0]
+        return _run_command(endpoint, command, key)
+
+
+def _run_command(endpoint: Endpoint, command: list[str], key: _CommandKey) -> str:
+    # The same root `agac run` resolves (the nearest agent_actions.yml), not the outermost.
+    root = find_project_root() or Path.cwd()
     try:
         completed = subprocess.run(  # noqa: S603 — argv from the project config, no shell
-            command, capture_output=True, text=True, timeout=_COMMAND_TIMEOUT_SECONDS, check=False
+            command,
+            capture_output=True,
+            text=True,
+            timeout=_COMMAND_TIMEOUT_SECONDS,
+            check=False,
+            cwd=root,
         )
     except FileNotFoundError:
         _refuse(endpoint, f"auth command '{command[0]}' is not on PATH")
