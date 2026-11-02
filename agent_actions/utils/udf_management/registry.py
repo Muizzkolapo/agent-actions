@@ -80,6 +80,26 @@ UDF_REGISTRY: dict[str, dict[str, Any]] = {}
 # Track which module names contributed UDFs (for sys.modules cleanup on clear)
 _registered_modules: set[str] = set()
 
+# Tool files discovery skipped because they failed to import: file -> error.
+_skipped_tool_files: dict[str, str] = {}
+
+
+def record_skipped_tool_files(files: dict[str, str]) -> None:
+    with _registry_lock:
+        _skipped_tool_files.update(files)
+
+
+def _not_found(func_name: str) -> FunctionNotFoundError:
+    available = sorted(meta["name"] for meta in UDF_REGISTRY.values())
+    context: dict[str, Any] = {"function_name": func_name, "available_functions": available}
+    message = f"Function '{func_name}' not found"
+    if _skipped_tool_files:
+        context["skipped_tool_files"] = dict(_skipped_tool_files)
+        message += ". These tool files failed to import and were skipped: " + "; ".join(
+            f"{file} ({error})" for file, error in sorted(_skipped_tool_files.items())
+        )
+    return FunctionNotFoundError(message, context=context)
+
 
 def udf_tool(
     func: Callable | None = None,
@@ -142,11 +162,7 @@ def get_udf(func_name: str) -> Callable:
     with _registry_lock:
         func_name_lower = func_name.lower()
         if func_name_lower not in UDF_REGISTRY:
-            available = sorted([meta["name"] for meta in UDF_REGISTRY.values()])
-            raise FunctionNotFoundError(
-                f"Function '{func_name}' not found",
-                context={"function_name": func_name, "available_functions": available},
-            )
+            raise _not_found(func_name)
         return cast(Callable, UDF_REGISTRY[func_name_lower]["function"])
 
 
@@ -159,11 +175,7 @@ def get_udf_metadata(func_name: str) -> dict[str, Any]:
     with _registry_lock:
         func_name_lower = func_name.lower()
         if func_name_lower not in UDF_REGISTRY:
-            available = sorted([meta["name"] for meta in UDF_REGISTRY.values()])
-            raise FunctionNotFoundError(
-                f"Function '{func_name}' not found",
-                context={"function_name": func_name, "available_functions": available},
-            )
+            raise _not_found(func_name)
         return UDF_REGISTRY[func_name_lower].copy()
 
 
@@ -191,3 +203,4 @@ def clear_registry() -> None:
             # Discovery files a tool module under this prefixed name too.
             sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
         _registered_modules.clear()
+        _skipped_tool_files.clear()
