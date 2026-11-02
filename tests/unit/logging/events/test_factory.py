@@ -126,6 +126,7 @@ class TestLoggerFactoryLoggingBridge:
         logger = logging.getLogger("agent_actions")
         assert len(logger.handlers) >= 1
 
+    @pytest.mark.real_logging_setup
     def test_logging_bridge_propagate_disabled(self):
         """Test that propagation is disabled to avoid duplicates."""
         LoggerFactory.initialize()

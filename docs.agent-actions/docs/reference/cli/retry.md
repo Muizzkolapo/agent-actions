@@ -296,6 +296,22 @@ than being asked again. Below a FILE tool that rewrote the file, every record
 whose row the tool changed is asked again, since what the reviewer decided on
 is gone.
 
+## A retry after a config edit
+
+A retry answers the records it names under the config as it is now, and leaves every
+other record's answer as it was. So when an action it re-runs was
+[edited](./run#when-you-edit-the-workflow) since it completed, the retry does not answer
+everything under the edit, and says so:
+
+```
+extract_facts was edited since it completed (model). A retry answers only the records it
+names and leaves the rest as they are: run again with --rerun extract_facts to answer every
+record under the edit
+```
+
+The action keeps the stamp of its earlier answers, so each later `agac run` names the edit
+again until `agac run --rerun extract_facts` answers every record under it.
+
 ## An action that failed as a whole
 
 Some failures belong to an action rather than to any record of it: its input could
@@ -469,7 +485,7 @@ the file it reads them from. `--dry-run` lists them too.
 
 ```
 The interrupted retry's snapshot replaces 1 row(s) changed since it was taken, each shown as live then restored:
-  label / 9873aae5-ffca-5e5e-bf5c-daee1ed053b6: filtered (excluded_by_hand) -> failed (Error executing UDF 'mp_label': mp_label refuses row-bad)
+  label / 9873aae5-ffca-5e5e-bf5c-daee1ed053b6: filtered (excluded_by_hand) -> failed (Error executing UDF 'mp_label': ValueError: mp_label refuses row-bad)
 To keep a live value, edit its entry in .../agent_io/store/my_workflow/_retry_manifest.json before you retry.
 ```
 

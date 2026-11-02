@@ -260,15 +260,6 @@ def test_file_mode_hitl_sets_identity_source_mapping():
 @pytest.mark.parametrize(
     ("n_records", "payload", "match"),
     [
-        pytest.param(
-            3,
-            {
-                "hitl_status": "timeout",
-                "record_reviews": [{"hitl_status": "approved"}, None, None],
-            },
-            "1/3 records reviewed",
-            id="timeout_reports_record_count",
-        ),
         # The server emits "error" when it cannot bind a port; applying it as a verdict
         # stamps every record reviewed while downstream guards discard the dataset.
         pytest.param(
@@ -320,6 +311,36 @@ def test_file_mode_hitl_non_decision_fails_the_action(n_records, payload, match)
         pytest.raises(AgentActionsError, match=match),
     ):
         HITLStrategy().invoke(input_data, context)
+
+
+def test_file_mode_hitl_timeout_fails_each_record_naming_the_file(caplog):
+    """Raised, the walk lost the file unnamed and the action read as cleanly completed."""
+    input_data = [{"source_guid": f"sg-{i}", "content": {"id": i}} for i in range(1, 4)]
+    context = ProcessingContext(
+        agent_config={"kind": "hitl", "granularity": "file"},
+        agent_name="review_data",
+        source_data=input_data,
+        target_relative_path="b.json",
+    )
+    payload = {
+        "hitl_status": "timeout",
+        "record_reviews": [{"hitl_status": "approved"}, None, None],
+    }
+
+    with (
+        patch(
+            "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+            return_value=(payload, True),
+        ),
+        caplog.at_level(logging.WARNING, logger="agent_actions.processing.strategies.hitl"),
+    ):
+        results = HITLStrategy().invoke(input_data, context)
+
+    assert [r.status for r in results] == [ProcessingStatus.FAILED] * 3
+    assert [r.source_guid for r in results] == ["sg-1", "sg-2", "sg-3"]
+    assert [r.input_record for r in results] == input_data
+    assert all("1/3 records reviewed) in b.json" in r.error for r in results)
+    assert "b.json left unreviewed" in caplog.text
 
 
 def test_file_mode_hitl_rejected_file_decision_still_succeeds():

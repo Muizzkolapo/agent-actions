@@ -1,0 +1,5 @@
+kind: Bug Fix
+body: >-
+  A tool's failure names the exception type with its message, as "Error executing UDF
+  'lookup': KeyError: 'no_such_namespace'", where a KeyError used to show only the key.
+time: 2026-11-01T23:05:00Z

@@ -1,0 +1,14 @@
+kind: Bug Fix
+body: >-
+  A `kind: hitl` action with several input files no longer stalls on a review nobody
+  can see. The review page sent a shutdown 1.5s after a submit, which reached the next
+  file's server on the same port and marked that file timed out unseen, and the tab
+  then said "Complete" while the file after it waited out its whole timeout. Each
+  file's page now carries its review session: a request from a page served for
+  another file is refused (409) and changes nothing. After a submit or a timeout the
+  tab loads the next file as soon as its server is up, and each server releases its
+  port before the next one starts. A file whose review times out now has its records
+  marked failed, with a warning naming the file, so the action ends completed with
+  failures (or failed) instead of cleanly completed, and `agac retry` reopens that
+  file's review with the decisions already made.
+time: 2026-11-01T20:00:00Z

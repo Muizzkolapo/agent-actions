@@ -978,12 +978,21 @@ HitlClient.invoke()
      │  GET  /              → approval UI (HTML) │
      │  GET  /api/context   → record data + fields│
      │  GET  /api/review-state → review progress  │
+     │  GET  /api/session   → this server's session│
      │  POST /api/review-record → per-record decision│
      │  POST /api/approve   → approve (single)    │
      │  POST /api/reject    → reject (single)     │
      │  POST /api/submit    → submit all reviews  │
      │  POST /api/shutdown  → manual shutdown      │
      └──────────────────────────────────────────┘
+
+Sessions (one server per input file, same port):
+  The page carries its server's session token and sends it as X-HITL-Session
+  on every POST. A POST with another session's token is refused (409,
+  stale_session) and changes nothing; /api/shutdown requires the token.
+  After a submit the page polls /api/session and reloads once a new session
+  is up, so one tab follows the action from file to file. start_and_wait
+  closes its socket before returning so the next file binds the same port.
 
 Security:
   - Loopback-only bind (127.0.0.1) — no remote access
@@ -1004,7 +1013,8 @@ Record depth:
 
 Timeout:
   No response within timeout → hitl_status: "timeout"
-  Partial reviews are persisted → next run resumes where left off
+  HITLStrategy fails each record of that file (completed_with_failures)
+  Partial reviews are persisted → `agac retry` resumes where left off
 ```
 
 ---

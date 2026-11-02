@@ -2,7 +2,8 @@
 
 Each block is loaded as `agac run` loads it and put through the pre-flight it runs.
 Only what a block leaves to its author is filled in: an intent, a prompt, a tool's
-impl, and a schema whose fields nothing in the block reads. A HITL action is loaded
+impl and a function registered under it (and under a UDF guard's name), and a schema
+whose fields nothing in the block reads. A HITL action is loaded
 as shown, `hitl:` settings included. A block that names an action it does not show continues
 a workflow: an action an earlier block of the same page shows is that action, wired
 as shown, and any other stands in with no schema, so any field of it may be read. A
@@ -18,7 +19,9 @@ from typing import Any
 import pytest
 import yaml
 
+from agent_actions.input.loaders.udf import guard_udf_name
 from agent_actions.services.workflow_inspector import WorkflowInspector
+from agent_actions.utils.udf_management.registry import udf_tool
 
 _SKILL = Path(__file__).resolve().parents[3] / "agent_actions" / "skills" / "agac-agent-skills"
 _FENCE = re.compile(r"^```yaml\n(.*?)^```", re.S | re.M)
@@ -113,6 +116,19 @@ def _borrowed(action: dict[str, Any]) -> dict[str, Any]:
     return _stand_in(action["name"], action.get("dependencies") or [], observe)
 
 
+def _stand_in_udfs(actions: list[dict[str, Any]]) -> None:
+    """Register a function under each tool and guard UDF name, as the author would write one."""
+    names = {a["impl"] for a in actions if a.get("kind") == "tool"}
+    names |= {name for a in actions if (name := guard_udf_name(a.get("guard")))}
+    for name in names:
+
+        def stand_in(data: Any) -> Any:
+            return data
+
+        stand_in.__name__ = name
+        udf_tool()(stand_in)
+
+
 def _project(root: Path, block: list[dict[str, Any]], earlier: dict[str, dict[str, Any]]) -> None:
     workflow = root / "agent_workflow" / "snippet"
     (workflow / "agent_config").mkdir(parents=True)
@@ -133,6 +149,7 @@ def _project(root: Path, block: list[dict[str, Any]], earlier: dict[str, dict[st
         },
         "actions": _upstream(block, earlier) + [_authored(a) for a in block],
     }
+    _stand_in_udfs(config["actions"])
     (workflow / "agent_config" / "snippet.yml").write_text(yaml.safe_dump(config, sort_keys=False))
 
 

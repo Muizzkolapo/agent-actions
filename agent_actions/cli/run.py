@@ -269,8 +269,7 @@ def run(
     verify_keys: bool = False,
     project_root: Path | None = None,
 ) -> None:
-    """
-    Run agents with a specified agent configuration.
+    """Run agents with a specified agent configuration.
 
     \b
     Examples:

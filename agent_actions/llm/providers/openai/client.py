@@ -23,7 +23,10 @@ from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUs
 from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_kwargs,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -116,6 +119,8 @@ class OpenAIClient(BaseClient):
                 agent_config,
                 extra_params=("frequency_penalty", "presence_penalty"),
             ),
+            # Per request, so it outranks a declared endpoint's client-wide timeout.
+            **request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()
@@ -208,6 +213,8 @@ class OpenAIClient(BaseClient):
                 agent_config,
                 extra_params=("frequency_penalty", "presence_penalty"),
             ),
+            # Per request, so it outranks a declared endpoint's client-wide timeout.
+            **request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()
