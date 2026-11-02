@@ -1,16 +1,11 @@
-"""A run resumed beside a file stored before keeps what the interrupted run answered (1273).
+"""A run resumed beside a file stored before keeps what the interrupted run answered.
 
-An action edited after it completed is run again with ``--rerun``, which answers part of a
-file and is stopped. Each record it answered has a checkpoint row beside the file stored before
-the edit, and the run after that kept the record's `success` but asked the model again:
-the stored row is older than the answer and the checkpoint row had not been enriched, so
-neither was carried. Every record the stopped run answered was paid for twice.
-
-The checkpoint row is now finished as the answer it was, enriched and collected with the
-run's own, in place of the stored row. The row stored before the edit is never carried.
-
-Every run is an `agac run` through the CLI, executor, store and the action's own tool or
-the mock provider. Only the interrupt is stood in for.
+An action edited after it completed is run with ``--rerun``, answers part of a file and is
+stopped, leaving a checkpoint row per answered record beside the file stored before the
+edit. The stored row is older than the answer, so the next run finishes each checkpoint
+row as the answer it was, enriched and collected with the run's own, and no record is
+paid for twice; the row stored before the edit is never carried. Only the interrupt is
+stood in for.
 """
 
 import csv

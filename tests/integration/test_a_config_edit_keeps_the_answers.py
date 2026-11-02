@@ -1,16 +1,11 @@
 """A config edit keeps the answers an action already holds.
 
-An edit to an action's model, prompt, schema, guard, context scope or dependencies used to
-reset it and every action reading it, so the next run answered every record again. A model
-swapped partway through a long run threw that run away. Now the answers stand: records not
-yet answered are answered under the edit, a warning names what changed, each prompt trace
-row records the config it was answered under, and ``--rerun <action>`` answers the action
-and its readers again when that is what the user wants.
-
-`recap` reads one field of `stage_items` and writes what it saw; `after_recap` reads
-`recap`; `bystander` reads `stage_items` and nothing the edits touch. Each tool writes a
-line to `calls.log` per record, so a test sees which actions ran. Every run is its own
-`agac` process. Only the fault is stood in for: a tool raising for a named item.
+After an edit to an action's model, prompt, schema, guard, context scope or dependencies,
+the answers stand, so a model swapped partway through a long run loses nothing: records
+not yet answered are answered under the edit, a warning names what changed, each prompt
+trace row records the config it was answered under, and ``--rerun <action>`` answers the
+action and its readers again. `bystander` reads nothing the edits touch; each tool logs a
+line per record to `calls.log`, so a test sees which actions ran.
 """
 
 import json

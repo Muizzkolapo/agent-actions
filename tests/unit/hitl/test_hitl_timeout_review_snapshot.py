@@ -1,6 +1,6 @@
 """Timeout responses must carry the partial per-record review snapshot."""
 
-from agent_actions.llm.providers.hitl.server import HitlServer
+from agent_actions.llm.providers.hitl.server import SESSION_HEADER, HitlServer
 
 
 def _server():
@@ -38,7 +38,7 @@ def test_shutdown_timeout_includes_partial_reviews():
     )
     assert resp.status_code == 200
 
-    resp = client.post("/api/shutdown")
+    resp = client.post("/api/shutdown", headers={SESSION_HEADER: server.session_id})
     assert resp.status_code == 200
 
     assert server.response["hitl_status"] == "timeout"
