@@ -30,6 +30,10 @@ _SENSITIVE_KEY_PATTERN = re.compile(
 )
 _REDACTED = "***"
 
+# Each server's pages send its token back, so a tab left open on an earlier file
+# cannot end or answer the session of the file served after it on the same port.
+SESSION_HEADER = "X-HITL-Session"
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +68,7 @@ class HitlServer:
         self._server: Any = None
         self._lock = threading.Lock()
         self._active_port = port  # Updated when an available port is found
+        self.session_id = secrets.token_urlsafe(16)
         if self.state_file:
             self._load_state_from_disk()
         self.app = self._create_app()
@@ -180,7 +185,9 @@ class HitlServer:
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             return response
 
+        app.before_request(self._refuse_another_session)
         app.add_url_rule("/", "index", self._handle_index)
+        app.add_url_rule("/api/session", "session", self._handle_session)
         app.add_url_rule("/api/context", "get_context", self._handle_get_context)
         app.add_url_rule("/api/review-state", "review_state", self._handle_review_state)
         app.add_url_rule(
@@ -203,6 +210,35 @@ class HitlServer:
             metadata_keys=json.dumps(sorted(METADATA_KEYS)),
             rejection_reasons=json.dumps(self.rejection_reasons),
             hitl_timeout=self.timeout,
+            hitl_session=self.session_id,
+        )
+
+    def _handle_session(self):
+        return jsonify({"session": self.session_id})
+
+    def _refuse_another_session(self):
+        """Refuse a write carrying another session's token.
+
+        A write without a token is a client other than the page and is let through,
+        except a shutdown: it ends the session unreviewed, so only this session's
+        page may send it.
+        """
+        if request.method != "POST":
+            return None
+        sent = request.headers.get(SESSION_HEADER)
+        if sent == self.session_id or (sent is None and request.endpoint != "shutdown"):
+            return None
+        logger.info("Ignored %s from a page of another HITL review session", request.path)
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "stale_session": True,
+                    "error": "This page belongs to another review session. "
+                    "Reload to review the file served now.",
+                }
+            ),
+            409,
         )
 
     def _handle_get_context(self):
@@ -542,7 +578,7 @@ class HitlServer:
             logger.warning("HITL approval timeout after %ds", self.timeout)
             self._make_terminal_response("timeout")
 
-        self._shutdown_server()
+        self._close_server(server_thread)
         assert self.response is not None
         return self.response
 
@@ -563,6 +599,19 @@ class HitlServer:
         server = self._server
         if server is not None:
             threading.Thread(target=server.shutdown, daemon=True).start()
+
+    def _close_server(self, server_thread: threading.Thread) -> None:
+        """Stop serving and release the port before returning.
+
+        The next file's server binds the same port, where the reviewer's tab
+        looks for it; a socket still open would push it to the next port.
+        """
+        server = self._server
+        if server is None:
+            return
+        server.shutdown()
+        server_thread.join(timeout=5)
+        server.server_close()
 
     def _find_available_port(self) -> int:
         """Find available port, trying sequential ports on failure.
