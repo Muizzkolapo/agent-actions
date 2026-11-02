@@ -840,6 +840,8 @@ Stamped beside it, each compared on its own (_edits_since):
     context_scope_hash   (_compute_context_scope_hash: observe/passthrough/
                           drop as sets, seed as written)
     dependencies_hash    (_compute_dependencies_hash: in declared order)
+    generation_hash      (_compute_generation_hash: the GENERATION_PARAMS an
+                          LLM action sends; "" for tool and hitl)
 
 Never add a key to _compute_action_config_hash: every stored digest would
 change and every completed action of every workflow would be named as edited.

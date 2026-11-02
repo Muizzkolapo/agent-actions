@@ -105,7 +105,9 @@ the erasure a limit exists to avoid.
 
 An edit to an action's config does not re-run anything. That covers its model
 (`model_name`, `model_vendor`, in the action or in `defaults`), prompt, schema, guard,
-`context_scope` and `dependencies`. The records the action already answered keep their
+`context_scope`, `dependencies` and the generation settings an LLM action sends
+(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty`,
+in the action, in `defaults` or in `default_agent_config`). The records the action already answered keep their
 answers, and so do the actions that read them. Records it has not answered yet are answered
 under the edit. So you can switch the model of a long run partway through, and nothing it
 already paid for is asked again.

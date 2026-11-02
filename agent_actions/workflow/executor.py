@@ -24,6 +24,7 @@ from agent_actions.errors import (
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
+from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
@@ -140,11 +141,23 @@ def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
     return _digest(dependencies)
 
 
-# What an action reads, each stamped under its own key and named by its label when
-# a reset is logged.
+def _compute_generation_hash(action_config: ActionConfigDict) -> str:
+    """A digest of the generation settings sent with each request; empty for a non-LLM action.
+
+    A tool or hitl action inherits the workflow's settings without sending them.
+    """
+    if (action_config.get("kind") or DEFAULT_ACTION_KIND) != DEFAULT_ACTION_KIND:
+        return ""
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    return _digest({key: cfg[key] for key in GENERATION_PARAMS if cfg.get(key) is not None})
+
+
+# What an action reads and how it is asked, each stamped under its own key and named
+# by its label when an edit is logged.
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str]], ...] = (
     ("context_scope_hash", "context scope", _compute_context_scope_hash),
     ("dependencies_hash", "dependencies", _compute_dependencies_hash),
+    ("generation_hash", "generation settings", _compute_generation_hash),
 )
 
 
@@ -173,6 +186,7 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "config_hash",
         "context_scope_hash",
         "dependencies_hash",
+        "generation_hash",
         "records_processed",
         "truncated",
         "max_records",

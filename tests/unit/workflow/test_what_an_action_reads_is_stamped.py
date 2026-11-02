@@ -10,6 +10,7 @@ from agent_actions.workflow.executor import (
     _compute_action_config_hash,
     _compute_context_scope_hash,
     _compute_dependencies_hash,
+    _compute_generation_hash,
     _edits_since,
     edits_since_its_work_began,
 )
@@ -111,3 +112,34 @@ class TestEditsSince:
         assert edits_since_its_work_began(details, edited) == ["context scope"]
         assert edits_since_its_work_began(details, CONFIG) == []
         assert edits_since_its_work_began({}, edited) is None
+
+
+class TestTheGenerationDigest:
+    """Generation settings are stamped beside config_hash (1601)."""
+
+    def test_each_setting_a_client_sends_counts(self):
+        from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
+
+        base = _compute_generation_hash(CONFIG)
+        for key in GENERATION_PARAMS:
+            assert _compute_generation_hash({**CONFIG, key: 1}) != base, key
+
+    def test_an_unset_setting_is_no_setting(self):
+        assert _compute_generation_hash({**CONFIG, "temperature": None}) == (
+            _compute_generation_hash(CONFIG)
+        )
+
+    def test_a_non_llm_action_sends_none(self):
+        for kind in ("tool", "hitl"):
+            assert _compute_generation_hash({**CONFIG, "kind": kind, "temperature": 1}) == ""
+        assert _compute_generation_hash({**CONFIG, "kind": "llm"}) == (
+            _compute_generation_hash(CONFIG)
+        )
+
+    def test_an_edit_is_named_and_an_old_stamp_names_none(self):
+        stamp = {**_stamp(CONFIG), "generation_hash": _compute_generation_hash(CONFIG)}
+        edited = {**CONFIG, "max_tokens": 50}
+
+        assert _edits_since(stamp, edited) == ["generation settings"]
+        del stamp["generation_hash"]
+        assert _edits_since(stamp, edited) == []
