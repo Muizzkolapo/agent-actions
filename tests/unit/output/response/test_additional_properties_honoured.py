@@ -79,3 +79,35 @@ def test_udf_output_extra_key_rejected_when_default():
     schema = compile_unified_schema(_UNIFIED, "openai")["schema"]
     with pytest.raises(SchemaValidationError):
         _validate_against_schema({"a": "x", "extra": 1}, schema, "udf", validation_type="output")
+
+
+def _compile_root_array(root_flag, item=None):
+    """The record schema of a root array schema that sets *root_flag* at its root (1610)."""
+    schema = {"type": "array", "items": item or {"type": "object", "properties": {"a": {}}}}
+    if root_flag is not None:
+        schema["additionalProperties"] = root_flag
+    agent = {"agent_type": "act", "schema": schema}
+    compile_output_schema(agent, {})
+    return agent["json_output_schema"]
+
+
+def test_a_root_array_flag_covers_its_records():
+    record = _compile_root_array(True)
+    assert record["additionalProperties"] is True
+    _validate_against_schema({"a": "x", "carried": 1}, record, "udf", validation_type="output")
+
+
+def test_a_root_array_without_the_flag_stays_strict():
+    record = _compile_root_array(None)
+    with pytest.raises(SchemaValidationError):
+        _validate_against_schema({"a": "x", "carried": 1}, record, "udf", validation_type="output")
+
+
+def test_the_records_own_flag_wins_over_the_root():
+    item = {"type": "object", "properties": {"a": {}}, "additionalProperties": False}
+    assert _compile_root_array(True, item)["additionalProperties"] is False
+
+
+def test_records_with_properties_and_no_type_take_the_flag_too():
+    assert _compile_root_array(None, {"properties": {"a": {}}})["additionalProperties"] is False
+    assert _compile_root_array(True, {"properties": {"a": {}}})["additionalProperties"] is True
