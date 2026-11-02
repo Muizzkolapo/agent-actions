@@ -75,7 +75,13 @@ class ProgressRenderer(ConsoleEventHandler):
             parts.append(f"{failed} failed")
 
         icon = self._icon("✗", "FAILED", "red") if failed else self._icon("✓", "DONE", "green")
-        return f"\n{icon} {elapsed} — {', '.join(parts)}"
+        line = f"\n{icon} {elapsed} — {', '.join(parts)}"
+        empty = event.data.get("empty_final_actions") or []
+        if empty:
+            warn = self._icon("⚠", "WARNING", "yellow")
+            names = self._escape(", ".join(empty))
+            line += f"\n{warn} No records reached the final output: {names}"
+        return line
 
     def _workflow_failed(self, event: BaseEvent) -> str:
         icon = self._icon("✗", "FAILED", "red")

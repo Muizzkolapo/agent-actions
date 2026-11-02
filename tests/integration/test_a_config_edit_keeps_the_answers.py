@@ -1,16 +1,11 @@
 """A config edit keeps the answers an action already holds.
 
-An edit to an action's model, prompt, schema, guard, context scope or dependencies used to
-reset it and every action reading it, so the next run answered every record again. A model
-swapped partway through a long run threw that run away. Now the answers stand: records not
-yet answered are answered under the edit, a warning names what changed, each prompt trace
-row records the config it was answered under, and ``--rerun <action>`` answers the action
-and its readers again when that is what the user wants.
-
-`recap` reads one field of `stage_items` and writes what it saw; `after_recap` reads
-`recap`; `bystander` reads `stage_items` and nothing the edits touch. Each tool writes a
-line to `calls.log` per record, so a test sees which actions ran. Every run is its own
-`agac` process. Only the fault is stood in for: a tool raising for a named item.
+After an edit to an action's model, prompt, schema, guard, context scope or dependencies,
+the answers stand, so a model swapped partway through a long run loses nothing: records
+not yet answered are answered under the edit, a warning names what changed, each prompt
+trace row records the config it was answered under, and ``--rerun <action>`` answers the
+action and its readers again. `bystander` reads nothing the edits touch; each tool logs a
+line per record to `calls.log`, so a test sees which actions ran.
 """
 
 import json
@@ -363,3 +358,175 @@ def test_each_prompt_trace_row_records_the_config_it_was_answered_under(complete
     assert [json.loads(row["answered_under"]) for row in _traces(completed, "summary")] == [
         after
     ] * len(ITEMS)
+
+
+def _project_default(root, line):
+    config = root / "agent_actions.yml"
+    text = config.read_text()
+    assert text.count("default_agent_config:\n") == 1
+    config.write_text(text.replace("default_agent_config:\n", f"default_agent_config:\n  {line}\n"))
+
+
+SUMMARY_INTENT = '    intent: "Say what the item is"\n'
+
+
+@pytest.mark.parametrize(
+    "setting",
+    ["temperature: 0.9", "max_tokens: 50", "top_p: 0.5", "stop: END", "presence_penalty: 1.0"],
+)
+def test_a_generation_setting_on_the_action_is_named_as_an_edit(completed, setting):
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    {setting}\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (generation settings)" in result.printed
+    assert "--rerun summary" in result.printed
+    assert _statuses(completed)["summary"]["status"] == "completed"
+
+
+def test_a_project_default_max_tokens_names_only_the_llm_actions(completed):
+    _project_default(completed, "max_tokens: 50")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (generation settings)" in result.printed
+    assert "recap was edited" not in result.printed
+    assert "stage_items was edited" not in result.printed
+
+
+def test_rerun_restamps_the_generation_settings(completed):
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    temperature: 0.9\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "summary")
+    assert result.returncode == 0, result.printed
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_a_reworded_intent_is_not_an_edit(completed):
+    _edit(completed, SUMMARY_INTENT, '    intent: "Name the item"\n')
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_a_store_stamped_before_generation_settings_names_no_edit(completed):
+    path = _workflow(completed) / "agent_io" / ".agent_status.json"
+    statuses = json.loads(path.read_text())
+    for details in statuses.values():
+        details.pop("generation_hash", None)
+        (details.get("answered_under") or {}).pop("generation_hash", None)
+    path.write_text(json.dumps(statuses))
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    temperature: 0.9\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+TOOLS_FILE = Path("tools") / WORKFLOW / "logged.py"
+RECAP_RETURNS = 'return {"saw": item + ":" + staged.get("text", "-")}'
+GUARD = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool()
+def summary_gate(data: dict[str, Any]) -> bool:
+    return True
+"""
+
+
+def _edit_tools(root, old, new):
+    path = root / TOOLS_FILE
+    text = path.read_text()
+    assert text.count(old) == 1, f"the tools no longer have exactly one {old!r}"
+    path.write_text(text.replace(old, new))
+
+
+def test_an_edit_to_a_tools_code_is_named_at_every_action_its_file_serves(completed):
+    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert _ran(completed) == {}
+    assert _recap_saw(completed) == SAW_THE_ID
+    for action in ("recap", "after_recap", "bystander"):
+        assert f"{action} was edited since it completed (tool/guard code)" in result.printed
+    assert "stage_items was edited" not in result.printed
+    assert "summary was edited" not in result.printed
+
+
+def test_rerun_answers_under_the_edited_code_and_restamps_it(completed):
+    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "recap")
+    assert result.returncode == 0, result.printed
+    assert _recap_saw(completed) == [f"{item}:edited" for item in ITEMS]
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "recap was edited" not in result.printed
+    assert "after_recap was edited" not in result.printed
+    assert "bystander was edited since it completed (tool/guard code)" in result.printed
+
+
+def test_an_edit_to_a_tool_file_no_action_uses_is_not_an_edit(project):
+    unrelated = project / "tools" / WORKFLOW / "unrelated.py"
+    unrelated.write_text(GUARD)
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode == 0
+    unrelated.write_text(GUARD.replace("return True", "return False"))
+
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_an_edit_to_a_guard_udfs_code_is_named(project):
+    (project / "tools" / WORKFLOW / "gate.py").write_text(GUARD)
+    _edit(project, SUMMARY_INTENT, f'{SUMMARY_INTENT}    guard: "udf:summary_gate"\n')
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode == 0
+    (project / "tools" / WORKFLOW / "gate.py").write_text(GUARD.replace("True", "1 == 1"))
+
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (tool/guard code)" in result.printed
+
+
+def test_an_action_stopped_partway_names_a_code_edit(project):
+    (project / FAULT).write_text(json.dumps({"item": "beta"}))
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode != 0
+    _ran(project)
+
+    (project / FAULT).unlink()
+    _edit_tools(project, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "recap was edited since its last run started (tool/guard code)" in result.printed
+    assert _recap_saw(project) == ["alpha:-", "beta:edited", "gamma:edited"]
+
+
+def test_a_store_stamped_before_code_digests_names_no_edit(completed):
+    path = _workflow(completed) / "agent_io" / ".agent_status.json"
+    statuses = json.loads(path.read_text())
+    for details in statuses.values():
+        details.pop("udf_source_hash", None)
+        (details.get("answered_under") or {}).pop("udf_source_hash", None)
+    path.write_text(json.dumps(statuses))
+    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed

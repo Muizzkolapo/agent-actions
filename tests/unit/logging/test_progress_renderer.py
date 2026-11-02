@@ -248,6 +248,19 @@ class TestWorkflowFraming:
         )
         assert "3 completed" in out
         assert "failed" not in out
+        assert "No records reached" not in out
+
+    def test_the_footer_names_a_final_action_left_empty(self, rendered):
+        out = rendered(
+            WorkflowCompleteEvent(
+                workflow_name="quiz_gen",
+                elapsed_time=10.0,
+                actions_completed=2,
+                empty_final_actions=["write_out", "export"],
+            )
+        )
+        assert "2 completed" in out
+        assert "No records reached the final output: write_out, export" in out
 
 
 class TestAPlainStream:

@@ -124,20 +124,8 @@ class HITLStrategy:
                     f"got {type(decision_payload).__name__}"
                 )
 
-            # Detect timeout — partial reviews are persisted on disk; raise so
-            # the agent is marked failed and re-runs will resume from state.
             if decision_payload.get("hitl_status") == "timeout":
-                reviewed = sum(
-                    1 for r in (decision_payload.get("record_reviews") or []) if r is not None
-                )
-                raise AgentActionsError(
-                    f"HITL review timed out ({reviewed}/{len(records)} records reviewed). "
-                    "Partial reviews saved. Re-run workflow to resume.",
-                    context={
-                        "agent_name": context.agent_name,
-                        "record_count": len(records),
-                    },
-                )
+                return _timed_out(records, original_data, decision_payload, context)
 
             # Broadcasting a non-decision would stamp every record reviewed and
             # let the run succeed while guards discard the whole dataset.
@@ -223,3 +211,37 @@ class HITLStrategy:
         except Exception:
             logger.exception("Unexpected error in FILE mode HITL processing")
             raise
+
+
+def _timed_out(
+    records: list[dict[str, Any]],
+    original_data: list[dict[str, Any]],
+    decision_payload: dict[str, Any],
+    context: ProcessingContext,
+) -> list[ProcessingResult]:
+    """Fail every record of a file whose review timed out.
+
+    Raised instead, the walk lost the file with nothing naming its records, and the
+    action read as cleanly completed. Decisions made before the timeout stay in the
+    state file, where the retry's review resumes from.
+    """
+    reviewed = sum(1 for r in (decision_payload.get("record_reviews") or []) if r is not None)
+    where = context.target_relative_path or context.file_path
+    error = (
+        f"HITL review timed out ({reviewed}/{len(records)} records reviewed)"
+        f"{f' in {where}' if where else ''}. "
+        "Partial reviews saved. Run `agac retry` to review them."
+    )
+    logger.warning(
+        "[%s] %s left unreviewed: its %d record(s) are marked failed",
+        context.agent_name,
+        where or "a file",
+        len(records),
+    )
+    originals = original_data if len(original_data) == len(records) else records
+    return [
+        ProcessingResult.failed(
+            error=error, source_guid=record.get("source_guid"), input_record=original
+        )
+        for record, original in zip(records, originals, strict=True)
+    ]

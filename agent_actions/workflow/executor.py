@@ -24,6 +24,7 @@ from agent_actions.errors import (
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
+from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
@@ -56,6 +57,7 @@ from agent_actions.utils.limits import (
     resolve_record_limit,
     slice_observation,
 )
+from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 from agent_actions.workflow.managers.output import AllVersionsFilteredError
 from agent_actions.workflow.managers.state import (
     ANSWERS_UNDER_MORE_THAN_ONE_CONFIG,
@@ -140,11 +142,44 @@ def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
     return _digest(dependencies)
 
 
-# What an action reads, each stamped under its own key and named by its label when
-# a reset is logged.
-_READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str]], ...] = (
+def _compute_generation_hash(action_config: ActionConfigDict) -> str:
+    """A digest of the generation settings sent with each request; empty for a non-LLM action.
+
+    A tool or hitl action inherits the workflow's settings without sending them.
+    """
+    if (action_config.get("kind") or DEFAULT_ACTION_KIND) != DEFAULT_ACTION_KIND:
+        return ""
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    return _digest({key: cfg[key] for key in GENERATION_PARAMS if cfg.get(key) is not None})
+
+
+def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
+    """A digest of the files its tool and its UDF guard were loaded from; "" with neither.
+
+    None when one of them has not been loaded, so that its code is not compared at all.
+    The whole file counts, so an edit to a helper beside the UDF is seen; a module the
+    file imports is not.
+    """
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    names = [cfg.get("conditional_clause")]
+    if cfg.get("model_vendor") == "tool":
+        names.append(cfg.get("model_name"))
+    digests: dict[str, str] = {}
+    for name in filter(None, names):
+        digest = (UDF_REGISTRY.get(str(name).lower()) or {}).get("source_digest")
+        if digest is None:
+            return None
+        digests[str(name)] = digest
+    return _digest(digests) if digests else ""
+
+
+# What an action reads and how it is asked, each stamped under its own key and named
+# by its label when an edit is logged.
+_READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], ...] = (
     ("context_scope_hash", "context scope", _compute_context_scope_hash),
     ("dependencies_hash", "dependencies", _compute_dependencies_hash),
+    ("generation_hash", "generation settings", _compute_generation_hash),
+    ("udf_source_hash", "tool/guard code", _compute_udf_source_hash),
 )
 
 
@@ -173,6 +208,8 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "config_hash",
         "context_scope_hash",
         "dependencies_hash",
+        "generation_hash",
+        "udf_source_hash",
         "records_processed",
         "truncated",
         "max_records",
@@ -198,7 +235,7 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     """What differs from the config *stamp* recorded, by label; empty when nothing does.
 
     A key the stamp holds no value for never differs, so state written before a key
-    was recorded is left alone.
+    was recorded is left alone; nor does one the config cannot compute now.
     """
     edits: list[str] = []
     # The hash reads a "model" key and configs write model_name/model_vendor; adding
@@ -212,8 +249,8 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     if stored_hash is not None and stored_hash != _compute_action_config_hash(action_config):
         edits.append(CONFIG_EDIT)
     for key, label, compute in _READS_STAMPS:
-        stored = stamp.get(key)
-        if stored is not None and stored != compute(action_config):
+        stored, current = stamp.get(key), compute(action_config)
+        if stored is not None and current is not None and stored != current:
             edits.append(label)
     return edits
 
@@ -848,9 +885,8 @@ class ActionExecutor:
     def reopen_with_readers(self, action_name: str) -> list[str]:
         """Forget what *action_name* and everything reading it hold, and put them all back
         to pending, about to answer everything again. Returns the names put back."""
-        reopened = [*self._stale_readers(action_name), action_name]
-        for name in reopened:
-            self._forget_what_it_did(name)
+        reopened = [*self._reset_readers(action_name), action_name]
+        self._forget_what_it_did(action_name)
         self.deps.state_manager.reopen(reopened)
         return reopened
 
@@ -897,13 +933,19 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             return []
-        readers = self.readers_of(action_name)
+        return self.readers_of(action_name)
+
+    def _reset_readers(self, action_name: str) -> list[str]:
+        """Forget what reads *action_name*, saying so once; returns the readers."""
+        readers = self._stale_readers(action_name)
         if readers:
             logger.info(
                 "%s is running again: resetting what reads it (%s)",
                 action_name,
                 ", ".join(readers),
             )
+        for name in readers:
+            self._forget_what_it_did(name)
         return readers
 
     def readers_of(self, action_name: str) -> list[str]:
@@ -1024,9 +1066,7 @@ class ActionExecutor:
             # Its output is gone, the one route that leaves it completed here, so it will
             # answer everything again. Outside the try: a failure part-way through the
             # reset is not a failure to verify.
-            readers = self._stale_readers(action_name)
-            for name in readers:
-                self._forget_what_it_did(name)
+            readers = self._reset_readers(action_name)
             if not getattr(self.deps.action_runner, "retried_records", ()):
                 storage_backend.clear_prompt_traces(action_name)
             self.deps.state_manager.reopen([*readers, action_name])

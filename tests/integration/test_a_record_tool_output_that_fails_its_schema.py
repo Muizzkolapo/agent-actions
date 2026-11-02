@@ -1,14 +1,12 @@
-"""A record tool's output that fails its schema fails that record, not its file (1333).
+"""A record tool's output that fails its schema fails that record, not its file.
 
-A `kind: tool` action checks each record's output against its schema. One record's
-output failing it left the record loop and was caught for the whole file: every record
-of that file was lost, the valid ones with it, no disposition named any of them, and the
-action read `completed` with exit 0. `agac retry` found nothing to retry, the next run
-found the action complete, and on a `--rerun` the file kept its rows from before it.
+A `kind: tool` action checks each record's output against its schema. One failing record
+must fail alone: caught for the whole file, it would lose the valid records too, with no
+disposition naming any of them, so the action reads `completed` with exit 0, `agac retry`
+finds nothing to retry, and a `--rerun` keeps the file's old rows.
 
-Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
-provider. Only the fault is stood in for: while a flag file exists, the tool answers
-page alpha with a number where its schema asks for a string.
+Only the fault is stood in for: while a flag file exists, the tool answers page alpha with
+a number where its schema asks for a string.
 """
 
 import json

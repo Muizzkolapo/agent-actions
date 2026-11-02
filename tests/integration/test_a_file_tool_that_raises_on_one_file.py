@@ -1,17 +1,11 @@
-"""A FILE tool that fails on one file fails that file's records (1298).
+"""A FILE tool that fails on one file fails that file's records.
 
-A `granularity: File` tool is handed a whole file and answers it as one result, which
-names no record. When it raised, or answered with output its schema refused, the walk
-logged the file and went on: nothing was stored for the file and no disposition named
-any of its records, so the action read `completed` with exit 0. `agac retry` found
-nothing to retry and the next run found the action complete. Run again with --rerun of
-the action above it, the file kept its rows from before it, and under a retry the repaired record was left with no
-disposition at all.
-
-Every run is an `agac run` or `agac retry` through the CLI, executor, store and mock
-provider. Only the fault is stood in for: while a flag file exists, the tool raises on
-the file holding page alpha, answers page alpha with a summary its schema refuses, or
-answers that file with one row for both its pages that its schema refuses.
+A `granularity: File` tool answers a whole file as one result that names no record, so
+when it raises or its output fails its schema, each of the file's records must still get
+a failed disposition. Without one the action reads `completed` with exit 0, `agac retry`
+finds nothing, a `--rerun` of the action above keeps the file's old rows, and a retry
+leaves the repaired record with no disposition. Only the fault is stood in for, while a
+flag file exists: a raise on page alpha's file, or a refused answer for alpha or the file.
 """
 
 import json

@@ -166,6 +166,11 @@ class DefaultAgentConfig(BaseModel):
     chunk_config: ChunkConfig | None = None
     is_operational: bool = True
     run_mode: RunMode = RunMode.ONLINE
+    # Declared on both models: `default_agent_config:` reaches an agent only through
+    # these, which allow extras and would otherwise take any value.
+    request_timeout: float | None = Field(
+        default=None, strict=True, gt=0, allow_inf_nan=False, description="Default request timeout"
+    )
     model_config = ConfigDict(extra="allow")
 
 
@@ -219,6 +224,13 @@ class AgentConfig(BaseModel):
     )
     max_execution_time: int | None = Field(
         default=300, description="Maximum execution time in seconds"
+    )
+    request_timeout: float | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        allow_inf_nan=False,
+        description="Seconds one LLM request may take before it fails as a retriable error",
     )
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn", description="What an empty answer does to its record or action"

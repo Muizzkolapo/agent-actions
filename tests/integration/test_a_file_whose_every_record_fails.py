@@ -1,15 +1,11 @@
-"""A file whose every record fails on a rerun keeps no answer from before it (1283).
+"""A file whose every record fails on a rerun keeps no answer from before it.
 
-A run in which nothing of a file was answered and something failed does not write that
-file, so whatever an earlier run stored for it stands. A reset relies on the re-run writing
-each file again, so after `--rerun` under an edit such a file still held the answers the
-edit replaced. The action was recorded partly complete, with exit 0, over them; a reader
-reset with it ran on them and was recorded complete; and no later plain run asked for them
-again. The edit changes what the provider answers, so an answer from before it shows.
-
-Every run is an `agac run` through the CLI, executor, store and mock provider. Only the
-provider's answers are stood in for, for the pages of one file: answers that do not parse,
-or one a reader's tool raises on.
+A run that answers nothing of a file and fails some of it does not write that file, yet a
+`--rerun` reset relies on each file being written again. The answers the edit replaced
+must not survive it: otherwise the action reads partly complete with exit 0 over them, a
+reader reset with it runs on them, and no later plain run asks for them again. Only the
+provider's answers for one file's pages are stood in for: answers that do not parse, or
+one a reader's tool raises on.
 """
 
 import json

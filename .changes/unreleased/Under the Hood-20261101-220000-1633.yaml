@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: "Trim the integration-test module docstrings and the `agac run` help docstring to 10 lines or fewer"
+time: 2026-11-01T22:00:00Z
