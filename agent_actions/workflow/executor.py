@@ -24,6 +24,7 @@ from agent_actions.errors import (
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
+from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging.core.manager import fire_event
@@ -140,11 +141,23 @@ def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
     return _digest(dependencies)
 
 
-# What an action reads, each stamped under its own key and named by its label when
-# a reset is logged.
+def _compute_generation_hash(action_config: ActionConfigDict) -> str:
+    """A digest of the generation settings sent with each request; empty for a non-LLM action.
+
+    A tool or hitl action inherits the workflow's settings without sending them.
+    """
+    if (action_config.get("kind") or DEFAULT_ACTION_KIND) != DEFAULT_ACTION_KIND:
+        return ""
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    return _digest({key: cfg[key] for key in GENERATION_PARAMS if cfg.get(key) is not None})
+
+
+# What an action reads and how it is asked, each stamped under its own key and named
+# by its label when an edit is logged.
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str]], ...] = (
     ("context_scope_hash", "context scope", _compute_context_scope_hash),
     ("dependencies_hash", "dependencies", _compute_dependencies_hash),
+    ("generation_hash", "generation settings", _compute_generation_hash),
 )
 
 
@@ -173,6 +186,7 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "config_hash",
         "context_scope_hash",
         "dependencies_hash",
+        "generation_hash",
         "records_processed",
         "truncated",
         "max_records",
@@ -762,9 +776,8 @@ class ActionExecutor:
     def reopen_with_readers(self, action_name: str) -> list[str]:
         """Forget what *action_name* and everything reading it hold, and put them all back
         to pending, about to answer everything again. Returns the names put back."""
-        reopened = [*self._stale_readers(action_name), action_name]
-        for name in reopened:
-            self._forget_what_it_did(name)
+        reopened = [*self._reset_readers(action_name), action_name]
+        self._forget_what_it_did(action_name)
         self.deps.state_manager.reopen(reopened)
         return reopened
 
@@ -811,13 +824,19 @@ class ActionExecutor:
         """
         if getattr(self.deps.action_runner, "retried_records", ()):
             return []
-        readers = self.readers_of(action_name)
+        return self.readers_of(action_name)
+
+    def _reset_readers(self, action_name: str) -> list[str]:
+        """Forget what reads *action_name*, saying so once; returns the readers."""
+        readers = self._stale_readers(action_name)
         if readers:
             logger.info(
                 "%s is running again: resetting what reads it (%s)",
                 action_name,
                 ", ".join(readers),
             )
+        for name in readers:
+            self._forget_what_it_did(name)
         return readers
 
     def readers_of(self, action_name: str) -> list[str]:
@@ -938,9 +957,7 @@ class ActionExecutor:
             # Its output is gone, the one route that leaves it completed here, so it will
             # answer everything again. Outside the try: a failure part-way through the
             # reset is not a failure to verify.
-            readers = self._stale_readers(action_name)
-            for name in readers:
-                self._forget_what_it_did(name)
+            readers = self._reset_readers(action_name)
             if not getattr(self.deps.action_runner, "retried_records", ()):
                 storage_backend.clear_prompt_traces(action_name)
             self.deps.state_manager.reopen([*readers, action_name])

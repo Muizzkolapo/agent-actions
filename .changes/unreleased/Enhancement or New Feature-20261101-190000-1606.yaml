@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Set `request_timeout` (seconds) on an action, in a workflow's `defaults:` or in the project's `default_agent_config:` to bound each online LLM request. A request still unanswered after that long fails the attempt as a network error, which `retry:` retries like any other, and the record fails naming the timeout once the attempts run out; a hung request no longer holds a run indefinitely. It is passed to each provider SDK as its own per-request timeout and outranks a declared endpoint's `timeout_seconds`. Unset, nothing changes: each SDK keeps its own timeout. Zero, a negative number or a non-number is refused at load. Editing it is not a config edit."
+time: 2026-11-01T19:00:00Z

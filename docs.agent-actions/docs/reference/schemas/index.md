@@ -87,6 +87,12 @@ items:
     - technical_level
 ```
 
+`items` must say what each element is: `type: string` (or another type) for a list of
+values, or `type: object` with `properties` for a list of records. An `items` with
+`properties` and no `type` is read as an object; one with neither is refused with
+`Array schema '<name>' has 'items' with no 'type'`, rather than taken for a list of
+objects that would reject every string the model returns.
+
 A schema file may also be a JSON Schema object. Its properties are the record's
 fields, the same as `fields:` entries. A property is required only when it is
 listed under `required:`; the project's `required_by_default` does not apply.

@@ -95,8 +95,21 @@ def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, An
             hint="Use `required: true` or `required: false` at the array level.",
         )
 
-    # Determine if items are objects or primitives
-    item_type = items.get("type", "object")
+    # Items with properties are objects whether or not they say so; without either, the
+    # element type is unknown, and guessing object rejects every string the model returns.
+    item_type = items.get("type")
+    if item_type is None:
+        if "properties" not in items:
+            raise SchemaValidationError(
+                f"Array schema '{schema_name}' has 'items' with no 'type'",
+                schema_name=schema_name,
+                validation_type="structure",
+                hint=(
+                    "Say what each element is: items: {type: string} for a list of strings, "
+                    "or items: {type: object, properties: {...}} for a list of objects."
+                ),
+            )
+        item_type = "object"
 
     logger.debug("  - Items type: %s", item_type)
 

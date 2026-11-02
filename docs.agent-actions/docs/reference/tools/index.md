@@ -87,6 +87,17 @@ def filter_questions_by_score(data: dict, **kwargs) -> dict:
     return data
 ```
 
+`data` is keyed by **action name**, the `name:` in the workflow, never by `impl:`. With
+`- name: compile_input` and `impl: m_compile_input`, read `data["compile_input"]`:
+`data.get("m_compile_input")` finds nothing and returns its default without a word. Before
+running anything, `agac run` (like `agac validate-udfs`) warns about each literal key a tool
+or guard UDF reads that no action is named:
+
+```
+Pre-flight: bus namespaces — 1 warning(s)
+  └─ m_verify: reads bus namespace 'm_compile_input' which is not an action name in the workflow. ...
+```
+
 ### File Granularity
 
 Use when your logic needs cross-record context. FILE tools receive a list with one item per record, each holding the fields the action observes as flat keys.
@@ -239,6 +250,19 @@ What does not work:
 - **Sibling imports** — `import other_tool` or `from . import utils` where `other_tool` and `utils` are files in the same tools directory
 
 If you need shared logic across multiple tool files, extract it into an installable package and add it to your project dependencies.
+
+### A tool file that fails to import
+
+`agac run` skips a tool file that raises while it is imported and says so, so one broken file
+does not stop workflows that use none of its tools:
+
+```
+Skipped tool file tools/other/broken.py: it failed to import (boom at import). A workflow using a tool from it fails until it imports.
+```
+
+A workflow that names a tool or guard UDF that is not loaded, one from a skipped file
+included, is refused before any action runs. The error names the action and each skipped file.
+`agac validate-udfs` and `agac list-udfs` still stop at the first file that fails to import.
 
 ## Best Practices
 

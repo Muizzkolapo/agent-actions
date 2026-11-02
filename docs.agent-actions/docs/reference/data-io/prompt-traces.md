@@ -25,7 +25,7 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `attempt` | Attempt number (0 = initial, 1+ = repair iterations) |
 | `source_guid` | Durable identity of the record that was prompted |
 | `run_id` | The workflow run that wrote the row |
-| `answered_under` | JSON: the config the record was answered under. Holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash` and `dependencies_hash` |
+| `answered_under` | JSON: the config the record was answered under. Holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash`, `dependencies_hash` and `generation_hash` |
 
 Traces carry two identifiers, and which one to join on depends on the question
 you are asking.
@@ -51,6 +51,19 @@ record. It holds the same keys as the `answered_under` stamp of the action in
 existed leave it `NULL`. A row is written when its prompt is built, before the model is
 called, so a row with no `response_text` was prompted under that config but not answered:
 the run stopped before the answer came back.
+
+An action stopped partway keeps its traces when it resumes, the rows of attempts that
+failed included: they are the record of what was asked, and under which config. So a record
+can hold a failed attempt under the old config beside its answer under the new one. The
+latest row of each record is the one its answer came from:
+
+```sql
+SELECT source_guid, attempt, json_extract(answered_under, '$.model_name') AS model
+FROM prompt_trace
+WHERE id IN (
+  SELECT MAX(id) FROM prompt_trace WHERE action_name = 'classify' GROUP BY source_guid
+);
+```
 
 ```sql
 SELECT source_guid, json_extract(answered_under, '$.model_name') AS model
