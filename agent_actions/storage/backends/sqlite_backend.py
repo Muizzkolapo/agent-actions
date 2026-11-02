@@ -1211,6 +1211,23 @@ class SQLiteBackend(StorageBackend):
                 found.update(row["relative_path"] for row in cursor.fetchall())
         return found
 
+    def source_guids_among(self, record_ids: Iterable[str]) -> set[str]:
+        """Which of *record_ids* name a stored input row."""
+        ids = tuple(dict.fromkeys(record_ids))
+        found: set[str] = set()
+        with self._lock:
+            cursor = self.connection.cursor()
+            for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                chunk = ids[start : start + _SQL_MAX_PARAMS]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"SELECT DISTINCT source_guid FROM source_data "
+                    f"WHERE source_guid IN ({placeholders})",
+                    chunk,
+                )
+                found.update(row["source_guid"] for row in cursor.fetchall())
+        return found
+
     def records_share_a_repeat_chain(self, record_ids: Iterable[str]) -> bool:
         """Whether any of record_ids is a repeat, or is repeated by another row."""
         ids = tuple(dict.fromkeys(record_ids))
