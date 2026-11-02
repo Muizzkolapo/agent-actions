@@ -1,17 +1,11 @@
-"""An action whose guard filters every record of one file is not skipped (1253).
+"""An action whose guard filters every record of one file is not skipped.
 
-Online, each input file reaches the guard on its own, and a file whose every
-record was filtered wrote the node-level `skipped` row. That row names the action,
-not the file, and the executor reads it first: the action read skipped though its
-other file had just written rows, and its readers were skipped over those rows.
-Batch writes a node-level `passthrough` instead and reads skipped only while the
-action holds no row, so the same project completed there.
-
-A reader's input for the wholly filtered file is then empty. Online stores that
-file empty; batch sent nothing for it and kept what it had stored there before.
-
-Each run that applies the edit names the action with ``--rerun``, which resets it and
-its readers.
+Online, each input file reaches the guard on its own. The node-level `skipped` row names
+the action, not the file, so writing it for one wholly filtered file would make the action
+and its readers read skipped though its other file wrote rows; batch writes `passthrough`
+and reads skipped only while the action holds no row. A reader's input for the filtered
+file is then empty, and in either mode it stores that file empty, keeping no older rows.
+Runs that apply an edit name the action with ``--rerun``, resetting it and its readers.
 """
 
 import json

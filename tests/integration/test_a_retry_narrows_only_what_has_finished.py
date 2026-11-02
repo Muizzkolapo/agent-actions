@@ -1,14 +1,12 @@
-"""`agac retry` narrows only actions that finished their last run (1227).
+"""`agac retry` narrows only actions that finished their last run.
 
-A retry answers the records it names at every action it runs and carries what each
-action already holds for the rest. That is sound for an action that finished: what it
-holds for the rest is its answer. An action its last run left unfinished, reset by
-``--rerun`` and stopped while running again or never run at all, holds nothing current for the
-records that run had not reached, and the retry completed it on the ones it named.
+A retry answers the records it names at every action it runs and carries what each action
+already holds for the rest. That is sound only for an action that finished: one left
+unfinished (reset by ``--rerun`` then stopped, or never run) holds nothing current for the
+records not reached, so narrowing it would complete it on just the named ones.
 
-Two tool actions over six staged records, `flatten` and `enrich`, which reads it. Every
-command is a real `agac` invocation; only the faults are stood in for: the one that stops
-a run, raised where an action marks a record answered, and tools that fail.
+Two tool actions over six staged records: `flatten`, and `enrich`, which reads it. Only the
+faults are stood in for: a stop raised where a record is marked answered, and failing tools.
 """
 
 import json
