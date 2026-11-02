@@ -180,6 +180,25 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 | `is_operational` | boolean | Enable/disable action (default: true) |
 | `on_empty` | string | What an empty answer does: `warn` (default) fails the record and the run goes on, `error` fails the action, `skip` passes the record through as a tombstone |
 | `retry` | object | Retry configuration for transport-layer failures |
+| `request_timeout` | number | Seconds one LLM request may take, greater than 0. A request still unanswered then fails that attempt as a network error, which [`retry`](../execution/retry.md) retries like any other; when the attempts run out the record fails and the run names the timeout. Unset (the default), each provider SDK keeps its own timeout. Can also be set in `defaults:` or the project's `default_agent_config:`. See [Request timeout](#request-timeout) |
+
+### Request timeout
+
+`request_timeout` bounds each online request to the model, so a request that stops answering fails instead of holding the run indefinitely. It is passed to every provider SDK as that SDK's own per-request timeout: `timeout` per call for OpenAI, llamafile, declared endpoints, Groq and Anthropic; the client's `timeout` for Cohere and Ollama; `http_options.timeout` (in milliseconds) for Gemini. It does not change any answer, so editing it is not a config edit and keeps the answers an action holds.
+
+```yaml
+defaults:
+  request_timeout: 120     # every action
+  retry: { max_attempts: 3 }
+
+actions:
+  - name: long_summary
+    request_timeout: 600   # this action may take longer
+```
+
+- The OpenAI, Groq and Anthropic SDKs retry a timed-out request twice on their own before reporting it, so with those vendors one attempt can last up to three times `request_timeout` plus their short backoff.
+- On a [declared endpoint](./endpoints.md), an action's `request_timeout` outranks the endpoint's `timeout_seconds`; unset, `timeout_seconds` applies.
+- Online requests only. In `run_mode: batch` the provider runs the batch on its side and `request_timeout` is not applied, including to the in-process batch for `ollama_local` and `ollama_cloud`.
 
 :::note Granularity Constraints
 - **File granularity** is supported for tool and HITL actions (`kind: tool`, `kind: hitl`)
