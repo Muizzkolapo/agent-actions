@@ -10,6 +10,7 @@ record of both again, and `flatten` writes five rows.
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from tests._support.agac_cli import run_agac
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,
@@ -125,3 +126,11 @@ def test_the_plain_run_after_a_repair_of_the_edited_action_still_names_the_edit(
 
 def _unwrapped(output):
     return " ".join(output.split())
+
+
+def test_a_rerun_says_once_that_it_resets_the_action_below(chained):  # noqa: F811
+    result = run_agac(chained, "run", "-a", WORKFLOW, "--rerun", ACTION)
+
+    output = _unwrapped(result.stdout + result.stderr)
+    assert result.returncode == 0, output
+    assert output.count(f"{ACTION} is running again: resetting what reads it ({SECOND})") == 1
