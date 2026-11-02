@@ -87,6 +87,17 @@ def filter_questions_by_score(data: dict, **kwargs) -> dict:
     return data
 ```
 
+`data` is keyed by **action name**, the `name:` in the workflow, never by `impl:`. With
+`- name: compile_input` and `impl: m_compile_input`, read `data["compile_input"]`:
+`data.get("m_compile_input")` finds nothing and returns its default without a word. Before
+running anything, `agac run` (like `agac validate-udfs`) warns about each literal key a tool
+or guard UDF reads that no action is named:
+
+```
+Pre-flight: bus namespaces — 1 warning(s)
+  └─ m_verify: reads bus namespace 'm_compile_input' which is not an action name in the workflow. ...
+```
+
 ### File Granularity
 
 Use when your logic needs cross-record context. FILE tools receive a list with one item per record, each holding the fields the action observes as flat keys.
