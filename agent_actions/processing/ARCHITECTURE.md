@@ -299,7 +299,7 @@ First run (interrupted at record 150 of 200):
 Re-run:
 
   _reset_retryable_actions():
-      action stopped partway, config unchanged → selective clear (failures only)
+      action stopped partway, edited or not → selective clear (failures only)
       150 SUCCESS dispositions preserved
 
   UnifiedProcessor.process():
