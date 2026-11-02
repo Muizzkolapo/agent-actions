@@ -25,7 +25,7 @@ Every time an LLM action processes a record, Agent Actions captures a **prompt t
 | `attempt` | Attempt number (0 = initial, 1+ = repair iterations) |
 | `source_guid` | Durable identity of the record that was prompted |
 | `run_id` | The workflow run that wrote the row |
-| `answered_under` | JSON: the config the record was answered under. Holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash`, `dependencies_hash` and `generation_hash` |
+| `answered_under` | JSON: the config the record was answered under. Holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash` |
 
 Traces carry two identifiers, and which one to join on depends on the question
 you are asking.

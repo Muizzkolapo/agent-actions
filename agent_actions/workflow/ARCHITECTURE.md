@@ -842,6 +842,9 @@ Stamped beside it, each compared on its own (_edits_since):
     dependencies_hash    (_compute_dependencies_hash: in declared order)
     generation_hash      (_compute_generation_hash: the GENERATION_PARAMS an
                           LLM action sends; "" for tool and hitl)
+    udf_source_hash      (_compute_udf_source_hash: the source_digest each
+                          tool and UDF guard registered with; "" with
+                          neither, None, never compared, if not loaded)
 
 Never add a key to _compute_action_config_hash: every stored digest would
 change and every completed action of every workflow would be named as edited.
