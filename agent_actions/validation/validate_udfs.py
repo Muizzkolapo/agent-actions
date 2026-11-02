@@ -1,7 +1,5 @@
 """Validate-udfs CLI command for checking UDF references without running workflows."""
 
-import inspect
-import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -27,13 +25,17 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
-from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
     get_udf_metadata,
 )
-from agent_actions.validation.bus_namespace_validator import find_unknown_bus_namespaces
+from agent_actions.validation.bus_namespace_validator import (
+    find_unknown_bus_namespaces,
+    guard_valid_namespaces,
+    promoted_version_names,
+    udf_sources,
+)
 from agent_actions.validation.file_udf_contract_validator import find_file_udf_contract_warnings
 
 
@@ -275,75 +277,17 @@ class ValidateUDFsCommand:
 
     @staticmethod
     def _udf_sources(registry: dict, refs: set[str]) -> dict[str, str]:
-        """Each referenced UDF's own function body, keyed by the name that referenced it."""
-        sources: dict[str, str] = {}
-        for ref in refs:
-            meta = registry.get(ref) or registry.get(ref.lower())
-            if meta is None:
-                continue
-            try:
-                sources[ref] = textwrap.dedent(inspect.getsource(meta["function"]))
-            except (OSError, TypeError, KeyError):
-                continue
-        return sources
+        return udf_sources(registry, refs)
 
     @staticmethod
     def _promoted_version_names(config: dict) -> set[str]:
-        """Every name a versioned action's guard context promotes to the top level.
-
-        Finds the contexts; `VersionNamespaceBuilder.promoted_names` decides what each one
-        promotes, so a context cannot be read differently here than where it is built. It
-        was: claiming `i` and `idx` wherever a `_version_context` existed reported a guard
-        UDF reading a name the runtime never promotes as fine, which is the silence this
-        command exists to remove (#1199).
-
-        Still a union across the whole config, so a name promoted by one action's context is
-        allowed for every action -- the same deliberate over-approximation
-        `_guard_valid_namespaces` carries, and per-action resolution is #1192's.
-        """
-        from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
-
-        names: set[str] = set()
-
-        def walk(obj):
-            if isinstance(obj, dict):
-                vc = obj.get("_version_context")
-                if isinstance(vc, dict):
-                    names.update(VersionNamespaceBuilder.promoted_names(vc))
-                for value in obj.values():
-                    walk(value)
-            elif isinstance(obj, list):
-                for item in obj:
-                    walk(item)
-
-        walk(config)
-        return names
+        return promoted_version_names(config)
 
     @staticmethod
     def _guard_valid_namespaces(
         action_names: set[str], loop_params: set[str] | None = None
     ) -> set[str]:
-        """What a guard UDF may read — the union over every shape its context can take.
-
-        A guard receives the evaluation context rather than the action bus, and what that
-        context holds depends on the action: a first-stage one carries the record's
-        envelope, a versioned one carries the promoted loop keys, and a plain one carries
-        neither. This scan is keyed by UDF name and does not know which action it belongs
-        to, so it allows all of them.
-
-        That is deliberately an over-approximation and costs real findings — a guard on a
-        non-first-stage action reading ``source_guid`` reads nothing and is not reported.
-        The alternative errs the other way: a correct guard on a versioned action reading
-        ``idx`` would be warned about, and a validator that cries wolf gets ignored.
-        Narrowing this needs the per-action derivation ``build_guard_context`` performs
-        (#1192).
-        """
-        return (
-            action_names
-            | RUNTIME_BUS_NAMESPACES
-            | (RECORD_FRAMEWORK_FIELDS - {"content"})
-            | (loop_params or set())
-        )
+        return guard_valid_namespaces(action_names, loop_params)
 
     @classmethod
     def _find_guard_bus_namespace_warnings(

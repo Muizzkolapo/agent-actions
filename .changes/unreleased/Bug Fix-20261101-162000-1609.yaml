@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  agac run preflight now warns when a tool or guard UDF reads a bus key no action is named,
+  such as its upstream's impl name, which reads an empty dict silently. agac validate-udfs
+  already warned; the two share one scan.
+time: 2026-11-01T16:20:00Z

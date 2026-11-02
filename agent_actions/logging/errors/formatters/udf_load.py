@@ -23,7 +23,7 @@ class UDFLoadErrorFormatter(ErrorFormatter):
     """Render UDF import failures with the module, file, and how to fix it.
 
     UDF discovery imports every Python file under the user-code directory; a
-    single broken file blocks every command that loads the workflow. The
+    broken file stops ``validate-udfs`` and ``list-udfs`` (``agac run`` skips it). The
     generic configuration formatter loses the module + file context that
     ``UDFLoadError`` already carries, so this formatter claims those errors
     before the configuration chain sees them.
@@ -111,8 +111,8 @@ class UDFLoadErrorFormatter(ErrorFormatter):
             "\n\nThis file was found by the recursive scan of the user-code "
             "directory (set via `-u <path>` or `tool_path` in your workflow "
             "config). Fix its module-load code, or — if it is not a UDF — move "
-            "it outside that directory so discovery skips it. A single broken "
-            "file blocks every command that loads the workflow."
+            "it outside that directory so discovery skips it. A broken file stops "
+            "validate-udfs and list-udfs; agac run skips it with a warning."
         )
 
         ctx: dict[str, Any] = {}

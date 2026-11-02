@@ -16,6 +16,7 @@ from agent_actions.logging.events import (
     WorkflowInitializationStartEvent,
 )
 from agent_actions.utils.limits import FILE_LIMIT_KEY, RECORD_LIMIT_KEY, check_environment
+from agent_actions.utils.udf_management.registry import record_skipped_tool_files
 from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
@@ -170,8 +171,9 @@ def _discover_udfs_from_path(
         except ValueError:
             pass
     console.print(f"[cyan]\U0001f50d Discovering tools in {display_path}...[/cyan]", soft_wrap=True)
+    skipped: list[UDFLoadError] = []
     try:
-        registry = discover_udfs(abs_path)
+        registry = discover_udfs(abs_path, skipped=skipped)
     except UDFLoadError as e:
         # Add the configured search path so the formatter can surface it
         # alongside the per-file path UDFLoadError already carries.
@@ -183,4 +185,16 @@ def _discover_udfs_from_path(
             requested_path=path,
         )
         raise
+    # One broken file must not stop a workflow that uses none of its tools; one that
+    # does is refused when its tool is looked up, and that error names the file.
+    for failure in skipped:
+        logger.warning(
+            "Skipped tool file %s: it failed to import (%s). A workflow using a tool from it "
+            "fails until it imports.",
+            failure.context.get("file"),
+            failure.context.get("error"),
+        )
+    record_skipped_tool_files(
+        {str(f.context.get("file")): str(f.context.get("error")) for f in skipped}
+    )
     return len(registry)

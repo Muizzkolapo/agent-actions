@@ -13,7 +13,8 @@ from tests.integration.test_dispositions_prints_a_reason_that_holds_brackets imp
     project,  # noqa: F401
 )
 
-REASON = "Error executing UDF 'flat_brackets': [/note] gamma breaks"
+# Up to the tag: the table shortens a long reason, and the tag is what this is about.
+REASON = "Error executing UDF 'flat_brackets': RuntimeError: [/note]"
 
 
 @pytest.mark.parametrize(
@@ -25,6 +26,7 @@ REASON = "Error executing UDF 'flat_brackets': [/note] gamma breaks"
     ids=["dispositions-quarantined", "retry-dry-run"],
 )
 def test_the_reason_prints_exactly(project, args):  # noqa: F811
-    result = CliRunner().invoke(cli, args)
+    # Wide enough that the table does not wrap the reason.
+    result = CliRunner().invoke(cli, args, env={"COLUMNS": "200"})
 
     assert REASON in result.output

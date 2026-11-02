@@ -9,6 +9,7 @@ consistent retry handling across all providers.
 """
 
 import logging
+import math
 import time
 import uuid
 from typing import Any, ClassVar
@@ -54,6 +55,14 @@ def _build_client(api_key: str) -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
+def _timeout_options(agent_config: dict[str, Any]) -> dict[str, Any]:
+    """The action's ``request_timeout`` as per-request http_options; google-genai takes ms."""
+    timeout = agent_config.get("request_timeout")
+    if timeout is None:
+        return {}
+    return {"http_options": types.HttpOptions(timeout=math.ceil(timeout * 1000))}
+
+
 class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     """Google Gemini API client for JSON and non-JSON LLM invocations."""
 
@@ -93,6 +102,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             config = types.GenerateContentConfig(
                 response_mime_type="application/json",
                 **gen_params,
+                **_timeout_options(agent_config),
             )
             envelope = MessageBuilder.build(
                 "gemini", prompt_config, context_data, schema=schema, json_mode=True
@@ -156,7 +166,8 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
                 stop_as_list=True,
             )
-            config = types.GenerateContentConfig(**gen_params) if gen_params else None
+            config_kwargs = {**gen_params, **_timeout_options(agent_config)}
+            config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
             envelope = MessageBuilder.build("gemini", prompt_config, context_data, json_mode=False)
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config

@@ -31,6 +31,17 @@ agac run -a my_workflow -u ./user_code --use-tools
 agac run -a my_workflow --execution-mode parallel
 ```
 
+The last line counts actions, not records. When a final action (one nothing else reads)
+completes or is skipped holding no record, because every record was filtered, skipped or
+failed on the way to it, the run says so under that line and names it:
+
+```
+✓ 0.3s — 1 completed, 1 skipped
+⚠ No records reached the final output: write_out
+```
+
+The log line before it names the `agac dispositions` command that shows why.
+
 ## Options
 
 | Option | Description |
@@ -112,7 +123,11 @@ the erasure a limit exists to avoid.
 
 An edit to an action's config does not re-run anything. That covers its model
 (`model_name`, `model_vendor`, in the action or in `defaults`), prompt, schema, guard,
-`context_scope` and `dependencies`. The records the action already answered keep their
+`context_scope`, `dependencies` and the generation settings an LLM action sends
+(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty`,
+in the action, in `defaults` or in `default_agent_config`), and the code of a tool or UDF
+guard: the whole file it is defined in, though not the modules that file imports. The
+records the action already answered keep their
 answers, and so do the actions that read them. Records it has not answered yet are answered
 under the edit. So you can switch the model of a long run partway through, and nothing it
 already paid for is asked again.

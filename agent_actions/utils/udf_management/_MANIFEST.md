@@ -4,7 +4,7 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `registry.py` | Module | Thread-safe UDF registry decorator plus helpers for retrieving metadata and clearing the cache. | `errors`, `logging` |
+| `registry.py` | Module | Thread-safe UDF registry decorator plus helpers for retrieving metadata and clearing the cache. Each UDF registers with `source_digest`, a digest of its file as it was loaded, which the executor stamps as `udf_source_hash`. | `errors`, `logging` |
 | `FileUDFResult` | Dataclass | Optional FILE-granularity return wrapper. Tools can return plain lists instead — the framework handles all metadata. Validates each output's `source_index` at construction: a non-negative int, a list of them, or `None`. | `record` |
 | `udf_tool` | Function | Decorator that registers UDFs with optional schema typing/validation control. | `config`, `logging` |
 | `get_udf` | Function | Case-insensitive lookup for registered UDF functions (raises `FunctionNotFoundError`). | `errors` |
