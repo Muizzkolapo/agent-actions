@@ -52,6 +52,19 @@ actions:
 | `return_last` | Return last response, workflow continues |
 | `raise` | Raise exception, workflow fails |
 
+A record that exhausted its retries carries the error its last attempt raised, ahead of the
+count, wherever it is reported: the run's line for the action, `agac status`, and
+`agac dispositions` (its record-level detail too). An action whose every record exhausted
+fails with that error rather than with the count alone:
+
+```text
+✗ summarize  Action 'summarize': items.json: openai network error: Connection error. — retry
+  exhausted after 2 attempts — Action 'summarize' produced 0 successful records — …
+```
+
+The record's `_recovery.retry` holds it as `last_error`. An error with no message of its own
+is named by its type.
+
 ## Retryable Errors
 
 | Error Type | Examples | Retryable |

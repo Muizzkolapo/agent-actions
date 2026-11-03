@@ -10,6 +10,7 @@ from typing import Any
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RetryExhaustedEvent
+from agent_actions.utils.safe_format import safe_format_error
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ class RetryService:
                     attempts=attempt,
                     reason=reason,  # Set if we retried before succeeding
                     exhausted=False,
-                    last_error=str(last_error) if last_error else None,
+                    last_error=safe_format_error(last_error) if last_error is not None else None,
                 )
 
             except Exception as e:
@@ -178,7 +179,7 @@ class RetryService:
             attempts=self.max_attempts,
             reason=reason,
             exhausted=True,
-            last_error=str(last_error) if last_error else None,
+            last_error=safe_format_error(last_error) if last_error is not None else None,
         )
 
 

@@ -36,6 +36,7 @@ from agent_actions.storage.backend import (
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.file_handler import walk_files
 from agent_actions.utils.limits import forget_slice_observation, resolve_file_limit
+from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.workflow.merge import merge_fan_in, merge_json_files, split_from
 
 if TYPE_CHECKING:
@@ -75,7 +76,7 @@ class CollectedErrors:
 
     def record(self, relative_path: object, exc: Exception) -> None:
         if len(self.messages) < _MAX_TRACKED_ERRORS:
-            self.messages.append(f"{relative_path}: {exc}")
+            self.messages.append(f"{relative_path}: {safe_format_error(exc)}")
         if not every_record_failed(exc):
             self.left_input_unreached = True
         # Deliberately outside the cap: the halt may be the fiftieth failure,
@@ -83,10 +84,10 @@ class CollectedErrors:
         if raised_by_exhaustion_policy(exc):
             if self.halt is None:
                 self.halt = exc
-                self.halt_message = f"{relative_path}: {exc}"
+                self.halt_message = f"{relative_path}: {safe_format_error(exc)}"
         elif self.fatal is None and is_action_fatal(exc):
             self.fatal = exc
-            self.fatal_message = f"{relative_path}: {exc}"
+            self.fatal_message = f"{relative_path}: {safe_format_error(exc)}"
 
     def merge(self, other: CollectedErrors) -> None:
         self.messages.extend(other.messages)

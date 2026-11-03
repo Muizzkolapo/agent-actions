@@ -6,12 +6,11 @@ recurses once per level and fails on a row about 500 levels deep, which failed t
 whole collect pass; each builder is driven here with a row far past that.
 """
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
+from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata, RetryMetadata
 
 DEPTH = 800
 
@@ -110,7 +109,10 @@ class TestEveryBuilderSnapshotsADeepRow:
         with patch.object(
             strategy,
             "_exhausted_recovery_for",
-            return_value=(MagicMock(), SimpleNamespace(attempts=2)),
+            return_value=(
+                MagicMock(),
+                RetryMetadata(attempts=2, failures=2, succeeded=False, reason="missing"),
+            ),
         ):
             result = strategy._build_exhausted_passthrough(_ctx(row), "t-1", row, "act", "sg-1", 0)
 
