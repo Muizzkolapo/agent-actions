@@ -38,6 +38,8 @@ class VersionOutputCorrelator:
         self.agent_folder = agent_folder
         self.storage_backend = storage_backend
         self.correlations_cache: dict[str, Any] = {}
+        # Per file, the source records whose versions were merged apart (see below).
+        self.split_records: dict[str, list[str]] = {}
 
     def detect_explicit_version_consumption(
         self, execution_order: list[str], agent_configs: dict[str, Any]
@@ -154,10 +156,14 @@ class VersionOutputCorrelator:
                 file_outputs = [o for o in outputs if o.get("_source_file") == filename]
                 if file_outputs:
                     file_version_outputs[version_agent] = file_outputs
+            records = self._correlate_by_source_record(file_version_outputs)
+            split = _split_across_ids(records)
             correlated[filename] = [
                 {k: v for k, v in record.items() if k not in _CORRELATION_KEYS}
-                for record in self._correlate_by_source_record(file_version_outputs)
+                for record in records
             ]
+            if split:
+                self.split_records[filename] = split
         return correlated
 
     def prepare_correlated_input(
@@ -182,7 +188,10 @@ class VersionOutputCorrelator:
             if not version_outputs:
                 raise AllVersionsFilteredError(agent_name, version_sources)
 
+            self.split_records = {}
             correlated = self._process_version_files(version_outputs, version_filenames)
+            if self.split_records:
+                _warn_of_versions_merged_apart(agent_name, version_sources, self.split_records)
             self._forget_files_no_version_holds(agent_name, version_sources)
             return correlated
         except (AllVersionsFilteredError, AgentActionsError):
@@ -299,6 +308,45 @@ class VersionOutputCorrelator:
                     _left_for_the_version_that_folded_it(merged_record, agent_records, folded_into)
                 )
         return correlated_records
+
+
+def _split_across_ids(records: list[dict[str, Any]]) -> list[str]:
+    """Source records merged short of a version while another merged record holds it.
+
+    Each version of a source record carries the same correlation id, so its versions
+    merge into one record. Ids minted by an earlier agac took the project's path in,
+    and a version answered again from another path took another id: the record is
+    then merged twice, each half short of the versions the other holds.
+    """
+    short: defaultdict[str, list[set[str]]] = defaultdict(list)
+    for record in records:
+        guid = record.get("source_guid")
+        if guid and record.get("_missing_iterations"):
+            short[str(guid)].append(set(record.get("_correlation_sources") or ()))
+    return sorted(
+        guid
+        for guid, halves in short.items()
+        if len(halves) > 1 and sum(len(h) for h in halves) == len(set().union(*halves))
+    )
+
+
+def _warn_of_versions_merged_apart(
+    agent_name: str, version_sources: list[str], split: dict[str, list[str]]
+) -> None:
+    """Name the records whose versions were merged apart, and the rerun that joins them."""
+    guids = sorted({guid for guids in split.values() for guid in guids})
+    base = version_sources[0].rsplit("_", 1)[0] if version_sources else agent_name
+    shown = ", ".join(guids[:3]) + (f" (and {len(guids) - 3} more)" if len(guids) > 3 else "")
+    logger.warning(
+        "Version merge '%s': the versions of %d source record(s) carry different "
+        "correlation ids, so each was merged in parts short of a version: %s. Ids from "
+        "an earlier agac depended on the project's path. Run `agac run --rerun %s` to "
+        "answer every version under one id.",
+        agent_name,
+        len(guids),
+        shown,
+        base,
+    )
 
 
 def _left_for_the_version_that_folded_it(

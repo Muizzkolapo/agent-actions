@@ -62,7 +62,7 @@ VersionIdGenerator (correlation.py)
 └── _evict_oldest_if_needed()                       → LRU cap at 10,000
 ```
 
-`VersionIdGenerator` uses a class-level `OrderedDict` registry with LRU eviction and a reentrant lock. IDs are deterministic: `sha256(session_id:content)[:16]` prefixed with `corr_`.
+`VersionIdGenerator` uses a class-level `OrderedDict` registry with LRU eviction and a reentrant lock. IDs are deterministic: `sha256(session_id:content)[:16]` prefixed with `corr_`. The session id is derived from the workflow's name alone (`AgentWorkflow._generate_workflow_session_id`), never its path, so versions answered from another checkout or mount share ids with the versions they merge with.
 
 ---
 
