@@ -418,9 +418,15 @@ class AgentWorkflow:
     # ── Session management ──────────────────────────────────────────────
 
     def _generate_workflow_session_id(self) -> str:
-        """Generate a deterministic workflow session ID from config path + agent name."""
-        config_content = f"{self.config.paths.constructor_path}:{self.agent_name}"
-        config_hash = hashlib.sha256(config_content.encode()).hexdigest()[:16]
+        """A deterministic workflow session ID from the workflow's name alone.
+
+        Version correlation ids are minted from it, and a merge pairs each record's
+        versions by them. Answers kept from earlier runs must therefore carry the
+        same ids as answers given now, wherever the project sits: a path in it let
+        a run from another checkout, worktree or mount mint other ids, and the merge
+        stranded every version answered there.
+        """
+        config_hash = hashlib.sha256(self.agent_name.encode()).hexdigest()[:16]
         return f"workflow_{config_hash}"
 
     def _prepare_action_configs(self):
