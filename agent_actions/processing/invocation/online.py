@@ -160,6 +160,7 @@ class OnlineStrategy(InvocationStrategy):
                 succeeded=succeeded,
                 reason=retry_result.reason or "NOT_SET",
                 timestamp=datetime.now(UTC).isoformat(),
+                last_error=None if succeeded else retry_result.last_error,
             )
 
     def _invoke_with_retry(

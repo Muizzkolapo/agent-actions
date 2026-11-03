@@ -673,6 +673,7 @@ def collect_results_from_processing_results(
                     )
                 output.extend(data)
             attempts = _get_retry_attempts(result)
+            causes.append(str(result.error) if result.error else "")
             logger.debug(
                 "Collected EXHAUSTED result source_guid=%s attempts=%s",
                 result.source_guid,
@@ -1124,8 +1125,10 @@ class ResultCollector:
                         )
 
         first = exhausted_results[0]
+        retry = first.recovery_metadata.retry if first.recovery_metadata else None
+        cause = f"{retry.last_error} — " if retry and retry.last_error else ""
         return AgentActionsError(
-            f"Retry exhausted for record {first.source_guid} after "
+            f"{cause}Retry exhausted for record {first.source_guid} after "
             f"{_get_retry_attempts(first)} attempts (on_exhausted=raise)",
             context={
                 "agent_name": agent_name,

@@ -64,6 +64,7 @@ from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED, DISPOSITION_SUCCESS
 from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
+from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
 logger = logging.getLogger(__name__)
@@ -313,7 +314,7 @@ class OnlineLLMStrategy:
                 failed_result = ProcessingResult.failed(
                     # The cause, unwrapped: every layer above renders this, and
                     # the item index is already on the log line just above.
-                    error=str(e),
+                    error=safe_format_error(e),
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
                     input_record=input_record,
@@ -532,7 +533,7 @@ class OnlineLLMStrategy:
                         retry = recovery_metadata.retry
                         assert retry is not None
                         tombstone_reason = RETRY_EXHAUSTED
-                        error_msg = f"Retry exhausted after {retry.attempts} attempts"
+                        error_msg = retry.exhausted_message()
                     tombstone = build_exhausted_tombstone(
                         context.action_name,
                         input_record,
