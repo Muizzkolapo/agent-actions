@@ -160,3 +160,23 @@ def test_nothing_more_is_sent_or_collected_by_the_run_after(reader_has_a_batch_o
     assert "run again" not in again, again
     assert "submitted:" not in again, again
     assert _rows(project, READER) == held
+
+
+def test_a_rerun_of_the_action_a_reader_reads_does_not_say_the_reader_s_batch_is_collected(
+    reader_has_a_batch_out,
+):
+    """The reader was edited while its batch is out; ``--rerun`` of what it reads gives that
+    batch up, so no warning may say it is collected as it was sent."""
+    project = reader_has_a_batch_out
+    config = _config(project)
+    publish_prompt = "    prompt: $p.Publish\n"
+    config.write_text(
+        config.read_text().replace(
+            publish_prompt, publish_prompt + "    model_name: another-model\n", 1
+        )
+    )
+
+    output = " ".join(_run(project, *RERUN).split())
+
+    assert "collected as it was sent" not in output, output
+    assert f"{READER} is running again from scratch: giving up" in output, output

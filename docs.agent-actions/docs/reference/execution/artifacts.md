@@ -159,8 +159,8 @@ through an action — killed, interrupted, or stopped by an error — leaves the
 finished, and the next run keeps them. If the prompt, schema, guard, model, context scope,
 dependencies, generation settings or tool or guard code were edited in between — the same edits as for a completed action, above —
 the run names the edit and answers only the rest under it. When the action kept any
-answer, its stamps stay at the config those answers were given under
-(`kept_answers_under` in the status file), so every later run names the edit until
+answer, a batch sent and not yet collected included, its stamps stay at the config those
+answers were given under (`kept_answers_under` in the status file), so every later run names the edit until
 `--rerun` answers every record under it. An action that may hold answers from more than one
 config is marked so (`answers_under_more_than_one_config`), and each run says so even after
 the edit is undone. A change to a module a tool imports or to the contents of

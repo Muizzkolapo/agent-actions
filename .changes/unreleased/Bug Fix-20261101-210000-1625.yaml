@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: An action edited after its run stopped while collecting a batch, before anything was stored, now keeps naming the edit. The batch is collected as it was sent, so every answer comes from the config before the edit, but the run that completed it stamped the edited config and later runs said nothing; now each later run names the edit until `agac run --rerun <action>`. An action edited after a stop that kept no answer is no longer told "the records it finished stand"; the warning says it kept no answers, so every record is answered under the edit.
+time: 2026-11-01T21:00:00Z

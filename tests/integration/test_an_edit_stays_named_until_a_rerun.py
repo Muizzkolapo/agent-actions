@@ -8,20 +8,27 @@ files it skips keep older output. Every run goes through the CLI and the mock pr
 
 import json
 
+import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.agac.client import AgacClient
 from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_answers import (
     ACTION,
     EVERY_PAGE,
     MODEL,
+    PUBLISH_ACTION,
+    PUBLISHER,
     WORKFLOW,
     _backend,
+    _config,
     _edit_model,
     _page_in,
     _printed,
     _run,
+    _sent,
+    _sent_since,
     _status,
     _stored,
     online,  # noqa: F401 — fixture
@@ -34,9 +41,23 @@ STILL_NAMED = f"{ACTION} was edited since it completed (model)"
 FILE_LIMIT = f"{ACTION} is re-running under a file limit of 1 after"
 
 
-def _status_details(root):
+def _status_details(root, action=ACTION):
     status_file = root / "agent_workflow" / WORKFLOW / "agent_io" / ".agent_status.json"
-    return json.loads(status_file.read_text())[ACTION]
+    return json.loads(status_file.read_text())[action]
+
+
+def _checkpointed(root):
+    """How many records of the action hold a checkpoint row."""
+    backend = _backend(root)
+    try:
+        cursor = backend.connection.cursor()
+        cursor.execute(
+            "SELECT COUNT(DISTINCT source_guid) FROM checkpoint_output WHERE action_name = ?",
+            (ACTION,),
+        )
+        return cursor.fetchone()[0]
+    finally:
+        backend.close()
 
 
 def _trace_models(root):
@@ -174,11 +195,13 @@ def test_an_action_stopped_before_it_stored_a_file_still_names_the_edit_it_resum
     online,  # noqa: F811
     provider,  # noqa: F811
 ):
-    """The answer it kept is only a disposition: no file was stored before the stop."""
+    """The answer it kept is only checkpointed and marked answered: no file was stored
+    before the stop. Its verdict is what carries it, so its verdict is what names the edit."""
     provider.stops(at_call=2, raising=KeyboardInterrupt())
     _run("--fresh")
     assert _status(online) == "interrupted"
     assert _stored(online) == {}
+    assert _checkpointed(online) == 1
     _edit_model(online, EDITED_MODEL)
     provider.answers()
 
@@ -312,8 +335,8 @@ def test_a_rerun_of_an_action_whose_batch_is_out_does_not_say_it_is_collected(pr
     assert f"--rerun: {ACTION}" in _printed(result)
 
 
-def _flags(root):
-    return _status_details(root).get("answers_under_more_than_one_config")
+def _flags(root, action=ACTION):
+    return _status_details(root, action).get("answers_under_more_than_one_config")
 
 
 def test_a_rerun_under_a_file_limit_after_an_edit_leaves_the_action_marked_as_mixed(online):  # noqa: F811
@@ -416,3 +439,61 @@ def test_a_mixed_action_reset_again_under_a_file_limit_stays_marked(online):  # 
     assert _run("--file-limit", "1", "--record-limit", "1").exit_code == 0
 
     assert _flags(online) is True
+
+
+def test_a_rerun_under_a_file_limit_leaves_an_edited_reader_marked_as_mixed(online):  # noqa: F811
+    """``--rerun`` of the action it reads reaches only the file the walk opens: the reader's
+    other file keeps what it answered before its own edit."""
+    config = _config(online)
+    config.write_text(config.read_text().rstrip("\n") + "\n" + PUBLISH_ACTION)
+    assert _run("--fresh").exit_code == 0
+    publish_prompt = "    prompt: $p.Publish\n"
+    config.write_text(
+        config.read_text().replace(
+            publish_prompt, publish_prompt + f"    model_name: {EDITED_MODEL}\n", 1
+        )
+    )
+
+    assert _run("--rerun", ACTION, "--file-limit", "1").exit_code == 0
+
+    assert _flags(online, PUBLISHER) is True
+    result = _run("--file-limit", "1")
+    assert result.exit_code == 0, result.output
+    assert f"{PUBLISHER} may hold answers given under more than one config" in _printed(result)
+
+
+@pytest.mark.parametrize("left", ["failed", "checking_batch"], ids=["collect-error", "killed"])
+def test_an_edit_while_a_batch_nothing_was_collected_from_is_out_stays_named(project, left):  # noqa: F811
+    """Collecting stopped before anything was stored: the batch is all the action holds, and
+    every answer it gives was sent under the old config. ``killed`` stands for a process
+    killed while collecting, which leaves the status as it was."""
+    assert _run("--fresh").exit_code == 0
+
+    def provider_dropped(self, **kwargs):
+        raise RuntimeError("the provider dropped the connection")
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(BatchProcessingService, "_process_single_batch_file", provider_dropped)
+        assert _run().exit_code != 0
+    assert _status(project) == "failed"
+    assert _stored(project) == {}
+    if left == "checking_batch":
+        status_file = project / "agent_workflow" / WORKFLOW / "agent_io" / ".agent_status.json"
+        state = json.loads(status_file.read_text())
+        state[ACTION]["status"] = left
+        status_file.write_text(json.dumps(state))
+    _edit_model(project, EDITED_MODEL)
+    before = _sent(project)
+
+    for _ in range(3):
+        assert _run().exit_code == 0
+        if _status(project) == "completed":
+            break
+    assert _status(project) == "completed"
+    assert _sent_since(project, before) == []
+    assert len(_stored(project)) == len(EVERY_PAGE)
+
+    result = _run()
+
+    assert result.exit_code == 0, result.output
+    assert STILL_NAMED in _printed(result)
