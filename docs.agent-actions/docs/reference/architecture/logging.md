@@ -40,8 +40,10 @@ All logging flows through a central EventManager that dispatches events to regis
               │                  │
               │  - Enriches with │
               │    context       │
-              │  - Routes by     │
-              │    category      │
+              │  - Dispatches to │
+              │    each handler  │
+              │    that accepts  │
+              │    the event     │
               └────────┬─────────┘
                        │
           ┌────────────┼────────────┐
@@ -85,17 +87,21 @@ with manager.context(workflow_name="my_workflow"):
 
 ### Event Types
 
-**Location:** `agent_actions/logging/events/types.py`
+**Location:** `agent_actions/logging/events/` holds one module per category of events. `types.py` there holds the category constants, and the base class, `BaseEvent`, lives in `agent_actions/logging/core/events.py`.
 
-Events are dataclasses that represent specific occurrences in the system:
+Events are dataclasses that represent specific occurrences in the system. The event class name is the `event_type` written to `events.json`:
 
 **Event Categories:**
 - `workflow` - Workflow lifecycle events
 - `action` - Action execution events
 - `batch` - Batch job operations
+- `llm` - LLM requests and responses
 - `validation` - Validation results
-- `progress` - Progress updates
-- `system` - System-level events
+- `cache`, `template`, `data`, `guard`, `recovery` - Cache, template rendering, data loading, guard evaluation and retry events
+- `configuration`, `initialization`, `plugin` - Configuration loading, CLI start-up and tool discovery events
+- `data_processing`, `file_io`, `schema`, `transformation` - Record pipeline, file, schema and transformation events
+
+An event that sets no category has the category `system`.
 
 **Common Events:**
 - `WorkflowStartEvent` - Workflow execution begins
@@ -124,7 +130,7 @@ Formats events for user-facing CLI output using Rich.
 **Features:**
 - Color-coded output by event type
 - Timestamp display
-- Category filtering (show only workflow/action/batch events by default)
+- Category filtering (workflow, action and batch events by default); warnings and errors show whatever their category
 - Verbose mode shows all events
 - Drops events marked diagnostic unless the run is verbose
 
@@ -171,23 +177,27 @@ Writes events to a JSON file in NDJSON format (one JSON object per line).
 - NDJSON format for easy streaming and parsing
 - Full event payload with metadata
 
-**Output Location:** `{workflow}/agent_io/logs/events.json`
+**Output Location:** `{workflow}/agent_io/logs/events.json` holds every level. A second handler writes `{workflow}/agent_io/logs/errors.json`, which holds ERROR events only.
 
-**Example Entry:**
+**Example Entry** (one line in the file, indented here to read):
 ```json
 {
-  "event_id": "evt_abc123",
-  "timestamp": "2024-01-15T19:40:16.123Z",
-  "event_type": "workflow_start",
+  "event_type": "WorkflowStartEvent",
+  "code": "W001",
+  "level": "info",
   "category": "workflow",
-  "message": "Starting workflow support_resolution",
+  "message": "Running workflow support_resolution (5 actions)",
+  "diagnostic": false,
   "meta": {
-    "invocation_id": "run_xyz789",
-    "workflow_name": "support_resolution",
-    "correlation_id": "corr_def456"
+    "timestamp": "2026-01-15T19:40:16.123456+00:00",
+    "correlation_id": "4f8641ff",
+    "invocation_id": "run_support_resolution_8535dbc9",
+    "thread_id": null,
+    "workflow_name": "support_resolution"
   },
   "data": {
-    "agent_count": 5,
+    "workflow_name": "support_resolution",
+    "action_count": 5,
     "execution_mode": "parallel"
   }
 }
@@ -211,32 +221,35 @@ Collects workflow execution data and outputs a `run_results.json` artifact.
 ```json
 {
   "metadata": {
-    "invocation_id": "run_xyz789",
+    "invocation_id": "run_support_resolution_8535dbc9",
     "workflow_name": "support_resolution",
-    "agent_count": 5,
+    "action_count": 5,
     "execution_mode": "parallel",
-    "started_at": "2024-01-15T19:40:16.000Z",
-    "completed_at": "2024-01-15T19:42:15.456Z",
+    "started_at": "2026-01-15T19:40:16.000000+00:00",
+    "completed_at": "2026-01-15T19:42:15.456000+00:00",
     "elapsed_time": 119.456,
     "status": "success"
   },
   "results": [
     {
       "unique_id": "support_resolution.extract_raw_qa",
-      "agent_name": "extract_raw_qa",
-      "agent_index": 1,
+      "action_name": "extract_raw_qa",
+      "action_index": 0,
       "status": "success",
       "execution_time": 15.23,
-      "output_folder": "support_resolution/agent_io/target/extract_raw_qa",
+      "output_folder": "/path/to/project/agent_workflow/support_resolution/agent_io/target/extract_raw_qa",
       "record_count": 100,
       "tokens": {
         "prompt_tokens": 800,
         "completion_tokens": 400,
         "total_tokens": 1200
       },
+      "error_message": null,
+      "skip_reason": null,
+      "empty_output_records": 0,
       "timing": {
-        "started_at": "2024-01-15T19:40:17.000Z",
-        "completed_at": "2024-01-15T19:40:32.234Z"
+        "started_at": "2026-01-15T19:40:17.000000+00:00",
+        "completed_at": "2026-01-15T19:40:32.234000+00:00"
       }
     }
   ],
@@ -259,19 +272,20 @@ When a workflow runs, LoggerFactory initializes the logging system:
 # In cli/run.py
 LoggerFactory.initialize(
     output_dir=agent_folder,  # {workflow}/agent_io
-    workflow_name=workflow_name,
+    workflow_name=self.agent_name,
     invocation_id=run_id,
-    verbose=args.verbose,
     force=True,
+    new_run=True,  # rotate the earlier run logs first
 )
 ```
 
 This:
 1. Creates EventManager singleton
 2. Registers ProgressRenderer (the console handler for a run)
-3. Registers JSONFileHandler (writes to `{output_dir}/target/events.json`)
-4. Registers RunResultsCollector (writes to `{output_dir}/target/run_results.json`)
-5. Sets up LoggingBridgeHandler to convert `logger.*` calls to events
+3. Registers JSONFileHandler (writes every level to `{output_dir}/logs/events.json`)
+4. Registers a second JSONFileHandler (writes ERROR events to `{output_dir}/logs/errors.json`)
+5. Registers RunResultsCollector (writes `{output_dir}/logs/run_results.json`)
+6. Sets up LoggingBridgeHandler to convert `logger.*` calls to events
 
 ### 2. Event Emission
 
@@ -283,9 +297,8 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import WorkflowStartEvent
 
 fire_event(WorkflowStartEvent(
-    message="Starting workflow",
     workflow_name="my_workflow",
-    agent_count=5,
+    action_count=5,
 ))
 ```
 
@@ -310,7 +323,7 @@ manager.set_context(
 )
 
 # All events inherit this context
-fire_event(AgentStartEvent(message="Starting"))
+fire_event(ActionStartEvent(action_name="extract_data"))
 # Event will have workflow_name and correlation_id populated
 ```
 
@@ -321,12 +334,15 @@ EventManager routes events to handlers based on acceptance criteria:
 ```python
 class ConsoleEventHandler:
     def accepts(self, event: BaseEvent) -> bool:
-        # Accept only specific categories
-        return event.category in self.categories
+        # Below the minimum level: refused
+        # Diagnostic event on a non-verbose run: refused
+        # WARN and ERROR: accepted whatever the category
+        # Otherwise: accepted when the category is in self.categories
+        ...
 
     def handle(self, event: BaseEvent) -> None:
         # Format and print event
-        self.console.print(self.formatter.format(event))
+        ...
 ```
 
 ### 5. Output Generation
@@ -338,22 +354,17 @@ Handlers process events and generate output:
 
 ## Context Propagation
 
-Context is automatically propagated through nested workflow executions:
+`manager.context()` overlays context values for the code inside the block, for each thread and coroutine separately:
 
 ```python
-# In dependency.py (upstream workflow execution)
-with manager.context(
-    workflow_name=upstream_name,
-    correlation_id=str(uuid4())[:8]
-):
-    # Execute upstream workflow
+with manager.context(workflow_name="upstream", correlation_id="abc123"):
     # All events in this scope inherit the context
-    upstream_wf.run()
+    run_upstream()
 
 # Context automatically restores after block
 ```
 
-This ensures proper attribution of events to the correct workflow in the execution hierarchy.
+This ensures proper attribution of events to the correct workflow or action.
 
 Each action runs inside `manager.context(action_name=..., action_index=...)`, so every event
 it fires, from its worker threads too, names it in `meta`. Actions of one step run at once,
@@ -364,42 +375,54 @@ which is why the action is never set with `set_context()`: that value is shared 
 ### Testing Event Emission
 
 ```python
-from agent_actions.logging.core.manager import EventManager
+from agent_actions.logging.core.manager import EventManager, fire_event
 from agent_actions.logging.events import WorkflowStartEvent
 
+
+class CaptureHandler:
+    def __init__(self):
+        self.events = []
+
+    def accepts(self, event):
+        return True
+
+    def handle(self, event):
+        self.events.append(event)
+
+    def flush(self):
+        pass
+
+    def close(self):
+        pass
+
+
 def test_workflow_event():
+    EventManager.reset()
     manager = EventManager.get()
-    events = []
 
     # Register test handler
-    def capture(event):
-        events.append(event)
-
-    manager.register_function(capture)
+    capture = CaptureHandler()
+    manager.register(capture)
 
     # Fire event
-    fire_event(WorkflowStartEvent(
-        message="Test",
-        workflow_name="test",
-    ))
+    fire_event(WorkflowStartEvent(workflow_name="test", action_count=1))
 
     # Verify
-    assert len(events) == 1
-    assert events[0].workflow_name == "test"
+    assert len(capture.events) == 1
+    assert capture.events[0].data["workflow_name"] == "test"
 ```
 
 ### Testing Handlers
 
 ```python
 from agent_actions.logging.core.handlers import ConsoleEventHandler
-from agent_actions.logging.events import AgentCompleteEvent
+from agent_actions.logging.events import ActionCompleteEvent
 
 def test_console_handler():
-    handler = ConsoleEventHandler(categories={"agent"})
+    handler = ConsoleEventHandler(categories={"action"})
 
-    event = AgentCompleteEvent(
-        message="Completed",
-        agent_name="test",
+    event = ActionCompleteEvent(
+        action_name="test",
         execution_time=1.5,
     )
 
@@ -418,10 +441,13 @@ Console verbosity can be controlled:
 
 ```bash
 # Default: INFO level, workflow/action/batch categories
-agac run
+agac run -a my_workflow
 
-# Verbose: DEBUG level, all categories
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run
+# Verbose: all categories, diagnostic events included
+agac --verbose run -a my_workflow
+
+# DEBUG level, same categories as the default
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
 # Quiet: warnings and errors only
 agac --quiet run -a my_workflow
@@ -430,7 +456,7 @@ agac --quiet run -a my_workflow
 ### File Handler
 
 The file handler only attaches when a workflow run passes `output_dir` to
-`LoggerFactory.initialize()` — `agac run` and `agac retry` do this once the
+`LoggerFactory.initialize()` — `agac run`, `agac retry` and the `agac batch` commands do this once the
 run's own output directory is known:
 
 ```python
@@ -451,17 +477,15 @@ Don't use BaseEvent directly. Create specific event classes:
 
 ```python
 # Good
-fire_event(AgentCompleteEvent(
-    message="Agent completed",
-    agent_name="extract_data",
+fire_event(ActionCompleteEvent(
+    action_name="extract_data",
     execution_time=15.2,
 ))
 
 # Bad
 fire_event(BaseEvent(
-    message="Agent completed",
-    category="agent",
-    event_type="agent_complete",
+    message="Action completed",
+    category="action",
 ))
 ```
 
@@ -471,7 +495,7 @@ Event messages should be human-readable and actionable:
 
 ```python
 # Good
-message="Agent extract_data completed in 15.2s"
+message="Action extract_data completed in 15.2s"
 
 # Bad
 message="done"
@@ -482,20 +506,27 @@ message="done"
 Put machine-readable data in the `data` dict:
 
 ```python
-fire_event(AgentCompleteEvent(
-    message="Agent completed",
-    agent_name="extract_data",
+fire_event(ActionCompleteEvent(
+    action_name="extract_data",
     execution_time=15.2,
-    tokens={"prompt": 800, "completion": 400},
+    tokens={"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
 ))
 ```
 
-The `data` dict will contain:
+The event class builds the `message` and the `data` dict from its fields. The `data` dict will contain:
 ```json
 {
-  "agent_name": "extract_data",
+  "action_name": "extract_data",
+  "action_index": 0,
+  "total_actions": 0,
   "execution_time": 15.2,
-  "tokens": {"prompt": 800, "completion": 400}
+  "output_path": "",
+  "record_count": 0,
+  "tokens": {"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
+  "mode": "",
+  "model_vendor": "",
+  "model_name": "",
+  "kind": ""
 }
 ```
 
@@ -522,48 +553,16 @@ finally:
     LoggerFactory.flush()  # Ensure all buffered events are written
 ```
 
-## Migration from Legacy Logging
+## Console Output
 
-The event system replaces several legacy components:
+Do not call `console.print()` from framework code to report progress. Fire an event instead, and the console handler formats it:
 
-### ServiceLogger (Deprecated)
-
-**Before:**
 ```python
-from agent_actions.cli.utils.service_logger import ServiceLogger
-
-logger = ServiceLogger()
-logger.print("Processing item", style="info")
-```
-
-**After:**
-```python
-from agent_actions.logging.core.manager import fire_event
-from agent_actions.logging.events import ProgressEvent
-
-fire_event(ProgressEvent(
-    message="Processing item",
-    current=1,
-    total=100,
+fire_event(ActionCompleteEvent(
+    action_name="my_action",
+    execution_time=1.5,
 ))
 ```
-
-### Direct console.print() (Avoid)
-
-**Before:**
-```python
-console.print("[green]✓[/green] Completed")
-```
-
-**After:**
-```python
-fire_event(AgentCompleteEvent(
-    message="Agent completed",
-    agent_name="my_agent",
-))
-```
-
-The ConsoleEventHandler will format it appropriately.
 
 ## Performance Considerations
 
@@ -578,6 +577,8 @@ json_handler = JSONFileHandler(
 )
 ```
 
+`LoggerFactory` sets `buffer_size=5` for `events.json` and `buffer_size=1` for `errors.json`.
+
 ### Handler Acceptance
 
 Handlers filter events early to avoid unnecessary processing:
@@ -585,7 +586,8 @@ Handlers filter events early to avoid unnecessary processing:
 ```python
 def accepts(self, event: BaseEvent) -> bool:
     # Quick check before handle() is called
-    return event.category in self.categories
+    level_order = EventLevel.ordered()
+    return level_order.index(event.level) >= level_order.index(self.min_level)
 ```
 
 ### Context Copying
@@ -593,9 +595,10 @@ def accepts(self, event: BaseEvent) -> bool:
 EventManager copies context to avoid mutation issues:
 
 ```python
-# Context is copied to each event
-event.meta.invocation_id = self._context["invocation_id"]
-event.meta.workflow_name = self._context["workflow_name"]
+# invocation_id and correlation_id are set on the event's meta;
+# every other context key, such as workflow_name, goes into meta.extra
+event.meta.invocation_id = context["invocation_id"]
+event.meta.extra["workflow_name"] = context["workflow_name"]
 ```
 
 ## See Also

@@ -9,7 +9,7 @@ sidebar_position: 3
 Add custom code to your workflows for validation, transformation, API calls, or any deterministic logic.
 
 :::note
-Tools currently support Python only. Support for Docker containers and other runtimes is planned.
+Tools support Python only.
 :::
 
 ## Quick Start
@@ -34,12 +34,14 @@ actions:
   - name: price_validator
     kind: tool
     impl: validate_product_price
+    intent: Check that the product price is positive
+    schema: { source: object }
     context_scope:
       observe:
         - source.*
 ```
 
-Agent Actions discovers tools automatically—no module paths needed.
+Agent Actions discovers tools automatically—no module paths needed. A tool action must declare an `intent` and a `schema` for the fields it returns. This tool returns `data` unchanged, so its schema is `{ source: object }`.
 
 ## Tool Signature
 

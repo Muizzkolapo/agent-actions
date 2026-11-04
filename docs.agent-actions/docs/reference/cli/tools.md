@@ -65,6 +65,10 @@ Catches misspelled function names or missing `@udf_tool` decorators before execu
 - No duplicate function names across files
 - All Python files can be imported without errors
 - Functions are properly decorated with `@udf_tool`
+- Guard UDF references resolve to registered functions
+- The workflow config passes the same structural checks that `inspect`, `schema` and `run` apply
+
+On failure the command exits with code 1. It also prints warnings, for example for a FILE tool whose return type breaks the FILE contract or a tool that reads an unknown namespace key.
 
 **Examples:**
 

@@ -5,11 +5,11 @@ sidebar_position: 3
 
 # Context Handling
 
-Agent Actions builds prompt context the same way in both batch and online modes. Earlier revisions of this page claimed the two modes diverged — that was wrong. **The single correct template pattern is `{{ source.field }}` in both modes**, and the rest of this page exists to explain why.
+Agent Actions builds prompt context the same way in both batch and online modes. **The template pattern is `{{ source.field }}` in both modes**, and the rest of this page explains why.
 
 ## Mode Differences
 
-There are none, as far as your templates are concerned. Both batch and online start each record with `base: dict = {}` (see `agent_actions/prompt/service.py:630`) and merge in only what `context_scope` admits — under the namespaces it admits them. The final Jinja context is identical in both modes for the same `context_scope` configuration.
+There are none, as far as your templates are concerned. Both batch and online start each record with an empty `base` dict and merge in only what `context_scope` admits — under the namespaces it admits them. The final Jinja context is identical in both modes for the same `context_scope` configuration.
 
 | Property                       | Online | Batch |
 |--------------------------------|--------|-------|
@@ -57,18 +57,18 @@ Analyze: {{ source.content }}
 **Do not** use bare `{{ field }}`. `base` is empty before rendering, so `field` is undefined and rendering the template fails (Jinja `StrictUndefined`) — in either mode.
 
 :::warning Common pitfall
-Earlier revisions of this guide described batch mode as accepting unwrapped variables — for example, `{{ content }}` instead of `{{ source.content }}`. That was wrong. If you have prompts of the form `{{ passage }}`, migrate them to `{{ source.passage }}`; the change is safe in both modes and is the only pattern that has ever worked end-to-end.
+Neither mode accepts unwrapped variables such as `{{ content }}` in place of `{{ source.content }}`. If a prompt reads `{{ passage }}`, write `{{ source.passage }}` instead.
 :::
 
 ## Mode-Agnostic Templates
 
-There is no longer a need for `{% if source is defined %}` conditionals or other mode-detection scaffolding. Templates are mode-agnostic by construction:
+Templates need no `{% if source is defined %}` conditionals or other mode-detection scaffolding. They are mode-agnostic by construction:
 
 ```jinja2
 Content: {{ source.content }}
 ```
 
-This renders the same way under `agac run -w my_workflow` and `agac run -w my_workflow --mode batch`.
+This renders the same way whether the action's `run_mode` is `online` or `batch`.
 
 ## Context Variables
 
@@ -102,7 +102,7 @@ The same configuration works identically in both modes.
 ## Best Practices
 
 1. **Always namespace fields in templates** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never bare `{{ field }}`.
-2. **Pick a mode for cost/latency reasons, not for templating reasons** — `--mode batch` changes when LLM calls happen, not what context the prompt sees.
+2. **Pick a mode for cost/latency reasons, not for templating reasons** — `run_mode: batch` changes when LLM calls happen, not what context the prompt sees.
 3. **Use seed data for static content** — works identically in both modes.
 4. **Inspect rendered prompts** — `agac traces -w <workflow> -a <action>` shows the exact text the LLM received.
 

@@ -8,18 +8,17 @@ sidebar_position: 4
 
 Beyond running agentic workflows, `agac` provides commands for project setup, debugging, and maintenance. These utilities help you initialize projects, debug template rendering, run tests, and keep your workspace clean.
 
-## render / compile (removed)
+## render / compile
 
-`agac render` and `agac compile` are no longer available as standalone
-commands. Rendering happens implicitly during preflight — when
+There are no standalone `agac render` or `agac compile` commands. Rendering happens implicitly during preflight — when
 [`agac inspect`](./inspect) loads a workflow it Jinja2-expands templates,
 resolves prompts, inlines schemas, and expands versions. A rendering
-failure surfaces a non-zero exit and writes the partial YAML to
+failure exits non-zero. When the rendered text is not valid YAML, the
+command also writes it to
 `.agent-actions/cache/rendered_workflows/<workflow>_failed.yml` for
 debugging.
 
-If you need fresh scaffolding (the prior `--create-dirs` use case), use
-[`agac init`](#init).
+To create the project folders, use [`agac init`](#init).
 
 ## init
 
@@ -39,7 +38,9 @@ my-project/
 ├── agent_workflow/        # Agentic workflow definitions
 ├── schema/                # JSON schemas for validation
 ├── prompt_store/          # Prompt templates
-└── tools/                 # Custom tools
+├── templates/             # Jinja2 templates for config rendering
+├── tools/                 # Custom tools
+└── seed_data/             # Static reference data
 ```
 
 Think of this like `npm init` or `git init` - it gives you a working starting point with sensible defaults.
@@ -47,14 +48,15 @@ Think of this like `npm init` or `git init` - it gives you a working starting po
 **Subcommands:**
 | Subcommand | Description |
 |------------|-------------|
+| `new <project-name>` | Create a project from a template (the default when the first word is not a subcommand) |
 | `list` | List available example projects from GitHub |
-| `example <name> [project-name]` | Scaffold from a GitHub example |
+| `example <name> [project-name]` | Scaffold from a GitHub example (takes `-o, --output-dir` and `-f, --force`) |
 
 **Options (for `agac init <project-name>`):**
 | Option | Description |
 |--------|-------------|
 | `-o, --output-dir` | Directory to create the project in (default: current directory) |
-| `-t, --template` | Template to use for project initialization (default: `default`) |
+| `-t, --template` | Template name: `default`, `minimal` or `full` (default: `default`). All three create the same structure |
 | `-f, --force` | Force project creation even if directory exists |
 
 **Examples:**
@@ -65,7 +67,7 @@ agac init my_project
 # Create a project in a specific directory
 agac init my_project -o ~/projects
 
-# Use a specific template
+# Name a template (default, minimal or full)
 agac init my_project -t minimal
 
 # See all available examples
@@ -120,14 +122,14 @@ agac example install contract_reviewer my_project
 
 ## clean
 
-The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/`, a directory earlier versions wrote and this one does not — on a project that never ran one, a plain `clean` finds nothing to remove. Your staged input is untouched. Anything beyond that is opt-in.
+The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/`, a directory the framework does not write — on a project without one, a plain `clean` finds nothing to remove. Your staged input is untouched. Anything beyond that is opt-in.
 
 ```bash
 agac clean -a <workflow-name> [options]
 ```
 
 Removes:
-- `agent_io/source/` — left behind by an earlier version; no longer written (always)
+- `agent_io/source/` — not written by the framework; removed if present (always)
 - `agent_io/target/` — your generated output (only with `--target` or `--all`)
 - `agent_io/staging/` and the durable store — your input data and run history (only with `--all`)
 - what a provider recorded locally about this workflow's batches, under `.agac/` at the project root — the store being removed is what names them, so this is the last moment anything can reach them (only with `--all`)
@@ -171,7 +173,7 @@ agac docs [options]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-o, --output` | Output directory for generated files (default: `artefact`) |
+| `-o, --output` | Output directory for generated files; a relative path resolves against the project root (default: `artefact`) |
 | `-p, --port` | Port to run server on (default: `8000`) |
 
 **Examples:**
@@ -194,6 +196,13 @@ Run Playwright tests to verify the documentation site renders correctly.
 agac docs test [options]
 ```
 
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-t, --test` | Test suite to run: `schemas`, `actions` or `all` (default: `all`) |
+| `-p, --port` | Port where the docs server is running (default: `8890`) |
+
+The command does not start a server. It needs Node.js, a running docs server, and the test scripts (`test-all-schemas.js`, `test-run-actions-complete.js`, `test-actions-specific.js`) in the project root.
 :::tip Run from Anywhere
 You can run docs commands from any subdirectory within your project.
 :::

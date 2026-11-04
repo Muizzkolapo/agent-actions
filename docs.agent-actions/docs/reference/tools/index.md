@@ -23,7 +23,11 @@ def process_text(data: dict, **kwargs) -> dict:
 - name: process_step
   kind: tool
   impl: process_text
+  intent: "Upper-case the text"
   granularity: record
+  schema: processed_text
+  context_scope:
+    observe: [source.*]
 ```
 
 ## @udf_tool Decorator
@@ -180,17 +184,13 @@ Agent Actions automatically discovers tools decorated with `@udf_tool` from conf
 
 ### Configuration
 
-Set the tool path in `agent_actions.yml`:
+Set the tool path in `agent_actions.yml`. The default is `["tools"]`:
 
 ```yaml
 tool_path: ["tools", "custom_tools"]
 ```
 
-Or use the `TOOLS_PATH` environment variable:
-
-```bash
-export TOOLS_PATH="tools"
-```
+A workflow file can set its own `tool_path`, which takes precedence over the project file. The `TOOLS_PATH` environment variable does not change tool discovery; it only names the folder searched for a custom `split_method` module.
 
 ### Directory Structure
 
@@ -225,7 +225,7 @@ Reference tools by function name:
 5. Validates `impl` references in agentic workflow config
 
 :::info Thread Safety
-Tool discovery is thread-safe and cached. Concurrent discovery calls are properly synchronized, and modules are loaded only once.
+Tool registration is thread-safe, and a module is loaded only once.
 :::
 
 ## CLI Commands
@@ -301,9 +301,14 @@ def validate_phone(data): ...
 ### Duplicate Function Names
 
 ```
-DuplicateFunctionError: Function 'process_data' already registered
-  Existing: module_a.process_data (tools/module_a.py)
-  New: module_b.process_data (tools/module_b.py)
+Duplicate UDF function name detected: 'process_data'
+  Existing: module_a.process_data (in tools/module_a.py)
+  New:      module_b.process_data (in tools/module_b.py)
+
+Suggestions:
+  1. Rename one of the functions to be unique
+  2. Move shared UDFs to a common shared directory
+  3. Remove the duplicate if it's unintentional
 ```
 
 Rename one of the functions.
@@ -316,6 +321,9 @@ not take that branch. Pre-flight reads the tool before anything runs and refuses
 the workflow when it can see this:
 
 ```python
+from agent_actions import udf_tool
+
+
 @udf_tool()
 def produce(data: dict, **kwargs) -> dict:
     out: dict = {"label": data["source"]["text"]}
@@ -326,7 +334,7 @@ def produce(data: dict, **kwargs) -> dict:
 
 ```
 producer: output schema requires 'items' but the tool 'produce' sets it only at
-line 5 of produce.py, inside an `if`, so a record that does not take that path
+line 8 of produce.py, inside an `if`, so a record that does not take that path
 fails output validation at run time. Make 'items' optional in the schema, or set
 it on every path in the tool.
 ```
@@ -356,6 +364,9 @@ validate. An early return of a literal, or of `out` before the key is set,
 refuses the workflow when it leaves out a required field:
 
 ```python
+from agent_actions import udf_tool
+
+
 @udf_tool()
 def produce(data: dict, **kwargs) -> dict:
     content = data["source"]["text"]
@@ -366,7 +377,7 @@ def produce(data: dict, **kwargs) -> dict:
 
 ```
 producer: output schema requires 'items' but the tool 'produce' returns without
-it at line 5 of produce.py, inside an `if`, so a record that takes that path fails
+it at line 8 of produce.py, inside an `if`, so a record that takes that path fails
 output validation at run time. Make 'items' optional in the schema, or set it on
 every path in the tool.
 ```

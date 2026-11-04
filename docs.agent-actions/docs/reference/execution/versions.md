@@ -23,9 +23,9 @@ actions:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `param` | string | `i` | Name of the version variable used in templates |
-| `range` | array | `[1, 1]` | Two integers for an inclusive `[start, end]`, or the values to expand over |
+| `range` | array | `[1, 1]` | Two integers for an inclusive `[start, end]`, or any other number of values to expand over |
 
-Values that are not integers become the suffixes directly — `range: ["literal", "idiomatic"]` gives `translate_literal` and `translate_idiomatic`. Version consumption cannot collect those: fan-in groups versions by a numeric suffix, so a consumer of a non-integer range finds no versions and logs a warning. Use an integer range where a downstream action consumes the versions.
+A two-element `range` is always an inclusive pair of integers: `[3, 1]` and a pair of non-integers are refused when the workflow loads. A list of one, or of three or more, gives the values as the suffixes directly — `range: ["literal", "idiomatic", "formal"]` gives `translate_literal`, `translate_idiomatic` and `translate_formal`, and `range: [5]` gives `_5`. Version consumption cannot collect those: fan-in groups versions by a numeric suffix, so a consumer of a non-integer range finds no versions and logs a warning. Use an integer range where a downstream action consumes the versions.
 
 ## Template Variables
 
@@ -98,7 +98,7 @@ Downstream actions consume outputs from all version iterations. The `version_con
 | Field | Type | Description |
 |-------|------|-------------|
 | `source` | string | Name of the upstream versioned action to consume |
-| `pattern` | string | `merge` — combine all version outputs into one record (fan-in); `match` — pair each version output 1:1 with the consumer |
+| `pattern` | string | `merge` (default) — combine all version outputs into one record (fan-in). `match` is accepted and runs as `merge` |
 
 :::note
 Consumption requires the source's versions to carry numeric suffixes, which means an integer `range`.
@@ -272,12 +272,12 @@ context_scope:
 
 ## Debugging
 
-`agac inspect -a workflow_name` shows the dependency graph with version
-groups collapsed (`foo (×3)`). To see the per-variant configuration of a
-specific expansion, drill into one:
+`agac inspect -a workflow_name` lists every variant by name (`foo_1`, `foo_2`,
+`foo_3`). The `Used by` line of `agac inspect action` folds a versioned consumer
+into `foo (×3)`. To see the configuration of one variant, drill into it:
 
 ```bash
-agac inspect action -a workflow_name foo_1     # full config + rendered prompt for variant 1
+agac inspect action -a workflow_name foo_1     # full config and prompt text for variant 1
 ```
 
 Enable prompt debug to see rendered prompts per iteration:

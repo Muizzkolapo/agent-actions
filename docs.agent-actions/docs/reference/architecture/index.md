@@ -74,8 +74,8 @@ The arrows show data dependencies. `validate_facts` can't run until `extract_fac
 
 When an action references `{{ upstream_action.field }}`:
 
-1. **Locate** - Find the output file from the upstream action
-2. **Extract** - Parse JSON and extract the specified field
+1. **Locate** - Find the upstream action's stored records
+2. **Extract** - Read the specified field from the record
 3. **Inject** - Make value available in prompt template
 
 ## Component Architecture
@@ -166,11 +166,11 @@ For each level:
 3. Execute actions in parallel (up to concurrency limit)
 4. Validate outputs against schemas
 5. Regenerate on expectation failure (if an `expect:` block is set)
-6. Write outputs to target directory
+6. Write outputs to the workflow's SQLite store
 
 ### 5. Output
 
-- JSON files per action per record in `target/`
+- Records per action in the workflow's SQLite store, `agent_io/store/<workflow>.db` (read them with `agac records`)
 - Lineage tracking via `source_guid` and `node_id`
 - Passthrough fields merged from context scope
 

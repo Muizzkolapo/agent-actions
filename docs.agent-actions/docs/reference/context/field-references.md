@@ -136,37 +136,40 @@ prompt: |
 
 ## Dependencies
 
-Explicit `dependencies` are required for correct execution ordering:
+An action reads only the actions upstream of it through its `dependencies`. List each action it reads, or an action downstream of it:
 
 ```yaml
 - name: validate
-  dependencies: [extract]  # Required
+  dependencies: [extract]  # Required: `extract` is read below
   prompt: |
     Validate: {{ extract.data }}
 ```
 
 ## Best Practices
 
-1. **Use explicit dependencies** - Required for all referenced actions
+1. **Use explicit dependencies** - Every referenced action must be upstream of the action through its `dependencies`
 2. **Use Jinja2 syntax** - `{{ action_name.field }}` for prompts
 3. **Use selector syntax** - `action_name.field` for guards and context_scope
-4. **Use schema command** - Run `agac schema -a workflow` to analyze field dependencies
+4. **Use schema command** - Run `agac schema -a <workflow>` to see the fields each action takes and produces
 
 ## Version Field Patterns
 
-Version actions prefix field names to avoid collisions. Use wildcard syntax to reference all iterations:
+Each iteration of a version action keeps its output in its own namespace (`extract_strategies_1`, `extract_strategies_2`). A consumer declares `version_consumption` and uses wildcard syntax to reference all iterations:
 
 ```yaml
 - name: analyze_strategies
   dependencies: [extract_strategies]
+  version_consumption:
+    source: extract_strategies
+    pattern: merge
   context_scope:
     observe:
-      - extract_strategies.*  # Matches extract_strategies_1_*, extract_strategies_2_*, etc.
+      - extract_strategies.*  # Matches the namespaces extract_strategies_1, extract_strategies_2, ...
 ```
 
 See [Version Actions](../execution/versions) for complete documentation.
 
 ## See Also
 
-- [Version Actions](../execution/versions) - Version configuration and field prefix patterns
+- [Version Actions](../execution/versions) - Version configuration and consumption patterns
 - [Context Scope](./context-scope) - Field visibility and flow control

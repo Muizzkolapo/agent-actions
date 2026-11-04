@@ -20,7 +20,7 @@ agac retry -a <workflow-name> [options]
 | `--from TEXT` | Action to retry from. If omitted, retries from the earliest failure |
 | `--record TEXT` | Restrict retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what would be retried without executing |
-| `--abandon-in-flight` | Retry even though a batch is still in flight, giving up its results |
+| `--abandon-in-flight` | Retry even though a batch has not been collected, giving up its results |
 | `--filter ACTION:RECORD_ID` | Mark a failed record filtered at `ACTION` instead of retrying it, so no retry selects it again. Repeatable. Records the exclusion and exits: nothing is re-run and no LLM is called. See [Keep a record out for good](#keep-a-record-out-for-good) |
 | `--reason TEXT` | Why the `--filter` records are filtered (required with `--filter`); stored as their disposition reason |
 

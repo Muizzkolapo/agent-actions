@@ -159,7 +159,7 @@ Nested paths inside a wildcard element (`options[*].text`) aren't supported — 
 
 ## Expressions
 
-`type: expression` evaluates a condition against the **whole record**, using the same syntax as [guard](../execution/guards.md) conditions. The grammar is shared; field resolution is not, so a condition string is **not** portable between the two unchanged. An `expect:` entry reads the action's own output by bare name, as below. A guard reads the namespaced stored record, so the same bare name usually resolves to something else there, or to nothing — which is why the two are not interchangeable. Some bare names do resolve in a guard; #1164 measures which. It takes no `field:` (the fields it reads are named inside the condition):
+`type: expression` evaluates a condition against the **whole record**, using the same syntax as [guard](../execution/guards.md) conditions. The grammar is shared; field resolution is not, so a condition string is **not** portable between the two unchanged. An `expect:` entry reads the action's own output by bare name, as below. A guard reads the namespaced stored record, so the same bare name usually resolves to something else there, or to nothing — which is why the two are not interchangeable. It takes no `field:` (the fields it reads are named inside the condition):
 
 ```yaml
 - id: score_consistent_with_verdict
@@ -327,7 +327,7 @@ defaults:                                 defaults:
     on_exhausted: return_last                 on_exhausted: return_last
 ```
 
-`structural: auto` keeps the schema feedback the old block sent. Leave it off and a schema failure
+`structural: auto` keeps the schema feedback the `reprompt:` block sent. Leave it off and a schema failure
 re-sends the original prompt instead, which is usually what you want — a response the schema
 rejected has no partial result worth preserving.
 
@@ -399,9 +399,9 @@ Results attach to the record under an `expect` key, alongside the action's own s
     "failed": [],
     "skipped": [],
     "outcomes": [
-      {"id": "summary_present", "type": "not_null", "severity": "error", "passed": true, "detail": "", "skipped": false},
-      {"id": "summary_length", "type": "word_count_between", "severity": "warn", "passed": false, "detail": "212 words, expected at most 200", "skipped": false},
-      {"id": "summary_grounded", "type": "llm_judge", "severity": "info", "passed": true, "detail": "3/3 judge votes passed", "skipped": false}
+      {"id": "summary_present", "type": "not_null", "severity": "error", "passed": true, "detail": "", "definition_hash": "3f9a1c2d7b40", "skipped": false},
+      {"id": "summary_length", "type": "word_count_between", "severity": "warn", "passed": false, "detail": "212 words, expected at most 200", "definition_hash": "a81e5b60c3d2", "skipped": false},
+      {"id": "summary_grounded", "type": "llm_judge", "severity": "info", "passed": true, "detail": "3/3 judge votes passed", "definition_hash": "c07d44e9b1a6", "skipped": false}
     ]
   }
 }

@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Chunking
 
-Chunking splits large documents into smaller pieces that fit within LLM context limits. Agent Actions supports multiple chunking strategies optimized for different use cases.
+Chunking splits large text documents (`.txt`, `.md`, `.html`, `.pdf`, `.docx`) into smaller pieces that fit within LLM context limits. Rows of JSON, CSV, TSV and Excel files are not chunked. Agent Actions supports multiple chunking strategies optimized for different use cases.
 
 ## Configuration
 
@@ -25,7 +25,7 @@ default_agent_config:
 |-------|---------|-------------|
 | `chunk_size` | 300 | Maximum size per chunk (tokens or characters) |
 | `chunk_overlap` | 10 | Overlap between consecutive chunks |
-| `split_method` | `tiktoken` | Chunking strategy: `tiktoken`, `chars`, or `spacy` |
+| `split_method` | `tiktoken` | Chunking strategy: `tiktoken`, `chars`, `spacy`, or the name of a custom split function (see below) |
 | `tokenizer_model` | `cl100k_base` | Tokenizer used to measure chunk size |
 
 These four are the only keys `chunk_config` takes; anything else is refused at load, naming the field it resembles. Each can also be written as a key of its own on an action, in `defaults:`, or in `default_agent_config:`.
@@ -37,7 +37,7 @@ default_agent_config key  <  default_agent_config block  <  defaults: key
   <  defaults: block  <  action key  <  action block
 ```
 
-An overlap at or above the chunk size it would be split with is refused at load rather than at the split, since merging by name can pair a nearer size with a wider overlap.
+For `tiktoken` and `chars` splits, an overlap at or above the chunk size is refused at load rather than at the split, since merging by name can pair a nearer size with a wider overlap.
 
 The defaults are tuned for the framework's own short-document benchmarks. The examples below show larger values (4000 / 8000) tuned for OpenAI-class context windows — start there for production workloads on long documents.
 
@@ -95,6 +95,10 @@ chunk_config:
 
 **When to use:** Preserving sentence integrity, natural language content, quality over speed.
 
+### Custom split function
+
+Any other `split_method` value names a Python module and function of that name in the `tools/` folder (or the folder `TOOLS_PATH` names). The function takes `(text, chunk_size, overlap, tokenizer_model)` and returns a list of strings.
+
 ## Overlap
 
 Overlap ensures context is not lost at chunk boundaries. Overlapping sections appear in both adjacent chunks.
@@ -132,6 +136,8 @@ actions:
       Summarize this section:
       {{ source.content }}
     schema: chapter_summary
+    context_scope:
+      observe: [source.content]
 ```
 
 ### Downstream Aggregation
@@ -144,7 +150,9 @@ actions:
     granularity: record  # Process each chunk
 
   - name: aggregate_results
-    granularity: file    # Combine all chunks
+    kind: tool
+    impl: aggregate_results
+    granularity: file    # Combine all chunks (tool actions only)
     dependencies: [process_chunks]
 ```
 
@@ -152,8 +160,8 @@ actions:
 
 1. **Match split method to model**: Use `tiktoken` for OpenAI models, `chars` for others
 2. **Account for prompt size**: Leave room for your prompt template in the chunk size
-3. **Test boundaries**: Use `agac run -a workflow --log-level DEBUG` to see how documents are split
+3. **Test boundaries**: Run `agac run -a <workflow> --file-limit 1`, then read the first action's records with `agac records -w <workflow> -a <action>` to see each chunk
 
 ## Disabling Chunking
 
-To process documents whole, set a large `chunk_size` or omit `chunk_config` entirely.
+To process a document whole, set a `chunk_size` larger than the document. Omitting `chunk_config` does not turn chunking off: the defaults above apply.

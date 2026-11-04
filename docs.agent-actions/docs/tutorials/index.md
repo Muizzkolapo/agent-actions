@@ -10,7 +10,7 @@ Learn Agent Actions through hands-on tutorials.
 
 ## Your First Workflow
 
-Let's build your first agentic workflow in 5 minutes. You'll create a two-action pipeline that extracts product data and generates marketing content—a common pattern for automating content creation.
+Let's build your first agentic workflow. You'll create a two-action pipeline that extracts product data and generates marketing content—a common pattern for automating content creation.
 
 ## What You'll Build
 
@@ -42,14 +42,16 @@ This creates the standard project structure:
 
 ```
 my_workflow/
-├── agent_actions.yml      # Project configuration (API keys, defaults)
+├── agent_actions.yml      # Project configuration (API key variable names, defaults)
 ├── agent_workflow/        # Workflow definitions
 ├── prompt_store/          # Prompt templates (optional)
 ├── schema/                # Output schemas for validation
+├── seed_data/             # Reference data
+├── templates/             # Config templates
 └── tools/                 # Custom Python functions
 ```
 
-**`agent_actions.yml`** is the project marker file. It tells Agent Actions this directory is a project and stores default configuration like API keys and model settings. Without it, `agac` commands won't work.
+**`agent_actions.yml`** is the project marker file. It tells Agent Actions this directory is a project and stores default configuration like the name of your API key variable and model settings. Without it, commands that read the project fail with `Project not found`.
 
 For this tutorial, you'll create a workflow under `agent_workflow/`:
 
@@ -67,7 +69,7 @@ agent_workflow/
 
 ## 2. Define Your Schemas
 
-**Why schemas matter:** When an LLM generates output, how do you know it's valid? Schemas act as contracts—they define exactly what structure you expect, and Agent Actions validates every response against them. If the LLM returns malformed data, an `expect:` repair policy regenerates until it conforms.
+**Why schemas matter:** When an LLM generates output, how do you know it's valid? Schemas act as contracts—they define exactly what structure you expect, and Agent Actions validates every response against them. If the LLM returns malformed data, an `expect:` repair policy regenerates the output, up to `max_iterations` times (default 3).
 
 Create these schema files:
 
@@ -86,7 +88,7 @@ Create these schema files:
     "price_range": { "type": "string" },
     "target_audience": { "type": "string" }
   },
-  "required": ["product_name", "category", "key_features"]
+  "required": ["product_name", "category", "key_features", "target_audience"]
 }
 ```
 
@@ -110,7 +112,7 @@ Create these schema files:
 
 ## 3. Create Your Agentic Workflow
 
-Here's where it gets interesting. The workflow configuration defines your actions and how data flows between them. Notice how `generate_content` references fields from `extract_data` using `{{ extract_data.field }}` syntax—this is how actions share data.
+Here's where it gets interesting. The workflow configuration defines your actions and how data flows between them. Notice how `generate_content` references fields from `extract_data` using `{{ extract_data.field }}` syntax—this is how actions share data. Every action declares a `context_scope`, and a field a prompt references must be listed in it.
 
 **`agent_workflow/product_pipeline/agent_config/product_pipeline.yml`**:
 
@@ -125,6 +127,7 @@ defaults:
 
 actions:
   - name: extract_data
+    intent: "Extract structured product data from raw text"
     prompt: |
       Extract structured product information from this text:
       {{ source.content }}
@@ -136,6 +139,7 @@ actions:
         - source.content
 
   - name: generate_content
+    intent: "Write marketing copy from the extracted data"
     dependencies: [extract_data]
     prompt: |
       Create marketing content for this product:
@@ -201,28 +205,43 @@ agac run -a product_pipeline
 You should see output like this:
 
 ```
-Running workflow: product_pipeline
-├── extract_data ✓
-└── generate_content ✓
+Starting agent run for: product_pipeline
+...
+product_pipeline — 2 actions
+Step 1/2 extract_data
+  ✓ extract_data  1 record in 2.1s (openai/gpt-4o-mini)
+Step 2/2 generate_content
+  ✓ generate_content  1 record in 1.8s (openai/gpt-4o-mini)
 
-Results written to: agent_io/store/product_pipeline.db
+✓ 3.9s — 2 completed
 ```
 
-Print the content `generate_content` stored for each record (the store keeps records compressed, so read them with the CLI rather than sqlite3):
+Print the content `generate_content` stored for each record. The content holds one entry per namespace the record carries (the store keeps records compressed, so read them with the CLI rather than sqlite3):
 
 ```bash
 agac records -w product_pipeline -a generate_content --field content
 ```
 
 ```json
-{
-  "product_name": "Smart Fitness Tracker Pro",
-  "category": "Wearable Technology",
-  "key_features": ["Heart Rate Tracking", "Sleep Analysis", "GPS"],
-  "headline": "Track Your Fitness Like a Pro",
-  "description": "Advanced health monitoring with precision tracking...",
-  "key_benefits": ["24/7 Health Monitoring", "GPS Accuracy", "Sleep Insights"]
-}
+[
+  {
+    "source": {
+      "content": "Smart Fitness Tracker Pro - Advanced health monitoring device..."
+    },
+    "extract_data": {
+      "product_name": "Smart Fitness Tracker Pro",
+      "category": "Wearable Technology",
+      "key_features": ["Heart Rate Tracking", "Sleep Analysis", "GPS"],
+      "price_range": "$199-249",
+      "target_audience": "Fitness enthusiasts"
+    },
+    "generate_content": {
+      "headline": "Track Your Fitness Like a Pro",
+      "description": "Advanced health monitoring with precision tracking...",
+      "key_benefits": ["24/7 Health Monitoring", "GPS Accuracy", "Sleep Insights"]
+    }
+  }
+]
 ```
 
 ## What Just Happened?
@@ -233,7 +252,7 @@ Let's walk through what Agent Actions did behind the scenes:
 2. **generate_content** received extract_data's output via `{{ extract_data.field }}` references, generated marketing content, and validated against the `marketing_content` schema
 3. Both actions wrote their records as rows in the `target_data` table of `agent_io/store/product_pipeline.db`
 
-**What if the LLM returns invalid JSON?** If you configure `expect:` with a repair policy, Agent Actions regenerates until the output conforms to your schema. See [Expectations](../reference/validation/expectations.md) to enable this.
+**What if the LLM returns invalid JSON?** If you configure `expect:` with a repair policy, Agent Actions regenerates the output, up to `max_iterations` times, until it conforms to your schema. See [Expectations](../reference/validation/expectations.md) to enable this.
 
 ## Next Steps
 

@@ -202,5 +202,5 @@ sent again. The row stored before the rerun is kept for neither.
 - [batch Commands](../cli/batch) - CLI reference for batch operations
 - [retry Command](../cli/retry) - Retry failed records, in either run mode
 - [Batch Recovery](./batch-recovery) - Two-phase retry and repair for batch processing
-- [Context Handling](./context-handling) - Batch vs online context differences
+- [Context Handling](./context-handling) - Prompt context in both run modes
 - [Granularity](./granularity) - Record vs file processing

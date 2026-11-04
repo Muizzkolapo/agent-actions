@@ -22,7 +22,7 @@ The store keeps these payloads compressed, so `sqlite3` shows `target_data.data`
 | `-a, --action TEXT` | Only this action's records. Every action with stored records when omitted. |
 | `--source-guid TEXT` | Only the records of this source record, in whichever actions hold one |
 | `--file TEXT` | Only the records of this stored file (its `relative_path`). Without `-a`, every action that stores the file; with `--snapshots`, only the records failed in it. |
-| `--field TEXT` | Print one value per record instead of the record: a dotted path into it, such as `content.headline`. A path the record does not have prints `null`. |
+| `--field TEXT` | Print one value per record instead of the record: a dotted path into it, such as `content.extract_facts.headline`, where the stored `content` is keyed by action name. A path the record does not have prints `null`. |
 | `--snapshots` | Print the input each failed or exhausted record was processed with, instead of stored records. `-a`, `--source-guid` and `--file` narrow it. |
 
 Each record prints as stored, plus `_action` (the action that stored it) and `_file` (the file it is stored under). Both can be named by `--field`.
@@ -34,7 +34,7 @@ Each record prints as stored, plus `_action` (the action that stored it) and `_f
 agac records -w my_workflow -a extract_facts
 
 # One field of each
-agac records -w my_workflow -a extract_facts --field content.headline
+agac records -w my_workflow -a extract_facts --field content.extract_facts.headline
 
 # One source record, in every action that holds it
 agac records -w my_workflow --source-guid <source_guid>

@@ -49,9 +49,10 @@ The output shows:
 
 - **Input**: Fields the action requires from upstream actions or source data
 - **Output**: Fields the action produces for downstream actions
-- **(none)**: No input fields required
+- **(none)**: No input fields required, or no output fields produced
 - **(schemaless)**: Output schema not defined (tool without a YAML `schema:` field)
 - **(dynamic)**: Schema determined at runtime
+- **(template-based)**: Input fields come from the prompt template
 
 **Schema Sources by Action Type:**
 

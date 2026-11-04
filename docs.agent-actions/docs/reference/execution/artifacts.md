@@ -19,8 +19,6 @@ project/
 │   ├── catalog.json                    # Project catalog (agac docs)
 │   ├── runs.json                       # Workflow execution history (agac run + agac docs)
 │   └── rendered_workflows/             # Partial rendered configs saved when preflight render fails
-├── logs/
-│   └── agent_actions.log              # Application logs
 └── agent_workflow/
     └── my_workflow/
         └── agent_io/
@@ -36,7 +34,8 @@ project/
             │   ├── errors.json         # Error-level events of the current run (JSON Lines)
             │   └── errors.N.json       # Earlier runs' errors
             └── target/
-                └── {action_name}/      # Per-action output directories
+                └── {action_name}/      # Output location named in run_results.json. Records live in
+                                        # the store; `agac batch retrieve` writes results here
 ```
 
 ## Runtime Artifacts
@@ -45,28 +44,31 @@ project/
 
 **Path:** `agent_io/logs/.manifest.json`
 
-The manifest tracks the execution plan and status for the entire workflow run. Created when the workflow starts, updated as actions complete.
+The manifest holds the execution plan for the workflow run: the action order, the levels and the dependencies. It is created when the workflow starts. The top-level `status` and `completed_at` are set when the run ends. The per-action `status`, `started_at`, `completed_at`, `record_count` and `error` fields stay at their starting values during a run; read per-action state from `.agent_status.json`.
 
 ```json
 {
   "schema_version": "1.0",
   "workflow_name": "product_pipeline",
-  "workflow_run_id": "run_abc123",
+  "workflow_run_id": "run_20260324_100000",
   "pid": 48213,
   "host_id": "9f2c1a77b4e03d58",
-  "started_at": "2026-03-24T10:00:00Z",
-  "completed_at": "2026-03-24T10:02:30Z",
+  "started_at": "2026-03-24T10:00:00.123456",
+  "completed_at": "2026-03-24T10:02:30.654321",
   "status": "completed",
   "execution_order": ["extract_data", "generate_content"],
-  "levels": [[0, "extract_data"], [1, "generate_content"]],
+  "levels": [["extract_data"], ["generate_content"]],
   "actions": {
     "extract_data": {
-      "status": "completed",
+      "index": 0,
+      "level": 0,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
       "output_dir": "extract_data",
       "dependencies": [],
-      "record_count": 5,
-      "started_at": "2026-03-24T10:00:01Z",
-      "completed_at": "2026-03-24T10:01:15Z"
+      "record_count": null,
+      "error": null
     }
   }
 }
@@ -214,10 +216,12 @@ resumed after it stopped, keeps them for each record it does not ask again.
 | `pending` | Not yet executed |
 | `running` | Currently executing |
 | `completed` | Successfully finished |
+| `completed_with_failures` | Finished, but one or more records failed or were exhausted |
 | `failed` | Terminated with error |
 | `interrupted` | The run was killed while this action was executing, or the process that owned it no longer exists |
 | `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
 | `batch_submitted` | Batch job submitted, awaiting results |
+| `checking_batch` | The run is checking whether a submitted batch has finished |
 
 Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished, edited or not. A completed first-stage action whose staged input files changed runs again, with everything reading it, answering only the records the change added or changed.
 
@@ -230,25 +234,40 @@ Summary of the workflow execution with per-action metrics:
 ```json
 {
   "metadata": {
-    "invocation_id": "inv_abc123",
+    "invocation_id": "run_product_pipeline_89381a13",
     "workflow_name": "product_pipeline",
     "action_count": 3,
-    "execution_mode": "parallel"
+    "execution_mode": "parallel",
+    "started_at": "2026-03-24T10:00:00.123456+00:00",
+    "completed_at": "2026-03-24T10:00:12.623456+00:00",
+    "elapsed_time": 12.5,
+    "status": "success"
   },
   "results": [
     {
+      "unique_id": "product_pipeline.extract_data",
       "action_name": "extract_data",
-      "status": "completed",
+      "action_index": 0,
+      "status": "success",
       "execution_time": 4.2,
+      "output_folder": "/path/to/agent_workflow/product_pipeline/agent_io/target/extract_data",
       "record_count": 10,
-      "tokens": 1500,
-      "output_folder": "extract_data"
+      "tokens": {"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500},
+      "error_message": null,
+      "skip_reason": null,
+      "empty_output_records": 0,
+      "timing": {
+        "started_at": "2026-03-24T10:00:00.200000+00:00",
+        "completed_at": "2026-03-24T10:00:04.400000+00:00"
+      }
     }
   ],
   "elapsed_time": 12.5,
-  "total_tokens": 4500
+  "tokens": {"prompt_tokens": 3000, "completion_tokens": 1500, "total_tokens": 4500}
 }
 ```
+
+An action with a guard also carries a `guard_stats` object with the `condition`, the counts `passed` and `filtered`, and `on_false`.
 
 ### Run History (`runs.json`)
 
@@ -256,25 +275,39 @@ Summary of the workflow execution with per-action metrics:
 
 `runs.json` is the cumulative catalog of past workflow executions surfaced by the documentation site. Every `agac run` writes to it twice via `RunTracker`:
 
-- At start — a new execution entry is appended with `status: "running"`, `started_at`, and the action plan.
-- At end — the entry is updated with the final `status` (`success` / `failed` / `paused`), `ended_at`, `duration_seconds`, and any `error_message`. Aggregate workflow metrics (`success_rate`, `avg_duration_seconds`) are recomputed in the same write.
+- At start — a new execution entry is inserted at the front of `executions` with `status: "running"`, `started_at` and `total_actions`; each action adds its own entry as it starts and finishes.
+- At end — the entry is updated with the final `status` (`SUCCESS` / `FAILED` / `PAUSED`), `ended_at`, `duration_seconds`, and any `error_message`. Aggregate workflow metrics (`success_rate`, `avg_duration_seconds`) are recomputed in the same write.
 
 `agac docs` reads `runs.json` to render the Run History view in the documentation site; if the file is missing when `agac docs` runs, an empty catalog is initialized so the page renders even before the first run completes.
 
 ```json
 {
-  "metadata": {"generated_at": "2026-03-24T10:00:00Z", "total_runs": 12},
+  "metadata": {"generated_at": "2026-03-24T10:00:00+00:00", "total_runs": 12, "schema_version": "1.0"},
   "executions": [
     {
       "id": "run_product_pipeline_a1b2c3d4",
       "workflow_id": "product_pipeline",
       "workflow_name": "product_pipeline",
-      "status": "success",
-      "started_at": "2026-03-24T10:00:00Z",
-      "ended_at": "2026-03-24T10:02:30Z",
+      "status": "SUCCESS",
+      "started_at": "2026-03-24T10:00:00+00:00",
+      "ended_at": "2026-03-24T10:02:30+00:00",
       "duration_seconds": 150.0,
-      "actions_completed": 5,
-      "actions_total": 5
+      "total_actions": 5,
+      "successful_actions": 5,
+      "failed_actions": 0,
+      "skipped_actions": 0,
+      "total_tokens": 0,
+      "error_message": null,
+      "actions": {
+        "extract_data": {
+          "status": "success",
+          "started_at": "2026-03-24T10:00:01+00:00",
+          "ended_at": "2026-03-24T10:01:15+00:00",
+          "duration_seconds": 74.0,
+          "type": "tool",
+          "impl": "extract_data"
+        }
+      }
     }
   ],
   "workflow_metrics": {
@@ -282,6 +315,7 @@ Summary of the workflow execution with per-action metrics:
       "total_runs": 8,
       "successful_runs": 7,
       "failed_runs": 1,
+      "total_tokens": 0,
       "success_rate": 0.875,
       "avg_duration_seconds": 142.3
     }
@@ -370,11 +404,10 @@ When `--fresh` is passed, every `events*.json` and `errors*.json` file in the wo
 
 **Path:** `agent_io/logs/errors.json`
 
-ERROR-level events only — a filtered subset of `events.json` for quick error diagnosis:
+ERROR-level events only — a filtered subset of `events.json` for quick error diagnosis. Each line has the same envelope as `events.json`:
 
 ```jsonl
-{"type": "ValidationFailEvent", "action": "extract_data", "error": "Required field 'name' missing"}
-{"type": "ActionFailedEvent", "action": "generate_content", "error": "Rate limit exceeded"}
+{"event_type": "GuardEvaluationErrorEvent", "code": "G002", "level": "error", "category": "guard", "message": "Guard evaluation failed: Guard condition references field 'src.descx' which does not exist in the data. Available top-level fields: source, src, workflow", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:03+00:00", "correlation_id": "d96faa45"}, "data": {"guard_clause": "src.descx == 'a'", "error": "Guard condition references field 'src.descx' which does not exist in the data. Available top-level fields: source, src, workflow"}}
 ```
 
 :::caution Monitoring change
@@ -404,12 +437,13 @@ The SQLite database stores structured workflow data:
 | `success` | Record processed successfully |
 | `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
 | `skipped` | Left out of this action before its guard ran, or the whole action was skipped |
+| `deferred` | Sent to a batch provider, awaiting its result |
 | `filtered` | Removed from this action and every action below it (guard with `on_false: filter`) |
 | `exhausted` | Recovery gave up — retry attempts or `expect` iterations spent |
 | `failed` | Processing failed |
 | `unprocessed` | Not answered: an upstream failure cascaded, or a guard with `on_false: skip` skipped it. The next run puts it to the guard again |
 
-The `failed` and `exhausted` dispositions also store an `input_snapshot` column containing the JSON-serialized input record at the time of failure (truncated to 10KB). This enables post-mortem debugging even after batch recovery files have been cleaned up. Other disposition types do not populate this column.
+The `failed` and `exhausted` dispositions also store an `input_snapshot` column containing the JSON-serialized input record at the time of failure (an input over 10 KB is stored as a truncation marker holding its first 8,192 characters). This enables post-mortem debugging even after batch recovery files have been cleaned up. Other disposition types do not populate this column.
 
 ### Querying the Database
 
@@ -442,19 +476,26 @@ Each output record contains tracking metadata:
 {
   "source_guid": "37812c37-80a2-596b-8747-8f93e7a34e7f",
   "content": {
-    "product_name": "Smart Fitness Tracker",
-    "category": "Wearable Technology"
+    "extract_data": {
+      "product_name": "Smart Fitness Tracker",
+      "category": "Wearable Technology"
+    }
   },
   "target_id": "dd45e6ef-63d6-45f6-8759-5df33c9a84a2",
-  "node_id": "node_0_86a1e066-9522-4e0e-a3db-e83c7e38ab8c",
-  "lineage": ["node_0_86a1e066-9522-4e0e-a3db-e83c7e38ab8c"]
+  "node_id": "extract_data_86a1e066-9522-4e0e-a3db-e83c7e38ab8c",
+  "lineage": ["extract_data_86a1e066-9522-4e0e-a3db-e83c7e38ab8c"],
+  "parent_target_id": "0ef93d35-4f64-4cf3-9cfc-272e7311a539",
+  "root_target_id": "0ef93d35-4f64-4cf3-9cfc-272e7311a539",
+  "metadata": {"model": "dp_src", "provider": "tool"}
 }
 ```
+
+A record also carries lifecycle fields such as `_state` and `_state_history`.
 
 | Field | Description |
 |-------|-------------|
 | `source_guid` | Links to original input record |
-| `content` | Schema-validated action output |
+| `content` | Schema-validated action output, under the action's name |
 | `target_id` | Unique identifier for this output |
 | `node_id` | Action execution identifier |
 | `lineage` | Chain of `node_id`s for provenance tracking |
@@ -482,7 +523,7 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 agac --debug run -a my_workflow
 ```
 
-Log file location: `{project_root}/logs/agent_actions.log`
+Events from each run are written to `agent_io/logs/events.json` and `errors.json` in the workflow folder (see above).
 
 ## Useful Commands
 
@@ -498,7 +539,7 @@ cat agent_io/logs/events.json | python3 -c "
 import sys, json, collections
 counts = collections.Counter()
 for line in sys.stdin:
-    counts[json.loads(line)['type']] += 1
+    counts[json.loads(line)['event_type']] += 1
 for k, v in counts.most_common():
     print(f'{v:4d} {k}')
 "

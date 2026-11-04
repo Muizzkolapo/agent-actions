@@ -41,7 +41,7 @@ agac --version
 
 You should see output like:
 ```
-Agent Actions CLI v0.2.6
+Agent Actions CLI v2.0.0
 ```
 
 ## Provider Configuration
@@ -71,7 +71,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=...
 ```
 
-Agent Actions automatically loads `.env` files from the current directory.
+Agent Actions loads the `.env` file in the project root, the directory that holds `agent_actions.yml`.
 
 ### Supported Providers
 
@@ -82,7 +82,8 @@ Agent Actions automatically loads `.env` files from the current directory.
 | Google | `GEMINI_API_KEY` | Any model supported by the Gemini API |
 | Groq | `GROQ_API_KEY` | Any model supported by the Groq API |
 | Cohere | `COHERE_API_KEY` | Any model supported by the Cohere API |
-| Ollama | (local) | Any model you've pulled locally |
+| Ollama (local) | (none) | Any model you've pulled locally |
+| Ollama Cloud | `OLLAMA_API_KEY` | Any model hosted on ollama.com |
 
 ## Local Models with Ollama
 
@@ -96,8 +97,8 @@ curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull llama3.1
 
 # Use in your agentic workflow
-# vendor: ollama_local
-# model: llama3.1
+# model_vendor: ollama_local
+# model_name: llama3.1
 ```
 
 ## Local Models with an OpenAI-compatible Server

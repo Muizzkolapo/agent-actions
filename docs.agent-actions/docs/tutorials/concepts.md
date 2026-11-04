@@ -46,7 +46,7 @@ An action is a single step in your agentic workflow—either an LLM call, a tool
 
 - **Structure** — Actions declare dependencies and schemas, making the workflow self-documenting
 - **Validation** — Output schemas are enforced automatically
-- **Reusability** — Actions can be shared across workflows
+- **Reusability** — Prompts and schemas are shared across workflows through the prompt store and the schema directory, and Jinja2 templates reuse action patterns
 - **Version control** — YAML configs are diffable and reviewable
 - **Separation of concerns** — Prompts, schemas, and logic live in separate files
 - **Progressive context disclosure** — Control exactly what data each action sees via context scope
@@ -73,19 +73,19 @@ actions:
 | Field | Description |
 |-------|-------------|
 | **name** | Unique identifier for this action |
-| **intent** | Human-readable description of what this action does |
+| **intent** | Human-readable description of what this action does (required) |
 | **dependencies** | Actions that must complete first |
-| **schema** | JSON Schema name for output validation |
+| **schema** | JSON Schema name for output validation (a tool action must name one) |
 | **prompt** | LLM instructions (inline or `$workflow.PromptName` reference) |
 | **kind** | `llm` (default), `tool` for Python functions, or `hitl` for human review gates |
 | **impl** | For tool actions, the function name to call |
 | **hitl** | For hitl actions, configuration block (port, instructions, timeout, etc.) |
-| **context_scope** | Progressive context disclosure—control exactly what data flows into this action (`observe`, `drop`, `passthrough`) |
+| **context_scope** | Progressive context disclosure—control exactly what data flows into this action (`observe`, `drop`, `passthrough`). Every action must declare one |
 | **expect** | Output rules and the repair policy that regenerates on failure |
 | **model_vendor** | Which provider to use (inherited from defaults if not specified) |
 | **model_name** | Which model to use (inherited from defaults if not specified) |
 | **run_mode** | `online` or `batch` processing (inherited from defaults if not specified) |
-| **granularity** | `Record` (per-item) or `File` (all items at once) processing (inherited from defaults if not specified) |
+| **granularity** | `record` (per-item) or `file` (all items at once) processing (inherited from defaults if not specified) |
 
 **Configuration inheritance:** Agent Actions uses a hierarchical config system. Settings cascade from `agent_actions.yml` → workflow `defaults` → individual actions. You only need to specify fields at the action level if you want to override the inherited values.
 
@@ -107,15 +107,26 @@ Agent Actions supports three kinds of actions:
 actions:
   - name: generate_report
     kind: llm  # LLM generates initial report
+    intent: "Generate the compliance report"
     prompt: "Generate a compliance report from the data..."
+    schema: report
+    context_scope:
+      observe:
+        - source.*
 
   - name: validate_report
     kind: tool  # Python validates report structure
+    intent: "Validate the report structure"
     impl: validate_compliance_report
+    schema: report
     dependencies: [generate_report]
+    context_scope:
+      observe:
+        - generate_report.*
 
   - name: review_report
     kind: hitl  # Human reviews before publishing
+    intent: "Review the report before publishing"
     dependencies: [validate_report]
     hitl:
       instructions: "Review the compliance report for accuracy"
@@ -125,8 +136,13 @@ actions:
 
   - name: publish_report
     kind: tool  # Publish if approved
+    intent: "Publish the approved report"
     impl: publish_to_portal
+    schema: report
     dependencies: [review_report]
+    context_scope:
+      observe:
+        - review_report.*
     guard:
       condition: "review_report.hitl_status == 'approved'"
       on_false: skip
@@ -138,13 +154,13 @@ See the [Human-in-the-Loop guide](../guides/human-in-the-loop.md) for more detai
 
 Agent Actions distinguishes between two types of dependencies:
 
-- **Execution dependencies**: Declared explicitly via `dependencies: [action_name]`. These control execution order—ensuring upstream actions complete before downstream actions start.
-- **Context dependencies**: Auto-inferred from field references like `{{ action_name.field }}` in your prompts or `context_scope` declarations. The referenced field must be defined in that action's output schema—this is how Agent Actions knows the field exists and can pass it to downstream actions.
+- **Execution dependencies**: Declared via `dependencies: [action_name]`. These control execution order—ensuring upstream actions complete before downstream actions start.
+- **Context dependencies**: Declared via `context_scope` entries like `action_name.field`. The referenced field must be defined in that action's output schema—this is how Agent Actions knows the field exists and can pass it to downstream actions.
 
 **Example: Execution dependency**
 
 ```yaml
-# From incident-management sample
+# From the incident_triage example
 - name: classify_severity
   dependencies: [extract_incident_details]  # Must wait for extraction to complete
   intent: "Classify incident severity"
@@ -154,7 +170,7 @@ Agent Actions distinguishes between two types of dependencies:
 **Example: Context dependency (via context_scope)**
 
 ```yaml
-# From incident-management sample
+# From the incident_triage example
 - name: classify_severity
   dependencies: [extract_incident_details]
   context_scope:
@@ -170,16 +186,16 @@ flowchart TB
         A1[extract_incident_details] -->|"dependencies: [extract_incident_details]"| B1[classify_severity]
     end
 
-    subgraph context["Context Dependencies (auto-inferred)"]
+    subgraph context["Context Dependencies (declared in context_scope)"]
         direction LR
         A2[extract_incident_details] -.->|"observe: extract_incident_details.*"| B2[classify_severity]
     end
 
-    execution --> |"You declare"| D[Execution Order]
-    context --> |"Agent Actions infers"| E[Data Flow]
+    execution --> |"Sets"| D[Execution Order]
+    context --> |"Sets"| E[Data Flow]
 ```
 
-You only need to declare execution dependencies explicitly. Context dependencies are handled automatically based on your prompt template or context_scope references, as long as the action named is upstream through `dependencies`: only the actions a record passed through are sure to be on it, and preflight refuses any other name.
+You declare both. A prompt may reference only a namespace that `context_scope` lists in `observe` or `passthrough`, and each action a prompt or `context_scope` names must be upstream through `dependencies`: only the actions a record passed through are sure to be on it, and preflight refuses any other name.
 
 ## Field References
 
@@ -193,11 +209,11 @@ prompt: |
 
 The `{{ action_name.field }}` syntax pulls data from completed upstream actions. Agent Actions validates these references at configuration time—you'll catch typos before making any API calls.
 
-**Auto-inferred context**: When you reference a field like `{{ extract_data.product_name }}` in your prompt, Agent Actions automatically makes that field available in the action's context. You don't need to manually configure which fields to include. The system infers them from your template references.
+**Declared context**: A prompt can use `{{ extract_data.product_name }}` only if the action's `context_scope` lists `extract_data.product_name` or `extract_data.*` under `observe` (or `passthrough`). Preflight refuses a prompt that references a namespace the `context_scope` does not list.
 
 ## Schema Validation
 
-**What happens when an LLM returns malformed JSON?** Every action output is validated against a JSON Schema. If you configure `expect:` with a repair policy, Agent Actions regenerates until the output conforms.
+**What happens when an LLM returns malformed JSON?** Every action output is validated against its JSON Schema. If you configure `expect:` with a repair policy, Agent Actions regenerates the output, up to `max_iterations` times (default 3), until it conforms.
 
 ```json
 {
@@ -274,9 +290,9 @@ flowchart LR
     end
 
     subgraph output[" "]
-        T1[target/extract/data.json]
-        T2[target/transform/data.json]
-        T3[target/generate/data.json]
+        T1[store: extract records]
+        T2[store: transform records]
+        T3[store: generate records]
     end
 
     ST --> A1
@@ -290,7 +306,7 @@ The flow:
 1. Input data placed in `agent_io/staging/`
 2. Agent Actions stages each record into the store under `agent_io/store/`
 3. Actions execute in dependency order (parallel where possible)
-4. Each action output is validated and written to `target/{action_name}/`
+4. Each action output is validated and written to the store's `target_data` table, keyed by action name
 
 ## Further Reading
 

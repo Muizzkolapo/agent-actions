@@ -53,6 +53,7 @@ Each trace prints as:
 | Message | Cause |
 |---------|-------|
 | `No store for workflow '<name>' at <path>` | The workflow has not run, so it has no store. |
-| `No prompt traces for action '<action>' in <path>` | The action wrote no traces: it is a tool action, it has not run, or `--fresh` cleared it. |
+| `No prompt traces for action '<action>' in <path>` | The action wrote no traces: it is a tool action that runs over a whole file (`granularity: File`), it has not run, or `--fresh` cleared it. |
+| `No prompt traces for action '<action>' record '<record>' in <path>` | `--record` named a record the action has no trace for. |
 
 See [Prompt Traces](../data-io/prompt-traces.md) for what a trace holds and when it is cleared.

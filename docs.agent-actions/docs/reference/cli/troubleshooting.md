@@ -12,8 +12,8 @@ Agent Actions provides actionable error messages and multiple debugging options.
 
 | Environment Variable | Level | Shows |
 |---------------------|-------|-------|
-| (default) | `CRITICAL` | Only critical system errors |
-| `AGENT_ACTIONS_LOG_LEVEL=INFO` | `INFO` | Progress and status updates |
+| (default) | `INFO` | Progress and status updates |
+| `AGENT_ACTIONS_LOG_LEVEL=WARNING` | `WARNING` | Warnings and errors only |
 | `AGENT_ACTIONS_LOG_LEVEL=DEBUG` | `DEBUG` | Full exception chains, context, and tracebacks |
 
 ## Debug Mode
@@ -42,6 +42,7 @@ Redirect debug output to a file for complex issues: `AGENT_ACTIONS_LOG_LEVEL=DEB
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `GROQ_API_KEY` | Groq API key |
 | `COHERE_API_KEY` | Cohere API key |
+| `OLLAMA_API_KEY` | Ollama Cloud API key |
 
 ## Exit Codes
 
@@ -54,7 +55,7 @@ Redirect debug output to a file for complex issues: `AGENT_ACTIONS_LOG_LEVEL=DEB
 
 ## Debugging Process
 
-1. Start with `AGENT_ACTIONS_LOG_LEVEL=INFO` to see execution flow
+1. Read the console output at the default level (`INFO`) to see execution flow
 2. Use `AGENT_ACTIONS_LOG_LEVEL=DEBUG` to investigate specific errors
 3. Check exception chains for root causes
 4. Review context information (file paths, action names, operations)

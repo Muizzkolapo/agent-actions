@@ -65,7 +65,7 @@ In `--json`, the same entry carries `"executes": false` and an `"inert_because"`
 
 ```bash
 agac expect list -a my_workflow
-# Problem: summarize: unknown_type: unknown type 'vibe_check'. Known types: ...
+# Problem: PreFlightValidationError: summarize: unknown_type: unknown type 'vibe_check'. Known types: ...
 ```
 
 ### JSON output

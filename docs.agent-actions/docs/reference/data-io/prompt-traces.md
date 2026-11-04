@@ -5,9 +5,9 @@ sidebar_position: 6
 
 # Prompt Traces
 
-> **Storage backend:** SQLite as of v0.2.6. Traces are stored in `agent_io/store/<workflow>.db`, table `prompt_trace`.
+> **Storage backend:** SQLite. Traces are stored in `agent_io/store/<workflow>.db`, table `prompt_trace`.
 
-Every time an LLM action processes a record, Agent Actions captures a **prompt trace** — the compiled prompt sent to the model and the raw response received. Traces are stored in the `prompt_trace` table of your workflow's SQLite database and surfaced automatically in the Data Explorer.
+Every time an action processes a record, Agent Actions captures a **prompt trace** — the compiled prompt sent to the model and the raw response received. Traces are stored in the `prompt_trace` table of your workflow's SQLite database. A tool action is traced too: its `model_vendor` is `tool` and its `model_name` is the tool name.
 
 ## What Gets Captured
 
@@ -91,29 +91,19 @@ Otherwise, storage maintenance keeps the traces of the most recent
 `storage.prompt_trace_retention_runs` calendar days on which traces were written
 (`0` never prunes).
 
-## Viewing Traces in the Data Explorer
+## Viewing Traces in VS Code
 
-Run `agac docs` to generate the documentation catalog, then open the Data Explorer in your browser.
+The VS Code extension attaches each record's trace to the record in the Query Results panel, matched by `target_id`. Card view shows these sections, in this order after the identity header:
 
-### Card View
-
-Cards display record sections in this order:
-
-1. **Identity header** — record number, source GUID, file path
-2. **Prompt Trace** — collapsible, shows the input sent to the LLM
-3. **Action Output** — scalar fields first, then structured fields (arrays of objects rendered as sub-cards)
-4. **Metadata** — collapsible, shown last
-
-The Prompt Trace accordion displays the model name and run mode as badges. Click to expand and see two panels:
-
-- **Compiled Prompt** (indigo header) — The exact prompt the LLM received, scrollable for long prompts
-- **LLM Response** (teal header) — The raw text the LLM returned
-
-Arrays of objects in the output section are rendered as **structured sub-cards** with labeled fields per item, rather than raw JSON. Long arrays show a "Show more" toggle.
+1. **Prompt Trace** — collapsible; shows the compiled prompt, with the model name and run mode as badges
+2. **Input Data** — collapsible; the record's input namespaces
+3. **Raw Response** — collapsible; the text the LLM returned
+4. **Action Output**
+5. **Metadata** — collapsible, shown last
 
 ### JSON View
 
-In JSON view, traces appear as a nested `_trace` field on each record:
+In JSON view, the trace appears as a nested `_trace` field on each record:
 
 ```json
 {
@@ -128,10 +118,6 @@ In JSON view, traces appear as a nested `_trace` field on each record:
   }
 }
 ```
-
-### Table View
-
-Traces are excluded from Table view by design — prompt text is unreadable in table cells. Use Card view or JSON view to inspect traces.
 
 ## Reading a Trace
 
@@ -179,14 +165,4 @@ GROUP BY action_name, record_id
 HAVING max_attempts > 0;
 ```
 
-`compiled_prompt`, `llm_context` and `response_text` read as blobs in `sqlite3`. A store written before compression keeps its older rows as text, and `agac traces` reads both.
-
-## CLI Access
-
-The `agac docs` command automatically includes traces in the generated `catalog.json` when the `prompt_trace` table exists. No additional flags are needed.
-
-For workflows run before prompt trace support was added, the Data Explorer gracefully omits the trace accordion — records display exactly as before.
-
-## VS Code Extension
-
-The VS Code extension surfaces traces in the Query Results panel. When you preview data for an action, trace accordions appear in Card view alongside each record. The extension queries traces live from the SQLite database via the storage backend API.
+`compiled_prompt`, `llm_context` and `response_text` read as blobs in `sqlite3`. `agac traces` reads rows stored as text as well as compressed rows.

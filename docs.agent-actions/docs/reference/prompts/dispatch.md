@@ -34,7 +34,7 @@ from agent_actions import udf_tool
 
 
 @udf_tool
-def handle_quiz_type(input_data: str) -> dict:
+def handle_quiz_type(input_data: str) -> str:
     """Return appropriate authoring prompt based on quiz type."""
     context = json.loads(input_data)
     quiz_type = context["source"]["quiz_type"].upper()
@@ -44,13 +44,12 @@ def handle_quiz_type(input_data: str) -> dict:
         "APPLICATION": "Generate a practical question...",
     }
 
-    return {
-        "authoring_prompt": prompts.get(quiz_type, prompts["APPLICATION"]),
-        "quiz_type_used": quiz_type,
-    }
+    return prompts.get(quiz_type, prompts["APPLICATION"])
 ```
 
-The tool receives a JSON-encoded context string (source fields, seed data, upstream outputs); decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call.
+In a prompt, the tool receives the action's LLM context as a JSON-encoded string: the namespaces and fields the action observes. Decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call as text (`str()` of the value), so return a string; a dict would appear as its Python repr. A tool that returns `None` fails with `dispatch_task('<name>') returned None. The function must return a value.`
+
+In a `schema:` value that is exactly one `dispatch_task()` call, the return value keeps its type, so the tool can return a schema as a dict.
 
 ## When to Use Dispatch
 

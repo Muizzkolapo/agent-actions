@@ -53,7 +53,7 @@ The log line before it names the `agac dispositions` command that shows why.
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--record-limit N` | Cap each action at N records **per input file** — the same unit `record_limit` uses — whatever the workflow config sets. Applies to actions that set no limit of their own, and takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, naming this flag and the counts, since a truncated run otherwise looks complete |
 | `--file-limit N` | Stop each action after N input files — the same unit `file_limit` uses — whatever the workflow config sets. It counts files the action got through, so a file that fails does not spend the budget and a directory of unreadable files is attempted in full. Applies to actions that set no limit of their own, and takes precedence over `AGAC_FILE_LIMIT`. An action whose walk actually stops says so, naming this flag, since a shortened run otherwise looks complete. Never holds back `agac retry` |
-| `--fresh` | Clear stored results, dispositions, status, and event logs (`events.json`, `errors.json` and their earlier-run rotations) before execution, and discard what the provider recorded locally about every batch this workflow submitted, collected or not. Gives a clean slate for debugging. |
+| `--fresh` | Clear stored results, dispositions, prompt traces, status, and event logs (`events.json`, `errors.json` and their earlier-run rotations) before execution, and discard what the provider recorded locally about every batch this workflow submitted, collected or not. Gives a clean slate for debugging. |
 | `--rerun ACTION` | Answer every record of `ACTION`, and of every action that reads its output, again under the config as it is now. The name of a versioned action as the config writes it re-runs every version of it. Every other action keeps its answers. Use it after a config edit: an edit alone re-runs nothing (see [When you edit the workflow](#when-you-edit-the-workflow)). A name the workflow does not have stops the run before it starts |
 | `--verify-keys` | Verify API keys before execution. Each vendor is probed once per endpoint: an `openai` action with `base_url` is probed at that URL with `models.list()`, and an action without one at the OpenAI endpoint. A server that does not answer is logged as a warning and the run continues. A local server may serve `/v1/models` without checking the key (llamafile 0.10.6 does), so a passing probe there shows the server is reachable, not that the key is right. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) the workflow uses gets one structured-output request too; there a refused credential, a server that cannot be reached and a reply that does not match the probe's schema are errors |
 
@@ -67,7 +67,8 @@ bound the whole run from the command line:
 agac run -a my_workflow --record-limit 2 --file-limit 1
 ```
 
-The bound applies to **every** action, including those that configure no limit of their own,
+The bound applies to **every** action, including those that configure no limit of their own
+(an action whose own limit is smaller keeps it),
 which matters more than it sounds: a workflow that fans out across dozens of actions with repair
 loops turns a small configured limit into a very large number of model calls.
 
@@ -88,8 +89,8 @@ Either way the limits in force are stored with the action, so lifting one re-run
 back instead of serving a short run as a finished one. Changing `--record-limit` to another value
 re-runs the action when the new limit could have held something back; raising it above what an
 untruncated run already processed changes nothing, because a limit that cannot bite is not a
-different amount of work. A run that cannot say what it processed re-runs on any change, as it
-always did: one that completed before these counts existed, or one that lost an input file to an
+different amount of work. A run that cannot say what it processed re-runs on any change: one that
+completed without recorded counts, or one that lost an input file to an
 error, since the records it never reached were never counted. `--file-limit` has no such count behind it, so any change to it re-runs
 the action, including a change to a value larger than the number of staged files. A batch action stores what the run that *submitted* it applied, not
 what the later run that collects it was asked for.

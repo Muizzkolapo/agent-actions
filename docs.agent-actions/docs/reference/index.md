@@ -69,6 +69,7 @@ Let's walk through a simple agentic workflow that extracts facts from documents 
 
 ```yaml
 name: fact_extraction
+description: "Extract facts from documents and validate them"
 defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
@@ -76,14 +77,20 @@ defaults:
 
 actions:
   - name: extract_facts
+    intent: "Extract facts from the document"
     prompt: $prompts.extract_facts
     schema: facts_schema
+    context_scope:
+      observe: [source.*]
 
   - name: validate_facts
+    intent: "Validate the extracted facts"
     dependencies: [extract_facts]
     prompt: |
       Validate these facts: {{ extract_facts.facts }}
     schema: validation_result
+    context_scope:
+      observe: [extract_facts.facts]
     guard:
       condition: "extract_facts.facts != []"
       on_false: skip

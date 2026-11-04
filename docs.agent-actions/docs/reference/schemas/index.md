@@ -33,26 +33,27 @@ Agent Actions supports multiple schema definition approaches:
 
 ## External Schemas (YAML and JSON Files)
 
-Store reusable schemas in the `schema/` directory at the **project root**. Schema files can use `.yml`, `.yaml`, or `.json` extensions. Unlike prompts (which can be workflow-level), schemas are always project-level—shared across all workflows.
+Store reusable schemas in the folder that `schema_path` names in `agent_actions.yml` (`schema/` in a new project). A workflow can also keep its own `schema/` folder inside `agent_workflow/<workflow>/`. Schema files can use `.yml`, `.yaml`, or `.json` extensions. A schema name must be unique across all of these folders: a workflow that names a schema found in two places fails to load.
 
 ### Directory Structure
 
 ```
 project/
 ├── agent_actions.yml
-├── schema/                          # Project-level only (shared)
+├── schema/                          # Project-level (shared)
 │   ├── candidate_facts_list.yml     # YAML format
 │   ├── question_quality_score.yml
 │   ├── product_data.json            # JSON format works too
 │   └── cluster_validation.yml
 └── agent_workflow/
     ├── quiz_generation/             # Workflow uses project schemas
-    └── document_analysis/           # Same schemas available here
+    └── document_analysis/
+        └── schema/                  # Optional: schemas only this workflow keeps
 ```
 
-Why project-level only? Schemas define data contracts that often span multiple workflows. A `candidate_facts_list` schema might be used by both extraction and validation workflows. Centralizing schemas prevents drift and ensures consistent validation across your project.
+Schemas define data contracts that often span multiple workflows. A `candidate_facts_list` schema might be used by both extraction and validation workflows. Keeping those in the project folder prevents drift and ensures consistent validation across your project.
 
-If you need workflow-specific output structures, use inline schemas (see below) or create uniquely-named schema files in the shared `schema/` directory.
+If you need a workflow-specific output structure, use an inline schema (see below) or put a uniquely named schema file in that workflow's own `schema/` folder.
 
 ### JSON Schema Format
 
@@ -164,6 +165,8 @@ about no single field.
 
 ### Reference in Workflow
 
+Every action also needs an `intent` and a `context_scope`. The workflow snippets on this page leave them out.
+
 ```yaml
 actions:
   - name: extract_facts
@@ -224,41 +227,34 @@ What if different records need different output structures? For example, a quiz 
 ```yaml
 - name: generate_question
   prompt: $quiz_gen.question_prompt
-  schema: dispatch_task('select_question_schema')
+  schema: dispatch_task('select_output_schema')
 ```
 
 When this action runs, Agent Actions:
-1. Calls the `select_question_schema` tool with current context
-2. Uses the returned schema name or definition
+1. Calls the `select_output_schema` tool with the current context, passed as a JSON string
+2. Uses the schema definition the tool returns
 3. Validates the LLM output against that schema
 
-### Returning a Schema Name
+The tool is found by file name. `dispatch_task('select_output_schema')` loads the function `select_output_schema` from `select_output_schema.py` in the tool folder. To keep several dispatch functions in one file, name the file in the call: `dispatch_task('dispatch_tools.select_output_schema')`.
 
-The simplest approach returns a schema name that references a file in `schema/`:
-
-```python
-from agent_actions import udf_tool
-
-@udf_tool
-def select_question_schema(input_data: dict) -> str:
-    question_type = input_data["source"]["question_type"].upper()
-
-    if question_type == "MULTIPLE_CHOICE":
-        return "mc_question_schema"  # References schema/mc_question_schema.yml (or .yaml/.json)
-    elif question_type == "TRUE_FALSE":
-        return "tf_question_schema"
-    else:
-        return "open_question_schema"
-```
+:::caution Return a definition, not a name
+The tool must return a schema definition. A schema name such as `"mc_question_schema"` is not looked up in `schema/`; the compile step fails with `'str' object has no attribute 'items'`.
+:::
 
 ### Returning a Schema Definition
 
-For more dynamic cases, return a complete schema definition:
+Return a complete schema definition in the `fields` format. Decode the context with `json.loads()`:
 
 ```python
+import json
+
+from agent_actions import udf_tool
+
+
 @udf_tool
-def select_output_schema(input_data: dict) -> dict:
-    complexity = input_data["source"]["complexity"]
+def select_output_schema(input_data: str) -> dict:
+    context = json.loads(input_data)
+    complexity = context["source"]["complexity"]
 
     if complexity == "detailed":
         return {
@@ -284,31 +280,32 @@ def select_output_schema(input_data: dict) -> dict:
 
 | Scenario | Approach |
 |----------|----------|
-| **Multi-domain content** | Select `technical_schema`, `business_schema`, or `legal_schema` based on content type |
+| **Multi-domain content** | Return a technical, business or legal definition based on content type |
 | **Adaptive complexity** | Use detailed schema for long content, simple schema for short content |
-| **Question types** | Different schemas for multiple-choice, true/false, open-ended questions |
+| **Question types** | Different definitions for multiple-choice, true/false, open-ended questions |
 | **Vendor variations** | Adjust schema based on target vendor capabilities |
 
 ### Context Available
 
-The dispatch tool receives all available context:
+The dispatch tool receives the action's context as a JSON string. Decode it and read the namespaces your prompt can read:
 
 ```python
+import json
+
+from agent_actions import udf_tool
+
+
 @udf_tool
-def select_schema(input_data: dict) -> str:
+def select_schema(input_data: str) -> dict:
+    context = json.loads(input_data)
+
     # Source fields from current record
-    content_type = input_data["source"]["content_type"]
+    content_type = context["source"]["content_type"]
 
-    # Seed data
-    exam_type = input_data["seed"]["exam_syllabus"]["type"]
-
-    # Upstream action outputs
-    classification = input_data["classify_content"]["category"]
-
-    # Make decision based on any combination
-    if classification == "code":
-        return "code_analysis_schema"
-    return "default_schema"
+    # Make decision based on any combination of fields
+    if content_type == "code":
+        return {"name": "code_analysis", "fields": [{"id": "findings", "type": "array"}]}
+    return {"name": "default_analysis", "fields": [{"id": "summary", "type": "string"}]}
 ```
 
 For more details on `dispatch_task()`, see [Dynamic Dispatch](../prompts/dispatch).
@@ -378,6 +375,17 @@ properties:
 ```
 
 ## Validation Constraints
+
+A constraint written on a field or property is not always sent to the provider, and not always checked on the response. This table shows what each one does on a top-level field:
+
+| Constraint | Sent to the provider | Checked on the response |
+|------------|----------------------|-------------------------|
+| `enum` | Yes | Yes |
+| `minimum`, `maximum` | No | Yes |
+| `pattern` | Yes | No |
+| `minLength`, `maxLength`, `exclusiveMinimum` | No | No |
+
+Inside the `items` of an array field, every constraint is sent with the schema, and the response is checked element by element against the whole `items` schema, so `maxLength` there is enforced.
 
 ### String Constraints
 
@@ -585,13 +593,12 @@ score:
 
 ### Validation Failure
 
-What happens when schema validation fails? Agent Actions provides several fallback mechanisms:
+What happens when schema validation fails? Agent Actions provides two paths:
 
 1. If a repair policy is set: regenerate with the failure list
-2. Otherwise: the mismatch is logged and the record ships
-3. Downstream actions using this output are skipped
+2. Otherwise: the mismatch is logged as a warning and the record is stored as the model returned it
 
-This means a single validation failure does not necessarily crash your entire agentic workflow. Downstream actions that depend on the failed output will be skipped, but independent branches continue.
+This means a single validation failure does not crash your agentic workflow.
 
 A `kind: tool` action at record granularity checks each record's output against its schema. An output that fails it fails that record, as a tool that raises does: the record is marked `failed` with the validation message, the other records of its file are stored, the action ends `completed_with_failures` (`failed` when no record succeeds, as for a tool that raises), and `agac retry` runs the tool on that record again.
 
@@ -599,28 +606,32 @@ At file granularity each output of the tool is checked the same way after it ret
 
 ### Common Errors
 
+The warning reads `Schema validation warning for '<action>': <errors>`. The errors are:
+
 ```
-SchemaValidationError: Required field 'fact' missing
-SchemaValidationError: Value 'invalid' not in enum ['a', 'b', 'c']
-SchemaValidationError: String length 300 exceeds maxLength 250
+Missing required fields: fact, quote
+Type mismatch for 'score': expected number, got string
+Field 'technical_level': 'invalid' is not one of ['configuration', 'implementation', 'constraint']
+Field 'score': 150 is greater than the maximum of 100
+Field 'facts' element 0: 'xxxxxxxx...' is too long
 ```
 
 ### Debugging
 
-Enable validation details:
+Print what is sent to the model:
 
 ```yaml
 - name: my_action
   schema: my_schema
-  prompt_debug: true  # Shows validation errors in detail
+  prompt_debug: true  # Online runs print the prompt, context preview and schema sent to the model
 ```
 
 ## Schema Discovery
 
-List available schemas:
+List available schemas, using your `schema_path` folder and the workflow-level `schema/` folders:
 
 ```bash
-ls schema/*.yml schema/*.yaml schema/*.json
+ls schema/*.yml schema/*.yaml schema/*.json agent_workflow/*/schema/*
 ```
 
 A schema file is checked when the workflow that names it is loaded. Check one without running the workflow:

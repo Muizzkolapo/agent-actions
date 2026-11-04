@@ -21,7 +21,7 @@ The execution layer orchestrates LLM calls, data transformations, and validated 
 
 | Need | Configuration |
 |------|---------------|
-| Lower costs, can wait 24h | `run_mode: batch` |
+| Lower costs, can wait for results | `run_mode: batch` |
 | Immediate responses | `run_mode: online` |
 | Per-item transformations | `granularity: record` |
 | Aggregation/exports | `granularity: file` |

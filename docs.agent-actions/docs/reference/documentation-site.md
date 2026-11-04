@@ -28,7 +28,7 @@ Scans your project, generates documentation data, and serves an interactive docu
 
 **What it scans:**
 - Agentic workflows in `artefact/rendered_workflows/` and `*/agent_config/`
-- Prompts in `prompt_store/*.md` files
+- Prompts in `.md` files under `prompt_store/`, including subdirectories
 - Schemas in `schema/` files (`.yml`, `.yaml`, `.json`)
 
 **Output:**
@@ -43,7 +43,7 @@ agac docs --output ./custom-artefact
 
 ### `agac docs test`
 
-Runs browser tests to verify the documentation site renders correctly.
+Runs browser tests to verify the documentation site renders correctly. It does not start the server: it needs Node.js, a running docs server (`-p` sets its port, default `8890`), and the test scripts in the project root.
 
 ```bash
 agac docs test
@@ -68,17 +68,16 @@ The screenshot below shows a detailed agentic workflow view. Notice how the DAG 
 
 You might wonder: "How do I know if my agentic workflow is performing well over time?" The run history answers this question. View execution history for each agentic workflow:
 
-- **Executed Actions** — Status, duration, token usage
-- **Skipped Actions** — Actions filtered by guards (shown with SKIPPED badge)
-- **Metrics** — Success rate, average duration, total tokens
+- **Run list** — Status, duration, and how many actions succeeded, failed or were skipped
+- **Run detail** — Duration, action count, tokens, result, and a timeline with one bar per action; skipped actions are drawn in a muted colour
 
-The run history view helps you identify patterns—which actions take longest, which guards skip frequently, and where token usage spikes.
+The run history view helps you identify patterns—which actions take longest and which are skipped.
 
 ![Run History](/img/docs-site/runs.png)
 
 ### Schema Browser
 
-Explore all schemas with field definitions, types, and validation rules. This is especially helpful when debugging schema validation errors—you can see exactly what structure is expected.
+Explore all schemas with their field names and types. This is especially helpful when debugging schema validation errors—you can see exactly what structure is expected.
 
 ![Schema Browser](/img/docs-site/schemas.png)
 
@@ -109,7 +108,7 @@ every log:
 ### Search
 
 Find resources quickly with full-text search across agentic workflows, actions,
-schemas, prompts and tools. Press `⌘K` (or `/`) from anywhere. As your project
+schemas, prompts and tools. Press `⌘K` or `Ctrl+K` (or `/`) from anywhere. As your project
 grows, search becomes essential for navigating between related components. Event
 codes and messages have their own search box on the Logs & Events page.
 

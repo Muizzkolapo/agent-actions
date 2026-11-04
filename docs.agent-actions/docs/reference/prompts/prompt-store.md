@@ -30,7 +30,7 @@ Reference prompts in YAML using the `$` syntax:
   prompt: $my_workflow.Extract_Facts
 ```
 
-Format: `$filename.Prompt_Name` (filename without `.md`)
+Format: `$filename.Prompt_Name` (filename without `.md`). A prompt name must be unique within its file.
 
 ## Directory Structure
 
@@ -144,7 +144,7 @@ The same calls work on an upstream action, as in `{% for key, value in extract_f
 ```
 
 :::tip tojson Filter
-The `| tojson` filter is essential when passing structured data (dicts, lists) into prompts. Without it, Python's string representation is used, which can confuse the LLM. All examples use `| tojson` for seed data and complex fields:
+The `| tojson` filter is essential when passing structured data (dicts, lists) into prompts. Without it, Python's string representation is used, which can confuse the LLM. Use it for seed data and complex fields:
 
 ```markdown
 {{ seed.brand_voice | tojson }}
@@ -178,7 +178,7 @@ You are evaluator {{ i }} of {{ version.length }}.
 {end_prompt}
 ```
 
-An action's inline `prompt:` in the workflow file can load a store prompt the same way, however many lines it has. The loaded text goes in as written, exactly as in a store prompt, whatever YAML style the `prompt:` uses (a `|` or `>` block, or a quoted value): its line breaks are kept and its lines are not read as YAML, so it needs no indentation of its own. A filter applied to it first, such as `{{ load_prompt("common.Standard_Header") | indent(6) }}`, makes it ordinary text that the YAML reads where the tag stands, as it always has.
+An action's inline `prompt:` in the workflow file can load a store prompt the same way, however many lines it has. The loaded text goes in as written, exactly as in a store prompt, whatever YAML style the `prompt:` uses (a `|` or `>` block, or a quoted value): its line breaks are kept and its lines are not read as YAML, so it needs no indentation of its own. A filter applied to it first, such as `{{ load_prompt("common.Standard_Header") | indent(6) }}`, makes it ordinary text that the YAML reads where the tag stands.
 
 ```yaml
 actions:

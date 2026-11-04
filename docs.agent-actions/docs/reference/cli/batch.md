@@ -22,7 +22,7 @@ defaults:
 agac run -a my_workflow
 ```
 
-When `run_mode: batch` is set, Agent Actions submits the records asynchronously and returns a batch ID. Use the commands below to manage the batch lifecycle.
+When `run_mode: batch` is set, Agent Actions submits the records asynchronously and pauses the workflow with `Workflow paused - batch job(s) submitted for: <actions>`. The batch ID appears in the `Batch <id> submitted: <n> requests to <provider>` line. Use the commands below to manage the batch lifecycle.
 
 ```bash
 agac batch <subcommand> [options]
@@ -54,7 +54,9 @@ agac batch status --batch-id <id>
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--batch-id` | **Required.** The ID of the batch job. Omitting this raises `UsageError: --batch-id is required.` Capture the batch ID from the `agac run --mode batch` output (line: `Submitted batch <id>`) or from `agent_io/target/<action>/batch/.batch_registry.json`. |
+| `--batch-id` | **Required.** The ID of the batch job. Omitting this raises `UsageError: --batch-id is required.` Take the batch ID from the `Batch <id> submitted` line of the run. |
+| `-a, --agent` | Workflow name. Required in a project with more than one workflow. |
+| `--action` | Action name. Required when the workflow has more than one batch action and the batch ID does not identify one. |
 
 **Example:**
 ```bash
@@ -62,7 +64,7 @@ $ agac batch status --batch-id batch_abc123
 Batch job status: completed
 ```
 
-> **Note:** `--batch-id` is required. There is no last-job fallback. You must provide the batch ID from the submission output or the registry file.
+> **Note:** `--batch-id` is required. There is no last-job fallback. You must provide the batch ID from the submission output.
 
 ## batch retrieve
 
@@ -76,13 +78,15 @@ agac batch retrieve --batch-id <id>
 | Option | Description |
 |--------|-------------|
 | `--batch-id` | **Required.** The ID of the batch job to retrieve. Omitting this raises `UsageError: --batch-id is required.` |
+| `-a, --agent` | Workflow name. Required in a project with more than one workflow. |
+| `--action` | Action name. Required when the workflow has more than one batch action and the batch ID does not identify one. |
 
 **Example:**
 ```bash
 agac batch retrieve --batch-id batch_abc123
 ```
 
-Results are saved to your workflow's configured output directory as JSON files matching your output schema.
+Results are written to `agent_workflow/<workflow>/agent_io/target/<action>/<batch-id>_results.jsonl`, and the command prints that path.
 
 ## Batch Agentic Workflow
 
