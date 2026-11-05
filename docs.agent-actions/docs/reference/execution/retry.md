@@ -52,12 +52,25 @@ actions:
 | `return_last` | Return last response, workflow continues |
 | `raise` | Raise exception, workflow fails |
 
+A record that exhausted its retries carries the error its last attempt raised, ahead of the
+count, wherever it is reported: the run's line for the action, `agac status`, and
+`agac dispositions` (its record-level detail too). An action whose every record exhausted
+fails with that error rather than with the count alone:
+
+```text
+✗ summarize  Action 'summarize': items.json: openai network error: Connection error. — retry
+  exhausted after 2 attempts — Action 'summarize' produced 0 successful records — …
+```
+
+The record's `_recovery.retry` holds it as `last_error`. An error with no message of its own
+is named by its type.
+
 ## Retryable Errors
 
 | Error Type | Examples | Retryable |
 |------------|----------|-----------|
 | Rate Limits | HTTP 429, quota exceeded | Yes |
-| Network Issues | Connection refused, reset or dropped mid-response, timeout, DNS failure | Yes |
+| Network Issues | Connection refused, reset or dropped mid-response, timeout (including a request that outlasts [`request_timeout`](../configuration/index.md#request-timeout)), DNS failure | Yes |
 | Server Errors | HTTP 500, 502, 503, 504 | Yes; which other statuses depends on the provider ([by provider](#provider-support)) |
 | Invalid Request | Bad API key, malformed input | No |
 | Schema Violation | Invalid JSON output | No (uses `expect:` repair) |
@@ -76,7 +89,7 @@ Provider-specific errors are normalized into unified `RateLimitError` and `Netwo
 | Anthropic | Retried | Any HTTP 5xx retried, 529 (overloaded) included |
 | Gemini, Cohere, Ollama | Retried | HTTP 500, 502, 503, 504 retried |
 
-A status the table does not mark as retried is not retried.
+A status the table does not mark as retried is not retried. One exception: a [declared endpoint](../configuration/endpoints.md) with `auth.command` answers a 401 by running the command once more and retrying that call once, so an expired token is renewed; a second 401 fails the record.
 
 ## Best Practices
 

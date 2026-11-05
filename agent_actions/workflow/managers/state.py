@@ -66,6 +66,16 @@ MID_PROCESSING_STATUSES: frozenset[ActionStatus] = frozenset(
 # manifest's ``created_at``. Removed when a reset makes what the action holds stale.
 REPAIRED_BY = "repaired_by"
 
+# Status detail: the config the answers an action kept were given under, written when an
+# action stopped partway resumes under an edit. Its stamps are held to it, so later runs
+# still name the edit. Removed when a reset answers everything again.
+KEPT_ANSWERS_UNDER = "kept_answers_under"
+
+# Status detail: the action completed holding answers given under more than one config,
+# so its stamp, which names one, cannot say every answer is from the config in force.
+# Removed when a reset answers everything again.
+ANSWERS_UNDER_MORE_THAN_ONE_CONFIG = "answers_under_more_than_one_config"
+
 
 def _as_count(value: Any) -> int | None:
     """*value* as a record count, or None if it is not one."""
@@ -189,6 +199,24 @@ class ActionStateManager:
                 details["status"] = ActionStatus.PENDING
                 details.pop("max_records", None)
                 details.pop(REPAIRED_BY, None)
+                details.pop(KEPT_ANSWERS_UNDER, None)
+                details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
+            self._save_status()
+
+    def forget_mixed_answers(self, action_names: Iterable[str]) -> None:
+        """Drop the markers of answers kept from another config: none of them remains."""
+        with self._lock:
+            for name in action_names:
+                details = self.action_status.get(name, {})
+                details.pop(KEPT_ANSWERS_UNDER, None)
+                details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
+            self._save_status()
+
+    def mark_mixed_answers(self, action_names: Iterable[str]) -> None:
+        """Record that these actions hold answers given under more than one config."""
+        with self._lock:
+            for name in action_names:
+                self.action_status.setdefault(name, {})[ANSWERS_UNDER_MORE_THAN_ONE_CONFIG] = True
             self._save_status()
 
     def is_completed(self, action_name: str) -> bool:

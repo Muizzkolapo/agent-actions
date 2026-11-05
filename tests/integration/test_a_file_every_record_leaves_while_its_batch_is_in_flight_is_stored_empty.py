@@ -1,8 +1,8 @@
 """A file that held answers, emptied while its next batch is in flight, is stored empty.
 
-The file is sent again after an edit, every record leaves it while that batch is still at
-the provider, and the run checking on the batch is interrupted, so the next run resumes the
-action with the batch in flight. The answers the file held before the edit go with it.
+The file is sent again by `--rerun` under an edit, every record leaves it while that batch
+is still at the provider, and the run checking on the batch is interrupted, so the next run
+resumes the action with the batch in flight. The answers the file held before go with it.
 """
 
 import json
@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from tests.integration.test_a_batch_the_provider_refuses import (
+    CLI_ACTION,
     _agac,
     _batch_ids,
     _project,
@@ -41,7 +42,7 @@ def emptied(tmp_path_factory):
     held_before = _stored_rows(project)
 
     _edit_the_prompt(project)
-    assert _agac(project).status == "batch_submitted"
+    assert _agac(project, "--rerun", CLI_ACTION).status == "batch_submitted"
     batch = _batch_ids(project)["a_pages.json"]
     _held_out(project, batch, held=True)
     _staging(project, "a_pages.json").write_text(json.dumps([]))

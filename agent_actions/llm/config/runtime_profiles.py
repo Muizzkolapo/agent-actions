@@ -44,6 +44,11 @@ _WIRE_VENDOR: dict[Wire, str] = {"openai_chat": "openai"}
 
 
 def wire_vendor(vendor: str) -> str:
-    """The vendor whose formats *vendor* speaks: itself, unless it is a runtime profile."""
-    profile = RUNTIME_PROFILES.get(vendor.lower())
-    return _WIRE_VENDOR[profile.wire] if profile else vendor
+    """The vendor whose formats *vendor* speaks: itself, unless it is a profile or an endpoint."""
+    from agent_actions.llm.config.endpoints import project_endpoint
+
+    name = vendor.lower()
+    profile = RUNTIME_PROFILES.get(name)
+    if profile is not None:
+        return _WIRE_VENDOR[profile.wire]
+    return _WIRE_VENDOR["openai_chat"] if project_endpoint(name) is not None else vendor

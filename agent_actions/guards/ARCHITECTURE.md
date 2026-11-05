@@ -411,7 +411,7 @@ Two consequences worth stating:
 
 6. **Batch mode needs explicit disposition writing.** In batch, filtered/skipped records are marked in the context_map but dispositions are not written until finalization. If a batch run crashes between preparation and finalization, filtered records have no persisted disposition. Online mode writes dispositions immediately.
 
-7. **Guard clause is included in the config hash.** `_compute_action_config_hash()` in `workflow/executor.py` hashes the guard clause and behavior. Changing a guard condition invalidates previously completed action results, forcing a re-run. This prevents stale results from persisting after guard logic changes.
+7. **Guard clause is included in the config hash.** `_compute_action_config_hash()` in `workflow/executor.py` hashes the guard clause and behavior. Changing a guard condition re-runs nothing: the records already judged keep their verdicts, and each run warns that the action was edited until `agac run --rerun <action>` judges every record again under the new guard.
 
 8. **Missing fields are reclassified, not failed.** `reclassify_missing_field_error()` in `evaluator.py` handles two cases: (a) a flat field reference that exists inside a namespace is reclassified as SEMANTIC (config error); (b) a genuinely missing field is treated as "condition not matched" rather than an error. This prevents `passthrough_on_error` from accidentally passing records that should be filtered.
 

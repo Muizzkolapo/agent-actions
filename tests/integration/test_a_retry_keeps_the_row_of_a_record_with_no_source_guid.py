@@ -1,16 +1,12 @@
 """A retry of one record keeps the failed row an action stored for a record with no identity.
 
-A record that reaches an action without a source_guid is refused: the action stores a
-failed row with no source_guid and records no disposition for it, so that row and the run
-log are the only record of the refusal. A repair names records by source_guid, so it can
-never name that one, and it replaced the file with what it produced plus the stored rows
-it handed back -- none of them without a source_guid. The row was gone after the retry
-of any other record, and the action read complete, so no later run wrote it again.
+A record reaching an action without a source_guid is refused with a failed row and no
+disposition, so that row and the run log are its only record. A repair names records by
+source_guid and can never name it, so a retry of any other record must keep the row: the
+action reads complete, and no later run would write it again.
 
-Each run is its own `agac` process. `flatten` is a tool; `stamp` reads it, a tool online
-and an LLM action under batch. One stored `flatten` row loses its source_guid, as an
-upstream file edited by hand would leave it, and `stamp`'s schema is edited so the next
-run answers it again.
+`flatten` is a tool; `stamp` reads it (a tool online, an LLM action under batch). One stored
+`flatten` row loses its source_guid, as a hand-edited upstream file would.
 """
 
 from __future__ import annotations
@@ -137,15 +133,16 @@ def _configure(project: Path, mode: str, schema: str) -> None:
 _ENV = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
 
 
-def _run(project: Path, *args: str) -> None:
-    """`agac run` until nothing is left in flight."""
+def _run(project: Path, *first: str) -> None:
+    """`agac run` until nothing is left in flight, passing *first* to the first run alone."""
+    args = first
     for _ in range(4):
         result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", *args, env=_ENV)
         output = result.stdout + result.stderr
         assert result.returncode == 0, output
         if "run again" not in output:
             return
-        args = tuple(arg for arg in args if arg != "--fresh")
+        args = ()
     pytest.fail(f"the workflow never stopped asking to be run again:\n{output}")
 
 
@@ -181,7 +178,7 @@ def _refused_at_stamp(project: Path, mode: str) -> dict:
     finally:
         backend.close()
     _configure(project, mode, "nameless_kept_edited")
-    _run(project)
+    _run(project, "--rerun", "stamp")
     (refused,) = [row for row in _held(project) if not row.get("source_guid")]
     assert refused["_state"] == "failed"
     return refused
@@ -227,7 +224,7 @@ def test_a_plain_run_over_the_record_with_no_source_guid_stores_its_failed_row_o
     _refused_at_stamp(project, mode)
     _configure(project, mode, "nameless_kept_output")
 
-    _run(project)
+    _run(project, "--rerun", "stamp")
 
     held = _held(project)
     assert len(held) == 4

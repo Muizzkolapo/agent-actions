@@ -164,7 +164,7 @@ A FILE tool answers its whole file at once, so a failure is recorded against the
 - **The tool raises**, or returns output that cannot be matched to its inputs (a plain dict in a list, neither a list nor a `FileUDFResult`, or a row whose parent `source_index` names no input): every record of that file is marked `failed` with the error. The action's other files are stored.
 - **An output fails the action's schema**: each output is checked on its own after the tool returns. When the refused output names one input by `source_index`, that record is marked `failed` with the validation message, every other output of that record is dropped, and the rest of the file is stored. When it names several inputs or none (`source_index: None`), or a dropped output also answers another record, every record of the file is marked `failed`.
 
-The action ends `completed_with_failures` (`failed` when no record succeeds), and `agac retry` runs the tool again over each file holding a failed record, whole. After an edit resets the action, a file whose every record fails is stored with those failures, so no row from before the edit is kept.
+The action ends `completed_with_failures` (`failed` when no record succeeds), and `agac retry` runs the tool again over each file holding a failed record, whole. After `agac run --rerun` resets the action, a file whose every record fails is stored with those failures, so no row from before the reset is kept.
 
 ### When a Retry Reaches a FILE Tool
 

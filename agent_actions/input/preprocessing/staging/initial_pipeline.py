@@ -363,6 +363,17 @@ def process_initial_stage(ctx: InitialStageContext):
     content, file_type = _read_staged_file(ctx)
     staged = _check_and_prepare(ctx, content, file_type)
     run_mode, data_chunk, src_text = staged.run_mode, staged.data_chunk, staged.src_text
+    if ctx.storage_backend is not None and isinstance(data_chunk, list):
+        # Every record staged, before a repair or a limit narrows them: a record the
+        # walk left out is still staged, and only one no file holds is forgotten.
+        ctx.storage_backend.note_staged_records(
+            ctx.agent_name,
+            (
+                row["source_guid"]
+                for row in data_chunk
+                if isinstance(row, dict) and row.get("source_guid")
+            ),
+        )
 
     # The records a repair leaves out are what let the disposition gate tell a
     # stored row of this action's own making from one minted upstream.

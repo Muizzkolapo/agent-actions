@@ -32,6 +32,7 @@ from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.executor import ActionExecutor, ActionRunParams, ExecutorDependencies
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
+from tests._support.logs import framework_records
 
 ACTION = "agent_a"
 CONFIG = {"prompt": "Answer it", "model_vendor": "openai", "model_name": "m"}
@@ -88,7 +89,7 @@ def _failed(tmp_path, backend, error: Exception) -> None:
     executor._execute_action_run(ActionRunParams(ACTION, 0, CONFIG, False, datetime.now()))
 
 
-def _next_run_resets(tmp_path, backend, config=CONFIG) -> ActionStateManager:
+def _next_run_resets(tmp_path, backend, config=CONFIG, *, rerun: bool = False):
     """The next process, under *config*: the reset it runs first."""
     state, executor = _process(tmp_path, backend, config)
     workflow = object.__new__(AgentWorkflow)
@@ -98,6 +99,8 @@ def _next_run_resets(tmp_path, backend, config=CONFIG) -> ActionStateManager:
         core=SimpleNamespace(state_manager=state, action_executor=executor)
     )
     workflow._reset_retryable_actions()
+    if rerun:
+        executor.reopen_with_readers(ACTION)
     return state
 
 
@@ -114,13 +117,33 @@ def test_the_records_it_had_answered_are_still_done_for_the_next_run(tmp_path, b
     assert manager.get_status(ACTION) == ActionStatus.PENDING
 
 
-def test_an_edit_since_the_refusal_answers_every_record_again(tmp_path, backend):
-    """The refusal stored nothing, but what came before it was answered under the old prompt."""
+def test_an_edit_since_the_refusal_keeps_what_it_had_answered_and_names_the_edit(tmp_path, backend):
+    """What came before the refusal was answered under the old prompt and stands; the
+    records still to answer are answered under the edit."""
     _failed(tmp_path, backend, _refused())
 
-    _next_run_resets(tmp_path, backend, {**CONFIG, "prompt": "Answer it again"})
+    with framework_records("agent_actions.workflow.coordinator") as records:
+        manager = _next_run_resets(tmp_path, backend, {**CONFIG, "prompt": "Answer it again"})
+
+    assert _dispositions(backend) == {"answered": DISPOSITION_SUCCESS}
+    assert manager.get_status(ACTION) == ActionStatus.PENDING
+    assert [r.getMessage() for r in records if "was edited since" in r.getMessage()] == [
+        f"{ACTION} was edited since its last run started (action config (prompt/schema/guard)): "
+        "the records it finished stand, a batch already sent is collected as it was sent, and "
+        f"the rest are answered under the edit. Run again with --rerun {ACTION} to answer "
+        "every record under the edit"
+    ]
+
+
+def test_rerun_after_an_edit_since_the_refusal_answers_every_record_again(tmp_path, backend):
+    _failed(tmp_path, backend, _refused())
+
+    manager = _next_run_resets(
+        tmp_path, backend, {**CONFIG, "prompt": "Answer it again"}, rerun=True
+    )
 
     assert _dispositions(backend) == {}
+    assert manager.get_status(ACTION) == ActionStatus.PENDING
 
 
 def _batches_out_beside_it(backend) -> None:

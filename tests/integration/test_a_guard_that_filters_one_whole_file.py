@@ -1,16 +1,11 @@
-"""An action whose guard filters every record of one file is not skipped (1253).
+"""An action whose guard filters every record of one file is not skipped.
 
-Online, each input file reaches the guard on its own, and a file whose every
-record was filtered wrote the node-level `skipped` row. That row names the action,
-not the file, and the executor reads it first: the action read skipped though its
-other file had just written rows, and its readers were skipped over those rows.
-Batch writes a node-level `passthrough` instead and reads skipped only while the
-action holds no row, so the same project completed there.
-
-A reader's input for the wholly filtered file is then empty. Online stores that
-file empty; batch sent nothing for it and kept what it had stored there before.
-
-Editing the action is what resets it; its readers are reset by that.
+Online, each input file reaches the guard on its own. The node-level `skipped` row names
+the action, not the file, so writing it for one wholly filtered file would make the action
+and its readers read skipped though its other file wrote rows; batch writes `passthrough`
+and reads skipped only while the action holds no row. A reader's input for the filtered
+file is then empty, and in either mode it stores that file empty, keeping no older rows.
+Runs that apply an edit name the action with ``--rerun``, resetting it and its readers.
 """
 
 import json
@@ -102,7 +97,7 @@ def test_an_action_whose_guard_filters_one_whole_file_completes_and_its_reader_r
 ):
     _add_guard_to(two_files, ACTION, KEEP_OTHER)
 
-    _run("-e", mode)
+    _run("-e", mode, "--rerun", ACTION)
 
     assert _rows_by_file(two_files, ACTION) == {"other.json": OTHER, "pages.json": 0}
     assert _status(two_files, ACTION) == "completed"
@@ -116,8 +111,9 @@ def test_the_skip_one_file_wrote_is_not_left_to_describe_the_action(two_files_no
     next run reads it as a skip from before and runs the action again. Without a
     reader, nothing else clears it."""
     _add_guard_to(two_files_no_reader, ACTION, KEEP_OTHER)
-    _run()
+    _run("--rerun", ACTION)
 
+    assert _rows_by_file(two_files_no_reader, ACTION) == {"other.json": OTHER, "pages.json": 0}
     assert _status(two_files_no_reader, ACTION) == "completed"
     assert not _node_skipped(two_files_no_reader, ACTION)
     assert f"{ACTION} — already complete" in _run().output
@@ -128,7 +124,7 @@ def test_an_action_whose_guard_filters_every_file_is_still_skipped(two_files):
     reader is skipped under it and emptied."""
     _add_guard_to(two_files, ACTION, FILTER_ALL)
 
-    _run()
+    _run("--rerun", ACTION)
 
     assert _status(two_files, ACTION) == "skipped"
     assert _status(two_files, SECOND) == "skipped"
@@ -138,7 +134,7 @@ def test_an_action_whose_guard_filters_every_file_is_still_skipped(two_files):
 
 def _model_project_whose_guard_now_filters_one_whole_file(tmp_path, run_mode):
     """`summarize` read by `publish`, run to the end over two files, then given a guard
-    that filters every record of `pages.json`."""
+    that filters every record of `pages.json`. A run applies it with ``--rerun``."""
     root = _project(tmp_path)
     staging = _staging(root, "batch_field_rules")
     staging.joinpath("pages.json").write_text(
@@ -166,7 +162,7 @@ def test_a_model_action_whose_guard_filters_one_whole_file_completes_in_either_r
     already completed and online did not."""
     root = _model_project_whose_guard_now_filters_one_whole_file(tmp_path, run_mode)
 
-    transcript = _run_to_the_end(root)
+    transcript = _run_to_the_end(root, "--rerun", FIRST)
 
     assert _statuses(root) == {
         FIRST: ActionStatus.COMPLETED.value,
@@ -186,7 +182,7 @@ def test_its_reader_holds_nothing_for_the_file_the_guard_filtered_in_either_run_
     the rows it had built from the records the guard now filters."""
     root = _model_project_whose_guard_now_filters_one_whole_file(tmp_path, run_mode)
 
-    transcript = _run_to_the_end(root)
+    transcript = _run_to_the_end(root, "--rerun", FIRST)
 
     assert _rows_by_file(root, READER, _model_backend) == {
         "other.json": 2,

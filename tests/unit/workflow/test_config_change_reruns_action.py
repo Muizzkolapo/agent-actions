@@ -1,17 +1,14 @@
-"""A completed action must re-run when its config changed.
+"""What a completed action does on the next run when its config changed.
 
-``execute_action_sync`` checks for a config change before checking for output,
-and that order is correct.  But the coordinator never reaches it for a completed
-action: both run loops call ``verify_completion_status(action_name)`` first, and
-that function takes only a name — it has no ``action_config``, so it can only
-ask "does the output still exist".  For any completed action that still has its
-output, it says "skip", and the invalidation check never runs.  Edit a guard, a
-prompt, a model or a schema, re-run, and the previous run's results come back
-with nothing said about it.
+Both run loops reach a completed action through ``verify_completion_status``, which
+reads the config the action runs under and compares it with the completion stamp. A
+changed limit re-runs the action. An edit to its guard, prompt, schema or model does
+not: the answers it holds stand, a warning names the edit, and ``--rerun`` applies it.
 """
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -62,13 +59,14 @@ def _complete_with(state_manager, action_config: dict) -> None:
     )
 
 
-class TestAChangedConfigReRunsTheAction:
+class TestAChangedConfigOnACompletedAction:
     @pytest.mark.parametrize(
-        ("before", "change"),
+        ("before", "change", "label"),
         [
             pytest.param(
                 _config('density == "high"'),
                 {"guard": _config('density == "impossible"')["guard"]},
+                "action config (prompt/schema/guard)",
                 id="guard",
             ),
             # The hash cannot see the model, so it is compared from the stamp.
@@ -77,39 +75,52 @@ class TestAChangedConfigReRunsTheAction:
                     _config('density == "high"'), model_name="gpt-oss:120b", model_vendor="ollama"
                 ),
                 {"model_name": "claude-sonnet-4"},
+                "model",
                 id="model_name",
             ),
             pytest.param(
                 dict(_config('density == "high"'), model_name="m", model_vendor="ollama"),
                 {"model_vendor": "anthropic"},
+                "model",
                 id="model_vendor",
             ),
-            pytest.param(_config('density == "high"'), {"record_limit": 5}, id="record_limit"),
         ],
     )
-    def test_a_changed_setting_is_not_skipped(self, state_manager, before, change):
+    def test_an_edited_action_is_skipped_and_the_edit_named(
+        self, state_manager, caplog, before, change, label
+    ):
         _complete_with(state_manager, before)
         executor = _executor(state_manager, dict(before, **change))
 
+        with caplog.at_level(logging.WARNING, logger="agent_actions"):
+            assert executor.verify_completion_status(ACTION) is True
+
+        assert state_manager.get_status(ACTION) == ActionStatus.COMPLETED
+        executor.deps.action_runner.storage_backend.clear_disposition.assert_not_called()
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+            f"{ACTION} was edited since it completed ({label}): its answers stand, and only "
+            f"records it has not answered use the edit. Run again with --rerun {ACTION} to "
+            "answer every record under the edit"
+        ]
+
+    def test_a_changed_record_limit_is_not_skipped(self, state_manager):
+        config = _config('density == "high"')
+        _complete_with(state_manager, config)
+        executor = _executor(state_manager, dict(config, record_limit=5))
+
         assert executor.verify_completion_status(ACTION) is False
-
-    def test_a_changed_guard_returns_the_action_to_pending(self, state_manager):
-        _complete_with(state_manager, _config('density == "high"'))
-        executor = _executor(state_manager, _config('density == "impossible"'))
-
-        executor.verify_completion_status(ACTION)
-
         assert state_manager.get_status(ACTION) == ActionStatus.PENDING
 
     def test_a_stale_verdict_is_wiped_for_the_whole_action(self, state_manager):
-        """A changed prompt or guard makes every per-record verdict stale.
+        """A changed limit makes every per-record verdict stale.
 
         Checking output first would clear only the node-level marker and leave
         per-record SUCCESS rows, which the disposition gate carries forward — so
         the action would re-run while skipping records that already succeeded.
         """
-        _complete_with(state_manager, _config('density == "high"'))
-        executor = _executor(state_manager, _config('density == "impossible"'), has_output=False)
+        config = _config('density == "high"')
+        _complete_with(state_manager, config)
+        executor = _executor(state_manager, dict(config, record_limit=5), has_output=False)
 
         executor.verify_completion_status(ACTION)
 

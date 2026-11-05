@@ -482,8 +482,10 @@ def _exhaustion_of(
         metadata = RecoveryMetadata.from_dict(recovery)
     except (TypeError, KeyError):
         return None
+    retry_error = None
     if metadata.retry is not None:
         attempts = metadata.retry.attempts
+        retry_error = metadata.retry.exhausted_message()
     elif metadata.expectations is not None:
         attempts = metadata.expectations.attempts
     else:
@@ -491,7 +493,7 @@ def _exhaustion_of(
     if reason == EXPECTATIONS_EXHAUSTED and metadata.expectations is not None:
         error, _ = ExhaustedRecordBuilder.expectations_exhaustion(metadata.expectations)
     else:
-        error = f"Retry exhausted after {attempts} attempts"
+        error = retry_error or f"Retry exhausted after {attempts} attempts"
     return (DISPOSITION_EXHAUSTED, f"exhausted_after_{attempts}_attempts", error)
 
 

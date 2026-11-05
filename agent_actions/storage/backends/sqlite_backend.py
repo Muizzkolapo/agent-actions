@@ -111,6 +111,7 @@ class SQLiteBackend(StorageBackend):
             prompt_length INTEGER,
             context_length INTEGER,
             response_length INTEGER,
+            answered_under TEXT,          -- JSON: the config this record was answered under
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(action_name, record_id, attempt)
         )
@@ -192,6 +193,7 @@ class SQLiteBackend(StorageBackend):
             "prompt_length",
             "context_length",
             "response_length",
+            "answered_under",
             "created_at",
         },
     }
@@ -1209,6 +1211,23 @@ class SQLiteBackend(StorageBackend):
                 found.update(row["relative_path"] for row in cursor.fetchall())
         return found
 
+    def source_guids_among(self, record_ids: Iterable[str]) -> set[str]:
+        """Which of *record_ids* name a stored input row."""
+        ids = tuple(dict.fromkeys(record_ids))
+        found: set[str] = set()
+        with self._lock:
+            cursor = self.connection.cursor()
+            for start in range(0, len(ids), _SQL_MAX_PARAMS):
+                chunk = ids[start : start + _SQL_MAX_PARAMS]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"SELECT DISTINCT source_guid FROM source_data "
+                    f"WHERE source_guid IN ({placeholders})",
+                    chunk,
+                )
+                found.update(row["source_guid"] for row in cursor.fetchall())
+        return found
+
     def records_share_a_repeat_chain(self, record_ids: Iterable[str]) -> bool:
         """Whether any of record_ids is a repeat, or is repeated by another row."""
         ids = tuple(dict.fromkeys(record_ids))
@@ -1681,6 +1700,7 @@ class SQLiteBackend(StorageBackend):
         attempt: int = 0,
         source_guid: str | None = None,
         run_id: str | None = None,
+        answered_under: str | None = None,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record.
 
@@ -1719,8 +1739,9 @@ class SQLiteBackend(StorageBackend):
                     (action_name, record_id, source_guid, run_id, attempt,
                      compiled_prompt, llm_context,
                      response_text, model_name, model_vendor, run_mode,
-                     prompt_length, context_length, response_length, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     prompt_length, context_length, response_length, answered_under,
+                     created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         action_name,
@@ -1737,6 +1758,7 @@ class SQLiteBackend(StorageBackend):
                         prompt_length,
                         context_length,
                         response_length,
+                        answered_under,
                     ),
                 )
                 self.connection.commit()
@@ -1849,6 +1871,7 @@ class SQLiteBackend(StorageBackend):
         "prompt_length",
         "context_length",
         "response_length",
+        "answered_under",
         "created_at",
     )
 

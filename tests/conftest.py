@@ -16,20 +16,38 @@ def pytest_configure():
 
 
 @pytest.fixture(autouse=True)
-def _enable_log_propagation():
+def _enable_log_propagation(request):
     """Ensure agent_actions loggers propagate to root so caplog captures them.
 
-    ``LoggerFactory.configure`` sets ``propagate = False`` on the ``agent_actions``
-    logger (``logging/factory.py:257``) so its bridge handler owns output. caplog
-    hooks the Python root logger, so without this a caplog assertion sees nothing
-    once the framework's logging has been configured anywhere in the session —
-    presence assertions fail confusingly and absence assertions pass vacuously.
+    Setting the framework's logging up (``LoggerFactory._setup_logging_bridge``) sets
+    ``propagate = False`` on the ``agent_actions`` logger so its bridge handler owns
+    output, and caplog hooks the root logger. A command run in-process sets it up
+    partway through a test, so propagation is turned back on after every setup, not
+    only before the test (#1627).
     """
+    from agent_actions.logging.factory import LoggerFactory
+
     aa_logger = logging.getLogger("agent_actions")
     orig = aa_logger.propagate
     aa_logger.propagate = True
-    yield
-    aa_logger.propagate = orig
+    if request.node.get_closest_marker("real_logging_setup"):
+        yield
+        aa_logger.propagate = orig
+        return
+    # Patched by hand, not with monkeypatch: requesting it here would set it up before
+    # the other autouse fixtures and so undo a test's own patches only after theirs ran.
+    setup = LoggerFactory.__dict__["_setup_logging_bridge"]
+
+    def setup_and_propagate(cls):
+        setup.__func__(cls)
+        aa_logger.propagate = True
+
+    LoggerFactory._setup_logging_bridge = classmethod(setup_and_propagate)  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        LoggerFactory._setup_logging_bridge = setup  # type: ignore[method-assign]
+        aa_logger.propagate = orig
 
 
 @pytest.fixture(autouse=True)
@@ -173,17 +191,26 @@ def wire_batch_disposition_delegate(backend: MagicMock) -> None:
 @pytest.fixture(autouse=True)
 def _reset_global_singletons():
     """Prevent singleton state from leaking between tests."""
+    from agent_actions.llm.config.endpoints import clear_project_endpoints
+    from agent_actions.llm.providers.openai.compatible import clear_command_secrets
     from agent_actions.logging.factory import LoggerFactory
+    from agent_actions.logging.filters import clear_registered_secrets
     from agent_actions.utils.correlation import VersionIdGenerator
     from agent_actions.utils.path_utils import reset_path_manager
 
     reset_path_manager()
     LoggerFactory.reset()
     VersionIdGenerator.clear()
+    clear_project_endpoints()
+    clear_registered_secrets()
+    clear_command_secrets()
     yield
     reset_path_manager()
     LoggerFactory.reset()  # cascades to EventManager.reset()
     VersionIdGenerator.clear()
+    clear_project_endpoints()
+    clear_registered_secrets()
+    clear_command_secrets()
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -545,7 +545,7 @@ fire_event(ActionCompleteEvent(
 - `total_actions` (int): Total number of actions
 - `execution_time` (float): Execution time in seconds
 - `output_path` (str): Path to output file
-- `record_count` (int): Number of records this execution produced. A run that replaces rows already stored counts them again, so a re-run after an edit and `agac retry` report what they answered. Records carried forward from an earlier run are not counted. The `✓ <action>  N records` completion line shows the same number.
+- `record_count` (int): Number of records this execution produced. A run that replaces rows already stored counts them again, so `agac run --rerun` and `agac retry` report what they answered. Records carried forward from an earlier run are not counted. The `✓ <action>  N records` completion line shows the same number.
 - `tokens` (Dict[str, int]): Token usage breakdown
 - `mode` (str): `"online"` or `"batch"`
 - `model_vendor` / `model_name` (str): The model that ran the action; empty for a tool or HITL action

@@ -5,7 +5,7 @@ import json
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
-from tests.integration.test_an_upstream_edit_reruns_what_reads_it import _raw_rows
+from tests.integration.test_a_rerun_of_an_upstream_reruns_what_reads_it import _raw_rows
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,

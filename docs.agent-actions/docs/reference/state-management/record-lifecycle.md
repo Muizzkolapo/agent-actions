@@ -127,3 +127,5 @@ below the fan-in skip it as `upstream_unprocessed`, naming the same cause. A ver
 ## Version Correlation
 
 When using `version_consumption: merge`, records are correlated via `version_correlation_id`, `root_target_id`, and `parent_target_id`. On root records (records with no parent), `parent_target_id` is **absent** from the JSON object — not `null`. Always use a presence check (`"parent_target_id" in record`) rather than a null check.
+
+Every version of a source record carries the same `version_correlation_id`, derived from the workflow's name and the record, so a version answered again later, from another checkout, worktree or mount, still merges with the versions it kept. Ids stored by an agac release before this one also took in the project's path. When a merge meets a record whose versions carry different ids, it warns, naming the record, and the merge holds that record in parts, each short of a version. Run `agac run --rerun <version base>` (`--rerun vote` for `vote_1` … `vote_N`) to answer every version under one id.

@@ -41,10 +41,11 @@ class RetryMetadata:
     succeeded: bool
     reason: str  # "timeout", "api_error", "missing", "rate_limit", "network_error"
     timestamp: str | None = None  # ISO format (e.g., "2024-01-13T12:30:45Z")
+    last_error: str | None = None  # The error the final attempt raised
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        result = {
+        result: dict[str, Any] = {
             "attempts": self.attempts,
             "failures": self.failures,
             "succeeded": self.succeeded,
@@ -52,7 +53,19 @@ class RetryMetadata:
         }
         if self.timestamp:
             result["timestamp"] = self.timestamp
+        if self.last_error:
+            result["last_error"] = self.last_error
         return result
+
+    def exhausted_message(self) -> str:
+        """Why the record gave up, the provider's error first.
+
+        First because every view that renders it truncates (`agac dispositions` at
+        60 characters), and the error is the part a reader needs.
+        """
+        if self.last_error:
+            return f"{self.last_error} — retry exhausted after {self.attempts} attempts"
+        return f"Retry exhausted after {self.attempts} attempts"
 
 
 @dataclass

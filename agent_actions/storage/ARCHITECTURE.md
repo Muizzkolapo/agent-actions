@@ -173,10 +173,16 @@ CREATE TABLE IF NOT EXISTS prompt_trace (
     prompt_length INTEGER,            -- length of original prompt before truncation
     context_length INTEGER,
     response_length INTEGER,
+    answered_under TEXT,              -- JSON: the config the record was answered under
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, record_id, attempt)
 )
 ```
+
+`answered_under` holds the keys of the action's `answered_under` status stamp
+(`config_in_force` in `workflow/executor.py`). A config edit re-runs nothing, so one
+action can hold answers from more than one config; this column says which answered
+each record. An existing store gains it through `_enforce_schema`.
 
 Indexes:
 - `idx_trace_action ON prompt_trace(action_name)`
@@ -445,7 +451,7 @@ The `_REQUIRED_COLUMNS` dictionary lists the columns each table must have:
 | `source_data` | relative_path, source_guid, data, created_at, repeat_of_source_guid |
 | `target_data` | action_name, relative_path, data, record_count, created_at |
 | `record_disposition` | action_name, record_id, disposition, reason, relative_path, input_snapshot, detail, created_at |
-| `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, created_at |
+| `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, answered_under, created_at |
 
 Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added after the migration system and has no legacy schemas to handle.
 

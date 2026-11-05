@@ -47,6 +47,7 @@ Cohere, etc.).
 | `prompt` | outbound | Uses MessageBuilder and PromptPreparationService for prompt assembly |
 | `processing` | outbound | Uses UnifiedProcessor and BatchResultStrategy for result processing |
 | `config` | outbound | Reads vendor profiles and project paths from config utilities |
+| `config` | inbound | `ConfigManager.get_user_agents` validates the project's `endpoints:` block with `llm.config.endpoints.load_project_endpoints` |
 | `output` | outbound | Uses ResponseSchemaCompiler and FileWriter for output handling |
 | `input` | outbound | Uses loaders and preprocessing for batch data preparation |
 | `storage` | outbound | Persists batch registry and result dispositions via StorageBackend |

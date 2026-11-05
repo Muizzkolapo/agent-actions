@@ -59,19 +59,6 @@ def _stored(root):
         backend.close()
 
 
-def _reset(root):
-    """Give the action a guard that passes everything; editing it is what resets it."""
-    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-    text = config.read_text()
-    assert "    prompt: $p.Summarize\n" in text
-    config.write_text(
-        text.replace(
-            "    prompt: $p.Summarize\n",
-            "    prompt: $p.Summarize\n    guard: { condition: 'true', on_false: \"skip\" }\n",
-        )
-    )
-
-
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     root = tmp_path / "project"
@@ -96,9 +83,8 @@ def project(tmp_path, monkeypatch):
 
 def test_the_rows_of_a_file_that_is_gone_go_when_the_walk_submits(project):
     (_staging(project) / "more.json").unlink()
-    _reset(project)
 
-    submitted = _run()
+    submitted = _run("--rerun", ACTION)
 
     assert "run again" in submitted.output, "the reset did not submit a batch"
     assert _stored(project) == {"pages.json": PAGES}
@@ -106,8 +92,7 @@ def test_the_rows_of_a_file_that_is_gone_go_when_the_walk_submits(project):
 
 def test_collecting_does_not_bring_them_back(project):
     (_staging(project) / "more.json").unlink()
-    _reset(project)
-    _run()
+    _run("--rerun", ACTION)
 
     _run()
 
@@ -168,15 +153,8 @@ def test_a_version_merge_does_not_send_its_own_rows_for_a_file_that_is_gone(merg
     holding the file any more, what it stored for it would be sent as its input."""
     workflow = merged / "agent_workflow" / MERGE_WORKFLOW
     (workflow / "agent_io" / "staging" / "sub" / "items.json").unlink()
-    config = workflow / "agent_config" / f"{MERGE_WORKFLOW}.yml"
-    config.write_text(
-        config.read_text().replace(
-            "    impl: stage_items\n",
-            "    impl: stage_items\n    guard: { condition: 'true', on_false: \"skip\" }\n",
-        )
-    )
 
-    _run_merge()
+    _run_merge("--rerun", "stage_items")
     rows, sent = _merge_holds(merged)
     assert sent == ["items.json"]
     assert list(rows) == ["items.json"]

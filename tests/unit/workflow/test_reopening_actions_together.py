@@ -75,9 +75,7 @@ def test_a_completed_reader_is_not_said_to_give_up_a_batch_it_collected_long_ago
     )
 
     with caplog.at_level(logging.WARNING, logger="agent_actions"):
-        executor._maybe_invalidate_completed_status(
-            "split", {**configs["split"], "prompt": "Y"}, ActionStatus.COMPLETED
-        )
+        executor.reopen_with_readers("split")
 
     assert state.get_status("define") == ActionStatus.PENDING
     assert [r.getMessage() for r in caplog.records if "giving up" in r.getMessage()] == []
@@ -110,7 +108,11 @@ def test_a_retry_says_so_for_the_edited_action_it_is_about_to_re_run(tmp_path, c
         )
 
     assert status == ActionStatus.PENDING
-    assert [r.getMessage() for r in caplog.records if "agac run" in r.getMessage()] != []
+    assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+        "split was edited since it completed (action config (prompt/schema/guard)). A retry "
+        "answers only the records it names and leaves the rest as they are: run again with "
+        "--rerun split to answer every record under the edit"
+    ]
 
 
 CHAIN = {
@@ -158,11 +160,16 @@ def test_a_repair_warns_for_a_changed_model_as_for_a_changed_prompt(tmp_path, ca
     executor, _ = _executor(tmp_path, CHAIN, frozenset({"r1"}), model_name="first")
 
     with caplog.at_level(logging.WARNING, logger="agent_actions"):
-        executor._maybe_invalidate_completed_status(
+        status = executor._maybe_invalidate_completed_status(
             "split", {**CHAIN["split"], "model_name": "second"}, ActionStatus.COMPLETED
         )
 
-    assert [r.getMessage() for r in caplog.records if "agac run" in r.getMessage()] != []
+    assert status == ActionStatus.COMPLETED
+    assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+        "split was edited since it completed (model). A retry answers only the records it "
+        "names and leaves the rest as they are: run again with --rerun split to answer every "
+        "record under the edit"
+    ]
 
 
 def test_an_action_that_is_switched_off_is_not_reset_as_a_reader(tmp_path):
@@ -170,9 +177,7 @@ def test_an_action_that_is_switched_off_is_not_reset_as_a_reader(tmp_path):
     configs = {**CHAIN, "define": {**CHAIN["define"], "is_operational": False}}
     executor, state = _executor(tmp_path, configs)
 
-    executor._maybe_invalidate_completed_status(
-        "split", {**configs["split"], "prompt": "Y"}, ActionStatus.COMPLETED
-    )
+    executor.reopen_with_readers("split")
 
     assert state.get_status("split") == ActionStatus.PENDING
     assert state.get_status("define") == ActionStatus.COMPLETED
@@ -187,8 +192,6 @@ def test_a_declared_reader_is_still_reset_when_the_rest_cannot_be_inferred(tmp_p
     )
     executor, state = _executor(tmp_path, CHAIN)
 
-    executor._maybe_invalidate_completed_status(
-        "split", {**CHAIN["split"], "prompt": "Y"}, ActionStatus.COMPLETED
-    )
+    executor.reopen_with_readers("split")
 
     assert state.get_status("define") == ActionStatus.PENDING

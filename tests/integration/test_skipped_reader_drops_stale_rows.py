@@ -4,8 +4,8 @@ A skip never rewrites the reader's output, so whatever it stored before stands
 unless the skip removes it. Rows made from upstream output that no longer exists
 are removed; rows made from upstream output a failed run carried are not.
 
-Editing an upstream resets everything that reads it (1215), so only the action
-that changes is edited here; the readers are reset by that alone.
+Only the action that changes is edited here, and each run that applies the edit
+names it with ``--rerun``, which answers it and everything that reads it again.
 """
 
 import json
@@ -57,7 +57,7 @@ def _config(root):
 
 
 def _add_guard_to(root, action, guard):
-    """Give the named action a guard; editing its config is also what resets it."""
+    """Give the named action a guard, which a run applies to every record under ``--rerun``."""
     config = _config(root)
     text = config.read_text()
     start = text.index(f"  - name: {action}\n")
@@ -111,7 +111,7 @@ def test_a_reader_skipped_under_an_upstream_that_filtered_everything_keeps_no_ro
 ):
     _add_guard_to(chained, ACTION, FILTER_ALL)
 
-    _run("-e", mode)
+    _run("-e", mode, "--rerun", ACTION)
 
     assert _rows(chained, ACTION) == 0
     assert _rows(chained, SECOND) == 0
@@ -122,7 +122,7 @@ def test_a_reader_skipped_under_an_upstream_that_filtered_everything_keeps_no_ro
 
 def test_a_second_run_keeps_it_empty_and_lifting_the_filter_restores_it(chained):  # noqa: F811
     _add_guard_to(chained, ACTION, FILTER_ALL)
-    _run()
+    _run("--rerun", ACTION)
     _run()
     assert _rows(chained, SECOND) == 0
 
@@ -130,7 +130,7 @@ def test_a_second_run_keeps_it_empty_and_lifting_the_filter_restores_it(chained)
     config.write_text(
         "".join(line for line in config.read_text().splitlines(True) if "guard:" not in line)
     )
-    _run()
+    _run("--rerun", ACTION)
 
     assert _rows(chained, ACTION) == RECORDS
     assert _rows(chained, SECOND) == RECORDS
@@ -144,7 +144,7 @@ def test_the_drop_reaches_a_reader_of_the_reader(chained):  # noqa: F811
     assert _rows(chained, THIRD) == RECORDS
 
     _add_guard_to(chained, ACTION, FILTER_ALL)
-    _run()
+    _run("--rerun", ACTION)
 
     assert _rows(chained, SECOND) == 0
     assert _rows(chained, THIRD) == 0
@@ -155,7 +155,7 @@ def test_a_reader_whose_own_config_changed_too_keeps_no_rows(chained):  # noqa: 
     _add_guard_to(chained, ACTION, FILTER_ALL)
     _add_guard_to(chained, SECOND, RESET_ONLY)
 
-    _run()
+    _run("--rerun", ACTION)
 
     assert _rows(chained, SECOND) == 0
 
@@ -168,7 +168,7 @@ def test_a_reader_of_an_upstream_that_failed_but_kept_its_rows_keeps_its_own(cha
     config.write_text(config.read_text().replace("impl: flatten_pages", "impl: flatten_broken"))
     _add_guard_to(chained, SECOND, RESET_ONLY)
 
-    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--rerun", ACTION])
 
     assert f"Upstream dependency '{ACTION}' failed" in result.output, result.output
     assert _status(chained, ACTION) == "failed"

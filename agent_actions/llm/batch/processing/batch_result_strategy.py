@@ -749,7 +749,7 @@ class BatchResultStrategy:
         )
 
         processing_result = ProcessingResult.exhausted(
-            error=f"Retry exhausted after {retry_meta.attempts} attempts",
+            error=retry_meta.exhausted_message(),
             data=[exhausted_item],
             source_guid=source_guid,
             recovery_metadata=recovery_meta,

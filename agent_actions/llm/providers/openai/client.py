@@ -23,7 +23,10 @@ from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUs
 from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_kwargs,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -66,6 +69,11 @@ class OpenAIClient(BaseClient):
         return replace(_ERROR_MAPPING, vendor_name=cls.VENDOR)
 
     @classmethod
+    def _client_options(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        """Constructor kwargs for the SDK client; a declared endpoint adds headers and a timeout."""
+        return {"base_url": agent_config.get("base_url")}
+
+    @classmethod
     def call_json(
         cls,
         api_key: str | None,
@@ -76,7 +84,7 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, Any]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, base_url=agent_config.get("base_url"))
+        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "openai",
@@ -111,6 +119,8 @@ class OpenAIClient(BaseClient):
                 agent_config,
                 extra_params=("frequency_penalty", "presence_penalty"),
             ),
+            # Per request, so it outranks a declared endpoint's client-wide timeout.
+            **request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()
@@ -180,7 +190,7 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, str]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, base_url=agent_config.get("base_url"))
+        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
@@ -203,6 +213,8 @@ class OpenAIClient(BaseClient):
                 agent_config,
                 extra_params=("frequency_penalty", "presence_penalty"),
             ),
+            # Per request, so it outranks a declared endpoint's client-wide timeout.
+            **request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()

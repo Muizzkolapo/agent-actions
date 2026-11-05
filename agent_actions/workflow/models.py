@@ -30,6 +30,7 @@ class WorkflowRuntimeConfig:
     paths: WorkflowPaths
     use_tools: bool
     fresh: bool = False
+    rerun: str | None = None
     verify_keys: bool = False
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None

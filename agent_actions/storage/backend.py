@@ -107,6 +107,7 @@ class StorageBackend(ABC):
         self._format_version_checked = False
         self._rows_collected: dict[str, int] = {}
         self._rows_collected_lock = threading.Lock()
+        self._staged_this_run: dict[str, set[str]] = {}
 
     def credit_rows_collected(self, action_name: str, count: int) -> None:
         """Add *count* rows an action's run produced to its running total.
@@ -122,6 +123,20 @@ class StorageBackend(ABC):
         """Rows credited to *action_name* by :meth:`credit_rows_collected` so far."""
         with self._rows_collected_lock:
             return self._rows_collected.get(action_name, 0)
+
+    def note_staged_records(self, action_name: str, source_guids: Iterable[str]) -> None:
+        """Add records a first stage's walk found staged to what it found this run.
+
+        In memory only, like :meth:`credit_rows_collected`.
+        """
+        with self._rows_collected_lock:
+            self._staged_this_run.setdefault(action_name, set()).update(source_guids)
+
+    def records_staged_this_run(self, action_name: str) -> set[str] | None:
+        """Every record *action_name* found staged this run; None when it walked no file."""
+        with self._rows_collected_lock:
+            staged = self._staged_this_run.get(action_name)
+            return None if staged is None else set(staged)
 
     @classmethod
     @abstractmethod
@@ -821,6 +836,14 @@ class StorageBackend(ABC):
         """
         return set()
 
+    def source_guids_among(self, record_ids: Iterable[str]) -> set[str]:
+        """Which of *record_ids* name a stored input row, staged by some run.
+
+        Empty when nothing is known, so a caller forgetting records no longer
+        staged forgets none.
+        """
+        return set()
+
     def records_share_a_repeat_chain(self, record_ids: Iterable[str]) -> bool:
         """Whether any of record_ids is a repeat, or is repeated by another row.
 
@@ -933,11 +956,13 @@ class StorageBackend(ABC):
         attempt: int = 0,
         source_guid: str | None = None,
         run_id: str | None = None,
+        answered_under: str | None = None,
     ) -> None:
         """Persist the compiled prompt and LLM context for a single record.
 
         ``record_id`` holds the prepare-time target_id; ``source_guid`` is the
-        durable identity joins key on. This is telemetry. Implementations
+        durable identity joins key on; ``answered_under`` is the JSON config
+        stamp the record was answered under. This is telemetry. Implementations
         should not raise on failure.
         """
 

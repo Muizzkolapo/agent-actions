@@ -364,13 +364,15 @@ def test_a_retry_after_a_file_every_version_holds_empty_brings_none_of_it_back(p
 
     assert result.returncode == 0, _output(result)
 
+    # Answered again from the first stage, so alpha is asked again and fails.
     _empty_and_run_from_the_first_stage(project, "filtered")
+    rerun = ("run", "-a", WORKFLOW, "--rerun", "stage_items")
     if mode == "online":
         _fail(project, "alpha")
-        result = _agac(project, "run", "-a", WORKFLOW)
+        result = _agac(project, *rerun)
         _stop_failing(project)
     else:
-        result = _agac(project, "run", "-a", WORKFLOW, before_collect=_provider_fails("alpha"))
+        result = _agac(project, *rerun, before_collect=_provider_fails("alpha"))
 
     assert result.returncode == 0, _output(result)
     assert _status(project, MERGE) == "completed_with_failures", _output(result)

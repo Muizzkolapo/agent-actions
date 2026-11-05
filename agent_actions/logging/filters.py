@@ -9,6 +9,29 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Values read at run time, masked wherever they appear; the pattern rules know only key shapes.
+MIN_REGISTERED_SECRET_LENGTH = 8
+_REGISTERED_SECRETS: set[str] = set()
+
+
+def register_secret(value: str) -> None:
+    if value and len(value) >= MIN_REGISTERED_SECRET_LENGTH:
+        _REGISTERED_SECRETS.add(value)
+
+
+def clear_registered_secrets() -> None:
+    _REGISTERED_SECRETS.clear()
+
+
+def redact_known_secrets(text: str) -> str:
+    """Mask the registered values only: for text whose key names are not secrets."""
+    for value in sorted(_REGISTERED_SECRETS, key=len, reverse=True):
+        text = text.replace(value, "[REDACTED]")
+    return text
+
+
+_redact_registered = redact_known_secrets
+
 
 def _redact_sensitive_data(
     data: Any,
@@ -40,7 +63,7 @@ def _redact_sensitive_data(
             (r"anthropic-[a-zA-Z0-9-]{20,}", "anthropic-[REDACTED]"),
             (r"AIza[a-zA-Z0-9_-]{35}", "AIza[REDACTED]"),
         ]
-        result = data
+        result = _redact_registered(data)
         for pattern, replacement in patterns:
             result = re.sub(pattern, replacement, result)
         return result
@@ -77,7 +100,7 @@ def _compile_redaction_patterns(pattern_list: list[str]) -> list[tuple[Pattern, 
 
 
 def _apply_redaction_patterns(text: str, compiled_patterns: list[tuple[Pattern, str]]) -> str:
-    result = text
+    result = _redact_registered(text)
     for pattern, replacement in compiled_patterns:
         result = pattern.sub(replacement, result)
     return result

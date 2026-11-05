@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  A run whose final action ends holding no record, every record filtered, skipped or failed
+  on the way to it, now warns and names that action under its summary line instead of
+  reading as a healthy run.
+time: 2026-11-01T17:10:00Z

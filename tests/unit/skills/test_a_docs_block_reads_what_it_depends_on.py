@@ -47,6 +47,7 @@ _NOT_LOADED = {
     "docs.agent-actions/docs/reference/validation/index.md::action_a+action_b": "shows a circular dependency",
     "docs.agent-actions/docs/reference/cli/expect.md::Check output quality": "a CI step, not a workflow",
     "docs.agent-actions/docs/reference/prompts/prompt-store.md::analyze": "loads a store prompt this project lacks",
+    "docs.agent-actions/docs/reference/configuration/endpoints.md::extract+classify+review+final_check": "selects endpoints this project does not declare",
     "examples/incident_triage/docs/PATTERNS.md::validate_data+validate_data+use_validated": "shows the wrong form beside the right one",
     "examples/incident_triage/docs/PATTERNS.md::inject_data+inject_data": "shows the wrong form beside the right one",
 }

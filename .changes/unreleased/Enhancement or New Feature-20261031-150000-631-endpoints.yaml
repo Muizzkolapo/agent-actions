@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "Declare OpenAI-compatible endpoints in an `endpoints:` block of agent_actions.yml and select one with `model_vendor: <name>`. An endpoint has a base url (or one `${ENV_VAR}`), a credential from an environment variable, a command or none, extra headers and a timeout; it runs with structured output only, and a reply that does not match the schema fails the record. Secrets read for an endpoint are masked in logs by value."
+time: 2026-10-31T15:00:00Z

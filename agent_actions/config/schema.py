@@ -578,6 +578,13 @@ class ActionConfig(_RetryValidators):
         default=None, ge=0.0, le=2.0, description="Generation temperature"
     )
     max_tokens: int | None = Field(default=None, description="Maximum tokens")
+    request_timeout: float | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        allow_inf_nan=False,
+        description="Seconds one LLM request may take before it fails as a retriable error",
+    )
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
     )
@@ -704,6 +711,13 @@ class DefaultsConfig(_RetryValidators):
         default=None, ge=0.0, le=2.0, description="Default temperature"
     )
     max_tokens: int | None = Field(default=None, description="Default max tokens")
+    request_timeout: float | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        allow_inf_nan=False,
+        description="Default seconds one LLM request may take before it fails",
+    )
     top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
     frequency_penalty: float | None = Field(
         default=None, ge=-2.0, le=2.0, description="Default frequency penalty (OpenAI, Groq)"

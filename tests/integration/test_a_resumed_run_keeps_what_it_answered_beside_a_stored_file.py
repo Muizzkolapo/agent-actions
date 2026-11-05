@@ -1,16 +1,11 @@
-"""A run resumed beside a file stored before keeps what the interrupted run answered (1273).
+"""A run resumed beside a file stored before keeps what the interrupted run answered.
 
-An action edited after it completed is reset, and the next run answers part of a file and
-is stopped. Each record it answered has a checkpoint row beside the file stored before
-the edit, and the run after that kept the record's `success` but asked the model again:
-the stored row is older than the answer and the checkpoint row had not been enriched, so
-neither was carried. Every record the stopped run answered was paid for twice.
-
-The checkpoint row is now finished as the answer it was, enriched and collected with the
-run's own, in place of the stored row. The row stored before the edit is never carried.
-
-Every run is an `agac run` through the CLI, executor, store and the action's own tool or
-the mock provider. Only the interrupt is stood in for.
+An action edited after it completed is run with ``--rerun``, answers part of a file and is
+stopped, leaving a checkpoint row per answered record beside the file stored before the
+edit. The stored row is older than the answer, so the next run finishes each checkpoint
+row as the answer it was, enriched and collected with the run's own, and no record is
+paid for twice; the row stored before the edit is never carried. Only the interrupt is
+stood in for.
 """
 
 import csv
@@ -229,8 +224,8 @@ def _comparable(row):
 
 
 def _edited_then_stopped_at_a2(root, monkeypatch):
-    """Stores the file, adds a guard (an edit, so the action is reset), and runs again until
-    the tool is stopped on a2, having answered a0 and a1 beside the file stored before."""
+    """Stores the file, adds a guard, and reruns the action under the edit until the tool
+    is stopped on a2, having answered a0 and a1 beside the file stored before."""
     monkeypatch.setenv(ANSWER, "before")
     first = _run("--fresh")
     assert first.exit_code == 0, first.output
@@ -242,7 +237,7 @@ def _edited_then_stopped_at_a2(root, monkeypatch):
     config.write_text(edited)
     monkeypatch.setenv(ANSWER, "after")
     monkeypatch.setenv(STOP_AT, "a2")
-    _run()
+    _run("--rerun", ACTION)
     monkeypatch.delenv(STOP_AT)
     assert _status(root) == "interrupted"
     assert _asked(root) == ["a0", "a1"]
@@ -345,15 +340,15 @@ def test_a_resumed_llm_action_asks_only_what_the_stopped_run_never_answered(
     online,  # noqa: F811
     provider,  # noqa: F811
 ):
-    """The prompt is edited after both files are stored. The next run answers alpha and is
-    stopped on beta, in pages1.json. The resume asks for the other three alone, and alpha's
+    """The prompt is edited after both files are stored. The --rerun after it answers alpha
+    and is stopped on beta, in pages1.json. The resume asks for the other three alone, and alpha's
     row is the answer to the edited prompt, enriched as the others are."""
     provider.answers()
     assert summarizing._run("--fresh").exit_code == 0
     before_the_edit = summarizing._stored(online)
     summarizing._edit_prompt(online)
     provider.stops(at_call=2, raising=KeyboardInterrupt())
-    summarizing._run()
+    summarizing._run("--rerun", summarizing.ACTION)
     assert summarizing._status(online) == "interrupted"
     provider.answers()
 
@@ -401,7 +396,7 @@ def test_an_action_switched_to_batch_beside_a_file_stored_before_its_edit_keeps_
     online,  # noqa: F811
     provider,  # noqa: F811
 ):
-    """Alpha is answered online after the edit and the run is stopped. Batch does not
+    """Alpha is answered online by the --rerun after the edit and the run is stopped. Batch does not
     finish a checkpoint row, so it sends alpha again, rather than call it done and carry
     the row pages1.json held from before the edit."""
     provider.answers()
@@ -409,7 +404,7 @@ def test_an_action_switched_to_batch_beside_a_file_stored_before_its_edit_keeps_
     before_the_edit = summarizing._stored(online)
     summarizing._edit_prompt(online)
     provider.stops(at_call=2, raising=KeyboardInterrupt())
-    summarizing._run()
+    summarizing._run("--rerun", summarizing.ACTION)
     assert summarizing._status(online) == "interrupted"
     provider.answers()
     _switch(online, "batch")

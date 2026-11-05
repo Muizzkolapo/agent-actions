@@ -1,10 +1,12 @@
 """Unified task preparation for both batch and online modes."""
 
+import json
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
+from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors.validation import DataValidationError, MissingSourceGuidError
 from agent_actions.guards import GuardBehavior
 from agent_actions.processing.prepared_task import (
@@ -20,6 +22,7 @@ from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
+from agent_actions.workflow.executor import config_in_force
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +136,10 @@ class TaskPreparer:
                 attempt=attempt,
                 source_guid=prepared.source_guid,
                 run_id=(context.workflow_metadata or {}).get("run_id") or None,
+                answered_under=json.dumps(
+                    config_in_force(cast(ActionConfigDict, context.agent_config)),
+                    sort_keys=True,
+                ),
             )
 
         return prepared

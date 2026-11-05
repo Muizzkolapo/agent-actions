@@ -41,6 +41,7 @@ from .expander_schema import (
 )
 from .expander_validation import (
     validate_action_name,
+    validate_endpoint_action,
     validate_required_fields,
     validate_vendor_exists,
     validate_version_merge_output_namespaces,
@@ -198,6 +199,7 @@ class ActionExpander:
         # Validate configuration
         agent["model_vendor"] = canonical_vendor(agent["model_vendor"])
         validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
+        validate_endpoint_action(action, agent, action.get("name", "unknown"))
         if action_kind not in {"tool", "hitl"}:
             validate_required_fields(agent, action.get("name", "unknown"))
 

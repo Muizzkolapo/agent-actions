@@ -25,6 +25,7 @@ from agent_actions.config.schema import (
     refuse_retired_keys,
 )
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
+from agent_actions.llm.config.endpoints import clear_project_endpoints, load_project_endpoints
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 from agent_actions.output.response.config_fields import get_default
@@ -303,6 +304,8 @@ class ConfigManager:
             raise RuntimeError(
                 "user_config is None: load_configs() must be called before get_user_agents()"
             )
+        # A raise below must not leave the endpoints of a project loaded earlier.
+        clear_project_endpoints()
         if "name" in self.user_config and "actions" in self.user_config:
             try:
                 path_manager = PathManager(project_root=self.project_root)
@@ -315,6 +318,7 @@ class ConfigManager:
                 project_defaults = _validate_project_expect_block(project_defaults)
                 _refuse_blank_project_output_field(project_defaults)
             except (FileNotFoundError, ProjectRootNotFoundError):
+                project_config = {}
                 project_defaults = {}
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:
                 raise ConfigurationError(
@@ -325,6 +329,9 @@ class ConfigManager:
                     },
                     cause=e,
                 ) from e
+            # Beside its reader, like default_agent_config above: the plain loader
+            # stays a dict read, and a refusal names the endpoint and the key itself.
+            load_project_endpoints(project_config)
             # Validate entire workflow config (actions, defaults, duplicates,
             # dangling deps, circular deps) in one pass via Pydantic.
             try:
@@ -374,6 +381,7 @@ class ConfigManager:
                     "before get_user_agents()"
                 )
             agents_section = self.user_config[self.agent_name]
+            self._load_project_endpoints()
             if "agents" in agents_section:
                 return agents_section["agents"]  # type: ignore[no-any-return]
             return [
@@ -381,6 +389,15 @@ class ConfigManager:
                 for agent in agents_section
                 if isinstance(agent, dict) and "agent_type" in agent
             ]
+
+    def _load_project_endpoints(self) -> None:
+        """Validate the project's endpoints for a workflow that reads no project defaults."""
+        try:
+            project_root = PathManager(project_root=self.project_root).get_project_root()
+            project_config = load_project_config(project_root)
+        except (FileNotFoundError, ProjectRootNotFoundError):
+            project_config = {}
+        load_project_endpoints(project_config)
 
     def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
         from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig

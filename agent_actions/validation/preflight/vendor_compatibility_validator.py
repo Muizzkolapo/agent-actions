@@ -31,7 +31,13 @@ def _resolve_capabilities(vendor: str) -> dict[str, Any] | None:
     """
     entry = CLIENT_REGISTRY.get(vendor)
     if entry is None:
-        return None
+        from agent_actions.llm.config.endpoints import project_endpoint
+
+        if project_endpoint(vendor) is None:
+            return None
+        from agent_actions.llm.providers.openai.compatible import ENDPOINT_CAPABILITIES
+
+        return dict(ENDPOINT_CAPABILITIES)
     if isinstance(entry, str):
         module_path, class_name = entry.split(":", 1)
         try:
@@ -128,7 +134,7 @@ class VendorCompatibilityValidator(BaseValidator):
                 )
             return not self.has_errors()
 
-        if vendor not in VALID_VENDORS:
+        if vendor not in VALID_VENDORS and vendor not in self.get_supported_vendors():
             self.add_error(f"Unknown vendor: {vendor}")
             self.issues.append(
                 ValidationIssue(
@@ -225,8 +231,10 @@ class VendorCompatibilityValidator(BaseValidator):
         return unsupported
 
     def get_supported_vendors(self) -> set[str]:
-        """Get set of supported vendor names."""
-        return VALID_VENDORS.copy()
+        """Every supported vendor name: the client registry and the project's declared endpoints."""
+        from agent_actions.llm.config.endpoints import project_endpoints
+
+        return VALID_VENDORS | set(project_endpoints())
 
     def get_vendor_capabilities(self, vendor: str) -> dict[str, Any] | None:
         """Get capabilities for a specific vendor."""
