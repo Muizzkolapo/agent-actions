@@ -119,7 +119,7 @@ By default, every action uses `granularity: Record` -- one record at a time. Set
 
 This matters whenever your logic needs a cross-record view: computing averages, counting distributions, sorting by priority, producing one output from many inputs. Without it, the aggregation tool would see one clause at a time and could never build a contract-level summary.
 
-A FILE granularity tool in Python receives a `list[dict]`, one item per record, holding the observed fields as flat keys. The one wildcard's fields are bare (`risk_level`); the fields named one by one beside it carry their action's name (`split_into_clauses.clause_title`, `source.contract_id`). A tool that builds a new row returns a `FileUDFResult`:
+A FILE granularity tool in Python receives a `list[dict]`, one item per record, holding the observed fields as flat keys. Every observed field is under its bare name: the wildcard's (`risk_level`) and the ones named one by one beside it (`clause_title`, `contract_id`). Only a real collision, such as a wildcard field with the same name as a named field, gives a key its action's name (`analyze_clause.clause_number`). A tool that builds a new row returns a `FileUDFResult`:
 
 ```python
 from agent_actions import FileUDFResult, udf_tool
@@ -128,7 +128,7 @@ from agent_actions.config.types import Granularity
 @udf_tool(granularity=Granularity.FILE)
 def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     # data contains ALL clause records at once
-    contract_id = data[0].get("source.contract_id", "unknown")
+    contract_id = data[0].get("contract_id", "unknown")
     high = [r for r in data if r.get("risk_level") == "high"]
     # ... aggregate logic ...
     # source_index: None — no single input produced this row

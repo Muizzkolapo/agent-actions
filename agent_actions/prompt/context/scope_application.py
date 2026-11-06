@@ -585,19 +585,14 @@ def plan_flat_observed_keys(
 ) -> tuple[dict[str, Any], set[str]]:
     """Map observed fields to the flat keys FILE mode delivers them under.
 
-    Every rule reads the observe refs, never the data, so a ref always produces
-    the same key — on every record, batch and run. Deciding from the values
-    would let a UDF's keys depend on which records share a file, which is the
-    same silent loss as the overwrite this prevents.
-
-    A key is qualified when delivering it bare could lose data: it names a
-    namespace the action reads by that name, or a wildcard on another namespace
-    could expand onto it. *reserved_names* is the extra protection a caller
-    writing into a live record needs — applied, never announced, since the
-    payload is a flat dict where that name is free.
+    Every rule reads the observe refs, never the data, so a ref gives the same key on
+    every record, batch and run. A named ref owns its bare key; a key is qualified when
+    it names an observed namespace or is a wildcard field another namespace's named ref
+    claims. *reserved_names* is applied, never announced: the payload is a flat dict
+    where that name is free.
     """
     declared_reserved = {ns for ns, _, _ in resolved_observe} | RUNTIME_BUS_NAMESPACES
-    wildcard_namespaces = {ns for ns, field, _ in resolved_observe if field == "*"}
+    named_key_owner = {key: ns for ns, field, key in resolved_observe if field != "*"}
 
     flat: dict[str, Any] = {}
     announced: set[str] = set()
@@ -609,10 +604,7 @@ def plan_flat_observed_keys(
             if key in declared_reserved:
                 key = qualified
                 announced.add(key)
-            elif not from_wildcard and wildcard_namespaces - {ns}:
-                # A wildcard elsewhere may expand onto this bare name. Which
-                # fields it actually yields is a property of the data, so the
-                # only stable answer is to qualify whenever it is possible.
+            elif from_wildcard and named_key_owner.get(key, ns) != ns:
                 key = qualified
                 announced.add(key)
             elif key in reserved_names:
@@ -832,10 +824,8 @@ def apply_context_scope_for_records(
 
     if qualified_keys:
         logger.warning(
-            "Action '%s': observed field(s) would have overwritten a namespace or "
-            "another observed field on the record. Flat keys are namespace-qualified "
-            "(%s) — an action reading the bare key will not find it; read the "
-            "qualified key instead.",
+            "Action '%s': observed field names collide; these are delivered "
+            "namespace-qualified (%s). Read them by the qualified key.",
             action_name,
             ", ".join(sorted(qualified_keys)),
         )

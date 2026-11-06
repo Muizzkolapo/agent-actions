@@ -14,7 +14,7 @@ description: Build, run, inspect, and debug agent-actions workflows. Triggers on
 3. **Every `{{ namespace.field }}` in a prompt needs a matching observe.** Every observe entry feeds the prompt. If the prompt doesn't use it, remove it — you're paying tokens for nothing.
 4. **Only observe what the action needs.** Never pass large upstream fields to downstream actions when a distilled version already exists. Context bloat causes LLMs to drift off-topic.
 5. **Guard fields carry their action's name.** Write `upstream.field == value`, not `field == value`. A guard reads the record as stored, so the field does not have to be in observe; observing it only to guard on it sends it to the model for nothing.
-6. **A record tool reads by action name; a FILE tool reads flat keys.** A record tool gets `data["action_name"]["field"]`, one level, version merges included. A FILE tool gets a list of items holding the observed fields as flat keys: `item["field"]`, or `item["action_name.field"]` where two observed names could collide.
+6. **A record tool reads by action name; a FILE tool reads flat keys.** A record tool gets `data["action_name"]["field"]`, one level, version merges included. A FILE tool gets a list of items holding the observed fields as flat keys: `item["field"]` for a field named in observe, and `item["action_name.field"]` only where two observed names really collide (two named fields with one name, or a wildcard field with the same name as a named field, which keeps the bare key).
 7. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
 
 ## Workflow Structure
