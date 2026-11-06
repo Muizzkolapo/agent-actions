@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Dynamic Dispatch
 
-The `dispatch_task()` function calls tools at template render time, enabling data-driven selection of prompts, schemas, or configuration values.
+The `dispatch_task()` function calls a tool at template render time, so a prompt's text can depend on the record.
 
 ## Basic Usage
 
@@ -17,13 +17,9 @@ dispatch_task('handle_quiz_type')
 {end_prompt}
 ```
 
-### In Schemas
-
-```yaml
-- name: generate_question
-  prompt: $quiz_gen.ScenarioGenerator_prompt
-  schema: dispatch_task('select_output_schema')
-```
+:::caution Not supported in `schema:`
+A `schema: dispatch_task('...')` value is not resolved. `agac inspect` accepts it, but the run looks for a schema file with that name and fails with `Schema file 'dispatch_task('...')' not found`. Use a named or inline schema.
+:::
 
 ## Creating a Dispatch Tool
 
@@ -49,14 +45,11 @@ def handle_quiz_type(input_data: str) -> str:
 
 In a prompt, the tool receives the action's LLM context as a JSON-encoded string: the namespaces and fields the action observes. Decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call as text (`str()` of the value), so return a string; a dict would appear as its Python repr. A tool that returns `None` fails with `dispatch_task('<name>') returned None. The function must return a value.`
 
-In a `schema:` value that is exactly one `dispatch_task()` call, the return value keeps its type, so the tool can return a schema as a dict.
-
 ## When to Use Dispatch
 
 | Use dispatch when | Use Jinja2 when |
 |-------------------|-----------------|
 | Complex conditional logic | Simple if/else |
-| Schema structure depends on input | Minor text variations |
 | Unit-testable Python needed | Template-level logic sufficient |
 
 ## See Also

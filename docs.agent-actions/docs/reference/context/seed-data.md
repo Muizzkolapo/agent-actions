@@ -94,14 +94,17 @@ prompt: |
   {% endfor %}
 ```
 
-A [guard](../execution/guards.md#context-access) reads the same seed data, so a condition can
-compare a record against a reference file:
+A [guard](../execution/guards.md#context-access) reads the same seed data and compares it with
+a literal value:
 
 ```yaml
 guard:
-  condition: 'score_review.score >= seed.thresholds.min_score'
+  condition: 'seed.thresholds.min_score >= 0.5'
   on_false: filter
 ```
+
+A guard cannot compare a record field with a seed field: `score_review.score >= seed.thresholds.min_score`
+is refused before the run. Compute that comparison in an upstream tool action and guard on its result.
 
 A prompt or guard that reads a seed key its action does not declare is refused before the run.
 Preflight also warns when a field such as `seed.rubric.criteria` is missing from a JSON or

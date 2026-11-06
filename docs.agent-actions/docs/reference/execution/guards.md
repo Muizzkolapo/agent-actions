@@ -197,8 +197,12 @@ column written without the prefix, `page_content == 'two'`, names no field the g
 so preflight refuses it and names `source.page_content`.
 
 A guard reads the seed data its action declares under `context_scope.seed`, the same data
-the action's prompt reads, so `seed.thresholds.min_score <= score_review.score` compares a
-record against a reference file. Every declared seed key is visible to the guard, including
+the action's prompt reads, so `seed.thresholds.min_score >= 0.5` reads a value from a
+reference file. A clause compares a field with a literal value. A clause that compares two
+fields, such as `score_review.score >= seed.thresholds.min_score`, is refused before the run
+with `compares field 'score_review.score' to bare identifier 'seed.thresholds.min_score'`. To
+gate on such a comparison, compute it in an upstream tool action and guard on the tool's
+result, for example `check_score.passes == true`. Every declared seed key is visible to the guard, including
 one the action `drop`s. Preflight refuses a guard that reads a seed key its action does not
 declare, as it refuses a prompt that reads one.
 

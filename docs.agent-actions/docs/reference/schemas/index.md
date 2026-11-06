@@ -29,7 +29,6 @@ Agent Actions supports multiple schema definition approaches:
 | External YAML/JSON | `schema/` directory | Reusable, complex schemas |
 | Inline Object | Workflow YAML | Simple, one-off schemas |
 | Shorthand | Workflow YAML | Very simple type definitions |
-| Dynamic Dispatch | `dispatch_task()` | Runtime schema selection |
 
 ## External Schemas (YAML and JSON Files)
 
@@ -218,97 +217,9 @@ schema:
     thinking_process_1: string
 ```
 
-## Dynamic Schema Selection
+## One Schema per Action
 
-What if different records need different output structures? For example, a quiz generator might need different schemas for multiple-choice vs open-ended questions. The `dispatch_task()` function enables runtime schema selection based on context.
-
-### Basic Usage
-
-```yaml
-- name: generate_question
-  prompt: $quiz_gen.question_prompt
-  schema: dispatch_task('select_output_schema')
-```
-
-When this action runs, Agent Actions:
-1. Calls the `select_output_schema` tool with the current context, passed as a JSON string
-2. Uses the schema definition the tool returns
-3. Validates the LLM output against that schema
-
-The tool is found by file name. `dispatch_task('select_output_schema')` loads the function `select_output_schema` from `select_output_schema.py` in the tool folder. To keep several dispatch functions in one file, name the file in the call: `dispatch_task('dispatch_tools.select_output_schema')`.
-
-:::caution Return a definition, not a name
-The tool must return a schema definition. A schema name such as `"mc_question_schema"` is not looked up in `schema/`; the compile step fails with `'str' object has no attribute 'items'`.
-:::
-
-### Returning a Schema Definition
-
-Return a complete schema definition in the `fields` format. Decode the context with `json.loads()`:
-
-```python
-import json
-
-from agent_actions import udf_tool
-
-
-@udf_tool
-def select_output_schema(input_data: str) -> dict:
-    context = json.loads(input_data)
-    complexity = context["source"]["complexity"]
-
-    if complexity == "detailed":
-        return {
-            "name": "detailed_response",
-            "fields": [
-                {"id": "summary", "type": "string", "required": True},
-                {"id": "details", "type": "array", "required": True},
-                {"id": "confidence", "type": "number", "required": True},
-                {"id": "sources", "type": "array", "required": False}
-            ]
-        }
-    else:
-        return {
-            "name": "simple_response",
-            "fields": [
-                {"id": "summary", "type": "string", "required": True},
-                {"id": "confidence", "type": "number", "required": True}
-            ]
-        }
-```
-
-### Use Cases
-
-| Scenario | Approach |
-|----------|----------|
-| **Multi-domain content** | Return a technical, business or legal definition based on content type |
-| **Adaptive complexity** | Use detailed schema for long content, simple schema for short content |
-| **Question types** | Different definitions for multiple-choice, true/false, open-ended questions |
-| **Vendor variations** | Adjust schema based on target vendor capabilities |
-
-### Context Available
-
-The dispatch tool receives the action's context as a JSON string. Decode it and read the namespaces your prompt can read:
-
-```python
-import json
-
-from agent_actions import udf_tool
-
-
-@udf_tool
-def select_schema(input_data: str) -> dict:
-    context = json.loads(input_data)
-
-    # Source fields from current record
-    content_type = context["source"]["content_type"]
-
-    # Make decision based on any combination of fields
-    if content_type == "code":
-        return {"name": "code_analysis", "fields": [{"id": "findings", "type": "array"}]}
-    return {"name": "default_analysis", "fields": [{"id": "summary", "type": "string"}]}
-```
-
-For more details on `dispatch_task()`, see [Dynamic Dispatch](../prompts/dispatch).
+An action has one schema. `schema: dispatch_task('...')` is not supported: `agac inspect` accepts it, but the run looks for a schema file with that name and fails with `Schema file 'dispatch_task('...')' not found`. When records need different output shapes, split them with [guards](../execution/guards.md) into separate actions, each with its own schema.
 
 ## Schema Types
 
