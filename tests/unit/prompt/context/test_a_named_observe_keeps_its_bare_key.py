@@ -69,6 +69,21 @@ class TestTheKeysAToolIsHanded:
 
         assert payload == {"code": "B", "a.code": 1, "size": 2}
 
+    def test_a_wildcard_field_two_named_refs_share_a_name_with_arrives_qualified_too(self):
+        """Both named refs are qualified against each other; the wildcard's field does
+        not inherit the bare name they gave up."""
+        (payload,) = _payloads(
+            [{"a": {"x": "A", "y": 1}, "b": {"x": "B"}, "c": {"x": "C"}}],
+            ["a.*", "b.x", "c.x"],
+        )
+
+        assert payload == {"a.x": "A", "y": 1, "b.x": "B", "c.x": "C"}
+
+    def test_a_named_field_of_the_wildcards_own_namespace_stays_bare(self):
+        (payload,) = _payloads([{"a": {"x": 1, "y": 2}}], ["a.*", "a.x"])
+
+        assert payload == {"x": 1, "y": 2}
+
     def test_the_named_key_is_the_same_on_a_record_the_wildcard_reaches_and_one_it_does_not(
         self,
     ):
