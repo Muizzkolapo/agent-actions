@@ -1639,7 +1639,7 @@ class TestExtractToolInput:
             }
         }
         result = extract_tool_input(record, {"observe": ["extract.*", "classify.category"]})
-        assert result == {"q": "Q1", "a": "A1", "classify.category": "FAQ"}
+        assert result == {"q": "Q1", "a": "A1", "category": "FAQ"}
         assert "confidence" not in result
 
 
