@@ -14,6 +14,7 @@ from agent_actions.config.types import ActionConfigMap, ActionEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.config_schema import AgentConfig
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.error_handler import ErrorHandler
 from agent_actions.utils.error_wrap import as_validation_error
@@ -242,8 +243,10 @@ class ConfigRenderingService:
 
         schema_value = action.get("schema")
         if schema_value:
-            key = "schema_name" if isinstance(schema_value, str) else "schema"
-            agent_entry[key] = schema_value
+            names_a_file = isinstance(schema_value, str) and not schema_dispatch_function(
+                schema_value
+            )
+            agent_entry["schema_name" if names_a_file else "schema"] = schema_value
 
         if action.get("prompt"):
             agent_entry["prompt"] = action.get("prompt")

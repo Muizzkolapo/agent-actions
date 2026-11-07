@@ -1,5 +1,6 @@
 """Validator for inline schema configuration."""
 
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.schema_utils import is_compiled_schema
 from agent_actions.validation.action_validators.base_action_validator import (
@@ -28,6 +29,10 @@ class InlineSchemaValidator(BaseActionEntryValidator):
             return ActionEntryValidationResult.success()
 
         inline_schema = normalized_entry[SCHEMA_KEY]
+
+        if schema_dispatch_function(inline_schema):
+            # Chosen per record at run time; pre-flight checks the function it names.
+            return ActionEntryValidationResult.success()
 
         if not isinstance(inline_schema, dict):
             errors.append(

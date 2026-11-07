@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.schema import compile_unified_schema
 from agent_actions.output.response.schema_conversion import _without_rules
 from agent_actions.utils.schema_utils import is_compiled_schema
@@ -26,7 +27,7 @@ def process_schema_config(agent: dict[str, Any], action: dict[str, Any], templat
         else:
             # Apply template replacement for non-compiled schemas
             schema_value = template_replacer(schema_value)
-            if isinstance(schema_value, str):
+            if isinstance(schema_value, str) and not schema_dispatch_function(schema_value):
                 agent["schema_name"] = schema_value
             elif isinstance(schema_value, dict):
                 agent["schema"] = schema_value
@@ -46,7 +47,8 @@ def compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None
 
     # Get schema from action (already processed by process_schema_config)
     schema_fields = agent.get("schema")
-    if not schema_fields:
+    if not schema_fields or schema_dispatch_function(schema_fields):
+        # A dispatched schema is chosen per record; it is compiled when the record is.
         return
 
     # Build unified schema format

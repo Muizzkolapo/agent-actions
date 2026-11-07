@@ -52,3 +52,12 @@ class DispositionsNotStoredError(ProcessingError):
     """
 
     pass
+
+
+class SchemaDispatchError(ProcessingError):
+    """Raised when a record's ``schema: dispatch_task(...)`` cannot give it a schema.
+
+    The function chose for one record, so the failure is that record's alone.
+    """
+
+    pass

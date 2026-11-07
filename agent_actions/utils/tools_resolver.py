@@ -12,6 +12,22 @@ from agent_actions.utils.project_root import find_project_root
 
 logger = logging.getLogger(__name__)
 
+
+def parse_udf_call(call_args: str) -> tuple[str, str, list[str]]:
+    """Split a ``dispatch_task('module.function, arg, ...')`` argument string.
+
+    Returns ``(module_name, function_name, args)``. A bare name is both the module and
+    the function.
+    """
+    args = [arg.strip().strip("'\"") for arg in call_args.split(",")]
+    full_name, function_args = args[0], args[1:]
+    if "." in full_name:
+        module_name, function_name = full_name.rsplit(".", 1)
+    else:
+        module_name = function_name = full_name
+    return module_name, function_name, function_args
+
+
 _FORBIDDEN_MODULES = frozenset(
     {
         "os",

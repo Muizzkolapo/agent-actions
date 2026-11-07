@@ -19,4 +19,4 @@ The prompt system provides centralized management of reusable prompts as Markdow
 ## Learn More
 
 - **[Prompt Store](./prompt-store.md)** - `{prompt}...{end_prompt}` syntax and organization
-- **[Dynamic Dispatch](./dispatch.md)** - `dispatch_task()` for runtime prompt selection
+- **[Dynamic Dispatch](./dispatch.md)** - `dispatch_task()` for runtime prompt and schema selection

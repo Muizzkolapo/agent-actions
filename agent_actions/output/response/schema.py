@@ -91,6 +91,7 @@ class ResponseSchemaCompiler:
                 context_data_str,
                 agent_config,
                 captured_results,
+                project_root=self._project_root,
             )
         else:
             loaded_schema, schema_name = _load_named_schema(

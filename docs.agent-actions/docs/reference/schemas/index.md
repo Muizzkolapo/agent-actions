@@ -219,9 +219,108 @@ schema:
     thinking_process_1: string
 ```
 
-## One Schema per Action
+## Dynamic Schema Selection
 
-An action has one schema. `schema: dispatch_task('...')` is not supported: `agac inspect` accepts it, but the run looks for a schema file with that name and fails with `Schema file 'dispatch_task('...')' not found`. When records need different output shapes, split them with [guards](../execution/guards.md) into separate actions, each with its own schema.
+What if different records need different output structures? For example, a quiz generator might need different schemas for multiple-choice and open-ended questions. Set `schema:` to a `dispatch_task()` call and a tool picks the schema for each record. Splitting the records with [guards](../execution/guards.md) into separate actions, each with its own schema, also works.
+
+### Basic Usage
+
+```yaml
+- name: generate_question
+  prompt: $quiz_gen.question_prompt
+  schema: dispatch_task('select_question_schema')
+```
+
+For each record, Agent Actions:
+1. Calls `select_question_schema` with the record's context
+2. Uses the schema it returns: a schema definition, or the name of a schema file
+3. Asks the model for that schema and checks the answer against it
+
+The function is found by file: `select_question_schema.py` under the project's tool path, defining a function of the same name. `agac inspect` refuses the action when no such file defines it. The value must be exactly one `dispatch_task()` call.
+
+:::note Online only
+A dispatched schema needs `run_mode: online`. `agac inspect` refuses it under `run_mode: batch`.
+:::
+
+### Returning a Schema Name
+
+Return the name of a file in `schema/`. It loads as `schema: <name>` would:
+
+```python
+import json
+
+
+def select_question_schema(context_json: str) -> str:
+    question_type = json.loads(context_json)["source"]["question_type"].upper()
+
+    if question_type == "MULTIPLE_CHOICE":
+        return "mc_question_schema"  # schema/mc_question_schema.yml (or .yaml/.json)
+    if question_type == "TRUE_FALSE":
+        return "tf_question_schema"
+    return "open_question_schema"
+```
+
+### Returning a Schema Definition
+
+Or return the definition itself, in any form a `schema:` block accepts:
+
+```python
+import json
+
+
+def select_output_schema(context_json: str) -> dict:
+    complexity = json.loads(context_json)["source"]["complexity"]
+
+    if complexity == "detailed":
+        return {
+            "name": "detailed_response",
+            "fields": [
+                {"id": "summary", "type": "string"},
+                {"id": "details", "type": "array"},
+                {"id": "confidence", "type": "number"},
+            ],
+        }
+    return {
+        "name": "simple_response",
+        "fields": [
+            {"id": "summary", "type": "string"},
+            {"id": "confidence", "type": "number"},
+        ],
+    }
+```
+
+A returned definition follows the project's `required_by_default`, as a schema file does. An error in the function, a schema name with no file, or any other return value, including `None`, fails that record alone, with `dispatch_task('<function>') in schema returned None; return a schema mapping or the name of a schema file.`
+
+### Context Available
+
+The tool receives the record's context as one JSON string, keyed by namespace (`source`, upstream action names). Decode it with `json.loads()`:
+
+```python
+import json
+
+
+def select_schema(context_json: str) -> str:
+    context = json.loads(context_json)
+    content_type = context["source"]["content_type"]
+    classification = context["classify_content"]["category"]
+
+    if classification == "code" or content_type == "code":
+        return "code_analysis_schema"
+    return "default_schema"
+```
+
+
+### Use Cases
+
+| Scenario | Approach |
+|----------|----------|
+| **Multi-domain content** | Select `technical_schema`, `business_schema`, or `legal_schema` based on content type |
+| **Adaptive complexity** | Use detailed schema for long content, simple schema for short content |
+| **Question types** | Different schemas for multiple-choice, true/false, open-ended questions |
+
+Downstream actions cannot have their reads of a dispatched action checked before the run, because its fields depend on the record; `agac inspect` warns about each such read.
+
+For more details on `dispatch_task()`, see [Dynamic Dispatch](../prompts/dispatch).
 
 ## Schema Types
 

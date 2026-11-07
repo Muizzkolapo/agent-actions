@@ -13,6 +13,7 @@ import yaml
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.deferred_values import LoadedPrompt, LoadRender
@@ -328,9 +329,14 @@ def _compile_action_schemas(
             else:
                 logger.warning("Could not load schema '%s' for inlining", schema_name)
 
-    # Handle schema: "foo" (string reference) -> load and inline
+    # Handle schema: "foo" (string reference) -> load and inline. A dispatch_task call
+    # chooses the schema per record at run time and names no file.
     schema_value = action.get("schema")
-    if schema_value and isinstance(schema_value, str):
+    if (
+        schema_value
+        and isinstance(schema_value, str)
+        and not schema_dispatch_function(schema_value)
+    ):
         try:
             loaded_schema = SchemaLoader.load_schema(schema_value, project_root=project_root)
             action["schema"] = loaded_schema

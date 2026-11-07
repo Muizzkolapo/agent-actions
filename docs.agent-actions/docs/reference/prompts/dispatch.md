@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Dynamic Dispatch
 
-The `dispatch_task()` function calls a tool at template render time, so a prompt's text can depend on the record.
+The `dispatch_task()` function calls a tool for each record, so a prompt's text, or an action's output schema, can depend on the record.
 
 ## Basic Usage
 
@@ -17,9 +17,15 @@ dispatch_task('handle_quiz_type')
 {end_prompt}
 ```
 
-:::caution Not supported in `schema:`
-A `schema: dispatch_task('...')` value is not resolved. `agac inspect` accepts it, but the run looks for a schema file with that name and fails with `Schema file 'dispatch_task('...')' not found`. Use a named or inline schema.
-:::
+### In Schemas
+
+```yaml
+- name: generate_question
+  prompt: $quiz_gen.ScenarioGenerator_prompt
+  schema: dispatch_task('select_output_schema')
+```
+
+The tool runs once per record and returns that record's schema: a schema definition, or the name of a schema file. It is found as `select_output_schema.py` under the tool path, defining `select_output_schema`. A dispatched schema needs `run_mode: online`. See [Dynamic Schema Selection](../schemas/#dynamic-schema-selection).
 
 ## Creating a Dispatch Tool
 
