@@ -53,6 +53,10 @@ class _Backend:
 
     def __init__(self) -> None:
         self.meta: dict[str, str] = {}
+        self.traces: dict[tuple[str, int], str] = {}
+
+    def write_prompt_trace(self, **row) -> None:
+        self.traces[(row["record_id"], row["attempt"])] = row["compiled_prompt"]
 
     def save_metadata(self, key: str, value: str) -> None:
         self.meta[key] = value
