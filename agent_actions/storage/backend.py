@@ -1020,11 +1020,14 @@ class StorageBackend(ABC):
         record_id: str,
         response_text: str,
         parent_record_id: str | None = None,
+        attempt: int | None = None,
     ) -> None:
         """Attach the LLM response to the newest trace row for a prepared task.
 
         Pass ``parent_record_id`` when the record may be an expansion child,
-        whose own id was minted after its prompt ran.
+        whose own id was minted after its prompt ran. Pass ``attempt`` to attach it
+        to that attempt's row instead: a repair loop can ship an earlier attempt's
+        response.
 
         No-op if the trace does not exist. This is telemetry — must not raise.
         """

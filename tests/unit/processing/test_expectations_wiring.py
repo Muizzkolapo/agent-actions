@@ -23,6 +23,7 @@ def make_task():
         formatted_prompt="PROMPT",
         llm_context=None,
         target_id="r1",
+        source_guid="g1",
     )
 
 

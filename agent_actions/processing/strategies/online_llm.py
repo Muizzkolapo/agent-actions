@@ -499,6 +499,7 @@ class OnlineLLMStrategy:
                 action_name=context.agent_name,
                 record_id=prepared.target_id,
                 response_text=deep_json.dumps(response, ensure_ascii=False, default=str),
+                attempt=invocation_result.trace_attempt,
             )
 
         # Deferred (batch mode)
