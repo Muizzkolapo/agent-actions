@@ -142,7 +142,7 @@ actions:
 After a FILE tool returns, the framework:
 
 1. **Matches outputs to inputs by `source_index`** — a `TrackedItem` returned unchanged, or a `FileUDFResult` output naming the input it came from, extends that input's lineage.
-2. **Treats outputs declaring `source_index: None` as new records** — they get fresh lineage (e.g., aggregation results) and carry `aggregated_by`, the action's name, as does every record built from them below.
+2. **Treats outputs declaring `source_index: None` as new records** — they get fresh lineage (e.g., aggregation results) and carry `aggregated_by`, the action's name, as does every record built from them below. Such a row carries from each upstream namespace only the fields equal on every input of the file (so an action below can still read a value every input shared), and no input's state history.
 3. **Stores a tombstone for each input no output names** — the tool dropped it, however many rows it wrote for the others, so the record is `unprocessed` with reason `tool_missing_record` and the actions below it skip it. An output that consumes several inputs names each of them in its `source_index` list. When any output declares `source_index: None`, it may have consumed any input, so an input no output names gets no row and no disposition.
 4. **Wraps and enriches** — assigns new `target_id`, `node_id`, and extends the `lineage` chain.
 

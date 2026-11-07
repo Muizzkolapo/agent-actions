@@ -235,19 +235,57 @@ def _resolve_input_record(
 ) -> dict[str, Any] | None:
     """Resolve the input record for namespace carry-forward.
 
-    When *input_idx* is ``None`` (synthetic record), falls back to
-    ``original_data[0]`` — all records in a batch share upstream namespaces.
+    When *input_idx* is ``None`` (a roll-up no single input produced), the record is
+    what every input shares (`_shared_by_every_input`), not the first input.
     Raises ``IndexError`` when *input_idx* names no input position.
     """
     if not original_data:
         return None
     if input_idx is None:
-        return original_data[0]
+        return _shared_by_every_input(original_data)
     if not is_input_position(input_idx, len(original_data)):
         raise IndexError(
             f"source_index {input_idx!r} does not name one of the {len(original_data)} input records"
         )
     return original_data[input_idx]
+
+
+# Row 1's identity fields stay on a roll-up: correlation ids are derived from them and
+# the identity is re-minted later. Its history does not: the row is not row 1's.
+_ROLL_UP_TRACKING_FIELDS = ("source_guid", "parent_source_guid", "version_correlation_id")
+
+
+def _shared_by_every_input(original_data: list[dict]) -> dict[str, Any]:
+    """The stand-in input for a roll-up row: each upstream field equal on every input.
+
+    A namespace keeps only the fields whose value is the same on every input of the
+    file, and is left out when none is, so a reader below gets no one input's value
+    presented as the roll-up's. Computed over every input, never from the first.
+    """
+    from agent_actions.utils.content import get_existing_content
+
+    first = get_existing_content(original_data[0])
+    contents = [get_existing_content(record) for record in original_data]
+    shared: dict[str, Any] = {}
+    for ns, fields in first.items():
+        if not isinstance(fields, dict):
+            continue
+        others = [content.get(ns) for content in contents[1:]]
+        dicts = [other for other in others if isinstance(other, dict)]
+        if len(dicts) != len(others):
+            continue
+        same = {
+            name: value
+            for name, value in fields.items()
+            if all(name in other and other[name] == value for other in dicts)
+        }
+        if same:
+            shared[ns] = same
+    record: dict[str, Any] = {"content": shared}
+    for field in _ROLL_UP_TRACKING_FIELDS:
+        if field in original_data[0]:
+            record[field] = original_data[0][field]
+    return record
 
 
 def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
