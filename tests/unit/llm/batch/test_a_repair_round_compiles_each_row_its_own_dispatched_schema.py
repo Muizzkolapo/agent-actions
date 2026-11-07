@@ -20,14 +20,18 @@ import json
 
 def pick_schema(context_json):
     page_id = json.loads(context_json)["source"]["page_id"]
-    field = "topic" if page_id == "p1" else "verdict"
-    return {"name": f"{field}_answer", "fields": [{"id": field, "type": "string"}]}
+    return "topic_answer" if page_id == "p1" else "verdict_answer"
 """
 
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    (tmp_path / "agent_actions.yml").write_text("required_by_default: true\n")
+    (tmp_path / "agent_actions.yml").write_text("required_by_default: true\nschema_path: schema\n")
+    (tmp_path / "schema").mkdir()
+    for name, field in (("topic_answer", "topic"), ("verdict_answer", "verdict")):
+        (tmp_path / "schema" / f"{name}.yml").write_text(
+            f"name: {name}\nfields:\n  - id: {field}\n    type: string\n"
+        )
     (tmp_path / "tools").mkdir()
     (tmp_path / "tools" / "pick_schema.py").write_text(TOOL)
     return tmp_path
@@ -42,6 +46,7 @@ def _sent_tasks(project: Path, attempt: int, feedback_by_id: dict[str, str] | No
         "json_mode": True,
         "granularity": "record",
         "schema": "dispatch_task('pick_schema')",
+        "schema_options": ["topic_answer", "verdict_answer"],
         "tool_path": [str(project / "tools")],
         "_project_root": str(project),
         "context_scope": {"observe": ["source.page_id"]},

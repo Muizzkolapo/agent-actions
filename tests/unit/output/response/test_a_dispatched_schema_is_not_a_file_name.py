@@ -94,21 +94,27 @@ def test_the_static_analyzer_treats_it_as_chosen_at_run_time(kind):
     assert output.load_error is None
 
 
-def test_a_dispatch_function_may_return_a_mapping():
-    assert _dispatched_schema("pick_schema", {"topic": "string"}, None) == {"topic": "string"}
+OPTIONS = ["topic_answer", "verdict_answer"]
 
 
-@pytest.mark.parametrize("returned", [None, 3, ["topic"]])
-def test_any_other_return_fails_the_record_with_what_to_return(returned):
+@pytest.mark.parametrize(
+    ("returned", "shown"),
+    [
+        ({"topic": "string"}, "a schema definition"),
+        ("other_answer", "'other_answer'"),
+        (None, "None"),
+        (3, "3"),
+    ],
+)
+def test_a_return_outside_schema_options_fails_the_record(returned, shown):
     """Not a configuration error: online and batch fail this record alone, not the action."""
     with pytest.raises(SchemaDispatchError) as refused:
-        _dispatched_schema("pick_schema", returned, None)
+        _dispatched_schema("pick_schema", returned, OPTIONS, None)
 
     assert not isinstance(refused.value, ConfigurationError)
-
     assert str(refused.value) == (
-        f"dispatch_task('pick_schema') in schema returned {returned!r}; "
-        "return a schema mapping or the name of a schema file."
+        f"dispatch_task('pick_schema') in schema returned {shown}, which is not in "
+        "schema_options [topic_answer, verdict_answer]."
     )
 
 

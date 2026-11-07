@@ -274,6 +274,19 @@ class StaticTypeChecker:
             )
             return
 
+        if root_field in output_schema.partial_fields:
+            result.add_warning(
+                StaticTypeWarning(
+                    message=f"Field '{root_field}' of action '{source_agent}' is not in every "
+                    "schema in its schema_options; it can be absent.",
+                    location=location,
+                    referenced_agent=source_agent,
+                    referenced_field=field_path,
+                    hint="Read it with a default, or guard the reader on the field.",
+                )
+            )
+            return
+
         reads_namespace = is_guard or requirement.location in _NAMESPACE_READS
         if reads_namespace:
             # A read of the action's namespace finds it as stored: what it produced and the

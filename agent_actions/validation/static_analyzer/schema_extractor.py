@@ -102,6 +102,7 @@ class SchemaExtractor:
     ) -> None:
         """Record that the action's named schema cannot be loaded, with the loader's reason."""
         output.is_dynamic = True
+        output.failed_schema = schema_id
         output.load_error = str(error) if error else f"Schema file '{schema_id}' not found."
 
     def _try_load_schema(
@@ -338,8 +339,7 @@ class SchemaExtractor:
             return
 
         if schema_dispatch_function(schema_def):
-            # Chosen per record by a tool; nothing to load or check statically.
-            output.is_dynamic = True
+            self._load_schema_options(output, config.get("schema_options"), schema_loader)
         elif isinstance(schema_def, str):
             self._try_load_schema(output, schema_def, schema_loader)
         elif isinstance(schema_def, dict):
@@ -372,7 +372,7 @@ class SchemaExtractor:
             return
 
         if schema_dispatch_function(schema_def):
-            output.is_dynamic = True
+            self._load_schema_options(output, config.get("schema_options"), schema_loader)
         elif isinstance(schema_def, str):
             self._try_load_schema(output, schema_def, schema_loader)
         elif isinstance(schema_def, dict):
@@ -387,6 +387,31 @@ class SchemaExtractor:
                     output.schema_fields.add(item["name"])
         else:
             output.is_dynamic = True
+
+    def _load_schema_options(
+        self, output: OutputSchema, options: Any, schema_loader: Any | None
+    ) -> None:
+        """A dispatched schema writes one of its ``schema_options``: its fields are their union.
+
+        A field in some options only is kept apart, so a reader of it is warned. With no
+        options the shapes are unknown; pre-flight refuses that action on its own.
+        """
+        names = [name for name in options or [] if isinstance(name, str)]
+        if not names:
+            output.is_dynamic = True
+            return
+        per_option: list[set[str]] = []
+        for name in names:
+            option = OutputSchema()
+            if not self._try_load_schema(option, name, schema_loader):
+                output.is_dynamic = True
+                output.load_error = option.load_error
+                output.failed_schema = name
+                return
+            per_option.append(set(option.schema_fields))
+        union = set().union(*per_option)
+        output.schema_fields = union
+        output.partial_fields = union - set.intersection(*per_option)
 
     def _extract_hitl_schema(self, output: OutputSchema) -> None:
         """Extract schema for HITL actions using the canonical HITL output schema.

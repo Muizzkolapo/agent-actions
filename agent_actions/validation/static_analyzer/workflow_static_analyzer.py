@@ -491,9 +491,7 @@ class WorkflowStaticAnalyzer:
             node = self.graph.get_node(name)
             if node is None or not node.output_schema.load_error:
                 continue
-            schema = action.get("schema")
-            if not isinstance(schema, str):
-                schema = action.get("schema_name") or schema
+            schema = node.output_schema.failed_schema or action.get("schema_name")
             errors.append(
                 StaticTypeError(
                     message=(

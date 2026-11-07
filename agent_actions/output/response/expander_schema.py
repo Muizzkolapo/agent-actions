@@ -19,6 +19,8 @@ def process_schema_config(agent: dict[str, Any], action: dict[str, Any], templat
     If the schema is already compiled (from render step), use it directly.
     Otherwise, apply template replacement and set appropriately.
     """
+    if action.get("schema_options") is not None:
+        agent["schema_options"] = list(action["schema_options"])
     schema_value = action.get("schema")
     if schema_value:
         # If already compiled (unified format from render step), use directly
