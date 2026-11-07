@@ -15,7 +15,7 @@ Agent Actions catches these problems through multiple validation layers, from sc
 |------|------|---------|
 | **Schema Analysis** | Before execution | Analyze field dependencies and schemas |
 | **Schema Validation** | After LLM response | Validate output structure |
-| **Guards** | After validation | Filter or skip based on semantic conditions |
+| **Guards** | Before a downstream action runs | Filter or skip a record based on semantic conditions on upstream output |
 | **AI Expectations** | After schema validation | Deterministic + LLM-judged semantic checks, observed and reported |
 | **Expectation Repair** | On expectation failure | Regenerate and re-validate until the suite passes, or exhaust into a verdict, tombstone, or halt |
 
@@ -33,14 +33,15 @@ This shows input/output schemas for each action, helping you catch field referen
 
 | Information | Description |
 |-------------|-------------|
-| **Input Fields** | Fields the action requires from upstream actions or source data |
-| **Output Fields** | Fields the action produces for downstream actions |
-| **Dependencies** | Which actions feed into each action |
-| **Schema Sources** | Where each schema is defined |
+| **Action** and **Type** | Each action and its kind (`llm`, `tool`) |
+| **Input** | Fields the action requires from upstream actions or source data |
+| **Output** | Fields the action produces for downstream actions |
+
+Add `--verbose` for a data-flow tree that lists what each action expects and produces, or `--json` for machine-readable output.
 
 ### Dependency Validation
 
-The workflow executor validates dependencies at runtime:
+Loading the workflow config validates dependencies, so a cycle is refused before any action runs (`Circular dependency detected: action_a -> action_b -> action_a`):
 
 ```yaml
 # ERROR: Circular dependency
@@ -73,28 +74,23 @@ For schema definition details, see [Schemas](../schemas/index.md).
 
 ### Error Categories
 
+Preflight issues about vendor support and file paths carry a `category` in their error context:
+
 | Category | Examples |
 |----------|----------|
-| `template` | Missing variables, syntax errors |
-| `context` | Missing fields, type mismatches |
-| `dependency` | Circular deps, missing actions |
 | `vendor` | Unsupported features |
 | `path` | Missing files |
-| `schema` | Output doesn't match schema |
 
 ### Runtime Error Format
 
 Here's what validation output looks like when problems are found at runtime:
 
 ```
-SchemaValidationError: Input schema validation failed for tool 'add_answer_text'
+SchemaValidationError: Input schema validation failed for UDF 'add_answer_text'
 at target_word_counts -> correct_answer_words: 18 is not of type 'string'
-[Context: function=add_answer_text, validation_type=input,
- error_path=target_word_counts -> correct_answer_words,
- failed_value=18, schema_constraint={'type': 'string'}]
 ```
 
-The error context shows exactly what field failed and why, helping you fix issues quickly.
+The message names the UDF, the path to the field that failed and the reason, so you can fix the issue quickly. The error also carries `function`, `validation_type`, `error_path`, `failed_value` and `schema_constraint` in its context.
 
 ## Learn More
 

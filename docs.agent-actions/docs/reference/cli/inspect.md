@@ -7,11 +7,11 @@ sidebar_position: 6
 # inspect Commands
 
 `agac inspect` is the read-only introspection surface for a workflow. The
-default form runs preflight validation and renders a dependency graph;
+default form runs preflight validation and lists the validated actions;
 two subcommands drill into a single action.
 
 ```bash
-agac inspect -a <workflow>                          # default: graph + validation
+agac inspect -a <workflow>                          # default: validation + action list
 agac inspect action  -a <workflow> ACTION [options]
 agac inspect context -a <workflow> ACTION [options]
 ```
@@ -19,6 +19,13 @@ agac inspect context -a <workflow> ACTION [options]
 :::tip Run from Anywhere
 You can run inspect commands from any subdirectory within your project.
 :::
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `-a`, `--agent` | Workflow name. Required; `agac inspect` without it exits 2 with `Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage.` |
+| `-u`, `--user-code` | Path to the user code directory. Also accepted by `inspect action` and `inspect context` |
 
 ## Default behavior
 
@@ -79,8 +86,9 @@ output.
 agac inspect action -a <workflow> <action_name> [--json]
 ```
 
-Configuration, dependencies, context scope, rendered prompt template,
-output schema, LLM settings, and downstream consumers for one action.
+Configuration, dependencies, context scope, prompt template (with its
+placeholders unfilled), output schema, model and run settings, and
+downstream consumers for one action.
 
 ### inspect context
 
@@ -101,7 +109,7 @@ action.
 
 | Code | Meaning |
 |------|---------|
-| 0 | Inspection OK (graph shown, validation passed) |
+| 0 | Inspection OK (validation passed, action list shown) |
 | 1 | Validation failed or other CLI error |
 | 2 | Bad flags or missing required option |
 
@@ -109,9 +117,9 @@ action.
 
 ### Dependency debugging
 
-The default `agac inspect -a my_workflow` shows the full dependency
-graph with parallel fan-outs. For per-action drill-down with inputs,
-context, schema, and rendered prompt:
+The default `agac inspect -a my_workflow` validates the workflow and lists
+its actions. For per-action drill-down with inputs, context, schema, and
+prompt template:
 
 ```bash
 agac inspect action -a my_workflow problematic_action

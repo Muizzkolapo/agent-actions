@@ -20,7 +20,7 @@ Every record has a `_state` field governed by a finite state machine. There are 
 | `failed` | Terminal | Record hit an unrecoverable error |
 | `exhausted` | Terminal | Record exhausted all repair iterations |
 
-> **Note:** `committed` and `guard_deferred` were **removed** from the `RecordState` enum in VIOL-0029/0030. They had zero stamp sites — no code path ever wrote them — so the state machine now produces only the six states above. A record carrying either value fails loudly (`RecordEnvelopeError`) on load.
+> **Note:** `committed` and `guard_deferred` are not `RecordState` members, so the state machine produces only the six states above. A record in target storage that carries any other `_state` value is rejected when a downstream action loads it, with a `ConfigurationError` (`Record has unrecognised '_state' value ...`).
 
 Three categories:
 
@@ -38,20 +38,22 @@ Each state transition appends to `_state_history`:
 {
   "_state": "processed",
   "_state_history": [
-    { "action": "classify_ticket", "from": "active", "to": "processed", "reason": "success" }
+    { "timestamp": "2026-11-03T18:57:45.711349+00:00", "action": "classify_ticket", "from": null, "to": "processed", "reason": "success", "detail": null }
   ]
 }
 ```
 
+`from` is `null` when the action stamps the record for the first time. Each entry also carries a `timestamp` and a `detail`. At the next action boundary the framework appends a second entry that resets a `processed` or `guard_skipped` record to `active` with reason `downstream_reset`.
+
 ### History Capping
 
-The `_state_history` array is capped at **64 entries** (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`). In workflows with roughly 16 or more actions, histories can reach this limit and the oldest entries are dropped. The framework emits an INFO log the first time this happens for a given action in a process:
+The `_state_history` array is capped at **64 entries** (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`). In workflows with roughly 16 or more actions, histories can reach this limit and the oldest entries are dropped. The framework emits a WARNING log the first time this happens for a given action in a process:
 
 ```
-_state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'.
+_state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'. Fires at most once per action per process.
 ```
 
-The log fires at most once per action per process to avoid per-record spam. It is written to `events.json` at WARNING but kept off the terminal, since the cap is a framework constant rather than anything you configure; run with `-v` to see it there. When it appears, `_state_history` for that action has already lost its oldest transitions.
+The log fires at most once per action per process to avoid per-record spam. It is written to `events.json` but kept off the terminal, since the cap is a framework constant rather than anything you configure; run with `-v` to see it there. When it appears, `_state_history` for that action has already lost its oldest transitions.
 
 ## Dispositions
 
@@ -61,8 +63,8 @@ column.
 
 ### `disposition` column
 
-A fixed enum derived from the record's final `_state` (see `Disposition` in
-`agent_actions/storage/backend.py`):
+A fixed enum of eight values (see `Disposition` in
+`agent_actions/storage/backend.py`). Most follow from the record's final `_state`:
 
 | Disposition | Meaning |
 |-------------|---------|

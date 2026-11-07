@@ -12,19 +12,22 @@ This guide explains how that works — from the state machine that governs each 
 
 ## The Record Envelope
 
-When Agent Actions reads your input data, it wraps each item in a **record envelope**:
+When Agent Actions reads your input data, it gives each item a `source_guid` and wraps it in a **record envelope**. After the first action runs, the stored record looks like this:
 
 ```json
 {
   "source_guid": "a3f7c291-8d1c-5f83-be54-2b9ef2a548bb",
-  "content": {},
-  "_state": "active",
+  "content": {
+    "source": { "id": "row-a", "title": "First input document" },
+    "classify_ticket": { "category": "billing" }
+  },
+  "_state": "processed",
   "_state_schema_version": 1,
-  "_state_history": []
+  "_state_history": [ ... ]
 }
 ```
 
-The `content` dict is empty — it will grow as each action adds its output under a namespace key. The `_state` is `active`, meaning the record is ready to be processed. The `_state_history` will accumulate every transition the record goes through.
+The `content` dict starts with your input under `source` and grows as each action adds its output under a namespace key. A source record carries no `_state` until the first action stamps it. The `_state_history` accumulates every transition the record goes through.
 
 ## The State Machine
 
@@ -79,7 +82,7 @@ The executor sends the record to `classify_ticket`. The LLM returns structured o
   },
   "_state": "processed",
   "_state_history": [
-    { "action": "classify_ticket", "from": "active", "to": "processed", "reason": "success" }
+    { "action": "classify_ticket", "from": null, "to": "processed", "reason": "success" }
   ]
 }
 ```
@@ -92,7 +95,7 @@ Before the next action runs, the executor resets `processed` back to `active`:
 {
   "_state": "active",
   "_state_history": [
-    { "action": "classify_ticket", "from": "active", "to": "processed", "reason": "success" },
+    { "action": "classify_ticket", "from": null, "to": "processed", "reason": "success" },
     { "action": "classify_ticket", "from": "processed", "to": "active", "reason": "downstream_reset" }
   ]
 }
@@ -110,9 +113,9 @@ Before the next action runs, the executor resets `processed` back to `active`:
   },
   "_state": "processed",
   "_state_history": [
-    { "action": "classify_ticket", "from": "active", "to": "processed", "reason": "success" },
+    { "action": "classify_ticket", "from": null, "to": "processed", "reason": "success" },
     { "action": "classify_ticket", "from": "processed", "to": "active", "reason": "downstream_reset" },
-    { "action": "extract_entities", "from": "active", "to": "processed", "reason": "success" }
+    { "action": "extract_entities", "from": null, "to": "processed", "reason": "success" }
   ]
 }
 ```
@@ -138,7 +141,7 @@ If the review passed, `rewrite_response` is skipped:
   "_state": "guard_skipped",
   "_state_history": [
     ...previous entries...,
-    { "action": "rewrite_response", "from": "active", "to": "guard_skipped", "reason": "guard_skip" }
+    { "action": "rewrite_response", "from": null, "to": "guard_skipped", "reason": "guard_skip" }
   ]
 }
 ```
@@ -167,10 +170,10 @@ When the executor encounters a terminal record at an action boundary, it propaga
 {
   "_state": "cascade_skipped",
   "_state_history": [
-    { "action": "classify_ticket", "from": "active", "to": "processed", "reason": "success" },
-    { "action": "draft_response", "from": "active", "to": "failed", "reason": "parse_error" },
-    { "action": "review_response", "from": "active", "to": "cascade_skipped", "reason": "upstream draft_response failed" },
-    { "action": "send_response", "from": "active", "to": "cascade_skipped", "reason": "upstream draft_response failed" }
+    { "action": "classify_ticket", "from": null, "to": "processed", "reason": "success" },
+    { "action": "draft_response", "from": null, "to": "failed", "reason": "parse_error" },
+    { "action": "review_response", "from": null, "to": "cascade_skipped", "reason": "upstream_unprocessed" },
+    { "action": "send_response", "from": null, "to": "cascade_skipped", "reason": "upstream_unprocessed" }
   ]
 }
 ```
@@ -191,7 +194,7 @@ This function:
 3. Appends to `_state_history` with timestamp, action name, from/to states, and reason
 4. Sets `_state_schema_version` so readers can detect stale records
 
-No other code path can modify `_state` or `_state_history`. This single-mutator design prevents the inconsistencies that arise when multiple code paths set state independently.
+Framework code changes `_state` and `_state_history` through this function, so state is set the same way on every path.
 
 ## The Audit Trail: `_state_history`
 
@@ -222,7 +225,7 @@ You can filter records by their history to answer questions like "which records 
 
 When a record reaches a terminal failure state (`failed` or `exhausted`) through the result collection pipeline, the disposition store captures the input record at the moment of failure in the `input_snapshot` column of `record_disposition`. This covers online, batch, and file-tool processing paths. The snapshot preserves the data that was being processed when the failure occurred — even after batch context maps and temporary recovery files have been cleaned up.
 
-The snapshot is serialized as JSON, truncated to 10KB and stored compressed by the storage backend. Print it with [`agac records --snapshots`](../reference/cli/records):
+The snapshot is serialized as JSON and stored compressed by the storage backend. A snapshot longer than 10,240 characters is replaced by a JSON object with `"__truncated__": true` and a `partial` field holding the first 8,192 characters. Print it with [`agac records --snapshots`](../reference/cli/records):
 
 ```bash
 agac records -w <workflow> --snapshots
@@ -234,7 +237,7 @@ The record envelope manages three categories of framework fields:
 
 | Category | Fields | Behavior |
 |----------|--------|----------|
-| **Tracking** | `source_guid`, `version_correlation_id` | Set once at record creation. Stable identity that never changes. |
+| **Tracking** | `source_guid`, `parent_source_guid`, `version_correlation_id`, `aggregated_by`, `folded_sources` | Set once at record creation. Stable identity that never changes. |
 | **Lifecycle** | `_state_history`, `_state_schema_version` | Cumulative — carried forward and appended to across all actions. |
 | **Stage** | `_state`, `target_id`, `metadata`, `content`, `lineage`, `node_id`, etc. | Rebuilt per action. Not carried forward — enrichers set these fresh at each stage. |
 
@@ -263,17 +266,17 @@ A record that finishes a 7-action agentic workflow looks like this:
   "_state_history": [
     { "timestamp": "2024-01-18T09:14:02Z", "action": "classify_ticket", "from": null, "to": "processed", "reason": "success", "detail": null },
     { "timestamp": "2024-01-18T09:14:02Z", "action": "classify_ticket", "from": "processed", "to": "active", "reason": "downstream_reset", "detail": null },
-    { "timestamp": "2024-01-18T09:14:04Z", "action": "extract_entities", "from": "active", "to": "processed", "reason": "success", "detail": null },
+    { "timestamp": "2024-01-18T09:14:04Z", "action": "extract_entities", "from": null, "to": "processed", "reason": "success", "detail": null },
     { "timestamp": "2024-01-18T09:14:04Z", "action": "extract_entities", "from": "processed", "to": "active", "reason": "downstream_reset", "detail": null },
-    { "timestamp": "2024-01-18T09:14:05Z", "action": "search_kb", "from": "active", "to": "processed", "reason": "success", "detail": null },
+    { "timestamp": "2024-01-18T09:14:05Z", "action": "search_kb", "from": null, "to": "processed", "reason": "success", "detail": null },
     { "timestamp": "2024-01-18T09:14:05Z", "action": "search_kb", "from": "processed", "to": "active", "reason": "downstream_reset", "detail": null },
-    { "timestamp": "2024-01-18T09:16:30Z", "action": "draft_response", "from": "active", "to": "processed", "reason": "success", "detail": null },
+    { "timestamp": "2024-01-18T09:16:30Z", "action": "draft_response", "from": null, "to": "processed", "reason": "success", "detail": null },
     { "timestamp": "2024-01-18T09:16:30Z", "action": "draft_response", "from": "processed", "to": "active", "reason": "downstream_reset", "detail": null },
-    { "timestamp": "2024-01-18T09:18:15Z", "action": "review_response", "from": "active", "to": "processed", "reason": "success", "detail": null },
+    { "timestamp": "2024-01-18T09:18:15Z", "action": "review_response", "from": null, "to": "processed", "reason": "success", "detail": null },
     { "timestamp": "2024-01-18T09:18:15Z", "action": "review_response", "from": "processed", "to": "active", "reason": "downstream_reset", "detail": null },
-    { "timestamp": "2024-01-18T09:18:15Z", "action": "route_decision", "from": "active", "to": "processed", "reason": "success", "detail": null },
+    { "timestamp": "2024-01-18T09:18:15Z", "action": "route_decision", "from": null, "to": "processed", "reason": "success", "detail": null },
     { "timestamp": "2024-01-18T09:18:15Z", "action": "route_decision", "from": "processed", "to": "active", "reason": "downstream_reset", "detail": null },
-    { "timestamp": "2024-01-18T09:18:16Z", "action": "send_response", "from": "active", "to": "processed", "reason": "success", "detail": null }
+    { "timestamp": "2024-01-18T09:18:16Z", "action": "send_response", "from": null, "to": "processed", "reason": "success", "detail": null }
   ],
   "metadata": { "model": "gpt-4o-mini", "provider": "openai" },
   "node_id": "send_response_d38daf8b-...",

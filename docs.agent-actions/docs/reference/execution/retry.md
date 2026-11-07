@@ -5,7 +5,7 @@ sidebar_position: 6
 
 # Retry & Error Handling
 
-Retry handles transient errors (rate limits, network issues, server errors) with exponential backoff.
+Retry handles transient errors (rate limits, network issues, server errors) with exponential backoff. An online action waits up to 1 second after the first failed attempt, up to 2 seconds after the second, and so on, doubling up to a cap of 60 seconds; each wait is a random time between zero and that limit. Neither value is configurable.
 
 Retry is **off until a `retry:` block turns it on**, on the action or under `defaults:`, where
 it applies to every action that writes no block of its own. Inside a block, `enabled` is `true`,
@@ -49,7 +49,7 @@ actions:
 
 | Value | Behavior |
 |-------|----------|
-| `return_last` | Return last response, workflow continues |
+| `return_last` | The record is marked `exhausted`, no response is kept, and the workflow continues |
 | `raise` | Raise exception, workflow fails |
 
 A record that exhausted its retries carries the error its last attempt raised, ahead of the
@@ -72,6 +72,7 @@ is named by its type.
 | Rate Limits | HTTP 429, quota exceeded | Yes |
 | Network Issues | Connection refused, reset or dropped mid-response, timeout (including a request that outlasts [`request_timeout`](../configuration/index.md#request-timeout)), DNS failure | Yes |
 | Server Errors | HTTP 500, 502, 503, 504 | Yes; which other statuses depends on the provider ([by provider](#provider-support)) |
+| Transient request rejection | A request the provider refuses with a message containing `could not parse the JSON body` or `we are currently processing your json schema` | Yes |
 | Invalid Request | Bad API key, malformed input | No |
 | Schema Violation | Invalid JSON output | No (uses `expect:` repair) |
 

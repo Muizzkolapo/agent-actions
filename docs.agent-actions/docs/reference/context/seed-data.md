@@ -41,6 +41,8 @@ The seed data directory defaults to `seed_data/`. You can change it in `agent_ac
 seed_data_path: reference_data   # defaults to "seed_data" if omitted
 ```
 
+The value is a folder name. A value with a path separator or `..` is ignored with a warning, and `seed_data` is used.
+
 ### Shared Folders
 
 A file several workflows read lives once, in a shared folder. List shared folders in `agent_actions.yml`, relative to the project root:
@@ -51,7 +53,7 @@ seed_data_paths: [shared_seeds]
 
 Each `$file:` reference is looked for in this order, and resolves to the first folder that holds it:
 
-1. the workflow's own folder (`agent_workflow/<workflow>/seed_data/`)
+1. the workflow's own folder (`agent_workflow/<workflow>/seed_data/`, or the `seed_data_path` name)
 2. the project folder (`seed_data/` at the project root, or the `seed_data_path` name)
 3. each folder of `seed_data_paths`, in order
 
@@ -92,14 +94,17 @@ prompt: |
   {% endfor %}
 ```
 
-A [guard](../execution/guards.md#context-access) reads the same seed data, so a condition can
-compare a record against a reference file:
+A [guard](../execution/guards.md#context-access) reads the same seed data and compares it with
+a literal value:
 
 ```yaml
 guard:
-  condition: 'score_review.score >= seed.thresholds.min_score'
+  condition: 'seed.thresholds.min_score >= 0.5'
   on_false: filter
 ```
+
+A guard cannot compare a record field with a seed field: `score_review.score >= seed.thresholds.min_score`
+is refused before the run. Compute that comparison in an upstream tool action and guard on its result.
 
 A prompt or guard that reads a seed key its action does not declare is refused before the run.
 Preflight also warns when a field such as `seed.rubric.criteria` is missing from a JSON or
@@ -152,7 +157,7 @@ Rules:
 Seed 'syllabus' in action 'generate_question': record value 'snowflak' for 'source.exam' is not in the file map. Known values: dbt, snowflake. (staging/pages.json, record 3)
 ```
 
-A guard reads the same file the prompt does for a record, so `seed.syllabus.domains` in a guard clause is the record's own syllabus. There is no default file: a value the map does not name is an error, never a silent fallback. `agac inspect context <workflow> <action>` shows which file each value gets.
+A guard reads the same file the prompt does for a record, so `seed.syllabus.domains` in a guard clause is the record's own syllabus. There is no default file: a value the map does not name is an error, never a silent fallback. `agac inspect context -a <workflow> <action>` shows which file each value gets.
 
 ## Seed Data vs Source Data
 

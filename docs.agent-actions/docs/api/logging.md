@@ -14,11 +14,11 @@ from agent_actions.logging.events import WorkflowStartEvent
 
 fire_event(WorkflowStartEvent(
     workflow_name="my_workflow",
-    agent_count=5,
+    action_count=5,
 ))
 ```
 
-**Note:** The `message` field is auto-generated in `__post_init__` based on other fields.
+**Note:** Every event class sets its own `level`, `category`, `message` and `data` in `__post_init__`. A `message` you pass in is replaced.
 
 **Parameters:**
 - `event` (BaseEvent): Event instance to fire
@@ -26,7 +26,7 @@ fire_event(WorkflowStartEvent(
 **Returns:** None
 
 **Context Enrichment:**
-Events are automatically enriched with correlation context from the EventManager before being dispatched to handlers.
+Before dispatch, the EventManager copies its context into the event's `meta`: `invocation_id` and `correlation_id` go to their own fields, and every other key goes to `meta.extra`.
 
 ---
 
@@ -62,24 +62,26 @@ manager = LoggerFactory.initialize(
     invocation_id="run_abc123",
     verbose=True,
     force=True,
+    new_run=True,
 )
 ```
 
 **Parameters:**
-- `config` (Optional[LoggingConfig]): Logging configuration. If None, uses defaults from environment.
-- `output_dir` (Optional[str | Path]): Directory for run_results.json and event logs. Defaults to None.
+- `config` (Optional[LoggingConfig]): Logging configuration. If None, keeps the configuration of an earlier call; if there was none, reads the `AGENT_ACTIONS_*` environment variables.
+- `output_dir` (Optional[str | Path]): Directory whose `logs/` subdirectory receives `events.json`, `errors.json` and `run_results.json`. Defaults to None.
 - `workflow_name` (str): Name of the workflow being executed. Defaults to "".
-- `invocation_id` (Optional[str]): Unique ID for this invocation. Auto-generated if not provided.
+- `invocation_id` (Optional[str]): Unique ID for this invocation. An 8-character ID is generated if not provided.
 - `verbose` (Optional[bool]): Show DEBUG level events, all categories, and diagnostic events on console. `None` (the default) keeps whatever a previous call configured, so a `force=True` re-init that omits it does not discard the CLI's flags.
 - `quiet` (Optional[bool]): Only show WARN and ERROR events on console. `None` (the default) keeps whatever a previous call configured.
 - `force` (bool): Reinitialize even if already initialized. Defaults to False.
+- `new_run` (bool): Mark the start of a workflow run. The run logs in `output_dir/logs` rotate first, so `events.json` holds this run only. Other commands append to the current run's file. Defaults to False.
 
 **Returns:** EventManager instance
 
 **Side Effects:**
 - Creates and registers ProgressRenderer (the run's console handler)
-- Creates and registers JSONFileHandler (if output_dir provided)
-- Creates and registers RunResultsCollector (if output_dir provided)
+- Creates and registers two JSONFileHandler instances (if output_dir provided): `logs/events.json` at DEBUG and `logs/errors.json` at ERROR
+- Creates and registers RunResultsCollector (it writes `logs/run_results.json` only if output_dir provided)
 - Sets up LoggingBridgeHandler to convert Python logging to events
 - Sets correlation context (invocation_id, workflow_name)
 
@@ -95,9 +97,10 @@ manager = LoggerFactory.initialize(
 )
 
 # Events are now routed to:
-# - Console (Rich-formatted output)
-# - agent_folder/target/events.json
-# - agent_folder/target/run_results.json
+# - Console (stderr, Rich-formatted when Rich is available)
+# - agent_folder/logs/events.json
+# - agent_folder/logs/errors.json
+# - agent_folder/logs/run_results.json
 ```
 
 #### LoggerFactory.get_logger()
@@ -112,9 +115,9 @@ logger.info("Processing item")  # Converted to LogEvent
 **Parameters:**
 - `name` (str): Logger name. Auto-prefixed with 'agent_actions.' if not already.
 
-**Returns:** logging.Logger instance
+**Returns:** logging.Logger instance. Initializes the factory first if it is not initialized.
 
-**Note:** All logging calls are converted to LogEvent instances and routed through EventManager.
+**Note:** Every record logged under the `agent_actions` namespace is converted to a LogEvent and routed through EventManager.
 
 #### LoggerFactory.set_context()
 
@@ -219,29 +222,24 @@ manager.register(handler)
 ```
 
 **Parameters:**
-- `handler` (EventHandler): Handler instance with `accepts()` and `handle()` methods
+- `handler` (EventHandler): Handler instance with `accepts()`, `handle()` and `flush()` methods. The manager calls `close()` on reset if the handler has one.
 
 **Returns:** None
 
 ---
 
-### EventManager.register_function()
+### EventManager.unregister()
 
-Register a simple function as a handler.
+Remove a registered handler. Does nothing if the handler is not registered.
 
 ```python
-def my_handler(event):
-    print(f"Event: {event.message}")
-
-manager.register_function(my_handler)
+manager.unregister(handler)
 ```
 
 **Parameters:**
-- `func` (Callable[[BaseEvent], None]): Function that takes an event
+- `handler` (EventHandler): Handler instance to remove
 
 **Returns:** None
-
-**Note:** Function will receive all events (no filtering).
 
 ---
 
@@ -252,7 +250,7 @@ Fire an event to all registered handlers.
 ```python
 from agent_actions.logging.events import WorkflowStartEvent
 
-event = WorkflowStartEvent(workflow_name="my_workflow", agent_count=3)
+event = WorkflowStartEvent(workflow_name="my_workflow", action_count=3)
 manager.fire(event)
 ```
 
@@ -291,11 +289,13 @@ Context manager for temporary context override.
 
 ```python
 with manager.context(workflow_name="upstream"):
-    fire_event(WorkflowStartEvent(workflow_name="upstream", agent_count=2))
-    # Event has workflow_name="upstream"
+    fire_event(WorkflowStartEvent(workflow_name="upstream", action_count=2))
+    # event.meta.extra["workflow_name"] == "upstream"
 
 # Context restored to previous value
 ```
+
+The override is local to the current thread or coroutine, and calls can nest.
 
 **Parameters:**
 - `**kwargs`: Temporary context values
@@ -341,30 +341,29 @@ All event classes inherit from `BaseEvent` and are dataclasses.
 Base class for all events.
 
 ```python
-from agent_actions.logging.events.base import BaseEvent, EventCategory
+from dataclasses import dataclass
+
+from agent_actions.logging.core.events import BaseEvent, EventLevel
 
 @dataclass
 class MyEvent(BaseEvent):
-    category: EventCategory = EventCategory.SYSTEM
-    event_type: str = "my_event"
-
-    # Custom fields
     custom_field: str = ""
 
-    def __post_init__(self):
-        super().__post_init__()
-        self.data["custom_field"] = self.custom_field
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = "system"
+        self.message = f"My event: {self.custom_field}"
+        self.data = {"custom_field": self.custom_field}
 ```
 
 **Attributes:**
-- `event_id` (str): Unique event identifier (auto-generated)
-- `timestamp` (datetime): Event timestamp (auto-generated)
-- `category` (EventCategory): Event category
-- `event_type` (str): Specific event type
+- `level` (EventLevel): Severity
+- `category` (str): Event category; see [EventCategories](#eventcategories)
 - `message` (str): Human-readable message
+- `meta` (EventMeta): `timestamp`, `correlation_id`, `invocation_id`, `thread_id` and `extra` (the other context keys)
 - `data` (Dict[str, Any]): Structured event data
 - `diagnostic` (bool): Framework internals rather than something the user can act on. Kept by the file handlers, dropped by the console unless verbose
-- `meta` (EventMetadata): Metadata (invocation_id, workflow_name, etc.)
+- `event_type` (str, read-only property): The event class name, such as `"ActionStartEvent"`
 
 ---
 
@@ -379,17 +378,17 @@ from agent_actions.logging.events import WorkflowStartEvent
 
 fire_event(WorkflowStartEvent(
     workflow_name="my_workflow",
-    agent_count=5,
-    execution_mode="parallel",
+    action_count=5,
+    execution_mode="async",
 ))
 ```
 
-**Note:** The `message` field is auto-generated based on `workflow_name` and `agent_count`.
+**Note:** The `message` field is generated from `workflow_name` and `action_count`.
 
 **Fields:**
 - `workflow_name` (str): Workflow name
-- `agent_count` (int): Number of agents in workflow
-- `execution_mode` (str): "sequential" or "parallel"
+- `action_count` (int): Number of actions in the workflow
+- `execution_mode` (str): `"sequential"` or `"async"`. The workflow runner sets it; it defaults to `"sequential"`
 
 ---
 
@@ -403,9 +402,10 @@ from agent_actions.logging.events import WorkflowCompleteEvent
 fire_event(WorkflowCompleteEvent(
     workflow_name="my_workflow",
     elapsed_time=119.5,
-    agents_completed=5,
-    agents_skipped=0,
-    agents_failed=0,
+    actions_completed=5,
+    actions_partial=0,
+    actions_skipped=0,
+    actions_failed=0,
     total_tokens=12500,
 ))
 ```
@@ -413,9 +413,10 @@ fire_event(WorkflowCompleteEvent(
 **Fields:**
 - `workflow_name` (str): Workflow name
 - `elapsed_time` (float): Total execution time in seconds
-- `agents_completed` (int): Number of agents completed
-- `agents_skipped` (int): Number of agents skipped
-- `agents_failed` (int): Number of agents failed
+- `actions_completed` (int): Number of actions completed
+- `actions_partial` (int): Number of actions that completed with failed records
+- `actions_skipped` (int): Number of actions skipped
+- `actions_failed` (int): Number of actions failed
 - `total_tokens` (int): Total tokens used
 
 ---
@@ -432,13 +433,14 @@ fire_event(WorkflowFailedEvent(
     error_message="Dependency cycle detected",
     error_type="CyclicDependencyError",
     elapsed_time=5.2,
-    failed_agent="extract_data",
+    failed_action="extract_data",
 ))
 ```
 
 **Fields:**
 - `workflow_name` (str): Workflow name
 - `error_message` (str): Error description
+- `error_detail` (str): Further detail on the error
 - `error_type` (str): Exception type name
 - `elapsed_time` (float): Time elapsed before failure
 - `failed_action` (str): Name of the action that failed
@@ -506,6 +508,7 @@ fire_event(ActionStartEvent(
     total_actions=5,
     action_type="llm",
     input_path="/path/to/input.json",
+    mode="online",
 ))
 ```
 
@@ -513,8 +516,9 @@ fire_event(ActionStartEvent(
 - `action_name` (str): Action name
 - `action_index` (int): Action position in workflow (0-based)
 - `total_actions` (int): Total number of actions
-- `action_type` (str): Type of action ("llm", "tool", etc.)
+- `action_type` (str): The action's kind (`"llm"`, `"tool"`, `"hitl"`)
 - `input_path` (str): Path to input file
+- `mode` (str): `"online"` or `"batch"`
 
 ---
 
@@ -555,7 +559,7 @@ fire_event(ActionCompleteEvent(
 
 #### ActionSkipEvent
 
-Emitted when an action is skipped (guard condition, cache hit, etc.).
+Emitted when an action is skipped, for example when its guard condition filters every record or its `skip_condition` is true.
 
 ```python
 from agent_actions.logging.events import ActionSkipEvent
@@ -564,7 +568,7 @@ fire_event(ActionSkipEvent(
     action_name="optional_enrichment",
     action_index=2,
     total_actions=5,
-    skip_reason="Guard condition failed: confidence < 0.8",
+    skip_reason="guard condition not met",
 ))
 ```
 
@@ -573,6 +577,7 @@ fire_event(ActionSkipEvent(
 - `action_index` (int): Action position in workflow (0-based)
 - `total_actions` (int): Total number of actions
 - `skip_reason` (str): Why action was skipped
+- `mode` (str): `"online"` or `"batch"`
 
 ---
 
@@ -599,9 +604,11 @@ fire_event(ActionFailedEvent(
 - `action_index` (int): Action position in workflow (0-based)
 - `total_actions` (int): Total number of actions
 - `error_message` (str): Error description
+- `error_detail` (str): Further detail on the error
 - `error_type` (str): Exception class name
 - `execution_time` (float): Time elapsed before failure
 - `suggestion` (str): Suggested fix or next step
+- `mode` (str): `"online"` or `"batch"`
 
 ---
 
@@ -616,7 +623,7 @@ from agent_actions.logging.events import BatchSubmittedEvent
 
 fire_event(BatchSubmittedEvent(
     batch_id="batch_abc123",
-    agent_name="extract_data",
+    action_name="extract_data",
     request_count=1000,
     provider="openai",
 ))
@@ -667,9 +674,7 @@ Emitted when a batch job fails.
 from agent_actions.logging.events import BatchErrorEvent
 
 fire_event(BatchErrorEvent(
-    message="Batch failed",
     action_name="extract_data",
-    batch_id="batch_abc123",
     error_message="Batch expired",
     error_type="BatchExpiredError",
 ))
@@ -677,7 +682,6 @@ fire_event(BatchErrorEvent(
 
 **Fields:**
 - `action_name` (str): Action name
-- `batch_id` (str): Batch job ID
 - `error_message` (str): Error description
 - `error_type` (str): Exception class name
 
@@ -693,31 +697,37 @@ Emitted when validation starts.
 from agent_actions.logging.events import ValidationStartEvent
 
 fire_event(ValidationStartEvent(
-    message="Starting validation",
     target="extract_data_schema",
+    validator="schema",
 ))
 ```
 
 **Fields:**
 - `target` (str): What is being validated
+- `validator` (str): Name of the validator
 
 ---
 
 #### ValidationCompleteEvent
 
-Emitted when validation completes successfully.
+Emitted when validation completes.
 
 ```python
 from agent_actions.logging.events import ValidationCompleteEvent
 
 fire_event(ValidationCompleteEvent(
-    message="Validation passed",
     target="extract_data_schema",
+    validator="schema",
+    elapsed_time=0.02,
 ))
 ```
 
 **Fields:**
 - `target` (str): What was validated
+- `validator` (str): Name of the validator
+- `elapsed_time` (float): Validation time in seconds
+- `warning_count` (int): Number of warnings found
+- `error_count` (int): Number of errors found; the event's level is ERROR when this is not 0
 
 ---
 
@@ -771,10 +781,12 @@ fire_event(ValidationWarningEvent(
 
 Base class for all event handlers.
 
-```python
-from agent_actions.logging.core.handlers import EventHandler
+`EventHandler` is a `Protocol` in `agent_actions.logging.core.protocols`. A handler is any object with these methods; it does not need to subclass it.
 
-class MyHandler(EventHandler):
+```python
+from agent_actions.logging.core.events import BaseEvent
+
+class MyHandler:
     def accepts(self, event: BaseEvent) -> bool:
         """Return True if this handler processes the event."""
         return event.category == "workflow"
@@ -792,6 +804,7 @@ class MyHandler(EventHandler):
 - `accepts(event)` → bool: Return True if handler processes this event
 - `handle(event)` → None: Process the event
 - `flush()` → None: Flush buffered data
+- `close()` → None: Release resources. The protocol lists it; the manager calls it on reset and on a forced re-initialize if the handler has it
 
 ---
 
@@ -811,7 +824,7 @@ Takes the same parameters as `ConsoleEventHandler`.
 
 ### ConsoleEventHandler
 
-Outputs events to the console using Rich formatting.
+Writes events to the console (stderr), using Rich formatting when Rich is available.
 
 ```python
 from agent_actions.logging.core.events import EventLevel
@@ -825,10 +838,11 @@ handler = ConsoleEventHandler(
 ```
 
 **Parameters:**
-- `min_level` (EventLevel): Minimum event level to display
-- `show_timestamp` (bool): Include timestamp in output
-- `formatter` (Optional[Callable]): Custom formatter function
-- `categories` (Optional[Set[str]]): Event categories to display (None = all)
+- `min_level` (EventLevel): Minimum event level to display. Defaults to `EventLevel.INFO`
+- `show_timestamp` (bool): Include timestamp in output. Defaults to True
+- `formatter` (Optional[Callable]): Custom formatter function that takes an event and returns a string
+- `console` (Optional[Any]): Rich console to write to. Defaults to a Rich console on stderr
+- `categories` (Optional[Set[str]]): Event categories to display (None = all). WARN and ERROR events show whatever their category
 - `show_diagnostics` (bool): Display events marked diagnostic. Defaults to False, which drops them at any level
 
 ---
@@ -850,9 +864,11 @@ handler = JSONFileHandler(
 ```
 
 **Parameters:**
-- `file_path` (Path): Output file path
-- `min_level` (EventLevel): Minimum event level to log
-- `buffer_size` (int): Number of events to buffer before writing
+- `file_path` (str | Path): Output file path. Parent directories are created
+- `min_level` (EventLevel): Minimum event level to log. Defaults to `EventLevel.DEBUG`
+- `buffer_size` (int): Number of events to buffer before writing. Defaults to 10
+- `max_debug_bytes` (Optional[int]): Past this many bytes in the file, DEBUG events are no longer written. Defaults to None (no cap)
+- `include_all_fields` (bool): True writes each event's full dictionary; False writes only `event_type`, `level`, `message` and `timestamp`. Defaults to True
 
 **Output Format:** NDJSON (one JSON object per line)
 
@@ -875,10 +891,10 @@ collector = RunResultsCollector(
 - `output_dir` (Optional[str | Path]): Directory to write run_results.json
 - `workflow_name` (str): Name of workflow being executed
 
-**Output:** `{output_dir}/target/run_results.json`
+**Output:** `{output_dir}/logs/run_results.json`
 
 **Methods:**
-- `accepts(event)`: Returns True for workflow/action category events
+- `accepts(event)`: Returns True for workflow and action category events, plus `RecordEmptyOutputEvent` and `ResultCollectionCompleteEvent`
 - `handle(event)`: Process event and update internal state
 - `flush()`: Write run_results.json to disk
 
@@ -899,7 +915,7 @@ LoggerFactory.initialize(config=config)
 ```
 
 **Fields:**
-- `default_level` (str): Default log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+- `default_level` (str): Default log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"). `from_environment()` reads it from `AGENT_ACTIONS_LOG_LEVEL`, and `AGENT_ACTIONS_DEBUG=1` forces `"DEBUG"`
 - `module_levels` (dict): Per-logger level overrides applied at init. Keys are
   Python logger names (e.g. `"httpx"`, `"my_module"`), values are level
   strings. Use this to re-enable a logger the framework clamps by default,
@@ -979,19 +995,30 @@ EventLevel.ERROR    # Error messages
 
 ---
 
-### EventCategory
+### EventCategories
 
-Event categories for filtering.
+Event category strings for filtering. `event.category` holds one of these values.
 
 ```python
-from agent_actions.logging.events.base import EventCategory
+from agent_actions.logging.events.types import EventCategories
 
-EventCategory.WORKFLOW     # Workflow lifecycle events
-EventCategory.ACTION       # Action execution events
-EventCategory.BATCH        # Batch processing events
-EventCategory.VALIDATION   # Validation events
-EventCategory.PROGRESS     # Progress updates
-EventCategory.SYSTEM       # System-level events
+EventCategories.WORKFLOW         # "workflow"        Workflow lifecycle events
+EventCategories.ACTION           # "action"          Action execution events
+EventCategories.BATCH            # "batch"           Batch processing events
+EventCategories.LLM              # "llm"             LLM interaction events
+EventCategories.VALIDATION       # "validation"      Validation events
+EventCategories.CACHE            # "cache"           Cache events
+EventCategories.TEMPLATE         # "template"        Template rendering events
+EventCategories.DATA             # "data"            Data loading and parsing events
+EventCategories.GUARD            # "guard"           Guard evaluation events
+EventCategories.RECOVERY         # "recovery"        Recovery and retry events
+EventCategories.CONFIGURATION    # "configuration"   Configuration loading events
+EventCategories.INITIALIZATION   # "initialization"  Initialization events
+EventCategories.PLUGIN           # "plugin"          Plugin and UDF discovery events
+EventCategories.DATA_PROCESSING  # "data_processing" Data processing events
+EventCategories.FILE_IO          # "file_io"         File I/O events
+EventCategories.SCHEMA           # "schema"          Schema operation events
+EventCategories.TRANSFORMATION   # "transformation"  Data transformation events
 ```
 
 ---
@@ -1018,29 +1045,29 @@ LoggerFactory.initialize(
 
 # Workflow start
 fire_event(WorkflowStartEvent(
-    message="Starting workflow",
     workflow_name="my_workflow",
     action_count=3,
 ))
 
 # Action 1
 fire_event(ActionStartEvent(
-    message="Starting action",
     action_name="extract",
-    action_index=1,
+    action_index=0,
+    total_actions=3,
 ))
 # ... do work ...
 fire_event(ActionCompleteEvent(
-    message="Action completed",
     action_name="extract",
+    action_index=0,
+    total_actions=3,
     execution_time=5.2,
 ))
 
 # Workflow complete
 fire_event(WorkflowCompleteEvent(
-    message="Workflow completed",
     workflow_name="my_workflow",
-    execution_time=15.6,
+    elapsed_time=15.6,
+    actions_completed=1,
 ))
 
 # Flush
@@ -1051,10 +1078,9 @@ LoggerFactory.flush()
 
 ```python
 from agent_actions.logging.core.manager import get_manager
-from agent_actions.logging.core.handlers import EventHandler
-from agent_actions.logging.events.base import BaseEvent
+from agent_actions.logging.core.events import BaseEvent
 
-class MetricsHandler(EventHandler):
+class MetricsHandler:
     def __init__(self):
         self.metrics = []
 
@@ -1091,16 +1117,16 @@ manager = get_manager()
 # Set global context
 manager.set_context(workflow_name="main")
 
-# All events inherit workflow_name="main"
-fire_event(ActionStartEvent(message="Action 1", action_name="extract"))
+# All events carry workflow_name="main" in event.meta.extra
+fire_event(ActionStartEvent(action_name="extract"))
 
 # Override for nested context
 with manager.context(workflow_name="upstream"):
-    fire_event(ActionStartEvent(message="Upstream action", action_name="fetch"))
-    # Event has workflow_name="upstream"
+    fire_event(ActionStartEvent(action_name="fetch"))
+    # Event carries workflow_name="upstream"
 
 # Back to workflow_name="main"
-fire_event(ActionStartEvent(message="Action 2", action_name="transform"))
+fire_event(ActionStartEvent(action_name="transform"))
 ```
 
 ---

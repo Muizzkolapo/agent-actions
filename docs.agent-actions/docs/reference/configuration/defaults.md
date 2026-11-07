@@ -37,6 +37,10 @@ actions:
     prompt: "..."
 ```
 
+:::note Examples show the setting, not a complete action
+The snippets on this page leave out lines that are not the point of the example. Every action also needs an `intent` and a `context_scope`, and the file needs a `name` that matches its filename and a `description`.
+:::
+
 ## Defaultable Fields
 
 | Field | Type | Description |
@@ -45,10 +49,10 @@ actions:
 | `model_name` | string | Model identifier |
 | `frequency_penalty` | float | Penalise repeated tokens, -2.0 to 2.0 (OpenAI and Groq) |
 | `presence_penalty` | float | Penalise tokens already present, -2.0 to 2.0 (OpenAI and Groq) |
-| `json_mode` | boolean | Enable JSON output mode (see [Non-JSON Mode](../../guides/non-json-mode.md)) |
+| `json_mode` | boolean | Enable JSON output mode (default: `true`; see [Non-JSON Mode](../../guides/non-json-mode.md)) |
 | `output_field` | string | Field name for plain-text output when `json_mode: false` (default: `raw_response`) |
-| `granularity` | string | `record` or `file` processing |
-| `run_mode` | string | `batch` or `online` execution |
+| `granularity` | string | `record` (default) or `file` processing |
+| `run_mode` | string | `online` (default) or `batch` execution |
 | `on_empty` | string | What an empty answer does: `warn` (default), `error` or `skip` — see [Execution Fields](./index.md#execution-fields) |
 | `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed` |
 | `temperature` | float | LLM temperature (0.0-2.0) |
@@ -59,6 +63,8 @@ actions:
 | `record_limit` | integer | Max records per file (default: unlimited). `AGAC_RECORD_LIMIT` caps this from the environment |
 | `file_limit` | integer | Max files to walk per action (default: unlimited). `AGAC_FILE_LIMIT` bounds this from the environment. Does not hold back [`agac retry`](../cli/retry), which walks the files holding the records it named rather than stopping at N |
 | `enable_prompt_caching` | boolean | Enable Anthropic prompt caching to reduce costs on repeated prompts (default: `false`) |
+
+The table lists the common keys. A `defaults:` block takes every key that [Unrecognized Default Key](#unrecognized-default-key) lists, including `api_key`, `base_url`, `retry`, `expect`, `data_source`, `chunk_config` and `prompt_debug`.
 
 :::note Every defaultable key is declared
 `DefaultsConfig` declares every key a `defaults:` block accepts, and a key it does not declare is refused at load rather than dropped. The refusal names the declared key a stray one resembles and always lists the keys the block takes. Anything the framework reads out of `defaults:` is therefore also writable there — if a key is worth inheriting, it is declared.
@@ -112,8 +118,9 @@ This means you can have one action using Claude while others use GPT-4, all inhe
 ### Resolution Order
 
 1. Action-specific value (if defined)
-2. Workflow defaults value (if defined)
-3. System default (built-in fallback)
+2. Workflow `defaults:` value (if defined)
+3. Project `default_agent_config` value in `agent_actions.yml` (if defined)
+4. System default (built-in fallback)
 
 ```yaml
 defaults:
@@ -371,13 +378,15 @@ defaults:
 
 1. Default field names are declared — an undeclared key is refused, not ignored
 2. Default values are valid types and within range
-3. Required fields are present (either in defaults or actions)
+3. Required fields are present at some level (`model_vendor` for an LLM action, set in the project config, the workflow defaults or the action)
 
 ### Unrecognized Default Key
 
 ```
-ConfigurationError: Workflow configuration is invalid
-  defaults: unknown defaults key 'temperture' — did you mean 'temperature'?; valid defaults keys are anthropic_version, api_key, base_url, ...
+Error: Configuration Error: Invalid configuration in agent 'my_workflow'
+  Problem: 1 validation error for WorkflowConfig
+defaults
+  Value error, unknown defaults key 'temperture' — did you mean 'temperature'?; valid defaults keys are anthropic_version, api_key, base_url, ...
 ```
 
 The list is always present: a suggestion is a closest-spelling match, so it can point at the
@@ -386,15 +395,18 @@ wrong field, and the list is what you fall back to.
 ### Missing Required Field
 
 ```
-ConfigurationError: Action 'my_action' missing required field 'prompt'
-  Neither defaults nor action defines this field.
+Error: Configuration Error: Missing required configuration fields
+  Problem: Action 'my_action' is missing required configuration: 'model_vendor'
+These fields were not found at any level (project → workflow → action).
 ```
 
 ### Invalid Default Value
 
 ```
-ConfigurationError: Invalid value for 'granularity': 'invalid'
-  Expected: 'record' or 'file'
+Error: Configuration Error: Invalid configuration in agent 'my_workflow'
+  Problem: 1 validation error for WorkflowConfig
+defaults.granularity
+  Input should be 'record' or 'file' [type=enum, input_value='invalid', input_type=str]
 ```
 
 :::tip

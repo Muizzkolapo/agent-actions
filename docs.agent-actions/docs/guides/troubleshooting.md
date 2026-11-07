@@ -5,7 +5,7 @@ sidebar_position: 10
 
 # Troubleshooting
 
-> **Storage backend:** SQLite as of v0.2.6. File paths under `agent_io/target/.../data.json` in older snippets are stale; this page uses the current SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`).
+> **Storage backend:** Action outputs live in SQLite at `agent_io/store/<workflow>.db`, in the table `target_data`.
 
 What happens when something goes wrong in your agentic workflow? This guide helps you debug and fix common errors. Let's explore the error types, their causes, and how to resolve them.
 
@@ -13,50 +13,37 @@ What happens when something goes wrong in your agentic workflow? This guide help
 
 ### SchemaValidationError
 
-The most common error. Occurs when data fails JSON Schema validation.
+Occurs when a tool returns data that the action's `schema:` does not accept. The framework checks each item a tool returns against that schema.
 
 ```
-SchemaValidationError: Input schema validation failed for tool 'add_answer_text'
-at target_word_counts -> correct_answer_words: 18 is not of type 'string'
-[Context: function=add_answer_text, validation_type=input,
- error_path=target_word_counts -> correct_answer_words,
- failed_value=18, schema_constraint={'type': 'string'}]
+Output schema validation failed for UDF 'add_answer_text' (item 0) at target_word_counts -> correct_answer_words: 18 is not of type 'string'
 ```
+
+`(item N)` appears when the tool returns a list. `at root` means the failure is on the item itself, not on one field.
 
 **Context Fields:**
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| `error_path` | Dot-path to failing field | `target_word_counts -> correct_answer_words` |
+| `error_path` | Path to failing field, joined by `->` (`root` for the item itself) | `target_word_counts -> correct_answer_words` |
 | `failed_value` | The actual value received | `18`, `'some text'`, `['a', 'b']` |
 | `schema_constraint` | Expected schema rule | `{'type': 'string'}` |
 | `function` | Tool that failed | `add_answer_text` |
-| `validation_type` | Input or output validation | `input`, `output` |
-
-### ProcessingError
-
-Wraps lower-level errors with record context. Think of this as a breadcrumb trail—it tells you which specific record caused the problem.
-
-```
-ProcessingError: Failed to process item
-[Context: source_guid=37812c37-80a2-596b-8747-8f93e7a34e7f,
-         agent_name=add_answer_text]
-```
-
-**Context Fields:**
-
-| Field | Description |
-|-------|-------------|
-| `source_guid` | UUID of the record being processed |
-| `agent_name` | Action that failed |
+| `validation_type` | Which side was validated | `output` |
+| `item_index` | Position in the returned list, or `None` | `0` |
 
 ### RecordContextError (Record Namespace)
 
 Occurs when a downstream action tries to read fields from an upstream action's output, but the expected fields are missing. This typically means the upstream action stored corrupted or empty data.
 
 ```
-[RECORD NAMESPACE] 'generate_optimal_code': declared fields ['optimal_code'] not found.
-Available: ['title', 'type', 'properties', 'required', 'additionalProperties']
+[RECORD NAMESPACE] 'generate_optimal_code': declared fields ['explanation'] not found. Available: ['optimal_code']
+```
+
+When none of the declared fields exist in the upstream output, the framework logs a warning instead and treats the upstream namespace as null for that record. A prompt that reads a field from it then fails, and the error names the reason:
+
+```
+[OBSERVE NULL-SAFE] 'generate_optimal_code': namespace has zero overlap with declared fields ['optimal_code'] (actual keys: ['additionalProperties', 'properties', 'required', 'title', 'type']) — treating as null
 ```
 
 **Common causes:**
@@ -64,19 +51,18 @@ Available: ['title', 'type', 'properties', 'required', 'additionalProperties']
 | Cause | What happened | Fix |
 |-------|--------------|-----|
 | Schema-echo | LLM returned the JSON Schema definition instead of data | Add `expect: {repair: auto}` — the validator detects schema-echo payloads and the repair loop regenerates |
-| Empty object | LLM returned `{}` | Same fix — empty objects are now rejected when the schema declares fields |
+| Empty object | LLM returned `{}` | Same fix — empty objects are rejected when the schema declares fields |
 | Existing poison | Bad data already in `target_data` from a previous run | Re-run the upstream action with a repair policy, or manually clean the SQLite row |
 
-**Behavior:** When a single record has corrupted namespace data, that record is skipped and processing continues for the remaining records in the file. The skipped record is logged at WARNING level. This prevents one bad record from failing an entire file of valid records.
+**Behavior:** When a single record has incomplete namespace data, the framework logs a WARNING (`Record <source_guid> prep failed (context incomplete)`), stores that record as failed, and continues with the remaining records in the file. One bad record does not fail an entire file of valid records.
 
 ### AgentActionsError
 
 Top-level agentic workflow failure. This wraps other errors to provide the full context of what went wrong.
 
 ```
-AgentActionsError: Error generating target: Failed to process content
-[Context: file_path=/path/to/data.json,
-         agent_name=my_workflow]
+AgentActionsError: Error generating target: <underlying error>
+[Context: file_path=/path/to/data.json, agent_name=my_workflow, ...]
 ```
 
 ## Common Errors & Fixes
@@ -187,18 +173,14 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
 18 is not of type 'string'
 ```
 
-**Cause:** Integer value where string expected.
+**Cause:** The tool returned an integer where the action's `schema:` declares a string.
 
 **Fix:** Convert in your tool:
 ```python
 data['field'] = str(data['field'])
 ```
 
-Or fix the TypedDict:
-```python
-# If the field can be int or string
-field: Union[int, str]
-```
+Or change the field's type in the action's `schema:`.
 
 ---
 
@@ -227,16 +209,11 @@ if isinstance(answer_text, str):
 'new_field' was unexpected
 ```
 
-**Cause:** Field exists in data but not declared in TypedDict.
+The full message reads `Additional properties are not allowed ('new_field' was unexpected)`.
 
-**Fix:** Add field to TypedDict:
-```python
-class MyInput(TypedDict, total=False):
-    existing_field: str
-    new_field: str  # Add the missing field
-```
+**Cause:** The tool returned a field that the action's `schema:` does not declare.
 
-Or use `total=False` to allow any fields.
+**Fix:** Declare the field in the action's `schema:`, or remove it from the tool's return value.
 
 ---
 
@@ -247,16 +224,9 @@ Or use `total=False` to allow any fields.
 'greater_than' is not of type 'integer'
 ```
 
-**Cause:** Using `Dict[str, int]` but values include strings.
+**Cause:** The schema constrains the values of an object field to one type (for example `additionalProperties: {type: integer}`), but the tool returned a string value.
 
-**Fix:** Use plain `dict` for mixed-type dictionaries:
-```python
-# BAD - Fails if values include strings
-target_word_counts: Dict[str, int]
-
-# GOOD - Allows any structure
-target_word_counts: dict
-```
+**Fix:** Return values of the declared type, or loosen the field in the schema file to a plain `type: object`.
 
 ---
 
@@ -267,7 +237,7 @@ target_word_counts: dict
 'question' is a required property
 ```
 
-**Cause:** Schema requires field but tool didn't return it. When the tool sets the field only inside a branch, pre-flight usually refuses the workflow before it runs and names the line; see [Required Output Field Set Only in a Branch](../reference/tools/index.md#required-output-field-set-only-in-a-branch).
+**Cause:** The action's `schema:` requires the field but the tool didn't return it. When the tool sets the field only inside a branch, pre-flight usually refuses the workflow before it runs and names the line; see [Required Output Field Set Only in a Branch](../reference/tools/index.md#required-output-field-set-only-in-a-branch).
 
 **Fix:** Ensure tool returns all required fields:
 ```python
@@ -368,11 +338,10 @@ When an error occurs, resist the urge to start changing code immediately. Follow
 
 Extract key information from the error message. Agent Actions provides structured error context—use it:
 
-1. **What type?** `SchemaValidationError`, `ProcessingError`, etc.
-2. **Which field?** Look at `error_path`
-3. **What value?** Look at `failed_value`
-4. **What expected?** Look at `schema_constraint`
-5. **Which action?** Look at `function` or `agent_name`
+1. **What type?** `SchemaValidationError`, `AgentActionsError`, etc.
+2. **Which field?** Look at the path after `at` in the message (`error_path`)
+3. **What value and what expected?** Read the end of the message (`failed_value`, `schema_constraint`)
+4. **Which action?** Look at the action name the error prefixes, or `function` and `agent_name`
 
 ### Step 2: Find the Source Record
 
@@ -433,22 +402,22 @@ Array of all node_ids visited. Grows at each node.
 
 ```json
 "lineage": [
-  "node_0_693094fb-53d1-48d6-bdc9-781a4989d35c",
-  "node_1_361c54c6-7080-4527-9a00-aaeccfd0e6ba_0",
-  "node_2_e546c260-de10-4f20-8950-e09f01ea468f"
+  "extract_raw_qa_693094fb-53d1-48d6-bdc9-781a4989d35c",
+  "flatten_questions_361c54c6-7080-4527-9a00-aaeccfd0e6ba_0",
+  "classify_type_e546c260-de10-4f20-8950-e09f01ea468f"
 ]
 ```
 
-The `_0` suffix indicates this was the first record from a flattening operation.
+The `_0` suffix indicates this was the first record from an action that returned several records for one input.
 
 ### node_id
 
 Identifies the specific processing node:
 
 ```
-node_0_693094fb-...          # Single output
-node_1_361c54c6-..._0        # Flattened, index 0
-node_1_361c54c6-..._1        # Flattened, index 1
+classify_ticket_693094fb-...       # Single output
+seed_rows_361c54c6-..._0           # Expansion, index 0
+seed_rows_361c54c6-..._1           # Expansion, index 1
 ```
 
 ### Action Output Storage
@@ -467,37 +436,14 @@ Typical layout for a multi-action workflow:
 
 ```
 target_data
-├── action_name='node_0_extract_raw_qa'      relative_path='input.json'  record_count=42
-├── action_name='node_1_flatten_questions'   relative_path='input.json'  record_count=128
-├── action_name='node_2_classify_type'       relative_path='input.json'  record_count=128
-└── action_name='final_workflow_output'      relative_path='input.json'  record_count=128
+├── action_name='extract_raw_qa'      relative_path='input.json'  record_count=42
+├── action_name='flatten_questions'   relative_path='input.json'  record_count=128
+└── action_name='classify_type'       relative_path='input.json'  record_count=128
 ```
 
-## TypedDict Best Practices
+## Reading Namespaced Fields in a Tool
 
-### Use `total=False` for Optional Fields
-
-```python
-class MyInput(TypedDict, total=False):
-    required_field: str  # Still works, just not enforced
-    optional_field: str
-```
-
-### Use Plain `dict` for Mixed Types
-
-```python
-# When dict values can be int, string, or other types
-metadata: dict  # Not Dict[str, int]
-```
-
-### Use Union for Polymorphic Fields
-
-```python
-# When a field can be different types
-answer_text: Union[str, List[str]]
-```
-
-### Access Namespaced Fields
+A tool receives the fields it observes, nested under each action name:
 
 ```python
 @udf_tool()
@@ -565,7 +511,7 @@ Events are JSON Lines. Structured fields live under the `.data` object
 
 ```bash
 # Find all schema validation errors
-jq -c 'select(.message | test("SchemaValidationError"))' agent_io/logs/events.json
+jq -c 'select(.message | test("schema validation failed"))' agent_io/logs/events.json
 
 # Find events for a specific action
 jq -c 'select(.data.action_name == "add_answer_text")' agent_io/logs/events.json
@@ -601,11 +547,11 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 
 | Error Pattern | Quick Fix |
 |---------------|-----------|
-| `X is not of type 'string'` | `str(value)` or `Union[int, str]` |
+| `X is not of type 'string'` | `str(value)` or change the type in the action's `schema:` |
 | `X is not of type 'array'` | `[value] if isinstance(value, str) else value` |
-| `X was unexpected` | Add field to TypedDict |
+| `X was unexpected` | Declare the field in the action's `schema:` or stop returning it |
 | `X is a required property` | Return field from tool or use `expect: {repair: auto}` |
-| `Dict[str, int]` fails | Use plain `dict` |
+| `X is not of type 'integer'` inside an object field | Return values of the declared type or loosen the field to `type: object` |
 
 ### Debug Checklist
 
@@ -614,7 +560,7 @@ When debugging agentic workflow errors, work through this checklist:
 1. [ ] Read full error message, note `error_path` and `failed_value`
 2. [ ] Find record by `source_guid` in node outputs
 3. [ ] Compare data before/after failing action
-4. [ ] Check TypedDict matches actual data shape
+4. [ ] Check the fields the tool returns match the action's `schema:`
 5. [ ] Enable `prompt_debug: true` for LLM actions
 6. [ ] Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG` for tracebacks
 7. [ ] Consider `expect: {repair: auto, max_iterations: 3}` for LLM schema failures

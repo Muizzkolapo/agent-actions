@@ -46,30 +46,37 @@ function InstallButton() {
 
 const YAML_LINES: {h?: boolean; html: string}[] = [
   {html: '<span style="color:#5ccfe6">name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">document-analysis</span>'},
+  {html: '<span style="color:#5ccfe6">description</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">"Extract facts and summarize them"</span>'},
   {html: '<span style="color:#5ccfe6">defaults</span><span style="color:#7c878e">:</span>'},
   {html: '  <span style="color:#5ccfe6">model_vendor</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">openai</span>'},
   {html: '  <span style="color:#5ccfe6">model_name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">gpt-4o-mini</span>'},
   {html: ''},
   {html: '<span style="color:#5ccfe6">actions</span><span style="color:#7c878e">:</span>'},
   {html: '  <span style="color:#7c878e">-</span> <span style="color:#5ccfe6">name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">extract</span>'},
-  {html: '    <span style="color:#5ccfe6">prompt</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">$prompts.Extract</span>'},
+  {html: '    <span style="color:#5ccfe6">intent</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">"Extract key facts"</span>'},
+  {html: '    <span style="color:#5ccfe6">prompt</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">$document-analysis.Extract</span>'},
   {html: '    <span style="color:#5ccfe6">schema</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">facts_schema</span>'},
+  {html: '    <span style="color:#5ccfe6">context_scope</span><span style="color:#7c878e">:</span>'},
+  {html: '      <span style="color:#5ccfe6">observe</span><span style="color:#7c878e">:</span> <span style="color:#7c878e">[</span><span style="color:#e2e8ec">source.content</span><span style="color:#7c878e">]</span>'},
   {html: '  <span style="color:#7c878e">-</span> <span style="color:#5ccfe6">name</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">summarize</span>'},
-  {h: true, html: '    <span style="color:#5ccfe6">dependencies</span><span style="color:#7c878e">:</span> <span style="color:#e2e8ec">extract</span>'},
-  {html: '    <span style="color:#5ccfe6">prompt</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">$prompts.Summarize</span>'},
+  {html: '    <span style="color:#5ccfe6">intent</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">"Summarize the facts"</span>'},
+  {h: true, html: '    <span style="color:#5ccfe6">dependencies</span><span style="color:#7c878e">:</span> <span style="color:#7c878e">[</span><span style="color:#e2e8ec">extract</span><span style="color:#7c878e">]</span>'},
+  {html: '    <span style="color:#5ccfe6">prompt</span><span style="color:#7c878e">:</span> <span style="color:#5ef0a6">$document-analysis.Summarize</span>'},
+  {html: '    <span style="color:#5ccfe6">context_scope</span><span style="color:#7c878e">:</span>'},
+  {html: '      <span style="color:#5ccfe6">observe</span><span style="color:#7c878e">:</span> <span style="color:#7c878e">[</span><span style="color:#e2e8ec">extract.facts</span><span style="color:#7c878e">]</span>'},
 ];
 
 const FEATURES = [
   {ic: IC.layers, n: '01', t: 'Action composition', d: 'Define actions in YAML with explicit dependencies. The engine resolves the execution order — each domino knows when to fall.'},
-  {ic: IC.check, n: '02', t: 'Schema validation', d: 'Every LLM output is validated against a declared schema. Failed validations trigger auto-retry with error context.'},
+  {ic: IC.check, n: '02', t: 'Schema validation', d: 'Every action output is validated against its declared schema. With an `expect:` block, output that fails validation is regenerated.'},
   {ic: IC.repeat, n: '03', t: 'Built-in repair', d: 'Declare expectations and the framework regenerates failing output, up to a configurable number of iterations. A failed domino doesn’t break the chain — it tries again.'},
 ];
 
 const QNAV = [
-  {path: 'get-started/', ic: IC.play, t: 'Get started', d: 'Install agent-actions and run your first workflow in 30 seconds.', c: '2 docs', to: '/docs/installation'},
+  {path: 'get-started/', ic: IC.play, t: 'Get started', d: 'Install agent-actions and run your first workflow.', c: '2 docs', to: '/docs/installation'},
   {path: 'tutorials/', ic: IC.layers, t: 'Key concepts', d: 'Actions, dependencies, schemas, context scoping, and the execution DAG.', c: 'tutorial', to: '/docs/tutorials/concepts'},
-  {path: 'guides/', ic: IC.repeat, t: 'Design patterns', d: 'Fan-out, consensus aggregation, gating, retries, and multi-provider chains.', c: '5 guides', to: '/docs/guides/design-patterns'},
-  {path: 'reference/cli/', ic: IC.terminal, t: 'CLI reference', d: 'Every command and flag for the agac binary, end to end.', c: 'reference', to: '/docs/reference/cli'},
+  {path: 'guides/', ic: IC.repeat, t: 'Design patterns', d: 'Sequential pipelines, parallel processing, map-reduce, conditional routing, review loops, and iterative refinement.', c: '5 guides', to: '/docs/guides/design-patterns'},
+  {path: 'reference/cli/', ic: IC.terminal, t: 'CLI reference', d: 'Reference for each agac command.', c: 'reference', to: '/docs/reference/cli'},
 ];
 
 export default function Home(): JSX.Element {

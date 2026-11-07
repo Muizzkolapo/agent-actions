@@ -5,13 +5,13 @@ sidebar_position: 4
 
 # Data Lineage
 
-> **Storage backend:** SQLite as of v0.2.6. File paths under `agent_io/target/.../data.json` in older snippets are stale; this page uses the current SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`, where each row's `data` column is a JSON array of records).
+> **Storage backend:** SQLite. This page uses the SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`, where each row's `data` column is a JSON array of records).
 
 How does Agent Actions track data as it flows through parallel branches, merges, and splits? The **Ancestry Chain** provides complete lineage tracking that enables complex workflow patterns like Diamond, Map-Reduce, and Ensemble voting.
 
 ## Overview
 
-Every record in Agent Actions carries lineage metadata:
+Every record in Agent Actions carries lineage metadata. This record comes from an action below the first:
 
 ```json
 {
@@ -35,8 +35,8 @@ Every record in Agent Actions carries lineage metadata:
 |-------|---------|----------|
 | `source_guid` | Correlates records from same source file | Basic file-level grouping |
 | `target_id` | Unique identifier for this specific record | Individual record tracking |
-| `parent_target_id` | Links to immediate parent record | **Parallel branch merge** (Diamond pattern) |
-| `root_target_id` | Links to original ancestor record | **Map-Reduce** aggregation |
+| `parent_target_id` | Links to immediate parent record (absent on the first action's records) | **Parallel branch merge** (Diamond pattern) |
+| `root_target_id` | Links to the first action's record for the same source record (absent on the first action's records) | **Map-Reduce** aggregation |
 | `lineage` | Array of node IDs this record passed through | Sequential chain tracking |
 
 ## How It Works
@@ -48,20 +48,19 @@ When a record flows through an action, the ancestry chain propagates automatical
 **Propagation Rules:**
 1. `target_id` = new UUID (unique for each output)
 2. `parent_target_id` = input's `target_id` (links to immediate parent)
-3. `root_target_id` = input's `root_target_id` (preserves original ancestor)
+3. `root_target_id` = input's `root_target_id`; when the input has none (it is the first action's record), the input's `target_id`
 
 ### First Record (Root)
 
-When a record first enters the pipeline:
+The record the first action writes is the root. It carries `target_id` and has neither `parent_target_id` nor `root_target_id`:
 
 ```json
 {
-  "target_id": "ROOT-UUID",
-  "root_target_id": "ROOT-UUID"
+  "target_id": "ROOT-UUID"
 }
 ```
 
-The first record is its own root—`root_target_id` equals `target_id`. Note that
+Every record below it takes the root's `target_id` as its `root_target_id`. Note that
 `parent_target_id` is **absent** on root records (not `null`): use a presence check
 (`"parent_target_id" in record`), not `record["parent_target_id"] is None`.
 
@@ -87,7 +86,7 @@ actions:
     dependencies: [generate_seo, generate_recommendations, assess_reading_level]
 ```
 
-**How matching works:** All three parallel branches share the same `parent_target_id` (the `validate` action's `target_id`). When `score_quality` runs, it queries for records with that `parent_target_id` and finds all siblings.
+**How matching works:** All three parallel branches share the same `parent_target_id` (the `validate` action's `target_id`). When `score_quality` runs, it pairs the branches' records by a shared key: the first of `version_correlation_id`, `source_guid`, `root_target_id` and `parent_target_id` that every record holds. For a plain diamond that key is `source_guid`. The merged record takes its `parent_target_id` from the first branch's record.
 
 ### Accessing Parallel Outputs
 
@@ -123,7 +122,7 @@ actions:
     impl: aggregate_results
 ```
 
-**How matching works:** All chunks preserve the original document's `root_target_id`. The aggregate action queries by `root_target_id` to collect all descendants.
+**How matching works:** Each chunk a tool writes takes a new `target_id` and a new `source_guid`, with the input record's `target_id` as its `parent_target_id`. A tool below the first action passes the input's `root_target_id` to every chunk, so all chunks of one record share it. A tool that is the first action, as `chunk_document` is here, writes root records: its chunks have no `root_target_id`, and the records below take each chunk's own `target_id` as their root.
 
 ## Ensemble/Voting Pattern
 
@@ -149,7 +148,7 @@ actions:
     dependencies: [gpt4_answer, claude_answer, gemini_answer]
 ```
 
-All three model responses share the same `parent_target_id`, enabling `best_answer` to access all of them for comparison.
+All three model responses share the same `parent_target_id`, and `best_answer` receives them merged into one record for comparison.
 
 ## Conditional Merge
 
@@ -232,7 +231,7 @@ The store keeps records compressed, so read them with [`agac records`](../cli/re
 
 ### Inspect Record Ancestry
 
-Every record carries `source_guid`, `target_id`, `parent_target_id`, `root_target_id` and `lineage`:
+Every record carries `source_guid`, `target_id` and `lineage`. Records below the first action also carry `parent_target_id` and `root_target_id`:
 
 ```bash
 agac records -w <workflow> -a merge
@@ -251,11 +250,11 @@ done
 
 ### Trace Root Ancestry
 
-For Map-Reduce, verify all chunks trace back to the same root:
+For Map-Reduce with a splitting tool below the first action, verify all chunks of one record trace back to the same root:
 
 ```bash
 agac records -w <workflow> -a process_chunk --field root_target_id
-# Every value should be the same UUID
+# Every value for chunks of one record should be the same UUID
 ```
 
 ## See Also

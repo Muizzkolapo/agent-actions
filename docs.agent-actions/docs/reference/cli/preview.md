@@ -77,19 +77,19 @@ agac preview -w my_workflow --stats
 
 ### Table Format (default)
 
-Displays records in a formatted table with key fields:
+Displays one row per record, numbered from the offset. With `-a`, the columns are the action's output fields, sorted by name and capped at the first six. Without `-a`, the command lists the actions that have stored data instead.
 
 ```
-┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ source_guid ┃ node_id            ┃ content                                  ┃
-┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ abc123      │ extract_facts_def4 │ {"facts": ["fact1", "fact2"]}           │
-└─────────────┴────────────────────┴──────────────────────────────────────────┘
+┏━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
+┃ # ┃ id     ┃ saw_keys                      ┃ saw_score ┃ saw_secret ┃ score ┃
+┡━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━┩
+│ 1 │ keep-1 │ id,saw_source_keys,score,tier │ True      │ False      │ 90    │
+└───┴────────┴───────────────────────────────┴───────────┴────────────┴───────┘
 ```
 
 ### JSON Format
 
-Full record data as JSON array:
+Full record data as a JSON array, including lineage and metadata fields:
 
 ```bash
 agac preview -w my_workflow -a extract_facts -f json

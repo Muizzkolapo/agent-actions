@@ -9,9 +9,9 @@ slug: /
 
 An agentic workflow engine that runs in your terminal. Define LLM pipelines in YAML, and the engine handles orchestration, validation, and error recovery.
 
-## Get started in 30 seconds
+## Get started
 
-**Prerequisites:** Python 3.11+ and an API key from any supported provider (OpenAI, Anthropic, Gemini, Groq, Ollama).
+**Prerequisites:** Python 3.11+ and an API key from any supported provider (OpenAI, Anthropic, Gemini, Groq, Cohere, Ollama).
 
 **Install Agent Actions:**
 
@@ -29,7 +29,7 @@ cd your-project
 agac run -a my_workflow
 ```
 
-That's it! Continue with [Quickstart (5 minutes)](./tutorials/) →
+That's it! Continue with [Quickstart](./tutorials/) →
 
 See [Installation](./installation.md) for configuration options or [Troubleshooting](./guides/troubleshooting.md) if you hit issues.
 
@@ -51,9 +51,9 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 
 **Build pipelines from YAML:** Define your workflow in plain YAML. Agent Actions handles DAG orchestration, parallelization, and dependency resolution.
 
-**Validate every output:** Every LLM response is validated against JSON Schema. An `expect:` block regenerates output that does not conform.
+**Validate every output:** Each action's output is validated against its JSON Schema. An `expect:` block regenerates output that does not conform, up to `max_iterations` times.
 
-**Mix and match providers:** Chain OpenAI, Anthropic, Gemini, Groq, and Ollama in the same workflow. Switch models per-action.
+**Mix and match providers:** Chain OpenAI, Anthropic, Gemini, Groq, Cohere, and Ollama in the same workflow. Switch models per-action.
 
 **Catch errors before they cost you:** Pre-flight validation checks your config, variables, and dependency wiring before any API calls are made.
 
@@ -62,20 +62,33 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 Write a YAML config:
 
 ```yaml
+name: fact_summary
+description: "Extract key facts and summarize them"
+
 actions:
   - name: extract
+    intent: "Extract key facts"
     prompt: "Extract key facts from: {{ source.content }}"
     schema: facts_schema
+    context_scope:
+      observe:
+        - source.content
 
   - name: summarize
+    intent: "Summarize the facts"
     dependencies: [extract]
     prompt: "Summarize: {{ extract.facts }}"
+    context_scope:
+      observe:
+        - extract.facts
 ```
+
+Here `facts_schema` is a schema file that defines a `facts` field. The workflow file is `fact_summary.yml`.
 
 Run it:
 
 ```bash
-agac run -a my_workflow
+agac run -a fact_summary
 ```
 
 ## Next steps

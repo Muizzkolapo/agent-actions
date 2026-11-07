@@ -29,7 +29,7 @@ actions:
 ```
 
 When the agentic workflow reaches this action:
-1. A browser UI opens at `http://localhost:3001`
+1. The terminal prints `HITL approval UI ready at: http://localhost:3001`. Open that URL in your browser.
 2. Workflow pauses and waits for your decision
 3. You review each record and approve/reject
 4. After submitting, the workflow continues automatically
@@ -53,7 +53,8 @@ sequenceDiagram
 
     W->>C: Execute HITL action
     C->>S: Start server on localhost:3001
-    S->>B: Open review UI
+    S-->>W: Print the review URL
+    B->>S: Open the review URL
     Note over W,C: Workflow blocks, waiting for response
     B->>S: User approves/rejects records
     B->>S: Submit reviews
@@ -70,10 +71,14 @@ The browser UI provides:
 - **Keyboard shortcuts**:
   - `A` - Approve current record
   - `R` - Reject current record
-  - `←/→` - Navigate between records
-- **View toggles**:
-  - **Fields view**: Structured display of record fields
-  - **JSON view**: Raw JSON for debugging
+  - `J` / `↓` - Next record
+  - `K` / `↑` - Previous record
+  - `S` - Skip to the next pending record
+  - `N` - Focus the reviewer note
+  - `?` - Show the shortcut list
+- **Inspector tabs**:
+  - **Review**: Structured display of the record and your decision
+  - **JSON**: Raw JSON for debugging
 - **Progress tracking**: Visual progress bar and stats (pending/approved/rejected)
 - **State persistence**: Refresh the page without losing your reviews
 - **Auto-shutdown**: Server closes automatically after submission
@@ -373,48 +378,23 @@ Field names are case-sensitive. Verify the exact field name in your data:
 
 `passthrough_on_error: true` (the default) does **not** rescue a field the clause cannot find. A missing field is reclassified as *not matched*, so `on_false` applies; and a bare field name that exists inside a namespace is a semantic error, which bypasses `passthrough_on_error` altogether. Either way the item is filtered or skipped, not passed through. The same is true when the field resolves to `None` and the comparison merely evaluates to `False`.
 
-### Check Server Logs
+### Find the Review URL
 
-HITL logs appear in workflow output:
+The server prints the review URL to the terminal when it starts:
 
 ```
-13:45:32 | Action 'review_data': Starting HITL server...
-13:45:32 | 🔍 APPROVAL REQUIRED
-13:45:32 | ============================================================
-13:45:32 | Open this URL in your browser:
-13:45:32 |   http://localhost:3001
-13:45:32 | ============================================================
+  HITL approval UI ready at: http://localhost:3001
 ```
 
-### Browser Console Debugging
-
-Open DevTools (F12) → Console to see:
-
-```javascript
-// When saving a decision:
-Persisted decision for record 0: approved
-
-// When refreshing (state restoration):
-Loaded review state from server: {record_count: 3, record_reviews: [...]}
-Restored 2 of 3 reviews from server
-
-// If restoration fails:
-Failed to restore review state: <error details>
-```
+The framework does not open the browser for you.
 
 ### State Refresh Issue
 
-If refreshing the page shows all records as "pending":
+The server saves each decision to a state file under the action's output directory, in `hitl/.hitl_reviews_<hash>.json`, and the page reloads its decisions from `/api/review-state`. If refreshing the page shows all records as "pending":
 
-1. **Check browser console** for errors
-2. **Check server logs** for `/api/review-state` requests
-3. **Verify persistence** by checking if decisions were saved:
-   - Approve a record
-   - Check console: `Persisted decision for record 0: approved`
-   - Refresh page
-   - Check console: `Restored 1 of 3 reviews from server`
-
-If state isn't restoring, the console will show the error.
+1. **Check browser console** for the warning `Could not restore review state`.
+2. **Check the state file** exists and holds your decisions.
+3. **Check the run log** for `HITL state file record count mismatch ... starting fresh`. The server discards a state file whose record count differs from the current records.
 
 ### Port Conflicts
 
@@ -537,18 +517,16 @@ from agent_actions.llm.providers.hitl.client import HitlClient
 
 def test_workflow_with_hitl(monkeypatch):
     # Mock HITL to auto-approve
-    def mock_invoke(self, context, config):
+    def mock_invoke(agent_config, context_data, tool_args=None, source_content=None):
         return {
             "hitl_status": "approved",
             "user_comment": "Auto-approved for testing",
             "timestamp": "2026-02-12T10:00:00Z"
         }
 
-    monkeypatch.setattr(HitlClient, "invoke", mock_invoke)
+    monkeypatch.setattr(HitlClient, "invoke", staticmethod(mock_invoke))
 
-    # Run workflow - HITL will auto-approve
-    result = run_workflow("workflow.yml")
-    assert result.success
+    # Run the workflow here; every HITL action receives this decision.
 ```
 
 ## See Also

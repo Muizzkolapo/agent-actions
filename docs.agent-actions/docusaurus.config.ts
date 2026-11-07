@@ -102,7 +102,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/Muizzkolapo/agent-actions/tree/main/agentaction-docs/',
+            'https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/',
         },
         blog: {
           showReadingTime: true,
@@ -113,7 +113,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/Muizzkolapo/agent-actions/tree/main/agentaction-docs/',
+            'https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -205,17 +205,13 @@ const config: Config = {
             },
             {
               label: 'Changelog',
-              href: 'https://github.com/Muizzkolapo/agent-actions/releases',
+              href: 'https://github.com/Muizzkolapo/agent-actions/blob/main/CHANGELOG.md',
             },
           ],
         },
         {
           title: 'Community',
           items: [
-            {
-              label: 'Discussions',
-              href: 'https://github.com/Muizzkolapo/agent-actions/discussions',
-            },
             {
               label: 'Contributing',
               href: 'https://github.com/Muizzkolapo/agent-actions/blob/main/CONTRIBUTING.md',

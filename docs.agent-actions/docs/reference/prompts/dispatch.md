@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Dynamic Dispatch
 
-The `dispatch_task()` function calls tools at template render time, enabling data-driven selection of prompts, schemas, or configuration values.
+The `dispatch_task()` function calls a tool at template render time, so a prompt's text can depend on the record.
 
 ## Basic Usage
 
@@ -17,13 +17,9 @@ dispatch_task('handle_quiz_type')
 {end_prompt}
 ```
 
-### In Schemas
-
-```yaml
-- name: generate_question
-  prompt: $quiz_gen.ScenarioGenerator_prompt
-  schema: dispatch_task('select_output_schema')
-```
+:::caution Not supported in `schema:`
+A `schema: dispatch_task('...')` value is not resolved. `agac inspect` accepts it, but the run looks for a schema file with that name and fails with `Schema file 'dispatch_task('...')' not found`. Use a named or inline schema.
+:::
 
 ## Creating a Dispatch Tool
 
@@ -34,7 +30,7 @@ from agent_actions import udf_tool
 
 
 @udf_tool
-def handle_quiz_type(input_data: str) -> dict:
+def handle_quiz_type(input_data: str) -> str:
     """Return appropriate authoring prompt based on quiz type."""
     context = json.loads(input_data)
     quiz_type = context["source"]["quiz_type"].upper()
@@ -44,20 +40,16 @@ def handle_quiz_type(input_data: str) -> dict:
         "APPLICATION": "Generate a practical question...",
     }
 
-    return {
-        "authoring_prompt": prompts.get(quiz_type, prompts["APPLICATION"]),
-        "quiz_type_used": quiz_type,
-    }
+    return prompts.get(quiz_type, prompts["APPLICATION"])
 ```
 
-The tool receives a JSON-encoded context string (source fields, seed data, upstream outputs); decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call.
+In a prompt, the tool receives the action's LLM context as a JSON-encoded string: the namespaces and fields the action observes. Decode it with `json.loads()` and read fields from the resulting dict. The return value replaces the `dispatch_task()` call as text (`str()` of the value), so return a string; a dict would appear as its Python repr. A tool that returns `None` fails with `dispatch_task('<name>') returned None. The function must return a value.`
 
 ## When to Use Dispatch
 
 | Use dispatch when | Use Jinja2 when |
 |-------------------|-----------------|
 | Complex conditional logic | Simple if/else |
-| Schema structure depends on input | Minor text variations |
 | Unit-testable Python needed | Template-level logic sufficient |
 
 ## See Also

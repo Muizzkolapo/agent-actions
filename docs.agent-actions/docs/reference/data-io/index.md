@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Data I/O
 
-> **Storage backend:** SQLite as of v0.2.6. All source and target records live in a single SQLite database per workflow at `agent_io/store/<workflow>.db`. Older snippets that reference `agent_io/source/` and `agent_io/target/` directories as the record store are stale. `agent_io/staging/` holds your input as on-disk JSON; `agent_io/source/` is no longer written at all, and a directory left by an earlier version holds nothing the framework reads.
+> **Storage backend:** SQLite. All source and target records live in a single SQLite database per workflow at `agent_io/store/<workflow>.db`. `agent_io/staging/` holds your input as on-disk files. The framework does not write `agent_io/source/`.
 
 Every agentic workflow needs data to flow in, through, and out. Agent Actions uses a standardized layout that makes this flow predictable and traceable.
 
@@ -26,7 +26,7 @@ agent_workflow/
 ```
 
 :::tip Storage Backend
-SQLite is the only supported storage backend. Source records, target records, dispositions, prompt traces, and checkpoint outputs all live in `agent_io/store/<workflow>.db`. Only `staging/` remains as on-disk JSON because that is what users place by hand.
+SQLite is the only supported storage backend. Source records, target records, dispositions, prompt traces, and checkpoint outputs all live in `agent_io/store/<workflow>.db`. Only `staging/` remains as on-disk files because that is what users place by hand.
 :::
 
 ### staging/
@@ -86,9 +86,9 @@ Let's trace how a document moves through an agentic workflow:
 flowchart LR
     ST[staging/] --> SR[source_data]
     SR --> A1[Action 1]
-    A1 --> T1[target_data: action_name='node_0']
+    A1 --> T1[target_data: action_name='action_1']
     T1 --> A2[Action 2]
-    A2 --> T2[target_data: action_name='node_1']
+    A2 --> T2[target_data: action_name='action_2']
 ```
 
 Here is what happens at each stage:
@@ -107,14 +107,15 @@ All workflow data lives in `agent_io/store/<workflow>.db`. The framework manages
 
 ### SQLite Database Schema
 
-The database carries five framework-owned tables:
+The database carries six framework-owned tables:
 
 | Table                | Purpose                                                                            |
 |----------------------|------------------------------------------------------------------------------------|
 | `source_data`        | Source records, deduplicated by `(relative_path, source_guid)`                     |
 | `target_data`        | Per-action output records, one row per `(action_name, relative_path)`              |
-| `record_disposition` | Per-record dispositions (success/failed/exhausted/skipped) emitted by each action  |
+| `record_disposition` | Per-record dispositions (`success`, `failed`, `exhausted`, `skipped`, `filtered`, `passthrough`, `deferred`, `unprocessed`) emitted by each action  |
 | `prompt_trace`       | Compiled prompt + LLM response per record per attempt (online and batch)           |
+| `prompt_trace_dictionary` | Compression dictionaries for the text columns of `prompt_trace`              |
 | `checkpoint_output`  | Mid-action checkpoint records (resumable batch retrieval and repair recovery)     |
 
 Plus a `workflow_metadata` bookkeeping table for run-level key/value state.

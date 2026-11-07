@@ -41,6 +41,7 @@ defaults:
 
 actions:
   - name: extract_requirements
+    intent: "Extract requirements"
     prompt: |
       Analyze this job posting and extract structured requirements.
 
@@ -55,8 +56,12 @@ actions:
       responsibilities: array
       team_context: string
       years_experience_mentioned: number
+    context_scope:
+      observe:
+        - source.raw_posting
 
   - name: rewrite_for_inclusivity
+    intent: "Rewrite for inclusivity"
     dependencies: [extract_requirements]
     prompt: |
       Rewrite this job posting to be more inclusive and welcoming.
@@ -72,8 +77,14 @@ actions:
       rewritten_posting: string
       changes_made: array
       inclusivity_score: number
+    context_scope:
+      observe:
+        - source.raw_posting
+        - extract_requirements.must_have_skills
+        - extract_requirements.nice_to_have_skills
 
   - name: generate_interview_questions
+    intent: "Generate interview questions"
     dependencies: [rewrite_for_inclusivity]
     prompt: |
       Generate structured interview questions for this role.
@@ -85,21 +96,24 @@ actions:
       Create 5 behavioral and 3 technical questions.
       Each question should map to a specific requirement.
     schema:
-      behavioral_questions:
-        type: array
-        items: string
-        minItems: 5
-      technical_questions:
-        type: array
-        items: string
-        minItems: 3
+      behavioral_questions: array
+      technical_questions: array
       skill_mapping: object
+    context_scope:
+      observe:
+        - rewrite_for_inclusivity.rewritten_posting
+        - extract_requirements.role_title
+        - extract_requirements.must_have_skills
+        - extract_requirements.responsibilities
 
   - name: format_posting
     dependencies: [generate_interview_questions]
     kind: tool
     impl: format_job_package
     intent: "Package optimized posting with interview kit"
+    schema:
+      optimized_posting: string
+      interview_kit: object
     context_scope:
       observe:
         - rewrite_for_inclusivity.*
@@ -219,6 +233,8 @@ actions:
     kind: tool
     impl: calculate_composite_score
     intent: "Compute weighted composite score from parallel assessments"
+    schema:
+      composite_score: number
     context_scope:
       observe:
         - assess_skills.*
@@ -282,8 +298,15 @@ actions:
     kind: tool
     impl: split_contract_by_clause
     intent: "Split contract into individual clauses for analysis"
+    schema:
+      clause_text: string
+      clause_number: integer
+    context_scope:
+      observe:
+        - source.contract_text
 
   - name: analyze_clause
+    intent: "Analyze clause"
     dependencies: [split_into_clauses]
     prompt: |
       Analyze this contract clause for risk, obligations, and deadlines.
@@ -302,15 +325,25 @@ actions:
       obligations: array
       deadlines: array
       unusual_terms: array
+    context_scope:
+      observe:
+        - split_into_clauses.clause_text
+        - split_into_clauses.clause_number
 
   - name: aggregate_risk_summary
     dependencies: [analyze_clause]
     kind: tool
     impl: aggregate_clause_analyses
+    granularity: File
     intent: "Combine clause analyses into unified risk report"
+    schema:
+      risk_report: object
+    context_scope:
+      observe:
+        - analyze_clause.*
 ```
 
-The `root_target_id` field preserves document identity through all splits, enabling the aggregate action to collect all clauses belonging to the same contract.
+The aggregate action sets `granularity: File`, so one call receives every analyzed clause of the input file. A tool action without it runs once per record.
 
 **Advantages:**
 - Handles arbitrarily large inputs
@@ -351,6 +384,7 @@ defaults:
 
 actions:
   - name: classify_order
+    intent: "Classify order"
     prompt: |
       Analyze this order and determine its processing path.
 
@@ -363,6 +397,11 @@ actions:
       order_status: string
       reasoning: string
       priority: string
+    context_scope:
+      observe:
+        - source.order_details
+        - source.customer_message
+        - source.inventory_status
 
   # Only runs for in-stock orders
   - name: fulfill_order
@@ -411,6 +450,9 @@ actions:
       refund_amount: string
       refund_method: string
       confirmation_message: string
+    context_scope:
+      observe:
+        - classify_order.*
 ```
 
 **Advantages:**
@@ -455,6 +497,7 @@ defaults:
 
 actions:
   - name: draft_copy
+    intent: "Draft copy"
     prompt: |
       Write marketing copy for this campaign:
 
@@ -471,6 +514,7 @@ actions:
       tone: string
 
   - name: critique_against_guidelines
+    intent: "Critique against guidelines"
     dependencies: [draft_copy]
     prompt: |
       Review this marketing copy against our brand guidelines.
@@ -503,6 +547,7 @@ actions:
         - source.channel
 
   - name: finalize
+    intent: "Finalize"
     dependencies: [critique_against_guidelines]
     guard:
       condition: 'critique_against_guidelines.approved == true'
@@ -519,8 +564,15 @@ actions:
       final_headline: string
       final_body: string
       final_cta: string
+    context_scope:
+      observe:
+        - draft_copy.headline
+        - draft_copy.body_copy
+        - draft_copy.call_to_action
+        - critique_against_guidelines.approved
 
   - name: revise
+    intent: "Revise"
     dependencies: [critique_against_guidelines]
     guard:
       condition: 'critique_against_guidelines.approved == false'
@@ -541,6 +593,11 @@ actions:
       revised_body: string
       revised_cta: string
       changes_made: array
+    context_scope:
+      observe:
+        - draft_copy.*
+        - critique_against_guidelines.feedback
+        - critique_against_guidelines.issues
 ```
 
 **Advantages:**
@@ -562,6 +619,7 @@ Repeatedly improve output until quality thresholds are met. Use an `expect:` rep
 ```yaml
 actions:
   - name: generate_translation
+    intent: "Generate translation"
     prompt: $prompts.translate
     schema:
       translated_text: string
@@ -627,6 +685,8 @@ actions:
     kind: tool
     impl: compare_translations
     intent: "Score and select the best translation from parallel attempts"
+    schema:
+      best_translation: string
     version_consumption:
       source: translate
       pattern: merge
@@ -843,6 +903,9 @@ actions:
     kind: tool
     impl: fetch_competitor_prices
     intent: "Look up current competitor pricing for similar products"
+    schema:
+      competitor_prices: array
+      price_range: string
     context_scope:
       observe:
         - generate_description.search_keywords
@@ -874,6 +937,8 @@ actions:
     kind: tool
     impl: format_for_marketplace
     intent: "Format listing to meet marketplace character limits and requirements"
+    schema:
+      formatted_listing: object
     context_scope:
       observe:
         - write_marketing_copy.*
@@ -933,6 +998,7 @@ flowchart LR
 
 ```yaml
 - name: vote_quality
+  intent: "Vote quality"
   dependencies: [extract_qa]
   versions:
     param: voter_id
@@ -945,6 +1011,7 @@ flowchart LR
 
 ```yaml
 - name: aggregate_votes
+  intent: "Aggregate votes"
   kind: tool
   impl: aggregate_votes
   dependencies: [vote_quality]
@@ -974,6 +1041,7 @@ def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
 
 ```yaml
 - name: generate_answer
+  intent: "Generate answer"
   dependencies: [aggregate_votes]
   guard:
     condition: 'aggregate_votes.filter == "keep"'

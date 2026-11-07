@@ -15,12 +15,13 @@ Agent Actions accepts multiple input formats. Place files in `agent_io/staging/`
 | CSV | `.csv` | Tabular data, spreadsheets |
 | TSV | `.tsv` | Tab-separated tabular data |
 | Excel | `.xlsx` | Spreadsheet data |
-| XML | `.xml` | Structured markup data |
 | Text | `.txt` | Plain text documents |
 | Markdown | `.md` | Documentation, formatted text |
 | HTML | `.html` | Web content |
 | PDF | `.pdf` | PDF documents |
 | Word | `.docx` | Word documents |
+
+An `.xml` file is refused as first-stage input with `XML first-stage input is not supported; convert to CSV or JSON.`
 
 ## JSON Input
 
@@ -109,13 +110,13 @@ such a field is stopped there too (see [Accessing Source Data](#accessing-source
 
 ## Staging Checks
 
-Before the first action processes any file, every staged file it will process is read, its records prepared, and the checks the first stage runs are applied to each: the document rule (a JSON file is an array of objects), reserved field names, a value for every [seed chosen per record](../context/seed-data#choosing-a-seed-file-per-record) in every action, and a render of the first record against the prompt. A file that fails stops the run there, with the file and the record named, and nothing of any file is stored or sent:
+Before the first action processes any file, every staged file it will process is read, its records prepared, and the checks the first stage runs are applied to each: the document rule (a JSON file is an array of objects), reserved field names (not checked for CSV and TSV columns), a value for every [seed chosen per record](../context/seed-data#choosing-a-seed-file-per-record) in every action, and a render of the first record against the prompt. A file that fails stops the run there, with the file and the record named, and nothing of any file is stored or sent:
 
 ```
 Seed 'syllabus' in action 'label_page': record value 'snowflak' for 'source.exam' is not in the file map. Known values: dbt, snowflake. (staging/b_pages.json, record 1)
 ```
 
-The pass covers every file the run would process, so a `file_limit` or `record_limit` does not hide a bad file beyond the limit. A file that cannot be read or parsed is not a refusal: the run reads it again and reports it as a lost file, as before. The check prepares records with no store, so a refused run leaves the store as it found it.
+The pass covers every file the run would process, so a `file_limit` or `record_limit` does not hide a bad file beyond the limit. A file that cannot be read or parsed is not a refusal: the run reads it again and reports it as a lost file. The check prepares records with no store, so a refused run leaves the store as it found it.
 
 ## Accessing Source Data
 

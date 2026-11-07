@@ -98,7 +98,7 @@ Guards evaluate upstream field values the same way regardless of JSON mode:
     dependencies: [classify_issue]
     output_field: suggested_response
     guard:
-      condition: 'classify_issue.severity != "low"'  # Skip for low-severity → save tokens
+      condition: 'classify_issue.issue_type != "question"'  # Skip for questions → save tokens
       on_false: "skip"
 ```
 

@@ -20,13 +20,13 @@ flowchart TD
     G -->|Yes| E[Regenerate with Error Feedback]
     G -->|No| H[Action Fails]
     E --> A
-    B -->|Yes| I{Layer 3: Guard Passes?}
+    B -->|Yes| I{Layer 3: Downstream Guard Passes?}
     I -->|No - filter| J[Record Removed]
-    I -->|No - skip| K[Action Skipped]
-    I -->|Yes| L[Output Accepted]
+    I -->|No - skip| K[Downstream Action Skipped for the Record]
+    I -->|Yes| L[Downstream Action Runs]
 ```
 
-Guards run last because they evaluate semantic conditions that require valid, schema-conforming data.
+Guards run last. A guard sits on a downstream action and reads the output of an action that already passed layers 1 and 2. The framework evaluates it before the downstream action runs.
 
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
@@ -102,39 +102,26 @@ properties:
     minimum: 0
     maximum: 100
     # Rejects: -5, 101, 150
-
-  confidence:
-    type: number
-    exclusiveMinimum: 0
-    exclusiveMaximum: 1
-    # Rejects: 0, 1 (must be between, not equal)
 ```
 
-**String Constraints** - Reject by length/pattern:
+**Constraints the response check does not enforce** - Schema validation of a model response checks `type`, `required`, `enum`, `minimum` and `maximum`, plus the full sub-schema of an array's `items`. It does not check `exclusiveMinimum`, `exclusiveMaximum`, `minLength`, `maxLength`, `pattern`, `minItems` or `maxItems` on a field, so a response that breaks one of them is accepted. Express those rules as [expectations](./expectations.md) instead:
 
 ```yaml
-properties:
-  summary:
-    type: string
-    minLength: 10
-    maxLength: 500
-    # Rejects: "Short" (< 10 chars)
-
-  email:
-    type: string
-    pattern: "^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$"
-    # Rejects: "not-an-email"
-```
-
-**Array Constraints** - Reject by count:
-
-```yaml
-properties:
-  items:
-    type: array
-    minItems: 1
-    maxItems: 10
-    # Rejects: [] (empty) or arrays with 11+ items
+expect:
+  repair: auto
+  expectations:
+    - id: summary_length
+      type: word_count_between
+      field: summary
+      params: { min: 10, max: 500 }   # words, not characters
+    - id: email_format
+      type: matches_regex
+      field: email
+      params: { pattern: "^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$" }
+    - id: has_items
+      type: item_count
+      field: items
+      params: { min: 1, max: 10 }
 ```
 
 ### Schema-Echo and Empty-Object Detection
@@ -147,9 +134,9 @@ Beyond type and field checks, schema validation detects two common LLM failure m
 {"title": "InlineSchema", "type": "object", "properties": {"optimal_code": {"type": "string"}}, "required": [], "additionalProperties": false}
 ```
 
-This is valid JSON and structurally matches a JSON object, but contains zero declared fields. The validator detects this by checking whether the output's top-level keys are JSON Schema meta-keys (`title`, `type`, `properties`, `required`, `additionalProperties`) rather than the expected output fields.
+This is valid JSON and structurally matches a JSON object, but contains zero declared fields. The validator detects this by checking whether the output's top-level keys are JSON Schema meta-keys (such as `title`, `type`, `properties`, `required` and `additionalProperties`) rather than the expected output fields.
 
-**Empty object** — The model returns `{}`. This passes structural validation when no fields are `required`, but is semantically useless. The validator now rejects empty objects when the schema declares any output fields, even if none are marked required.
+**Empty object** — The model returns `{}`. This passes structural validation when no fields are `required`, but is semantically useless. The validator rejects empty objects when the schema declares any output fields, even if none are marked required.
 
 Both failures become a structural failure when an `expect:` block carries a repair policy, giving the model another chance to produce valid output.
 
@@ -179,13 +166,13 @@ By default a schema failure re-sends the original prompt unchanged, because a re
 rejected has no partial result worth preserving. `structural: auto` sends the schema feedback
 instead — the setting for a model that mis-formats systematically rather than occasionally.
 
-Without an `expect:` block a schema mismatch is logged and the record ships as it is.
+Without an `expect:` block a schema mismatch is logged as a warning and the record ships as it is. A schema-echo item is rejected either way.
 
 ## Layer 3: Guard Validation
 
 Here's where it gets interesting: schema validation catches structural problems, but what about semantic ones? A score of 25 is a valid integer, but maybe you only want to process high-quality content with scores above 85.
 
-Guards validate semantic and business logic after schema passes:
+A guard on a downstream action validates semantic and business logic on the output that passed schema validation:
 
 ### Filter Unwanted Values
 
@@ -441,8 +428,8 @@ def validate_content(data: dict) -> dict:
 | Wrong type | Schema `type` | String instead of number |
 | Missing field | Schema `required` | No "title" field |
 | Wrong value | Schema `enum` | "maybe" not in ["yes", "no"] |
-| Out of range | Schema `min/max` | Score of 150 (max 100) |
-| Too short/long | Schema `minLength/maxLength` | Summary < 10 chars |
+| Out of range | Schema `minimum`/`maximum` | Score of 150 (max 100) |
+| Too short/long | Expectation `word_count_between` | Summary < 10 words |
 | Empty array | Guard `!= []` | No facts extracted |
 | Low score | Guard `>= threshold` | Quality < 85 |
 | Wrong category | Guard `!= value` | Category == "invalid" |
@@ -558,8 +545,8 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 
 Look for:
 ```
-SchemaValidationError: Required field 'title' missing
-SchemaValidationError: Value 'invalid' not in enum
+Schema validation warning for 'extract_data': Missing required fields: title
+Schema validation warning for 'extract_data': Field 'status': 'invalid' is not one of ['approved', 'rejected', 'pending']
 ```
 
 ### Check Guard Evaluation
@@ -570,8 +557,8 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 
 Look for:
 ```
-Guard condition 'score >= 85' evaluated to False
-Record filtered by guard on action 'generate_output'
+Guard pre-filter for 'generate_output': 0 passed, 0 skipped, 1 filtered, 0 failed, 0 left unjudged for the cascade filter, of 1 total
+[generate_output] All 1 records filtered by guard (score_quality.score >= 85). None of them reaches downstream actions.
 ```
 
 ### Validate Schema Syntax

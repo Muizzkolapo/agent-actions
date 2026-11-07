@@ -73,18 +73,20 @@ Build and install the VS Code extension:
 
 ```bash
 # From the agent-actions repository
-cd editors/vscode
+cd vscode-extension
 
 # Install dependencies and build
 npm install
 npm run compile
 
 # Package the extension
-npx vsce package --allow-missing-repository
+npx vsce package
 
 # Install to VS Code
-code --install-extension agent-actions-lsp-0.3.0.vsix
+code --install-extension agent-actions-0.2.0.vsix
 ```
+
+The extension is also published on the VS Code Marketplace as `runagac.agent-actions`.
 
 After installation, reload VS Code (`Cmd+Shift+P` → "Developer: Reload Window").
 
@@ -94,7 +96,7 @@ For extension development or testing:
 
 1. Open the extension folder:
    ```bash
-   code editors/vscode
+   code vscode-extension
    ```
 
 2. Install dependencies:
@@ -171,15 +173,16 @@ The Explorer sidebar shows all workflows and actions in execution order:
 View your workflow as an interactive directed acyclic graph:
 
 ```
-Keyboard Shortcut: Cmd+Shift+D (Mac) / Ctrl+Shift+D (Windows/Linux)
 Command Palette: "Agent Actions: Show Workflow DAG"
 ```
+
+The extension binds no default keyboard shortcut. Assign one to the command `agentActions.showDAG` in VS Code's Keyboard Shortcuts editor if you want one.
 
 **Features:**
 - Action dependencies shown as directed edges
 - Status-colored nodes (green=completed, yellow=running, red=failed, gray=pending)
 - Click any node to navigate to its config definition
-- Toggle between vertical and horizontal layouts
+- Set the layout direction (vertical or horizontal) with `agentActions.dagLayout`
 - Auto-updates as workflow runs
 
 ### CodeLens Actions
@@ -260,17 +263,9 @@ $(graph) MyWorkflow: 5/10 | [6] process_results
 - **Currently running** action name (if any)
 - Click to focus the Workflow Navigator panel
 
-### Keyboard Shortcuts
-
-| Command | Mac | Windows/Linux | Description |
-|---------|-----|---------------|-------------|
-| Show Workflow DAG | `Cmd+Shift+D` | `Ctrl+Shift+D` | Open visual DAG panel |
-| Go to Action | `Cmd+Shift+A` | `Ctrl+Shift+A` | Quick-pick to jump to any action |
-| Refresh Workflow | `Cmd+Shift+R` | `Ctrl+Shift+R` | Manually refresh workflow state |
-
 ### Command Palette
 
-All commands are also available via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
+The extension registers no default keyboard shortcuts. Run each command from the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`) or bind your own key:
 
 | Command | Description |
 |---------|-------------|
@@ -365,7 +360,7 @@ Cursor uses VS Code extensions. Follow the VS Code VSIX installation, then:
 
 1. Open Cursor
 2. Go to Extensions → Install from VSIX
-3. Select `agent-actions-lsp-0.3.0.vsix`
+3. Select the `agent-actions-0.2.0.vsix` file you built
 4. Reload the window
 
 ## Syntax Highlighting
@@ -383,7 +378,7 @@ The extension provides syntax highlighting for prompt files (Markdown with agent
 
 ### Outline Navigation
 
-Open the Outline panel (`Cmd+Shift+O` in VS Code) to see document symbols:
+Open the Outline view in the VS Code Explorer sidebar to see document symbols:
 
 **In YAML workflow files:**
 - All action names listed as symbols
@@ -491,7 +486,7 @@ Ensure your project has:
 If workflow status isn't refreshing:
 
 1. Check that `agent_io/logs/.manifest.json` exists
-2. Try `Cmd+Shift+R` to manually refresh
+2. Run "Agent Actions: Refresh Workflow" from the Command Palette to refresh manually
 3. Enable polling: `"agentActions.refreshInterval": 2000`
 
 ### DAG Not Rendering
@@ -534,18 +529,18 @@ uv pip show agent-actions | grep Location
 If preview features aren't working after updates, completely reinstall:
 
 ```bash
-cd editors/vscode
+cd vscode-extension
 
 # Remove any globally installed version
-rm -rf ~/.vscode/extensions/agent-actions.agent-actions-lsp-*
+rm -rf ~/.vscode/extensions/runagac.agent-actions-*
 
 # Clean and rebuild
 rm -rf out/
 npm run compile
-npx @vscode/vsce package --allow-missing-repository
+npx @vscode/vsce package
 
 # Install fresh
-code --install-extension agent-actions-lsp-0.3.0.vsix --force
+code --install-extension agent-actions-0.2.0.vsix --force
 ```
 
 Then reload VS Code: `Cmd+Shift+P` → "Developer: Reload Window"

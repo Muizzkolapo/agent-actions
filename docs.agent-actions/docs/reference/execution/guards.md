@@ -13,7 +13,7 @@ Guards evaluate conditions and decide whether an action should run for each reco
 - name: my_action
   guard:
     condition: "expression"
-    on_false: "skip" | "filter"
+    on_false: "skip" | "filter" | "warn"
 ```
 
 | Field | Type | Default | Description |
@@ -99,10 +99,11 @@ Guard functions are not available in an `expression` [expectation](../validation
 condition, which shares this grammar but evaluates against an action's own output, not a
 stored record.
 
-`IS NULL` is the one to watch. A name it cannot resolve — misspelled, or written without its
-prefix — is treated as null, so the clause is true and the record passes. Every other operator
+`IS NULL` is the one to watch. A prefixed name it cannot resolve, such as a misspelling, is
+treated as null, so the clause is true and the record passes. Every other operator
 reports a missing field and filters; `IS NULL` alone lets it through, and logs nothing while
-doing it. Preflight refuses the misspellings it can prove (see [Context Access](#context-access)):
+doing it. Preflight refuses a field written without its prefix and the misspellings it can prove
+(see [Context Access](#context-access)):
 `summarize.descriptio IS NULL` is refused when `summarize`'s schema lists its fields. Against an
 action with no schema, or one whose schema sets `additionalProperties`, the same guard filters
 nothing and says nothing.
@@ -124,19 +125,12 @@ Prefer explicit comparison over a bare field reference for boolean fields. A bar
 # Fragile — string "false" is truthy, so the guard never filters
 condition: 'upstream_action.passes_filter'
 
-# Explicit — correct regardless of whether the value is a bool or a string
+# Explicit — matches a real boolean only; a string field needs a quoted string
 condition: 'upstream_action.passes_filter == true'
+condition: 'upstream_action.passes_filter_text == "true"'
 ```
 
-### Built-in Functions
-
-```yaml
-guard:
-  condition: 'len(upstream_action.items) > 0'
-  condition: 'max(upstream_action.scores) >= 85'
-```
-
-Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
+`== true` is false for the string `"true"`, so a guard on a string field that holds `"true"` filters every record.
 
 ## Examples
 
@@ -203,8 +197,12 @@ column written without the prefix, `page_content == 'two'`, names no field the g
 so preflight refuses it and names `source.page_content`.
 
 A guard reads the seed data its action declares under `context_scope.seed`, the same data
-the action's prompt reads, so `seed.thresholds.min_score <= score_review.score` compares a
-record against a reference file. Every declared seed key is visible to the guard, including
+the action's prompt reads, so `seed.thresholds.min_score >= 0.5` reads a value from a
+reference file. A clause compares a field with a literal value. A clause that compares two
+fields, such as `score_review.score >= seed.thresholds.min_score`, is refused before the run
+with `compares field 'score_review.score' to bare identifier 'seed.thresholds.min_score'`. To
+gate on such a comparison, compute it in an upstream tool action and guard on the tool's
+result, for example `check_score.passes == true`. Every declared seed key is visible to the guard, including
 one the action `drop`s. Preflight refuses a guard that reads a seed key its action does not
 declare, as it refuses a prompt that reads one.
 
@@ -271,7 +269,8 @@ Guard evaluation errors are classified into three categories, each with differen
 | Category | Example | `passthrough_on_error` respected? | Behavior |
 |----------|---------|-----------------------------------|----------|
 | **Semantic** | Unquoted string (`status == approved`) | No — always uses `on_false` | Condition itself is broken; cached after first occurrence |
-| **Data** | Missing field, type mismatch | Yes | Field absent for this specific record |
+| **Missing field** | `upstream_action.field` absent from this record | No — the condition counts as not met, so `on_false` applies | A `G002` event is logged |
+| **Data** | Any other error raised while evaluating this record | Yes | Failure specific to this record |
 | **Timeout** | Evaluation exceeded time limit | Yes | Transient failure |
 
 **Semantic errors** bypass `passthrough_on_error` because the condition is fundamentally broken — passing records through would give wrong results for every record, not just one. These errors are logged once (circuit breaker), not per-record.
@@ -286,7 +285,7 @@ guard:
 ```
 
 :::tip
-When a guard silently lets records through unexpectedly, check `target/errors.json` for `G002` events — these indicate evaluation failures that were swallowed by `passthrough_on_error: true`.
+When a guard behaves unexpectedly, check `agent_io/logs/errors.json` in the workflow folder for `G002` events — each one is an evaluation failure, including a missing field. A missing field applies `on_false`; other data errors pass the record when `passthrough_on_error` is `true`.
 :::
 
 ### UDF guards
@@ -312,7 +311,7 @@ guard:
 ## Limitations
 
 - **No external calls** - Guards can't make API requests
-- **Limited functions** - Only built-in functions available
+- **Limited functions** - Only `LENGTH`, `UPPER`, `LOWER` and `TRIM`
 - **File granularity pre-filter** - With File granularity, guards run as a per-record pre-filter before the action receives the array
 - **Single expression** - Complex logic should use tool actions
 

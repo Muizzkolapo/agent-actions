@@ -91,7 +91,7 @@ The system tracks failure counts per record, not globally. If record `A` succeed
       "failures": 1,
       "succeeded": true,
       "reason": "missing",
-      "timestamp": "2024-06-15T10:30:45Z"
+      "timestamp": "2024-06-15T10:30:45.123456+00:00"
     }
   }
 }
@@ -137,7 +137,7 @@ A repair round is a whole provider batch, so it defers rather than blocking:
    not re-spend the judge budget on them
 3. Records that fail are collected into a repair batch, each carrying its own regeneration prompt
 4. The batch is submitted and the run defers; the next pass resumes into the same loop
-5. When `max_iterations` rounds are spent, `on_exhausted` decides what ships
+5. When `max_iterations` is spent (the first generation counts as one), `on_exhausted` decides what ships
 
 A round with nothing to send is not submitted. When a guard turns every failing record away as it is evaluated again, no empty batch goes to the provider: those records are given up under `on_exhausted`, as when the rounds are spent. When it turns some of them away, the round goes out for the rest, and the records it did not send are given up the same way in that pass; they are not counted as sent, so the round coming back without them is not read as the provider dropping them.
 
@@ -159,7 +159,7 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
       "failures": 2,
       "succeeded": true,
       "reason": "missing",
-      "timestamp": "2024-06-15T10:30:45Z"
+      "timestamp": "2024-06-15T10:30:45.123456+00:00"
     },
     "expectations": {
       "attempts": 2,
@@ -178,7 +178,7 @@ Every record that goes through recovery gets a `_recovery` field in its output. 
 | `attempts` | integer | Total attempts made (including initial) |
 | `failures` | integer | Number of failed attempts before success |
 | `succeeded` | boolean | Whether retry ultimately succeeded |
-| `reason` | string | Why retry was needed: `missing`, `network_error`, `rate_limit`, `timeout` |
+| `reason` | string | Why retry was needed. A batch record always carries `missing`. An online record carries the error class of its last failed attempt: `network_error`, `rate_limit`, `timeout` or `api_error` |
 | `timestamp` | string | ISO 8601 timestamp of the recovery |
 
 **Expectations metadata** (`_recovery.expectations`, present when the repair loop exhausted):
@@ -201,7 +201,7 @@ Recovery metadata survives serialization. When batch results are saved to disk a
 
 ## Example: Full Recovery Flow
 
-Submit 100 records. 95 come back. 10 of the 95 fail validation.
+Submit 100 records. 95 come back. After the 5 missing records are recovered, 10 of the 100 fail validation.
 
 ```
 Submit 100 records
@@ -218,9 +218,8 @@ Submit 100 records
     └── Result: 99 passed, 1 exhausted (on_exhausted: return_last)
 
 Final output:
-  94 records — clean (no recovery needed)
-   5 records — _recovery.retry present
-   1 record  — _recovery.retry + _recovery.expectations (both phases)
+   5 records — _recovery.retry present (recovered in Phase 1)
+   1 record  — _recovery.expectations present (exhausted in Phase 2)
 ```
 
 ## See Also

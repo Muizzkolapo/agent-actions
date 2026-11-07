@@ -24,12 +24,12 @@ base_url = os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
 | `SQLITE_LOCK_TIMEOUT_SECONDS` | float | `30.0` | Wait time for SQLite database locks |
-| `PROMPT_TRACE_RETENTION_RUNS` | int | `10` | Number of workflow runs to retain prompt traces before cleanup |
+| `PROMPT_TRACE_RETENTION_RUNS` | int | `10` | Number of most recent calendar days of prompt traces to keep; despite the name, the unit is days, not runs. `0` never prunes |
 | `SOURCE_DATA_TTL_DAYS` | int\|None | `None` | Days to retain source data; `None` means keep forever |
 
 ### LockDefaults
 
-File-lock timeouts are split intentionally: simple (shared/read) locks use a shorter timeout than atomic (exclusive read-modify-write) locks.
+File-lock timeouts are split: the simple (shared/read) timeout is shorter than the atomic (exclusive read-modify-write) timeout. Only the atomic timeout is read at run time, by the run tracker; no code reads the simple timeout.
 
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
@@ -43,7 +43,7 @@ File-lock timeouts are split intentionally: simple (shared/read) locks use a sho
 | `BASE_URL` | str | `http://localhost:11434` | Default Ollama server URL |
 | `BATCH_MAX_WORKERS` | int | `1` | Maximum concurrent workers for Ollama batch processing |
 
-This value was previously duplicated in three files. It can be overridden at runtime via the `OLLAMA_HOST` environment variable.
+The `OLLAMA_HOST` environment variable overrides the base URL. An action's `base_url` overrides both.
 
 ### OllamaCloudDefaults
 
@@ -51,6 +51,8 @@ This value was previously duplicated in three files. It can be overridden at run
 |----------|------|-------|-------------|
 | `BASE_URL` | str | `https://ollama.com` | Default Ollama Cloud API URL |
 | `BATCH_MAX_WORKERS` | int | `1` | Maximum concurrent workers for Ollama Cloud batch processing |
+
+The Ollama Cloud batch client reads the `OLLAMA_CLOUD_HOST` environment variable before it uses `BASE_URL`. Both Ollama batch clients take the worker count from an action's `batch_max_workers`, then the `OLLAMA_BATCH_MAX_WORKERS` environment variable, then `BATCH_MAX_WORKERS`.
 
 ### ApiDefaults
 

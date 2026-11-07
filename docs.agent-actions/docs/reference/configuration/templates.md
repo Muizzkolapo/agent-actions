@@ -26,7 +26,7 @@ Templates are rendered before your agentic workflow runs. This means template er
 
 Loading a workflow renders the file through Jinja before it is parsed as YAML. Each action's `prompt:`, however the YAML writes it (on the key's line or the lines below, as a block scalar, or in a flow mapping such as `- {name: a, prompt: "..."}`), is decided where the load reaches it, with exactly the names bound there: names the file binds with `{% set %}`, `{% for %}`, `{% import %}` or a macro's parameters, the macros and variables of `templates/`, `load_prompt`, and Jinja's own globals such as `range`.
 
-- A prompt whose names are all bound renders at load, as it always has.
+- A prompt whose names are all bound renders at load.
 - A prompt that reads a name a record or a version supplies (`source`, `seed`, an action of the workflow, `version`, `i`, `idx` or a version `param`) is kept whole and renders per record, exactly as the same prompt in the prompt store does, `{% if %}`, `is defined`, captures, macros and `{% raw %}` blocks of its own included. An action named by a tag, such as `name: {{ n }}` in a loop or a macro, counts once the file is parsed; if no action has the name, the load fails as for any undefined name. Its own `{{ }}` tags outside its `{% %}` blocks that read load-time names and nothing else render into it at load: with `{% for n in [1, 2] %}`, `Stage {{ n }} of {{ source.text }}` becomes `Stage 2 of {{ source.text }}`. Load-time data its other tags read, such as a list a `{% for %}` walks or a flag an `{% if %}` tests, is set at its top (`{% set fields = ["title", "body"] +%}`).
 - In either case, a prompt's `{{ load_prompt("...") }}` tag puts the loaded prompt in as written once the file is parsed, so a loaded prompt of several lines keeps its line breaks in any YAML style and needs no indentation; passed through a filter first (`| indent(6)`), it is pasted into the YAML text like any other output.
 - A versioned action's other values (`model_vendor`, `model_name`, `intent`, …) that read a version variable render once per version, as if the version's variables were set when the file loads. On an action without `versions:` such a value fails the load, unless the variable is guarded with `is defined` or `default(...)`.
@@ -35,7 +35,7 @@ Only data reaches the per-record render. A prompt that renders per record can us
 
 Everything else renders at load. A name nothing defines fails the load (`'enable_validation' is undefined`) instead of rendering as nothing, unless it is guarded with `is defined` or `default(...)`, and so does a field a loaded name lacks. A name a record or a version supplies, read anywhere the load renders, also fails the load, so a record never sees a branch decided once for all of them: in a value other than a prompt, in a `{% set %}` block, macro body or `caller()` body that a prompt outputs, or tested with `is defined`. To hand a per-record tag to a prompt through a macro or a captured block, wrap it in `{% raw %}...{% endraw %}`; the prompt receives the tag as text and renders it per record.
 
-The top level of each `templates/` file runs once as the folder loads, to collect its macros and variables, with the macros and variables of the folder bound and nothing else; there, as before, an undefined name renders as nothing.
+The top level of each `templates/` file runs once as the folder loads, to collect its macros and variables, with the macros and variables of the folder bound and nothing else; there, an undefined name renders as nothing.
 
 A `templates/` file can use another file's macro or variable without importing it, and what the files are called makes no difference. The files run in name order, except that a file runs before any file that reads a name it sets, and all of them read the same names: a macro can call a macro of any other file, a `{% set %}` can read a variable another file sets, a file can append to a list another file set, and a file included or imported, with or without context, reads the folder's names too. Inside a file, its own macros and variables come first. Where two files define the same name, the load warns, and everywhere else the name is the one from the file that ran later: the one whose name sorts later (`helpers.j2` over `base.j2`), or the one that reads the other's names. Of two files that each read the other's variable at their top level, the one that runs first finds the other's unset.
 
@@ -59,44 +59,65 @@ project/
 Here's where it gets interesting. Define reusable action groups with Jinja2 macros—these become building blocks you can compose into larger agentic workflows:
 
 ```jinja2
-\{# templates/thinkific_tools.jinja2 #\}
+{# templates/thinkific_tools.jinja2 #}
 
-\{% macro thinkific_tools() -\%\}
-  - name: format_quiz_object
-    kind: tool
-    impl: format_quiz_object_with_html
-    intent: "Format quiz object with HTML text"
+{% macro thinkific_tools(first_dependency) -%}
+- name: format_quiz_object
+  kind: tool
+  impl: format_quiz_object_with_html
+  intent: "Format quiz object with HTML text"
+  dependencies: [{{ first_dependency }}]
+  schema: formatted_quiz
+  context_scope:
+    observe: [{{ first_dependency }}.*]
 
-  - name: add_asterisk_to_correct_answer
-    kind: tool
-    impl: add_asterisk_to_correct_answer
-    intent: "Add asterisk marker to correct answer option"
+- name: add_asterisk_to_correct_answer
+  kind: tool
+  impl: add_asterisk_to_correct_answer
+  intent: "Add asterisk marker to correct answer option"
+  dependencies: [format_quiz_object]
+  schema: formatted_quiz
+  context_scope:
+    observe: [format_quiz_object.*]
 
-  - name: convert_html_json_to_thinkific
-    kind: tool
-    impl: convert_html_json_to_thinkific
-    granularity: File
-    intent: "Convert HTML JSON format to Thinkific-compatible structure"
-\{%- endmacro \%\}
+- name: convert_html_json_to_thinkific
+  kind: tool
+  impl: convert_html_json_to_thinkific
+  granularity: File
+  intent: "Convert HTML JSON format to Thinkific-compatible structure"
+  dependencies: [add_asterisk_to_correct_answer]
+  schema: thinkific_quiz
+  context_scope:
+    observe: [add_asterisk_to_correct_answer.*]
+{%- endmacro %}
 ```
+
+Write the macro body from column 0. The `-%}` at the end of the first line strips the indentation that follows it, so a body indented inside the macro starts its first line at column 0 and leaves the others indented. A tool action needs a `schema`, every action needs a `context_scope`, and an action at `File` granularity needs a `dependencies` entry, because a first action always reads one record at a time.
 
 ### Parameterized Macros
 
 Create macros that accept parameters:
 
 ```jinja2
-\{% macro validation_chain(first_dependency, schema_name) -\%\}
-  - name: validate_structure
-    kind: llm
-    dependencies: [\{\{ first_dependency \}\}]
-    schema: \{\{ schema_name \}\}
-    prompt: $prompts.validate_structure
+{% macro validation_chain(first_dependency, schema_name) -%}
+- name: validate_structure
+  kind: llm
+  intent: "Check the structure of the output"
+  dependencies: [{{ first_dependency }}]
+  schema: {{ schema_name }}
+  prompt: $prompts.validate_structure
+  context_scope:
+    observe: [{{ first_dependency }}.*]
 
-  - name: validate_content
-    dependencies: [validate_structure]  # Input source
-    schema: \{\{ schema_name \}\}_content
-    prompt: $prompts.validate_content
-\{%- endmacro \%\}
+- name: validate_content
+  kind: llm
+  intent: "Check the content of the output"
+  dependencies: [validate_structure]  # Input source
+  schema: {{ schema_name }}_content
+  prompt: $prompts.validate_content
+  context_scope:
+    observe: [validate_structure.*]
+{%- endmacro %}
 ```
 
 ## Using Templates in Agentic Workflows
@@ -105,7 +126,7 @@ Import and use macros in agentic workflow files. Consider what happens when you 
 
 ```yaml
 # agent_config/my_workflow.yml
-\{% from 'thinkific_tools.jinja2' import thinkific_tools \%\}
+{% from 'thinkific_tools.jinja2' import thinkific_tools %}
 
 name: my_workflow
 description: "Workflow using template macros"
@@ -115,23 +136,28 @@ actions:
     kind: tool
     impl: prepare_data
     intent: "Prepare data for processing"
+    schema: prepared_data
+    context_scope:
+      observe: [source.*]
 
   # Include macro-defined actions
-\{\{ thinkific_tools() | indent(2) \}\}
+  {{ thinkific_tools("prepare_data") | indent(2) }}
 ```
+
+Put two spaces before the call. `indent(2)` indents every line after the first, and the two spaces set the first line.
 
 Dependencies come from each action's own `dependencies:` key. A top-level
 `plan:` block is not part of the schema and is refused.
 
 ## Rendered Output
 
-You might wonder how to verify your templates expanded correctly. Agent Actions renders templates before execution, and the rendered agentic workflow is saved to:
+You might wonder how to verify your templates expanded correctly. `agac run` renders templates before execution and saves the rendered agentic workflow to:
 
 ```
 artefact/rendered_workflows/my_workflow.yml
 ```
 
-Use this for debugging template expansion:
+The saved file also holds the resolved prompts and compiled schemas, so it differs from your file by more than the template tags. Use it for debugging template expansion:
 
 ```bash
 # View rendered workflow
@@ -153,12 +179,13 @@ The load supplies no variables of its own: only `load_prompt`, the macros and va
 Define variables in the workflow:
 
 ```yaml
-\{% set model = "gpt-4o-mini" \%\}
-\{% set api_key = "OPENAI_API_KEY" \%\}
+{% set model = "gpt-4o-mini" %}
+{% set api_key = "OPENAI_API_KEY" %}
 
 defaults:
-  model_name: \{\{ model \}\}
-  api_key: \{\{ api_key \}\}
+  model_vendor: openai
+  model_name: {{ model }}
+  api_key: {{ api_key }}
 ```
 
 ## Conditional Actions
@@ -166,14 +193,17 @@ defaults:
 Include actions conditionally on a variable the file sets:
 
 ```jinja2
-\{% set enable_validation = true \%\}
+{% set enable_validation = true %}
 
-\{% if enable_validation \%\}
+{% if enable_validation %}
   - name: validate_output
     kind: llm
+    intent: "Validate the output"
     schema: validation_result
     prompt: $prompts.validate
-\{% endif \%\}
+    context_scope:
+      observe: [source.*]
+{% endif %}
 ```
 
 ## Loops for Repeated Patterns
@@ -181,23 +211,28 @@ Include actions conditionally on a variable the file sets:
 Generate multiple actions with loops:
 
 ```jinja2
-\{% for stage in [1, 2, 3] \%\}
-  - name: process_stage_\{\{ stage \}\}
+{% for stage in [1, 2, 3] %}
+  - name: process_stage_{{ stage }}
     kind: llm
-    intent: "Process stage \{\{ stage \}\}"
-    schema: stage_\{\{ stage \}\}_output
+    intent: "Process stage {{ stage }}"
+    schema: stage_{{ stage }}_output
     prompt: $prompts.process_stage
-    \{% if stage > 1 \%\}
-    dependencies: [process_stage_\{\{ stage - 1 \}\}]
-    \{% endif \%\}
-\{% endfor \%\}
+    {% if stage > 1 %}
+    dependencies: [process_stage_{{ stage - 1 }}]
+    context_scope:
+      observe: [process_stage_{{ stage - 1 }}.*]
+    {% else %}
+    context_scope:
+      observe: [source.*]
+    {% endif %}
+{% endfor %}
 ```
 
 ## Debugging Templates
 
-To see the rendered output, use `agac run` which writes compiled prompts into the `prompt_trace` table.
+To see the rendered output, use `agac run`, which saves the rendered workflow under `artefact/rendered_workflows/` and writes compiled prompts into the `prompt_trace` table.
 
-When workflow rendering fails, the framework saves the partial rendered YAML to `.agent-actions/cache/rendered_workflows/<workflow>_failed.yml` and prints the path in the error message. You can `cat` that file to inspect template expansion and context-scope output that produced the failure.
+When the rendered text is not valid YAML, the framework saves it to `.agent-actions/cache/rendered_workflows/<workflow>_failed.yml`. The error shows the line and column of the failure in the rendered text, with the lines around it, and the saved file has the same line numbers. The error does not print the saved path. A Jinja error, such as an undefined name, is reported without a saved file.
 
 For deeper debugging, use `agac inspect context -a my_workflow <action_name>` to see what data namespaces and variables are available for a specific action's template.
 
@@ -208,28 +243,28 @@ Let's walk through some patterns that make templates easier to maintain.
 ### 1. Keep Macros Focused
 
 ```jinja2
-\{# Good: Single responsibility #\}
-\{% macro extraction_actions() \%\}...\{% endmacro \%\}
-\{% macro validation_actions() \%\}...\{% endmacro \%\}
+{# Good: Single responsibility #}
+{% macro extraction_actions() %}...{% endmacro %}
+{% macro validation_actions() %}...{% endmacro %}
 
-\{# Avoid: Monolithic macros #\}
-\{% macro entire_workflow() \%\}...\{% endmacro \%\}
+{# Avoid: Monolithic macros #}
+{% macro entire_workflow() %}...{% endmacro %}
 ```
 
 ### 2. Use Descriptive Names
 
 ```jinja2
-\{# Good #\}
-\{% macro quiz_generation_chain(source_action) \%\}
+{# Good #}
+{% macro quiz_generation_chain(source_action) %}
 
-\{# Avoid #\}
-\{% macro m1(s) \%\}
+{# Avoid #}
+{% macro m1(s) %}
 ```
 
 ### 3. Document Parameters
 
 ```jinja2
-\{#
+{#
   Create a validation chain for the given source.
 
   Args:
@@ -238,8 +273,8 @@ Let's walk through some patterns that make templates easier to maintain.
 
   Returns:
     Two validation actions: validate_structure, validate_content
-#\}
-\{% macro validation_chain(source_action, schema_name) \%\}
+#}
+{% macro validation_chain(source_action, schema_name) %}
 ```
 
 ### 4. Test Rendered Output
@@ -247,7 +282,7 @@ Let's walk through some patterns that make templates easier to maintain.
 Always verify template expansion before running:
 
 ```bash
-# Validate (any rendering failure surfaces non-zero with the saved YAML path).
+# Render and validate; a rendering failure exits non-zero.
 agac inspect -a my_workflow
 ```
 
@@ -256,15 +291,15 @@ agac inspect -a my_workflow
 Jinja2 whitespace control prevents extra newlines:
 
 ```jinja2
-\{# Without control: extra blank lines #\}
-\{% macro actions() \%\}
+{# Without control: extra blank lines #}
+{% macro actions() %}
   - name: action1
-\{% endmacro \%\}
+{% endmacro %}
 
-\{# With control: clean output #\}
-\{%- macro actions() -\%\}
+{# With control: clean output #}
+{%- macro actions() -%}
   - name: action1
-\{%- endmacro -\%\}
+{%- endmacro -%}
 ```
 
 ## Common Patterns
@@ -274,8 +309,8 @@ Here are some patterns you'll encounter frequently when building agentic workflo
 ### Base Configuration Extension
 
 ```jinja2
-\{# templates/base.jinja2 #\}
-\{% macro base_defaults() \%\}
+{# templates/base.jinja2 #}
+{% macro base_defaults() %}
 defaults:
   json_mode: true
   granularity: record
@@ -283,19 +318,24 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
-\{% endmacro \%\}
+{% endmacro %}
 ```
 
 ```yaml
-\{# Agentic workflow using base #\}
-\{% from 'base.jinja2' import base_defaults \%\}
+{# Agentic workflow using base #}
+{% from 'base.jinja2' import base_defaults %}
 
 name: my_workflow
-\{\{ base_defaults() \}\}
+description: "Workflow built on shared defaults"
+{{ base_defaults() }}
 
 actions:
   - name: my_action
-    # Uses base defaults
+    intent: "Uses the base defaults"
+    prompt: $prompts.my_action
+    schema: my_action_output
+    context_scope:
+      observe: [source.*]
 ```
 
 ### Feature Flags
@@ -303,16 +343,16 @@ actions:
 Feature flags let you toggle parts of your agentic workflow on and off. This is useful for A/B testing or gradually rolling out new actions:
 
 ```jinja2
-\{% set features = \{
+{% set features = {
   'enable_caching': true,
   'enable_validation': true,
   'enable_monitoring': false
-\} \%\}
+} %}
 
-\{% if features.enable_validation \%\}
+{% if features.enable_validation %}
   - name: validate_output
     ...
-\{% endif \%\}
+{% endif %}
 ```
 
 :::warning

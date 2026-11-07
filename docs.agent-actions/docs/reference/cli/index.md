@@ -40,7 +40,7 @@ agac --verbose run -a my_workflow
 
 ### `-q` / `--quiet`
 
-Suppress non-essential output. Useful for scripts and CI/CD pipelines where you only want to see errors.
+Show only warnings and errors. Useful for scripts and CI/CD pipelines where you only want to see problems.
 
 ```bash
 agac --quiet run -a my_workflow
@@ -78,36 +78,38 @@ my-project/
 # From project root
 cd my-project
 agac run -a my_workflow
-# 📁 Project root: .
 
 # From subdirectory
 cd my-project/src/utils
 agac run -a my_workflow
-# 📁 Project root: ../..
+# 📁 Project root: /path/to/my-project
 
 # From any depth
 cd my-project/src/agents/helpers
 agac run -a my_workflow
-# 📁 Project root: ../../../
+# 📁 Project root: /path/to/my-project
 ```
+
+From the project root the command prints no banner. From a subdirectory it prints the `📁 Project root:` line, with the absolute path of the project root, on stderr.
 
 ### Not in a Project?
 
-If you're outside a project directory, you'll get a helpful error:
+If you're outside a project directory, the command stops with a `ProjectNotFoundError`:
 
 ```bash
 $ cd /tmp
-$ agac run -a my_workflow
+$ agac inspect -a my_workflow
 
-Error: Not in an Agent Actions project
+Error: Operation Failed: command
 
-Could not find 'agent_actions.yml' in current directory or any parent directory.
+  Problem: ProjectNotFoundError: Project not found
 
-Current directory: /tmp
+  Context:
+    search_path: /tmp
 
-Solutions:
-  1. Navigate to your Agent Actions project directory
-  2. Run 'agac init' to create a new project
+  Fix: Check your configuration and try again. Run with --verbose for the full traceback, or check logs/events.json for details.
+
+  Learn more: https://docs.runagac.com/troubleshooting
 ```
 
 ### Commands That Work Anywhere
@@ -132,7 +134,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 
 | Command | Description |
 |---------|-------------|
-| [`inspect`](./inspect) | Preflight + introspection — graph + validation with `dependencies` / `action` / `context` drill-downs |
+| [`inspect`](./inspect) | Preflight + introspection — validation + action list with `dependencies` / `action` / `context` drill-downs |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
 | [`traces`](./traces) | Print the prompt, context and response an action's records were run with |

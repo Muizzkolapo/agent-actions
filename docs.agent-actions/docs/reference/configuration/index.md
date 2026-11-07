@@ -58,7 +58,7 @@ logging:
 | Field | Description |
 |-------|-------------|
 | `default_agent_config` | Default settings inherited by all actions, including `chunk_config` — see [Chunking](../data-io/chunking). Only keys nested here reach an action; a `chunk_config:` at the file's top level is read by nothing |
-| `schema_path` | Directory containing output schemas (default: `schema`) |
+| `schema_path` | Directory containing output schemas. Required: loading a schema fails without it. `agac init` writes `schema_path: schema` |
 | `tool_path` | Directories to scan for custom tools |
 | `seed_data_path` | Directory for static reference data (default: `seed_data`) |
 | `seed_data_paths` | Shared seed folders, relative to the project root, searched after the workflow's and the project's own folder; see [Seed Data](../context/seed-data#shared-folders) |
@@ -85,8 +85,11 @@ defaults:
 
 actions:
   - name: extract_facts
+    intent: "Extract key facts from content"
     prompt: $prompts.extract_facts
     schema: facts_schema
+    context_scope:
+      observe: [source.*]
 ```
 
 The top level takes exactly these keys, and refuses any other — a misspelled
@@ -95,7 +98,7 @@ with it:
 
 | Key | Meaning |
 |-----|---------|
-| `name` | Workflow name (required) |
+| `name` | Workflow name (required); it must match the file name without `.yml` |
 | `description` | Workflow description (required) |
 | `version` | Optional, for your own bookkeeping |
 | `defaults` | Settings inherited by every action |
@@ -125,6 +128,8 @@ actions:
     prompt: $prompts.extract_facts
     schema: facts_schema
     json_mode: true
+    context_scope:
+      observe: [source.*]
 
     # Execution
     run_mode: batch
@@ -141,12 +146,12 @@ actions:
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Unique action identifier |
-| `intent` | string | Human-readable description |
-| `kind` | string | `llm` (default) or `tool` |
+| `intent` | string | Human-readable description (required) |
+| `kind` | string | `llm` (default), `tool` or `hitl` |
 | `dependencies` | list | Upstream actions to wait for |
 | `prompt` | string | Inline prompt or `$store.template` reference |
 | `schema` | string | Output validation schema |
-| `context_scope` | object | Control data visibility: `observe`, `drop`, `passthrough`, `seed` — see [Context Scope](../context/context-scope.md) |
+| `context_scope` | object | Control data visibility: `observe`, `drop`, `passthrough`, `seed` — every action must declare one; see [Context Scope](../context/context-scope.md) |
 
 ### Model Fields
 
@@ -174,8 +179,8 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `run_mode` | string | `online` or `batch` — see [Run Modes](../execution/run-modes.md) |
-| `granularity` | string | `record` or `file` — see [Granularity](../execution/granularity.md) |
+| `run_mode` | string | `online` (default) or `batch` — see [Run Modes](../execution/run-modes.md) |
+| `granularity` | string | `record` (default) or `file` — see [Granularity](../execution/granularity.md) |
 | `guard` | object | Conditional execution — see [Guards](../execution/guards.md) |
 | `is_operational` | boolean | Enable/disable action (default: true) |
 | `on_empty` | string | What an empty answer does: `warn` (default) fails the record and the run goes on, `error` fails the action, `skip` passes the record through as a tombstone |
@@ -225,7 +230,6 @@ defaults:
 | Field | Type | Description |
 |-------|------|-------------|
 | `json_mode` | boolean | Enable structured JSON output |
-| `expect` | object | Output rules and repair policy (see [Expectations](../validation/expectations.md)) |
 | `expect` | object | Output expectations and their enforcement policy (see [AI Expectations](../validation/expectations.md)) |
 
 ### Tool Action Fields
@@ -335,16 +339,18 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 |----------|----------|
 | `OPENAI_API_KEY` | OpenAI |
 | `ANTHROPIC_API_KEY` | Anthropic |
-| `GOOGLE_API_KEY` | Google Gemini |
+| `GEMINI_API_KEY` | Google Gemini |
+| `COHERE_API_KEY` | Cohere |
+| `OLLAMA_API_KEY` | Ollama Cloud |
 | `GROQ_API_KEY` | Groq |
-| `OLLAMA_HOST` | Ollama (default: `http://localhost:11434`) |
+| `OLLAMA_HOST` | Ollama local server (default: `http://localhost:11434`) |
 
 ### Runtime Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AGENT_ACTIONS_LOG_LEVEL` | INFO | Console log level (DEBUG, INFO, WARNING, ERROR). Overrides `logging.level` in `agent_actions.yml` when set. |
-| `AGENT_ACTIONS_DEBUG` | 0 | Enable debug mode |
+| `AGENT_ACTIONS_LOG_LEVEL` | INFO | Console log level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Overrides `logging.level` in `agent_actions.yml` when set. |
+| `AGENT_ACTIONS_DEBUG` | 0 | Set to `1` to run the console at DEBUG level |
 | `AGENT_ACTIONS_LOG_MAX_BYTES` | 52428800 | DEBUG rows written per run log file before they stop; `0` for no cap. Overrides `logging.file.max_bytes`. |
 | `AGENT_ACTIONS_LOG_RETAIN_RUNS` | 5 | Earlier run logs kept. Overrides `logging.file.backup_count`. |
 | `AGAC_RECORD_LIMIT` | unset | Cap each action at this many records per input file, overriding a larger `record_limit` and applying to actions that set none. [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) takes precedence when both are set, and can raise this value as well as lower it. For running a project cheaply from outside it — a smoke check, a quick sanity pass. On a workflow you have already run it is not read-only: a limit smaller than what a completed action already processed differs from the one it stored, so it re-executes under this one and its output is rewritten to the smaller set. A value at or above what an untruncated run processed cannot cut anything and leaves the action alone. That needs a run able to say what it processed: one that completed before these counts existed, or one that lost an input file to an error, keeps the coarse rule and re-executes on any change. Unset it, or use a scratch project, when the stored output matters. An action that actually drops records logs a warning naming this variable, since a truncated run otherwise looks complete; an action that had nothing to drop stays quiet. A value below 1, or one that is not an integer, fails rather than being ignored — checked while the workflow is assembled, so it stops any command that loads one, read-only ones like [`agac inspect`](../cli/inspect) included. An empty or blank value reads as unset, since that is what a shell means by `AGAC_RECORD_LIMIT=`. Never excludes a record that [`agac retry`](../cli/retry) is re-running, since retry selects by id. |
@@ -361,7 +367,7 @@ project/
 ├── # ════════════════════════════════════════════════════════
 ├── # PROJECT-LEVEL (shared across all workflows)
 ├── # ════════════════════════════════════════════════════════
-├── schema/                     # Output schemas (project-level only)
+├── schema/                     # Output schemas (folder named by schema_path)
 ├── tools/                      # Custom tools (shared)
 ├── prompt_store/               # Shared prompt templates (optional)
 │
@@ -374,7 +380,9 @@ project/
         │   └── my_workflow.yml # Agentic workflow definition
         ├── agent_io/
         │   ├── staging/        # Input data (starting point)
-        │   └── target/         # Output data
+        │   ├── store/          # SQLite database holding every action's output
+        │   └── logs/           # events.json, run_results.json
+        ├── schema/             # Workflow-level schemas (optional)
         ├── seed_data/          # This workflow's own reference data
         └── prompt_store/       # Domain-specific prompts (optional)
 ```
@@ -383,8 +391,8 @@ project/
 
 | Asset | Project Level | Workflow Level | Notes |
 |-------|--------------|----------------|-------|
-| **Schemas** | `schema/` | — | Always project-level; shared across workflows |
-| **Tools** | `tools/` | — | Always project-level; shared across workflows |
+| **Schemas** | `schema/` | `workflow/schema/` | Either or both; a schema name must be unique across all of them |
+| **Tools** | `tools/` and the other folders in `tool_path` | — | Found through `tool_path`; a workflow's own `tool_path` takes precedence |
 | **Prompts** | `prompt_store/` | `workflow/prompt_store/` | Either or both; searched recursively |
 | **Seed Data** | `seed_data/` and the folders of `seed_data_paths` | `workflow/seed_data/` | Searched in that order, workflow first; a shared file exists once — see [Seed Data](../context/seed-data#shared-folders) |
 | **Input/Output** | — | `workflow/agent_io/` | Always workflow-level |

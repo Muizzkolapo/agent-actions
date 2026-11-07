@@ -8,7 +8,7 @@ sidebar_position: 3
 Context Scope controls data visibility and flow between actions—selecting which upstream namespaces an action can read from the record, what passes through to output, and what gets excluded.
 
 :::warning Required
-`context_scope` is **required** on every action. Omitting it raises a `ConfigurationError`. Every action must declare its data dependencies explicitly via `observe`, `passthrough`, or `drop`.
+`context_scope` is **required** on every action. Omitting it fails pre-flight with `Action '<name>' has no context_scope. All actions must declare data dependencies via context_scope.` Every action must declare its data dependencies explicitly via `observe`, `passthrough`, or `drop`.
 
 Many examples in these docs show a single key and leave `context_scope` out to stay short. They are fragments, not whole actions: add a `context_scope` when you copy one into a workflow.
 :::
@@ -18,7 +18,7 @@ Many examples in these docs show a single key and leave `context_scope` out to s
 | Directive | Purpose | In LLM Context | In Output |
 |-----------|---------|----------------|-----------|
 | `observe` | Include specific fields in LLM context | Yes | No |
-| `drop` | Exclude specific fields from context | No | No |
+| `drop` | Remove fields that `observe` brought into context | No | No |
 | `passthrough` | Forward fields directly to output | No | Yes |
 
 ## Syntax
@@ -38,7 +38,7 @@ context_scope:
 
 ## Observe Directive
 
-The `observe` directive selects which upstream namespaces and fields are visible to the action. When specified, only listed namespaces are included in the LLM context.
+The `observe` directive selects which upstream namespaces and fields are visible to the action. Only the listed fields are included in the LLM context.
 
 ```yaml
 - name: Cluster_Validation_Agent
@@ -53,11 +53,13 @@ The `observe` directive selects which upstream namespaces and fields are visible
 
 ## Drop Directive
 
-The `drop` directive excludes fields from the LLM context. All other fields are included unless `observe` is also specified.
+The `drop` directive removes fields from the context that `observe` selected, usually through a wildcard such as `source.*`. `drop` adds nothing: an action with only `drop` has no `source` namespace in its context, and a prompt that reads `source` fails.
 
 ```yaml
 - name: fact_extractor
   context_scope:
+    observe:
+      - source.*
     drop:
       - source.syllabus    # Reference data not needed
       - source.url         # URL not relevant
@@ -81,7 +83,7 @@ The `passthrough` directive forwards fields directly to the action output **with
 :::warning Passthrough preserves output — it does not feed downstream context
 `passthrough` keeps a field in **this action's own output record** (for lineage or export). It does **not** make that field available to later actions _through_ this action. A downstream action that needs the value must `observe` it from its **original producing action** (for example `observe: [source.url]`), not from the action that passed it through.
 
-In particular, `observe: [some_action.*]` expands only to `some_action`'s own output fields — it does **not** pull in fields that `some_action` merely passed through. Relying on an upstream `passthrough` to satisfy a downstream `observe` can make the field resolve **empty at runtime**, silently, because the field is still declared on the consumer's schema.
+In particular, `observe: [some_action.*]` expands only to `some_action`'s own output fields — it does **not** pull in fields that `some_action` merely passed through. An upstream `passthrough` does not satisfy a downstream `observe`: a wildcard leaves the passed-through field out of the context, and an explicit `observe: [some_action.url]` is refused before the run.
 
 A passed-through field is stored under the namespace it came from, not under the action that passed it through: after `passthrough: [source.url]` on `summarize`, the field is `source.url`. Pre-flight refuses a prompt, `observe` or `passthrough` that reads `summarize.url`, or a field `summarize` only observes, the same way it refuses a field the action's schema does not list.
 :::
@@ -109,7 +111,7 @@ defaults:
 
 ## Version Field Patterns
 
-When consuming outputs from version actions, field names are prefixed to avoid collisions. Use wildcard syntax to reference all iterations:
+Each iteration of a version action keeps its output in its own namespace, named with the iteration number (`extract_raw_qa_1`, `extract_raw_qa_2`). A consumer declares `version_consumption` and uses wildcard syntax to reference all iterations:
 
 ```yaml
 - name: extract_raw_qa
@@ -118,9 +120,12 @@ When consuming outputs from version actions, field names are prefixed to avoid c
 
 - name: flatten_questions
   dependencies: [extract_raw_qa]
+  version_consumption:
+    source: extract_raw_qa
+    pattern: merge
   context_scope:
     observe:
-      - extract_raw_qa.*  # Matches extract_raw_qa_1_*, extract_raw_qa_2_*, etc.
+      - extract_raw_qa.*  # Matches the namespaces extract_raw_qa_1, extract_raw_qa_2, ...
 ```
 
 See [Version Actions](../execution/versions) for complete documentation.
@@ -141,13 +146,13 @@ Actions referenced in `context_scope` or the prompt but **not** in `dependencies
   context_scope:
     observe:
       - validate_data.*        # From input files
-      - enrich_data.*          # Auto-inferred: upstream of validate_data
-      - extract_data.*         # Auto-inferred: upstream of enrich_data
+      - enrich_data.*          # Upstream of validate_data
+      - extract_data.*         # Upstream of enrich_data
 ```
 
 **How it works:**
 1. `validate_data` is in `dependencies` → its output files are processed as input
-2. `enrich_data` and `extract_data` are only in `context_scope` → auto-inferred as context dependencies
+2. `enrich_data` and `extract_data` are only in `context_scope`. They are upstream of `validate_data`, so pre-flight accepts them without a `dependencies` entry
 3. Context dependencies are read from the namespaces on each input record, so the data comes from the same record
 
 Preflight refuses an action that names one that is not upstream of it, such as an action
@@ -199,7 +204,7 @@ first record it names. See [Granularity](../execution/granularity.md#output-proc
 
 ## Resolution Order
 
-1. **Observe filter** - If `observe` is specified, start with only those fields
+1. **Observe filter** - Start with only the fields `observe` lists
 2. **Drop filter** - Remove any fields in `drop` list
 3. **Passthrough merge** - After LLM processing, merge passthrough fields into output
 
@@ -208,7 +213,7 @@ Passthrough fields never enter the LLM context—they join the output after proc
 ## Best Practices
 
 1. **Use observe for focus**: When LLM needs only specific fields
-2. **Use drop for noise reduction**: When most fields are needed but some aren't
+2. **Use drop for noise reduction**: Pair it with a wildcard `observe` when most fields are needed but some aren't
 3. **Use passthrough for data lineage**: Preserve data that downstream actions need
 
 ### Combined Example
@@ -218,7 +223,7 @@ Passthrough fields never enter the LLM context—they join the output after proc
   dependencies: [generate_summary]
   context_scope:
     observe:
-      - generate_summary.summary    # LLM needs this
+      - generate_summary.*          # LLM needs these
     passthrough:
       - source.url                  # Preserve for downstream
     drop:
@@ -227,7 +232,7 @@ Passthrough fields never enter the LLM context—they join the output after proc
 
 ## Debugging Context
 
-Enable `prompt_debug` to see the rendered context:
+Enable `prompt_debug` to print the rendered prompt and its context data:
 
 ```yaml
 - name: my_action

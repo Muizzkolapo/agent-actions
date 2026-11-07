@@ -77,6 +77,8 @@ Re-running a workflow over differently named input files leaves the earlier
 run's records in place and counts them too; `agac run --fresh` clears them. A
 `?` means the count could not be read at all — which is not the same as zero.
 
+An action with an action-level row, such as one halted after its retries were used up, appears in a second table titled `Action-level state`, followed by a hint that a halted action is not re-run by `agac run` and is resumed with `agac retry` or restarted with `agac run --fresh`.
+
 ## Examples
 
 ### Full workflow overview
