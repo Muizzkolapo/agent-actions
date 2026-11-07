@@ -15,8 +15,11 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.models.action_schema import FieldSource
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
+from agent_actions.utils.module_loader import _resolve_module_file, load_module_from_directory
+from agent_actions.utils.tools_resolver import parse_udf_call, resolve_tools_path
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf_metadata
 from agent_actions.validation.bus_namespace_validator import (
     bus_namespace_warnings,
@@ -55,6 +58,37 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 logger = logging.getLogger(__name__)
 
 
+def _token(value: Any) -> str:
+    return str(getattr(value, "value", value) or "").lower()
+
+
+def _dispatch_lookup_problem(call: str, tools_path: str | None) -> str | None:
+    """Why the run could not call this schema dispatch function, or None when it can.
+
+    Looks it up as the run does: the call's first argument, a file named for its module
+    under the tools path, else a standard import, then the function by name.
+    """
+    module_name, function_name, _ = parse_udf_call(call)
+    if not tools_path:
+        return "but no tools path is set, so dispatch_task cannot import it."
+    module_file = _resolve_module_file(module_name, tools_path)
+    if module_file is None and "." not in module_name:
+        copies = [p for p in Path(tools_path).rglob(f"{module_name}.py") if p.is_file()]
+        if len(copies) > 1:
+            return f"but {module_name}.py is in more than one place under {tools_path}."
+    module = load_module_from_directory(module_name, tools_path)
+    if module is None:
+        if module_file is not None:
+            return f"but {module_file} could not be imported; see the warning above."
+        return (
+            f"and no tool file defines it: dispatch_task looks for {module_name}.py with a "
+            f"function {function_name} under {tools_path}."
+        )
+    if not callable(getattr(module, function_name, None)):
+        return f"but {module_file or module_name} defines no function {function_name}."
+    return None
+
+
 def static_warning_lines(warnings: list[StaticTypeWarning]) -> list[str]:
     """One line per distinct finding: a prompt and an observe entry often report the same one."""
     lines = (
@@ -89,6 +123,7 @@ class PreflightService:
         # 0. Every tool and UDF guard named was loaded. A missing one would fail only when
         # its action runs, after every action before it has run.
         self._check_udfs_are_loaded()
+        self._check_schema_dispatches()
 
         # 1. Schema validation
         self.schema_service = WorkflowSchemaService.from_action_configs(
@@ -319,6 +354,35 @@ class PreflightService:
                 except FunctionNotFoundError as exc:
                     exc.context["action_name"] = action
                     raise
+
+    def _check_schema_dispatches(self) -> None:
+        """Refuse a ``schema: dispatch_task(...)`` the run could not resolve.
+
+        The function is looked up as the run looks it up, not in the UDF registry. Batch
+        compiles one schema for every row, so a dispatched schema there is refused.
+        """
+        problems: list[str] = []
+        for action, config in self.action_configs.items():
+            function = schema_dispatch_function(config.get("schema"))
+            if function is None:
+                continue
+            if _token(config.get("run_mode")) == "batch":
+                problems.append(
+                    f"Action '{action}' takes its schema from dispatch_task, which runs once "
+                    "per record and is supported only with run_mode: online. Set "
+                    "'run_mode: online' on this action."
+                )
+                continue
+            problem = _dispatch_lookup_problem(function, resolve_tools_path(config))
+            if problem:
+                problems.append(
+                    f"Action '{action}' dispatches its schema to '{function}', {problem}"
+                )
+        if problems:
+            raise PreFlightValidationError(
+                "\n".join(problems),
+                hint="Fix each schema dispatch above before running the workflow.",
+            )
 
     @staticmethod
     def _tool_udf_source(action: str, impl: str) -> str | None:

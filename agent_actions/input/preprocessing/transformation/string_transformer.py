@@ -7,7 +7,7 @@ import tiktoken
 
 from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.utils.module_loader import load_module_from_directory
-from agent_actions.utils.tools_resolver import anchor_to_project_root
+from agent_actions.utils.tools_resolver import anchor_to_project_root, parse_udf_call
 
 # Optional dependencies
 try:
@@ -37,15 +37,10 @@ class StringProcessor:
     def call_user_function(call_args, tools_path=None, context_data_str=None):
         """Dynamically load and execute a user-defined function from the tools folder."""
         try:
-            args = [arg.strip().strip("'\"") for arg in call_args.split(",")]
-            full_function_name = args[0]
-            function_args = args[1:]
-
-            if "." in full_function_name:
-                module_name, function_name = full_function_name.rsplit(".", 1)
-            else:
-                module_name = full_function_name
-                function_name = full_function_name
+            module_name, function_name, function_args = parse_udf_call(call_args)
+            full_function_name = (
+                function_name if module_name == function_name else f"{module_name}.{function_name}"
+            )
 
             if not tools_path:
                 raise ConfigurationError(

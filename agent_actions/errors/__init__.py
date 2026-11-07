@@ -79,6 +79,7 @@ from agent_actions.errors.processing import (
     GenerationError,
     GuardNotAppliedError,
     ProcessingError,
+    SchemaDispatchError,
     SerializationError,
     TransformationError,
     WorkflowError,
@@ -145,6 +146,7 @@ __all__ = [
     "WorkflowError",
     "SerializationError",
     "EmptyOutputError",
+    "SchemaDispatchError",
     # External Services
     "ExternalServiceError",
     "VendorAPIError",

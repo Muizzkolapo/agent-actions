@@ -52,18 +52,64 @@ def run_dynamic_agent(
 
     llm_data = llm_context if llm_context is not None else context
 
+    record_config, dispatch_results = _choose_dispatched_schema(agent_config, llm_data, tools_path)
+
     response = agent_builder.create_dynamic_agent(
-        agent_config,
+        record_config,
         llm_data,
         formatted_prompt,
         tools_path=tools_path,
         tool_args=tool_args,
         source_content=source_content,
     )
+    if dispatch_results:
+        response = [
+            {**item, **dispatch_results} if isinstance(item, dict) else item for item in response
+        ]
 
-    response = _validate_llm_output_schema(response, agent_config, agent_name)
+    response = _validate_llm_output_schema(response, record_config, agent_name)
 
     return (response, True)
+
+
+def _choose_dispatched_schema(
+    agent_config: dict[str, Any], llm_data: Any, tools_path: str | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve a ``schema: dispatch_task(...)`` once for this record.
+
+    The call and the output check then read the same schema, and the dispatch function
+    runs once. Returns the record's config and any ``add_dispatch`` results.
+    """
+    from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+
+    if schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is None:
+        return agent_config, {}
+    vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+    if vendor in {"tool", "hitl"}:
+        return agent_config, {}
+
+    from pathlib import Path
+
+    from agent_actions.llm.realtime.services import ContextService
+    from agent_actions.output.response.context_data import (
+        _load_inline_schema,
+        _prepare_context_data_str,
+    )
+    from agent_actions.utils.tools_resolver import resolve_tools_path
+
+    tools = tools_path or resolve_tools_path(agent_config)
+    context = ContextService.prepare_context_data(llm_data, is_tool=False)
+    project_root = agent_config.get("_project_root")
+    captured: dict[str, Any] = {}
+    schema, _ = _load_inline_schema(
+        agent_config[SCHEMA_KEY],
+        tools,
+        _prepare_context_data_str(context, tools),
+        agent_config,
+        captured,
+        project_root=Path(project_root) if project_root else None,
+    )
+    return {**agent_config, SCHEMA_KEY: schema}, captured
 
 
 def _is_tool_action(agent_config: dict[str, Any]) -> bool:

@@ -4,9 +4,23 @@ Dispatch and injection logic for schema processing.
 Handles recursive dispatch_task() resolution and injection into schema structures.
 """
 
+import re
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError
+
+_DISPATCH_CALL = re.compile(r'dispatch_task\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)')
+
+
+def schema_dispatch_function(value: Any) -> str | None:
+    """The function a ``schema:`` value dispatches to, when the value is exactly one call.
+
+    Such a value is resolved per record by that function; it never names a schema file.
+    """
+    if not isinstance(value, str):
+        return None
+    match = _DISPATCH_CALL.fullmatch(value.strip())
+    return match.group(1) if match else None
 
 
 def _inject_functions_into_schema(

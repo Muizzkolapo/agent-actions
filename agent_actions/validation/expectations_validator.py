@@ -17,6 +17,7 @@ from agent_actions.expectations.expression import (
 from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
 from agent_actions.llm.config.vendor import runs_in_batch
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 
 EXPECTATIONS_REMEDY = (
     "Fix the expect: block — each defect names its correction. For "
@@ -154,7 +155,12 @@ def _repair_mode_defects(
             "regenerate all of them; use repair: none or record granularity"
         )
     schema = action.get("schema")
-    if schema is not None and not isinstance(schema, dict):
+    if schema_dispatch_function(schema):
+        messages.append(
+            f"repair: {repair} cannot run with a schema chosen per record by dispatch_task — "
+            "the structural gate checks every record against one schema; use repair: none"
+        )
+    elif schema is not None and not isinstance(schema, dict):
         messages.append(
             f"repair: {repair} found a non-mapping schema ({type(schema).__name__}); "
             "the structural gate would silently check record shape only — fix the schema"
@@ -206,6 +212,12 @@ def _own_schema_entries(
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
         return _named_suite_entries(schema_name, project_root)
+    if schema_dispatch_function(schema_data):
+        return [], [
+            "a bare expect: reads the rules of the action's own schema, but this action's "
+            "schema is chosen per record by dispatch_task, so it has none to read; use "
+            "suite: or an inline expectations: list"
+        ]
     return [], [
         "a bare expect: reads the rules of the action's own schema, "
         "but this action declares no schema; add one, or use suite: or an "

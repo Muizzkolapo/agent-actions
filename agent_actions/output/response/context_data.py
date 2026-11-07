@@ -10,12 +10,14 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.path_config import get_required_by_default, resolve_project_root
+from agent_actions.errors import ConfigValidationError, SchemaDispatchError, SchemaValidationError
 from agent_actions.llm.config.runtime_profiles import wire_vendor
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.schema_utils import is_compiled_schema
 
-from .dispatch_injection import _resolve_dispatch_in_schema
+from .dispatch_injection import _resolve_dispatch_in_schema, schema_dispatch_function
 from .vendor_compilation import SUPPORTED_VENDORS, compile_unified_schema
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,7 @@ def _load_inline_schema(
     context_data_str: str,
     agent_config: dict[str, Any],
     captured_results: dict[str, Any],
+    project_root: Path | None = None,
 ) -> tuple[dict[str, Any], str]:
     """
     Load and prepare inline schema from agent config.
@@ -58,14 +61,28 @@ def _load_inline_schema(
         context_data_str: Context data as JSON string
         agent_config: Agent configuration
         captured_results: Dictionary to collect function outputs
+        project_root: Project root, for a dispatched schema name and required_by_default
 
     Returns:
         Tuple of (prepared schema dict, schema name)
     """
-    # Resolve dispatch if schema is a dispatch call string
-    resolved_schema = _resolve_dispatch_in_schema(
-        inline_schema, tools_path, context_data_str, agent_config, captured_results
-    )
+    dispatched_to = schema_dispatch_function(inline_schema)
+    if dispatched_to is None:
+        resolved_schema = _resolve_dispatch_in_schema(
+            inline_schema, tools_path, context_data_str, agent_config, captured_results
+        )
+    else:
+        try:
+            returned = _resolve_dispatch_in_schema(
+                inline_schema, tools_path, context_data_str, agent_config, captured_results
+            )
+        except ConfigValidationError as exc:
+            raise SchemaDispatchError(
+                f"dispatch_task('{dispatched_to}') in schema failed for this record: {exc}",
+                context={"function": dispatched_to},
+                cause=exc,
+            ) from exc
+        resolved_schema = _dispatched_schema(dispatched_to, returned, project_root)
 
     # A compiled form (fields, or a JSON Schema array/object) is compiled later by
     # compile_unified_schema; only shorthand goes through the shorthand parser.
@@ -74,8 +91,36 @@ def _load_inline_schema(
     else:
         base_schema = SchemaLoader.construct_schema_from_dict(resolved_schema)
 
+    if dispatched_to is not None and "required_by_default" not in base_schema:
+        # A schema chosen per record follows the project setting, as a schema file does.
+        base_schema = {
+            **base_schema,
+            "required_by_default": get_required_by_default(resolve_project_root(project_root)),
+        }
+
     schema_name = agent_config.get("name", "inline_schema")
     return base_schema, schema_name
+
+
+def _dispatched_schema(function_name: str, returned: Any, project_root: Path | None) -> Any:
+    """The schema a dispatch function chose: a mapping, or the name of a schema file."""
+    if isinstance(returned, dict):
+        return returned
+    if isinstance(returned, str):
+        try:
+            return SchemaLoader.load_schema(returned, project_root=project_root)
+        except (FileNotFoundError, ConfigValidationError, SchemaValidationError) as exc:
+            raise SchemaDispatchError(
+                f"dispatch_task('{function_name}') in schema returned the schema name "
+                f"'{returned}', which cannot be loaded: {exc}",
+                context={"function": function_name, "schema_name": returned},
+                cause=exc,
+            ) from exc
+    raise SchemaDispatchError(
+        f"dispatch_task('{function_name}') in schema returned {returned!r}; "
+        "return a schema mapping or the name of a schema file.",
+        context={"function": function_name, "returned_type": type(returned).__name__},
+    )
 
 
 def _load_named_schema(

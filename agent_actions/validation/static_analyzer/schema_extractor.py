@@ -7,6 +7,7 @@ from typing import Any
 from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.tooling.code_scanner import scan_tool_functions
@@ -336,7 +337,10 @@ class SchemaExtractor:
             output.schema_fields.add("content")
             return
 
-        if isinstance(schema_def, str):
+        if schema_dispatch_function(schema_def):
+            # Chosen per record by a tool; nothing to load or check statically.
+            output.is_dynamic = True
+        elif isinstance(schema_def, str):
             self._try_load_schema(output, schema_def, schema_loader)
         elif isinstance(schema_def, dict):
             output.json_schema = schema_def
@@ -367,7 +371,9 @@ class SchemaExtractor:
             output.is_schemaless = True
             return
 
-        if isinstance(schema_def, str):
+        if schema_dispatch_function(schema_def):
+            output.is_dynamic = True
+        elif isinstance(schema_def, str):
             self._try_load_schema(output, schema_def, schema_loader)
         elif isinstance(schema_def, dict):
             output.json_schema = schema_def
