@@ -81,11 +81,14 @@ MISSING_TWO = (
 )
 
 
-def _declare(project, observe: str):  # noqa: F811
+def _declare(project, observe: str, guard: str | None = None):  # noqa: F811
     config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-    config.write_text(config.read_text().rstrip("\n") + "\n" + ACTIONS.replace("OBSERVE", observe))
-    (project / "tools" / WORKFLOW / "prepare.py").write_text(PREPARE_TOOL)
-    (project / "tools" / WORKFLOW / "counted.py").write_text(COUNT_TOOL)
+    actions = ACTIONS.replace("OBSERVE", observe)
+    if guard:
+        actions = actions.replace(
+            "    impl: count_handed\n", f"    impl: count_handed\n    guard: {guard}\n"
+        )
+    config.write_text(config.read_text().rstrip("\n") + "\n" + actions)
 
 
 def _status(project, action):  # noqa: F811
@@ -185,3 +188,23 @@ class TestARecordWhoseUpstreamFailedIsNotARefusal:
         assert _disposition(project, page_4, "counted") == "unprocessed"
         assert _reasons(project, "counted")[page_4] == "upstream_unprocessed"
         assert _status(project, "counted") == "completed"
+
+
+class TestTheGuardDecidesBeforeTheRefusal:
+    def test_a_record_the_guard_skips_is_skipped_not_failed(self, project):  # noqa: F811
+        """The scope refuses the record before the guard runs, but the guard still
+        judges it: one it would skip is a guard skip, as in RECORD mode."""
+        _declare(
+            project,
+            "prepare.summary, prepare.region, prepare.zone",
+            guard="{ condition: 'prepare.summary != \"page 2\"', on_false: skip }",
+        )
+
+        result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+
+        assert result.exit_code == 0, result.output
+        page_2 = _page(project, 2)
+        assert _disposition(project, page_2, "counted") == "unprocessed"
+        assert _reasons(project, "counted")[page_2] == "guard_prefilter_skip"
+        assert _status(project, "counted") == "completed"
+        assert "item-level failure" not in result.output

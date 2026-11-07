@@ -9,6 +9,7 @@ enrichment, result collection) is handled uniformly by UnifiedProcessor.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
@@ -87,13 +88,15 @@ class UnifiedProcessor:
         raw_records: list[dict[str, Any]] | None = None,
         repair_inputs: list[dict[str, Any]] | None = None,
         whole_file: bool = False,
-        refused: list[ProcessingResult] | None = None,
+        refused: Mapping[int, str] | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Guard-filter, gate, quarantine, invoke, enrich and collect, in that order.
 
-        *refused* are the FILE scope pass's failures: records the action could not be
-        handed. They are collected beside the strategy's own, so one writer owns every
-        disposition, tombstone and failure cause of the action.
+        *refused* names, by position in *records*, each record the FILE scope pass could
+        not hand the action and why. Such a record is judged by the guard like any
+        other; one the guard admits fails with that reason, collected beside the
+        strategy's own results so one writer owns every disposition, tombstone and
+        failure cause, and one an action above left cascade-blocked is quarantined.
 
         The guard does not judge a record an action above failed or cascade-skipped: it
         passes on, and is carried by the gate or quarantined, as batch decides it.
@@ -119,6 +122,9 @@ class UnifiedProcessor:
                 f"records for {len(records)} records. The two are read position for "
                 f"position and there is no way to pair them once they differ."
             )
+
+        # By identity, since a repair narrows the list below and positions move.
+        refused_by_id = {id(records[at]): why for at, why in (refused or {}).items()}
 
         # Stamp first-stage records at the source BEFORE the guard split, so
         # guard-skipped records carry a (deterministic, content-hash) identity too
@@ -165,11 +171,16 @@ class UnifiedProcessor:
                     context.action_name, context.target_relative_path
                 )
 
+        refusals: list[ProcessingResult] = []
         if raw_records is not None:
             # FILE mode: the guard reads these, and they pair to `records` by position
             passing, guard_results, original_passing = self._guard_filter_file_mode(
                 records, context, raw_records
             )
+            if refused_by_id:
+                passing, original_passing, refusals = _fail_refused(
+                    passing, original_passing, refused_by_id
+                )
             context.source_data = original_passing
             # prefilter_by_guard returns these index-aligned. Keep the pairing so
             # any later filtering or reordering of `passing` can be replayed onto
@@ -320,9 +331,7 @@ class UnifiedProcessor:
         # This divergence is intentional. Do not unify without verifying FILE-mode
         # workflows that depend on sequential accumulation (e.g., multi-pass enrichment).
         if raw_records is not None:
-            all_results = (
-                quarantined_results + invocation_results + guard_results + list(refused or [])
-            )
+            all_results = quarantined_results + invocation_results + guard_results + refusals
         else:
             all_results = (
                 guard_results + quarantined_results + invocation_results + checkpointed_results
@@ -611,3 +620,33 @@ class NoOpStrategy:
             ProcessingResult.success(data=[record], source_guid=record.get("source_guid"))
             for record in records
         ]
+
+
+def refused_failure(original: dict[str, Any], why: str) -> ProcessingResult:
+    """The failure of a record the scope pass could not hand the action, as handed in."""
+    return ProcessingResult.failed(
+        error=why, source_guid=original.get("source_guid"), input_record=original
+    )
+
+
+def _fail_refused(
+    passing: list[dict[str, Any]],
+    original_passing: list[dict[str, Any]],
+    refused_by_id: Mapping[int, str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[ProcessingResult]]:
+    """Split the guard's admitted records into the ones the action gets and the refused.
+
+    A refused record an action above left cascade-blocked stays in the list for the
+    cascade filter: it is that action's, not a failure of this one.
+    """
+    kept: list[dict[str, Any]] = []
+    kept_originals: list[dict[str, Any]] = []
+    refusals: list[ProcessingResult] = []
+    for record, original in zip(passing, original_passing, strict=True):
+        why = refused_by_id.get(id(record))
+        if why is None or record.get("_state") in CASCADE_BLOCKING_VALUES:
+            kept.append(record)
+            kept_originals.append(original)
+        else:
+            refusals.append(refused_failure(original, why))
+    return kept, kept_originals, refusals
