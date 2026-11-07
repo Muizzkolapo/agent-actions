@@ -471,14 +471,22 @@ class FakeDataGenerator:
         schema = schema or {}
         text = cls._generate_unsized_string(attempt, schema, field_name)
         bounds = cls._declared_bounds(schema, "minLength", "maxLength", 200)
-        if bounds is None or bounds[0] <= len(text) <= bounds[1]:
+        # A formatted value padded with prose or cut short is no longer that format.
+        if bounds is None or schema.get("format") or bounds[0] <= len(text) <= bounds[1]:
             return text
         rng = cls._get_rng()
         low, high = int(bounds[0]), int(bounds[1])
-        target = rng.randint(low, high) if low <= high else low
-        while len(text) < target:
+        while len(text) < low:
             text = f"{text} {cls._generate_sentence(attempt, rng)}"
-        return text[:target]
+        return cls._cut_at_word(text, max(low, 1), high)
+
+    @staticmethod
+    def _cut_at_word(text: str, shortest: int, longest: int) -> str:
+        """*text* cut to at most *longest* characters, at a word boundary when that keeps *shortest*."""
+        if len(text) <= longest:
+            return text
+        space = text.rfind(" ", 0, longest + 1)
+        return text[:space] if space >= shortest else text[:longest]
 
     @classmethod
     def _generate_unsized_string(
@@ -651,6 +659,10 @@ class FakeDataGenerator:
         bounds = cls._declared_bounds(schema, "minimum", "maximum", 1000)
         if bounds is not None:
             low, high = bounds
+            if multiple_of:
+                first, last = math.ceil(low / multiple_of), math.floor(high / multiple_of)
+                if first <= last:
+                    return round(rng.randint(first, last) * multiple_of, 10)
             return min(max(round(rng.uniform(low, high), 2), low), high)
 
         # Context-aware generation

@@ -81,3 +81,33 @@ def test_a_long_minimum_length_is_met():
     values = _values({"type": "string", "minLength": 300}, "summary")
 
     assert all(len(v) >= 300 for v in values)
+
+
+def test_a_bounded_number_keeps_its_multiple():
+    values = _values({"type": "number", "minimum": 0, "maximum": 10, "multipleOf": 0.5}, "score")
+
+    assert all(0 <= v <= 10 and (v * 2).is_integer() for v in values), sorted(set(values))
+    assert len(set(values)) > 2
+
+
+def test_a_maximum_length_alone_never_empties_a_string():
+    values = _values({"type": "string", "maxLength": 20}, "summary")
+
+    assert all(1 <= len(v) <= 20 for v in values), sorted({len(v) for v in values})
+    assert not any(v.endswith(" ") for v in values)
+
+
+def test_a_long_string_is_cut_at_a_word_boundary():
+    whole = _values({"type": "string"}, "summary")
+    cut = _values({"type": "string", "maxLength": 20}, "summary")
+
+    for full, short in zip(whole, cut, strict=True):
+        assert full.startswith(short), (full, short)
+        assert len(full) == len(short) or full[len(short)] == " ", (full, short)
+    assert any(len(full) > 20 for full in whole)
+
+
+def test_a_formatted_string_keeps_its_format_over_a_length_bound():
+    values = _values({"type": "string", "format": "email", "minLength": 60}, "email")
+
+    assert all(v.count("@") == 1 and " " not in v for v in values), values[:3]
