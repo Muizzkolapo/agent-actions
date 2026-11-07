@@ -606,3 +606,42 @@ class TestTheStreamSaysNothingItDoesNotNeedTo:
             )
         )
         assert "2 batch jobs submitted" in out
+
+
+class TestGuardSkipsAreNamed:
+    """The record count holds the guard's tombstones; the line says how many those are."""
+
+    @staticmethod
+    def _repaired(guard_skipped):
+        return ActionCompleteEvent(
+            action_name="repaired",
+            action_index=0,
+            total_actions=1,
+            execution_time=0.1,
+            record_count=4,
+            model_vendor="agac-provider",
+            model_name="mock",
+            kind="llm",
+            guard_skipped=guard_skipped,
+        )
+
+    def test_action_line_names_guard_skips(self, rendered):
+        out = rendered(self._repaired(1))
+
+        assert "  ✓ repaired  4 records in 0.1s (agac-provider/mock) — 1 skipped by guard" in out
+
+    def test_action_line_without_guard_skips_is_unchanged(self, rendered):
+        out = rendered(self._repaired(0))
+
+        assert out.rstrip("\n").endswith("  ✓ repaired  4 records in 0.1s (agac-provider/mock)")
+        assert "skipped by guard" not in out
+
+    def test_the_event_carries_the_count(self):
+        assert self._repaired(3).data["guard_skipped"] == 3
+
+    def test_a_plain_stream_names_guard_skips_too(self):
+        renderer = TestAPlainStream._plain()
+
+        out = TestAPlainStream._capture(renderer, self._repaired(2))
+
+        assert "OK repaired  4 records in 0.1s (agac-provider/mock) — 2 skipped by guard" in out

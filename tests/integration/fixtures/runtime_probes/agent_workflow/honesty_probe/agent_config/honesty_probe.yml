@@ -1,0 +1,52 @@
+name: honesty_probe
+description: "Run-outcome honesty probe"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider
+  model_name: mock
+  api_key: OLLAMA_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: repaired
+    intent: "return_last ships a record that still fails"
+    schema: probe_page_summary
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content, source.keep] }
+    guard: { condition: "source.keep > 0", on_false: skip }
+    expect:
+      repair: auto
+      max_iterations: 3
+      on_exhausted: return_last
+      expectations:
+        - id: never_matches
+          type: matches_regex
+          field: summary
+          params: { pattern: '^NEVER_MATCHES$' }
+  - name: observed
+    intent: "repair none with a failing error rule"
+    schema: probe_page_summary
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect:
+      repair: none
+      expectations:
+        - id: never_matches
+          type: matches_regex
+          field: summary
+          params: { pattern: '^NEVER_MATCHES$' }
+  - name: warned
+    intent: "a warn rule fails on every record"
+    schema: probe_page_summary
+    prompt: $p.Summarize
+    context_scope: { observe: [source.page_content] }
+    expect:
+      repair: none
+      expectations:
+        - id: never_matches_warn
+          type: matches_regex
+          field: summary
+          severity: warn
+          params: { pattern: '^NEVER_MATCHES$' }

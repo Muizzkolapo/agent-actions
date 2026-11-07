@@ -14,6 +14,10 @@ GUARD_SKIP = "guard_skip"
 GUARD_PREFILTER_SKIP = "guard_prefilter_skip"
 GUARD_FILTER = "guard_filter"
 LLM_LAYER_GUARD_SKIP = "llm_layer_guard_skip"
+# On an ``unprocessed`` row, the reasons that mean the action's own guard turned the
+# record away (not an upstream cascade). The collector stamps these rows guard-skipped
+# and counts them for the run line; ``agac dispositions`` counts them as Guard skipped.
+GUARD_SKIP_REASONS = frozenset({GUARD_SKIP, GUARD_PREFILTER_SKIP, GUARD_FILTER})
 LLM_LAYER_GUARD_FILTER = "llm_layer_guard_filter"
 
 # -- Cascade / upstream ------------------------------------------------------

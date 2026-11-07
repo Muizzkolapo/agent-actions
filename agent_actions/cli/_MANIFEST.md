@@ -24,7 +24,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
 | `compile` | Function | Alias for render — compile workflow configuration. | - |
-| `dispositions.py` | Module | Inspect record-level processing dispositions per action. `--quarantined` lists failed, exhausted and unprocessed records (`QUARANTINED_DISPOSITIONS`), the last with the reason no answer reached them. | `cli`, `storage`, `validation` |
+| `dispositions.py` | Module | Inspect record-level processing dispositions per action. `--quarantined` lists failed, exhausted and unprocessed records (`QUARANTINED_DISPOSITIONS`), the last with the reason no answer reached them. The summary splits unprocessed rows into `Guard skipped` (reason in `record.reasons.GUARD_SKIP_REASONS`, the same set the collector counts for the run line) and `Unprocessed` (the rest); the columns still add up to `Total`. The summary table is printed at its full width (`_print_whole`), wider than a narrow terminal if it has to be, so no count or action name is cut short. | `cli`, `storage`, `validation` |
 | `DispositionsCommand` | Class | Implementation of the dispositions command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the dispositions command. | - |
 | `dispositions` | Function | Inspect record-level processing dispositions per action. | - |

@@ -25,8 +25,8 @@ from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     CONSUMED_INTO_OUTPUT,
     GUARD_FILTER,
-    GUARD_PREFILTER_SKIP,
     GUARD_SKIP,
+    GUARD_SKIP_REASONS,
     PARSE_ERROR,
     RETRY_EXHAUSTED,
     SUCCESS,
@@ -843,7 +843,7 @@ def collect_results_from_processing_results(
                 # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
                 state = (
                     RecordState.GUARD_SKIPPED
-                    if reason in (GUARD_PREFILTER_SKIP, GUARD_SKIP, GUARD_FILTER)
+                    if reason in GUARD_SKIP_REASONS
                     else RecordState.CASCADE_SKIPPED
                 )
                 if state == RecordState.GUARD_SKIPPED:
@@ -986,6 +986,8 @@ def collect_results_from_processing_results(
 
     if storage_backend is not None:
         storage_backend.credit_rows_collected(action_name, len(output) - carried_rows)
+        if guard_skipped_count:
+            storage_backend.credit_guard_skips(action_name, guard_skipped_count)
 
     return output, CollectionStats(
         causes=tuple(causes),

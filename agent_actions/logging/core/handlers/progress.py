@@ -163,7 +163,11 @@ class ProgressRenderer(ConsoleEventHandler):
         model = self._model(event)
         if model:
             detail.append(f"({model})")
-        return f"  {self._icon('✓', 'OK', 'green')} {self._subject(event)}{' '.join(detail)}"
+        line = f"  {self._icon('✓', 'OK', 'green')} {self._subject(event)}{' '.join(detail)}"
+        guard_skipped = event.data.get("guard_skipped", 0)
+        if guard_skipped:
+            line += f" — {guard_skipped} skipped by guard"
+        return line
 
     def _action_skip(self, event: BaseEvent) -> str:
         reason = self._escape(event.data.get("skip_reason", ""))
