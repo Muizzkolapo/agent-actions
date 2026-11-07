@@ -56,7 +56,7 @@ def dsp_pick_schema(context_json):
 """
 
 
-def project(tmp_path: Path, run_mode: str = "online") -> Path:
+def project(tmp_path: Path, run_mode: str = "online", tool: str | None = None) -> Path:
     root = tmp_path / "project"
     workflow = root / "agent_workflow" / "w"
     (workflow / "agent_config").mkdir(parents=True)
@@ -68,14 +68,15 @@ def project(tmp_path: Path, run_mode: str = "online") -> Path:
         "{prompt Label}\nLabel the page.\n{{ source.page_content }}\n{end_prompt}\n"
     )
     (root / "tools" / "w").mkdir(parents=True)
-    (root / "tools" / "w" / "dsp_pick_schema.py").write_text(_TOOL)
+    (root / "tools" / "w" / "dsp_pick_schema.py").write_text(tool or _TOOL)
     (root / "schema").mkdir()
     (root / "agent_actions.yml").write_text(_PROJECT)
     (root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
     return root
 
 
-def keys_by_page(root: Path) -> dict[str, set[str]]:
+def keys_by_page(root: Path) -> dict[str, set[str] | None]:
+    """The answer keys stored for each page; None for a record stored with no answer."""
     backend = get_storage_backend(str(root / "agent_workflow" / "w"), "w")
     backend.initialize()
     try:
@@ -86,7 +87,12 @@ def keys_by_page(root: Path) -> dict[str, set[str]]:
         ]
     finally:
         backend.close()
-    return {row["content"]["source"]["page_id"]: set(row["content"]["label_page"]) for row in rows}
+    return {
+        row["content"]["source"]["page_id"]: (
+            None if row["content"]["label_page"] is None else set(row["content"]["label_page"])
+        )
+        for row in rows
+    }
 
 
 def test_inspect_passes_it_without_looking_for_a_file(tmp_path):
@@ -109,3 +115,29 @@ def test_each_record_answers_in_the_schema_its_function_picked(tmp_path):
     keys = keys_by_page(root)
     assert "topic" in keys["p1"] and "verdict" not in keys["p1"]
     assert "verdict" in keys["p2"] and "topic" not in keys["p2"]
+
+
+_NONE_FOR_P2 = """\
+import json
+
+
+def dsp_pick_schema(context_json):
+    page_id = (json.loads(context_json).get("source") or {}).get("page_id", "")
+    if page_id == "p1":
+        return {"name": "topic_answer", "fields": [{"id": "topic", "type": "string"}]}
+    return None
+"""
+
+
+def test_a_function_returning_none_fails_that_record_alone(tmp_path):
+    root = project(tmp_path, tool=_NONE_FOR_P2)
+
+    result = run_agac(root, "run", "-a", "w", "--fresh", env={"COLUMNS": "400"})
+    output = result.stdout + result.stderr
+
+    assert (
+        "dispatch_task('dsp_pick_schema') in schema returned None; "
+        "return a schema mapping or the name of a schema file."
+    ) in output, output
+    assert "AttributeError" not in output, output
+    assert keys_by_page(root) == {"p1": {"topic"}, "p2": None}

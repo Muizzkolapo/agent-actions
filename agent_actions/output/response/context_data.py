@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.path_config import get_required_by_default, resolve_project_root
-from agent_actions.errors import ConfigValidationError, SchemaDispatchError, SchemaValidationError
+from agent_actions.errors import ConfigValidationError, SchemaValidationError
+from agent_actions.errors.processing import SchemaDispatchError
 from agent_actions.llm.config.runtime_profiles import wire_vendor
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
@@ -68,9 +69,7 @@ def _load_inline_schema(
     """
     dispatched_to = schema_dispatch_function(inline_schema)
     if dispatched_to is None:
-        resolved_schema = _resolve_dispatch_in_schema(
-            inline_schema, tools_path, context_data_str, agent_config, captured_results
-        )
+        resolved_schema = inline_schema
     else:
         try:
             returned = _resolve_dispatch_in_schema(

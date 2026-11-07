@@ -114,7 +114,7 @@ def _resolve_dispatch_in_schema(
             as ``_inject_functions_into_schema``: silent fallback was masking
             broken configs and producing opaque downstream API errors.
     """
-    if not isinstance(schema, str) or "dispatch_task(" not in schema:
+    if schema_dispatch_function(schema) is None:
         return schema
 
     from agent_actions.prompt.prompt_utils import PromptUtils

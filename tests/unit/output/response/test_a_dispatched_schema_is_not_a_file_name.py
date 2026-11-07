@@ -10,7 +10,8 @@ import logging
 
 import pytest
 
-from agent_actions.errors import ConfigurationError, SchemaDispatchError
+from agent_actions.errors import ConfigurationError
+from agent_actions.errors.processing import SchemaDispatchError
 from agent_actions.output.response.context_data import _dispatched_schema
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.expander_schema import (
