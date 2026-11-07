@@ -27,18 +27,23 @@ def _payloads(records: list[dict], observe: list[str]) -> list[dict]:
     return [extract_tool_input(r, scope) for r in enriched]
 
 
-def _llm(name: str, fields: list[str]) -> dict:
-    return {
+def _llm(name: str, fields: list[str], scope: dict | None = None) -> dict:
+    action = {
         "name": name,
         "prompt": f"Run {name}",
         "schema": {"type": "object", "properties": {f: {"type": "string"} for f in fields}},
     }
+    if scope:
+        action["context_scope"] = scope
+    return action
 
 
-def _collision_warnings(observe: list[str], gen_b_fields: list[str]) -> list:
+def _collision_warnings(
+    observe: list[str], gen_b_fields: list[str], gen_a_scope: dict | None = None
+) -> list:
     workflow = {
         "actions": [
-            _llm("gen_a", ["code", "notes"]),
+            _llm("gen_a", ["code", "notes"], gen_a_scope),
             _llm("gen_b", gen_b_fields),
             {
                 "name": "merge",
@@ -112,3 +117,11 @@ class TestWhatPreflightReports:
 
         assert "gen_a.code" in warning.message
         assert "gen_b.code" not in warning.message
+
+    def test_a_field_the_wildcard_action_only_forwards_is_not_a_collision(self):
+        """A field an action observes or passes through lands in that field's own
+        namespace at run time, never in the forwarding action's, so a wildcard on the
+        forwarding action never yields it and preflight must not count it."""
+        forwarding = {"observe": ["source.score"], "passthrough": ["source.score"]}
+
+        assert _collision_warnings(["gen_a.*", "gen_b.score"], ["score"], forwarding) == []
