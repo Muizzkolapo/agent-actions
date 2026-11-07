@@ -46,5 +46,6 @@ def test_tool_action_with_ambiguous_schema_string_degrades(tmp_path):
 def test_tool_action_with_ambiguous_schema_name_degrades(tmp_path):
     extractor = _project_with_ambiguous_schema(tmp_path)
     output = extractor.extract_schema({"kind": "tool", "schema_name": "dup"})
-    assert output.is_schemaless is True
+    assert output.is_dynamic is True
+    assert "ambiguous" in (output.load_error or "")
     assert output.json_schema is None

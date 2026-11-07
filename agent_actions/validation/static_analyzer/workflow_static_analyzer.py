@@ -216,6 +216,9 @@ class WorkflowStaticAnalyzer:
         for error in self._check_first_stage_file_granularity():
             result.add_error(error)
 
+        for error in self._check_named_schemas_load():
+            result.add_error(error)
+
         # Step 3c: context_scope validation (already ran in Step 0 before normalization)
         for error in context_scope_errors:
             result.add_error(error)
@@ -469,6 +472,40 @@ class WorkflowStaticAnalyzer:
                     hint=(
                         "Put a RECORD action in front and depend on it, so this one "
                         "receives a file of its output."
+                    ),
+                )
+            )
+        return errors
+
+    def _check_named_schemas_load(self) -> list[StaticTypeError]:
+        """Return one error per action whose named schema cannot be loaded.
+
+        The run would spend on every action upstream of it and then fail each of its
+        records, or, for a tool, write output no schema ever checked.
+        """
+        errors: list[StaticTypeError] = []
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name", "workflow")
+            node = self.graph.get_node(name)
+            if node is None or not node.output_schema.load_error:
+                continue
+            schema = action.get("schema")
+            if not isinstance(schema, str):
+                schema = action.get("schema_name") or schema
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{name}' names schema '{schema}', which cannot be loaded: "
+                        f"{node.output_schema.load_error}"
+                    ),
+                    location=FieldLocation(agent_name=name, config_field="schema"),
+                    referenced_agent=name,
+                    referenced_field="",
+                    hint=(
+                        f"Add {schema}.yml (or .yaml/.json) under the project's schema_path "
+                        "or the workflow's schema/ folder, or correct the name."
                     ),
                 )
             )

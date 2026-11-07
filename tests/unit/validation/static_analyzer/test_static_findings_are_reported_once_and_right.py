@@ -68,7 +68,7 @@ class TestABadObserveEntryIsReportedOnce:
         assert len(refs) == 1, [e.message for e in refs]
         assert "Did you mean 'source.page_content'?" in (refs[0].hint or ""), refs[0].hint
 
-    def test_a_schema_that_does_not_load_is_still_an_error_for_an_observe(self):
+    def test_a_schema_that_does_not_load_is_an_error_once_on_the_action_that_names_it(self):
         result = _analyze(
             {"name": "extractor", "schema_name": "nonexistent_schema"},
             {
@@ -78,9 +78,10 @@ class TestABadObserveEntryIsReportedOnce:
             },
         )
 
-        refs = [e for e in result.errors if e.location.raw_reference == "extractor.some_field"]
-        assert len(refs) == 1, [e.message for e in result.errors]
-        assert "nonexistent_schema" in refs[0].message
+        on_schema = [e for e in result.errors if e.location.config_field == "schema"]
+        assert [e.location.agent_name for e in on_schema] == ["extractor"]
+        assert "nonexistent_schema" in on_schema[0].message
+        assert not [e for e in result.errors if e.location.raw_reference == "extractor.some_field"]
         assert not [
             w for w in result.warnings if w.location.raw_reference == "extractor.some_field"
         ]
