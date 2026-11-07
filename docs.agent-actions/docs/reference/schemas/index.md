@@ -371,7 +371,7 @@ properties:
 
 ## Validation Constraints
 
-A constraint written on a field or property is not always sent to the provider, and not always checked on the response. This table shows what each one does on a top-level field:
+A constraint written on a field or property is not always sent to the provider, and not always checked on the response. This table shows what each one does on a top-level field of an LLM action:
 
 | Constraint | Sent to the provider | Checked on the response |
 |------------|----------------------|-------------------------|
@@ -382,6 +382,8 @@ A constraint written on a field or property is not always sent to the provider, 
 | `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | No | No |
 
 Inside the `items` of an array field, every constraint is sent with the schema, and the response is checked element by element against the whole `items` schema, so `maxLength` there is enforced.
+
+A tool action's output is checked against the schema as it is sent to a provider, so every constraint sent is enforced there, `minLength` and `maxLength` included: an output that breaks one is refused.
 
 ### String Constraints
 
@@ -419,9 +421,11 @@ properties:
 | `groq` | `response_format` `json_schema`, not strict | Sent as guidance |
 | `anthropic` | Tool `input_schema` | Sent as guidance |
 | `ollama_local`, `llamafile` | JSON schema turned into a grammar by llama.cpp | `minLength`/`maxLength` and integer `minimum`/`maximum` are enforced; `minimum`/`maximum` on a `number` are ignored |
-| `gemini`, `cohere`, `ollama_cloud` | Written into the prompt text | Sent as guidance |
+| `gemini` | Written into the prompt text online; `response_schema` in a batch | Sent as guidance |
+| `cohere` | `response_format` `json_object` with the schema; only field names in the prompt | [Cohere's structured-output docs](https://docs.cohere.com/docs/structured-outputs) list these keys as unsupported |
+| `ollama_cloud` | Written into the prompt text | Sent as guidance |
 
-Whatever the vendor, the answer is checked against the schema after it arrives, and that check holds `minimum` and `maximum` (not string length). An out-of-range value logs a schema validation warning on an ordinary action, fails the record on a declared endpoint, and is repaired as a structural failure under `expect:` repair.
+Whatever the vendor, an LLM action's answer is checked after it arrives against the `minimum`, `maximum` and `enum` the schema file writes, not string length; an out-of-range value logs a schema validation warning. A [declared endpoint](../configuration/endpoints.md) also checks its reply against the schema it sent, so a value outside `minimum` or `maximum` fails the record.
 
 ### Required Fields
 

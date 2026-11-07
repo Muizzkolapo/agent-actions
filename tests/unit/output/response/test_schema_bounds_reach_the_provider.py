@@ -11,8 +11,10 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.output.response.vendor_compilation import compile_unified_schema
+from agent_actions.utils.udf_management.tooling import output_schema_errors
 
 FIELDS_FORM = """\
 name: scored
@@ -107,3 +109,51 @@ def test_the_openai_shape_is_exactly_the_type_and_its_bounds():
         "minimum": 1,
         "maximum": 4,
     }
+
+
+def test_exclusive_bounds_and_multiple_of_stay_out():
+    unified = {
+        "name": "s",
+        "fields": [
+            {
+                "id": "score",
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMinimum": 0,
+                "exclusiveMaximum": 9,
+                "multipleOf": 0.5,
+            }
+        ],
+    }
+
+    compiled = compile_unified_schema(unified, "openai")
+
+    assert compiled["schema"]["properties"]["score"] == {"type": "number", "minimum": 0}
+
+
+def _tool_output_schema(tmp_path: Path) -> dict:
+    """The per-item schema a tool's output is checked against, as expansion builds it."""
+    compiled = compile_unified_schema(_loaded(tmp_path, FIELDS_FORM), "openai")
+    return compiled["schema"]
+
+
+@pytest.mark.parametrize(
+    ("row", "path"),
+    [
+        ({"score": 9, "label": "ok", "tier": "gold"}, "score"),
+        ({"score": 2, "label": "a" * 13, "tier": "gold"}, "label"),
+        ({"score": 2, "label": "a", "tier": "gold"}, "label"),
+    ],
+    ids=["above_maximum", "above_max_length", "below_min_length"],
+)
+def test_a_tool_output_outside_a_bound_is_refused(tmp_path, row, path):
+    errors = output_schema_errors("udf", [row], _tool_output_schema(tmp_path))
+
+    assert [e.context["error_path"] for _, e in errors] == [path]
+    assert all(isinstance(e, SchemaValidationError) for _, e in errors)
+
+
+def test_a_tool_output_inside_every_bound_is_kept(tmp_path):
+    row = {"score": 4, "label": "abcdefghijkl", "tier": "silver"}
+
+    assert output_schema_errors("udf", [row], _tool_output_schema(tmp_path)) == []
