@@ -6,6 +6,7 @@ record building, output reconciliation, guard pre-filtering.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -58,8 +59,8 @@ def _consumed_guids(
     """
     if source_mapping is not None and source_mapping.get(output_index, False) is None:
         # Mapped to no input: the row is the tool's own invention. Resolving it to one
-        # anyway — as the neighbouring _resolve_input_record does for namespaces — would
-        # hand that input's carry a row it never produced.
+        # anyway would hand that input's carry a row it never produced; its namespaces
+        # come from what every input shares (_shared_by_every_input), not from one.
         return []
 
     source_idx: int | list[int] | None = None
@@ -230,24 +231,63 @@ def _record_producers(item: dict[str, Any], consumed: list[str]) -> None:
         item["producer_source_guids"] = producers
 
 
-def _resolve_input_record(
-    input_idx: int | None, original_data: list[dict]
-) -> dict[str, Any] | None:
-    """Resolve the input record for namespace carry-forward.
+def _resolve_input_record(input_idx: int, original_data: list[dict]) -> dict[str, Any] | None:
+    """The input record a row names, for namespace carry-forward.
 
-    When *input_idx* is ``None`` (synthetic record), falls back to
-    ``original_data[0]`` — all records in a batch share upstream namespaces.
-    Raises ``IndexError`` when *input_idx* names no input position.
+    A row naming no input (``source_index: None``) is resolved by the caller to what
+    every input shares. Raises ``IndexError`` when *input_idx* names no input position.
     """
     if not original_data:
         return None
-    if input_idx is None:
-        return original_data[0]
     if not is_input_position(input_idx, len(original_data)):
         raise IndexError(
             f"source_index {input_idx!r} does not name one of the {len(original_data)} input records"
         )
     return original_data[input_idx]
+
+
+def _canonical(value: Any) -> str:
+    """One text per value, so equality is by content and never by a type's own `==`."""
+    return json.dumps(value, sort_keys=True, default=str)
+
+
+def _shared_by_every_input(original_data: list[dict]) -> dict[str, Any]:
+    """The stand-in input for a roll-up row: each upstream field equal on every input.
+
+    A namespace keeps only the fields whose value is the same on every input of the
+    file, compared by content, and is left out when none is, so a reader below gets no
+    one input's value presented as the roll-up's. Computed over every input, never from
+    the first; a file of one input shares everything that input holds. The envelope's
+    persistent fields come from the first input, as they do for any row, except its
+    state history: the row is not that input's.
+    """
+    from agent_actions.record.envelope import RECORD_LIFECYCLE_FIELDS, RECORD_TRACKING_FIELDS
+    from agent_actions.utils.content import get_existing_content
+
+    contents = [get_existing_content(record) for record in original_data]
+    shared: dict[str, Any] = {}
+    for ns, fields in contents[0].items():
+        if not isinstance(fields, dict):
+            continue
+        others = [content.get(ns) for content in contents[1:]]
+        dicts = [other for other in others if isinstance(other, dict)]
+        if len(dicts) != len(others):
+            continue
+        same = {
+            name: value
+            for name, value in fields.items()
+            if all(
+                name in other and _canonical(other[name]) == _canonical(value) for other in dicts
+            )
+        }
+        if same:
+            shared[ns] = same
+    record: dict[str, Any] = {"content": shared}
+    carried = (RECORD_TRACKING_FIELDS | RECORD_LIFECYCLE_FIELDS) - {"_state_history"}
+    for field in sorted(carried):
+        if field in original_data[0]:
+            record[field] = original_data[0][field]
+    return record
 
 
 def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
@@ -362,6 +402,19 @@ def reconcile_outputs(
 
     source_mapping: dict[int, int | list[int] | None] = {}
     structured_data: list[dict[str, Any]] = []
+    # The inputs do not change between rows, so what they share is computed once per
+    # call however many rows name no input.
+    stand_in: dict[str, Any] | None = None
+
+    def input_for(idx: int | None) -> dict[str, Any] | None:
+        nonlocal stand_in
+        if idx is None:
+            if not original_data:
+                return None
+            if stand_in is None:
+                stand_in = _shared_by_every_input(original_data)
+            return stand_in
+        return _resolve_input_record(idx, original_data)
 
     if isinstance(raw_response, FileUDFResult):
         for i, out in enumerate(raw_response.outputs):
@@ -374,14 +427,14 @@ def reconcile_outputs(
                 input_idx = src_idx
             source_mapping[i] = src_idx
 
-            matched = _resolve_input_record(input_idx, original_data)
+            matched = input_for(input_idx)
             structured_data.append(_build_record(action_name, out["data"], matched, version_merge))
 
     elif isinstance(raw_response, list):
         for i, item in enumerate(raw_response):
             if isinstance(item, TrackedItem):
                 source_mapping[i] = item._source_index
-                matched = _resolve_input_record(item._source_index, original_data)
+                matched = input_for(item._source_index)
                 at = item._source_index
                 from_seed = (
                     seed_payloads[at] if isinstance(at, int) and at < len(seed_payloads) else {}

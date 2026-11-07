@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: 'A FILE tool''s roll-up row (an output with source_index: None) carried the first input''s upstream fields and state history, so a reader below saw one input''s source and values as the roll-up''s. The row now carries, from each upstream namespace, only the fields equal on every input of the file, and none of the first input''s history. A value every input shares still reaches the actions below. An action below a roll-up that observes a field whose value differs between the inputs (`flatten.summary` on a roll-up over several pages) no longer finds it on the roll-up row and fails that record; observe a field the inputs share, or read it from the rows that have it.'
+time: 2026-11-07T10:11:16.848305Z
