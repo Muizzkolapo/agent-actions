@@ -30,6 +30,7 @@ from agent_actions.llm.config.vendor import (
     NON_LLM_VENDORS,
     ONLINE_ONLY_VENDORS,
     api_key_env_var,
+    canonical_vendor,
     vendor_needs_api_key,
 )
 from agent_actions.llm.providers.client_base import api_key_env_name
@@ -327,7 +328,7 @@ class WorkflowResolutionService:
         targets: dict[tuple[str, str | None], ProbeTarget] = {}
 
         for action_name, config in self.action_configs.items():
-            vendor = (config.get("model_vendor") or "").lower()
+            vendor = canonical_vendor((config.get("model_vendor") or "").lower())
             if not vendor:
                 continue
 

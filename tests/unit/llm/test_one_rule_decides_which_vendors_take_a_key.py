@@ -106,3 +106,24 @@ def test_preflight_checks_a_named_key_only_where_the_vendor_sends_one(
     monkeypatch, vendor, required
 ):
     assert _preflight_refuses(monkeypatch, vendor) is required
+
+
+def test_an_alias_is_probed_under_the_vendor_it_names(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "set-for-the-probe")
+    service = WorkflowResolutionService(action_configs={"a": {"model_vendor": "google"}})
+
+    errors, _, targets = service._check_api_keys()
+
+    assert errors == []
+    assert [target.vendor for target in targets] == ["gemini"]
+
+
+def test_an_alias_with_its_key_unset_is_refused_under_that_key(monkeypatch):
+    monkeypatch.delenv("AA_SKIP_ENV_VALIDATION", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    service = WorkflowResolutionService(action_configs={"a": {"model_vendor": "google"}})
+
+    errors, _, targets = service._check_api_keys()
+
+    assert [error.location.raw_reference for error in errors] == ["GEMINI_API_KEY"]
+    assert targets == []
