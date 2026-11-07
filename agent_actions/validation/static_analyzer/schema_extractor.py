@@ -99,12 +99,9 @@ class SchemaExtractor:
     def _mark_schema_load_failure(
         self, output: OutputSchema, schema_id: str, error: Exception | None = None
     ) -> None:
-        """Mark output as dynamic due to a schema loading failure."""
+        """Record that the action's named schema cannot be loaded, with the loader's reason."""
         output.is_dynamic = True
-        if error:
-            output.load_error = f"Schema '{schema_id}' could not be loaded: {error}"
-        else:
-            output.load_error = f"Schema '{schema_id}' not found in {self.project_root}"
+        output.load_error = str(error) if error else f"Schema file '{schema_id}' not found."
 
     def _try_load_schema(
         self,
@@ -119,10 +116,12 @@ class SchemaExtractor:
         if neither succeeds.
         """
         # Try file-based loader first
+        file_error: Exception | None = None
         try:
             loaded = self._load_schema_by_name(schema_id)
-        except (FileNotFoundError, ConfigValidationError):
+        except (FileNotFoundError, ConfigValidationError) as e:
             loaded = None
+            file_error = e
         except SchemaValidationError as e:
             # Ambiguous name — the fallback loader cannot disambiguate either.
             logger.warning("Schema loading failed for '%s': %s", schema_id, e)
@@ -146,7 +145,7 @@ class SchemaExtractor:
                 return False
 
         # Neither loader found it
-        self._mark_schema_load_failure(output, schema_id)
+        self._mark_schema_load_failure(output, schema_id, file_error)
         return False
 
     def extract_schema(
@@ -161,7 +160,7 @@ class SchemaExtractor:
         model_vendor = agent_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":
-            self._extract_tool_schema(agent_config, output)
+            self._extract_tool_schema(agent_config, output, schema_loader)
         elif kind == "hitl" or model_vendor == "hitl":
             self._extract_hitl_schema(output)
         else:
@@ -354,41 +353,22 @@ class SchemaExtractor:
         self,
         config: dict[str, Any],
         output: OutputSchema,
+        schema_loader: Any | None = None,
     ) -> None:
         """Extract schema from tool/UDF action using YAML config."""
         schema_def = config.get("schema") or config.get("output_schema")
         schema_name = config.get("schema_name")
 
         if not schema_def and schema_name:
-            try:
-                loaded = self._load_schema_by_name(schema_name)
-            except FileNotFoundError:
-                loaded = None
-            except SchemaValidationError as e:
-                logger.warning("Skipping ambiguous schema name '%s': %s", schema_name, e)
-                loaded = None
-            if loaded:
-                output.json_schema = loaded
-                output.schema_fields = self.extract_fields_from_json_schema(loaded)
-                return
+            self._try_load_schema(output, schema_name, schema_loader)
+            return
 
         if not schema_def:
             output.is_schemaless = True
             return
 
         if isinstance(schema_def, str):
-            try:
-                loaded = self._load_schema_by_name(schema_def)
-            except FileNotFoundError:
-                loaded = None
-            except SchemaValidationError as e:
-                logger.warning("Skipping ambiguous schema name '%s': %s", schema_def, e)
-                loaded = None
-            if loaded:
-                output.json_schema = loaded
-                output.schema_fields = self.extract_fields_from_json_schema(loaded)
-            else:
-                output.is_dynamic = True
+            self._try_load_schema(output, schema_def, schema_loader)
         elif isinstance(schema_def, dict):
             output.json_schema = schema_def
             output.schema_fields = self.extract_fields_from_json_schema(schema_def)

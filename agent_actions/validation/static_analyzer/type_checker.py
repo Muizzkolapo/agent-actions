@@ -236,17 +236,8 @@ class StaticTypeChecker:
         output_schema = source_node.output_schema
         root_field = field_path.split(".")[0]
 
-        if output_schema.is_dynamic and output_schema.load_error and is_scope_read:
-            result.add_error(
-                StaticTypeError(
-                    message=f"Cannot validate {requirement.location} field '{field_path}' "
-                    f"— {output_schema.load_error}",
-                    location=location,
-                    referenced_agent=source_agent,
-                    referenced_field=field_path,
-                    hint="Fix the schema file first, then re-run validation.",
-                )
-            )
+        if output_schema.load_error:
+            # The action naming the schema is refused for it once; its readers add nothing.
             return
 
         # "*" is a wildcard directive (observe/passthrough all), not a field name. A

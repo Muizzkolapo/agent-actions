@@ -865,8 +865,8 @@ class TestContextScopeValidation:
         unknown_errors = [e for e in context_errors if "does not exist in workflow" in e.message]
         assert len(unknown_errors) >= 1
 
-    def test_context_scope_reports_error_when_schema_load_fails(self):
-        """Test that unresolvable schema_name produces a StaticTypeError, not a silent skip."""
+    def test_an_unresolvable_schema_name_is_refused_on_the_action_not_its_reader(self):
+        """The action naming the schema is refused once; the reader adds no second error."""
         workflow_config = {
             "actions": [
                 {
@@ -886,13 +886,12 @@ class TestContextScopeValidation:
         result = analyze_workflow(workflow_config)
 
         assert not result.is_valid
-        context_errors = [
-            e for e in result.errors if e.location.config_field.startswith("context_scope")
-        ]
-        assert len(context_errors) >= 1
-        assert any(
-            "not found" in e.message or "could not be loaded" in e.message for e in context_errors
+        schema_errors = [e for e in result.errors if e.location.config_field == "schema"]
+        assert [e.location.agent_name for e in schema_errors] == ["extractor"]
+        assert schema_errors[0].message.startswith(
+            "Action 'extractor' names schema 'nonexistent_schema', which cannot be loaded: "
         )
+        assert not [e for e in result.errors if e.location.agent_name == "processor"]
 
     def test_output_field_observable_by_downstream(self):
         """Downstream action can observe an output_field-produced field."""

@@ -54,6 +54,8 @@ Schemas define data contracts that often span multiple workflows. A `candidate_f
 
 If you need a workflow-specific output structure, use an inline schema (see below) or put a uniquely named schema file in that workflow's own `schema/` folder.
 
+A schema an action names must exist. `agac inspect` and `agac run` both refuse a name that matches no file, before any action runs, with `Action '<action>' names schema '<name>', which cannot be loaded: ...`. This holds for tool actions too.
+
 ### JSON Schema Format
 
 Full JSON Schema syntax for complex validation:

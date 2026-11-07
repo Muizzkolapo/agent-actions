@@ -49,7 +49,8 @@ Preflight covers action definitions, dependency cycles, `context_scope`
 references — including that every declared dependency is referenced by
 at least one `observe` or `passthrough` field, and that every action a
 `context_scope`, prompt or guard names is upstream of it through
-`dependencies` — template variables, schema structure, guard syntax, and that every
+`dependencies` — template variables, schema structure, that every schema an action names
+by file exists and loads (for LLM and tool actions alike), guard syntax, and that every
 `action_name.field` a prompt or guard reads names an action in the workflow and a field its
 schema lists. If any static check fails you get
 a `PreFlightValidationError` naming the exact YAML field instead of
