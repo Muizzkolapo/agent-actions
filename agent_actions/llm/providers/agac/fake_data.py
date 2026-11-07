@@ -8,6 +8,7 @@ Uses seeded randomness for reproducibility while providing variety.
 import hashlib
 import json
 import logging
+import math
 import random
 import threading
 from dataclasses import dataclass
@@ -442,6 +443,23 @@ class FakeDataGenerator:
                 return cls._generate_array(schema, attempt, field_name)
             return cls._generate_string(attempt, field_name=field_name)
 
+    @staticmethod
+    def _declared_bounds(
+        schema: dict[str, Any], low_key: str, high_key: str, span: float
+    ) -> tuple[float, float] | None:
+        """The range a schema declares with *low_key*/*high_key*; None when it declares neither.
+
+        A one-sided bound is widened by *span* on the open side.
+        """
+        low, high = schema.get(low_key), schema.get(high_key)
+        if low is None and high is None:
+            return None
+        if low is None:
+            low = min(0, high) if low_key == "minLength" else high - span
+        if high is None:
+            high = low + span
+        return low, high
+
     @classmethod
     def _generate_string(
         cls,
@@ -449,8 +467,27 @@ class FakeDataGenerator:
         schema: dict | None = None,
         field_name: str | None = None,
     ) -> str:
-        """Generate a contextually appropriate string."""
+        """Generate a contextually appropriate string, sized to any declared length bound."""
         schema = schema or {}
+        text = cls._generate_unsized_string(attempt, schema, field_name)
+        bounds = cls._declared_bounds(schema, "minLength", "maxLength", 200)
+        if bounds is None or bounds[0] <= len(text) <= bounds[1]:
+            return text
+        rng = cls._get_rng()
+        low, high = int(bounds[0]), int(bounds[1])
+        target = rng.randint(low, high) if low <= high else low
+        while len(text) < target:
+            text = f"{text} {cls._generate_sentence(attempt, rng)}"
+        return text[:target]
+
+    @classmethod
+    def _generate_unsized_string(
+        cls,
+        attempt: int,
+        schema: dict[str, Any],
+        field_name: str | None = None,
+    ) -> str:
+        """A contextually appropriate string, before any length bound is applied."""
         rng = cls._get_rng()
         field_lower = (field_name or "").lower()
 
@@ -611,6 +648,11 @@ class FakeDataGenerator:
         maximum = schema.get("maximum", 1000)
         multiple_of = schema.get("multipleOf")
 
+        bounds = cls._declared_bounds(schema, "minimum", "maximum", 1000)
+        if bounds is not None:
+            low, high = bounds
+            return min(max(round(rng.uniform(low, high), 2), low), high)
+
         # Context-aware generation
         if field_lower:
             if any(x in field_lower for x in ["price", "cost", "amount", "total"]):
@@ -649,6 +691,11 @@ class FakeDataGenerator:
 
         minimum = schema.get("minimum", 0)
         maximum = schema.get("maximum", 1000)
+
+        bounds = cls._declared_bounds(schema, "minimum", "maximum", 1000)
+        if bounds is not None:
+            low, high = math.ceil(bounds[0]), math.floor(bounds[1])
+            return rng.randint(low, high) if low <= high else low
 
         # Context-aware generation
         if field_lower:
@@ -808,11 +855,11 @@ class FakeDataGenerator:
             return field["enum"][idx]
 
         if field_type == "string":
-            return cls._generate_string(attempt, field_name=field_id)
+            return cls._generate_string(attempt, field, field_id)
         elif field_type == "number":
-            return cls._generate_number(attempt, field_name=field_id)
+            return cls._generate_number(attempt, field, field_id)
         elif field_type == "integer":
-            return cls._generate_integer(attempt, field_name=field_id)
+            return cls._generate_integer(attempt, field, field_id)
         elif field_type == "boolean":
             return cls._generate_boolean(attempt, field_name=field_id)
         elif field_type == "array":
