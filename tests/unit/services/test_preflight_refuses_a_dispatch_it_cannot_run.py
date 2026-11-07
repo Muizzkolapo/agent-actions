@@ -108,8 +108,27 @@ def test_schema_options_without_a_dispatch_is_refused(tmp_path):
         _check(tmp_path, "pick_schema", schema={"topic": "string"})
 
 
-def test_a_dispatch_inside_schema_fields_is_refused(tmp_path):
-    schema = {"name": "s", "fields": [{"id": "topic", "type": "dispatch_task('pick_schema')"}]}
-
-    with pytest.raises(PreFlightValidationError, match="calls dispatch_task inside its schema"):
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"name": "s", "fields": [{"id": "topic", "type": "dispatch_task('pick_schema')"}]},
+        {
+            "name": "s",
+            "fields": [
+                {
+                    "id": "detail",
+                    "type": "object",
+                    "properties": {"inner": {"type": "dispatch_task('pick_schema')"}},
+                }
+            ],
+        },
+    ],
+    ids=["top_level", "nested"],
+)
+def test_a_dispatch_inside_schema_fields_is_refused_and_names_schema_options(tmp_path, schema):
+    with pytest.raises(PreFlightValidationError) as refused:
         _check(tmp_path, "pick_schema", schema=schema, schema_options=None)
+
+    message = str(refused.value)
+    assert "calls dispatch_task inside its schema fields" in message
+    assert "list the schemas it can return under schema_options" in message

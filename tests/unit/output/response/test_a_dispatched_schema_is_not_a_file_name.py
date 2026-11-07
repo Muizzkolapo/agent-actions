@@ -102,6 +102,8 @@ OPTIONS = ["topic_answer", "verdict_answer"]
     [
         ({"topic": "string"}, "a schema definition"),
         ("other_answer", "'other_answer'"),
+        ("Topic_answer", "'Topic_answer'"),
+        ("topic", "'topic'"),
         (None, "None"),
         (3, "3"),
     ],
