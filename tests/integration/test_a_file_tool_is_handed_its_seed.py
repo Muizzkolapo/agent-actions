@@ -27,10 +27,10 @@ from agent_actions import udf_tool
 @udf_tool
 def fail_one(data: Any, *args) -> list[dict]:
     """Raise on one record, so the FILE action below meets an upstream failure."""
-    summary = ((data or {}).get("flatten") or {}).get("summary") or ""
-    if summary == "page 2":
+    page = ((data or {}).get("source") or {}).get("page_content") or ""
+    if page == "page 2":
         raise RuntimeError("page 2 cannot be prepared")
-    return [{"summary": summary, "exam_density": "low"}]
+    return [{"summary": page, "exam_density": "low"}]
 '''
 
 REPORT_TOOL = '''from typing import Any
@@ -62,7 +62,7 @@ SEEDED_ACTIONS = """  - name: prepare
     intent: "Pass each record on, failing one"
     schema: tool_action_output
     impl: fail_one
-    context_scope: { observe: [flatten.summary] }
+    context_scope: { observe: [source.page_content, flatten.summary] }
     expect: { repair: none }
   - name: seeded
     kind: tool
@@ -86,8 +86,8 @@ def seeded(project):  # noqa: F811
     config.write_text(config.read_text().rstrip("\n") + "\n" + SEEDED_ACTIONS)
     (workflow / "seed_data").mkdir(exist_ok=True)
     (workflow / "seed_data" / "rules.json").write_text(json.dumps({"threshold": 7}))
-    (project / "tools" / WORKFLOW / "prepare.py").write_text(FAIL_ONE_TOOL)
-    (project / "tools" / WORKFLOW / "seeded.py").write_text(REPORT_TOOL)
+    (project / "tools" / WORKFLOW / "seeded_prepare.py").write_text(FAIL_ONE_TOOL)
+    (project / "tools" / WORKFLOW / "seeded_report.py").write_text(REPORT_TOOL)
 
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
     assert result.exit_code == 0, result.output
