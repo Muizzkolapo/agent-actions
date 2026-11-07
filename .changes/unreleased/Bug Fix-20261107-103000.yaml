@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  A schema field's `minimum`, `maximum`, `minLength` and `maxLength` now reach the provider. The
+  schema compiler copied a fixed list of keys that left them out, so no provider, real or mock,
+  was ever told a field's range, even though the schema file accepted them and the docs showed
+  them. Because the bound is now in the compiled schema, an answer outside it is caught where
+  output is checked against that schema: an ordinary online action logs a schema validation
+  warning, an action on a declared endpoint fails the record, and an action with `expect:`
+  repair treats it as a structural failure and repairs it. String length is sent but not checked
+  on output.
+time: 2026-11-07T10:30:00Z

@@ -408,6 +408,20 @@ properties:
     exclusiveMinimum: 0
 ```
 
+### What the provider is sent
+
+`minimum`, `maximum`, `minLength` and `maxLength` are sent to the provider with the field, as are `pattern`, `enum`, `minItems` and `maxItems`. `exclusiveMinimum`, `exclusiveMaximum` and `multipleOf` are not sent. Whether the model is held to a bound depends on the vendor:
+
+| Vendor | How the schema is sent | Bounds |
+|--------|------------------------|--------|
+| `openai`, declared endpoints | `response_format` `json_schema`, not strict | Sent as guidance; not enforced |
+| `groq` | `response_format` `json_schema`, not strict | Sent as guidance |
+| `anthropic` | Tool `input_schema` | Sent as guidance |
+| `ollama_local`, `llamafile` | JSON schema turned into a grammar by llama.cpp | `minLength`/`maxLength` and integer `minimum`/`maximum` are enforced; `minimum`/`maximum` on a `number` are ignored |
+| `gemini`, `cohere`, `ollama_cloud` | Written into the prompt text | Sent as guidance |
+
+Whatever the vendor, the answer is checked against the schema after it arrives, and that check holds `minimum` and `maximum` (not string length). An out-of-range value logs a schema validation warning on an ordinary action, fails the record on a declared endpoint, and is repaired as a structural failure under `expect:` repair.
+
 ### Required Fields
 
 ```yaml
