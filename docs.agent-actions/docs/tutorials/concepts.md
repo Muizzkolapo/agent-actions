@@ -85,7 +85,7 @@ actions:
 | **model_vendor** | Which provider to use (inherited from defaults if not specified) |
 | **model_name** | Which model to use (inherited from defaults if not specified) |
 | **run_mode** | `online` or `batch` processing (inherited from defaults if not specified) |
-| **granularity** | `record` (per-item) or `file` (all items at once) processing (inherited from defaults if not specified) |
+| **granularity** | `record` (per-item) or `file` (all items at once) processing (inherited from defaults if not specified; `file` is for tool and HITL actions, so an LLM action stays at `record`) |
 
 **Configuration inheritance:** Agent Actions uses a hierarchical config system. Settings cascade from `agent_actions.yml` → workflow `defaults` → individual actions. You only need to specify fields at the action level if you want to override the inherited values.
 

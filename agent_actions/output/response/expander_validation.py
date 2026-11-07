@@ -2,11 +2,44 @@
 
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import vendor_names
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES, RUNTIME_BUS_NAMESPACES
+from agent_actions.utils.constants import (
+    HITL_FILE_GRANULARITY_ERROR,
+    LLM_FILE_GRANULARITY_ERROR,
+    RESERVED_AGENT_NAMES,
+    RUNTIME_BUS_NAMESPACES,
+)
+
+
+def _token(value: Any) -> str:
+    return str(getattr(value, "value", value) or "").lower()
+
+
+def is_file_granularity(granularity: Any) -> bool:
+    return _token(granularity) == "file"
+
+
+def runs_without_a_model(agent: dict[str, Any]) -> bool:
+    """Whether the runtime routes this action to a tool or HITL, by kind or by vendor."""
+    from agent_actions.processing.helpers import _is_tool_action
+
+    return _is_tool_action(agent) or agent.get("model_vendor") == "hitl"
+
+
+def validate_granularity_for_kind(
+    agent: dict[str, Any], kind: Any, granularity: Any, action_name: str
+) -> None:
+    """Refuse a granularity an action sets that its kind cannot run at."""
+    if _token(kind) == "hitl":
+        if _token(granularity) == "record":
+            raise ConfigurationError(
+                HITL_FILE_GRANULARITY_ERROR, context={"agent_name": action_name}
+            )
+    elif is_file_granularity(granularity) and not runs_without_a_model(agent):
+        raise ConfigurationError(LLM_FILE_GRANULARITY_ERROR, context={"agent_name": action_name})
 
 
 def validate_vendor_exists(vendor: str | None, action_name: str) -> None:

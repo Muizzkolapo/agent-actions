@@ -9,7 +9,9 @@ import logging
 import pytest
 
 from agent_actions.config.schema import ActionConfig, WorkflowConfig
+from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.output.response.expander import ActionExpander
 from agent_actions.services.preflight_service import PreflightService
 from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
     ActionEntryValidationOrchestrator,
@@ -26,6 +28,23 @@ def _validate_entry(entry: dict, agent_name: str = "test_workflow") -> tuple[lis
     orch = ActionEntryValidationOrchestrator()
     orch.validate_action_entry(entry, agent_name)
     return orch.get_validation_errors(), orch.get_validation_warnings()
+
+
+_HITL_BLOCK = {"hitl": {"port": 3999, "instructions": "Review these records"}}
+_HITL = {"kind": "hitl", **_HITL_BLOCK}
+
+
+def _expanded_granularity(action: dict, defaults: dict | None = None) -> str:
+    """Expand one action the way inspect and run both do; return its granularity."""
+    model = {"model_vendor": "openai", "model_name": "gpt-4o", "api_key": "k"}
+    agents = ActionExpander.expand_actions_to_agents(
+        {
+            "name": "test_workflow",
+            "defaults": {**model, **(defaults or {})},
+            "actions": [{"prompt": "p", **action}],
+        }
+    )
+    return next(a for group in agents.values() for a in group)["granularity"]
 
 
 def _make_workflow(actions: list[dict]) -> dict:
@@ -298,71 +317,44 @@ class TestTypeSpecificValidation:
 
     def test_llm_file_granularity_blocked(self):
         """LLM action with granularity: file is rejected — FILE granularity is tool/hitl only."""
-        errors, _ = _validate_entry(
-            {
-                "name": "extract",
-                "agent_type": "extract",
-                "model_name": "n/a",
-                "kind": "llm",
-                "granularity": "file",
-            }
-        )
-        assert any("file granularity" in e.lower() for e in errors)
+        with pytest.raises(ConfigurationError, match="FILE granularity is only supported"):
+            _expanded_granularity({"name": "extract", "kind": "llm", "granularity": "file"})
 
     def test_llm_without_kind_file_granularity_blocked(self):
         """Action with no kind and granularity: file is rejected (defaults to LLM behavior)."""
-        errors, _ = _validate_entry(
-            {
-                "name": "extract",
-                "agent_type": "extract",
-                "model_name": "n/a",
-                "granularity": "file",
-            }
-        )
-        assert any("file granularity" in e.lower() for e in errors)
+        with pytest.raises(ConfigurationError, match="FILE granularity is only supported"):
+            _expanded_granularity({"name": "extract", "granularity": "file"})
 
     def test_hitl_requires_file_granularity(self):
-        """HITL action with granularity: record is caught by action validator."""
-        errors, _ = _validate_entry(
-            {
-                "name": "review",
-                "agent_type": "review",
-                "model_name": "n/a",
-                "kind": "hitl",
-                "granularity": "record",
-                "hitl": {"instructions": "Review these records"},
-            }
-        )
-        assert any("hitl" in e.lower() and "file" in e.lower() for e in errors)
+        """HITL action with granularity: record is refused at expansion."""
+        with pytest.raises(ConfigurationError, match="HITL actions require FILE granularity"):
+            _expanded_granularity({"name": "review", "granularity": "record", **_HITL})
+
+    def test_a_tool_named_by_its_vendor_runs_at_file(self):
+        """The runtime routes `model_vendor: tool` to the tool client, as it does kind."""
+        action = {"name": "t", "model_vendor": "tool", "impl": "mod.fn", "granularity": "file"}
+        assert _expanded_granularity(action) == "File"
+
+    def test_a_tool_named_by_its_vendor_inherits_file_from_defaults(self):
+        action = {"name": "t", "model_vendor": "tool", "impl": "mod.fn"}
+        assert _expanded_granularity(action, {"granularity": "File"}) == "File"
+
+    def test_a_hitl_action_named_by_its_vendor_runs_at_file(self):
+        """The runtime routes `model_vendor: hitl` to the HITL client, as it does kind."""
+        action = {"name": "r", "model_vendor": "hitl", **_HITL_BLOCK, "granularity": "file"}
+        assert _expanded_granularity(action) == "File"
+
+    def test_a_hitl_action_named_by_its_vendor_inherits_file_from_defaults(self):
+        action = {"name": "r", "model_vendor": "hitl", **_HITL_BLOCK}
+        assert _expanded_granularity(action, {"granularity": "File"}) == "File"
 
     def test_hitl_file_granularity_passes(self):
-        """HITL action with granularity: file passes validation."""
-        errors, _ = _validate_entry(
-            {
-                "name": "review",
-                "agent_type": "review",
-                "model_name": "n/a",
-                "kind": "hitl",
-                "granularity": "file",
-                "hitl": {"instructions": "Review these records"},
-            }
-        )
-        hitl_errors = [e for e in errors if "hitl" in e.lower() and "granularity" in e.lower()]
-        assert len(hitl_errors) == 0
+        """HITL action with granularity: file expands at File."""
+        assert _expanded_granularity({"name": "review", "granularity": "file", **_HITL}) == "File"
 
     def test_hitl_without_granularity_passes(self):
-        """HITL action without explicit granularity passes (runtime defaults to file)."""
-        errors, _ = _validate_entry(
-            {
-                "name": "review",
-                "agent_type": "review",
-                "model_name": "n/a",
-                "kind": "hitl",
-                "hitl": {"instructions": "Review these records"},
-            }
-        )
-        hitl_errors = [e for e in errors if "hitl" in e.lower() and "granularity" in e.lower()]
-        assert len(hitl_errors) == 0
+        """HITL action without explicit granularity defaults to File."""
+        assert _expanded_granularity({"name": "review", **_HITL}) == "File"
 
     def test_hitl_requires_hitl_config(self):
         """HITL action without hitl config block raises at Pydantic level."""
@@ -427,20 +419,9 @@ class TestActionableErrors:
 
     def test_granularity_error_is_actionable(self):
         """HITL granularity error message tells the user how to fix it."""
-        errors, _ = _validate_entry(
-            {
-                "name": "review",
-                "agent_type": "review",
-                "model_name": "n/a",
-                "kind": "hitl",
-                "granularity": "record",
-                "hitl": {"instructions": "Review these records"},
-            }
-        )
-        hitl_errors = [e for e in errors if "hitl" in e.lower()]
-        assert len(hitl_errors) > 0
-        # Error message should tell user how to fix
-        assert any("granularity: file" in e.lower() or "remove" in e.lower() for e in hitl_errors)
+        with pytest.raises(ConfigurationError) as refused:
+            _expanded_granularity({"name": "review", "granularity": "record", **_HITL})
+        assert "Set 'granularity: file'" in str(refused.value)
 
 
 # ── TestPromptRequiredCrossCheck ─────────────────────────────────────

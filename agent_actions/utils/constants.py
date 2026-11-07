@@ -122,6 +122,12 @@ HITL_FILE_GRANULARITY_ERROR = (
     "Set 'granularity: file' or remove the granularity field (HITL defaults to file)."
 )
 
+LLM_FILE_GRANULARITY_ERROR = (
+    "FILE granularity is only supported for tool and hitl actions. "
+    "LLM actions must use RECORD granularity. "
+    "Remove 'granularity: file' from the action, or make it a tool."
+)
+
 # Canonical output schema for HITL actions.
 # Fields match _make_terminal_response() in hitl/server.py.
 # Pre-compiled here (rather than calling compile_unified_schema) to avoid

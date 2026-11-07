@@ -274,7 +274,8 @@ Both delegate to `PromptUtils.process_dispatch_in_text()` with `preserve_type_on
 │                                                              │
 │  12.  Process granularity                                    │
 │       → HITL defaults to "file", rejects "record"            │
-│       → LLM inherits from defaults                           │
+│       → tool inherits from defaults                          │
+│       → LLM rejects "file"; an inherited "file" → "record"   │
 │                                                              │
 │  13.  deep_merge_context_scope()                             │
 │       → action directives merge with defaults (not replace)  │
@@ -436,6 +437,8 @@ ResponseBuilder (static methods):
 9. **Tool actions must declare an output schema.** `process_tool_action()` raises `ConfigValidationError` if neither `json_output_schema` nor `schema` is present. This runs before `compile_output_schema`, which would otherwise silently skip schema-less actions.
 
 10. **HITL granularity must be "file".** HITL actions default to file-level granularity. Explicitly setting `granularity: record` on a HITL action raises `ConfigurationError` with the `HITL_FILE_GRANULARITY_ERROR` constant.
+
+10a. **LLM granularity must be "record".** Setting `granularity: file` on an LLM action raises `ConfigurationError` with `LLM_FILE_GRANULARITY_ERROR`. A `granularity: file` an LLM action inherits from `defaults:` is not applied; the action expands at Record. An action counts as a tool or HITL by `kind` or by `model_vendor`, as the runtime routes it. Both rules live in `validate_granularity_for_kind()`, which also checks a workflow written as a list of agent entries.
 
 11. **Mutable defaults are deep-copied.** `inherit_simple_fields()` deep-copies any list or dict value before assigning it to the agent dict. Without this, all agents in a versioned expansion would share the same mutable reference, causing cross-agent state leakage.
 

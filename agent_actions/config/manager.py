@@ -380,15 +380,29 @@ class ConfigManager:
                     "agent_name is None: validate_agent_name() must be called "
                     "before get_user_agents()"
                 )
+            from agent_actions.output.response.expander_validation import (
+                validate_granularity_for_kind,
+            )
+
             agents_section = self.user_config[self.agent_name]
             self._load_project_endpoints()
+            agents: list[dict[str, Any]]
             if "agents" in agents_section:
-                return agents_section["agents"]  # type: ignore[no-any-return]
-            return [
-                agent
-                for agent in agents_section
-                if isinstance(agent, dict) and "agent_type" in agent
-            ]
+                agents = agents_section["agents"]
+            else:
+                agents = [
+                    agent
+                    for agent in agents_section
+                    if isinstance(agent, dict) and "agent_type" in agent
+                ]
+            for agent in agents:
+                validate_granularity_for_kind(
+                    agent,
+                    agent.get("kind"),
+                    agent.get("granularity"),
+                    agent.get("name") or agent.get("agent_type", "?"),
+                )
+            return agents
 
     def _load_project_endpoints(self) -> None:
         """Validate the project's endpoints for a workflow that reads no project defaults."""

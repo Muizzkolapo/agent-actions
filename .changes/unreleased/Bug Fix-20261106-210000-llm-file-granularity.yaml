@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  `agac inspect` now refuses `granularity: file` on an LLM action, as `agac run` already did,
+  and both print the reason on the Problem line. A `granularity: file` under `defaults:` no
+  longer marks an LLM action as File: the action runs at Record, as it always did.
+time: 2026-11-06T21:00:00Z

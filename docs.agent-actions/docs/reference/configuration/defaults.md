@@ -51,7 +51,7 @@ The snippets on this page leave out lines that are not the point of the example.
 | `presence_penalty` | float | Penalise tokens already present, -2.0 to 2.0 (OpenAI and Groq) |
 | `json_mode` | boolean | Enable JSON output mode (default: `true`; see [Non-JSON Mode](../../guides/non-json-mode.md)) |
 | `output_field` | string | Field name for plain-text output when `json_mode: false` (default: `raw_response`) |
-| `granularity` | string | `record` (default) or `file` processing |
+| `granularity` | string | `record` (default) or `file` processing. `file` here applies to tool actions only: LLM actions stay at `record`, and HITL actions are always `file` |
 | `run_mode` | string | `online` (default) or `batch` execution |
 | `on_empty` | string | What an empty answer does: `warn` (default), `error` or `skip` — see [Execution Fields](./index.md#execution-fields) |
 | `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed` |
