@@ -252,7 +252,12 @@ def _resolve_input_record(
 
 # Row 1's identity fields stay on a roll-up: correlation ids are derived from them and
 # the identity is re-minted later. Its history does not: the row is not row 1's.
-_ROLL_UP_TRACKING_FIELDS = ("source_guid", "parent_source_guid", "version_correlation_id")
+_ROLL_UP_TRACKING_FIELDS = (
+    "source_guid",
+    "parent_source_guid",
+    "version_correlation_id",
+    "_state_schema_version",
+)
 
 
 def _shared_by_every_input(original_data: list[dict]) -> dict[str, Any]:
@@ -400,6 +405,17 @@ def reconcile_outputs(
 
     source_mapping: dict[int, int | list[int] | None] = {}
     structured_data: list[dict[str, Any]] = []
+    # The inputs do not change between rows, so what they share is computed once per
+    # call however many rows name no input.
+    stand_in: dict[str, Any] | None = None
+
+    def input_for(idx: int | None) -> dict[str, Any] | None:
+        nonlocal stand_in
+        if idx is None and original_data:
+            if stand_in is None:
+                stand_in = _shared_by_every_input(original_data)
+            return stand_in
+        return _resolve_input_record(idx, original_data)
 
     if isinstance(raw_response, FileUDFResult):
         for i, out in enumerate(raw_response.outputs):
@@ -412,14 +428,14 @@ def reconcile_outputs(
                 input_idx = src_idx
             source_mapping[i] = src_idx
 
-            matched = _resolve_input_record(input_idx, original_data)
+            matched = input_for(input_idx)
             structured_data.append(_build_record(action_name, out["data"], matched, version_merge))
 
     elif isinstance(raw_response, list):
         for i, item in enumerate(raw_response):
             if isinstance(item, TrackedItem):
                 source_mapping[i] = item._source_index
-                matched = _resolve_input_record(item._source_index, original_data)
+                matched = input_for(item._source_index)
                 at = item._source_index
                 from_seed = (
                     seed_payloads[at] if isinstance(at, int) and at < len(seed_payloads) else {}

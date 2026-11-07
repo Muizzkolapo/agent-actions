@@ -22,6 +22,7 @@ def _inputs() -> list[dict]:
             "parent_source_guid": "p1",
             "version_correlation_id": "c1",
             "_state_history": [{"state": "ok", "action": "up"}],
+            "_state_schema_version": 2,
             "content": {
                 "source": {"id": "row-a", "lang": "en"},
                 "up": {"shared": "same", "own": "first"},
@@ -70,6 +71,23 @@ class TestWhatTheRowCarries:
         row = _roll_up(_inputs())
 
         assert not row.get("_state_history")
+        assert row["_state_schema_version"] == 2
+
+    def test_two_roll_up_rows_share_one_stand_in_computed_once(self):
+        rows, mapping = reconcile_outputs(
+            FileUDFResult(
+                [
+                    {"source_index": None, "data": {"note": "first"}},
+                    {"source_index": None, "data": {"note": "second"}},
+                ]
+            ),
+            ACTION,
+            _inputs(),
+        )
+
+        assert mapping == {0: None, 1: None}
+        assert [r["content"]["up"] for r in rows] == [{"shared": "same"}] * 2
+        assert rows[0]["source_guid"] != rows[1]["source_guid"]
 
     def test_the_shared_set_is_computed_over_every_input_not_the_first_two(self):
         inputs = _inputs() + [dict(_inputs()[0], source_guid="g3")]
