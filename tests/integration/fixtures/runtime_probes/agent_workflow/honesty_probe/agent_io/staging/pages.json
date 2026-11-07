@@ -1,0 +1,6 @@
+[
+  {"id": "p1", "keep": 1, "page_content": "Materializations control how each model is built."},
+  {"id": "p2", "keep": 1, "page_content": "Sources declare raw tables loaded by other tools."},
+  {"id": "p3", "keep": 1, "page_content": "Tests assert facts about a model's columns."},
+  {"id": "p4", "keep": 0, "page_content": "This page is skipped by the guard."}
+]

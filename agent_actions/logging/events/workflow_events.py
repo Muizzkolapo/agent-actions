@@ -155,6 +155,8 @@ class ActionCompleteEvent(BaseEvent):
     model_vendor: str = ""
     model_name: str = ""
     kind: str = ""
+    # Of record_count, the rows the guard skipped this execution.
+    guard_skipped: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -176,6 +178,7 @@ class ActionCompleteEvent(BaseEvent):
             "model_vendor": self.model_vendor,
             "model_name": self.model_name,
             "kind": self.kind,
+            "guard_skipped": self.guard_skipped,
         }
 
     @property

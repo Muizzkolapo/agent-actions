@@ -26,25 +26,32 @@ One row per action, with a count per disposition:
 
 ```
                               Dispositions: my_workflow
-┃ Action  ┃ Success ┃ Failed ┃ Exhaust… ┃ Unproc… ┃ Passthr… ┃ Filter… ┃ Total ┃ Records ┃
-│ extract │      25 │      0 │        0 │       0 │        0 │       0 │    25 │      25 │
-│ rewrite │       4 │      0 │        0 │      21 │        0 │       0 │    25 │      25 │
-│ split   │       1 │      0 │        0 │       0 │        0 │       0 │     1 │       5 │
+┃ Action  ┃ Success ┃ Failed ┃ Exhausted ┃ Guard skipped ┃ Unprocessed ┃ Passthrough ┃ Filtered ┃ Total ┃ Records ┃
+│ extract │      25 │      0 │         0 │             0 │           0 │           0 │        0 │    25 │      25 │
+│ rewrite │       4 │      0 │         0 │            21 │           0 │           0 │        0 │    25 │      25 │
+│ split   │       1 │      0 │         0 │             0 │           0 │           0 │        0 │     1 │       5 │
 ```
+
+The table is printed at its full width. In a terminal narrower than that, its lines wrap
+instead of cutting a count or an action name short.
 
 | Disposition | Meaning |
 |-------------|---------|
 | **Success** | The record was processed by the action |
 | **Failed** | Processing failed for the record |
 | **Exhausted** | The record failed and its retries are used up |
-| **Unprocessed** | The action never answered the record: an upstream failure cascaded, or a guard condition skipped it and it flows on unchanged |
+| **Guard skipped** | The action's guard skipped the record and it flows on unchanged. Stored as `unprocessed` (see below) |
+| **Unprocessed** | The action never answered the record for any other reason, such as an upstream failure that cascaded |
 | **Passthrough** | The model or tool answered nothing and `on_empty: skip` kept the record as a tombstone |
 | **Filtered** | The action removed the record from the stream |
 
-A guard skip counts as **Unprocessed** in both run modes, with reason `guard_skip`, or
-`guard_prefilter_skip` for an action of `granularity: file`: unprocessed keeps the record
+A guard skip is stored as `unprocessed` in both run modes, with reason `guard_skip`, or
+`guard_prefilter_skip` for an action of `granularity: file` (`guard_filter` on the rare
+unprocessed row a batch path writes with no reason of its own): unprocessed keeps the record
 open, so once the guard passes it again it is sent to the model, where a terminal
-disposition would carry the tombstone for good.
+disposition would carry the tombstone for good. The summary counts those rows under
+**Guard skipped** and the rest of the unprocessed rows under **Unprocessed**, so the columns
+still add up to **Total**. `--quarantined` lists guard skips with their reason, as before.
 
 ### Why Total and Records can differ
 
@@ -67,9 +74,10 @@ targets inputs: retrying a record means re-running the input that failed.
 the records it successfully produced. A record that was guard-skipped, cascade-
 skipped or failed is kept in the action's output as a placeholder so downstream
 actions can still see it, and those placeholders are counted here. The `rewrite`
-row above shows this: 4 successes and 21 guard skips, `Records 25`. So a high
+row above shows this: 4 successes and 21 guard skips, `Records 25`. The run line says the
+same: `✓ rewrite  25 records in 1.2s — 21 skipped by guard`. So a high
 `Records` is not on its own evidence that the action worked — read it against
-the `Failed`, `Unprocessed` and `Passthrough` columns, or use `--quarantined` for
+the `Failed`, `Guard skipped`, `Unprocessed` and `Passthrough` columns, or use `--quarantined` for
 the detail.
 
 `Records` also reads what is in the store *now*, not only this run's output.

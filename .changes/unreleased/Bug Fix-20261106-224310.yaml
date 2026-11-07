@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The run line now says how many of an action''s records its guard skipped: `✓ repaired  4 records in 0.1s — 1 skipped by guard`. The record count already held those tombstones and gave no sign of it. `agac dispositions` shows guard skips in their own `Guard skipped` column instead of mixing them into `Unprocessed`; they are still stored as `unprocessed`, so a later run sends them again once the guard passes.'
+time: 2026-11-06T22:43:10.510596Z

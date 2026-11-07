@@ -156,7 +156,15 @@ Step 12/12 2 actions: auto_review_note, describe_confusion_risk
 ```
 
 An action reports once, on completion; `--verbose` additionally announces each
-one as it starts. A batch action's duration is marked `(batch)` so provider
+one as it starts. The record count includes the rows the action's guard skipped, kept
+as tombstones; `— N skipped by guard` says how many those are, and is left off when
+there are none:
+
+```
+  ✓ repaired  4 records in 0.2s (agac-provider/mock) — 1 skipped by guard
+```
+
+A batch action's duration is marked `(batch)` so provider
 queue time does not read as local work.
 
 #### JSONFileHandler
