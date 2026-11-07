@@ -135,13 +135,17 @@ class TestOneDroppedRecordDoesNotFailTheFile:
 
         assert _stored_records(project, SECOND) == RECORDS - 1
 
-    def test_the_unresolvable_record_alone_is_left_out(self, one_unobservable):
+    def test_the_unresolvable_record_alone_fails_and_the_reason_names_the_field(
+        self, one_unobservable
+    ):
         """The reason, not just "not success": no disposition row at all would also
         satisfy a negative assertion, and that is a different outcome."""
         project, dropped, _result = one_unobservable  # noqa: F811
 
-        assert _disposition(project, dropped, SECOND) == "skipped"
-        assert _skip_reason(project, dropped, SECOND) == "observe_field_missing"
+        assert _disposition(project, dropped, SECOND) == "failed"
+        assert _skip_reason(project, dropped, SECOND) == (
+            f"context_scope.observe field '{ACTION}.summary' not found in this record"
+        )
 
     def test_the_others_succeed(self, one_unobservable):
         """A count alone would pass if five records landed with a failed
