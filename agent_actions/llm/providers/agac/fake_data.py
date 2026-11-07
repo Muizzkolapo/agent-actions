@@ -452,13 +452,11 @@ class FakeDataGenerator:
         A one-sided bound is widened by *span* on the open side.
         """
         low, high = schema.get(low_key), schema.get(high_key)
-        if low is None and high is None:
-            return None
-        if low is None:
-            low = min(0, high) if low_key == "minLength" else high - span
         if high is None:
-            high = low + span
-        return low, high
+            return None if low is None else (float(low), float(low) + span)
+        if low is None:
+            low = min(0.0, high) if low_key == "minLength" else high - span
+        return float(low), float(high)
 
     @classmethod
     def _generate_string(
@@ -662,7 +660,7 @@ class FakeDataGenerator:
             if multiple_of:
                 first, last = math.ceil(low / multiple_of), math.floor(high / multiple_of)
                 if first <= last:
-                    return round(rng.randint(first, last) * multiple_of, 10)
+                    return round(rng.randint(first, last) * float(multiple_of), 10)
             return min(max(round(rng.uniform(low, high), 2), low), high)
 
         # Context-aware generation
