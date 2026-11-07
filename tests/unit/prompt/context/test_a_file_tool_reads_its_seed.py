@@ -194,20 +194,20 @@ class TestTheSeedStaysOutOfStoredRows:
 
     def test_an_item_a_tool_returns_is_stored_without_what_the_seed_supplied(self):
         inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}}, "_seed": {"rules": RULES}}]
-        handed = {"x": 1, "rules": inputs[0]["_seed"]["rules"]}
-        returned = [TrackedItem({**handed, "verdict": "ok"}, source_index=0)]
+        from_seed = {"rules": inputs[0]["_seed"]["rules"]}
+        returned = [TrackedItem({"x": 1, **from_seed, "verdict": "ok"}, source_index=0)]
 
-        rows, _ = reconcile_outputs(returned, "probe", inputs, seed_payloads=[handed])
+        rows, _ = reconcile_outputs(returned, "probe", inputs, seed_payloads=[from_seed])
 
         (row,) = rows
         assert row["content"]["probe"] == {"x": 1, "verdict": "ok"}
 
     def test_a_value_the_tool_put_under_a_seed_key_is_kept(self):
         inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}}, "_seed": {"rules": RULES}}]
-        handed = {"x": 1, "rules": inputs[0]["_seed"]["rules"]}
+        from_seed = {"rules": inputs[0]["_seed"]["rules"]}
         returned = [TrackedItem({"x": 1, "rules": {"threshold": 99}}, source_index=0)]
 
-        rows, _ = reconcile_outputs(returned, "probe", inputs, seed_payloads=[handed])
+        rows, _ = reconcile_outputs(returned, "probe", inputs, seed_payloads=[from_seed])
 
         assert rows[0]["content"]["probe"] == {"x": 1, "rules": {"threshold": 99}}
 
