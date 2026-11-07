@@ -127,15 +127,21 @@ def test_the_fixture_really_invents(inventing):
     assert {r["source_guid"] for r in rows}.isdisjoint(set(_record_ids(inventing, ACTION)))
 
 
-def test_an_invented_row_still_carries_what_came_before_it(inventing):
+def test_an_invented_row_still_carries_what_every_input_shared(inventing):
     """Read back, not as written: the loss is in the rejoin, so a raw row looks
-    the same either way."""
+    the same either way. `flatten.exam_density` is equal on every input and is
+    carried; `flatten.summary` and `source.page_content` differ and are not, so
+    the row holds no input's `source`."""
     read_back = _read_back(inventing, "roll_up")
+    inputs = [r["content"]["flatten"] for r in _raw(inventing, ACTION)]
+    shared = {k: v for k, v in inputs[0].items() if all(i.get(k) == v for i in inputs)}
 
     assert [sorted(r.get("content", {})) for r in read_back] == [
-        ["flatten", "roll_up", "source"],
-        ["flatten", "roll_up", "source"],
+        ["flatten", "roll_up"],
+        ["flatten", "roll_up"],
     ]
+    assert shared["exam_density"] == "low"
+    assert [r["content"]["flatten"] for r in read_back] == [shared] * 2
 
 
 def test_the_action_below_reads_a_value_from_above_the_roll_up(inventing):
@@ -171,7 +177,9 @@ def test_an_invented_row_is_given_no_producer_of_its_own(inventing):
 
 def test_a_retry_below_it_rolls_the_file_up_again(inventing):
     """The rows claim no record, and none needs to: a retry reaching the file hands
-    the tool all of it and replaces both rows, so nothing is left to attribute."""
+    the tool all of it and writes both rows again. Written again exactly as they
+    were, they are the rows they were and keep their identity, as any row does; the
+    actions below keep what they hold for them."""
     before = {r["source_guid"] for r in _raw(inventing, "roll_up")}
     selected = _record_ids(inventing, ACTION)[1]
     _fail(inventing, selected, ACTION)
@@ -184,7 +192,7 @@ def test_a_retry_below_it_rolls_the_file_up_again(inventing):
     assert [r["content"]["roll_up"]["summary"] for r in after] == [
         f"rollup {half} over {RECORDS}" for half in (1, 2)
     ]
-    assert before.isdisjoint(r["source_guid"] for r in after)
+    assert {r["source_guid"] for r in after} == before
 
 
 def test_the_records_it_rolled_up_are_all_still_accounted_for(inventing):
@@ -226,7 +234,7 @@ def test_a_row_rewritten_by_a_retry_keeps_what_came_before_it(inventing):
     assert result.exit_code == 0, result.output
 
     namespaces = [sorted(r.get("content", {})) for r in _read_back(inventing, "roll_up")]
-    assert namespaces == [["flatten", "roll_up", "source"]] * len(namespaces)
+    assert namespaces == [["flatten", "roll_up"]] * len(namespaces)
     assert len(namespaces) == 2
 
 
