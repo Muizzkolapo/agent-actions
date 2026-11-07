@@ -62,13 +62,18 @@ def test_an_agent_its_kind_can_run_is_returned_as_written(entry):
 
 
 def test_a_mixed_case_tool_vendor_is_held_to_the_llm_rule_as_the_runtime_routes_it():
-    """The runtime matches a tool vendor exactly, so `Tool` would run as an LLM at FILE."""
+    """The tool client is chosen by an exact `model_vendor == "tool"` match, so `Tool` runs as an LLM."""
     with pytest.raises(ConfigurationError, match="FILE granularity is only supported"):
         _agents({"model_vendor": "Tool", "granularity": "file"})
 
 
-def test_a_hitl_agent_with_no_granularity_runs_at_file_as_in_the_actions_format():
-    (agent,) = _agents({"kind": "hitl", "model_vendor": "hitl"})
+@pytest.mark.parametrize(
+    "entry",
+    [{"kind": "hitl", "model_vendor": "hitl"}, {"model_vendor": "hitl"}],
+    ids=["hitl_kind", "hitl_vendor"],
+)
+def test_a_hitl_agent_with_no_granularity_runs_at_file_as_in_the_actions_format(entry):
+    (agent,) = _agents(entry)
 
     assert agent["granularity"] == "file"
 

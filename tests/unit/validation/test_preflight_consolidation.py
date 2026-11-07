@@ -9,7 +9,7 @@ import logging
 import pytest
 
 from agent_actions.config.schema import ActionConfig, WorkflowConfig
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.services.preflight_service import PreflightService
@@ -334,10 +334,11 @@ class TestTypeSpecificValidation:
     def test_a_tool_named_by_its_vendor_runs_at_file(self):
         """The runtime routes `model_vendor: tool` to the tool client, as it does kind."""
         action = {"name": "t", "model_vendor": "tool", "impl": "mod.fn", "granularity": "file"}
+        action["schema"] = _TOOL_SCHEMA
         assert _expanded_granularity(action) == "File"
 
     def test_a_tool_named_by_its_vendor_inherits_file_from_defaults(self):
-        action = {"name": "t", "model_vendor": "tool", "impl": "mod.fn"}
+        action = {"name": "t", "model_vendor": "tool", "impl": "mod.fn", "schema": _TOOL_SCHEMA}
         assert _expanded_granularity(action, {"granularity": "File"}) == "File"
 
     def test_a_hitl_action_named_by_its_vendor_runs_at_file(self):
@@ -384,6 +385,15 @@ class TestTypeSpecificValidation:
 
         assert agent["hitl"]["instructions"] == "Review these records"
         assert agent["model_vendor"] == "hitl"
+
+    def test_a_tool_named_by_its_vendor_is_held_to_the_impl_rule(self):
+        """A kind-named tool must name its impl; the vendor spelling is held to the same."""
+        with pytest.raises(ConfigValidationError, match="must specify 'impl'"):
+            _expanded_granularity({"name": "t", "model_vendor": "tool", "schema": _TOOL_SCHEMA})
+
+    def test_a_tool_named_by_its_vendor_is_held_to_the_schema_rule(self):
+        with pytest.raises(ConfigValidationError, match="has no output schema"):
+            _expanded_granularity({"name": "t", "model_vendor": "tool", "impl": "mod.fn"})
 
     def test_hitl_file_granularity_passes(self):
         """HITL action with granularity: file expands at File."""

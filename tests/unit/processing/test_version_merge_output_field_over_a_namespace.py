@@ -79,7 +79,7 @@ def _expand(
         action["granularity"] = granularity
     if model_vendor is not None:
         action["model_vendor"] = model_vendor
-    if kind == "tool":
+    if kind == "tool" or model_vendor == "tool":
         action["impl"] = "aggregate"
     if version_consumption:
         action["version_consumption"] = {"source": "voter", "pattern": "merge"}
