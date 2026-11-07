@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors.validation import DataValidationError, MissingSourceGuidError
@@ -24,7 +24,44 @@ from agent_actions.utils.content import get_existing_content
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.workflow.executor import config_in_force
 
+if TYPE_CHECKING:
+    from agent_actions.processing.types import ProcessingContext
+
 logger = logging.getLogger(__name__)
+
+
+def write_trace_row(
+    context: "PreparationContext | ProcessingContext",
+    *,
+    record_id: str,
+    source_guid: str | None,
+    prompt: str,
+    llm_context: Any,
+    attempt: int,
+) -> None:
+    """Store the prompt one provider call is sent, as row *attempt* of the record's trace.
+
+    The one writer of a trace row: a prepared task's first prompt and every repair
+    prompt after it are stored the same way.
+    """
+    if context.storage_backend is None:
+        return
+    context.storage_backend.write_prompt_trace(
+        action_name=context.agent_name,
+        record_id=record_id,
+        compiled_prompt=prompt,
+        llm_context=deep_json.dumps(llm_context, ensure_ascii=False, default=str),
+        model_name=context.agent_config.get("model_name") or context.agent_config.get("model"),
+        model_vendor=context.agent_config.get("model_vendor"),
+        run_mode=context.mode.value if context.mode else None,
+        attempt=attempt,
+        source_guid=source_guid,
+        run_id=(context.workflow_metadata or {}).get("run_id") or None,
+        answered_under=json.dumps(
+            config_in_force(cast(ActionConfigDict, context.agent_config)),
+            sort_keys=True,
+        ),
+    )
 
 
 class TaskPreparer:
@@ -123,24 +160,14 @@ class TaskPreparer:
             guard_status=GuardStatus.PASSED,
         )
 
-        if context.storage_backend is not None:
-            context.storage_backend.write_prompt_trace(
-                action_name=context.agent_name,
-                record_id=prepared.target_id,
-                compiled_prompt=prepared.formatted_prompt,
-                llm_context=deep_json.dumps(prepared.llm_context, ensure_ascii=False, default=str),
-                model_name=context.agent_config.get("model_name")
-                or context.agent_config.get("model"),
-                model_vendor=context.agent_config.get("model_vendor"),
-                run_mode=context.mode.value if context.mode else None,
-                attempt=attempt,
-                source_guid=prepared.source_guid,
-                run_id=(context.workflow_metadata or {}).get("run_id") or None,
-                answered_under=json.dumps(
-                    config_in_force(cast(ActionConfigDict, context.agent_config)),
-                    sort_keys=True,
-                ),
-            )
+        write_trace_row(
+            context,
+            record_id=prepared.target_id,
+            source_guid=prepared.source_guid,
+            prompt=prepared.formatted_prompt,
+            llm_context=prepared.llm_context,
+            attempt=attempt,
+        )
 
         return prepared
 

@@ -9,11 +9,13 @@ from typing import TYPE_CHECKING, Any, cast
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
+from agent_actions.processing.task_preparer import write_trace_row
 from agent_actions.processing.types import (
     ExpectationsMetadata,
     RecoveryMetadata,
     RetryMetadata,
 )
+from agent_actions.utils import deep_json
 
 if TYPE_CHECKING:
     from agent_actions.expectations.service import ExpectationService
@@ -50,10 +52,23 @@ class OnlineStrategy(InvocationStrategy):
 
         recovery_metadata = RecoveryMetadata()
         retry_service = self._retry_service
+        attempts = 0
 
         def generate(prompt: str) -> tuple[Any, bool]:
-            # Under an expectation repair loop this runs once per iteration;
-            # shipped metadata must describe the generation that ships, not a
+            nonlocal attempts
+            attempt, attempts = attempts, attempts + 1
+            # Under an expectation repair loop this runs once per iteration. Each
+            # repair prompt gets its own trace row; prepare stored the first.
+            if attempt:
+                write_trace_row(
+                    context,
+                    record_id=task.target_id,
+                    source_guid=task.source_guid,
+                    prompt=prompt,
+                    llm_context=task.llm_context,
+                    attempt=attempt,
+                )
+            # Shipped metadata must describe the generation that ships, not a
             # discarded earlier one.
             recovery_metadata.retry = None
             if retry_service:
@@ -62,6 +77,14 @@ class OnlineStrategy(InvocationStrategy):
                 )
             else:
                 response, executed = self._call_llm(task, context, prompt)
+            # On this attempt's row, so a response the loop discards is kept beside
+            # the prompt that drew it.
+            if context.storage_backend is not None and executed and response is not None:
+                context.storage_backend.update_prompt_trace_response(
+                    action_name=context.agent_name,
+                    record_id=task.target_id,
+                    response_text=deep_json.dumps(response, ensure_ascii=False, default=str),
+                )
             return response, executed
 
         if self._expectation_service:
