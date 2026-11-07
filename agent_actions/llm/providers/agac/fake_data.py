@@ -906,9 +906,10 @@ class FakeDataGenerator:
 
     @staticmethod
     def offered_answer_shapes(prompt: str) -> list[dict[str, Any]] | None:
-        """The JSON objects a prompt's last line offers as its answer, joined by ` or `.
+        """The JSON objects a prompt's last line offers as its answer: two or more, joined by ` or `.
 
-        None when that line holds anything else, so ordinary prose prompts are untouched.
+        None when that line holds anything else. A single object is not an offer, so a prompt
+        that ends with a rendered record still gets prose.
         """
         lines = [line.strip() for line in prompt.splitlines() if line.strip()]
         if not lines:
@@ -923,7 +924,7 @@ class FakeDataGenerator:
                 return None
             shapes.append(shape)
             if pos == len(line):
-                return shapes
+                return shapes if len(shapes) > 1 else None
             if not line.startswith(" or ", pos):
                 return None
             pos += len(" or ")

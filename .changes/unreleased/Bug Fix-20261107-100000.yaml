@@ -4,6 +4,6 @@ body: >-
   rule can be tested offline. The judge asks in text mode for one of two JSON objects, and the
   mock answered every text prompt with random sentences, so every judged outcome failed with
   "judge response was not a verdict object". In text mode the mock now answers a prompt whose
-  last line offers JSON objects joined by `or` with one of them, chosen by its seeded generator.
-  Any other text prompt still gets prose.
+  last line offers two or more JSON objects joined by `or` with one of them, chosen by its seeded
+  generator. Any other text prompt, including one that ends with a single object, still gets prose.
 time: 2026-11-07T10:00:00Z

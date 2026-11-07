@@ -1,6 +1,6 @@
 """In text mode the mock answers in the shape a prompt's last line offers.
 
-A prompt that ends with one or more JSON objects joined by ` or ` gets one of them back,
+A prompt that ends with two or more JSON objects joined by ` or ` gets one of them back,
 chosen by the mock's seeded RNG, with each string value replaced by a generated sentence.
 So an `llm_judge` on `agac-provider` gets a verdict it can read, and both verdicts occur.
 Any other prompt keeps getting prose.
@@ -71,10 +71,15 @@ def test_a_prompt_ending_in_prose_gets_prose():
         json.loads(_answer("Describe the weather.\nAnswer in one paragraph."))
 
 
-def test_a_prompt_ending_in_one_object_gets_that_shape():
-    answer = json.loads(_answer('Count the items.\n{"a": 1}'))
+def test_two_offered_objects_get_one_of_them_back():
+    answer = json.loads(_answer('Pick one.\n{"a": 1} or {"b": 2}'))
 
-    assert answer == {"a": 1}
+    assert answer in ({"a": 1}, {"b": 2})
+
+
+def test_a_prompt_ending_in_one_rendered_record_gets_prose():
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(_answer('Summarise this record.\n{"title": "x", "body": "y"}'))
 
 
 @pytest.mark.parametrize(
