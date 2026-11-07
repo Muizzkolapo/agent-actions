@@ -24,6 +24,7 @@ from tests.integration.test_retry_ignores_record_cap import (
     _backend,
     _disposition,
     _record_ids,
+    _stored_guids,
     _stored_records,
     project,  # noqa: F401
 )
@@ -130,10 +131,12 @@ class TestOneDroppedRecordDoesNotFailTheFile:
         assert "length mismatch" not in result.output
 
     def test_every_resolvable_record_is_processed(self, one_unobservable):
-        """The point of the fix: the other five records are not collateral."""
-        project, _dropped, _result = one_unobservable  # noqa: F811
+        """The point of the fix: the other five records are not collateral. The sixth
+        is stored too, as the failed record's tombstone."""
+        project, dropped, _result = one_unobservable  # noqa: F811
 
-        assert _stored_records(project, SECOND) == RECORDS - 1
+        assert _stored_records(project, SECOND) == RECORDS
+        assert dropped in _stored_guids(project, SECOND)
 
     def test_the_unresolvable_record_alone_fails_and_the_reason_names_the_field(
         self, one_unobservable

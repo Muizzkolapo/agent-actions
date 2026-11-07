@@ -958,14 +958,6 @@ def apply_context_scope_for_records(
             ", ".join(sorted(qualified_keys)),
         )
 
-    if skipped:
-        reason_counts = Counter(s["reason"] for s in skipped)
-        logger.warning(
-            "[%s] %d of %d records skipped — %s",
-            action_name,
-            len(skipped),
-            len(records),
-            ", ".join(f"{reason}: {count}" for reason, count in sorted(reason_counts.items())),
-        )
-
+    # No summary line for the refusals: each is the record's failure, which the
+    # collector reports and stores, or a guard skip, which the guard reports.
     return enriched, skipped
