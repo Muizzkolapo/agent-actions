@@ -376,9 +376,10 @@ A constraint written on a field or property is not always sent to the provider, 
 | Constraint | Sent to the provider | Checked on the response |
 |------------|----------------------|-------------------------|
 | `enum` | Yes | Yes |
-| `minimum`, `maximum` | No | Yes |
+| `minimum`, `maximum` | Yes | Yes |
 | `pattern` | Yes | No |
-| `minLength`, `maxLength`, `exclusiveMinimum` | No | No |
+| `minLength`, `maxLength` | Yes | No |
+| `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf` | No | No |
 
 Inside the `items` of an array field, every constraint is sent with the schema, and the response is checked element by element against the whole `items` schema, so `maxLength` there is enforced.
 
