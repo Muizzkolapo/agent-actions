@@ -812,7 +812,15 @@ def apply_context_scope_for_records(
             # Staging has checked every row's selecting value against every selected
             # seed before the run, so a load that still fails here is the action's
             # configuration, not one record's, and stops it.
-            seed = _load_record_seed(config, context_scope, action_name, source_content)
+            # An empty pool resolves to an empty dict, not None: the record's own
+            # carried source then selects the file, as it answers an observe of it.
+            carried = content.get("source")
+            seed = _load_record_seed(
+                config,
+                context_scope,
+                action_name,
+                source_content or (carried if isinstance(carried, dict) else None),
+            )
 
         # Validate observe/passthrough/drop refs against the record's namespaces.
         # RecordContextError means a required namespace or field is missing —
