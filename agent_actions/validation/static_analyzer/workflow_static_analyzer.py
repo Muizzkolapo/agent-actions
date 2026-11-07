@@ -1385,8 +1385,11 @@ class WorkflowStaticAnalyzer:
             fields = shape.setdefault(ns, {})
             schema = schemas.get(ns)
             if field == "*":
+                # The action's own output only: a field it forwards by passthrough
+                # lands in that field's own namespace at run time, never in this one,
+                # so a wildcard here never yields it.
                 if schema and not (schema.is_dynamic or schema.is_schemaless):
-                    fields.update(dict.fromkeys(schema.available_fields))
+                    fields.update(dict.fromkeys(schema.schema_fields))
             else:
                 fields[field] = None
         return shape

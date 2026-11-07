@@ -119,7 +119,7 @@ By default, every action uses `granularity: Record` -- one record at a time. Set
 
 This matters whenever your logic needs a cross-record view: computing averages, counting distributions, sorting by priority, producing one output from many inputs. Without it, the aggregation tool would see one clause at a time and could never build a contract-level summary.
 
-A FILE granularity tool in Python receives a `list[dict]`, one item per record, holding the observed fields as flat keys. Every observed field is under its bare name: the wildcard's (`risk_level`) and the ones named one by one beside it (`clause_title`, `contract_id`). Only a real collision, such as a wildcard field with the same name as a named field, gives a key its action's name (`analyze_clause.clause_number`). A tool that builds a new row returns a `FileUDFResult`:
+A FILE granularity tool in Python receives a `list[dict]`, one item per record, holding the observed fields as flat keys. Every observed field is under its bare name: the wildcard's (`risk_level`) and the ones named one by one beside it (`clause_title`, `contract_id`). Only a real collision, such as a wildcard field with the same name as a named field, gives a key its action's name (`other_action.clause_number`, when `other_action` has a field of that name in its own schema). A tool that builds a new row returns a `FileUDFResult`:
 
 ```python
 from agent_actions import FileUDFResult, udf_tool
