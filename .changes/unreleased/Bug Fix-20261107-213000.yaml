@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  A first action's guard on a `source` field that no staged row holds now logs the same
+  warning a later action's guard gets: `Action 'tag' guards on source.scroe, but no record
+  staged from staging/rows.json holds 'scroe'.` Before, a misspelled field under `IS NULL`
+  passed every record with no message. The run goes on, and the guard still decides.
+time: 2026-11-07T21:30:00Z

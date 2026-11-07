@@ -105,8 +105,12 @@ reports a missing field and filters; `IS NULL` alone lets it through, and logs n
 doing it. Preflight refuses a field written without its prefix and the misspellings it can prove
 (see [Context Access](#context-access)):
 `summarize.descriptio IS NULL` is refused when `summarize`'s schema lists its fields. Against an
-action with no schema, or one whose schema sets `additionalProperties`, the same guard filters
-nothing and says nothing.
+action with no schema, or one whose schema sets `additionalProperties`, preflight cannot prove the
+misspelling: it warns `Cannot validate field 'descriptio'`, and the guard passes every record.
+A guard on a `source.` field that no staged row holds, on the first action or on any action
+below it, logs a warning when the run reads the staged file:
+`Action 'tag' guards on source.scroe, but no record staged from staging/rows.json holds 'scroe'.`
+The run goes on, and the guard decides what each record does.
 
 ### Boolean Values
 

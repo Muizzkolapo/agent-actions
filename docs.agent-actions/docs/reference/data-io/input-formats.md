@@ -133,8 +133,8 @@ prompt: |
 
 Every action reads the `source` namespace of the staged row its record came from;
 no action adds a field to it. So when the first action stages a file, the fields an
-action below it reads from `source` are checked against that file's rows, before any
-record is stored or sent:
+action below it reads from `source`, and the fields the first action's own guard reads,
+are checked against that file's rows, before any record is stored or sent:
 
 - An `observe`, or a prompt reference every render reads, of a field that no row
   of the file holds stops the run, naming the action, the field and the file. Each
@@ -144,8 +144,8 @@ record is stored or sent:
   read is logged as a warning instead. Files that are all text documents are the
   exception: their records all hold only `content`, so the read is still refused.
 - These are logged as a warning, and the run goes on: a `passthrough` (it leaves the
-  field out, as for the first action), a guard (`source.x IS NULL` passes a record
-  without `x`; a comparison filters it), and a prompt reference under an `if` body or
+  field out, as for the first action), a guard on any action, the first included
+  (`source.x IS NULL` passes a record without `x`; a comparison filters it), and a prompt reference under an `if` body or
   a loop, on the right of `and`/`or`, bound with `{% set %}` or `{% with %}` (read only
   where the name is used), behind `| default(...)`, `is defined`, a conditional
   expression or `source.get('x', ...)`.
