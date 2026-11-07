@@ -409,9 +409,9 @@ class SchemaExtractor:
                 output.failed_schema = name
                 return
             per_option.append(set(option.schema_fields))
-        union = set().union(*per_option)
+        union: set[str] = set().union(*per_option)
         output.schema_fields = union
-        output.partial_fields = union - set.intersection(*per_option)
+        output.partial_fields = union - per_option[0].intersection(*per_option[1:])
 
     def _extract_hitl_schema(self, output: OutputSchema) -> None:
         """Extract schema for HITL actions using the canonical HITL output schema.
