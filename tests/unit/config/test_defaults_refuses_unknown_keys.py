@@ -150,11 +150,8 @@ class TestWhatTheFrameworkReadsFromADefaultsBlock:
         [
             ("enable_prompt_caching", True),
             ("anthropic_version", "2023-06-01"),
-            ("max_execution_time", 30),
-            ("enable_caching", False),
             ("tokenizer_model", "gpt2"),
             ("split_method", "sentence"),
-            ("where_clause", {"field": "x"}),
             ("on_empty", "skip"),
         ],
     )

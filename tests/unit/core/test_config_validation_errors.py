@@ -67,31 +67,6 @@ class TestConfigValidationErrorMessages:
         assert "prompt" in str(error)
         assert "reserved_names" in error.context
 
-    def test_where_clause_config_validation_empty_clause(self):
-        """Test WHERE clause config validation rejects empty clause."""
-        from agent_actions.errors import ValidationError
-        from agent_actions.output.response.config_schema import WhereClauseConfig
-
-        with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
-            WhereClauseConfig(clause="")
-        with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
-            WhereClauseConfig(clause="   ")
-
-    def test_where_clause_config_validation_dangerous_patterns(self):
-        """Test WHERE clause config validates against dangerous patterns."""
-        from agent_actions.errors import ValidationError
-        from agent_actions.output.response.config_schema import WhereClauseConfig
-
-        dangerous_clauses = [
-            "field = __import__('os')",
-            "field = exec('malicious code')",
-            "field = eval('expression')",
-            "field = open('/etc/passwd')",
-        ]
-        for clause in dangerous_clauses:
-            with pytest.raises(ValidationError):
-                WhereClauseConfig(clause=clause)
-
 
 def _make_workflow_manager(actions, defaults=None):
     """Create a ConfigManager with a new-format workflow config for validation tests."""

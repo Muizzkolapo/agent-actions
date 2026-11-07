@@ -5,11 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.workflow.managers.skip import (
-    GuardStrategy,
-    SkipConditionStrategy,
-    SkipEvaluator,
-)
+from agent_actions.workflow.managers.skip import SkipConditionStrategy, SkipEvaluator
 
 GUARD_FILTER_PATH = "agent_actions.workflow.managers.skip.get_global_guard_filter"
 FIRE_EVENT_PATH = "agent_actions.workflow.managers.skip.fire_event"
@@ -102,249 +98,6 @@ class TestSkipConditionStrategy:
         assert result is False
 
 
-# ── GuardStrategy ──────────────────────────────────────────────────────
-
-
-class TestGuardStrategy:
-    """Tests for GuardStrategy (guard with scope='action')."""
-
-    @pytest.fixture
-    def strategy(self):
-        return GuardStrategy()
-
-    def test_no_guard_returns_false(self, strategy):
-        assert strategy.should_skip({}, {}) is False
-
-    def test_scope_not_agent_returns_false(self, strategy):
-        cfg = {"guard": {"scope": "workflow", "clause": "x > 1"}}
-        assert strategy.should_skip(cfg, {}) is False
-
-    def test_matched_does_not_skip(self, strategy):
-        """Guard matched → agent proceeds."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {"guard": {"scope": "action", "clause": "x > 1"}, "agent_type": "a"}
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            assert strategy.should_skip(cfg, {}) is False
-
-    def test_not_matched_skips(self, strategy):
-        """Guard not matched → skip agent and fire AgentSkipEvent."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=False))
-        cfg = {"guard": {"scope": "action", "clause": "x > 1"}, "agent_type": "a"}
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
-            assert strategy.should_skip(cfg, {}) is True
-        mock_fire.assert_called_once()
-        event = mock_fire.call_args[0][0]
-        assert event.action_name == "a"
-        assert "guard" in event.skip_reason
-
-    def test_filter_error_passthrough_false(self, strategy):
-        """Error with passthrough_on_error=False → skip and fire event."""
-        filt = _make_filter(FakeFilterResult(success=False, error="oops"))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": False},
-            "agent_type": "a",
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
-            assert strategy.should_skip(cfg, {}) is True
-        mock_fire.assert_called_once()
-        event = mock_fire.call_args[0][0]
-        assert event.action_name == "a"
-        assert "passthrough_on_error" in event.skip_reason
-
-    @pytest.mark.parametrize(
-        "filt",
-        [
-            pytest.param(
-                _make_filter(FakeFilterResult(success=False, error="oops")), id="filter_error"
-            ),
-            pytest.param(_raising_filter(ValueError("boom")), id="exception"),
-        ],
-    )
-    def test_evaluation_error_with_passthrough_does_not_skip(self, strategy, filt):
-        cfg = {
-            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": True},
-            "agent_type": "a",
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            assert strategy.should_skip(cfg, {}) is False
-
-    def test_exception_passthrough_false(self, strategy):
-        """Exception with passthrough_on_error=False → skip."""
-        filt = MagicMock()
-        filt.filter_item.side_effect = TypeError("boom")
-        cfg = {
-            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": False},
-            "agent_type": "a",
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH):
-            assert strategy.should_skip(cfg, {}) is True
-
-    def test_context_excludes_guard_key(self, strategy):
-        """Context passed to filter should not include the 'guard' key itself."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-            "dependencies": ["b"],
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, {"prev": "data"})
-
-        call_args = filt.filter_item.call_args[0][0]
-        assert "guard" not in call_args.data.get("agent_config", {})
-
-    def test_flattens_previous_outputs_to_top_level(self, strategy):
-        """Action outputs from previous_outputs are accessible as top-level keys."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-        }
-        previous_outputs = {
-            "classify": [{"category": "bug"}],
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        call_args = filt.filter_item.call_args[0][0]
-        # Action outputs should be flattened to top-level
-        assert "classify" in call_args.data
-        # previous_outputs should still be present for backward compat
-        assert "previous_outputs" in call_args.data
-
-    def test_meta_keys_not_flattened(self, strategy):
-        """Internal _meta metadata keys are excluded from top-level flattening."""
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-        }
-        previous_outputs = {
-            "classify": [{"category": "bug"}],
-            "classify_meta": {"status": "completed"},
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        call_args = filt.filter_item.call_args[0][0]
-        assert "classify" in call_args.data
-        assert "classify_meta" not in call_args.data
-
-    @pytest.mark.parametrize(
-        ("cfg_extra", "previous_outputs", "expected"),
-        [
-            # A reserved key keeps its config value rather than the action output.
-            pytest.param(
-                {"dependencies": ["b"]},
-                {"dependencies": [{"data": "value"}]},
-                {"dependencies": ["b"]},
-                id="reserved_key_not_overwritten",
-            ),
-            # A single-key dict is unwrapped from its list and its field promoted.
-            pytest.param(
-                {},
-                {"assess": [{"severity": "high"}]},
-                {"assess": {"severity": "high"}, "severity": "high"},
-                id="single_item_unwrapped_and_promoted",
-            ),
-            pytest.param({}, {"empty_action": []}, {"empty_action": []}, id="empty_list_kept"),
-            pytest.param(
-                {},
-                {"extract": [{"id": 1}, {"id": 2}]},
-                {"extract": [{"id": 1}, {"id": 2}]},
-                id="multi_item_list_kept",
-            ),
-        ],
-    )
-    def test_previous_outputs_reach_the_guard_context(
-        self, strategy, cfg_extra, previous_outputs, expected
-    ):
-        filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {
-            "guard": {"scope": "action", "clause": "x > 1"},
-            "agent_type": "a",
-            **cfg_extra,
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt):
-            strategy.should_skip(cfg, previous_outputs)
-
-        data = filt.filter_item.call_args[0][0].data
-        assert {key: data[key] for key in expected} == expected
-
-    # ── Missing field reclassification tests ──
-
-    def test_missing_upstream_skips_action(self, strategy):
-        """Guard on missing upstream action skips instead of passing through.
-
-        Before the fix, a missing field produced a DATA error that
-        passthrough_on_error=True (default) let through silently.
-        After reclassification, the missing field is treated as
-        matched=False → action is skipped.
-        """
-        from agent_actions.input.preprocessing.filtering.guard_filter import (
-            ErrorCategory,
-            FilterResult,
-        )
-
-        # Simulate GuardFilter response for a field that doesn't exist
-        result = FilterResult(
-            success=False,
-            error="Field 'classify.category' does not exist in the data",
-            error_category=ErrorCategory.DATA,
-        )
-        filt = _make_filter(result)
-        cfg = {
-            "guard": {
-                "scope": "action",
-                "clause": 'classify.category == "urgent"',
-                "passthrough_on_error": True,
-            },
-            "agent_type": "triage",
-        }
-        # previous_outputs does NOT contain 'classify'
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
-            should_skip = strategy.should_skip(cfg, {})
-
-        assert should_skip is True
-        mock_fire.assert_called_once()
-        event = mock_fire.call_args[0][0]
-        assert event.action_name == "triage"
-
-    def test_semantic_error_always_skips_regardless_of_passthrough(self, strategy):
-        """SEMANTIC errors bypass passthrough_on_error and always skip.
-
-        This matches GuardEvaluator parity: semantic errors (e.g. flat
-        field reference in namespaced content) are structural config
-        mistakes that should not be silently passed through.
-        """
-        from agent_actions.input.preprocessing.filtering.guard_filter import (
-            ErrorCategory,
-            FilterResult,
-        )
-
-        # After reclassification, a flat-field-in-namespace error becomes SEMANTIC
-        result = FilterResult(
-            success=False,
-            error="Field 'category' does not exist in the data. Did you mean: classify.category?",
-            error_category=ErrorCategory.DATA,
-        )
-        filt = _make_filter(result)
-        cfg = {
-            "guard": {
-                "scope": "action",
-                "clause": 'category == "urgent"',
-                "passthrough_on_error": True,
-            },
-            "agent_type": "triage",
-        }
-        with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
-            should_skip = strategy.should_skip(cfg, {})
-
-        # Should skip despite passthrough_on_error=True
-        assert should_skip is True
-        mock_fire.assert_called_once()
-
-
 # ── SkipEvaluator ──────────────────────────────────────────────────────
 
 
@@ -357,8 +110,7 @@ class TestSkipEvaluator:
         with patch(GUARD_FILTER_PATH, return_value=MagicMock()):
             assert evaluator.should_skip_action({"agent_type": "a"}) is False
 
-    def test_first_match_short_circuits(self):
-        """If SkipConditionStrategy says skip, later strategies are not called."""
+    def test_a_skip_condition_skips_the_action(self):
         evaluator = SkipEvaluator()
         filt = _make_filter(FakeFilterResult(success=True, matched=False))
         cfg = {"skip_condition": {"where": "x > 1"}, "agent_type": "a"}
@@ -369,17 +121,18 @@ class TestSkipEvaluator:
     def test_strategy_exception_continues(self):
         """If one strategy raises, evaluator continues to the next."""
         evaluator = SkipEvaluator()
-        evaluator.strategies[0] = MagicMock()
-        evaluator.strategies[0].should_skip.side_effect = ValueError("first broke")
-        evaluator.strategies[0].get_strategy_name.return_value = "broken"
-
-        evaluator.strategies[1] = MagicMock()
-        evaluator.strategies[1].should_skip.return_value = True
-        evaluator.strategies[1].get_strategy_name.return_value = "guard"
+        broken = MagicMock()
+        broken.should_skip.side_effect = ValueError("first broke")
+        broken.get_strategy_name.return_value = "broken"
+        working = MagicMock()
+        working.should_skip.return_value = True
+        working.get_strategy_name.return_value = "working"
+        evaluator.strategies = [broken, working]
 
         result = evaluator.should_skip_action({"agent_type": "a"}, {})
         assert result is True
+        working.should_skip.assert_called_once()
 
     def test_repr(self):
         evaluator = SkipEvaluator()
-        assert "2" in repr(evaluator)
+        assert repr(evaluator) == "SkipEvaluator(strategies=1)"

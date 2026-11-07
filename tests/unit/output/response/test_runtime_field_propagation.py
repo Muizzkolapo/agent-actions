@@ -1,13 +1,12 @@
 """Tests for runtime field propagation through the expander pipeline.
 
-Action-level runtime fields (anthropic_version,
-enable_prompt_caching, max_execution_time, where_clause, enable_caching)
+Action-level runtime fields (anthropic_version, enable_prompt_caching, on_empty)
 must survive expansion and appear in the final agent dict.
 """
 
 import pytest
 
-from agent_actions.output.response.config_fields import inherit_simple_fields
+from agent_actions.output.response.config_fields import SIMPLE_CONFIG_FIELDS, inherit_simple_fields
 from agent_actions.output.response.expander import ActionExpander
 
 
@@ -38,9 +37,6 @@ class TestRuntimeFieldPropagation:
         [
             ("anthropic_version", "2023-06-01"),
             ("enable_prompt_caching", True),
-            ("max_execution_time", 600),
-            ("where_clause", {"clause": "status = 'active'"}),
-            ("enable_caching", True),
             ("on_empty", "error"),
         ],
     )
@@ -54,64 +50,33 @@ class TestRuntimeFieldPropagation:
         """Fields not set in action or defaults get their hardcoded default."""
         action = _minimal_action()
         result = _make_agent(action)
-        # Optional fields default to None
-        for field in [
-            "anthropic_version",
-            "enable_prompt_caching",
-            "where_clause",
-        ]:
+        for field in ["anthropic_version", "enable_prompt_caching"]:
             assert result[field] is None, f"{field} should default to None"
-        # Fields with non-None defaults must match AgentConfig expectations
-        assert result["enable_caching"] is True, "enable_caching should default to True"
-        assert result["max_execution_time"] == 300, "max_execution_time should default to 300"
+        assert result["on_empty"] == "warn"
 
     def test_defaults_level_inheritance(self):
         """Fields set in defaults propagate when action omits them."""
         action = _minimal_action()
-        defaults = {
-            "anthropic_version": "2023-06-01",
-            "enable_prompt_caching": True,
-            "max_execution_time": 300,
-            "where_clause": {"clause": "active = 1"},
-            "enable_caching": True,
-        }
+        defaults = {"anthropic_version": "2023-06-01", "enable_prompt_caching": True}
         result = _make_agent(action, defaults)
 
         assert result["anthropic_version"] == "2023-06-01"
         assert result["enable_prompt_caching"] is True
-        assert result["max_execution_time"] == 300
-        assert result["where_clause"] == {"clause": "active = 1"}
-        assert result["enable_caching"] is True
 
     def test_action_overrides_defaults(self):
         """Action-level value wins over defaults-level value."""
-        defaults = {
-            "anthropic_version": "2023-01-01",
-            "max_execution_time": 100,
-            "enable_caching": False,
-        }
-        action = _minimal_action(
-            anthropic_version="2024-01-01",
-            max_execution_time=600,
-            enable_caching=True,
-        )
+        defaults = {"anthropic_version": "2023-01-01", "enable_prompt_caching": False}
+        action = _minimal_action(anthropic_version="2024-01-01", enable_prompt_caching=True)
         result = _make_agent(action, defaults)
 
         assert result["anthropic_version"] == "2024-01-01"
-        assert result["max_execution_time"] == 600
-        assert result["enable_caching"] is True
+        assert result["enable_prompt_caching"] is True
 
 
 class TestEndToEndPropagation:
     """Integration tests through expand_actions_to_agents (full pipeline)."""
 
-    RUNTIME_FIELDS = {
-        "anthropic_version": "2023-06-01",
-        "enable_prompt_caching": True,
-        "max_execution_time": 600,
-        "where_clause": {"clause": "status = 'active'"},
-        "enable_caching": True,
-    }
+    RUNTIME_FIELDS = {"anthropic_version": "2023-06-01", "enable_prompt_caching": True}
 
     def test_non_versioned_action_propagates_fields(self):
         """Runtime fields survive the full expand_actions_to_agents path."""
@@ -159,31 +124,22 @@ class TestEndToEndPropagation:
 
 
 class TestInheritSimpleFieldsRuntime:
-    """Unit tests for inherit_simple_fields with the new runtime fields."""
+    """Unit tests for inherit_simple_fields with the runtime fields."""
 
     def test_runtime_fields_in_simple_config(self):
-        """All 6 runtime fields must be present in SIMPLE_CONFIG_FIELDS."""
-        from agent_actions.output.response.config_fields import SIMPLE_CONFIG_FIELDS
-
-        for field in [
-            "anthropic_version",
-            "enable_prompt_caching",
-            "max_execution_time",
-            "where_clause",
-            "enable_caching",
-        ]:
+        for field in ["anthropic_version", "enable_prompt_caching"]:
             assert field in SIMPLE_CONFIG_FIELDS, f"{field} missing from SIMPLE_CONFIG_FIELDS"
 
-    def test_where_clause_dict_is_deep_copied(self):
-        """where_clause dict must be deep-copied to prevent cross-agent mutation."""
-        shared = {"clause": "x = 1"}
-        action = {"where_clause": shared}
+    def test_a_dict_from_the_action_is_deep_copied(self):
+        """A dict value must be deep-copied to prevent cross-agent mutation."""
+        shared = {"max_retries": 3}
+        action = {"retry": shared}
         agent_a: dict = {}
         agent_b: dict = {}
 
         inherit_simple_fields(agent_a, action, {})
         inherit_simple_fields(agent_b, action, {})
 
-        agent_a["where_clause"]["clause"] = "MUTATED"
-        assert agent_b["where_clause"]["clause"] == "x = 1"
-        assert shared["clause"] == "x = 1"
+        agent_a["retry"]["max_retries"] = 99
+        assert agent_b["retry"]["max_retries"] == 3
+        assert shared["max_retries"] == 3

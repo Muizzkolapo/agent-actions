@@ -83,17 +83,10 @@ class TestGuardEvaluator:
         assert result.should_execute is True
         mock_guard_filter.filter_item.assert_not_called()
 
-    def test_evaluate_action_scope_skipped(self, evaluator, mock_guard_filter):
-        """Action-scope guards are skipped (only item-level guards evaluated)."""
-        guard_config = {"clause": "x > 1", "scope": "action"}
-        result = evaluator.evaluate({"x": 5}, guard_config)
-        assert result.should_execute is True
-        mock_guard_filter.filter_item.assert_not_called()
-
     def test_evaluate_guard_passes(self, evaluator, mock_guard_filter):
         """Guard that matches returns passed."""
         mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=True)
-        guard_config = {"clause": "x > 1", "scope": "item", "behavior": "filter"}
+        guard_config = {"clause": "x > 1", "behavior": "filter"}
 
         result = evaluator.evaluate({"x": 5}, guard_config)
 
@@ -103,7 +96,7 @@ class TestGuardEvaluator:
     def test_evaluate_guard_filters(self, evaluator, mock_guard_filter):
         """Guard that doesn't match with filter behavior returns filtered."""
         mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=False)
-        guard_config = {"clause": "x > 10", "scope": "item", "behavior": "filter"}
+        guard_config = {"clause": "x > 10", "behavior": "filter"}
 
         result = evaluator.evaluate({"x": 5}, guard_config)
 
@@ -113,7 +106,7 @@ class TestGuardEvaluator:
     def test_evaluate_guard_skips(self, evaluator, mock_guard_filter):
         """Guard that doesn't match with skip behavior returns skipped."""
         mock_guard_filter.filter_item.return_value = FilterResult(success=True, matched=False)
-        guard_config = {"clause": "x > 10", "scope": "item", "behavior": "skip"}
+        guard_config = {"clause": "x > 10", "behavior": "skip"}
 
         result = evaluator.evaluate({"x": 5}, guard_config)
 
@@ -270,7 +263,7 @@ class TestOutputFieldPromotion:
             "assess_severity": {"severity": "high"},
             "severity": "high",  # Promoted
         }
-        guard_config = {"clause": 'severity != "low"', "scope": "item", "behavior": "skip"}
+        guard_config = {"clause": 'severity != "low"', "behavior": "skip"}
 
         evaluator.evaluate(
             item={"content": {}},
@@ -500,7 +493,7 @@ class TestNamespacedContentGuardEvaluation:
             },
             "source_guid": "sg-1",
         }
-        guard = {"clause": "validate.pass == true", "scope": "item", "behavior": "skip"}
+        guard = {"clause": "validate.pass == true", "behavior": "skip"}
 
         result = evaluator.evaluate(record, guard)
 
@@ -513,7 +506,7 @@ class TestNamespacedContentGuardEvaluation:
             "content": {"validate": {"pass": True}},
             "source_guid": "sg-1",
         }
-        guard = {"clause": "validate.pass == false", "scope": "item", "behavior": "skip"}
+        guard = {"clause": "validate.pass == false", "behavior": "skip"}
 
         result = evaluator.evaluate(record, guard)
 
@@ -530,7 +523,7 @@ class TestNamespacedContentGuardEvaluation:
             },
             "source_guid": "sg-1",
         }
-        guard = {"clause": "classify.confidence > 0.9", "scope": "item", "behavior": "filter"}
+        guard = {"clause": "classify.confidence > 0.9", "behavior": "filter"}
 
         result = evaluator.evaluate(record, guard)
 
@@ -548,7 +541,6 @@ class TestNamespacedContentGuardEvaluation:
         }
         guard = {
             "clause": "pass == false",
-            "scope": "item",
             "behavior": "skip",
         }
 
@@ -567,7 +559,6 @@ class TestNamespacedContentGuardEvaluation:
         }
         guard = {
             "clause": 'severity == "high"',
-            "scope": "item",
             "behavior": "filter",
         }
 
@@ -588,7 +579,6 @@ class TestNamespacedContentGuardEvaluation:
         }
         guard = {
             "clause": "nonexistent_action.field == true",
-            "scope": "item",
             "behavior": "skip",
         }
 
@@ -605,7 +595,6 @@ class TestNamespacedContentGuardEvaluation:
         }
         guard = {
             "clause": "nonexistent.field == true",
-            "scope": "item",
             "behavior": "filter",
         }
 
@@ -622,7 +611,6 @@ class TestNamespacedContentGuardEvaluation:
         }
         guard = {
             "clause": "nonexistent.field == true",
-            "scope": "item",
             "behavior": "warn",
         }
 
@@ -638,7 +626,7 @@ class TestNamespacedContentGuardEvaluation:
             "source_guid": "sg-1",
         }
         context = {"assess": {"severity": "high"}}
-        guard = {"clause": "validate.pass == false", "scope": "item", "behavior": "skip"}
+        guard = {"clause": "validate.pass == false", "behavior": "skip"}
 
         result = evaluator.evaluate(item, guard, context)
 
@@ -648,7 +636,7 @@ class TestNamespacedContentGuardEvaluation:
         """Phase 2 evaluation can access namespaces from context dict."""
         item = {"content": {}, "source_guid": "sg-1"}
         context = {"assess": {"severity": "high"}}
-        guard = {"clause": 'assess.severity == "high"', "scope": "item", "behavior": "skip"}
+        guard = {"clause": 'assess.severity == "high"', "behavior": "skip"}
 
         result = evaluator.evaluate(item, guard, context)
 
@@ -747,7 +735,6 @@ class TestNamespacedContentGuardEvaluation:
         }
         guard = {
             "clause": "validate.pass == true AND nonexistent.field == true",
-            "scope": "item",
             "behavior": "skip",
         }
 
@@ -788,7 +775,7 @@ class TestGuardMissingFieldLogNoise:
         try:
             result = evaluator.evaluate(
                 {"content": {"validate": {"pass": True}}, "source_guid": "sg-1"},
-                {"clause": "nonexistent_action.field == true", "scope": "item", "behavior": "skip"},
+                {"clause": "nonexistent_action.field == true", "behavior": "skip"},
             )
         finally:
             for lg in loggers_to_check:
@@ -816,7 +803,7 @@ class TestGuardMissingFieldLogNoise:
         ) as mock_fire:
             result = evaluator.evaluate(
                 {"content": {"validate": {"pass": True}}, "source_guid": "sg-1"},
-                {"clause": "nonexistent_action.field == true", "scope": "item", "behavior": "skip"},
+                {"clause": "nonexistent_action.field == true", "behavior": "skip"},
             )
 
         assert result.should_execute is False
@@ -860,7 +847,7 @@ class TestGuardMissingFieldLogNoise:
         try:
             result = evaluator.evaluate(
                 {"content": {"validate": {"pass": True}}, "source_guid": "sg-1"},
-                {"clause": "pass == false", "scope": "item", "behavior": "skip"},
+                {"clause": "pass == false", "behavior": "skip"},
             )
         finally:
             target_logger.removeHandler(handler)

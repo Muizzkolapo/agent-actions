@@ -57,22 +57,6 @@ class GuardConfigDict(TypedDict, total=False):
     passthrough_on_empty: bool
 
 
-class WhereClauseDict(TypedDict, total=False):
-    """WHERE clause configuration for conditional filtering.
-
-    Supports SQL-like expressions evaluated per-item or per-action.
-    See WhereClauseConfig (output/response/config_schema.py) for
-    validation rules and defaults.
-    """
-
-    clause: str
-    scope: str  # "item" | "action"
-    behavior: str  # "skip" | "filter"
-    passthrough_on_empty: bool
-    passthrough_on_error: bool
-    cache_enabled: bool
-
-
 class HitlConfigDict(TypedDict, total=False):
     """Human-in-the-loop review configuration.
 
@@ -149,13 +133,10 @@ class ActionConfigDict(TypedDict, total=False):
     guard: GuardConfigDict
     conditional_clause: str
     skip_condition: str
-    where_clause: WhereClauseDict
 
     # Optional features
     add_dispatch: bool
-    constraints: list[str]
     retry: dict[str, Any]
-    max_execution_time: int
     on_empty: str  # "warn" | "error" | "skip"
     defaults: dict[str, Any]  # output fields a tool UDF synthesizes; read by the dag-fit check
 
@@ -210,7 +191,6 @@ class ActionEntryDict(TypedDict, total=False):
     chunk_config: dict[str, Any]
     is_operational: bool
     conditional_clause: str | None
-    where_clause: WhereClauseDict | None
     add_dispatch: bool | None
     # Anthropic-specific configuration options
     # API version header for Anthropic requests (e.g., "2023-06-01")

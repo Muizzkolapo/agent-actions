@@ -1,6 +1,5 @@
 """Configuration schema models for agent response processing."""
 
-from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
@@ -10,91 +9,6 @@ from agent_actions.config.types import RunMode
 from agent_actions.errors import ValidationError
 from agent_actions.llm.config.vendor import canonical_vendor, vendor_names
 from agent_actions.utils.constants import DANGEROUS_PATTERNS, contains_dangerous_pattern
-
-
-class FilterScope(str, Enum):
-    """Scope for WHERE clause filtering."""
-
-    ITEM = "item"
-    ACTION = "action"
-
-
-class WhereClauseBehavior(str, Enum):
-    """Behavior when WHERE clause condition fails."""
-
-    SKIP = "skip"
-    FILTER = "filter"
-
-
-class WhereClauseConfig(BaseModel):
-    """Configuration for WHERE clause filtering."""
-
-    clause: str = Field(..., description="SQL-like WHERE clause for filtering", max_length=10000)
-    scope: FilterScope = Field(
-        default=FilterScope.ITEM,
-        description=(
-            "Filtering scope: 'item' for individual items, 'action' for entire action execution"
-        ),
-    )
-    passthrough_on_empty: bool = Field(
-        default=True, description="Pass data through if no matches found"
-    )
-    passthrough_on_error: bool = Field(
-        default=True, description="Pass data through if evaluation error occurs"
-    )
-    cache_enabled: bool = Field(
-        default=True, description="Enable caching of parsed WHERE clauses for performance"
-    )
-    behavior: WhereClauseBehavior = Field(
-        default=WhereClauseBehavior.FILTER,
-        description=("Behavior when condition fails: 'skip' (passthrough) or 'filter' (remove)"),
-    )
-
-    @field_validator("clause")
-    @classmethod
-    def validate_clause(cls, v):
-        """Validate the WHERE clause syntax."""
-        if v is not None and (not v or not v.strip()):
-            raise ValidationError(
-                "WHERE clause cannot be empty",
-                context={
-                    "clause": v,
-                    "operation": "validate_where_clause",
-                    "failed_field": "where_clause",
-                    "expected": 'Non-empty WHERE clause (e.g., "column = value")',
-                    "actual_value": v,
-                    "suggestion": (
-                        "Provide a valid WHERE clause with a condition, or remove "
-                        "the where parameter if filtering is not needed."
-                    ),
-                },
-            )
-        if v is None:
-            return v
-        clause_lower = v.lower()
-        matched = contains_dangerous_pattern(clause_lower, DANGEROUS_PATTERNS)
-        if matched:
-            raise ValidationError(
-                f"WHERE clause contains potentially dangerous operation: {matched}",
-                context={
-                    "clause": v,
-                    "dangerous_pattern": matched,
-                    "operation": "validate_where_clause",
-                    "failed_field": "where_clause",
-                    "expected": (
-                        "WHERE clause without dangerous patterns like exec, eval, __import__, etc."
-                    ),
-                    "actual_value": v,
-                    "suggestion": (
-                        f'Remove the dangerous pattern "{matched}" from your '
-                        "WHERE clause. Use safe comparison operators and "
-                        "column references only."
-                    ),
-                },
-            )
-        return v
-
-    model_config = ConfigDict(extra="forbid")
 
 
 class SkipConditionConfig(BaseModel):
@@ -214,16 +128,10 @@ class AgentConfig(BaseModel):
         description="Enable Anthropic's prompt caching feature for improved performance",
     )
     conditional_clause: str | None = Field(
-        default=None, description="Legacy conditional clause (deprecated, use where_clause instead)"
-    )
-    where_clause: WhereClauseConfig | None = Field(
-        default=None, description="WHERE clause configuration for advanced filtering"
+        default=None, description="UDF guard condition, written by the expander"
     )
     skip_condition: SkipConditionConfig | None = Field(
         default=None, description="Safe skip condition configuration"
-    )
-    max_execution_time: int | None = Field(
-        default=300, description="Maximum execution time in seconds"
     )
     request_timeout: float | None = Field(
         default=None,
@@ -235,7 +143,6 @@ class AgentConfig(BaseModel):
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn", description="What an empty answer does to its record or action"
     )
-    enable_caching: bool = Field(default=True, description="Enable caching for performance")
     context_scope: dict[str, Any] | None = Field(
         default=None,
         description="Context scope configuration for data visibility and flow control "
@@ -254,7 +161,5 @@ class AgentConfig(BaseModel):
 __all__ = [
     "DefaultAgentConfig",
     "AgentConfig",
-    "WhereClauseConfig",
-    "FilterScope",
     "SkipConditionConfig",
 ]

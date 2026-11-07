@@ -26,7 +26,7 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
             agent["conditional_clause"] = guard_expr.expression
             agent["conditional_clause_passthrough_on_error"] = True
         else:
-            agent["guard"] = {"clause": guard_expr.expression, "scope": "item"}
+            agent["guard"] = {"clause": guard_expr.expression}
     else:
         guard_config = parse_guard_config(guard_data)
         if guard_config.is_udf_condition():
@@ -46,7 +46,6 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
         else:
             agent["guard"] = {
                 "clause": guard_config.get_condition_expression(),
-                "scope": "item",
                 "behavior": guard_config.on_false.value,
                 "passthrough_on_error": guard_config.passthrough_on_error,
             }

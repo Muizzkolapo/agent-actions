@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: 'An action or `defaults:` block that writes `constraints`, `enable_caching`, `max_execution_time` or `where_clause` is now refused at load. The error names each key and its replacement: write a `constraints` instruction into the action''s prompt; `enable_caching` is `enable_prompt_caching`; `max_execution_time` has no replacement; a `where_clause` filter is a `guard:` with a `condition` and `on_false: filter`. The four keys validated and configured nothing: no runtime module read them, so a `where_clause:` filtered no record. The action-scope guard path that no config could reach is removed with them; a guard is evaluated per record, as documented.'
+time: 2026-11-07T10:00:00.000000Z
