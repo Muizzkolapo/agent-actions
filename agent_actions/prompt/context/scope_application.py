@@ -95,6 +95,32 @@ def _resolve_missing_field(
     )
 
 
+def _missing_observe_fields(
+    errors: list[RecordContextError], action_name: str
+) -> RecordContextError:
+    """One error for every explicit observe ref the record lacks, in observe order.
+
+    A single missing field keeps its own error and message; several are named together,
+    with ``field_refs`` beside the first ``field_ref`` in the context.
+    """
+    if len(errors) == 1:
+        return errors[0]
+    refs = [e.context.get("field_ref") for e in errors]
+    quoted = ", ".join(f"'{ref}'" for ref in refs)
+    return RecordContextError(
+        f"context_scope.observe fields {quoted} not found in this record",
+        context={
+            "action": action_name,
+            "field_ref": refs[0],
+            "field_refs": refs,
+            "directive": "observe",
+            "operation": "apply_context_scope",
+            "hint": "Upstream actions may have produced incomplete output; every field "
+            "named is missing from this record.",
+        },
+    )
+
+
 # Framework-injected namespaces that are always available for template rendering
 # regardless of context_scope.observe/passthrough. These are not user data —
 # they are iteration context, static reference data, and workflow metadata.
@@ -315,6 +341,9 @@ def apply_context_scope(
 
     # Process OBSERVE: Extract to llm_context, KEEP in prompt_context for template rendering
     observe_refs = context_scope.get("observe", [])
+    # Every missing explicit ref is gathered before the record is refused, so the error
+    # names all of them and a record lacking two fields is not fixed one field at a time.
+    missing: list[RecordContextError] = []
     for field_ref in observe_refs:
         try:
             ns_name, field_name = parse_field_reference(field_ref)
@@ -325,13 +354,16 @@ def apply_context_scope(
                 if action_fields:
                     llm_context.setdefault(ns_name, {}).update(action_fields)
             else:
-                # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
                 if value is _MISSING:
-                    _resolve_missing_field(
-                        prompt_context, ns_name, field_ref, action_name, "observe"
-                    )
+                    try:
+                        _resolve_missing_field(
+                            prompt_context, ns_name, field_ref, action_name, "observe"
+                        )
+                    except RecordContextError as e:
+                        missing.append(e)
+                        continue
                     value = None
 
                 llm_context.setdefault(ns_name, {})[field_name] = value
@@ -348,6 +380,8 @@ def apply_context_scope(
                 )
             )
             continue
+    if missing:
+        raise _missing_observe_fields(missing, action_name)
 
     # Gate prompt_context to scoped fields only.
     # Only fields declared in observe or passthrough (plus framework namespaces)
@@ -857,13 +891,16 @@ def apply_context_scope_for_records(
             # RecordContextError in this package appends "Available: {list(data.keys())}",
             # the record's own keys, and a disposition row outlives the run.
             context = getattr(e, "context", None) or {}
-            field_ref = context.get("field_ref")
-            directive = context.get("directive")
-            detail = (
-                f"context_scope.{directive} field '{field_ref}' not found in this record"
-                if field_ref and directive
-                else "a context_scope field named by this action was not found in this record"
+            field_refs = context.get("field_refs") or (
+                [context["field_ref"]] if context.get("field_ref") else []
             )
+            directive = context.get("directive")
+            if field_refs and directive:
+                noun = "field" if len(field_refs) == 1 else "fields"
+                quoted = ", ".join(f"'{ref}'" for ref in field_refs)
+                detail = f"context_scope.{directive} {noun} {quoted} not found in this record"
+            else:
+                detail = "a context_scope field named by this action was not found in this record"
             skipped.append(
                 {
                     "source_guid": sguid,
@@ -921,14 +958,6 @@ def apply_context_scope_for_records(
             ", ".join(sorted(qualified_keys)),
         )
 
-    if skipped:
-        reason_counts = Counter(s["reason"] for s in skipped)
-        logger.warning(
-            "[%s] %d of %d records skipped — %s",
-            action_name,
-            len(skipped),
-            len(records),
-            ", ".join(f"{reason}: {count}" for reason, count in sorted(reason_counts.items())),
-        )
-
+    # No summary line for the refusals: each is the record's failure, which the
+    # collector reports and stores, or a guard skip, which the guard reports.
     return enriched, skipped

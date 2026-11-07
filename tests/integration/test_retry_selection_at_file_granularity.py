@@ -134,8 +134,8 @@ class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
 
 class TestAFileToolDecidesEveryRecordOfTheFileAgain:
     def test_an_unnamed_record_is_decided_as_a_run_decides_it(self, project):  # noqa: F811
-        """Its upstream row no longer holds the observed field, so the scope drops it,
-        as it would in a run: the file is the tool's unit of work."""
+        """Its upstream row no longer holds the observed field, so the scope refuses it
+        and it fails, as it would in a run: the file is the tool's unit of work."""
         project = _at_file_granularity(project)
         ids = _record_ids(project, ACTION)
         selected, unnamed = ids[0], ids[-1]
@@ -145,5 +145,5 @@ class TestAFileToolDecidesEveryRecordOfTheFileAgain:
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
         assert retry.exit_code == 0, retry.output
-        assert _disposition(project, unnamed, SECOND) == "skipped"
+        assert _disposition(project, unnamed, SECOND) == "failed"
         assert _disposition(project, selected, SECOND) == "success"

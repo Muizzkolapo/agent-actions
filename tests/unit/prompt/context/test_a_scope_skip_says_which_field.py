@@ -1,14 +1,9 @@
-"""A scope-skipped row records which field was missing and which directive wanted it.
+"""A scope refusal records which field was missing and which directive wanted it.
 
 `apply_context_scope_for_records` refuses a record it cannot enrich and appends a skip
-carrying only a reason string. The diagnosis existed at that moment -- `RecordContextError`
-holds `field_ref` and `directive` in its context, and the source-pool branch knows how many
-records it searched -- and went to a `debug` log that is off in a normal run. What the user
-can see afterwards is the stored disposition, which said `observe_field_missing` and nothing
-about which field (#1140).
-
-`DispositionRow` already carries a `detail` column, documented as "extended error message or
-context for the disposition", and this path passed `None` for it.
+whose `detail` names the field, or how many pooled records were searched. The pipeline
+turns the refusal into the record's failure, so the detail is what the stored disposition
+holds and what the run line prints.
 """
 
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
@@ -98,47 +93,57 @@ class TestAnUnresolvedSourceSaysWhatWasSearched:
         assert "source.url" in skipped[0]["detail"], skipped
 
 
-class TestTheDetailReachesTheStoredRow:
-    """The skip dict carrying a detail is half of it; the column has to be written.
+class TestTheDetailReachesTheFailedResult:
+    """The skip dict carrying a detail is half of it; the record's failure has to carry it.
 
-    `pipeline.py` built the seven-tuple inline and passed `None` for `detail`, which is how
-    it stayed empty unnoticed. `scope_skip_disposition_rows` is that construction, named so
-    the column can be asserted without driving a whole pipeline (#1140).
+    `pipeline.py` turns each refusal into the failed result the collector writes the
+    disposition from. `scope_refusals` is that construction, named so the error and the
+    tombstone can be asserted without driving a whole pipeline.
     """
 
-    def test_the_detail_lands_in_the_seventh_column(self):
-        from agent_actions.workflow.pipeline import scope_skip_disposition_rows
+    def test_the_detail_is_the_error_and_the_pre_scope_record_the_tombstone(self):
+        from agent_actions.processing.types import ProcessingStatus
+        from agent_actions.workflow.pipeline import scope_refusals
 
-        rows = scope_skip_disposition_rows(
-            "consume",
+        records = [
+            {"source_guid": "g0", "content": {}},
+            {"source_guid": "g1", "content": {"a1": {}}},
+        ]
+        (result,) = scope_refusals(
             [
                 {
                     "source_guid": "g1",
                     "reason": "observe_field_missing",
-                    "position": 0,
+                    "position": 1,
                     "detail": "context_scope.observe field 'a1.n' not found in this record",
                 }
             ],
+            records,
         )
 
-        assert len(rows) == 1
-        assert len(rows[0]) == 7, rows[0]
-        assert rows[0][3] == "observe_field_missing"
-        assert rows[0][6] == "context_scope.observe field 'a1.n' not found in this record"
+        assert result.status is ProcessingStatus.FAILED
+        assert result.error == "context_scope.observe field 'a1.n' not found in this record"
+        assert result.source_guid == "g1"
+        assert result.input_record is records[1]
 
-    def test_a_skip_with_no_detail_still_writes_a_row(self):
-        """Nothing requires the detail: a reason-only skip must still be accounted for."""
-        from agent_actions.workflow.pipeline import scope_skip_disposition_rows
+    def test_a_refusal_with_no_detail_fails_with_its_reason(self):
+        from agent_actions.workflow.pipeline import scope_refusals
 
-        rows = scope_skip_disposition_rows(
-            "consume", [{"source_guid": "g1", "reason": "source_unresolved", "position": 0}]
+        (result,) = scope_refusals(
+            [{"source_guid": "g1", "reason": "source_unresolved", "position": 0}],
+            [{"source_guid": "g1", "content": {}}],
         )
 
-        assert len(rows) == 1
-        assert rows[0][6] is None
+        assert result.error == "source_unresolved"
 
-    def test_a_skip_without_a_source_guid_is_left_out(self):
-        """There is nothing to key a disposition on."""
-        from agent_actions.workflow.pipeline import scope_skip_disposition_rows
+    def test_a_refusal_without_a_source_guid_is_still_a_failure(self):
+        """The record is in the run's count whether or not it can be keyed by identity."""
+        from agent_actions.workflow.pipeline import scope_refusals
 
-        assert scope_skip_disposition_rows("consume", [{"reason": "source_unresolved"}]) == []
+        (result,) = scope_refusals(
+            [{"reason": "source_unresolved", "position": 0, "detail": "no pool"}],
+            [{"content": {}}],
+        )
+
+        assert result.source_guid is None
+        assert result.error == "no pool"
