@@ -1,6 +1,8 @@
 """Batch task preparation from raw data using shared TaskPreparer logic."""
 
 import logging
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +21,7 @@ from agent_actions.llm.batch.core.batch_models import (
     BatchTaskPreparationStats,
     PreparedBatchTasks,
 )
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import quarantine_reason
 from agent_actions.processing.result_collector import _safe_set_disposition
@@ -27,7 +30,7 @@ from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
-from agent_actions.utils.constants import JSON_MODE_KEY
+from agent_actions.utils.constants import JSON_MODE_KEY, SCHEMA_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
@@ -148,6 +151,7 @@ class BatchTaskPreparator:
 
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
+        dispatched = schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is not None
 
         context_map_builder: dict[str, Any] = {}
         tasks_builder: list[dict[str, Any]] = []
@@ -173,6 +177,11 @@ class BatchTaskPreparator:
                     context_map_builder=context_map_builder,
                     stats=stats,
                     attempt=attempt,
+                    row_schema=(
+                        partial(self._compile_row_schema, agent_config, provider, tools_path)
+                        if dispatched
+                        else None
+                    ),
                 )
 
                 if result:
@@ -248,11 +257,14 @@ class BatchTaskPreparator:
         context_map_builder: dict[str, Any],
         stats: BatchTaskPreparationStats,
         attempt: int = 0,
+        row_schema: Callable[[Any], dict[str, Any] | None] | None = None,
     ) -> dict[str, Any] | None:
         """Process a single data item using TaskPreparer.
 
         Return prepared task if item should be included, None otherwise.
-        Update context_map_builder and stats as side effects.
+        Update context_map_builder and stats as side effects. ``row_schema`` compiles
+        the schema of an action whose schema is chosen per record, from the record's
+        context; the task then carries it.
         """
         # 1. Generate target_id if missing
         custom_id = row.get("target_id")
@@ -307,17 +319,21 @@ class BatchTaskPreparator:
             logger.debug("Guard skipped item %s", custom_id)
             return None
 
-        # 7. Mark INCLUDED only now — prepare() succeeded and guard passed
-        BatchContextMetadata.set_filter_status(
-            context_map_builder[custom_id], FilterStatus.INCLUDED
-        )
-
-        # 8. Create and return task
-        return {
+        # 7. A schema chosen per record is compiled from this record's context; a failure
+        # fails this record only, before it is marked INCLUDED.
+        task: dict[str, Any] = {
             "target_id": custom_id,
             "content": prepared.llm_context,
             "prompt": prepared.formatted_prompt,
         }
+        if row_schema is not None:
+            task["compiled_schema"] = row_schema(prepared.llm_context)
+
+        # 8. Mark INCLUDED only now — prepare() succeeded and guard passed
+        BatchContextMetadata.set_filter_status(
+            context_map_builder[custom_id], FilterStatus.INCLUDED
+        )
+        return task
 
     @staticmethod
     def _mark_prep_failed(
@@ -365,10 +381,19 @@ class BatchTaskPreparator:
                 )
 
     def _validate_config(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
-        """Validate agent configuration. Returns compiled schema."""
-        schema = self._prepare_schema(agent_config, provider)
-        json_mode = agent_config.get(JSON_MODE_KEY, True)
+        """Validate agent configuration. Returns compiled schema.
 
+        A schema chosen per record has no action-wide form; each row compiles its own.
+        """
+        if schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is not None:
+            return None
+        schema = self._prepare_schema(agent_config, provider, resolve_tools_path(agent_config))
+        self._require_schema(agent_config, schema)
+        return schema
+
+    @staticmethod
+    def _require_schema(agent_config: dict[str, Any], schema: dict[str, Any] | None) -> None:
+        json_mode = agent_config.get(JSON_MODE_KEY, True)
         if not schema and json_mode:
             raise ConfigurationError(
                 "Schema is required for batch processing when json_mode is enabled",
@@ -378,9 +403,30 @@ class BatchTaskPreparator:
                     "hint": "Either provide a schema or set json_mode: false",
                 },
             )
+
+    def _compile_row_schema(
+        self,
+        agent_config: dict[str, Any],
+        provider,
+        tools_path: str | None,
+        llm_context: Any,
+    ) -> dict[str, Any] | None:
+        from agent_actions.llm.realtime.services import ContextService
+
+        # Encoded as online encodes it for the call, so a value json cannot dump as-is
+        # reaches the dispatch function the same way in both run modes.
+        context = ContextService.prepare_context_data(llm_context, is_tool=False)
+        schema = self._prepare_schema(agent_config, provider, tools_path, context)
+        self._require_schema(agent_config, schema)
         return schema
 
-    def _prepare_schema(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
+    def _prepare_schema(
+        self,
+        agent_config: dict[str, Any],
+        provider,
+        tools_path: str | None,
+        context_data: Any = None,
+    ) -> dict[str, Any] | None:
         """Prepare and compile schema for provider."""
 
         from agent_actions.output.response.schema import ResponseSchemaCompiler
@@ -391,8 +437,10 @@ class BatchTaskPreparator:
             vendor = type(provider).__name__.replace("BatchProvider", "").lower()
 
         _pr = agent_config.get("_project_root")
-        compiler = ResponseSchemaCompiler(project_root=Path(_pr) if _pr else None)
-        schema, _captured_results = compiler.compile(agent_config, vendor)
+        compiler = ResponseSchemaCompiler(
+            project_root=Path(_pr) if _pr else None, tools_path=tools_path
+        )
+        schema, _captured_results = compiler.compile(agent_config, vendor, context_data)
         return schema  # type: ignore[return-value]
 
     def _add_tools_to_path(self, tools_path: str | None) -> None:

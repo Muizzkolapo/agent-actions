@@ -25,7 +25,7 @@ dispatch_task('handle_quiz_type')
   schema: dispatch_task('select_output_schema')
 ```
 
-The tool runs once per record and returns that record's schema: a schema definition, or the name of a schema file. It is found as `select_output_schema.py` under the tool path, defining `select_output_schema`. A dispatched schema needs `run_mode: online`. See [Dynamic Schema Selection](../schemas/#dynamic-schema-selection).
+The tool runs once per record and returns that record's schema: a schema definition, or the name of a schema file. It is found as `select_output_schema.py` under the tool path, defining `select_output_schema`. It works in online and batch runs. See [Dynamic Schema Selection](../schemas/#dynamic-schema-selection).
 
 ## Creating a Dispatch Tool
 
