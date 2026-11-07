@@ -131,3 +131,13 @@ def test_a_repair_round_uses_the_name_each_row_was_given_first(project):
         project, attempt=1, feedback_by_id={"t1": "fix", "t2": "fix"}, recorded=recorded
     )
     assert _fields_by_target(tasks) == {"t1": ["topic"], "t2": ["verdict"]}
+
+
+def test_a_chosen_name_with_no_file_fails_that_row_alone(project):
+    """Loaded as online loads it: the row fails, the other rows are sent, the action goes on."""
+    (project / "schema" / "verdict_answer.yml").unlink()
+
+    tasks, context_map = _prepare(project, attempt=0, feedback_by_id=None)
+
+    assert [task["target_id"] for task in tasks] == ["t1"]
+    assert "verdict_answer" in context_map["t2"][ContextMetaKeys.PREP_ERROR]

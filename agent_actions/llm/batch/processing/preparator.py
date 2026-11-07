@@ -424,7 +424,9 @@ class BatchTaskPreparator:
         from agent_actions.output.response.context_data import (
             _prepare_context_data_str,
             choose_dispatched_schema_name,
+            load_chosen_schema,
         )
+        from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 
         chosen = recorded
         if chosen is None:
@@ -438,8 +440,14 @@ class BatchTaskPreparator:
                 agent_config,
                 {},
             )
-        named = {**agent_config, SCHEMA_KEY: None, "schema_name": chosen}
-        schema = self._prepare_schema(named, provider, tools_path)
+        # Loaded as online loads it, so a file that will not load fails this row alone.
+        _pr = agent_config.get("_project_root")
+        loaded = load_chosen_schema(
+            str(schema_dispatch_function(agent_config[SCHEMA_KEY])),
+            chosen,
+            Path(_pr) if _pr else None,
+        )
+        schema = self._prepare_schema({**agent_config, SCHEMA_KEY: loaded}, provider, tools_path)
         self._require_schema(agent_config, schema)
         return schema, chosen
 

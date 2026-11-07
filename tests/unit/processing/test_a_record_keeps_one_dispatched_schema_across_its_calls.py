@@ -79,3 +79,38 @@ def test_a_repair_loop_calls_the_dispatch_function_once_and_names_the_schema(tmp
     assert len(sent) == 2
     assert all([f["id"] for f in config["schema"]["fields"]] == ["topic"] for config in sent)
     assert result.output_schema == "topic_answer"
+
+
+def test_a_retry_calls_the_dispatch_function_once(tmp_path):
+    """Through RetryService: a call that fails once and is retried keeps the first choice."""
+    from agent_actions.errors import NetworkError
+    from agent_actions.processing.recovery.retry import RetryService
+
+    tools = _project(tmp_path)
+    context = MagicMock()
+    context.agent_name = "label_page"
+    context.agent_config = {
+        "schema": "dispatch_task('pick_schema')",
+        "schema_options": ["topic_answer"],
+        "model_vendor": "openai",
+        "tool_path": [str(tools)],
+        "_project_root": str(tmp_path),
+    }
+    task = PreparedTask(
+        target_id="t1", source_guid="sg1", formatted_prompt="Label it.", llm_context={"source": {}}
+    )
+    calls: list[dict] = []
+
+    def fails_once(config, *args, **kwargs):
+        calls.append(config)
+        if len(calls) == 1:
+            raise NetworkError("connection reset")
+        return [{"topic": "x"}]
+
+    strategy = OnlineStrategy(retry_service=RetryService(max_attempts=2, base_delay=0))
+    with patch("agent_actions.llm.realtime.builder.create_dynamic_agent", side_effect=fails_once):
+        result = strategy.invoke(task, context)
+
+    assert len(calls) == 2
+    assert (tools / "calls").read_text() == "1"
+    assert result.output_schema == "topic_answer"
