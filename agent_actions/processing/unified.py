@@ -87,8 +87,13 @@ class UnifiedProcessor:
         raw_records: list[dict[str, Any]] | None = None,
         repair_inputs: list[dict[str, Any]] | None = None,
         whole_file: bool = False,
+        refused: list[ProcessingResult] | None = None,
     ) -> tuple[list[dict[str, Any]], CollectionStats]:
         """Guard-filter, gate, quarantine, invoke, enrich and collect, in that order.
+
+        *refused* are the FILE scope pass's failures: records the action could not be
+        handed. They are collected beside the strategy's own, so one writer owns every
+        disposition, tombstone and failure cause of the action.
 
         The guard does not judge a record an action above failed or cascade-skipped: it
         passes on, and is carried by the gate or quarantined, as batch decides it.
@@ -315,7 +320,9 @@ class UnifiedProcessor:
         # This divergence is intentional. Do not unify without verifying FILE-mode
         # workflows that depend on sequential accumulation (e.g., multi-pass enrichment).
         if raw_records is not None:
-            all_results = quarantined_results + invocation_results + guard_results
+            all_results = (
+                quarantined_results + invocation_results + guard_results + list(refused or [])
+            )
         else:
             all_results = (
                 guard_results + quarantined_results + invocation_results + checkpointed_results
