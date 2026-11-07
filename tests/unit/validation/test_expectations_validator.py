@@ -695,3 +695,26 @@ def test_a_judged_context_ref_is_allowed_online():
         {"a": {"options"}, "research": {"findings"}},
     )
     assert defects == {}
+
+
+def test_a_string_terms_is_one_preflight_defect_naming_the_list_it_wants():
+    defects = find_expectation_defects(
+        config(
+            [
+                {
+                    "id": "quote_in_source",
+                    "type": "contains_terms_from",
+                    "field": "answer",
+                    "params": {"terms": "source.essay"},
+                }
+            ]
+        ),
+        FIELDS,
+    )
+
+    assert defects == {
+        "write_q": [
+            "quote_in_source: type 'contains_terms_from' takes parameter 'terms' as a list, "
+            "got str 'source.essay'; params hold literal values, so a field name here is not read"
+        ]
+    }

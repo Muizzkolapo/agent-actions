@@ -81,19 +81,29 @@ class Expectation(BaseModel):
         return data
 
     @model_validator(mode="after")
-    def _field_matches_type(self) -> Expectation:
+    def _matches_its_type(self) -> Expectation:
+        """Refuse a selector the type does not take, and a parameter of the wrong type.
+
+        One validator, so a rule wrong in both ways names both.
+        """
         # Imported here, not at module scope: the registry reaches this module
         # through judge.py, so a top-level import would close a cycle.
         from agent_actions.expectations import registry
 
+        problems: list[str] = []
         if registry.is_record_scoped(self.type):
             if self.field is not None:
-                raise ValueError(
+                problems.append(
                     f"type '{self.type}' evaluates against the whole record and does not "
                     "take field:; it reads the record itself"
                 )
         elif self.field is None:
-            raise ValueError(f"type '{self.type}' requires field:")
+            problems.append(f"type '{self.type}' requires field:")
+        etype = registry.get(self.type)
+        if etype is not None:
+            problems.extend(registry.param_type_defects(etype, self.params))
+        if problems:
+            raise ValueError("; ".join(problems))
         return self
 
     def definition_hash(self) -> str:

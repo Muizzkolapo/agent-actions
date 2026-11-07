@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import inspect
 import re
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from agent_actions.errors import DuplicateFunctionError
@@ -21,6 +21,10 @@ from agent_actions.expectations.judge import _llm_judge_unreachable
 Check = Callable[[Any, dict[str, Any]], tuple[bool, str]]
 
 Scope = Literal["field", "record"]
+
+# The value type a built-in check needs for one parameter. A check reads its
+# params as given, so a string where a list is meant is iterated by character.
+ParamKind = Literal["list", "number", "string", "boolean"]
 
 _REGISTRY: dict[str, ExpectationType] = {}
 
@@ -43,6 +47,7 @@ class ExpectationType:
     required: frozenset[str]
     check: Check
     scope: Scope = "field"
+    param_types: Mapping[str, ParamKind] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         # Unioned here rather than at each registration site so no path can
@@ -52,17 +57,70 @@ class ExpectationType:
 
 def register(
     name: str,
-    params: Iterable[str] = (),
+    params: Mapping[str, ParamKind] | None = None,
     required: Iterable[str] = (),
     scope: Scope = "field",
 ) -> Callable[[Check], Check]:
+    """Register a built-in check; *params* names each parameter with its value type."""
+    declared = dict(params or {})
+
     def decorate(fn: Check) -> Check:
         _REGISTRY[name] = ExpectationType(
-            name, frozenset(params) | _UNIVERSAL_PARAMS, frozenset(required), fn, scope
+            name,
+            frozenset(declared) | _UNIVERSAL_PARAMS,
+            frozenset(required),
+            fn,
+            scope,
+            declared,
         )
         return fn
 
     return decorate
+
+
+_KIND_WORDS: dict[ParamKind, str] = {
+    "list": "a list",
+    "number": "a number",
+    "string": "a string",
+    "boolean": "a boolean",
+}
+
+
+def _is_kind(value: Any, kind: ParamKind) -> bool:
+    if kind == "list":
+        return isinstance(value, (list, tuple))
+    if kind == "number":
+        # bool is an int to isinstance, and True is not a count.
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if kind == "string":
+        return isinstance(value, str)
+    return isinstance(value, bool)
+
+
+def param_type_defects(etype: ExpectationType, params: Mapping[str, Any]) -> list[str]:
+    """Each supplied parameter whose value is not the type its check declares.
+
+    A null optional parameter is left to its check, as YAML writes an omitted value
+    that way. A type that declares no parameter types, as a project-defined one
+    does, is not checked.
+    """
+    defects: list[str] = []
+    for name, kind in etype.param_types.items():
+        if name not in params:
+            continue
+        value = params[name]
+        if value is None and name not in etype.required:
+            continue
+        if _is_kind(value, kind):
+            continue
+        message = (
+            f"type '{etype.name}' takes parameter '{name}' as {_KIND_WORDS[kind]}, "
+            f"got {type(value).__name__} {value!r}"
+        )
+        if kind == "list" and isinstance(value, str):
+            message += "; params hold literal values, so a field name here is not read"
+        defects.append(message)
+    return defects
 
 
 def is_record_scoped(name: str) -> bool:
@@ -149,7 +207,7 @@ def _not_null(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("no_null_fields", params=("exclude",), scope="record")
+@register("no_null_fields", params={"exclude": "list"}, scope="record")
 def _no_null_fields(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     """No field the model was asked to fill came back null.
 
@@ -175,7 +233,7 @@ def _no_null_fields(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("item_count", params=("equals", "min", "max"))
+@register("item_count", params={"equals": "number", "min": "number", "max": "number"})
 def _item_count(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     if not isinstance(value, list):
         return False, f"expected a list, found {type(value).__name__}"
@@ -189,7 +247,7 @@ def _item_count(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("word_count_between", params=("min", "max"))
+@register("word_count_between", params={"min": "number", "max": "number"})
 def _word_count_between(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     count = len(_words(value))
     if params.get("min") is not None and count < params["min"]:
@@ -199,7 +257,7 @@ def _word_count_between(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("word_count_ratio", params=("max_ratio",), required=("max_ratio",))
+@register("word_count_ratio", params={"max_ratio": "number"}, required=("max_ratio",))
 def _word_count_ratio(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     if not isinstance(value, list):
         return False, f"expected a list, found {type(value).__name__}"
@@ -215,7 +273,7 @@ def _word_count_ratio(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("accepted_values", params=("values",), required=("values",))
+@register("accepted_values", params={"values": "list"}, required=("values",))
 def _accepted_values(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     allowed = params["values"]
     if value not in allowed:
@@ -223,7 +281,7 @@ def _accepted_values(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("matches_regex", params=("pattern", "negate"), required=("pattern",))
+@register("matches_regex", params={"pattern": "string", "negate": "boolean"}, required=("pattern",))
 def _matches_regex(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     pattern = params["pattern"]
     matched = re.search(pattern, str(value)) is not None
@@ -243,7 +301,11 @@ def _like_to_regex(like_pattern: str) -> str:
     )
 
 
-@register("match_like_pattern", params=("like_pattern", "negate"), required=("like_pattern",))
+@register(
+    "match_like_pattern",
+    params={"like_pattern": "string", "negate": "boolean"},
+    required=("like_pattern",),
+)
 def _match_like_pattern(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     like_pattern = params["like_pattern"]
     matched = re.fullmatch(_like_to_regex(str(like_pattern)), str(value), re.DOTALL) is not None
@@ -256,7 +318,11 @@ def _match_like_pattern(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("no_forbidden_phrases", params=("phrases", "case_sensitive"), required=("phrases",))
+@register(
+    "no_forbidden_phrases",
+    params={"phrases": "list", "case_sensitive": "boolean"},
+    required=("phrases",),
+)
 def _no_forbidden_phrases(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     cased = params.get("case_sensitive", False)
     haystack = str(value) if cased else str(value).lower()
@@ -266,7 +332,11 @@ def _no_forbidden_phrases(value: Any, params: dict[str, Any]) -> tuple[bool, str
     return True, ""
 
 
-@register("contains_terms_from", params=("terms", "min_matches"), required=("terms",))
+@register(
+    "contains_terms_from",
+    params={"terms": "list", "min_matches": "number"},
+    required=("terms",),
+)
 def _contains_terms_from(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     haystack = str(value).lower()
     needed = params.get("min_matches", 1)

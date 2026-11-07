@@ -101,16 +101,25 @@ agac expect list -a my_workflow --action summarize
 | Type | Params | Checks |
 |------|--------|--------|
 | `not_null` | — | Value isn't `None` and isn't an empty string/list/dict |
-| `no_null_fields` | `exclude` | **Record-scoped** — no field in the whole record is `None`. Takes no `field:`; `exclude` waives fields that are legitimately nullable. Null is not emptiness: an empty string is a value the model chose, and `not_null` is the rule for rejecting that on a named field |
-| `item_count` | `equals`, `min`, `max` | Length of a list field |
-| `word_count_between` | `min`, `max` | Whitespace-split word count |
-| `word_count_ratio` | `max_ratio` *(required)* | Longest/shortest word count across a list of items doesn't exceed a ratio — catches one option in a list being wildly longer than its siblings |
-| `accepted_values` | `values` *(required)* | Value is one of an explicit allow-list |
-| `matches_regex` | `pattern` *(required)*, `negate` | Value matches (or, with `negate: true`, must not match) a regex |
-| `match_like_pattern` | `like_pattern` *(required)*, `negate` | Value matches a SQL `LIKE` pattern across its whole length — `%` is any run, `_` exactly one character, everything else literal |
-| `no_forbidden_phrases` | `phrases` *(required)*, `case_sensitive` | Value doesn't contain any of a list of substrings |
-| `contains_terms_from` | `terms` *(required)*, `min_matches` | Value contains at least `min_matches` (default 1) terms from a list |
+| `no_null_fields` | `exclude` (list) | **Record-scoped** — no field in the whole record is `None`. Takes no `field:`; `exclude` waives fields that are legitimately nullable. Null is not emptiness: an empty string is a value the model chose, and `not_null` is the rule for rejecting that on a named field |
+| `item_count` | `equals`, `min`, `max` (numbers) | Length of a list field |
+| `word_count_between` | `min`, `max` (numbers) | Whitespace-split word count |
+| `word_count_ratio` | `max_ratio` (number) *(required)* | Longest/shortest word count across a list of items doesn't exceed a ratio — catches one option in a list being wildly longer than its siblings |
+| `accepted_values` | `values` (list) *(required)* | Value is one of an explicit allow-list |
+| `matches_regex` | `pattern` (string) *(required)*, `negate` (boolean) | Value matches (or, with `negate: true`, must not match) a regex |
+| `match_like_pattern` | `like_pattern` (string) *(required)*, `negate` (boolean) | Value matches a SQL `LIKE` pattern across its whole length — `%` is any run, `_` exactly one character, everything else literal |
+| `no_forbidden_phrases` | `phrases` (list) *(required)*, `case_sensitive` (boolean) | Value doesn't contain any of a list of substrings |
+| `contains_terms_from` | `terms` (list) *(required)*, `min_matches` (number) | Value contains at least `min_matches` (default 1) terms from a list |
 | `expression` | `condition` *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
+
+Each parameter takes the value type shown. A value of another type is refused when the rule is
+loaded, at preflight and at run time, with the same message. A list parameter given as a string
+is refused too: `params` hold literal values, so `terms: source.essay` would be the text
+`source.essay`, not the field. A number is never a boolean, and a list is never a number.
+
+```
+quote_in_source: type 'contains_terms_from' takes parameter 'terms' as a list, got str 'source.essay'; params hold literal values, so a field name here is not read
+```
 
 ```yaml
 - id: category_is_valid
