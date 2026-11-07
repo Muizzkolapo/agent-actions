@@ -164,6 +164,7 @@ class WorkflowEventLogger:
                 tokens = params.result.tokens
             metrics = getattr(params.result, "metrics", None)
             record_count = metrics.record_count if metrics is not None else 0
+            guard_skipped = metrics.guard_skipped if metrics is not None else 0
             config = params.action_config or {}
             fire_event(
                 ActionCompleteEvent(
@@ -173,6 +174,7 @@ class WorkflowEventLogger:
                     execution_time=params.duration,
                     output_path=params.result.output_folder or "",
                     record_count=record_count,
+                    guard_skipped=guard_skipped,
                     tokens=tokens,
                     mode=params.run_mode,
                     model_vendor=config.get("model_vendor") or "",

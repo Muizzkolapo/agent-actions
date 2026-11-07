@@ -343,15 +343,25 @@ def test_agac_preview_and_dispositions_show_the_folded_record_unprocessed(tmp_pa
     a = _source_of(root, "a")
 
     preview = run_agac(root, "preview", "-w", WORKFLOW, "-a", "join", "-f", "json")
-    summary = run_agac(root, "dispositions", "-a", WORKFLOW, "--action", "join")
+    summary = run_agac(
+        root, "dispositions", "-a", WORKFLOW, "--action", "join", env={"COLUMNS": "200"}
+    )
 
     assert preview.returncode == 0, preview.stdout + preview.stderr
     shown = preview.stdout.replace(" ", "").replace("\n", "")
     assert '"reason":"consumed_into_another_record"' in shown
     assert f'"consumed_into":"{a}"' in shown
     assert summary.returncode == 0, summary.stdout + summary.stderr
-    join_row = next(line for line in summary.stdout.splitlines() if "join" in line)
-    assert [cell.strip() for cell in join_row.strip("│ ").split("│")][1:5] == ["2", "0", "0", "1"]
+    cells = _summary_cells(summary.stdout, "join")
+    assert [
+        cells[c] for c in ("Success", "Failed", "Exhausted", "Guard skipped", "Unprocessed")
+    ] == [
+        "2",
+        "0",
+        "0",
+        "0",
+        "1",
+    ]
 
 
 def test_folding_with_no_fan_in_below_carries_the_folded_row_alone(tmp_path):
@@ -369,3 +379,15 @@ def test_folding_with_no_fan_in_below_carries_the_folded_row_alone(tmp_path):
     again = _run(root)
     assert again.returncode == 0, again.stdout + again.stderr
     assert len(_stored(root, "loud")) == 2
+
+
+def _summary_cells(output: str, action: str) -> dict[str, str]:
+    """One action's row of `agac dispositions`, keyed by its column header."""
+    header = next(line for line in output.splitlines() if line.startswith("┃"))
+    names = [cell.strip() for cell in header.strip("┃").split("┃")]
+    row = next(
+        line
+        for line in output.splitlines()
+        if line.startswith("│") and line.strip("│").split("│")[0].strip() == action
+    )
+    return dict(zip(names, (cell.strip() for cell in row.strip("│").split("│")), strict=True))

@@ -8,6 +8,7 @@ together.
 """
 
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,3 +138,101 @@ class TestRepairExhaustion:
         assert outcomes["density_is_a_known_bucket"]["passed"] is False
         assert outcomes["reason_is_present"]["passed"] is True
         assert outcomes["density_is_a_known_bucket"]["detail"], "a failure must say why"
+
+
+def _summary_cells(output: str, action: str) -> dict[str, str]:
+    """One action's row of `agac dispositions`, keyed by its column header."""
+    header = next(line for line in output.splitlines() if line.startswith("┃"))
+    names = [cell.strip() for cell in header.strip("┃").split("┃")]
+    row = next(
+        line
+        for line in output.splitlines()
+        if line.startswith("│") and line.strip("│").split("│")[0].strip() == action
+    )
+    return dict(zip(names, (cell.strip() for cell in row.strip("│").split("│")), strict=True))
+
+
+def _action_complete_data(r: Run) -> dict[str, dict]:
+    events = r.project / "agent_workflow" / r.workflow / "agent_io" / "logs" / "events.json"
+    rows = [json.loads(line) for line in events.read_text().splitlines() if line.strip()]
+    return {
+        row["data"]["action_name"]: row["data"]
+        for row in rows
+        if row.get("event_type") == "ActionCompleteEvent"
+    }
+
+
+class TestHonestyProbe:
+    """The run line and `agac dispositions` say what the records did, guard skips apart."""
+
+    def test_honesty_probe_names_guard_skips(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        line = next(row for row in r.output.splitlines() if " repaired  " in row)
+        assert "repaired  4 records in" in line
+        assert line.rstrip().endswith("— 1 skipped by guard")
+        for action in ("observed", "warned"):
+            other = next(row for row in r.output.splitlines() if f" {action}  " in row)
+            assert "skipped by guard" not in other
+
+        assert _action_complete_data(r)["repaired"]["guard_skipped"] == 1
+        assert _action_complete_data(r)["observed"]["guard_skipped"] == 0
+
+    @staticmethod
+    def _project(tmp_path, run_mode="online"):
+        project = tmp_path / "honesty_probe"
+        shutil.copytree(FIXTURE, project)
+        (project / ".env").write_text("OPENAI_API_KEY=sk-not-used\nOLLAMA_API_KEY=not-used\n")
+        config = project / "agent_workflow" / "honesty_probe" / "agent_config" / "honesty_probe.yml"
+        config.write_text(config.read_text().replace("run_mode: online", f"run_mode: {run_mode}"))
+        return project
+
+    @staticmethod
+    def _repaired_line(output: str) -> str:
+        """The completion line of `repaired`, unwrapped, up to the next completion icon."""
+        flat = " ".join(output.split())
+        (line,) = re.findall(r"✓ repaired \d+ records in [^✓]*", flat)
+        return line
+
+    def test_a_sequential_run_names_the_guard_skip_too(self, tmp_path):
+        project = self._project(tmp_path)
+
+        result = run_agac(
+            project, "run", "-a", "honesty_probe", "--fresh", "--execution-mode", "sequential"
+        )
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        line = self._repaired_line(result.stdout + result.stderr)
+        assert "repaired 4 records in" in line
+        assert "— 1 skipped by guard" in line
+
+    def test_a_batch_run_names_the_guard_skip_on_the_run_that_completes_it(self, tmp_path):
+        project = self._project(tmp_path, run_mode="batch")
+        env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+
+        outputs = []
+        result = run_agac(project, "run", "-a", "honesty_probe", "--fresh", env=env)
+        outputs.append(result.stdout + result.stderr)
+        for _ in range(5):
+            if "run again" not in outputs[-1]:
+                break
+            result = run_agac(project, "run", "-a", "honesty_probe", env=env)
+            outputs.append(result.stdout + result.stderr)
+
+        assert result.returncode == 0, outputs[-1]
+        completing = next(out for out in outputs if "✓ repaired" in " ".join(out.split()))
+        line = self._repaired_line(completing)
+        assert "repaired 4 records in" in line
+        assert "— 1 skipped by guard" in line
+
+    def test_dispositions_put_the_guard_skip_in_its_own_column(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        shown = run_agac(r.project, "dispositions", "-a", "honesty_probe", env={"COLUMNS": "200"})
+        assert shown.returncode == 0, shown.stdout + shown.stderr
+
+        cells = _summary_cells(shown.stdout, "repaired")
+        assert (cells["Success"], cells["Guard skipped"], cells["Unprocessed"]) == ("3", "1", "0")
+        assert (cells["Total"], cells["Records"]) == ("4", "4")

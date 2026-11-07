@@ -231,13 +231,30 @@ def test_agac_dispositions_counts_the_folded_record_unprocessed_at_the_merge(tmp
     root = _project(tmp_path)
     _run(root, "--fresh")
 
-    summary = run_agac(root, "dispositions", "-a", WORKFLOW, "--action", "merged")
+    summary = run_agac(
+        root, "dispositions", "-a", WORKFLOW, "--action", "merged", env={"COLUMNS": "200"}
+    )
 
     assert summary.returncode == 0, summary.stdout + summary.stderr
-    merged_row = next(line for line in summary.stdout.splitlines() if "merged" in line)
-    assert [cell.strip() for cell in merged_row.strip("│ ").split("│")][1:5] == [
+    cells = _summary_cells(summary.stdout, "merged")
+    assert [
+        cells[c] for c in ("Success", "Failed", "Exhausted", "Guard skipped", "Unprocessed")
+    ] == [
         "2",
+        "0",
         "0",
         "0",
         "1",
     ]
+
+
+def _summary_cells(output: str, action: str) -> dict[str, str]:
+    """One action's row of `agac dispositions`, keyed by its column header."""
+    header = next(line for line in output.splitlines() if line.startswith("┃"))
+    names = [cell.strip() for cell in header.strip("┃").split("┃")]
+    row = next(
+        line
+        for line in output.splitlines()
+        if line.startswith("│") and line.strip("│").split("│")[0].strip() == action
+    )
+    return dict(zip(names, (cell.strip() for cell in row.strip("│").split("│")), strict=True))

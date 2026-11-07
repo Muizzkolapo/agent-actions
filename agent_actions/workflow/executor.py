@@ -353,6 +353,9 @@ class ExecutionMetrics:
     # guard-all-filtered SKIPPED, FAILED, and cached completions discovered
     # by _check_prior_output (this execution didn't run the action).
     record_count: int = 0
+    # Of record_count, the rows the action's guard skipped this execution: they
+    # are stored as tombstones and counted as rows like any other.
+    guard_skipped: int = 0
 
 
 @dataclass
@@ -1302,6 +1305,7 @@ class ActionExecutor:
             )
 
         record_count = self._count_after_the_run(params.action_name, duration, pre_run_count)
+        guard_skipped = self._guard_skips_this_run(params.action_name)
 
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
@@ -1317,7 +1321,9 @@ class ActionExecutor:
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(duration=duration, record_count=record_count),
+                metrics=ExecutionMetrics(
+                    duration=duration, record_count=record_count, guard_skipped=guard_skipped
+                ),
             )
 
         self.deps.state_manager.update_status(
@@ -1340,6 +1346,7 @@ class ActionExecutor:
                 model_name=params.action_config.get("model_name"),
                 files_processed=0,
                 record_count=record_count,
+                guard_skipped=guard_skipped,
             ),
         )
 
@@ -1359,6 +1366,20 @@ class ActionExecutor:
             )
         collected: int = storage_backend.rows_collected(action_name)
         return collected
+
+    def _guard_skips_this_run(self, action_name: str) -> int:
+        """Take the backend's guard-skip tally for *action_name*, which then reads zero.
+
+        Taken when the execution starts and again when it completes, so the second
+        reading is what this execution's collections credited.
+        """
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            raise RuntimeError(
+                f"Cannot count guard skips for {action_name!r}: no storage backend on action_runner"
+            )
+        taken: int = storage_backend.take_guard_skips(action_name)
+        return taken
 
     def _records_written_this_run(self, action_name: str, pre_run_count: int) -> int:
         """Rows this execution produced: the rows credited since *pre_run_count*."""
@@ -2225,7 +2246,10 @@ class ActionExecutor:
         tracked a start, so the failure is recorded with one.
         """
         try:
-            return self._count_records_for_action(action_name)
+            count = self._count_records_for_action(action_name)
+            # Drop what an earlier execution left: what this check collects is counted.
+            self._guard_skips_this_run(action_name)
+            return count
         except Exception as error:
             params = ActionRunParams(
                 action_name=action_name,
@@ -2322,6 +2346,7 @@ class ActionExecutor:
                 )
 
             record_count = self._count_after_the_run(action_name, wall_clock, pre_run_count)
+            guard_skipped = self._guard_skips_this_run(action_name)
             self.deps.state_manager.update_status(
                 action_name,
                 final_status,
@@ -2337,7 +2362,9 @@ class ActionExecutor:
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
-                metrics=ExecutionMetrics(duration=wall_clock, record_count=record_count),
+                metrics=ExecutionMetrics(
+                    duration=wall_clock, record_count=record_count, guard_skipped=guard_skipped
+                ),
             )
 
         if batch_status == "in_progress":
@@ -2438,10 +2465,12 @@ class ActionExecutor:
             self._record_store_failure(params.action_name, _elapsed(params), error, start=params)
             raise
         try:
-            return self._count_records_for_action(params.action_name)
+            count = self._count_records_for_action(params.action_name)
         except Exception as error:
             self._record_store_failure(params.action_name, _elapsed(params), error)
             raise
+        self._guard_skips_this_run(params.action_name)  # drop what an earlier execution left
+        return count
 
     def _count_after_the_run(self, action_name: str, duration: float, pre_run_count: int) -> int:
         """Rows this execution produced, counted before the action is marked complete.
