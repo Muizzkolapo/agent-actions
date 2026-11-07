@@ -38,7 +38,7 @@
 | `example` | Function | Example command group. | - |
 | `example_list` | Function | List available example projects from GitHub. | - |
 | `example_install` | Function | Install an example project. | - |
-| `expect.py` | Module | Inspect the expectation rules an action would run, and report the verdicts a run stored. | `cli`, `expectations`, `storage`, `validation` |
+| `expect.py` | Module | Inspect the expectation rules an action would run, and report the verdicts a run stored. The report heading names each `warn`/`info` rule that failed (failed/checked), since only `error` rules gate the records-passed rate; JSON is unchanged. | `cli`, `expectations`, `storage`, `validation` |
 | `ExpectListCommand` | Class | Implementation of the expect list command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Resolve each action's suite through the runner's own loader and print it. | - |
 | `expect` | Function | Expect command group. | - |

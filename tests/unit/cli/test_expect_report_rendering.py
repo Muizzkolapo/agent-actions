@@ -88,3 +88,99 @@ def test_a_rate_that_is_not_perfect_never_renders_as_perfect(render, passed, tot
     )
     rate = out.split("·")[1].split()[0] if "·" in out else out
     assert rate.rstrip("%") not in ("100", "100.0", "0", "0.0"), f"rendered {rate!r}"
+
+
+def _warned(rules, records=4, passed=4):
+    return ActionTally(
+        action="warned", records=records, records_passed=passed, rules=rules, records_total=records
+    )
+
+
+def _heading(out: str) -> str:
+    return next(line for line in out.splitlines() if line.lstrip().startswith("warned  ")).strip()
+
+
+def test_heading_names_a_failed_warn_rule(render):
+    rule = RuleTally(id="never_matches_warn", type="matches_regex", severity="warn", failed=4)
+
+    out = render([_warned((rule,))], asked_for=("warned",))
+
+    assert _heading(out) == (
+        "warned  4/4 records passed · 100%  "
+        "⚠ 1 non-blocking rule failed: never_matches_warn (warn) 4/4"
+    )
+
+
+def test_heading_with_no_non_blocking_failure_is_unchanged(render):
+    rules = (
+        RuleTally(id="soft", type="matches_regex", severity="warn", passed=4),
+        RuleTally(id="hard", type="not_null", severity="error", passed=3, failed=1),
+    )
+
+    out = render([_warned(rules, passed=3)], asked_for=("warned",))
+
+    assert _heading(out) == "warned  3/4 records passed · 75%"
+
+
+def test_an_info_rule_counts_and_the_count_is_failed_over_checked(render):
+    rules = (
+        RuleTally(id="a_warn", type="matches_regex", severity="warn", passed=1, failed=3),
+        RuleTally(id="an_info", type="matches_regex", severity="info", passed=2, failed=2),
+    )
+
+    out = render([_warned(rules)], asked_for=("warned",))
+
+    assert _heading(out).endswith(
+        "⚠ 2 non-blocking rules failed: a_warn (warn) 3/4, an_info (info) 2/4"
+    )
+
+
+def test_many_failed_warn_rules_are_named_and_counted(render):
+    rules = tuple(
+        RuleTally(id=f"w{n}", type="matches_regex", severity="warn", passed=n, failed=7 - n)
+        for n in range(7)
+    )
+
+    out = render([_warned(rules, records=7, passed=7)], asked_for=("warned",))
+
+    assert _heading(out).endswith(
+        "⚠ 7 non-blocking rules failed: w0 (warn) 7/7, w1 (warn) 6/7, w2 (warn) 5/7, "
+        "w3 (warn) 4/7, w4 (warn) 3/7 and 2 more"
+    )
+
+
+def test_the_note_comes_before_the_no_verdict_note(render):
+    rule = RuleTally(id="soft", type="matches_regex", severity="warn", failed=4)
+    tally = ActionTally(
+        action="warned", records=4, records_passed=4, rules=(rule,), records_total=6
+    )
+
+    heading = _heading(render([tally], asked_for=("warned",)))
+
+    assert heading.index("non-blocking rule failed") < heading.index("carried no verdict")
+
+
+def test_json_is_unchanged():
+    from agent_actions.cli.expect import _tally_row
+
+    rule = RuleTally(id="never_matches_warn", type="matches_regex", severity="warn", failed=4)
+
+    assert _tally_row(_warned((rule,))) == {
+        "action": "warned",
+        "records": 4,
+        "records_passed": 4,
+        "records_total": 4,
+        "unverified": 0,
+        "pass_rate": 1.0,
+        "rules": [
+            {
+                "id": "never_matches_warn",
+                "type": "matches_regex",
+                "severity": "warn",
+                "passed": 0,
+                "failed": 4,
+                "skipped": 0,
+                "pass_rate": 0.0,
+            }
+        ],
+    }

@@ -503,6 +503,20 @@ def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
     if suffix:
         detail = f"{detail} · {suffix}"
     heading.append(f"  {detail}", style="dim")
+    # Only an error rule gates records_passed, so a failed warn or info rule leaves the
+    # rate at 100%; the table below shows it, and the heading must not read as clean.
+    soft_failures = [
+        rule for rule in tally.rules if rule.severity in ("warn", "info") and rule.failed
+    ]
+    if soft_failures:
+        count = len(soft_failures)
+        entries = [
+            f"{rule.id} ({rule.severity}) {rule.failed}/{rule.checked}" for rule in soft_failures
+        ]
+        heading.append(
+            f"  ⚠ {count} non-blocking rule{'s' if count != 1 else ''} failed: {_named(entries)}",
+            style="yellow",
+        )
     if tally.unverified:
         # The rate above is over rated records only; without this the survivors
         # of a run that tombstoned records would read as full health.
