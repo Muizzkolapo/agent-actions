@@ -2,7 +2,7 @@
 
 import logging
 from collections import Counter
-from typing import Any
+from typing import Any, cast
 
 from agent_actions.errors import ConfigurationError, RecordContextError
 from agent_actions.logging.core.manager import fire_event
@@ -659,16 +659,57 @@ def _inject_flat_observed_keys(
 # ── FILE mode wrapper ──────────────────────────────────────────────────
 
 
+def _load_record_seed(
+    agent_config: dict[str, Any],
+    context_scope: dict,
+    action_name: str,
+    source: dict | None,
+) -> dict[str, Any]:
+    """The seed the action declares, for one record; files are parsed once per process."""
+    from agent_actions.prompt.service import PromptPreparationService
+
+    return PromptPreparationService.load_seed_data(
+        agent_config, context_scope, action_name, source=source, shared=True
+    )
+
+
+def _own_or_pooled_source(
+    record: dict,
+    content: dict,
+    source_index: dict,
+    source_data: list[dict] | None,
+    action_name: str,
+) -> dict | None:
+    """The record's source for a seed that selects by a source field: carried, else pooled."""
+    carried = content.get("source")
+    if isinstance(carried, dict):
+        return carried
+    if not source_data:
+        return None
+    return _resolve_source_content(
+        record.get("source_guid"),
+        source_index,
+        source_data,
+        record.get("parent_source_guid"),
+        action_name,
+    )
+
+
 def apply_context_scope_for_records(
     records: list[dict],
     context_scope: dict,
     action_name: str = "unknown",
     source_data: list[dict] | None = None,
+    *,
+    agent_config: dict[str, Any] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Apply context_scope to a list of records (FILE mode).
 
     Unlike apply_context_scope(), this preserves ALL original namespaces in the
-    enriched record: downstream guards need full namespace visibility.
+    enriched record: downstream guards need full namespace visibility. A declared
+    ``seed`` is loaded per record from *agent_config*'s seed folders and reaches the
+    enriched content only, under ``seed``, so the payload holds it and a stored row
+    does not.
 
     Returns (enriched_records, skipped_records); skipped entries carry
     ``{"source_guid": ..., "reason": ..., "position": ..., "detail": ...}``. *position* indexes
@@ -678,11 +719,17 @@ def apply_context_scope_for_records(
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
     drop_refs = context_scope.get("drop", [])
+    seed_config = context_scope.get("seed")
     # One report per inert ref for the whole file, not one per record.
     inert_drops_reported: set[str] = set()
 
     if not observe_refs and not passthrough_refs and not drop_refs:
         return records, []
+    if seed_config and agent_config is None:
+        raise ValueError(
+            f"Action '{action_name}' declares context_scope.seed, which is loaded from the "
+            "action's seed folders; pass agent_config"
+        )
 
     # Check if any directive references the source namespace
     has_source_refs = (
@@ -700,7 +747,8 @@ def apply_context_scope_for_records(
         ref.startswith("source.") for ref in (*observe_refs, *passthrough_refs)
     )
 
-    source_index = _build_source_index(source_data) if has_source_refs else {}
+    # A seed selected by a source field needs the record's source resolved as well.
+    source_index = _build_source_index(source_data) if has_source_refs or seed_config else {}
     resolved_observe, qualify_wildcards = (
         _resolve_observe_refs_for_flat_keys(observe_refs, action_name)
         if observe_refs
@@ -762,6 +810,17 @@ def apply_context_scope_for_records(
             if source_content:
                 field_context["source"] = source_content
 
+        seed: dict[str, Any] = {}
+        if seed_config:
+            seed = _load_record_seed(
+                cast(dict[str, Any], agent_config),
+                context_scope,
+                action_name,
+                source_content
+                if source_content is not None
+                else _own_or_pooled_source(record, content, source_index, source_data, action_name),
+            )
+
         # Validate observe/passthrough/drop refs against the record's namespaces.
         # RecordContextError means a required namespace or field is missing —
         # skip this record rather than enriching it with None values.
@@ -770,7 +829,11 @@ def apply_context_scope_for_records(
             # discarded, so _apply_drops_to_content below is the one that reports. Left on,
             # every record logged the same inert drop twice and fired a WARN event per row.
             apply_context_scope(
-                field_context, context_scope, action_name=action_name, report_inert_drops=False
+                field_context,
+                context_scope,
+                static_data=seed or None,
+                action_name=action_name,
+                report_inert_drops=False,
             )
         except RecordContextError as e:
             logger.debug(
@@ -809,6 +872,8 @@ def apply_context_scope_for_records(
         enriched_content = plain_copy(content)
         if source_content:
             enriched_content["source"] = plain_copy(source_content)
+        if seed:
+            enriched_content["seed"] = plain_copy(seed)
         _apply_drops_to_content(enriched_content, drop_refs, inert_drops_reported)
         prepared.append((record, enriched_content))
 

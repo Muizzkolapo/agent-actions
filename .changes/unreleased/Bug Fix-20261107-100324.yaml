@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: A FILE tool or FILE HITL action that observes a declared seed (seed.rules) is handed it, as a RECORD tool and a guard already are. Before, the FILE scope pass never loaded the seed, so every record of the action was skipped with observe_field_missing. The seed reaches the tool's input only, never a stored row.
+time: 2026-11-07T10:03:24.573778Z
