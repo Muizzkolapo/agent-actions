@@ -2,7 +2,6 @@
 
 import json
 import logging
-from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
@@ -40,8 +39,8 @@ from agent_actions.processing.repair_lineage import (
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
-from agent_actions.processing.types import ProcessingContext
-from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor, refused_failure
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.limits import record_indices_to_process
@@ -69,27 +68,21 @@ class PipelineConfig:
     retried_records: frozenset[str] = frozenset()
 
 
-def scope_refusals(scope_skipped: list[dict[str, Any]]) -> dict[int, str]:
-    """Why the FILE scope pass could not hand the action each refused record, by position.
+def scope_refusals(
+    scope_skipped: list[dict[str, Any]], records: list[dict[str, Any]]
+) -> list[ProcessingResult]:
+    """The failed result for each record the FILE scope pass could not hand the action.
 
-    The position indexes the pre-scope list. The text is the refusal's detail, which
-    names every missing field or the source pool searched, and is what the record
-    fails with if the guard admits it; the processor writes the disposition from it,
-    as it does for a record the tool itself refused.
+    A refusal names the record's position in *records*, the pre-scope list, so the
+    tombstone is built from the record as it was handed in. The error is the refusal's
+    detail, which names every missing field or the source pool searched; the collector
+    writes the disposition from it, as it does for a record the tool itself refused.
+    The guard does not judge such a record: its context needs every observed field.
     """
-    return {skip["position"]: skip.get("detail") or skip["reason"] for skip in scope_skipped}
-
-
-def with_refused_in_place(
-    enriched: list[dict[str, Any]], refused: Mapping[int, str], records: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """*enriched* with each refused record standing at its own position, as handed in.
-
-    The guard reads the pre-scope list and pairs it to this one by position, so a
-    refused record stays in both: the guard judges it, and only one it admits fails.
-    """
-    rest = iter(enriched)
-    return [records[at] if at in refused else next(rest) for at in range(len(records))]
+    return [
+        refused_failure(records[skip["position"]], skip.get("detail") or skip["reason"])
+        for skip in scope_skipped
+    ]
 
 
 def _stored_rows(
@@ -843,19 +836,21 @@ class ProcessingPipeline:
                 source_data=source_data,
                 agent_config=cast(dict[str, Any], self.config.action_config),
             )
-            # The guard pairs the two lists by position and judges every record,
-            # refused ones included, so a record it would skip is skipped and not
-            # failed; a refused record it admits fails as this action's own.
-            refused = scope_refusals(scope_skipped)
+            # Matched to `filtered`, not to `data`: the guard pairs the two lists by
+            # position, so the pre-drop list failed the whole file over one drop. A
+            # refused record is a failure of this action, collected with the rest; the
+            # guard cannot read it, since its context needs every observed field.
+            dropped = {skip["position"] for skip in scope_skipped}
+            pre_observe = [record for at, record in enumerate(data) if at not in dropped]
             replaced = {guid for row in stored_here if (guid := row.get("source_guid"))}
             output, stats = self._unified_processor.process(
-                with_refused_in_place(filtered, refused, data),
+                filtered,
                 context,
                 strategy,
-                raw_records=data,
+                raw_records=pre_observe,
                 repair_inputs=offered_to_repair,
                 whole_file=whole_file,
-                refused=refused,
+                refused=scope_refusals(scope_skipped, data),
             )
             # A row the tool wrote again as it was is the row it was, and what reads it
             # still answers for it.

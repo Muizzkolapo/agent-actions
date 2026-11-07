@@ -96,15 +96,20 @@ class TestAnUnresolvedSourceSaysWhatWasSearched:
 class TestTheDetailReachesTheFailedResult:
     """The skip dict carrying a detail is half of it; the record's failure has to carry it.
 
-    `pipeline.py` keys each refusal by its position for the processor, which fails the
-    record with that text once the guard has admitted it. Both halves are asserted here
-    without driving a whole pipeline.
+    `pipeline.py` turns each refusal into the failed result the collector writes the
+    disposition from. `scope_refusals` is that construction, named so the error and the
+    tombstone can be asserted without driving a whole pipeline.
     """
 
-    def test_the_detail_is_keyed_by_the_records_position(self):
+    def test_the_detail_is_the_error_and_the_pre_scope_record_the_tombstone(self):
+        from agent_actions.processing.types import ProcessingStatus
         from agent_actions.workflow.pipeline import scope_refusals
 
-        assert scope_refusals(
+        records = [
+            {"source_guid": "g0", "content": {}},
+            {"source_guid": "g1", "content": {"a1": {}}},
+        ]
+        (result,) = scope_refusals(
             [
                 {
                     "source_guid": "g1",
@@ -112,46 +117,33 @@ class TestTheDetailReachesTheFailedResult:
                     "position": 1,
                     "detail": "context_scope.observe field 'a1.n' not found in this record",
                 }
-            ]
-        ) == {1: "context_scope.observe field 'a1.n' not found in this record"}
-
-    def test_a_refusal_with_no_detail_fails_with_its_reason(self):
-        from agent_actions.workflow.pipeline import scope_refusals
-
-        assert scope_refusals(
-            [{"source_guid": "g1", "reason": "source_unresolved", "position": 0}]
-        ) == {0: "source_unresolved"}
-
-    def test_the_failure_is_the_pre_scope_record_with_the_detail_as_its_error(self):
-        from agent_actions.processing.types import ProcessingStatus
-        from agent_actions.processing.unified import refused_failure
-
-        original = {"source_guid": "g1", "content": {"a1": {}}}
-        result = refused_failure(
-            original, "context_scope.observe field 'a1.n' not found in this record"
+            ],
+            records,
         )
 
         assert result.status is ProcessingStatus.FAILED
         assert result.error == "context_scope.observe field 'a1.n' not found in this record"
         assert result.source_guid == "g1"
-        assert result.input_record is original
+        assert result.input_record is records[1]
+
+    def test_a_refusal_with_no_detail_fails_with_its_reason(self):
+        from agent_actions.workflow.pipeline import scope_refusals
+
+        (result,) = scope_refusals(
+            [{"source_guid": "g1", "reason": "source_unresolved", "position": 0}],
+            [{"source_guid": "g1", "content": {}}],
+        )
+
+        assert result.error == "source_unresolved"
 
     def test_a_refusal_without_a_source_guid_is_still_a_failure(self):
         """The record is in the run's count whether or not it can be keyed by identity."""
-        from agent_actions.processing.unified import refused_failure
+        from agent_actions.workflow.pipeline import scope_refusals
 
-        result = refused_failure({"content": {}}, "no pool")
+        (result,) = scope_refusals(
+            [{"reason": "source_unresolved", "position": 0, "detail": "no pool"}],
+            [{"content": {}}],
+        )
 
         assert result.source_guid is None
         assert result.error == "no pool"
-
-    def test_refused_records_keep_their_positions_beside_the_enriched_ones(self):
-        from agent_actions.workflow.pipeline import with_refused_in_place
-
-        records = [{"i": 0}, {"i": 1}, {"i": 2}]
-        enriched = [{"i": 0, "e": True}, {"i": 2, "e": True}]
-
-        placed = with_refused_in_place(enriched, {1: "why"}, records)
-
-        assert placed == [{"i": 0, "e": True}, {"i": 1}, {"i": 2, "e": True}]
-        assert placed[1] is records[1]

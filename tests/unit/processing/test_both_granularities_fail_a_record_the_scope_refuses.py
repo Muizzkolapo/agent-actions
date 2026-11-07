@@ -48,10 +48,9 @@ class TestFileModeRefusesBeforeTheGuardAndFailsTheRecord:
         assert skipped[0]["position"] == 0
 
     def test_the_refusal_becomes_the_records_failure(self):
-        """What the pipeline does with the refusal once the guard admits the record: a
-        failed result the collector writes, built from the pre-scope record."""
+        """What the pipeline does with the refusal: a failed result the collector writes,
+        built from the pre-scope record."""
         from agent_actions.processing.types import ProcessingStatus
-        from agent_actions.processing.unified import refused_failure
         from agent_actions.workflow.pipeline import scope_refusals
 
         records = [_record()]
@@ -59,8 +58,7 @@ class TestFileModeRefusesBeforeTheGuardAndFailsTheRecord:
             records, _SCOPE, source_data=[_record()], action_name="b"
         )
 
-        ((position, why),) = scope_refusals(skipped).items()
-        failure = refused_failure(records[position], why)
+        (failure,) = scope_refusals(skipped, records)
 
         assert failure.status is ProcessingStatus.FAILED
         assert failure.error == "context_scope.observe field 'a1.n' not found in this record"
