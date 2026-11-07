@@ -293,11 +293,9 @@ class BatchClientResolver:
                 ) from e
 
         # 2. Try vendor config class default
-        from agent_actions.validation.preflight.resolution_service import (
-            _get_api_key_env_name,
-        )
+        from agent_actions.llm.config.vendor import api_key_env_var
 
-        env_name = _get_api_key_env_name(vendor)
+        env_name = api_key_env_var(vendor)
         if env_name:
             key = os.environ.get(env_name)
             if key:

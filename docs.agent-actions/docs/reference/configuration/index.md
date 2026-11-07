@@ -157,9 +157,9 @@ actions:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud, llamafile |
+| `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud, llamafile, agac-provider |
 | `model_name` | string | Model identifier (e.g., gpt-4o-mini) |
-| `api_key` | string | Environment variable name for API key |
+| `api_key` | string | Environment variable name for API key. Not needed for `agac-provider`, `ollama_local`, `llamafile` or a declared endpoint; an action on one of them expands and inspects with no `api_key` at any level |
 | `base_url` | string | Server URL for `openai`, `llamafile`, `ollama_local` and `ollama_cloud`. For `openai`, any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1`. Preflight refuses it on `anthropic`, `gemini`, `groq` and `cohere` actions |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
@@ -252,6 +252,7 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
 | Ollama (cloud) | `ollama_cloud` | ✅ | gpt-oss:120b-cloud |
 | llamafile | `llamafile` | ❌ | any GGUF model the server loads |
+| Mock (no network, no key) | `agac-provider` | ✅ | any name; answers are generated from the schema |
 
 ### Named local runtimes
 
@@ -344,6 +345,8 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 | `OLLAMA_API_KEY` | Ollama Cloud |
 | `GROQ_API_KEY` | Groq |
 | `OLLAMA_HOST` | Ollama local server (default: `http://localhost:11434`) |
+
+`agac-provider`, `ollama_local` and `llamafile` take no key. When an action on any other vendor has no `api_key`, the error names that vendor's variable from this table.
 
 ### Runtime Variables
 

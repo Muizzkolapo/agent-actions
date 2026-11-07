@@ -17,8 +17,6 @@ from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-
 from agent_actions.config.path_config import (
     SeedFileError,
     SeedFolder,
@@ -28,7 +26,12 @@ from agent_actions.config.path_config import (
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.config.endpoints import Endpoint, project_endpoint
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
-from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
+from agent_actions.llm.config.vendor import (
+    NON_LLM_VENDORS,
+    ONLINE_ONLY_VENDORS,
+    api_key_env_var,
+    vendor_needs_api_key,
+)
 from agent_actions.llm.providers.client_base import api_key_env_name
 from agent_actions.prompt.context.seed_entry import parse_seed_entry, strip_file_prefix
 from agent_actions.prompt.context.static_loader import StaticDataLoader, StaticDataLoadError
@@ -43,61 +46,7 @@ from agent_actions.validation.static_analyzer.errors import (
 
 logger = logging.getLogger(__name__)
 
-# Vendor name → config class mapping.  Built lazily on first access to
-# avoid importing all vendor configs (and transitively their SDKs) at
-# module level.
-_VENDOR_CONFIG_MAP: dict[str, type[BaseModel]] | None = None
-
-# Sentinel substrings in api_key_env_name that indicate no real key is needed.
-_NO_KEY_SENTINELS = ("NO_KEY_REQUIRED",)
-
 _VENDORS_WITHOUT_ENDPOINT = NON_LLM_VENDORS
-
-
-def _get_vendor_config_map() -> dict[str, type[BaseModel]]:
-    """Build vendor → config class map on first call (lazy)."""
-    global _VENDOR_CONFIG_MAP  # noqa: PLW0603
-    if _VENDOR_CONFIG_MAP is not None:
-        return _VENDOR_CONFIG_MAP
-
-    from agent_actions.llm.config.vendor import (
-        AgacProviderConfig,
-        AnthropicConfig,
-        CohereConfig,
-        GeminiConfig,
-        GroqConfig,
-        HitlVendorConfig,
-        OllamaCloudConfig,
-        OllamaLocalConfig,
-        OpenAIConfig,
-        ToolVendorConfig,
-    )
-
-    _VENDOR_CONFIG_MAP = {
-        "openai": OpenAIConfig,
-        "anthropic": AnthropicConfig,
-        "gemini": GeminiConfig,
-        "groq": GroqConfig,
-        "cohere": CohereConfig,
-        "ollama_local": OllamaLocalConfig,
-        "ollama_cloud": OllamaCloudConfig,
-        "tool": ToolVendorConfig,
-        "hitl": HitlVendorConfig,
-        "agac-provider": AgacProviderConfig,
-    }
-    return _VENDOR_CONFIG_MAP
-
-
-def _get_api_key_env_name(vendor: str) -> str | None:
-    """Resolve API key env var name from vendor config class (single source of truth)."""
-    config_cls = _get_vendor_config_map().get(vendor.lower())
-    if config_cls is None:
-        return None
-    field_info = config_cls.model_fields.get("api_key_env_name")
-    if field_info is None:
-        return None
-    default = field_info.default
-    return str(default) if default is not None else None
 
 
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -382,24 +331,17 @@ class WorkflowResolutionService:
             if not vendor:
                 continue
 
-            profile = RUNTIME_PROFILES.get(vendor)
-            if profile is not None and not profile.api_key_required:
+            if not vendor_needs_api_key(vendor):
                 continue
-            # A declared endpoint takes its credential from its own auth block.
-            if project_endpoint(vendor) is not None:
-                continue
-
-            # Resolve the expected env var name from vendor config
-            env_var_name = _get_api_key_env_name(vendor)
-            if env_var_name is None:
-                continue
-
-            # Skip vendors that don't need real keys (tool, hitl)
-            if any(sentinel in env_var_name for sentinel in _NO_KEY_SENTINELS):
-                continue
-
             if config.get("api_key"):
                 env_var_name = api_key_env_name(config["api_key"])
+            else:
+                default_name = api_key_env_var(vendor)
+                # A vendor with no variable of its own leaves nothing to check;
+                # expansion has already refused its missing api_key.
+                if default_name is None:
+                    continue
+                env_var_name = default_name
             key_value = os.environ.get(env_var_name, "")
 
             if not key_value:

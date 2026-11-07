@@ -7,8 +7,8 @@ so an agent that kept `google` would be checked against no key at all and read v
 """
 
 from agent_actions.config.manager import ConfigManager
+from agent_actions.llm.config.vendor import api_key_env_var
 from agent_actions.output.response.config_schema import AgentConfig
-from agent_actions.validation.preflight.resolution_service import _get_api_key_env_name
 
 
 def _manager(default_agent_config: dict | None = None) -> ConfigManager:
@@ -53,7 +53,7 @@ class TestAnAgentThatWritesGoogle:
 
         vendor = manager.agent_configs["a1"].model_vendor
 
-        assert _get_api_key_env_name(vendor) == "GEMINI_API_KEY"
+        assert api_key_env_var(vendor) == "GEMINI_API_KEY"
 
 
 class TestWhatTheAliasDoesNotTouch:

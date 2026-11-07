@@ -181,8 +181,9 @@ Performs resource resolution checks that require I/O (env vars, filesystem, netw
 WorkflowResolutionService.resolve_all()
   |
   1. API key checks
-  |    - resolves env var name from vendor config class (single source of truth)
-  |    - skips _NO_KEY_SENTINELS ("NO_KEY_REQUIRED" for tool, hitl)
+  |    - skips a vendor vendor_needs_api_key() says takes no key
+  |      (agac-provider, ollama_local, tool, hitl, llamafile, declared endpoints)
+  |    - resolves env var name with api_key_env_var() (llm/config/vendor.py)
   |    - supports custom $ENV_VAR and literal key syntax
   |    - optional --verify-keys: probes vendor endpoints
   |    - AA_SKIP_ENV_VALIDATION=1 skips key checks ONLY (not seed/vendor checks)
