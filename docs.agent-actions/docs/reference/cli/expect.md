@@ -138,7 +138,11 @@ Rules are ordered by how often they failed, so the rule costing an action the mo
 
 - **Passed / Failed** count the records a rule actually ran on.
 - **Skipped** counts records where it did not run — a judge that hit its [budget](../validation/expectations.md#caching-and-budget), or a rule waived by its [`row_condition`](../validation/expectations.md#row-conditions). A skipped rule is neither a pass nor a fail, so it cannot move a rate over records it never applied to; a rule that never ran shows `—` rather than a rate.
-- **Records passed** counts `overall_pass`, which only `error`-severity outcomes gate. A `warn` rule can fail on a record that still passes — that is what `warn` is for.
+- **Records passed** counts `overall_pass`, which only `error`-severity outcomes gate. A `warn` rule can fail on a record that still passes — that is what `warn` is for. So the heading does not read as clean when one does, it names each `warn` or `info` rule that failed at least once, with failed over checked, most failures first (more than five: the first five and a count of the rest). The rate, `--fail-under` and `--json` are unchanged:
+
+  ```
+  warned  4/4 records passed · 100%  ⚠ 1 non-blocking rule failed: never_matches_warn (warn) 4/4
+  ```
 - **`⚠ N records carried no verdict`** appears when an action produced output for records that carry no verdict — a record tombstoned by [`on_exhausted: fail`](../validation/expectations.md#the-expect-block) keeps its output and loses its verdict. Without this line the survivors would read as full health. A [guard-skipped](../execution/guards.md) record produced no output at all and is not counted against the action.
 
 An action that no record carried a verdict for is reported as having none, rather than as zeroes — an action that never ran expectations and one whose rules all passed are different answers.
