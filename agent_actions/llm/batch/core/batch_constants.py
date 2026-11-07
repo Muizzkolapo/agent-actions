@@ -117,6 +117,8 @@ class ContextMetaKeys:
     PASSTHROUGH_FIELDS = "_passthrough_fields"
     SKIP_REASON = "_batch_skip_reason"
     PREP_ERROR = "_batch_prep_error"
+    # The schema a ``schema: dispatch_task(...)`` chose for the row; a repair round reads it.
+    OUTPUT_SCHEMA = "_batch_output_schema"
 
     @classmethod
     def all_internal_keys(cls) -> set[str]:
@@ -127,4 +129,5 @@ class ContextMetaKeys:
             cls.PASSTHROUGH_FIELDS,
             cls.SKIP_REASON,
             cls.PREP_ERROR,
+            cls.OUTPUT_SCHEMA,
         }

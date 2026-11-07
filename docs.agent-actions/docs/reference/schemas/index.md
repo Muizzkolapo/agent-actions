@@ -265,6 +265,8 @@ def select_question_schema(context_json: str) -> str:
 
 The chosen schema follows the project's `required_by_default`, as any schema file does. Any other return value, such as a schema definition, `None` or a name outside the list, fails that record alone. The message is `dispatch_task('<function>') in schema returned None, which is not in schema_options [<names>].` An error in the function also fails that record alone.
 
+The function runs once for each record. Every retry and every repair round of that record uses the schema it first chose, in online and batch runs. Each stored record names that schema in `metadata.output_schema`.
+
 ### Context Available
 
 The tool receives the record's context as one JSON string, keyed by namespace (`source`, upstream action names). Decode it with `json.loads()`:

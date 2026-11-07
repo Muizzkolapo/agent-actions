@@ -18,6 +18,8 @@ class InvocationResult:
 
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
     recovery_metadata: RecoveryMetadata | None = None
+    # The schema a ``schema: dispatch_task(...)`` chose for this record.
+    output_schema: str | None = None
 
     @classmethod
     def immediate(
@@ -26,6 +28,7 @@ class InvocationResult:
         executed: bool,
         passthrough_fields: dict[str, Any] | None = None,
         recovery: RecoveryMetadata | None = None,
+        output_schema: str | None = None,
     ) -> "InvocationResult":
         """Create an immediate execution result."""
         return cls(
@@ -34,6 +37,7 @@ class InvocationResult:
             deferred=False,
             passthrough_fields=passthrough_fields or {},
             recovery_metadata=recovery,
+            output_schema=output_schema,
         )
 
     @classmethod

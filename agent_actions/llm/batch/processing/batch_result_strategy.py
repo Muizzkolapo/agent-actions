@@ -474,6 +474,9 @@ class BatchResultStrategy:
             source_guid=original_source_guid,
             pre_extracted_metadata=batch_result.metadata,
             recovery_metadata=batch_result.recovery_metadata,
+            output_schema=BatchContextMetadata.get_output_schema(
+                ctx.context_map.get(custom_id, {})
+            ),
         )
 
         processing_result.processing_context = processing_context

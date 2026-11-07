@@ -36,8 +36,12 @@ def run_dynamic_agent(
     tool_args: dict[str, Any] | None = None,
     source_content: Any | None = None,
     llm_context: Any | None = None,
+    dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
+
+    ``dispatched`` is the record's already-resolved schema (``_choose_dispatched_schema``),
+    so a retry or repair call writes the schema the record was first given.
 
     `prefilter_by_guard` has already run on every path that reaches here, and the online
     record path additionally runs `TaskPreparer.prepare`, the authoritative evaluation
@@ -52,7 +56,9 @@ def run_dynamic_agent(
 
     llm_data = llm_context if llm_context is not None else context
 
-    record_config, dispatch_results = _choose_dispatched_schema(agent_config, llm_data, tools_path)
+    record_config, dispatch_results, _ = dispatched or _choose_dispatched_schema(
+        agent_config, llm_data, tools_path
+    )
 
     response = agent_builder.create_dynamic_agent(
         record_config,
@@ -74,19 +80,20 @@ def run_dynamic_agent(
 
 def _choose_dispatched_schema(
     agent_config: dict[str, Any], llm_data: Any, tools_path: str | None
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], str | None]:
     """Resolve a ``schema: dispatch_task(...)`` once for this record.
 
     The call and the output check then read the same schema, and the dispatch function
-    runs once. Returns the record's config and any ``add_dispatch`` results.
+    runs once. Returns the record's config, any ``add_dispatch`` results, and the name
+    of the chosen schema (None when the action's schema is not dispatched).
     """
     from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 
     if schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is None:
-        return agent_config, {}
+        return agent_config, {}, None
     vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     if vendor in {"tool", "hitl"}:
-        return agent_config, {}
+        return agent_config, {}, None
 
     from pathlib import Path
 
@@ -101,7 +108,7 @@ def _choose_dispatched_schema(
     context = ContextService.prepare_context_data(llm_data, is_tool=False)
     project_root = agent_config.get("_project_root")
     captured: dict[str, Any] = {}
-    schema, _ = _load_inline_schema(
+    schema, chosen = _load_inline_schema(
         agent_config[SCHEMA_KEY],
         tools,
         _prepare_context_data_str(context, tools),
@@ -109,7 +116,7 @@ def _choose_dispatched_schema(
         captured,
         project_root=Path(project_root) if project_root else None,
     )
-    return {**agent_config, SCHEMA_KEY: schema}, captured
+    return {**agent_config, SCHEMA_KEY: schema}, captured, chosen
 
 
 def _is_tool_action(agent_config: dict[str, Any]) -> bool:

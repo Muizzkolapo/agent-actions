@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  A `schema: dispatch_task('fn')` is now resolved once for each record. Retries and repair
+  rounds use the schema the record first got, online and in batch; before, the function ran
+  again on each call and could choose another shape in the middle of a repair. Each stored
+  record names its schema in `metadata.output_schema`.
+time: 2026-11-07T15:00:00Z

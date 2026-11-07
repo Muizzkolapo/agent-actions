@@ -339,6 +339,9 @@ class MetadataEnricher(Enricher):
                 agent_config=cast(dict[str, Any], context.agent_config),
             )
             metadata_dict = metadata.to_dict()
+        if result.output_schema:
+            # The writer's schema, stored with the record it wrote.
+            metadata_dict = {**metadata_dict, "output_schema": result.output_schema}
 
         for item in result.data:
             FieldManager.add_metadata(item, metadata=metadata_dict)

@@ -46,6 +46,7 @@ class BatchContextAdapter:
         pre_extracted_metadata: dict[str, Any] | None = None,
         recovery_metadata: RecoveryMetadata | None = None,
         passthrough_fields: dict[str, Any] | None = None,
+        output_schema: str | None = None,
     ) -> ProcessingResult:
         """Build a ProcessingResult from batch-side data."""
         return ProcessingResult.success(
@@ -54,4 +55,5 @@ class BatchContextAdapter:
             pre_extracted_metadata=pre_extracted_metadata,
             recovery_metadata=recovery_metadata,
             passthrough_fields=passthrough_fields or {},
+            output_schema=output_schema,
         )
