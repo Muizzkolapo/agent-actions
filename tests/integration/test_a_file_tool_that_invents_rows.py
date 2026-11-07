@@ -127,15 +127,18 @@ def test_the_fixture_really_invents(inventing):
     assert {r["source_guid"] for r in rows}.isdisjoint(set(_record_ids(inventing, ACTION)))
 
 
-def test_an_invented_row_still_carries_what_came_before_it(inventing):
+def test_an_invented_row_still_carries_what_every_input_shared(inventing):
     """Read back, not as written: the loss is in the rejoin, so a raw row looks
-    the same either way."""
+    the same either way. `flatten.exam_density` is equal on every input and is
+    carried; `flatten.summary` and `source.page_content` differ and are not, so
+    the row holds no input's `source`."""
     read_back = _read_back(inventing, "roll_up")
 
     assert [sorted(r.get("content", {})) for r in read_back] == [
-        ["flatten", "roll_up", "source"],
-        ["flatten", "roll_up", "source"],
+        ["flatten", "roll_up"],
+        ["flatten", "roll_up"],
     ]
+    assert [r["content"]["flatten"] for r in read_back] == [{"exam_density": "low"}] * 2
 
 
 def test_the_action_below_reads_a_value_from_above_the_roll_up(inventing):
@@ -226,7 +229,7 @@ def test_a_row_rewritten_by_a_retry_keeps_what_came_before_it(inventing):
     assert result.exit_code == 0, result.output
 
     namespaces = [sorted(r.get("content", {})) for r in _read_back(inventing, "roll_up")]
-    assert namespaces == [["flatten", "roll_up", "source"]] * len(namespaces)
+    assert namespaces == [["flatten", "roll_up"]] * len(namespaces)
     assert len(namespaces) == 2
 
 

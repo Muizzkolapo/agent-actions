@@ -194,8 +194,9 @@ def test_file_udf_result_list_source_index():
 # --- FileUDFResult synthetic records (source_index=None) ---
 
 
-def test_synthetic_record_carries_forward_namespaces():
-    """FileUDFResult with source_index=None gets namespaces from first input."""
+def test_synthetic_record_carries_forward_what_every_input_shares():
+    """FileUDFResult with source_index=None carries the upstream fields equal on every
+    input, and not a field that differs between them."""
     context = _make_context()
 
     udf_result = FileUDFResult(
@@ -207,11 +208,11 @@ def test_synthetic_record_carries_forward_namespaces():
     input_data = [
         {
             "source_guid": "guid-1",
-            "content": {"upstream_action": {"question": "What is X?"}},
+            "content": {"upstream_action": {"question": "What is X?", "topic": "algebra"}},
         },
         {
             "source_guid": "guid-2",
-            "content": {"upstream_action": {"question": "What is Y?"}},
+            "content": {"upstream_action": {"question": "What is Y?", "topic": "algebra"}},
         },
     ]
 
@@ -228,9 +229,8 @@ def test_synthetic_record_carries_forward_namespaces():
     assert result.status == ProcessingStatus.SUCCESS
     assert len(result.data) == 1
     content = result.data[0]["content"]
-    # Upstream namespace carried forward from original_data[0]
-    assert "upstream_action" in content
-    assert content["upstream_action"]["question"] == "What is X?"
+    # Only what every input shares is carried: the topic, not either question
+    assert content["upstream_action"] == {"topic": "algebra"}
     # Current action's namespace present
     assert "my_file_tool" in content
     assert content["my_file_tool"]["summary"] == "Combined result"
@@ -305,6 +305,9 @@ def test_synthetic_mixed_with_sourced_records():
     assert result.data[2].get("source_guid") == "sg-2"
     # Synthetic record does NOT inherit parent's source_guid
     assert result.data[1].get("source_guid") not in ("sg-1", "sg-2")
+    # Nor either input's `prev.q`, which differs between them
+    assert "prev" not in result.data[1]["content"]
+    assert result.data[0]["content"]["prev"] == {"q": "Q1"}
 
     # All records have both upstream and action namespaces
     for item in result.data:
