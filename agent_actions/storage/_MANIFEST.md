@@ -36,6 +36,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 - **output/saver.py**: Uses backend for `write_source()` operations
 - **input/loaders/source_data.py**: Falls back to backend for `read_source()` operations
 - **processing/task_preparer.py**: Passes backend for prompt trace writes
+- **processing/invocation/online.py**, **processing/strategies/online_llm.py**: attach each repair attempt's response to its own trace row (`update_prompt_trace_response(attempt=)`)
 
 ## Project Surface
 
