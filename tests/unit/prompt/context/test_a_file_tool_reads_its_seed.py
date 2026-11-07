@@ -129,6 +129,17 @@ class TestWhatIsRefused:
                 action_name="probe",
             )
 
+    def test_a_declared_seed_no_observe_ref_names_is_not_loaded(self, tmp_path):
+        """A FILE action has no prompt; a seed nothing observes is not read at all."""
+        scope = {"observe": ["a.x"], "seed": {"rules": "$file:absent.json"}}
+        agent_config = _project(tmp_path, {})
+
+        (payload,) = _payloads(
+            [{"source_guid": "g1", "content": {"a": {"x": 1}}}], scope, agent_config
+        )
+
+        assert payload == {"x": 1}
+
     def test_without_a_declared_seed_the_action_config_is_not_needed(self):
         scope = {"observe": ["a.x"]}
 

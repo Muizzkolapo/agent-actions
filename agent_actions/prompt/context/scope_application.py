@@ -704,7 +704,11 @@ def apply_context_scope_for_records(
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
     drop_refs = context_scope.get("drop", [])
-    seed_config = context_scope.get("seed")
+    # A FILE action has no prompt: the seed reaches it through observe alone, so it is
+    # loaded only when an observe ref names it, as a guard loads it only when it reads it.
+    seed_config = (
+        context_scope.get("seed") if any(ref.startswith("seed.") for ref in observe_refs) else None
+    )
     # One report per inert ref for the whole file, not one per record.
     inert_drops_reported: set[str] = set()
 
