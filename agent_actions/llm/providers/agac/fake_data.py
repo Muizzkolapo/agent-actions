@@ -904,6 +904,45 @@ class FakeDataGenerator:
 
         return response
 
+    @staticmethod
+    def offered_answer_shapes(prompt: str) -> list[dict[str, Any]] | None:
+        """The JSON objects a prompt's last line offers as its answer, joined by ` or `.
+
+        None when that line holds anything else, so ordinary prose prompts are untouched.
+        """
+        lines = [line.strip() for line in prompt.splitlines() if line.strip()]
+        if not lines:
+            return None
+        line, decoder, shapes, pos = lines[-1], json.JSONDecoder(), [], 0
+        while True:
+            try:
+                shape, pos = decoder.raw_decode(line, pos)
+            except ValueError:
+                return None
+            if not isinstance(shape, dict):
+                return None
+            shapes.append(shape)
+            if pos == len(line):
+                return shapes
+            if not line.startswith(" or ", pos):
+                return None
+            pos += len(" or ")
+
+    @classmethod
+    def generate_offered_answer(
+        cls, shapes: list[dict[str, Any]], prompt: str, attempt: int = 1
+    ) -> str:
+        """One of the offered shapes, chosen by the seeded RNG, each string a generated sentence."""
+        seed = int(hashlib.md5(f"{prompt}:{attempt}".encode()).hexdigest()[:8], 16)
+        cls.set_context(seed=seed, prompt=prompt)
+        rng = cls._get_rng()
+        shape = rng.choice(shapes)
+        answer = {
+            key: cls._generate_sentence(attempt, rng) if isinstance(value, str) else value
+            for key, value in shape.items()
+        }
+        return json.dumps(answer)
+
     @classmethod
     def generate_text_response(cls, prompt: str, attempt: int = 1) -> str:
         """
