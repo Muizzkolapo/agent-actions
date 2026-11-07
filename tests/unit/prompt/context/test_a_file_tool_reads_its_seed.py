@@ -13,7 +13,12 @@ from pathlib import Path
 import pytest
 
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.workflow.pipeline_file_mode import extract_tool_input
+from agent_actions.record.tracking import TrackedItem
+from agent_actions.workflow.pipeline_file_mode import (
+    extract_tool_input,
+    reconcile_outputs,
+    seed_payload_keys,
+)
 
 RULES = {"threshold": 7}
 
@@ -147,3 +152,51 @@ class TestWhatIsRefused:
         assert enriched == []
         assert [s["source_guid"] for s in skipped] == ["g1"]
         assert "a.x" in skipped[0]["detail"]
+
+
+class TestTheSeedStaysOutOfStoredRows:
+    def test_the_seeds_payload_keys_are_planned_as_the_payload_is(self, tmp_path):
+        scope = {"observe": ["a.x", "seed.rules"], "seed": {"rules": "$file:rules.json"}}
+        agent_config = _project(tmp_path, {"rules.json": RULES})
+
+        (enriched,), _ = apply_context_scope_for_records(
+            records=[{"source_guid": "g1", "content": {"a": {"x": 1}}}],
+            context_scope=scope,
+            action_name="probe",
+            agent_config=agent_config,
+        )
+
+        assert seed_payload_keys(enriched, scope) == frozenset({"rules"})
+        assert seed_payload_keys({"content": {"a": {"x": 1}}}, scope) == frozenset()
+
+    def test_an_item_a_tool_returns_is_stored_without_what_the_seed_supplied(self):
+        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}, "seed": {"rules": RULES}}}]
+        returned = [TrackedItem({"x": 1, "rules": RULES, "verdict": "ok"}, source_index=0)]
+
+        rows, _ = reconcile_outputs(returned, "probe", inputs, drop_keys=frozenset({"rules"}))
+
+        (row,) = rows
+        assert row["content"]["probe"] == {"x": 1, "verdict": "ok"}
+
+    def test_a_row_the_tool_built_itself_keeps_what_the_tool_put_in_it(self):
+        from agent_actions.utils.udf_management.registry import FileUDFResult
+
+        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}, "seed": {"rules": RULES}}}]
+        built = FileUDFResult([{"source_index": 0, "data": {"rules": "kept on purpose"}}])
+
+        rows, _ = reconcile_outputs(built, "probe", inputs, drop_keys=frozenset({"rules"}))
+
+        assert rows[0]["content"]["probe"] == {"rules": "kept on purpose"}
+
+    def test_a_seed_picked_by_no_field_is_the_same_object_for_every_record(self, tmp_path):
+        """Loaded once per file: both records' payloads hold the one loaded seed."""
+        scope = {"observe": ["seed.rules"], "seed": {"rules": "$file:rules.json"}}
+        agent_config = _project(tmp_path, {"rules.json": RULES})
+
+        first, second = _payloads(
+            [{"source_guid": "g1", "content": {}}, {"source_guid": "g2", "content": {}}],
+            scope,
+            agent_config,
+        )
+
+        assert first == second == {"rules": RULES}

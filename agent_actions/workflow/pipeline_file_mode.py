@@ -287,6 +287,28 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     return flat
 
 
+def seed_payload_keys(record: dict, context_scope: Mapping[str, Any]) -> frozenset[str]:
+    """The payload keys *record*'s ``seed`` namespace supplies, planned as the payload is.
+
+    A tool that returns the items it was handed writes them back under its namespace;
+    these keys are what it got from the seed, which reaches the payload and nothing stored.
+    """
+    from agent_actions.prompt.context.scope_application import (
+        _resolve_observe_refs_for_flat_keys,
+        plan_flat_observed_keys,
+    )
+
+    content = record.get("content")
+    seed = content.get("seed") if isinstance(content, dict) else None
+    if not isinstance(seed, dict) or "observe" not in context_scope:
+        return frozenset()
+    resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
+        context_scope["observe"], emit_diagnostics=False
+    )
+    flat, _ = plan_flat_observed_keys({"seed": seed}, resolved, qualify_wildcards)
+    return frozenset(flat)
+
+
 def _build_record(
     action_name: str,
     data_fields: dict,
@@ -315,13 +337,16 @@ def reconcile_outputs(
     original_data: list[dict],
     version_merge: bool = False,
     version_base_name: str | None = None,
+    drop_keys: frozenset[str] = frozenset(),
 ) -> tuple[list[dict[str, Any]], dict[int, int | list[int] | None]]:
     """Core reconciliation of tool output to input records.
 
     Dispatches on response type (``FileUDFResult`` vs ``TrackedItem`` list),
     builds records, and reattaches ``source_guid``. A minted row derives its
     correlation id from ``version_base_name``; only a versioned action carries
-    one, and for any other its own name is already the base.
+    one, and for any other its own name is already the base. *drop_keys* are
+    payload keys a returned item is not stored with (what the seed supplied);
+    a row the tool built itself (``FileUDFResult``) holds what the tool put in it.
 
     Returns ``(structured_data, source_mapping)``.
     """
@@ -349,9 +374,8 @@ def reconcile_outputs(
             if isinstance(item, TrackedItem):
                 source_mapping[i] = item._source_index
                 matched = _resolve_input_record(item._source_index, original_data)
-                structured_data.append(
-                    _build_record(action_name, dict(item), matched, version_merge)
-                )
+                fields = {k: v for k, v in item.items() if k not in drop_keys}
+                structured_data.append(_build_record(action_name, fields, matched, version_merge))
             elif isinstance(item, dict):
                 raise ValueError(
                     f"FILE tool '{action_name}' returned plain dict at "

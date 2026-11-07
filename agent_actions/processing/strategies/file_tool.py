@@ -34,6 +34,7 @@ from agent_actions.workflow.pipeline_file_mode import (
     extract_tool_input,
     is_empty_response,
     reconcile_outputs,
+    seed_payload_keys,
 )
 
 logger = logging.getLogger(__name__)
@@ -288,6 +289,7 @@ class FileToolStrategy:
                 original_data,
                 version_merge=is_version_merge(context.agent_config),
                 version_base_name=context.agent_config.get("version_base_name"),
+                drop_keys=seed_payload_keys(records[0], context_scope) if records else frozenset(),
             )
 
             is_expansion = len(structured_data) > len(answered)

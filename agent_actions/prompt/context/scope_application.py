@@ -673,25 +673,10 @@ def _load_record_seed(
     )
 
 
-def _own_or_pooled_source(
-    record: dict,
-    content: dict,
-    source_index: dict,
-    source_data: list[dict] | None,
-    action_name: str,
-) -> dict | None:
-    """The record's source for a seed that selects by a source field: carried, else pooled."""
-    carried = content.get("source")
-    if isinstance(carried, dict):
-        return carried
-    if not source_data:
-        return None
-    return _resolve_source_content(
-        record.get("source_guid"),
-        source_index,
-        source_data,
-        record.get("parent_source_guid"),
-        action_name,
+def _seed_selects_by_source(seed_config: Any) -> bool:
+    """Whether any declared seed picks its file by a field of the record's source."""
+    return isinstance(seed_config, dict) and any(
+        isinstance(entry, dict) and "select_by" in entry for entry in seed_config.values()
     )
 
 
@@ -747,8 +732,17 @@ def apply_context_scope_for_records(
         ref.startswith("source.") for ref in (*observe_refs, *passthrough_refs)
     )
 
-    # A seed selected by a source field needs the record's source resolved as well.
-    source_index = _build_source_index(source_data) if has_source_refs or seed_config else {}
+    # A seed picked by a source field reads the record's source the way an observe of
+    # it does: resolved once, below, pooled first and carried last. A seed picked by no
+    # field is the same for every record of the file and is loaded once.
+    seed_per_record = _seed_selects_by_source(seed_config)
+    resolve_source = has_source_refs or seed_per_record
+    shared_seed: dict[str, Any] = (
+        _load_record_seed(cast(dict[str, Any], agent_config), context_scope, action_name, None)
+        if seed_config and not seed_per_record
+        else {}
+    )
+    source_index = _build_source_index(source_data) if resolve_source else {}
     resolved_observe, qualify_wildcards = (
         _resolve_observe_refs_for_flat_keys(observe_refs, action_name)
         if observe_refs
@@ -767,7 +761,7 @@ def apply_context_scope_for_records(
         # Build field_context with source namespace resolved
         field_context = dict(content)
         source_content: dict | None = None
-        if has_source_refs:
+        if resolve_source:
             cache_key = (sguid, psguid)
             if cache_key not in source_cache:
                 source_cache[cache_key] = _resolve_source_content(
@@ -810,15 +804,17 @@ def apply_context_scope_for_records(
             if source_content:
                 field_context["source"] = source_content
 
-        seed: dict[str, Any] = {}
-        if seed_config:
+        seed = shared_seed
+        if seed_per_record:
+            # Staging has checked every row's selecting value against every selected
+            # seed before the run, so a load that still fails here is the action's
+            # configuration, not one record's, and stops it.
+            carried = content.get("source")
             seed = _load_record_seed(
                 cast(dict[str, Any], agent_config),
                 context_scope,
                 action_name,
-                source_content
-                if source_content is not None
-                else _own_or_pooled_source(record, content, source_index, source_data, action_name),
+                source_content or (carried if isinstance(carried, dict) else None),
             )
 
         # Validate observe/passthrough/drop refs against the record's namespaces.
