@@ -105,14 +105,16 @@ def _project(tmp_path: Path, *, with_files: bool) -> Path:
     return root
 
 
-def _prompt_traces(project: Path) -> int:
+def _prompt_traces(project: Path) -> dict[str, int]:
+    """Stored prompt traces per action; an empty dict when no store was created."""
     store = project / "agent_workflow" / "w" / "agent_io" / "store"
     dbs = list(store.glob("*.db")) if store.exists() else []
     if not dbs:
-        return 0
+        return {}
     con = sqlite3.connect(f"file:{dbs[0]}?mode=ro", uri=True)
     try:
-        return con.execute("select count(*) from prompt_trace").fetchone()[0]
+        rows = con.execute("select action_name, count(*) from prompt_trace group by action_name")
+        return dict(rows.fetchall())
     finally:
         con.close()
 
@@ -127,7 +129,7 @@ def test_both_commands_refuse_each_action_naming_a_missing_schema(tmp_path, comm
     assert result.returncode == 1, output
     assert "Action 'classify' names schema 'ms_label', which cannot be loaded" in output, output
     assert "Action 'tag' names schema 'ms_tag', which cannot be loaded" in output, output
-    assert _prompt_traces(project) == 0, output
+    assert _prompt_traces(project) == {}, output
 
 
 def test_the_same_workflow_runs_when_the_schema_files_exist(tmp_path):
@@ -138,4 +140,6 @@ def test_the_same_workflow_runs_when_the_schema_files_exist(tmp_path):
 
     assert inspected.returncode == 0, inspected.stdout + inspected.stderr
     assert ran.returncode == 0, ran.stdout + ran.stderr
-    assert _prompt_traces(project) == 2
+    traces = _prompt_traces(project)
+    assert traces["summarize"] == len(PAGES)
+    assert traces["classify"] == len(PAGES)
