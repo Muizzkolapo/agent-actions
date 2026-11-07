@@ -157,7 +157,7 @@ def deduplicate_records(data: list[dict]) -> list[dict]:
     return result
 ```
 
-A key is the bare field name when nothing else observed could carry the same name. Where it could, as when the tool observes several actions by wildcard or merges versions, the key is `action_name.field`: `item["evaluate_1.verdict"]`.
+A field named in `observe` is under its bare name. A key is `action_name.field` only where two observed names really collide: two named fields with one name, a wildcard field with the same name as a named field, or several actions observed by wildcard (`item["evaluate_1.verdict"]`).
 
 Return rules:
 - Returning input items (filter/enrich): `list[dict]` — TrackedItem provenance automatic

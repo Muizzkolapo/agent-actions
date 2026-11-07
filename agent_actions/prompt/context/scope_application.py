@@ -592,7 +592,10 @@ def plan_flat_observed_keys(
     where that name is free.
     """
     declared_reserved = {ns for ns, _, _ in resolved_observe} | RUNTIME_BUS_NAMESPACES
-    named_key_owner = {key: ns for ns, field, key in resolved_observe if field != "*"}
+    named_field_owners: dict[str, set[str]] = {}
+    for ns, field, _ in resolved_observe:
+        if field != "*":
+            named_field_owners.setdefault(field, set()).add(ns)
 
     flat: dict[str, Any] = {}
     announced: set[str] = set()
@@ -604,7 +607,7 @@ def plan_flat_observed_keys(
             if key in declared_reserved:
                 key = qualified
                 announced.add(key)
-            elif from_wildcard and named_key_owner.get(key, ns) != ns:
+            elif from_wildcard and named_field_owners.get(field, set()) - {ns}:
                 key = qualified
                 announced.add(key)
             elif key in reserved_names:
