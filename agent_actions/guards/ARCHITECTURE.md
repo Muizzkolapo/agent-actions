@@ -178,7 +178,7 @@ Unsupported behaviors (`write_to`, `reprocess`) are recognized during config loa
 │    expander_action_types.py :: process_guard_config()         │
 │                                                              │
 │    Converts GuardConfig into agent dict keys:                │
-│      SQL  → agent["guard"] = {clause, scope, behavior}       │
+│      SQL  → agent["guard"] = {clause, behavior, ...}         │
 │      UDF  → agent["conditional_clause"] = "func_name"        │
 │                                                              │
 │    Enforces: UDF cannot use FILTER behavior                  │
@@ -385,7 +385,6 @@ Two consequences worth stating:
 | `processing/task_preparer.py` | `TaskPreparer.prepare()` — evaluates guard per-record before LLM call |
 | `workflow/executor.py` | `_compute_action_config_hash()` — includes guard clause + behavior in config hash |
 | `workflow/coordinator.py` | `validate_guard_conditions()` — pre-flight AST parse and semantic checks |
-| `workflow/managers/skip.py` | Action-scope guard evaluation (scope: action, not item) |
 | `config/types.py` | `GuardConfig` TypedDict — `passthrough_on_error`, `passthrough_on_empty` config shape |
 
 ### Re-export Shims (backward compatibility)

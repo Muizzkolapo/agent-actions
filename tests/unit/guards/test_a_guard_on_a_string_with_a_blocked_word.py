@@ -4,7 +4,6 @@ import pytest
 
 from agent_actions.errors import ValidationError
 from agent_actions.guards.guard_parser import GuardParser, GuardType
-from agent_actions.output.response.config_schema import WhereClauseConfig
 from agent_actions.utils.constants import contains_dangerous_pattern
 
 
@@ -38,15 +37,6 @@ def test_a_guard_comparing_to_a_string_with_a_blocked_word_parses(clause):
 def test_a_blocked_word_outside_a_string_is_still_refused(clause, word):
     with pytest.raises(ValidationError, match=f"dangerous pattern: {word}"):
         GuardParser.parse(clause)
-
-
-def test_a_where_clause_comparing_to_a_string_with_a_blocked_word_is_accepted():
-    assert WhereClauseConfig(clause="status = 'open'").clause == "status = 'open'"
-
-
-def test_a_where_clause_calling_a_blocked_word_is_still_refused():
-    with pytest.raises(ValidationError, match="dangerous operation: open"):
-        WhereClauseConfig(clause="open('x')")
 
 
 @pytest.mark.parametrize(

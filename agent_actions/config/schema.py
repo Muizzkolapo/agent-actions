@@ -93,14 +93,18 @@ _FILE_GRANULARITY_REPLACES_REDUCE_KEY = (
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "constraints": "write the instruction into the action's prompt",
+    "enable_caching": "Anthropic prompt caching is enable_prompt_caching",
     "ephemeral": "",
     "idempotency_key": "",
     "interceptors": "",
+    "max_execution_time": "",
     "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
     "policy": "",
     "reduce_key": _FILE_GRANULARITY_REPLACES_REDUCE_KEY,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
     "version_mode": _VERSION_ORDER_HINT,
+    "where_clause": "filter records with a guard: condition plus on_false: filter",
 }
 
 
@@ -599,22 +603,14 @@ class ActionConfig(_RetryValidators):
         default=None, ge=-2.0, le=2.0, description="Presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
-    constraints: Any | None = Field(default=None, description="Generation constraints")
 
     # --- Runtime-consumed keys (from AgentConfig) ---
-    where_clause: dict[str, Any] | None = Field(
-        default=None, description="WHERE clause configuration for filtering"
-    )
     anthropic_version: str | None = Field(
         default=None, description="API version header for Anthropic requests"
     )
     enable_prompt_caching: bool | None = Field(
         default=None, description="Enable Anthropic prompt caching"
     )
-    max_execution_time: int | None = Field(
-        default=None, description="Maximum execution time in seconds"
-    )
-    enable_caching: bool | None = Field(default=None, description="Enable caching for performance")
 
     # --- Limit controls ---
     record_limit: int | None = Field(
@@ -730,7 +726,6 @@ class DefaultsConfig(_RetryValidators):
         default=None, ge=-2.0, le=2.0, description="Default presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
-    constraints: Any | None = Field(default=None, description="Default constraints")
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
     expect: ExpectConfig | None = Field(
         default=None,
@@ -747,19 +742,12 @@ class DefaultsConfig(_RetryValidators):
     chunk_overlap: int | None = Field(default=None, ge=0, description="Default chunk overlap")
 
     # --- Read out of defaults by field inheritance ---
-    where_clause: dict[str, Any] | None = Field(
-        default=None, description="Default WHERE clause configuration for filtering"
-    )
     anthropic_version: str | None = Field(
         default=None, description="Default API version header for Anthropic requests"
     )
     enable_prompt_caching: bool | None = Field(
         default=None, description="Default Anthropic prompt caching setting"
     )
-    max_execution_time: int | None = Field(
-        default=None, description="Default maximum execution time in seconds"
-    )
-    enable_caching: bool | None = Field(default=None, description="Default caching setting")
     tokenizer_model: str | None = Field(default=None, description="Default tokenizer model")
     split_method: str | None = Field(default=None, description="Default chunk split method")
 

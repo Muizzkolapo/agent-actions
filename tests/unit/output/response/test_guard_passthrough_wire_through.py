@@ -26,11 +26,24 @@ def test_expander_defaults_passthrough_on_error_true():
     assert agent["guard"]["passthrough_on_error"] is True
 
 
+def test_expander_writes_no_scope_key_for_a_dict_guard():
+    agent: dict = {}
+    process_guard_config(
+        agent, {"name": "a", "guard": {"condition": "x > 0", "on_false": "filter"}}
+    )
+    assert "scope" not in agent["guard"]
+
+
+def test_expander_writes_no_scope_key_for_a_string_guard():
+    agent: dict = {}
+    process_guard_config(agent, {"name": "a", "guard": "x > 0"})
+    assert agent["guard"] == {"clause": "x > 0"}
+
+
 def test_evaluator_applies_behavior_when_passthrough_on_error_false():
     evaluator = GuardEvaluator()
     guard = {
         "clause": "x > 0",
-        "scope": "item",
         "behavior": "filter",
         "passthrough_on_error": False,
     }
@@ -43,7 +56,7 @@ def test_evaluator_applies_behavior_when_passthrough_on_error_false():
 
 def test_evaluator_passes_record_when_passthrough_on_error_true():
     evaluator = GuardEvaluator()
-    guard = {"clause": "x > 0", "scope": "item", "behavior": "filter", "passthrough_on_error": True}
+    guard = {"clause": "x > 0", "behavior": "filter", "passthrough_on_error": True}
     with patch.object(evaluator, "_filter") as mock_filter:
         mock_filter.filter_item.side_effect = TypeError("boom")
         result = evaluator.evaluate({"x": 1}, guard)

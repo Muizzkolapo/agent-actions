@@ -28,7 +28,6 @@ class TestGetDefault:
         assert get_default("is_operational") is True
         assert get_default("run_mode") == RunMode.ONLINE
         assert get_default("output_field") == "raw_response"
-        assert get_default("max_execution_time") == 300
 
     def test_returns_none_for_required_fields(self):
         """Required fields (model_vendor, model_name, api_key) default to None."""
@@ -57,23 +56,23 @@ class TestGetDefault:
 class TestMutableDefaults:
     """Verify that mutable defaults cannot leak state across agents."""
 
-    def test_constraints_default_is_immutable(self):
-        """constraints default must be a tuple so accidental mutation fails fast."""
-        assert isinstance(SIMPLE_CONFIG_FIELDS["constraints"], tuple)
+    def test_no_default_is_a_mutable_container(self):
+        """A list or dict default would be shared by every agent that inherits it."""
+        mutable = [k for k, v in SIMPLE_CONFIG_FIELDS.items() if isinstance(v, list | dict)]
+        assert mutable == []
 
     def test_inherit_deep_copies_list_from_action(self):
         """Lists coming from action config must be independent copies."""
-        shared_list = ["no_pii"]
-        action = {"constraints": shared_list}
+        shared_list = ["END"]
+        action = {"stop": shared_list}
         agent_a: dict = {}
         agent_b: dict = {}
 
         inherit_simple_fields(agent_a, action, {})
         inherit_simple_fields(agent_b, action, {})
 
-        # Mutating one agent's constraints must not affect the other
-        agent_a["constraints"].append("extra")
-        assert "extra" not in agent_b["constraints"]
+        agent_a["stop"].append("extra")
+        assert "extra" not in agent_b["stop"]
         assert "extra" not in shared_list
 
     def test_inherit_deep_copies_dict_from_defaults(self):
@@ -88,13 +87,6 @@ class TestMutableDefaults:
 
         agent_a["retry"]["max_retries"] = 99
         assert agent_b["retry"]["max_retries"] == 3
-
-    def test_inherit_uses_tuple_default_when_no_override(self):
-        """When neither action nor defaults provide constraints, the tuple default is used."""
-        agent: dict = {}
-        inherit_simple_fields(agent, {}, {})
-        # Tuple default — immutable, no cross-agent risk
-        assert agent["constraints"] == ()
 
     def test_inherit_scalar_values_unchanged(self):
         """Scalars (str, int, bool, None) should pass through without copy overhead."""

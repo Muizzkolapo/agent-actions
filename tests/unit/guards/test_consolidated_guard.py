@@ -227,7 +227,6 @@ class TestFormatConverterIntegration:
         )
         assert result.get("guard") is not None
         assert result["guard"]["clause"] == 'questionable != "Low Value"'
-        assert result["guard"]["scope"] == "item"
         assert result["guard"]["behavior"] == "filter"
         assert result.get("conditional_clause") is None
 
@@ -251,7 +250,6 @@ class TestFormatConverterIntegration:
         )
         assert result.get("guard") is not None
         assert result["guard"]["clause"] == 'questionable != "Low Value"'
-        assert result["guard"]["scope"] == "item"
         assert result["guard"]["behavior"] == "skip"
         assert result.get("conditional_clause") is None
 

@@ -57,7 +57,6 @@ class ActionConfigValidationUtilities:
         "add_dispatch",
         "output_field",
         "context_scope",
-        "constraints",
         "kind",
         "impl",
         "intent",

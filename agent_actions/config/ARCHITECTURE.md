@@ -256,7 +256,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 | File | Role |
 |------|------|
 | `schema.py` | `WorkflowConfig` (extra=forbid), `ActionConfig` (extra=forbid), `DefaultsConfig` (extra=forbid), `StorageConfig` (extra=forbid), `RetryConfig`, `ExpectConfig`, `HitlConfig`, `VersionConfig`; cross-validation (duplicates, dangling deps, cycles) |
-| `types.py` | `Granularity`, `RunMode` enums; `ActionConfigDict`, `ActionEntryDict`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict` typed dicts |
+| `types.py` | `Granularity`, `RunMode` enums; `ActionConfigDict`, `ActionEntryDict`, `ContextScopeDict`, `GuardConfigDict`, `HitlConfigDict` typed dicts |
 | `environment.py` | `EnvironmentConfig` (pydantic-settings), API key validation, environment detection helpers |
 
 ### Path Resolution

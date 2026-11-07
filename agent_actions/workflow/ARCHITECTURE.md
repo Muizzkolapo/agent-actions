@@ -659,7 +659,7 @@ Run N: Resume (if recovery submitted)
 5. BatchProcessingService← orchestrates result processing
 6. VersionOutputCorrelator← version/loop input correlation
 7. ActionStateManager    ← .agent_status.json persistence
-8. SkipEvaluator         ← WHERE clause evaluation
+8. SkipEvaluator         ← skip_condition evaluation
 9. BatchLifecycleManager ← polling + processing lifecycle
 10. ActionOutputManager   ← previous output loading
 11. ActionExecutor        ← bundles all above + console
@@ -978,6 +978,6 @@ they never carried.
 | `managers/state.py` | `ActionStateManager` — status persistence, status sets |
 | `managers/batch.py` | `BatchLifecycleManager` — polling, result processing |
 | `managers/output.py` | `ActionOutputManager` — previous output, version correlation |
-| `managers/skip.py` | `SkipEvaluator` — WHERE clause, guard |
+| `managers/skip.py` | `SkipEvaluator` — skip_condition |
 | `managers/manifest.py` | `ManifestManager` — .manifest.json for external tools |
 | `parallel/action_executor.py` | `ActionLevelOrchestrator` — topological sort, parallel dispatch |

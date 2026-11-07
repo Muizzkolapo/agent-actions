@@ -39,16 +39,12 @@ SIMPLE_CONFIG_FIELDS = {
     "frequency_penalty": None,  # Default: None (OpenAI and Groq only)
     "presence_penalty": None,  # Default: None (OpenAI and Groq only)
     "stop": None,  # Default: None (no stop sequences)
-    "constraints": (),  # Default: empty tuple (immutable — no cross-agent mutation)
     # Retry configuration (transport-layer failure handling)
     "retry": None,  # Default: None (retry disabled unless configured)
     "request_timeout": None,  # Default: None (each SDK's own per-request timeout)
     # Runtime-consumed fields (providers and managers read these from agent dict)
     "anthropic_version": None,
     "enable_prompt_caching": None,
-    "max_execution_time": 300,
-    "where_clause": None,
-    "enable_caching": True,
     # Chunking defaults (used by expander_merge, initial_pipeline)
     "chunk_size": 300,
     "chunk_overlap": 10,

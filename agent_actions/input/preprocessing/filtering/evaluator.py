@@ -158,7 +158,7 @@ def reclassify_missing_field_error(filter_result: FilterResult, clause: str) -> 
        instead of silently passing.
 
     This is a standalone function so it can be called from any guard
-    evaluation path (GuardEvaluator, GuardStrategy, etc.).
+    evaluation path.
     """
     if (
         filter_result.success
@@ -347,10 +347,6 @@ class GuardEvaluator:
     def _evaluate_guard(self, context: Any, guard_config: dict[str, Any] | None) -> GuardResult:
         """Evaluate guard condition against context data."""
         if not guard_config:
-            return GuardResult.passed()
-
-        scope = guard_config.get("scope", "item")
-        if scope != "item":
             return GuardResult.passed()
 
         clause = guard_config.get("clause")

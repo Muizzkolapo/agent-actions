@@ -6,17 +6,12 @@ from typing import Any
 
 from rich.console import Console
 
-from agent_actions.input.preprocessing.filtering.evaluator import (
-    reclassify_missing_field_error,
-)
 from agent_actions.input.preprocessing.filtering.guard_filter import (
-    ErrorCategory,
     FilterItemRequest,
     get_global_guard_filter,
 )
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ActionSkipEvent
-from agent_actions.output.response.config_fields import get_default
 
 logger = logging.getLogger(__name__)
 
@@ -95,167 +90,13 @@ class SkipConditionStrategy(SkipStrategy):
             return False  # Don't skip on error
 
 
-class GuardStrategy(SkipStrategy):
-    """Strategy for evaluating 'guard' with scope='action'."""
-
-    def get_strategy_name(self) -> str:
-        return "guard"
-
-    def _handle_filter_error(
-        self, agent_name: str, error_msg: str, passthrough_on_error: bool
-    ) -> bool:
-        """Handle filter evaluation errors."""
-        logger.warning(
-            "Guard evaluation error for %s: %s",
-            agent_name,
-            error_msg,
-            extra={"action_name": agent_name, "operation": "guard_evaluation"},
-        )
-
-        if passthrough_on_error:
-            logger.debug(
-                "Action %s proceeding despite error (passthrough_on_error=True)",
-                agent_name,
-                extra={"action_name": agent_name, "passthrough_on_error": True},
-            )
-            return False
-
-        fire_event(
-            ActionSkipEvent(
-                action_name=agent_name, skip_reason="error occurred and passthrough_on_error=False"
-            )
-        )
-        return True
-
-    def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
-        """Evaluate action-level guard condition."""
-        guard_config = agent_config.get("guard")
-
-        if not guard_config or guard_config.get("scope") != "action":
-            return False
-
-        agent_name = agent_config["agent_type"]
-        guard_clause = guard_config["clause"]
-        passthrough_on_error = guard_config.get("passthrough_on_error", True)
-
-        try:
-            filter_service = get_global_guard_filter()
-
-            prev = previous_outputs or {}
-            context_data: dict[str, Any] = {
-                "previous_outputs": prev,
-                "agent_type": agent_config.get("agent_type"),
-                "dependencies": agent_config.get("dependencies", []),
-                "agent_config": {k: v for k, v in agent_config.items() if k != "guard"},
-            }
-            # Flatten action outputs to top-level so guards can use dot notation
-            # e.g., assess_severity.severity != "low"
-            for action_name, action_output in prev.items():
-                # Skip internal metadata keys (e.g., "classify_meta")
-                if action_name.endswith("_meta"):
-                    continue
-                if action_name in context_data:
-                    logger.debug(
-                        "Action '%s' collides with reserved context key — "
-                        "use previous_outputs.%s in guard conditions",
-                        action_name,
-                        action_name,
-                    )
-                    continue
-                # Unwrap single-item lists (common output_field pattern)
-                if isinstance(action_output, list) and len(action_output) == 1:
-                    context_data[action_name] = action_output[0]
-                else:
-                    context_data[action_name] = action_output
-
-            # Promote output_field values to top-level (best-effort heuristic).
-            # When a flattened action is a single-key dict, promote that key so
-            # guards can write `severity != "low"` instead of `assess_severity.severity`.
-            for key in list(context_data.keys()):
-                val = context_data[key]
-                if isinstance(val, dict) and len(val) == 1:
-                    field_name, field_value = next(iter(val.items()))
-                    if field_name not in context_data:
-                        context_data[field_name] = field_value
-
-            logger.debug(
-                "Evaluating action-level guard for %s",
-                agent_name,
-                extra={
-                    "action_name": agent_name,
-                    "guard": guard_clause,
-                    "operation": "guard_evaluation",
-                },
-            )
-
-            filter_result = filter_service.filter_item(
-                FilterItemRequest(
-                    data=context_data,
-                    condition=guard_clause,
-                    timeout=agent_config.get(
-                        "max_execution_time", get_default("max_execution_time")
-                    ),
-                )
-            )
-
-            # Reclassify missing-field DATA errors so they apply guard
-            # behavior instead of silently passing via passthrough_on_error.
-            filter_result = reclassify_missing_field_error(filter_result, guard_clause)
-
-            if not filter_result.success:
-                # SEMANTIC errors (e.g. flat field reference in namespaced
-                # content) always skip — unlike GuardResult.from_filter_result
-                # which dispatches on behavior (skip/filter/warn), action-level
-                # guards only have a binary outcome (skip or don't skip).
-                if filter_result.error_category == ErrorCategory.SEMANTIC:
-                    fire_event(
-                        ActionSkipEvent(
-                            action_name=agent_name,
-                            skip_reason=f"guard semantic error: {filter_result.error}",
-                        )
-                    )
-                    return True
-                error_msg = filter_result.error or "Unknown filter error"
-                return self._handle_filter_error(agent_name, error_msg, passthrough_on_error)
-
-            # Handle filter result
-            if not filter_result.matched:
-                fire_event(
-                    ActionSkipEvent(action_name=agent_name, skip_reason="guard condition not met")
-                )
-                logger.debug(
-                    "Guard details: %s",
-                    guard_clause,
-                    extra={
-                        "action_name": agent_name,
-                        "guard": guard_clause,
-                        # Names only: context_data holds every upstream record
-                        # body, and this is persisted to events.json — the file
-                        # users attach to bug reports. The guard clause names
-                        # the fields that matter; the bodies are already in the
-                        # store if they are needed.
-                        "context_keys": sorted(context_data),
-                        "operation": "guard_evaluation",
-                    },
-                )
-                return True
-
-            return False
-
-        except (ValueError, KeyError, TypeError, AttributeError) as e:
-            return self._handle_filter_error(agent_name, str(e), passthrough_on_error)
-
-
 class SkipEvaluator:
     """Orchestrates skip condition evaluation in precedence order."""
 
     def __init__(self, console: Console | None = None):
         """Initialize skip evaluator with strategies."""
         self.console = console or Console()
-        self.strategies = [
-            SkipConditionStrategy(self.console),
-            GuardStrategy(self.console),
-        ]
+        self.strategies = [SkipConditionStrategy(self.console)]
 
     def __repr__(self):
         return f"SkipEvaluator(strategies={len(self.strategies)})"

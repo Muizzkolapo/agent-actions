@@ -407,7 +407,7 @@ ResponseBuilder (static methods):
 | File | Role |
 |------|------|
 | `response/config_fields.py` | SIMPLE_CONFIG_FIELDS registry, get_default(), inherit_simple_fields() |
-| `response/config_schema.py` | Pydantic models: AgentConfig, DefaultAgentConfig, WhereClauseConfig |
+| `response/config_schema.py` | Pydantic models: AgentConfig, DefaultAgentConfig, SkipConditionConfig |
 
 ### Response handling
 | File | Role |
