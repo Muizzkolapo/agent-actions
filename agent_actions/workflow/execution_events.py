@@ -111,6 +111,9 @@ class WorkflowEventLogger:
         logger.debug(separator)
 
         mode = "async" if is_async else "sequential"
+        # The workflow line reports this run's failed checks, not an earlier run's
+        # in the same process.
+        self.services.core.action_executor.records_failed_checks = 0
 
         fire_event(
             WorkflowStartEvent(
@@ -165,6 +168,7 @@ class WorkflowEventLogger:
             metrics = getattr(params.result, "metrics", None)
             record_count = metrics.record_count if metrics is not None else 0
             guard_skipped = metrics.guard_skipped if metrics is not None else 0
+            checks_failed = metrics.checks_failed if metrics is not None else 0
             config = params.action_config or {}
             fire_event(
                 ActionCompleteEvent(
@@ -175,6 +179,7 @@ class WorkflowEventLogger:
                     output_path=params.result.output_folder or "",
                     record_count=record_count,
                     guard_skipped=guard_skipped,
+                    checks_failed=checks_failed,
                     tokens=tokens,
                     mode=params.run_mode,
                     model_vendor=config.get("model_vendor") or "",
@@ -223,6 +228,7 @@ class WorkflowEventLogger:
                 actions_skipped=summary.get("skipped", 0),
                 actions_failed=summary.get("failed", 0),
                 empty_final_actions=empty,
+                records_failed_checks=self.services.core.action_executor.records_failed_checks,
             )
         )
 

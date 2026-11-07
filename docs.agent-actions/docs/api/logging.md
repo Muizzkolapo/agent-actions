@@ -417,6 +417,7 @@ fire_event(WorkflowCompleteEvent(
 - `agents_skipped` (int): Number of agents skipped
 - `agents_failed` (int): Number of agents failed
 - `total_tokens` (int): Total tokens used
+- `records_failed_checks` (int): Records the run shipped carrying an expectations verdict whose `overall_pass` is false. The workflow line turns `⚠` and says `N records failed their checks` when it is above zero
 
 ---
 
@@ -547,6 +548,7 @@ fire_event(ActionCompleteEvent(
 - `output_path` (str): Path to output file
 - `record_count` (int): Number of records this execution produced. A run that replaces rows already stored counts them again, so `agac run --rerun` and `agac retry` report what they answered. Records carried forward from an earlier run are not counted. The `✓ <action>  N records` completion line shows the same number.
 - `guard_skipped` (int): Of `record_count`, the records the action's guard skipped this execution, kept as tombstones. The completion line ends `— N skipped by guard` when it is above zero.
+- `checks_failed` (int): The records this execution shipped carrying an expectations verdict whose `overall_pass` is false (`on_exhausted: return_last`, `repair: none`). They are stored as successes; the completion line turns `⚠` and says `N failed their checks` when it is above zero.
 - `tokens` (Dict[str, int]): Token usage breakdown
 - `mode` (str): `"online"` or `"batch"`
 - `model_vendor` / `model_name` (str): The model that ran the action; empty for a tool or HITL action

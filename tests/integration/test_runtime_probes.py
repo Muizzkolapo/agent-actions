@@ -234,5 +234,57 @@ class TestHonestyProbe:
         assert shown.returncode == 0, shown.stdout + shown.stderr
 
         cells = _summary_cells(shown.stdout, "repaired")
-        assert (cells["Success"], cells["Guard skipped"], cells["Unprocessed"]) == ("3", "1", "0")
-        assert (cells["Total"], cells["Records"]) == ("4", "4")
+        assert (cells["Failed checks"], cells["Guard skipped"], cells["Unprocessed"]) == (
+            "3",
+            "1",
+            "0",
+        )
+        assert (cells["Success"], cells["Total"], cells["Records"]) == ("0", "4", "4")
+
+    def test_honesty_probe_reports_failed_checks(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        flat = r.flat
+        assert "⚠ observed 4 records in" in flat
+        assert "— 4 failed their checks" in flat
+        assert "⚠ repaired 4 records in" in flat
+        assert "— 1 skipped by guard, 3 failed their checks" in flat
+        warned = re.findall(r"[✓⚠] warned 4 records in [^✓⚠]*", flat)
+        assert warned and warned[0].startswith("✓") and "failed" not in warned[0]
+        assert re.search(r"⚠ [0-9.]+s — 3 completed, 7 records failed their checks", flat)
+
+    def test_honesty_probe_stores_failed_checks_as_successes(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob("*.db")
+        held = sorted(
+            stored_rows(
+                db,
+                "select action_name, disposition, ifnull(reason, 'NULL'), count(*) "
+                "from record_disposition where record_id != '__node__' group by 1, 2, 3",
+            )
+        )
+        assert held == [
+            ("observed", "success", "expectations_failed", 4),
+            ("repaired", "success", "expectations_failed", 3),
+            ("repaired", "unprocessed", "guard_skip", 1),
+            ("warned", "success", "NULL", 4),
+        ]
+
+        shown = run_agac(r.project, "dispositions", "-a", "honesty_probe", env={"COLUMNS": "200"})
+        observed = _summary_cells(shown.stdout, "observed")
+        warned = _summary_cells(shown.stdout, "warned")
+        assert (observed["Success"], observed["Failed checks"]) == ("0", "4")
+        assert (warned["Success"], warned["Failed checks"]) == ("4", "0")
+
+    def test_retry_finds_nothing_to_rerun_in_records_that_only_failed_their_checks(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        dry = run_agac(r.project, "retry", "-a", "honesty_probe", "--dry-run")
+        listed = dry.stdout + dry.stderr
+
+        assert "observed" not in listed
+        assert "repaired" not in listed

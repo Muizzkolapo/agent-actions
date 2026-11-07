@@ -52,6 +52,10 @@ EMPTY_OUTPUT = "empty_output"
 # -- Exhaustion --------------------------------------------------------------
 RETRY_EXHAUSTED = "retry_exhausted"
 EXPECTATIONS_EXHAUSTED = "expectations_exhausted"
+# On a ``success`` row: the record shipped carrying a verdict whose overall_pass is
+# false, as ``on_exhausted: return_last`` and ``repair: none`` ship it. Still a success:
+# it is not cascade-blocked, retried, or counted as a failure.
+EXPECTATIONS_FAILED = "expectations_failed"
 
 # -- Disposition fallbacks ---------------------------------------------------
 UNPROCESSED = "unprocessed"

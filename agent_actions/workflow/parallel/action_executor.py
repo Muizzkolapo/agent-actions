@@ -306,6 +306,7 @@ class ActionLevelOrchestrator:
                     output_path=result.output_folder or "",
                     record_count=metrics.record_count,
                     guard_skipped=metrics.guard_skipped,
+                    checks_failed=metrics.checks_failed,
                     tokens=tokens,
                     mode=run_mode,
                     model_vendor=config.get("model_vendor") or "",

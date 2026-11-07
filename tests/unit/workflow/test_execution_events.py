@@ -35,6 +35,7 @@ def mock_services():
     """Build WorkflowServices with mock core/support."""
     core = MagicMock(spec=CoreServices)
     core.state_manager = MagicMock()
+    core.action_executor = MagicMock(records_failed_checks=0)
     support = MagicMock(spec=SupportServices)
     support.manifest_manager = MagicMock()
     return WorkflowServices(core=core, support=support)

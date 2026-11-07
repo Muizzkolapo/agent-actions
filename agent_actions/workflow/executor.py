@@ -346,6 +346,9 @@ class ExecutionMetrics:
     # Of record_count, the rows the action's guard skipped this execution: they
     # are stored as tombstones and counted as rows like any other.
     guard_skipped: int = 0
+    # Records this execution shipped carrying a verdict whose overall_pass is false
+    # (on_exhausted: return_last, repair: none). Stored as successes.
+    checks_failed: int = 0
 
 
 @dataclass
@@ -501,6 +504,9 @@ class ActionExecutor:
         """Initialize action executor."""
         self.deps = deps
         self.console = console or Console()
+        # Records shipped with a failing verdict by every execution of this run, for
+        # the workflow line.
+        self.records_failed_checks = 0
         self.run_tracker: Any | None = None
         self.run_id: str | None = None
 
@@ -1296,6 +1302,8 @@ class ActionExecutor:
 
         record_count = self._count_after_the_run(params.action_name, duration, pre_run_count)
         guard_skipped = self._guard_skips_this_run(params.action_name)
+        checks_failed = self._checks_failed_this_run(params.action_name)
+        self.records_failed_checks += checks_failed
 
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
@@ -1312,7 +1320,10 @@ class ActionExecutor:
                 output_folder=output_folder,
                 status=final_status,
                 metrics=ExecutionMetrics(
-                    duration=duration, record_count=record_count, guard_skipped=guard_skipped
+                    duration=duration,
+                    record_count=record_count,
+                    guard_skipped=guard_skipped,
+                    checks_failed=checks_failed,
                 ),
             )
 
@@ -1337,6 +1348,7 @@ class ActionExecutor:
                 files_processed=0,
                 record_count=record_count,
                 guard_skipped=guard_skipped,
+                checks_failed=checks_failed,
             ),
         )
 
@@ -1369,6 +1381,17 @@ class ActionExecutor:
                 f"Cannot count guard skips for {action_name!r}: no storage backend on action_runner"
             )
         taken: int = storage_backend.take_guard_skips(action_name)
+        return taken
+
+    def _checks_failed_this_run(self, action_name: str) -> int:
+        """Take the backend's failed-checks tally for *action_name*, as for guard skips."""
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if storage_backend is None:
+            raise RuntimeError(
+                f"Cannot count failed checks for {action_name!r}: "
+                "no storage backend on action_runner"
+            )
+        taken: int = storage_backend.take_checks_failed(action_name)
         return taken
 
     def _records_written_this_run(self, action_name: str, pre_run_count: int) -> int:
@@ -2239,6 +2262,7 @@ class ActionExecutor:
             count = self._count_records_for_action(action_name)
             # Drop what an earlier execution left: what this check collects is counted.
             self._guard_skips_this_run(action_name)
+            self._checks_failed_this_run(action_name)
             return count
         except Exception as error:
             params = ActionRunParams(
@@ -2337,6 +2361,8 @@ class ActionExecutor:
 
             record_count = self._count_after_the_run(action_name, wall_clock, pre_run_count)
             guard_skipped = self._guard_skips_this_run(action_name)
+            checks_failed = self._checks_failed_this_run(action_name)
+            self.records_failed_checks += checks_failed
             self.deps.state_manager.update_status(
                 action_name,
                 final_status,
@@ -2353,7 +2379,10 @@ class ActionExecutor:
                 output_folder=output_folder,
                 status=final_status,
                 metrics=ExecutionMetrics(
-                    duration=wall_clock, record_count=record_count, guard_skipped=guard_skipped
+                    duration=wall_clock,
+                    record_count=record_count,
+                    guard_skipped=guard_skipped,
+                    checks_failed=checks_failed,
                 ),
             )
 
@@ -2459,7 +2488,9 @@ class ActionExecutor:
         except Exception as error:
             self._record_store_failure(params.action_name, _elapsed(params), error)
             raise
-        self._guard_skips_this_run(params.action_name)  # drop what an earlier execution left
+        # Drop what an earlier execution left: what this one collects is counted.
+        self._guard_skips_this_run(params.action_name)
+        self._checks_failed_this_run(params.action_name)
         return count
 
     def _count_after_the_run(self, action_name: str, duration: float, pre_run_count: int) -> int:
