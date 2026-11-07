@@ -930,16 +930,17 @@ class FakeDataGenerator:
             pos += len(" or ")
 
     @classmethod
-    def generate_offered_answer(
-        cls, shapes: list[dict[str, Any]], prompt: str, attempt: int = 1
-    ) -> str:
-        """One of the offered shapes, chosen by the seeded RNG, each string a generated sentence."""
-        seed = int(hashlib.md5(f"{prompt}:{attempt}".encode()).hexdigest()[:8], 16)
+    def generate_offered_answer(cls, shapes: list[dict[str, Any]], prompt: str) -> str:
+        """One of the offered shapes, chosen by an RNG seeded by *prompt* alone.
+
+        Each string value becomes a generated sentence. One prompt always gets one answer.
+        """
+        seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
         cls.set_context(seed=seed, prompt=prompt)
         rng = cls._get_rng()
         shape = rng.choice(shapes)
         answer = {
-            key: cls._generate_sentence(attempt, rng) if isinstance(value, str) else value
+            key: cls._generate_sentence(1, rng) if isinstance(value, str) else value
             for key, value in shape.items()
         }
         return json.dumps(answer)

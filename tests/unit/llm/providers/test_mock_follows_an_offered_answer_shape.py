@@ -89,6 +89,8 @@ def test_a_prompt_ending_in_one_rendered_record_gets_prose():
         '{"a": 1} or',
         '[{"a": 1}]',
         'Reply with {"a": 1}',
+        'Reply with {"a": 1} or {"b": 2}',
+        '{"a": 1} or {"b": 2} please',
     ],
 )
 def test_a_last_line_that_is_not_only_offered_objects_gets_prose(last_line):
@@ -104,3 +106,29 @@ def test_a_judge_on_the_mock_returns_a_verdict_not_a_parse_failure():
     assert isinstance(passed, bool)
     assert reason.strip()
     assert "not a verdict object" not in reason
+
+
+def _verdict(value: str) -> bool:
+    passed, _ = invoke_judge(
+        {"model_vendor": "agac-provider", "model_name": "mock", "name": "act"}, "rule", value
+    )
+    return passed
+
+
+def test_a_verdict_does_not_depend_on_the_judge_calls_before_it():
+    first = _verdict("target")
+    for i in range(7):
+        _verdict(f"other {i}")
+
+    assert _verdict("target") == first
+    assert {_verdict("target") for _ in range(6)} == {first}
+
+
+def test_the_order_of_values_does_not_change_their_verdicts():
+    values = [f"value {i}" for i in range(8)]
+    forward = {v: _verdict(v) for v in values}
+    AgacClient.reset()
+    backward = {v: _verdict(v) for v in reversed(values)}
+
+    assert forward == backward
+    assert set(forward.values()) == {True, False}
