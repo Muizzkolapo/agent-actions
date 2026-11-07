@@ -224,7 +224,7 @@ class TestInitialPipelineGuardSkipAndToolAction:
             patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats())
+            MockProc.return_value.process.return_value = ([], CollectionStats(filtered=1))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
 

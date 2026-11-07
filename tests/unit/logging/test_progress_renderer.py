@@ -645,3 +645,84 @@ class TestGuardSkipsAreNamed:
         out = TestAPlainStream._capture(renderer, self._repaired(2))
 
         assert "OK repaired  4 records in 0.1s (agac-provider/mock) — 2 skipped by guard" in out
+
+
+class TestFailedChecksAreNamed:
+    """A record shipped with a failing verdict is a success; the line says it did not pass."""
+
+    @staticmethod
+    def _action(name, *, guard_skipped=0, checks_failed=0):
+        return ActionCompleteEvent(
+            action_name=name,
+            action_index=0,
+            total_actions=3,
+            execution_time=0.1,
+            record_count=4,
+            model_vendor="agac-provider",
+            model_name="mock",
+            kind="llm",
+            guard_skipped=guard_skipped,
+            checks_failed=checks_failed,
+        )
+
+    @staticmethod
+    def _workflow(*, failed=0, records_failed_checks=0):
+        return WorkflowCompleteEvent(
+            workflow_name="honesty_probe",
+            elapsed_time=0.1,
+            actions_completed=3,
+            actions_failed=failed,
+            records_failed_checks=records_failed_checks,
+        )
+
+    def test_failed_checks_turn_the_icon_and_name_the_count(self, rendered):
+        out = rendered(
+            self._action("observed", checks_failed=4),
+            self._action("repaired", guard_skipped=1, checks_failed=3),
+            self._action("warned"),
+            self._workflow(records_failed_checks=7),
+        )
+
+        assert "  ⚠ observed  4 records in 0.1s (agac-provider/mock) — 4 failed their checks" in out
+        assert (
+            "  ⚠ repaired  4 records in 0.1s (agac-provider/mock) — 1 skipped by guard, "
+            "3 failed their checks"
+        ) in out
+        assert "  ✓ warned  4 records in 0.1s (agac-provider/mock)\n" in out
+        assert "⚠ 0.1s — 3 completed, 7 records failed their checks" in out
+
+    def test_one_failure_is_singular(self, rendered):
+        out = rendered(self._action("a", checks_failed=1), self._workflow(records_failed_checks=1))
+
+        assert "— 1 failed its checks" in out
+        assert "— 3 completed, 1 record failed its checks" in out
+
+    def test_a_failed_action_keeps_the_failed_icon(self, rendered):
+        out = rendered(self._workflow(failed=1, records_failed_checks=2))
+
+        assert "✗ 0.1s — 3 completed, 1 failed, 2 records failed their checks" in out
+
+    def test_a_run_with_no_failed_checks_is_unchanged(self, rendered):
+        out = rendered(self._action("warned"), self._workflow())
+
+        assert "✓ 0.1s — 3 completed" in out
+        assert "failed" not in out
+        assert "⚠" not in out
+
+    def test_a_plain_stream_says_warn(self):
+        renderer = TestAPlainStream._plain()
+
+        out = TestAPlainStream._capture(
+            renderer,
+            self._action("observed", checks_failed=4),
+            self._workflow(records_failed_checks=4),
+        )
+
+        assert (
+            "WARN observed  4 records in 0.1s (agac-provider/mock) — 4 failed their checks" in out
+        )
+        assert "WARN 0.1s — 3 completed, 4 records failed their checks" in out
+
+    def test_the_events_carry_the_counts(self):
+        assert self._action("a", checks_failed=2).data["checks_failed"] == 2
+        assert self._workflow(records_failed_checks=5).data["records_failed_checks"] == 5

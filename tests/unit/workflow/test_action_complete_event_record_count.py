@@ -46,6 +46,8 @@ def _make_executor_with_backend(rows_collected=0, has_backend=True):
     if has_backend:
         backend = MagicMock()
         backend.rows_collected.return_value = rows_collected
+        backend.take_guard_skips.return_value = 0
+        backend.take_checks_failed.return_value = 0
         deps.action_runner.storage_backend = backend
     else:
         del deps.action_runner.storage_backend
