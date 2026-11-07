@@ -149,7 +149,7 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
 | | Record-level | File-level |
 |---|---|---|
 | Input | Single `dict` with namespaced upstream data | `list[dict]` — each item holds the observed fields as flat keys |
-| Read fields | `data["action_name"]["field"]` | `record["field"]`, or `record["action_name.field"]` where two observed names could collide |
+| Read fields | `data["action_name"]["field"]` | `record["field"]`; a named field is always bare, and only a real collision gives a key `record["action_name.field"]` |
 | Passthrough | Return modified dict | Return the item you received |
 | New records | N/A | Return `FileUDFResult` with `source_index: None` |
 

@@ -130,7 +130,7 @@ File granularity is exclusively supported for tool actions. LLM actions must use
 ### File Granularity Constraints
 
 - **Input is an array with one item per record** — each item holds the fields the action observes as flat keys
-- **Read business data from `record["field"]`** — or `record["action_name.field"]` where two observed names could collide, as when the tool observes several actions by wildcard or merges versions. There is no `content` and no action name around the fields
+- **Read business data from `record["field"]`** — a field you name in `observe` is always under its bare name. A key is `action_name.field` only where two observed names really collide: two named fields with the same name, a field named for an observed namespace, a wildcard field with the same name as a named field (the named one keeps the bare key), or several actions observed by wildcard. There is no `content` and no action name around the fields
 - **Return the item you received for passthrough** (filter, dedup, sort, transform) — preserves its identity and lineage
 - **Return `FileUDFResult` with `source_index: None` for aggregation** — says no single input produced the row; the framework mints it an identity and fresh lineage. A plain new dict in a list is rejected
 - **A position is a non-negative built-in `int`** — `source_index` takes one position, a list of them for a many-to-one output, or `None`. A negative, a bool, or a `None` inside the list is refused, and a numpy or pandas index is not an `int` — cast it with `int(idx)`. Use `None` to mean no single input produced the row, never an empty list

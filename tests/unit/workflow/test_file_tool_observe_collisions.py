@@ -78,13 +78,13 @@ class TestNonCollidingStayBare:
                 {"q": "Q1", "a": "A1"},
                 id="single_wildcard_namespace_bare",
             ),
-            # Whether `extract.*` expands onto `category` is a property of the data, so
-            # the only key shape stable across runs qualifies the explicit ref.
+            # The named ref owns its bare key whatever `extract.*` expands onto; a
+            # wildcard field of that name would arrive as `extract.category`.
             pytest.param(
                 {"extract": {"q": "Q1"}, "classify": {"category": "FAQ", "x": 1}},
                 ["extract.*", "classify.category"],
-                {"q": "Q1", "classify.category": "FAQ"},
-                id="explicit_ref_beside_wildcard_qualified",
+                {"q": "Q1", "category": "FAQ"},
+                id="named_ref_beside_wildcard_stays_bare",
             ),
         ],
     )

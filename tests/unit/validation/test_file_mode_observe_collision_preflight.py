@@ -107,9 +107,9 @@ class TestWildcardExpansionCollision:
         assert len(warnings) == 1
         assert "code" in warnings[0].message
 
-    def test_explicit_ref_beside_a_wildcard_is_reported(self):
-        """Even with disjoint schemas today, `gen_a.*` could grow a `score`, so
-        the key is qualified up front and preflight says so."""
+    def test_a_named_ref_beside_a_wildcard_on_a_disjoint_schema_is_not_reported(self):
+        """The named `gen_b.score` keeps its bare key; `gen_a.*` holds no `score`,
+        so nothing is qualified and nothing is reported."""
         workflow = {
             "actions": [
                 _llm("gen_a", ["code", "notes"]),
@@ -118,10 +118,7 @@ class TestWildcardExpansionCollision:
             ]
         }
 
-        warnings = _collision_warnings(workflow)
-
-        assert len(warnings) == 1
-        assert "gen_b.score" in warnings[0].message
+        assert _collision_warnings(workflow) == []
 
 
 class TestNamespaceShadowing:
@@ -267,11 +264,7 @@ class TestSchemalessNamespaces:
             ]
         }
 
-        warnings = _collision_warnings(workflow)
-
-        assert len(warnings) == 1
-        assert "gen_b.content" in warnings[0].message
-        assert "gen_a." not in warnings[0].message
+        assert _collision_warnings(workflow) == []
 
     def test_wildcard_shape_excludes_schemaless_fields_directly(self):
         """Direct unit test on the shape builder, isolated from the

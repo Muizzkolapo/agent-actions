@@ -287,8 +287,8 @@ class TestApplyContextScopeForRecords:
         result, _ = apply_context_scope_for_records(
             records=data, context_scope=context_scope, action_name="review"
         )
-        # "question" is qualified: the wildcard on "rewrite" could expand onto it.
-        assert result[0]["content"]["generate.question"] == "Q?"
+        # The named field keeps its bare key; the wildcard elsewhere does not take it.
+        assert result[0]["content"]["question"] == "Q?"
         # rewrite namespace absent — no fields injected
         assert "output" not in result[0]["content"]
 
