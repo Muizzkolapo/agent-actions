@@ -733,6 +733,8 @@ def apply_context_scope_for_records(
     # source cannot be resolved is refused as it would be for an observe of it. A seed
     # picked by no field is the same for every record of the file and is loaded once.
     seed_per_record = _seed_selects_by_source(seed_config)
+    seed_drop_refs = [ref for ref in drop_refs if ref.startswith("seed.")]
+    drop_refs = [ref for ref in drop_refs if not ref.startswith("seed.")]
     resolve_source = has_source_refs or seed_per_record
     needs_source_content = seed_per_record or any(
         ref.startswith("source.") for ref in (*observe_refs, *passthrough_refs)
@@ -866,7 +868,14 @@ def apply_context_scope_for_records(
         if source_content:
             enriched_content["source"] = plain_copy(source_content)
         _apply_drops_to_content(enriched_content, drop_refs, inert_drops_reported)
-        prepared.append((record, enriched_content, plain_copy(seed) if seed else None))
+        # The seed is dropped from too: it rides beside the content, so a drop under
+        # `seed` is applied to the copy the payload reads, never to the loader's value.
+        record_seed: dict | None = None
+        if seed:
+            seeded = {"seed": plain_copy(seed)}
+            _apply_drops_to_content(seeded, seed_drop_refs, inert_drops_reported)
+            record_seed = seeded["seed"]
+        prepared.append((record, enriched_content, record_seed))
 
     # Namespace presence can differ per record; reserving the batch union rather
     # than each record's own subset keeps a given ref qualified the same way on

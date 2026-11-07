@@ -233,24 +233,47 @@ class TestTheSeedStaysOutOfStoredRows:
 
         assert first == second == {"rules": RULES}
 
-    def test_a_drop_under_seed_does_not_reach_the_next_record_or_the_loader(self, tmp_path):
+    def test_a_drop_under_seed_reaches_the_payload_and_not_the_loader(self, tmp_path):
+        dropping = {
+            "observe": ["seed.rules"],
+            "drop": ["seed.rules.threshold"],
+            "seed": {"rules": "$file:rules.json"},
+        }
+        plain = {"observe": ["seed.rules"], "seed": {"rules": "$file:rules.json"}}
+        agent_config = _project(tmp_path, {"rules.json": {"threshold": 7, "name": "r"}})
+
+        first, second = _payloads(
+            [{"source_guid": "g1", "content": {}}, {"source_guid": "g2", "content": {}}],
+            dropping,
+            agent_config,
+        )
+        (undropped,) = _payloads([{"source_guid": "g3", "content": {}}], plain, agent_config)
+
+        assert first == second == {"rules": {"name": "r"}}
+        assert undropped == {"rules": {"threshold": 7, "name": "r"}}
+
+    def test_a_drop_under_seed_is_not_reported_as_inert(self, tmp_path):
+        """The seed namespace is not in the content; a drop under it is applied to the
+        seed, so the inert-drop warning must not fire for it."""
+        import logging
+
         scope = {
             "observe": ["seed.rules"],
             "drop": ["seed.rules.threshold"],
             "seed": {"rules": "$file:rules.json"},
         }
         agent_config = _project(tmp_path, {"rules.json": {"threshold": 7, "name": "r"}})
+        logger = logging.getLogger("agent_actions.prompt.context.scope_application")
+        seen: list[str] = []
+        handler = logging.Handler()
+        handler.emit = lambda record: seen.append(record.getMessage())  # type: ignore[method-assign]
+        logger.addHandler(handler)
+        try:
+            _payloads([{"source_guid": "g1", "content": {}}], scope, agent_config)
+        finally:
+            logger.removeHandler(handler)
 
-        first, second = _payloads(
-            [{"source_guid": "g1", "content": {}}, {"source_guid": "g2", "content": {}}],
-            scope,
-            agent_config,
-        )
-
-        assert first == second
-        assert first["rules"]["name"] == "r"
-        (again,) = _payloads([{"source_guid": "g3", "content": {}}], scope, agent_config)
-        assert again["rules"]["name"] == "r"
+        assert [m for m in seen if "removed nothing" in m] == []
 
 
 class TestASelectedSeedNeedsTheRecordsSource:
