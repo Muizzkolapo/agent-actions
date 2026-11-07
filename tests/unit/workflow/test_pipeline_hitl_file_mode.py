@@ -719,3 +719,57 @@ def test_invalid_ref_does_not_misalign_pairs():
     assert result[0]["content"]["dep_a.title"] == "T"
     assert result[0]["content"]["dep_b.title"] == "T2"
     assert result[0]["content"]["body"] == "B"
+
+
+def test_a_file_hitl_action_is_handed_its_declared_seed(tmp_path):
+    """A FILE HITL action reads the same payload a FILE tool does, seed included."""
+    import json
+
+    project = tmp_path / "project"
+    workflow = project / "agent_workflow" / "wf"
+    (workflow / "agent_config").mkdir(parents=True)
+    (project / "agent_actions.yml").write_text("schema_path: schema\n")
+    config_path = workflow / "agent_config" / "wf.yml"
+    config_path.write_text('version: "0.1.0"\n')
+    (workflow / "seed_data").mkdir()
+    (workflow / "seed_data" / "rules.json").write_text(json.dumps({"threshold": 7}))
+    action_config = {
+        "kind": "hitl",
+        "granularity": "file",
+        "workflow_config_path": str(config_path),
+        "context_scope": {
+            "observe": ["upstream.question", "seed.rules"],
+            "seed": {"rules": "$file:rules.json"},
+        },
+    }
+    original_data = [
+        {"source_guid": "sg-1", "content": {"upstream": {"question": "What is X?"}}},
+    ]
+
+    filtered, skipped = apply_context_scope_for_records(
+        records=original_data,
+        context_scope=action_config["context_scope"],
+        action_name="review_data",
+        agent_config=action_config,
+    )
+    assert skipped == []
+
+    captured = {}
+
+    def fake_run_dynamic_agent(**kwargs):
+        captured["context"] = kwargs["context"]
+        return (
+            {"hitl_status": "approved", "user_comment": "", "timestamp": "2026-02-12T10:00:00Z"},
+            True,
+        )
+
+    context = ProcessingContext(
+        agent_config=action_config, agent_name="review_data", source_data=original_data
+    )
+    with patch(
+        "agent_actions.processing.strategies.hitl.run_dynamic_agent",
+        side_effect=fake_run_dynamic_agent,
+    ):
+        HITLStrategy().invoke(filtered, context)
+
+    assert captured["context"] == [{"question": "What is X?", "rules": {"threshold": 7}}]
