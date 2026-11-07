@@ -659,16 +659,42 @@ def _inject_flat_observed_keys(
 # ── FILE mode wrapper ──────────────────────────────────────────────────
 
 
+def _load_record_seed(
+    agent_config: dict[str, Any],
+    context_scope: dict,
+    action_name: str,
+    source: dict | None,
+) -> dict[str, Any]:
+    """The seed the action declares, for one record; files are parsed once per process."""
+    from agent_actions.prompt.service import PromptPreparationService
+
+    return PromptPreparationService.load_seed_data(
+        agent_config, context_scope, action_name, source=source, shared=True
+    )
+
+
+def _seed_selects_by_source(seed_config: Any) -> bool:
+    """Whether any declared seed picks its file by a field of the record's source."""
+    return isinstance(seed_config, dict) and any(
+        isinstance(entry, dict) and "select_by" in entry for entry in seed_config.values()
+    )
+
+
 def apply_context_scope_for_records(
     records: list[dict],
     context_scope: dict,
     action_name: str = "unknown",
     source_data: list[dict] | None = None,
+    *,
+    agent_config: dict[str, Any] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Apply context_scope to a list of records (FILE mode).
 
     Unlike apply_context_scope(), this preserves ALL original namespaces in the
-    enriched record: downstream guards need full namespace visibility.
+    enriched record: downstream guards need full namespace visibility. A declared
+    ``seed`` is loaded from *agent_config*'s seed folders and rides on the enriched
+    record as ``_seed``, outside its content, so the payload holds it and a stored row
+    does not.
 
     Returns (enriched_records, skipped_records); skipped entries carry
     ``{"source_guid": ..., "reason": ..., "position": ..., "detail": ...}``. *position* indexes
@@ -678,11 +704,21 @@ def apply_context_scope_for_records(
     observe_refs = context_scope.get("observe", [])
     passthrough_refs = context_scope.get("passthrough", [])
     drop_refs = context_scope.get("drop", [])
+    # A FILE action has no prompt: the seed reaches it through observe alone, so it is
+    # loaded only when an observe ref names it, as a guard loads it only when it reads it.
+    seed_config = (
+        context_scope.get("seed") if any(ref.startswith("seed.") for ref in observe_refs) else None
+    )
     # One report per inert ref for the whole file, not one per record.
     inert_drops_reported: set[str] = set()
 
     if not observe_refs and not passthrough_refs and not drop_refs:
         return records, []
+    if seed_config and agent_config is None:
+        raise ValueError(
+            f"Action '{action_name}' declares context_scope.seed, which is loaded from the "
+            "action's seed folders; pass agent_config"
+        )
 
     # Check if any directive references the source namespace
     has_source_refs = (
@@ -696,11 +732,24 @@ def apply_context_scope_for_records(
     # the skip on has_source_refs discarded a record whose action merely declared
     # `drop: [source.secret]` -- a record that carries no source cannot leak one, and
     # RECORD mode proceeds with it.
-    needs_source_content = any(
+    # A seed picked by a source field reads the record's source the way an observe of
+    # it does: resolved once, below, pooled first and carried last, and a record whose
+    # source cannot be resolved is refused as it would be for an observe of it. A seed
+    # picked by no field is the same for every record of the file and is loaded once.
+    seed_per_record = _seed_selects_by_source(seed_config)
+    seed_drop_refs = [ref for ref in drop_refs if ref.startswith("seed.")]
+    drop_refs = [ref for ref in drop_refs if not ref.startswith("seed.")]
+    resolve_source = has_source_refs or seed_per_record
+    needs_source_content = seed_per_record or any(
         ref.startswith("source.") for ref in (*observe_refs, *passthrough_refs)
     )
-
-    source_index = _build_source_index(source_data) if has_source_refs else {}
+    config: dict[str, Any] = agent_config if agent_config is not None else {}
+    shared_seed: dict[str, Any] = (
+        _load_record_seed(config, context_scope, action_name, None)
+        if records and seed_config and not seed_per_record
+        else {}
+    )
+    source_index = _build_source_index(source_data) if resolve_source else {}
     resolved_observe, qualify_wildcards = (
         _resolve_observe_refs_for_flat_keys(observe_refs, action_name)
         if observe_refs
@@ -708,7 +757,7 @@ def apply_context_scope_for_records(
     )
 
     source_cache: dict[tuple[str | None, str | None], dict | None] = {}
-    prepared: list[tuple[dict, dict]] = []
+    prepared: list[tuple[dict, dict, dict | None]] = []
     skipped: list[dict] = []
 
     for position, record in enumerate(records):
@@ -719,7 +768,7 @@ def apply_context_scope_for_records(
         # Build field_context with source namespace resolved
         field_context = dict(content)
         source_content: dict | None = None
-        if has_source_refs:
+        if resolve_source:
             cache_key = (sguid, psguid)
             if cache_key not in source_cache:
                 source_cache[cache_key] = _resolve_source_content(
@@ -762,6 +811,21 @@ def apply_context_scope_for_records(
             if source_content:
                 field_context["source"] = source_content
 
+        seed = shared_seed
+        if seed_per_record:
+            # Staging has checked every row's selecting value against every selected
+            # seed before the run, so a load that still fails here is the action's
+            # configuration, not one record's, and stops it.
+            # An empty pool resolves to an empty dict, not None: the record's own
+            # carried source then selects the file, as it answers an observe of it.
+            carried = content.get("source")
+            seed = _load_record_seed(
+                config,
+                context_scope,
+                action_name,
+                source_content or (carried if isinstance(carried, dict) else None),
+            )
+
         # Validate observe/passthrough/drop refs against the record's namespaces.
         # RecordContextError means a required namespace or field is missing —
         # skip this record rather than enriching it with None values.
@@ -769,8 +833,14 @@ def apply_context_scope_for_records(
             # report_inert_drops=False: this pass exists to validate and its result is
             # discarded, so _apply_drops_to_content below is the one that reports. Left on,
             # every record logged the same inert drop twice and fired a WARN event per row.
+            # A copy: the loader shares one parsed file across the process, and a
+            # drop under `seed` is applied in place to what it is handed.
             apply_context_scope(
-                field_context, context_scope, action_name=action_name, report_inert_drops=False
+                field_context,
+                context_scope,
+                static_data=plain_copy(seed) if seed else None,
+                action_name=action_name,
+                report_inert_drops=False,
             )
         except RecordContextError as e:
             logger.debug(
@@ -810,20 +880,38 @@ def apply_context_scope_for_records(
         if source_content:
             enriched_content["source"] = plain_copy(source_content)
         _apply_drops_to_content(enriched_content, drop_refs, inert_drops_reported)
-        prepared.append((record, enriched_content))
+        # The seed is dropped from too: it rides beside the content, so a drop under
+        # `seed` is applied to the copy the payload reads, never to the loader's value.
+        record_seed: dict | None = None
+        if seed:
+            seeded = {"seed": plain_copy(seed)}
+            _apply_drops_to_content(seeded, seed_drop_refs, inert_drops_reported)
+            record_seed = seeded["seed"]
+        prepared.append((record, enriched_content, record_seed))
 
     # Namespace presence can differ per record; reserving the batch union rather
     # than each record's own subset keeps a given ref qualified the same way on
     # every record in this call, not just the ones that happen to carry it.
-    namespace_union: frozenset[str] = frozenset(ns for _, content in prepared for ns in content)
+    namespace_union: frozenset[str] = frozenset(
+        ns for _, content, _ in prepared for ns in content
+    ) | ({"seed"} if any(seed for _, _, seed in prepared) else frozenset())
 
+    # The seed rides on the record as `_seed`, never in its content: content is what a
+    # tombstone, a quarantine and a snapshot copy, and the seed belongs to the payload
+    # alone (`extract_tool_input` reads it from there).
     enriched: list[dict] = []
     qualified_keys: set[str] = set()
-    for record, enriched_content in prepared:
+    for record, enriched_content, record_seed in prepared:
         qualified_keys |= _inject_flat_observed_keys(
             enriched_content, resolved_observe, qualify_wildcards, action_name, namespace_union
         )
-        enriched.append({**record, "content": enriched_content})
+        enriched.append(
+            {
+                **record,
+                "content": enriched_content,
+                **({"_seed": record_seed} if record_seed else {}),
+            }
+        )
 
     if qualified_keys:
         logger.warning(
