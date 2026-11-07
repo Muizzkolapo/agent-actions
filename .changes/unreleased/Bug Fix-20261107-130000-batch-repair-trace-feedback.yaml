@@ -1,0 +1,5 @@
+kind: Bug Fix
+body: >-
+  A batch repair round's prompt trace now holds the prompt that round sent, with the
+  validation feedback appended. It held the first prompt, without the feedback.
+time: 2026-11-07T13:00:00Z

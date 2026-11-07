@@ -48,7 +48,7 @@ Each trace prints as:
 <the response, or (none) if it has not arrived>
 ```
 
-A record that [`expect:`](../validation/expectations.md) repaired online has one trace per attempt: attempt 0 is the first prompt, and each attempt after it is the repair prompt that call was sent (the previous response and the failed rules appended), beside the response it drew. The last attempt holds the response that shipped.
+A record that [`expect:`](../validation/expectations.md) repaired has one trace per attempt, online and in batch: attempt 0 is the first prompt, and each attempt after it is the repair prompt that call was sent (the previous response and the failed rules appended), beside the response it drew. The last attempt holds the response that shipped.
 
 ## Errors
 
