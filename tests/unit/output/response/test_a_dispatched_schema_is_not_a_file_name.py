@@ -137,3 +137,24 @@ def test_inline_rules_without_repair_are_accepted(tmp_path):
     assert (
         _defects({"repair": "none", "expectations": [{"type": "no_null_fields"}]}, tmp_path) == []
     )
+
+
+def _entry_errors(schema) -> list[str]:
+    from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
+        ActionEntryValidationOrchestrator,
+    )
+
+    orchestrator = ActionEntryValidationOrchestrator()
+    orchestrator.validate_action_entry(
+        {"name": "label_page", "agent_type": "label_page", "model_name": "m", "schema": schema},
+        "wf",
+    )
+    return [e for e in orchestrator.get_validation_errors() if "'schema'" in e]
+
+
+def test_the_run_entry_validator_accepts_a_dispatch_call():
+    assert _entry_errors(DISPATCH) == []
+
+
+def test_the_run_entry_validator_still_refuses_any_other_string():
+    assert _entry_errors("not a mapping") != []
