@@ -69,7 +69,9 @@ def _enrich(content, observe, *, source_data=None, action_name="probe"):
 
 
 class TestWildcardExpandedFieldCollision:
-    """A wildcard expansion and an explicit ref can claim the same bare key."""
+    """A wildcard expansion and an explicit ref can claim the same bare key.
+
+    The named ref owns the bare key; the wildcard's field arrives qualified."""
 
     CONTENT = {"a": {"x": "FROM_A", "y": 2}, "b": {"x": "FROM_B"}}
 
@@ -77,8 +79,8 @@ class TestWildcardExpandedFieldCollision:
         record = _enrich(dict(self.CONTENT), ["a.*", "b.x"])
         content = record["content"]
 
-        assert content["x"] == "FROM_A"
-        assert content["b.x"] == "FROM_B"
+        assert content["x"] == "FROM_B"
+        assert content["a.x"] == "FROM_A"
         assert content["y"] == 2
 
     def test_key_shape_is_order_independent(self):
@@ -91,21 +93,21 @@ class TestWildcardExpandedFieldCollision:
         cs = {"observe": ["a.*", "b.x"]}
         record = _enrich(dict(self.CONTENT), cs["observe"])
 
-        assert extract_tool_input(record, cs) == {"x": "FROM_A", "y": 2, "b.x": "FROM_B"}
+        assert extract_tool_input(record, cs) == {"x": "FROM_B", "y": 2, "a.x": "FROM_A"}
 
     def test_collision_is_announced(self, scope_warnings):
         _enrich(dict(self.CONTENT), ["a.*", "b.x"], action_name="merge")
 
-        assert any("merge" in m and "b.x" in m for m in scope_warnings)
+        assert any("merge" in m and "a.x" in m for m in scope_warnings)
 
 
 class TestKeyShapeIsDeclarationDerived:
     """Key names come from the observe refs, never the values, so a record's keys
     cannot depend on which other records share its file."""
 
-    def test_explicit_ref_qualifies_whenever_a_wildcard_could_reach_it(self):
-        """`a.*` may or may not expand onto `x` depending on the data; qualifying
-        `b.x` only when it actually does would make the key data-dependent."""
+    def test_a_named_ref_keeps_its_bare_key_on_every_record(self):
+        """`a.*` may or may not expand onto `x` depending on the data; the named
+        `b.x` is `x` either way, and `a.x` arrives qualified only where `a` has it."""
         cs = {"observe": ["a.*", "b.x"]}
         records = [
             {"source_guid": "g1", "content": {"a": {"x": 1}, "b": {"x": 2}}},
@@ -117,7 +119,7 @@ class TestKeyShapeIsDeclarationDerived:
 
         payloads = [extract_tool_input(r, cs) for r in enriched]
 
-        assert payloads == [{"x": 1, "b.x": 2}, {"y": 3, "b.x": 2}]
+        assert payloads == [{"a.x": 1, "x": 2}, {"y": 3, "x": 2}]
 
     def test_same_record_gives_the_same_keys_alone_or_with_file_mates(self):
         cs = {"observe": ["a.*", "b.status"]}

@@ -1385,8 +1385,11 @@ class WorkflowStaticAnalyzer:
             fields = shape.setdefault(ns, {})
             schema = schemas.get(ns)
             if field == "*":
+                # The action's own output only: a field it forwards by passthrough
+                # lands in that field's own namespace at run time, never in this one,
+                # so a wildcard here never yields it.
                 if schema and not (schema.is_dynamic or schema.is_schemaless):
-                    fields.update(dict.fromkeys(schema.available_fields))
+                    fields.update(dict.fromkeys(schema.schema_fields))
             else:
                 fields[field] = None
         return shape
@@ -1394,13 +1397,10 @@ class WorkflowStaticAnalyzer:
     def _check_file_tool_observe_collision(self) -> list[StaticTypeWarning]:
         """Warn when FILE-mode observed fields collide on their flat key.
 
-        FILE tool and HITL actions read observed fields as flat top-level keys.
-        A bare key two namespaces claim, or that names a namespace the action
-        reads by that name, arrives namespace-qualified (``ns.field``) so nothing
-        is overwritten — and a bare read then returns None. Plans the keys
-        through the runtime planner so the two can't drift, and reports only what
-        the payload will see: qualification the record applies purely to protect
-        a namespace would send the user to a key their action never gets.
+        Plans the keys through the runtime planner, over the declared schemas, so the
+        two cannot drift and a schemaless namespace claims nothing. Reports only what
+        the payload will see: qualification applied purely to protect a namespace
+        would send the user to a key their action never gets.
         """
         from agent_actions.prompt.context.scope_application import (
             _resolve_observe_refs_for_flat_keys,
@@ -1436,7 +1436,7 @@ class WorkflowStaticAnalyzer:
             if qualify_wildcards:
                 qualified |= {f"{ns}.*" for ns, field, _ in resolved if field == "*"}
             # What the declared refs alone can't show: a field shadowing a
-            # namespace, or an explicit ref a wildcard elsewhere could expand onto.
+            # namespace, or a wildcard field whose name a named ref owns.
             _, shadowed = plan_flat_observed_keys(
                 self._observed_namespace_fields(observe_refs, schemas),
                 resolved,
@@ -1453,8 +1453,7 @@ class WorkflowStaticAnalyzer:
                     message=(
                         f"{kind_label} '{name}' observes colliding field names; input "
                         f"keys are delivered namespace-qualified "
-                        f"({', '.join(sorted(qualified))}). An action reading the bare "
-                        f"field name receives None."
+                        f"({', '.join(sorted(qualified))})."
                     ),
                     location=FieldLocation(
                         agent_name=name,

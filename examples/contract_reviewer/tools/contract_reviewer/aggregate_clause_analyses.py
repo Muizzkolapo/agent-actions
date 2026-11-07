@@ -19,11 +19,12 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     """
     Combine clause-level risk analyses into one risk report per contract.
 
-    Input (one item per clause, holding the observed fields as flat keys):
+    Input (one item per clause, holding the observed fields as flat keys, every one
+    under its bare name):
         - risk_level, risk_score, risk_indicators, obligations, deadlines,
-          recommended_action, reasoning (bare: the one wildcard, analyze_clause.*)
-        - split_into_clauses.clause_number, split_into_clauses.clause_title
-        - source.contract_id, source.title, source.parties
+          recommended_action, reasoning (the wildcard, analyze_clause.*)
+        - clause_number, clause_title (named from split_into_clauses)
+        - contract_id, title, parties (named from source)
 
     Output (one record per contract in the file):
         - overall_risk_level, overall_risk_score, risk_distribution
@@ -33,7 +34,7 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
     # A file may hold several contracts: group each clause's position by its contract
     by_contract: dict[str, list[int]] = {}
     for position, record in enumerate(data):
-        by_contract.setdefault(record.get("source.contract_id", "unknown"), []).append(position)
+        by_contract.setdefault(record.get("contract_id", "unknown"), []).append(position)
 
     # source_index lists the clauses a report was built from (many inputs, one output)
     return FileUDFResult(
@@ -47,9 +48,9 @@ def aggregate_clause_analyses(data: list[dict[str, Any]]) -> FileUDFResult:
 def _risk_report(data: list[dict[str, Any]]) -> dict[str, Any]:
     """The risk report of one contract's clauses."""
     # Every clause of a contract carries the same contract metadata
-    contract_id = data[0].get("source.contract_id", "unknown")
-    contract_title = data[0].get("source.title", "unknown")
-    parties = data[0].get("source.parties", [])
+    contract_id = data[0].get("contract_id", "unknown")
+    contract_title = data[0].get("title", "unknown")
+    parties = data[0].get("parties", [])
 
     # Collect analyses from all clause records
     risk_counts = {"high": 0, "medium": 0, "low": 0}
@@ -62,8 +63,8 @@ def _risk_report(data: list[dict[str, Any]]) -> dict[str, Any]:
     for record in data:
         risk_level = record.get("risk_level", "low")
         risk_score = record.get("risk_score", 0.0)
-        clause_number = record.get("split_into_clauses.clause_number", 0)
-        clause_title = record.get("split_into_clauses.clause_title", "Unknown")
+        clause_number = record.get("clause_number", 0)
+        clause_title = record.get("clause_title", "Unknown")
 
         # Count risk levels
         if risk_level in risk_counts:

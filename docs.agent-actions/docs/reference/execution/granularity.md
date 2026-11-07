@@ -91,7 +91,7 @@ def validate_email(data, **kwargs):
 
 ### File-Level Tool
 
-FILE tools receive a list with one item per record. Each item holds the fields the action observes as flat keys: the bare field name, or `action_name.field` where two observed names could collide (for example, when the tool observes several actions by wildcard). There is no action name around them and no `content`. Return the items you received to preserve lineage.
+FILE tools receive a list with one item per record. Each item holds the fields the action observes as flat keys. A field named in `observe` keeps its bare name. A key is `action_name.field` only where two observed names really collide: two named fields with the same name, a wildcard field with the same name as a named field (the named one keeps the bare key), or several actions observed by wildcard. There is no action name around them and no `content`. Return the items you received to preserve lineage.
 
 ```python
 from agent_actions import udf_tool
