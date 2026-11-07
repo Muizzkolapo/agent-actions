@@ -107,6 +107,9 @@ RECORD_STAGE_FIELDS: frozenset[str] = frozenset(
         # carry. Plural because a many-to-one output has several. Carried forward it
         # would name, at the next action, records that action never received.
         "producer_source_guids",
+        # The seed a FILE action declares, carried beside the content for the payload
+        # alone; never stored, never part of a synthesized source.
+        "_seed",
     }
 )
 

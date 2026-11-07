@@ -34,7 +34,7 @@ from agent_actions.workflow.pipeline_file_mode import (
     extract_tool_input,
     is_empty_response,
     reconcile_outputs,
-    seed_payload_keys,
+    seed_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -237,21 +237,24 @@ class FileToolStrategy:
                         },
                     )
 
+                # Built from the records as handed in, before the scope: what a stored
+                # tombstone or snapshot holds is the input, never the payload.
+                before_scope = _originals(records, original_data)
                 if on_empty == "skip":
                     return [
                         ProcessingResult.skipped(
                             passthrough_data=build_tombstone(
                                 context.agent_name,
-                                record,
+                                original,
                                 EMPTY_OUTPUT,
-                                source_guid=record.get("source_guid"),
+                                source_guid=original.get("source_guid"),
                             ),
                             reason=EMPTY_OUTPUT,
-                            source_guid=record.get("source_guid"),
-                            source_snapshot=plain_copy(record),
-                            input_record=record,
+                            source_guid=original.get("source_guid"),
+                            source_snapshot=plain_copy(original),
+                            input_record=original,
                         )
-                        for record in records
+                        for original in before_scope
                     ]
 
                 error_msg = (
@@ -261,10 +264,10 @@ class FileToolStrategy:
                 return [
                     ProcessingResult.failed(
                         error=error_msg,
-                        source_guid=record.get("source_guid"),
-                        source_snapshot=plain_copy(record),
+                        source_guid=original.get("source_guid"),
+                        source_snapshot=plain_copy(original),
                     )
-                    for record in records
+                    for original in before_scope
                 ]
 
             refused: dict[int, str] = {}
@@ -289,7 +292,7 @@ class FileToolStrategy:
                 original_data,
                 version_merge=is_version_merge(context.agent_config),
                 version_base_name=context.agent_config.get("version_base_name"),
-                drop_keys=seed_payload_keys(records[0], context_scope) if records else frozenset(),
+                seed_payloads=[seed_payload(record, context_scope) for record in records],
             )
 
             is_expansion = len(structured_data) > len(answered)

@@ -17,7 +17,7 @@ from agent_actions.record.tracking import TrackedItem
 from agent_actions.workflow.pipeline_file_mode import (
     extract_tool_input,
     reconcile_outputs,
-    seed_payload_keys,
+    seed_payload,
 )
 
 RULES = {"threshold": 7}
@@ -155,7 +155,7 @@ class TestWhatIsRefused:
 
 
 class TestTheSeedStaysOutOfStoredRows:
-    def test_the_seeds_payload_keys_are_planned_as_the_payload_is(self, tmp_path):
+    def test_the_seed_rides_beside_the_content_not_in_it(self, tmp_path):
         scope = {"observe": ["a.x", "seed.rules"], "seed": {"rules": "$file:rules.json"}}
         agent_config = _project(tmp_path, {"rules.json": RULES})
 
@@ -166,30 +166,62 @@ class TestTheSeedStaysOutOfStoredRows:
             agent_config=agent_config,
         )
 
-        assert seed_payload_keys(enriched, scope) == frozenset({"rules"})
-        assert seed_payload_keys({"content": {"a": {"x": 1}}}, scope) == frozenset()
+        assert "seed" not in enriched["content"]
+        assert enriched["_seed"] == {"rules": RULES}
+        assert extract_tool_input(enriched, scope) == {"x": 1, "rules": RULES}
+
+    def test_the_seeds_payload_entries_are_planned_as_the_payload_is(self, tmp_path):
+        scope = {"observe": ["a.x", "seed.rules"], "seed": {"rules": "$file:rules.json"}}
+        agent_config = _project(tmp_path, {"rules.json": RULES})
+
+        (enriched,), _ = apply_context_scope_for_records(
+            records=[{"source_guid": "g1", "content": {"a": {"x": 1}}}],
+            context_scope=scope,
+            action_name="probe",
+            agent_config=agent_config,
+        )
+        payload = extract_tool_input(enriched, scope)
+
+        assert seed_payload(enriched, scope) == {"rules": RULES}
+        assert seed_payload(enriched, scope)["rules"] is payload["rules"]
+        assert seed_payload({"content": {"a": {"x": 1}}}, scope) == {}
+
+    def test_without_an_observe_key_the_whole_seed_is_the_payloads(self):
+        record = {"content": {"a": {"x": 1}}, "_seed": {"rules": RULES}}
+
+        assert extract_tool_input(record, {"drop": ["a.y"]}) == {"x": 1, "rules": RULES}
+        assert seed_payload(record, {"drop": ["a.y"]}) == {"rules": RULES}
 
     def test_an_item_a_tool_returns_is_stored_without_what_the_seed_supplied(self):
-        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}, "seed": {"rules": RULES}}}]
-        returned = [TrackedItem({"x": 1, "rules": RULES, "verdict": "ok"}, source_index=0)]
+        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}}, "_seed": {"rules": RULES}}]
+        handed = {"x": 1, "rules": inputs[0]["_seed"]["rules"]}
+        returned = [TrackedItem({**handed, "verdict": "ok"}, source_index=0)]
 
-        rows, _ = reconcile_outputs(returned, "probe", inputs, drop_keys=frozenset({"rules"}))
+        rows, _ = reconcile_outputs(returned, "probe", inputs, seed_payloads=[handed])
 
         (row,) = rows
         assert row["content"]["probe"] == {"x": 1, "verdict": "ok"}
 
+    def test_a_value_the_tool_put_under_a_seed_key_is_kept(self):
+        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}}, "_seed": {"rules": RULES}}]
+        handed = {"x": 1, "rules": inputs[0]["_seed"]["rules"]}
+        returned = [TrackedItem({"x": 1, "rules": {"threshold": 99}}, source_index=0)]
+
+        rows, _ = reconcile_outputs(returned, "probe", inputs, seed_payloads=[handed])
+
+        assert rows[0]["content"]["probe"] == {"x": 1, "rules": {"threshold": 99}}
+
     def test_a_row_the_tool_built_itself_keeps_what_the_tool_put_in_it(self):
         from agent_actions.utils.udf_management.registry import FileUDFResult
 
-        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}, "seed": {"rules": RULES}}}]
-        built = FileUDFResult([{"source_index": 0, "data": {"rules": "kept on purpose"}}])
+        inputs = [{"source_guid": "g1", "content": {"a": {"x": 1}}, "_seed": {"rules": RULES}}]
+        built = FileUDFResult([{"source_index": 0, "data": {"rules": RULES}}])
 
-        rows, _ = reconcile_outputs(built, "probe", inputs, drop_keys=frozenset({"rules"}))
+        rows, _ = reconcile_outputs(built, "probe", inputs, seed_payloads=[{"rules": RULES}])
 
-        assert rows[0]["content"]["probe"] == {"rules": "kept on purpose"}
+        assert rows[0]["content"]["probe"] == {"rules": RULES}
 
-    def test_a_seed_picked_by_no_field_is_the_same_object_for_every_record(self, tmp_path):
-        """Loaded once per file: both records' payloads hold the one loaded seed."""
+    def test_a_seed_picked_by_no_field_is_loaded_once_for_the_file(self, tmp_path):
         scope = {"observe": ["seed.rules"], "seed": {"rules": "$file:rules.json"}}
         agent_config = _project(tmp_path, {"rules.json": RULES})
 
@@ -200,3 +232,44 @@ class TestTheSeedStaysOutOfStoredRows:
         )
 
         assert first == second == {"rules": RULES}
+
+    def test_a_drop_under_seed_does_not_reach_the_next_record_or_the_loader(self, tmp_path):
+        scope = {
+            "observe": ["seed.rules"],
+            "drop": ["seed.rules.threshold"],
+            "seed": {"rules": "$file:rules.json"},
+        }
+        agent_config = _project(tmp_path, {"rules.json": {"threshold": 7, "name": "r"}})
+
+        first, second = _payloads(
+            [{"source_guid": "g1", "content": {}}, {"source_guid": "g2", "content": {}}],
+            scope,
+            agent_config,
+        )
+
+        assert first == second
+        assert first["rules"]["name"] == "r"
+        (again,) = _payloads([{"source_guid": "g3", "content": {}}], scope, agent_config)
+        assert again["rules"]["name"] == "r"
+
+
+class TestASelectedSeedNeedsTheRecordsSource:
+    def test_a_record_whose_source_cannot_be_resolved_is_refused_not_fatal(self, tmp_path):
+        scope = {
+            "observe": ["a.x", "seed.syllabus"],
+            "seed": {"syllabus": {"select_by": "source.lang", "files": {"en": "$file:en.json"}}},
+        }
+        agent_config = _project(tmp_path, {"en.json": {"name": "english"}})
+        records = [{"source_guid": "ghost", "content": {"a": {"x": 1}}}]
+        pool = [{"source_guid": "other", "content": {"source": {"lang": "en"}}}]
+
+        enriched, skipped = apply_context_scope_for_records(
+            records=records,
+            context_scope=scope,
+            action_name="probe",
+            source_data=pool,
+            agent_config=agent_config,
+        )
+
+        assert enriched == []
+        assert [s["reason"] for s in skipped] == ["source_unresolved"]
