@@ -9,7 +9,11 @@ from __future__ import annotations
 import json
 
 from tests._support.agac_cli import run_agac
-from tests.integration.test_a_dispatched_schema_runs_per_record import keys_by_page, project
+from tests.integration.test_a_dispatched_schema_runs_per_record import (
+    keys_by_page,
+    project,
+    schemas_by_page,
+)
 
 _BATCH_NOW = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
 
@@ -43,3 +47,4 @@ def test_each_batch_row_answers_in_the_schema_its_function_picked(tmp_path):
     keys = keys_by_page(root)
     assert "topic" in keys["p1"] and "verdict" not in keys["p1"]
     assert "verdict" in keys["p2"] and "topic" not in keys["p2"]
+    assert schemas_by_page(root) == {"p1": "topic_answer", "p2": "verdict_answer"}

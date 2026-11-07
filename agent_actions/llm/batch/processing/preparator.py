@@ -257,7 +257,7 @@ class BatchTaskPreparator:
         context_map_builder: dict[str, Any],
         stats: BatchTaskPreparationStats,
         attempt: int = 0,
-        row_schema: Callable[[Any], dict[str, Any] | None] | None = None,
+        row_schema: Callable[[Any, str | None], tuple[dict[str, Any] | None, str]] | None = None,
     ) -> dict[str, Any] | None:
         """Process a single data item using TaskPreparer.
 
@@ -327,7 +327,10 @@ class BatchTaskPreparator:
             "prompt": prepared.formatted_prompt,
         }
         if row_schema is not None:
-            task["compiled_schema"] = row_schema(prepared.llm_context)
+            # A repair round's row carries the name its first round chose; it is used again.
+            recorded = BatchContextMetadata.get_output_schema(row)
+            task["compiled_schema"], chosen = row_schema(prepared.llm_context, recorded)
+            BatchContextMetadata.set_output_schema(context_map_builder[custom_id], chosen)
 
         # 8. Mark INCLUDED only now — prepare() succeeded and guard passed
         BatchContextMetadata.set_filter_status(
@@ -410,15 +413,35 @@ class BatchTaskPreparator:
         provider,
         tools_path: str | None,
         llm_context: Any,
-    ) -> dict[str, Any] | None:
-        from agent_actions.llm.realtime.services import ContextService
+        recorded: str | None,
+    ) -> tuple[dict[str, Any] | None, str]:
+        """Compile the schema a dispatch chooses for one row; return it and its name.
 
-        # Encoded as online encodes it for the call, so a value json cannot dump as-is
-        # reaches the dispatch function the same way in both run modes.
-        context = ContextService.prepare_context_data(llm_context, is_tool=False)
-        schema = self._prepare_schema(agent_config, provider, tools_path, context)
+        The function is called only when the row has no recorded choice, so a repair
+        round compiles the schema its first round chose.
+        """
+        from agent_actions.llm.realtime.services import ContextService
+        from agent_actions.output.response.context_data import (
+            _prepare_context_data_str,
+            choose_dispatched_schema_name,
+        )
+
+        chosen = recorded
+        if chosen is None:
+            # Encoded as online encodes it for the call, so a value json cannot dump
+            # as-is reaches the dispatch function the same way in both run modes.
+            context = ContextService.prepare_context_data(llm_context, is_tool=False)
+            chosen = choose_dispatched_schema_name(
+                agent_config[SCHEMA_KEY],
+                tools_path,
+                _prepare_context_data_str(context, tools_path),
+                agent_config,
+                {},
+            )
+        named = {**agent_config, SCHEMA_KEY: None, "schema_name": chosen}
+        schema = self._prepare_schema(named, provider, tools_path)
         self._require_schema(agent_config, schema)
-        return schema
+        return schema, chosen
 
     def _prepare_schema(
         self,

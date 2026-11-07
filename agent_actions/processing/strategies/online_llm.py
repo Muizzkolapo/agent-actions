@@ -686,6 +686,7 @@ class OnlineLLMStrategy:
             recovery_metadata=recovery_metadata,
             input_record=input_record,
             is_expansion=len(transformed) > 1,
+            output_schema=invocation_result.output_schema,
         )
 
     def _transform_response(

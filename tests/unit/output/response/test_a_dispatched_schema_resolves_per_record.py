@@ -93,11 +93,14 @@ def test_a_function_that_raises_fails_the_record_not_the_action(tmp_path):
 def test_the_output_check_reads_the_schema_the_record_was_given(tmp_path, caplog):
     tools = _project(tmp_path, "return 'topic_answer'")
 
-    record_config, _ = _choose_dispatched_schema(_config(tmp_path), {"source": {}}, str(tools))
+    record_config, _, chosen = _choose_dispatched_schema(
+        _config(tmp_path), {"source": {}}, str(tools)
+    )
     with caplog.at_level(logging.WARNING):
         _validate_llm_output_schema([{"verdict": "wrong shape"}], record_config, "a")
 
     assert [field["id"] for field in record_config["schema"]["fields"]] == ["topic"]
+    assert chosen == "topic_answer"
     assert any("Schema validation warning for 'a'" in r.getMessage() for r in caplog.records)
 
 

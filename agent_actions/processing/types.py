@@ -157,6 +157,8 @@ class ProcessingResult:
     recovery_metadata: RecoveryMetadata | None = None
     raw_response: Any | None = None
     pre_extracted_metadata: dict[str, Any] | None = None
+    # The schema a ``schema: dispatch_task(...)`` chose for this record.
+    output_schema: str | None = None
     source_mapping: dict[int, int | list[int] | None] | None = None
     processing_context: Optional["ProcessingContext"] = None
     is_expansion: bool = False  # True when a single input produced multiple outputs (1→N)
@@ -178,6 +180,7 @@ class ProcessingResult:
         input_record: dict[str, Any] | None = None,
         pre_extracted_metadata: dict[str, Any] | None = None,
         is_expansion: bool = False,
+        output_schema: str | None = None,
     ) -> "ProcessingResult":
         """Factory for successful result."""
         return cls(
@@ -192,6 +195,7 @@ class ProcessingResult:
             input_record=input_record,
             pre_extracted_metadata=pre_extracted_metadata,
             is_expansion=is_expansion,
+            output_schema=output_schema,
         )
 
     @classmethod

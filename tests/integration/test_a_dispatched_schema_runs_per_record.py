@@ -162,3 +162,30 @@ def test_a_dispatch_inside_a_named_schema_file_is_refused(tmp_path):
 
     assert result.returncode == 1, output
     assert "calls dispatch_task inside its schema fields" in output, output
+
+
+def schemas_by_page(root: Path) -> dict[str, str | None]:
+    """The schema each stored record names as the one that wrote it."""
+    backend = get_storage_backend(str(root / "agent_workflow" / "w"), "w")
+    backend.initialize()
+    try:
+        rows = [
+            row
+            for path in backend.list_target_files("label_page")
+            for row in backend.read_target("label_page", path)
+        ]
+    finally:
+        backend.close()
+    return {
+        row["content"]["source"]["page_id"]: (row.get("metadata") or {}).get("output_schema")
+        for row in rows
+    }
+
+
+def test_each_stored_record_names_the_schema_that_wrote_it(tmp_path):
+    root = project(tmp_path)
+
+    result = run_agac(root, "run", "-a", "w", "--fresh")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert schemas_by_page(root) == {"p1": "topic_answer", "p2": "verdict_answer"}

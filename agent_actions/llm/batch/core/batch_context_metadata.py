@@ -82,6 +82,17 @@ class BatchContextMetadata:
         """Get the preparation error from a record, or None if unset."""
         return record.get(ContextMetaKeys.PREP_ERROR)  # type: ignore[return-value]
 
+    @staticmethod
+    def set_output_schema(record: dict[str, Any], name: str) -> None:
+        """Record the schema a dispatch chose for this row."""
+        record[ContextMetaKeys.OUTPUT_SCHEMA] = name
+
+    @staticmethod
+    def get_output_schema(record: dict[str, Any]) -> str | None:
+        """The schema a dispatch chose for this row, or None if none was chosen."""
+        name = record.get(ContextMetaKeys.OUTPUT_SCHEMA)
+        return name if isinstance(name, str) else None
+
     # =========================================================================
     # Utility Methods
     # =========================================================================

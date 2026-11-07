@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 
 TOOL = """\
@@ -37,7 +38,22 @@ def project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _sent_tasks(project: Path, attempt: int, feedback_by_id: dict[str, str] | None) -> list[dict]:
+def _sent_tasks(
+    project: Path,
+    attempt: int,
+    feedback_by_id: dict[str, str] | None,
+    recorded: dict[str, str] | None = None,
+) -> list[dict]:
+    return _prepare(project, attempt, feedback_by_id, recorded)[0]
+
+
+def _prepare(
+    project: Path,
+    attempt: int,
+    feedback_by_id: dict[str, str] | None,
+    recorded: dict[str, str] | None = None,
+) -> tuple[list[dict], dict]:
+    """Prepare one round; return the tasks sent and the context map that is stored."""
     agent_config = {
         "agent_type": "label_page",
         "action_name": "label_page",
@@ -55,13 +71,16 @@ def _sent_tasks(project: Path, attempt: int, feedback_by_id: dict[str, str] | No
         {"target_id": f"t{i}", "source_guid": f"sg{i}", "content": {"page_id": f"p{i}"}}
         for i in (1, 2)
     ]
+    for row in data:
+        if recorded and row["target_id"] in recorded:
+            row[ContextMetaKeys.OUTPUT_SCHEMA] = recorded[row["target_id"]]
     provider = MagicMock()
     provider.prepare_tasks.return_value = []
     preparator = BatchTaskPreparator(action_indices={}, dependency_configs={})
     with patch(
         "agent_actions.prompt.formatter.PromptFormatter.get_raw_prompt", return_value="Label it."
     ):
-        preparator.prepare_tasks(
+        prepared = preparator.prepare_tasks(
             agent_config=agent_config,
             data=data,
             provider=provider,
@@ -69,7 +88,7 @@ def _sent_tasks(project: Path, attempt: int, feedback_by_id: dict[str, str] | No
             attempt=attempt,
             feedback_by_id=feedback_by_id,
         )
-    return provider.prepare_tasks.call_args.args[0]
+    return provider.prepare_tasks.call_args.args[0], prepared.context_map
 
 
 def _fields_by_target(tasks: list[dict]) -> dict[str, list[str]]:
@@ -93,3 +112,22 @@ def test_a_repair_round_compiles_each_row_its_own_schema_again(project):
 
     assert _fields_by_target(tasks) == {"t1": ["topic"], "t2": ["verdict"]}
     assert all(task["prompt"].endswith("fix it") for task in tasks)
+
+
+RAISES = """\
+def pick_schema(context_json):
+    raise AssertionError("a repair round must not call the dispatch function again")
+"""
+
+
+def test_a_repair_round_uses_the_name_each_row_was_given_first(project):
+    """The rows a repair round gets carry the first round's choice: the function is not called."""
+    _, context_map = _prepare(project, attempt=0, feedback_by_id=None)
+    (project / "tools" / "pick_schema.py").write_text(RAISES)
+    recorded = {key: row[ContextMetaKeys.OUTPUT_SCHEMA] for key, row in context_map.items()}
+
+    assert recorded == {"t1": "topic_answer", "t2": "verdict_answer"}
+    tasks = _sent_tasks(
+        project, attempt=1, feedback_by_id={"t1": "fix", "t2": "fix"}, recorded=recorded
+    )
+    assert _fields_by_target(tasks) == {"t1": ["topic"], "t2": ["verdict"]}

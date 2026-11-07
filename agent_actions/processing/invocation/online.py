@@ -50,6 +50,8 @@ class OnlineStrategy(InvocationStrategy):
 
         recovery_metadata = RecoveryMetadata()
         retry_service = self._retry_service
+        # Chosen once: every retry and repair call of this record writes the same schema.
+        dispatched = self._dispatched_schema(task, context)
 
         def generate(prompt: str) -> tuple[Any, bool]:
             # Under an expectation repair loop this runs once per iteration;
@@ -58,10 +60,10 @@ class OnlineStrategy(InvocationStrategy):
             recovery_metadata.retry = None
             if retry_service:
                 response, executed, _ = self._invoke_with_retry(
-                    task, context, recovery_metadata, retry_service, prompt
+                    task, context, recovery_metadata, retry_service, prompt, dispatched
                 )
             else:
-                response, executed = self._call_llm(task, context, prompt)
+                response, executed = self._call_llm(task, context, prompt, dispatched)
             return response, executed
 
         if self._expectation_service:
@@ -118,7 +120,19 @@ class OnlineStrategy(InvocationStrategy):
             executed=executed,
             passthrough_fields=task.passthrough_fields,
             recovery=recovery_metadata if not recovery_metadata.is_empty() else None,
+            output_schema=dispatched[2],
         )
+
+    @staticmethod
+    def _dispatched_schema(
+        task: PreparedTask, context: ProcessingContext
+    ) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+        from agent_actions.processing.helpers import _choose_dispatched_schema
+        from agent_actions.utils.tools_resolver import resolve_tools_path
+
+        agent_config = cast(dict[str, Any], context.agent_config)
+        llm_data = task.llm_context if task.llm_context is not None else task.original_content
+        return _choose_dispatched_schema(agent_config, llm_data, resolve_tools_path(agent_config))
 
     def supports_recovery(self) -> bool:
         """OnlineStrategy supports retry and expectation recovery."""
@@ -129,6 +143,7 @@ class OnlineStrategy(InvocationStrategy):
         task: PreparedTask,
         context: ProcessingContext,
         prompt: str,
+        dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
     ) -> tuple[Any, bool]:
         """Execute a single LLM call, returning (response, executed)."""
         from agent_actions.processing.helpers import run_dynamic_agent
@@ -143,6 +158,7 @@ class OnlineStrategy(InvocationStrategy):
             prompt,
             tools_path=tools_path,
             llm_context=task.llm_context,
+            dispatched=dispatched,
         )
 
     def _track_retry_metadata(
@@ -170,10 +186,11 @@ class OnlineStrategy(InvocationStrategy):
         recovery_metadata: RecoveryMetadata,
         retry_service: RetryService,
         prompt: str | None = None,
+        dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
     ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with retry protection."""
         retry_result = retry_service.execute(
-            lambda: self._call_llm(task, context, prompt or task.formatted_prompt),
+            lambda: self._call_llm(task, context, prompt or task.formatted_prompt, dispatched),
             context=f"action={context.agent_name}",
         )
 

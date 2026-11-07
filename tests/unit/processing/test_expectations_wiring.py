@@ -33,7 +33,7 @@ def make_context():
 def test_verdict_is_attached_under_the_expect_key(monkeypatch):
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({"ideas": ["a"]}, True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ({"ideas": ["a"]}, True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.response["expect"]["overall_pass"] is False
@@ -46,7 +46,7 @@ def test_verdict_is_attached_for_the_real_single_item_list_shape_call_llm_produc
     # mocks, is not the shape a real record-granularity online call produces.
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{"ideas": ["a"]}], True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ([{"ideas": ["a"]}], True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.response["expect"]["overall_pass"] is False
@@ -57,7 +57,9 @@ def test_verdict_is_attached_for_the_real_single_item_list_shape_call_llm_produc
 def test_original_fields_survive_the_attachment(monkeypatch):
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({"ideas": ["a", "b"]}, True)
+        OnlineStrategy,
+        "_call_llm",
+        lambda self, task, ctx, prompt, *_: ({"ideas": ["a", "b"]}, True),
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.response["ideas"] == ["a", "b"]
@@ -67,7 +69,7 @@ def test_original_fields_survive_the_attachment(monkeypatch):
 def test_no_expect_key_is_added_when_no_service_is_configured(monkeypatch):
     strategy = OnlineStrategy()
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({"ideas": ["a"]}, True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ({"ideas": ["a"]}, True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert "expect" not in result.response
@@ -97,7 +99,7 @@ def test_llm_context_reaches_a_judged_expectations_context_ref(monkeypatch):
         expectation_service=ExpectationService(suite, repair="none", judge=fake_judge)
     )
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({"ideas": ["a"]}, True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ({"ideas": ["a"]}, True)
     )
     task = make_task()
     task.llm_context = {"extract_context": {"source_context": "the docs say X"}}
@@ -124,7 +126,7 @@ def test_factory_threads_the_schema_into_the_structural_gate(monkeypatch):
     }
     calls = []
 
-    def fake_call(self, task, ctx, prompt):
+    def fake_call(self, task, ctx, prompt, *_):
         calls.append(prompt)
         if len(calls) == 1:
             return [{"wrong_key": 1}], True
@@ -142,7 +144,7 @@ def test_exhausted_fail_mode_converts_to_the_tombstone_channel(monkeypatch):
     service = ExpectationService(SUITE, repair="retry", max_iterations=2, on_exhausted="fail")
     strategy = OnlineStrategy(expectation_service=service)
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{"ideas": ["a"]}], True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ([{"ideas": ["a"]}], True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is False
@@ -160,7 +162,7 @@ def test_exhausted_non_record_under_return_last_also_converts(monkeypatch):
     )
     strategy = OnlineStrategy(expectation_service=service)
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ("not a record", True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ("not a record", True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is False
@@ -176,7 +178,7 @@ def test_exhausted_return_last_record_still_ships_annotated(monkeypatch):
     )
     strategy = OnlineStrategy(expectation_service=service)
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{"ideas": ["a"]}], True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ([{"ideas": ["a"]}], True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is True
@@ -188,7 +190,9 @@ def test_exhausted_return_last_record_still_ships_annotated(monkeypatch):
 def test_a_guard_skip_is_not_misrouted_to_the_exhaustion_channel(monkeypatch):
     service = ExpectationService(SUITE, repair="retry", max_iterations=3, on_exhausted="fail")
     strategy = OnlineStrategy(expectation_service=service)
-    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: (None, False))
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: (None, False)
+    )
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is False
     assert result.recovery_metadata is None or result.recovery_metadata.expectations is None
@@ -232,7 +236,7 @@ def test_every_record_of_an_expansion_carries_its_own_verdict(monkeypatch):
     monkeypatch.setattr(
         OnlineStrategy,
         "_call_llm",
-        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+        lambda self, task, ctx, prompt, *_: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
     )
     result = strategy.invoke(make_task(), make_context())
     assert isinstance(result.response, list), "the expansion shape must survive"
@@ -246,7 +250,7 @@ def test_an_expansion_keeps_its_own_fields_after_annotation(monkeypatch):
     monkeypatch.setattr(
         OnlineStrategy,
         "_call_llm",
-        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+        lambda self, task, ctx, prompt, *_: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
     )
     result = strategy.invoke(make_task(), make_context())
     assert [r["ideas"] for r in result.response] == [["a", "b"], ["c"]]
@@ -261,7 +265,7 @@ def test_return_last_ships_the_annotated_records_of_an_expansion(monkeypatch):
     monkeypatch.setattr(
         OnlineStrategy,
         "_call_llm",
-        lambda self, task, ctx, prompt: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
+        lambda self, task, ctx, prompt, *_: ([{"ideas": ["a", "b"]}, {"ideas": ["c"]}], True),
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is True, "a repairable expansion must not be tombstoned"
@@ -275,7 +279,7 @@ def test_an_all_empty_expansion_still_counts_as_empty_output(monkeypatch):
 
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ([{}, {}], True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ([{}, {}], True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert _is_empty_output(result.response) is True, (
@@ -287,7 +291,7 @@ def test_an_empty_single_record_still_counts_as_empty_output(monkeypatch):
     from agent_actions.processing.helpers import _is_empty_output
 
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
-    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: ({}, True))
+    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ({}, True))
     result = strategy.invoke(make_task(), make_context())
     assert _is_empty_output(result.response) is True
 
@@ -300,7 +304,7 @@ def test_a_single_item_list_of_a_non_record_is_tombstoned_not_crashed(monkeypatc
     )
     strategy = OnlineStrategy(expectation_service=service)
     monkeypatch.setattr(
-        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt: (["just a string"], True)
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: (["just a string"], True)
     )
     result = strategy.invoke(make_task(), make_context())
     assert result.executed is False

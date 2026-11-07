@@ -67,22 +67,14 @@ def _load_inline_schema(
         Tuple of (prepared schema dict, schema name)
     """
     dispatched_to = schema_dispatch_function(inline_schema)
+    chosen: str | None = None
     if dispatched_to is None:
         resolved_schema = inline_schema
     else:
-        try:
-            returned = _resolve_dispatch_in_schema(
-                inline_schema, tools_path, context_data_str, agent_config, captured_results
-            )
-        except ConfigValidationError as exc:
-            raise SchemaDispatchError(
-                f"dispatch_task('{dispatched_to}') in schema failed for this record: {exc}",
-                context={"function": dispatched_to},
-                cause=exc,
-            ) from exc
-        resolved_schema = _dispatched_schema(
-            dispatched_to, returned, agent_config.get("schema_options"), project_root
+        chosen = choose_dispatched_schema_name(
+            inline_schema, tools_path, context_data_str, agent_config, captured_results
         )
+        resolved_schema = load_chosen_schema(dispatched_to, chosen, project_root)
 
     # A compiled form (fields, or a JSON Schema array/object) is compiled later by
     # compile_unified_schema; only shorthand goes through the shorthand parser.
@@ -91,14 +83,45 @@ def _load_inline_schema(
     else:
         base_schema = SchemaLoader.construct_schema_from_dict(resolved_schema)
 
-    schema_name = agent_config.get("name", "inline_schema")
+    schema_name = chosen or agent_config.get("name", "inline_schema")
     return base_schema, schema_name
+
+
+def choose_dispatched_schema_name(
+    inline_schema: str,
+    tools_path: str | None,
+    context_data_str: str,
+    agent_config: dict[str, Any],
+    captured_results: dict[str, Any],
+) -> str:
+    """Call an action's schema dispatch function for one record; return the option it chose.
+
+    The one place that calls the function, for online and batch alike.
+    """
+    function_name = schema_dispatch_function(inline_schema)
+    try:
+        returned = _resolve_dispatch_in_schema(
+            inline_schema, tools_path, context_data_str, agent_config, captured_results
+        )
+    except ConfigValidationError as exc:
+        raise SchemaDispatchError(
+            f"dispatch_task('{function_name}') in schema failed for this record: {exc}",
+            context={"function": function_name},
+            cause=exc,
+        ) from exc
+    return _chosen_option(str(function_name), returned, agent_config.get("schema_options"))
 
 
 def _dispatched_schema(
     function_name: str, returned: Any, options: list[str] | None, project_root: Path | None
 ) -> dict[str, Any]:
-    """The schema file a dispatch function chose, by one of the action's ``schema_options``.
+    """The schema file a dispatch function chose, by one of the action's ``schema_options``."""
+    chosen = _chosen_option(function_name, returned, options)
+    return load_chosen_schema(function_name, chosen, project_root)
+
+
+def _chosen_option(function_name: str, returned: Any, options: list[str] | None) -> str:
+    """The returned name, when it is one of the action's declared options.
 
     The options are the action's declared contract: any other return fails this record.
     """
@@ -109,13 +132,18 @@ def _dispatched_schema(
             f"schema_options [{', '.join(options or [])}].",
             context={"function": function_name, "returned_type": type(returned).__name__},
         )
+    return returned
+
+
+def load_chosen_schema(function_name: str, name: str, project_root: Path | None) -> dict[str, Any]:
+    """Load the schema file a dispatch chose; a load failure fails this record."""
     try:
-        return SchemaLoader.load_schema(returned, project_root=project_root)
+        return SchemaLoader.load_schema(name, project_root=project_root)
     except (FileNotFoundError, ConfigValidationError, SchemaValidationError) as exc:
         raise SchemaDispatchError(
             f"dispatch_task('{function_name}') in schema returned the schema name "
-            f"'{returned}', which cannot be loaded: {exc}",
-            context={"function": function_name, "schema_name": returned},
+            f"'{name}', which cannot be loaded: {exc}",
+            context={"function": function_name, "schema_name": name},
             cause=exc,
         ) from exc
 
