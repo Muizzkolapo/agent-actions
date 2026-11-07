@@ -22,23 +22,33 @@ def is_file_granularity(granularity: Any) -> bool:
     return _token(granularity) == "file"
 
 
-def runs_without_a_model(agent: dict[str, Any]) -> bool:
-    """Whether the runtime routes this action to a tool or HITL, by kind or by vendor."""
+def routing_kind(agent: dict[str, Any]) -> str:
+    """The client the runtime sends this action to: ``"hitl"``, ``"tool"`` or ``"llm"``.
+
+    Read as the runtime reads it: ``kind`` (inherited from ``defaults:`` like any other
+    field) or ``model_vendor``. HITL is matched case-blind as the pipeline matches it; a
+    tool exactly, as the invocation factory matches it.
+    """
     from agent_actions.processing.helpers import _is_tool_action
 
-    return _is_tool_action(agent) or agent.get("model_vendor") == "hitl"
+    if _token(agent.get("kind")) == "hitl" or _token(agent.get("model_vendor")) == "hitl":
+        return "hitl"
+    if _is_tool_action(agent):
+        return "tool"
+    return "llm"
 
 
-def validate_granularity_for_kind(
-    agent: dict[str, Any], kind: Any, granularity: Any, action_name: str
-) -> None:
-    """Refuse a granularity an action sets that its kind cannot run at."""
-    if _token(kind) == "hitl":
+def validate_granularity_for_kind(kind: str, granularity: Any, action_name: str) -> None:
+    """Refuse a granularity an action sets that the runtime cannot run it at.
+
+    ``kind`` is the action's ``routing_kind``.
+    """
+    if kind == "hitl":
         if _token(granularity) == "record":
             raise ConfigurationError(
                 HITL_FILE_GRANULARITY_ERROR, context={"agent_name": action_name}
             )
-    elif is_file_granularity(granularity) and not runs_without_a_model(agent):
+    elif kind == "llm" and is_file_granularity(granularity):
         raise ConfigurationError(LLM_FILE_GRANULARITY_ERROR, context={"agent_name": action_name})
 
 

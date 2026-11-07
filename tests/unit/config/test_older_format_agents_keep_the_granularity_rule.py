@@ -30,9 +30,17 @@ def test_an_llm_agent_at_file_granularity_is_refused(nested):
     assert refused.value.context == {"agent_name": "label_page"}
 
 
-def test_a_hitl_agent_at_record_granularity_is_refused():
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"kind": "hitl", "model_vendor": "hitl", "granularity": "record"},
+        {"model_vendor": "hitl", "granularity": "record"},
+    ],
+    ids=["hitl_kind", "hitl_vendor"],
+)
+def test_a_hitl_agent_at_record_granularity_is_refused(entry):
     with pytest.raises(ConfigurationError, match="HITL actions require FILE granularity"):
-        _agents({"kind": "hitl", "model_vendor": "hitl", "granularity": "record"})
+        _agents(entry)
 
 
 @pytest.mark.parametrize(
@@ -41,12 +49,35 @@ def test_a_hitl_agent_at_record_granularity_is_refused():
         {"kind": "tool", "model_vendor": "tool", "granularity": "file"},
         {"model_vendor": "tool", "granularity": "file"},
         {"kind": "hitl", "model_vendor": "hitl", "granularity": "file"},
+        {"model_vendor": "hitl", "granularity": "file"},
         {**MODEL, "granularity": "record"},
         MODEL,
     ],
-    ids=["tool_kind", "tool_vendor", "hitl_file", "llm_record", "llm_unset"],
+    ids=["tool_kind", "tool_vendor", "hitl_file", "hitl_vendor_file", "llm_record", "llm_unset"],
 )
 def test_an_agent_its_kind_can_run_is_returned_as_written(entry):
     (agent,) = _agents(entry)
 
     assert agent == {"agent_type": "label_page", **entry}
+
+
+def test_a_mixed_case_tool_vendor_is_held_to_the_llm_rule_as_the_runtime_routes_it():
+    """The runtime matches a tool vendor exactly, so `Tool` would run as an LLM at FILE."""
+    with pytest.raises(ConfigurationError, match="FILE granularity is only supported"):
+        _agents({"model_vendor": "Tool", "granularity": "file"})
+
+
+def test_a_hitl_agent_with_no_granularity_runs_at_file_as_in_the_actions_format():
+    (agent,) = _agents({"kind": "hitl", "model_vendor": "hitl"})
+
+    assert agent["granularity"] == "file"
+
+
+@pytest.mark.parametrize("listed", [None, ["label_page"], {"agent_type": "label_page"}])
+def test_a_malformed_agents_list_names_the_workflow(listed):
+    manager = ConfigManager("wf.yml", "")
+    manager.user_config = {"wf": {"agents": listed}}
+    manager.agent_name = "wf"
+
+    with pytest.raises(ConfigurationError, match="Workflow 'wf': 'agents' must be a list"):
+        manager.get_user_agents()

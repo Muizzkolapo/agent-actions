@@ -53,8 +53,11 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
 
 
 def process_tool_action(agent: dict[str, Any], action: dict[str, Any]) -> None:
-    """Process tool-specific action configuration."""
-    action_kind = action.get("kind", DEFAULT_ACTION_KIND)
+    """Process tool-specific action configuration.
+
+    The kind is the agent's, so a ``kind: tool`` set under ``defaults:`` counts.
+    """
+    action_kind = agent.get("kind", action.get("kind", DEFAULT_ACTION_KIND))
     if action_kind != "tool":
         return
 

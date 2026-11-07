@@ -32,6 +32,7 @@ def _validate_entry(entry: dict, agent_name: str = "test_workflow") -> tuple[lis
 
 _HITL_BLOCK = {"hitl": {"port": 3999, "instructions": "Review these records"}}
 _HITL = {"kind": "hitl", **_HITL_BLOCK}
+_TOOL_SCHEMA = {"name": "t", "fields": [{"name": "out", "type": "string"}]}
 
 
 def _expanded_granularity(action: dict, defaults: dict | None = None) -> str:
@@ -344,9 +345,45 @@ class TestTypeSpecificValidation:
         action = {"name": "r", "model_vendor": "hitl", **_HITL_BLOCK, "granularity": "file"}
         assert _expanded_granularity(action) == "File"
 
-    def test_a_hitl_action_named_by_its_vendor_inherits_file_from_defaults(self):
+    def test_a_hitl_action_named_by_its_vendor_defaults_to_file_under_record_defaults(self):
         action = {"name": "r", "model_vendor": "hitl", **_HITL_BLOCK}
-        assert _expanded_granularity(action, {"granularity": "File"}) == "File"
+        assert _expanded_granularity(action, {"granularity": "Record"}) == "File"
+
+    def test_a_hitl_action_named_by_its_vendor_is_refused_at_record(self):
+        action = {"name": "r", "model_vendor": "hitl", **_HITL_BLOCK, "granularity": "record"}
+        with pytest.raises(ConfigurationError, match="HITL actions require FILE granularity"):
+            _expanded_granularity(action)
+
+    def test_a_tool_whose_kind_comes_from_defaults_inherits_file(self):
+        """The runtime reads the inherited kind, so the expander does too."""
+        action = {"name": "t", "impl": "mod.fn", "schema": _TOOL_SCHEMA}
+        assert _expanded_granularity(action, {"kind": "tool", "granularity": "File"}) == "File"
+
+    def test_a_tool_whose_kind_comes_from_defaults_may_set_file(self):
+        action = {"name": "t", "impl": "mod.fn", "schema": _TOOL_SCHEMA, "granularity": "file"}
+        assert _expanded_granularity(action, {"kind": "tool"}) == "File"
+
+    def test_an_inherited_file_on_an_llm_action_is_reported(self, caplog):
+        with caplog.at_level("WARNING"):
+            assert _expanded_granularity({"name": "a"}, {"granularity": "File"}) == "Record"
+
+        assert any(
+            "'a' is an LLM action" in r.getMessage() and "not applied" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_a_hitl_action_named_by_its_vendor_gets_its_hitl_block(self):
+        agents = ActionExpander.expand_actions_to_agents(
+            {
+                "name": "test_workflow",
+                "defaults": {"model_vendor": "openai", "model_name": "gpt-4o", "api_key": "k"},
+                "actions": [{"name": "r", "prompt": "p", "model_vendor": "hitl", **_HITL_BLOCK}],
+            }
+        )
+        (agent,) = agents["test_workflow"]
+
+        assert agent["hitl"]["instructions"] == "Review these records"
+        assert agent["model_vendor"] == "hitl"
 
     def test_hitl_file_granularity_passes(self):
         """HITL action with granularity: file expands at File."""

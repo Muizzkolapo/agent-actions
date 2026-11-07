@@ -381,27 +381,35 @@ class ConfigManager:
                     "before get_user_agents()"
                 )
             from agent_actions.output.response.expander_validation import (
+                routing_kind,
                 validate_granularity_for_kind,
             )
 
             agents_section = self.user_config[self.agent_name]
             self._load_project_endpoints()
-            agents: list[dict[str, Any]]
             if "agents" in agents_section:
-                agents = agents_section["agents"]
+                listed = agents_section["agents"]
+                if not isinstance(listed, list) or not all(isinstance(a, dict) for a in listed):
+                    raise ConfigurationError(
+                        f"Workflow '{self.agent_name}': 'agents' must be a list of agent "
+                        "entries, each a mapping",
+                        context={"agent_name": self.agent_name},
+                    )
             else:
-                agents = [
+                listed = [
                     agent
                     for agent in agents_section
                     if isinstance(agent, dict) and "agent_type" in agent
                 ]
-            for agent in agents:
-                validate_granularity_for_kind(
-                    agent,
-                    agent.get("kind"),
-                    agent.get("granularity"),
-                    agent.get("name") or agent.get("agent_type", "?"),
-                )
+            agents: list[dict[str, Any]] = []
+            for agent in listed:
+                kind = routing_kind(agent)
+                name = agent.get("name") or agent.get("agent_type", "?")
+                validate_granularity_for_kind(kind, agent.get("granularity"), name)
+                # A HITL review sees the whole dataset in one step, as in the actions format.
+                if kind == "hitl" and agent.get("granularity") is None:
+                    agent = {**agent, "granularity": "file"}
+                agents.append(agent)
             return agents
 
     def _load_project_endpoints(self) -> None:

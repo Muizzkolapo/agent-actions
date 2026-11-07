@@ -438,7 +438,7 @@ ResponseBuilder (static methods):
 
 10. **HITL granularity must be "file".** HITL actions default to file-level granularity. Explicitly setting `granularity: record` on a HITL action raises `ConfigurationError` with the `HITL_FILE_GRANULARITY_ERROR` constant.
 
-10a. **LLM granularity must be "record".** Setting `granularity: file` on an LLM action raises `ConfigurationError` with `LLM_FILE_GRANULARITY_ERROR`. A `granularity: file` an LLM action inherits from `defaults:` is not applied; the action expands at Record. An action counts as a tool or HITL by `kind` or by `model_vendor`, as the runtime routes it. Both rules live in `validate_granularity_for_kind()`, which also checks a workflow written as a list of agent entries.
+10a. **LLM granularity must be "record".** Setting `granularity: file` on an LLM action raises `ConfigurationError` with `LLM_FILE_GRANULARITY_ERROR`. A `granularity: file` an LLM action inherits from `defaults:` is not applied, with a warning; the action expands at Record. What an action is comes from `routing_kind()`, worked out once as the runtime works it out: `kind` (inherited from `defaults:` too) or `model_vendor`. The expander reads that one value for the HITL vendor, the forced online run mode, the required-field check, HITL and tool processing, and granularity. Both rules live in `validate_granularity_for_kind()`, which also checks a workflow written as a list of agent entries.
 
 11. **Mutable defaults are deep-copied.** `inherit_simple_fields()` deep-copies any list or dict value before assigning it to the agent dict. Without this, all agents in a versioned expansion would share the same mutable reference, causing cross-agent state leakage.
 
