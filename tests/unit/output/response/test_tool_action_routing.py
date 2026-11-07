@@ -5,7 +5,8 @@ from agent_actions.output.response.expander_action_types import process_tool_act
 
 class TestToolActionRouting:
     def test_a_tool_action_routes_to_the_tool_vendor(self):
-        agent: dict = {}
+        # The expander has already inherited the action's fields, kind among them.
+        agent: dict = {"kind": "tool"}
         action = {"name": "my_tool", "kind": "tool", "impl": "mod.func", "schema": {"f": "str"}}
 
         process_tool_action(agent, action)

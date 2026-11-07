@@ -2,11 +2,54 @@
 
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import vendor_names
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES, RUNTIME_BUS_NAMESPACES
+from agent_actions.utils.constants import (
+    HITL_FILE_GRANULARITY_ERROR,
+    LLM_FILE_GRANULARITY_ERROR,
+    RESERVED_AGENT_NAMES,
+    RUNTIME_BUS_NAMESPACES,
+)
+
+
+def _token(value: Any) -> str:
+    return str(getattr(value, "value", value) or "").lower()
+
+
+def is_file_granularity(granularity: Any) -> bool:
+    return _token(granularity) == "file"
+
+
+def routing_kind(agent: dict[str, Any]) -> str:
+    """The client the runtime sends this action to: ``"hitl"``, ``"tool"`` or ``"llm"``.
+
+    Read as the runtime reads it: ``kind`` (inherited from ``defaults:`` like any other
+    field) or ``model_vendor``. HITL is matched case-blind as the pipeline matches it; a
+    tool exactly, as the invocation factory matches it.
+    """
+    from agent_actions.processing.helpers import _is_tool_action
+
+    if _token(agent.get("kind")) == "hitl" or _token(agent.get("model_vendor")) == "hitl":
+        return "hitl"
+    if _is_tool_action(agent):
+        return "tool"
+    return "llm"
+
+
+def validate_granularity_for_kind(kind: str, granularity: Any, action_name: str) -> None:
+    """Refuse a granularity an action sets that the runtime cannot run it at.
+
+    ``kind`` is the action's ``routing_kind``.
+    """
+    if kind == "hitl":
+        if _token(granularity) == "record":
+            raise ConfigurationError(
+                HITL_FILE_GRANULARITY_ERROR, context={"agent_name": action_name}
+            )
+    elif kind == "llm" and is_file_granularity(granularity):
+        raise ConfigurationError(LLM_FILE_GRANULARITY_ERROR, context={"agent_name": action_name})
 
 
 def validate_vendor_exists(vendor: str | None, action_name: str) -> None:

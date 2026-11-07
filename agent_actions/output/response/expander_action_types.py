@@ -5,8 +5,8 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.guards import GuardBehavior, GuardParser, parse_guard_config
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.utils.constants import (
-    DEFAULT_ACTION_KIND,
     HITL_OUTPUT_JSON_SCHEMA,
     HITL_OUTPUT_SCHEMA,
 )
@@ -53,9 +53,12 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
 
 
 def process_tool_action(agent: dict[str, Any], action: dict[str, Any]) -> None:
-    """Process tool-specific action configuration."""
-    action_kind = action.get("kind", DEFAULT_ACTION_KIND)
-    if action_kind != "tool":
+    """Process tool-specific action configuration.
+
+    A tool is named as the runtime routes it: by ``kind``, inherited from ``defaults:``
+    too, or by ``model_vendor``. Each spelling is held to the same requirements.
+    """
+    if routing_kind(agent) != "tool":
         return
 
     if not action.get("impl"):

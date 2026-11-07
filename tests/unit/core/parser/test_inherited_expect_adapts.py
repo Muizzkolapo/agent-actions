@@ -42,7 +42,8 @@ class TestActionsThatCannotRepair:
         assert expand(POLICY, {"name": "t", **TOOL}) is None
 
     def test_a_file_granularity_action_does_not_inherit_it_either(self):
-        assert expand(POLICY, {"name": "w", "granularity": "file"}) is None
+        hitl = {"kind": "hitl", "hitl": {"port": 3999, "instructions": "Review"}}
+        assert expand(POLICY, {"name": "w", "granularity": "file", **hitl}) is None
 
     def test_an_llm_record_action_still_inherits_it(self):
         assert expand(POLICY, {"name": "a"}) == POLICY

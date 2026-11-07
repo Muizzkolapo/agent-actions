@@ -21,8 +21,13 @@ defaults:
   granularity: record
 
 actions:
+  - name: extract_items        # record, from defaults
+
   - name: aggregate_results
+    kind: tool
+    impl: aggregate_results
     granularity: file
+    dependencies: [extract_items]
 ```
 
 ## Record Granularity (Default)
@@ -63,7 +68,7 @@ A File action needs an action before it: it reads the file of records that actio
 - Cross-record validation
 
 :::warning Constraints
-**File granularity only works with tool and HITL actions** (`kind: tool` or `kind: hitl`). LLM actions must use Record granularity.
+**File granularity only works with tool and HITL actions** (`kind: tool` or `kind: hitl`). LLM actions must use Record granularity: `agac inspect` and `agac run` both refuse `granularity: file` set on an LLM action. A `granularity: file` under `defaults:` applies to the workflow's tools only; an LLM action that inherits it runs at Record.
 
 **HITL actions require File granularity** — setting `granularity: record` on a HITL action raises a `ConfigurationError`. HITL defaults to `file` automatically.
 

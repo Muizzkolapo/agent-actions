@@ -1,10 +1,7 @@
 """Validator for granularity and output_field configuration."""
 
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.constants import (
-    HITL_FILE_GRANULARITY_ERROR,
-    JSON_MODE_KEY,
-)
+from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
@@ -15,7 +12,11 @@ from agent_actions.validation.utils.action_config_validation_utilities import (
 
 
 class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
-    """Validates granularity enum, output_field compatibility, and kind-granularity rules."""
+    """Validates the granularity value and output_field compatibility.
+
+    Which kinds may run at which granularity is decided by the expander, which both
+    `agac inspect` and `agac run` go through and which sees inherited defaults.
+    """
 
     def validate(self, context) -> ActionEntryValidationResult:
         """Validate granularity and output_field configuration."""
@@ -35,17 +36,6 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
             if granularity not in valid_granularity_values:
                 valid_values_str = "' or '".join(sorted(valid_granularity_values))
                 errors.append(f"{desc} 'granularity' must be '{valid_values_str}'.")
-            elif granularity == "record":
-                kind = str(normalized_entry.get("kind", "")).lower()
-                if kind == "hitl":
-                    errors.append(f"{desc} {HITL_FILE_GRANULARITY_ERROR}")
-            elif granularity == "file":
-                kind = str(normalized_entry.get("kind", "")).lower()
-                if kind not in ("tool", "hitl"):
-                    errors.append(
-                        f"{desc} FILE granularity is only supported for tool and hitl actions. "
-                        "LLM actions must use RECORD granularity."
-                    )
 
         if "output_field" in normalized_entry:
             json_mode = normalized_entry.get(JSON_MODE_KEY, True)

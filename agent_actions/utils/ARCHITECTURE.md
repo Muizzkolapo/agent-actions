@@ -77,6 +77,7 @@ VersionIdGenerator (correlation.py)
 | `DANGEROUS_PATTERNS_UDF` | `frozenset` | UDF-specific superset (adds `__`) |
 | `SPECIAL_NAMESPACES` | `frozenset` | `RESERVED_AGENT_NAMES - {"context_scope"}` |
 | `HITL_FILE_GRANULARITY_ERROR` | `str` | HITL config validation |
+| `LLM_FILE_GRANULARITY_ERROR` | `str` | LLM config validation |
 | `HITL_OUTPUT_SCHEMA` / `HITL_OUTPUT_JSON_SCHEMA` | `dict` | Pre-compiled to avoid circular imports |
 | `SCHEMA_SUFFIXES` / `SCHEMA_FILE_GLOBS` | `tuple` | Schema file discovery |
 | Config key constants | `str` | `MODEL_VENDOR_KEY`, `PROMPT_KEY`, etc. |

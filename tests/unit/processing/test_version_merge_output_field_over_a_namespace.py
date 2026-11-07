@@ -79,7 +79,7 @@ def _expand(
         action["granularity"] = granularity
     if model_vendor is not None:
         action["model_vendor"] = model_vendor
-    if kind == "tool":
+    if kind == "tool" or model_vendor == "tool":
         action["impl"] = "aggregate"
     if version_consumption:
         action["version_consumption"] = {"source": "voter", "pattern": "merge"}
@@ -219,7 +219,7 @@ class TestTheNameIsRefusedWhereItIsDeclared:
         assert agent["version_consumption_config"]["source"] == "voter"
 
     def test_an_llm_version_consumer_is_unaffected_because_it_nests(self):
-        agent = _expand({"source": "string"}, kind="llm")
+        agent = _expand({"source": "string"}, kind="llm", granularity=None)
         assert agent["version_consumption_config"]["source"] == "voter"
 
     def test_a_tool_that_consumes_no_versions_is_unaffected(self):

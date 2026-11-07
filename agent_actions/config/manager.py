@@ -380,15 +380,37 @@ class ConfigManager:
                     "agent_name is None: validate_agent_name() must be called "
                     "before get_user_agents()"
                 )
+            from agent_actions.output.response.expander_validation import (
+                routing_kind,
+                validate_granularity_for_kind,
+            )
+
             agents_section = self.user_config[self.agent_name]
             self._load_project_endpoints()
             if "agents" in agents_section:
-                return agents_section["agents"]  # type: ignore[no-any-return]
-            return [
-                agent
-                for agent in agents_section
-                if isinstance(agent, dict) and "agent_type" in agent
-            ]
+                listed = agents_section["agents"]
+                if not isinstance(listed, list) or not all(isinstance(a, dict) for a in listed):
+                    raise ConfigurationError(
+                        f"Workflow '{self.agent_name}': 'agents' must be a list of agent "
+                        "entries, each a mapping",
+                        context={"agent_name": self.agent_name},
+                    )
+            else:
+                listed = [
+                    agent
+                    for agent in agents_section
+                    if isinstance(agent, dict) and "agent_type" in agent
+                ]
+            agents: list[dict[str, Any]] = []
+            for agent in listed:
+                kind = routing_kind(agent)
+                name = agent.get("name") or agent.get("agent_type", "?")
+                validate_granularity_for_kind(kind, agent.get("granularity"), name)
+                # A HITL review sees the whole dataset in one step, as in the actions format.
+                if kind == "hitl" and agent.get("granularity") is None:
+                    agent = {**agent, "granularity": "file"}
+                agents.append(agent)
+            return agents
 
     def _load_project_endpoints(self) -> None:
         """Validate the project's endpoints for a workflow that reads no project defaults."""
