@@ -393,14 +393,15 @@ class SchemaExtractor:
     ) -> None:
         """A dispatched schema writes one of its ``schema_options``: its fields are their union.
 
-        A field in some options only is kept apart, so a reader of it is warned. With no
-        options the shapes are unknown; pre-flight refuses that action on its own.
+        Each option keeps its own fields, so a reader of a field that some options lack is
+        told which. With no options the shapes are unknown; pre-flight refuses that action
+        on its own.
         """
         names = [name for name in options or [] if isinstance(name, str)]
         if not names:
             output.is_dynamic = True
             return
-        per_option: list[set[str]] = []
+        option_fields: dict[str, set[str]] = {}
         for name in names:
             option = OutputSchema()
             if not self._try_load_schema(option, name, schema_loader):
@@ -408,10 +409,9 @@ class SchemaExtractor:
                 output.load_error = option.load_error
                 output.failed_schema = name
                 return
-            per_option.append(set(option.schema_fields))
-        union: set[str] = set().union(*per_option)
-        output.schema_fields = union
-        output.partial_fields = union - per_option[0].intersection(*per_option[1:])
+            option_fields[name] = set(option.schema_fields)
+        output.option_fields = option_fields
+        output.schema_fields = set().union(*option_fields.values())
 
     def _extract_hitl_schema(self, output: OutputSchema) -> None:
         """Extract schema for HITL actions using the canonical HITL output schema.

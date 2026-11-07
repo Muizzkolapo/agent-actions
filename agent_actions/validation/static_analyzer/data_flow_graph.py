@@ -36,8 +36,8 @@ class OutputSchema:
     load_error: str | None = None
     # The named schema that failed to load, for the error that names it.
     failed_schema: str | None = None
-    # Fields of a dispatched schema found in some of its schema_options but not all.
-    partial_fields: set[str] = field(default_factory=set)
+    # A dispatched schema's options, each with the fields it declares.
+    option_fields: dict[str, set[str]] = field(default_factory=dict)
 
     @property
     def observe_fields(self) -> set[str]:

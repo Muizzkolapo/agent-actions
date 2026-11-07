@@ -92,9 +92,10 @@ def test_add_dispatch_with_a_dispatched_schema_online_passes(tmp_path):
     _check(tmp_path, "pick_schema", add_dispatch=True)
 
 
-def test_a_dispatch_with_no_schema_options_is_refused(tmp_path):
+@pytest.mark.parametrize("options", [None, []], ids=["absent", "empty"])
+def test_a_dispatch_with_no_schema_options_is_refused(tmp_path, options):
     with pytest.raises(PreFlightValidationError) as refused:
-        _check(tmp_path, "pick_schema", schema_options=None)
+        _check(tmp_path, "pick_schema", schema_options=options)
 
     assert (
         "Action 'label_page' takes its schema from dispatch_task('pick_schema') but declares "

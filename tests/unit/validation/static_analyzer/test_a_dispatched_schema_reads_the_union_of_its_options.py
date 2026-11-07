@@ -15,11 +15,14 @@ from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
 def _analyze(root: Path, reads: str, options: list[str]):
     (root / "agent_actions.yml").write_text("schema_path: schema\n")
     (root / "schema").mkdir(exist_ok=True)
-    for name, field in (("topic_answer", "topic"), ("verdict_answer", "verdict")):
-        (root / "schema" / f"{name}.yml").write_text(
-            f"name: {name}\nfields:\n  - id: {field}\n    type: string\n"
-            "  - id: shared\n    type: string\n"
-        )
+    fields = {
+        "topic_answer": ("topic", "shared", "note"),
+        "verdict_answer": ("verdict", "shared", "note"),
+        "label_answer": ("label", "shared"),
+    }
+    for name, ids in fields.items():
+        body = "".join(f"  - id: {field}\n    type: string\n" for field in ids)
+        (root / "schema" / f"{name}.yml").write_text(f"name: {name}\nfields:\n{body}")
     config = {
         "name": "wf",
         "actions": [
@@ -53,14 +56,35 @@ def test_a_field_in_every_option_is_a_checked_read(tmp_path):
     assert _about(_analyze(tmp_path, "shared", OPTIONS), "'shared'") == ([], [])
 
 
-def test_a_field_in_some_options_is_warned_as_possibly_absent(tmp_path):
+def test_a_field_in_the_first_option_only_names_the_option_that_lacks_it(tmp_path):
     errors, warnings = _about(_analyze(tmp_path, "topic", OPTIONS), "'topic'")
 
     assert errors == []
     assert warnings == [
-        "Field 'topic' of action 'label_page' is not in every schema in its schema_options; "
-        "it can be absent."
+        "Field 'topic' of action 'label_page' is in schema_options topic_answer but not in "
+        "verdict_answer; it can be absent."
     ]
+
+
+def test_a_field_in_a_later_option_only_is_read_past_the_first(tmp_path):
+    _, warnings = _about(_analyze(tmp_path, "verdict", OPTIONS), "'verdict'")
+
+    assert warnings == [
+        "Field 'verdict' of action 'label_page' is in schema_options verdict_answer but not in "
+        "topic_answer; it can be absent."
+    ]
+
+
+def test_a_field_in_two_of_three_options_names_both_sides(tmp_path):
+    options = ["topic_answer", "verdict_answer", "label_answer"]
+    result = _analyze(tmp_path, "note", options)
+    warnings = [w for w in result.warnings if "'note'" in w.message]
+
+    assert [w.message for w in warnings] == [
+        "Field 'note' of action 'label_page' is in schema_options topic_answer, verdict_answer "
+        "but not in label_answer; it can be absent."
+    ]
+    assert warnings[0].hint == "Read it with a default, or guard the reader on the field."
 
 
 def test_a_field_in_no_option_is_an_error(tmp_path):
