@@ -27,11 +27,11 @@ from agent_actions import udf_tool
 @udf_tool
 def prepare_pages(data: Any, *args) -> list[dict]:
     """Emit region and zone for every page but one; raise for another when asked."""
-    summary = ((data or {}).get("flatten") or {}).get("summary") or ""
-    if summary == "page 4" and __import__("os").environ.get("PREPARE_FAILS_PAGE_4") == "1":
+    page = ((data or {}).get("source") or {}).get("page_content") or ""
+    if page == "page 4" and __import__("os").environ.get("PREPARE_FAILS_PAGE_4") == "1":
         raise RuntimeError("page 4 cannot be prepared")
-    out = {"summary": summary, "exam_density": "low"}
-    if summary != "page 2":
+    out = {"summary": page, "exam_density": "low"}
+    if page != "page 2":
         out["region"] = "north"
         out["zone"] = "z-north"
     return [out]
@@ -63,7 +63,7 @@ ACTIONS = """  - name: prepare
     intent: "Emit region and zone for every page but one"
     schema: tool_action_output
     impl: prepare_pages
-    context_scope: { observe: [flatten.summary] }
+    context_scope: { observe: [source.page_content, flatten.summary] }
     expect: { repair: none }
   - name: counted
     kind: tool
@@ -89,6 +89,13 @@ def _declare(project, observe: str, guard: str | None = None):  # noqa: F811
             "    impl: count_handed\n", f"    impl: count_handed\n    guard: {guard}\n"
         )
     config.write_text(config.read_text().rstrip("\n") + "\n" + actions)
+    (project / "tools" / WORKFLOW / "refused_prepare.py").write_text(PREPARE_TOOL)
+    (project / "tools" / WORKFLOW / "refused_count.py").write_text(COUNT_TOOL)
+
+
+def _flat(output: str) -> str:
+    """The run's output with the console's line wrapping folded away."""
+    return " ".join(output.split())
 
 
 def _status(project, action):  # noqa: F811
@@ -144,9 +151,9 @@ class TestOneRecordLacksTwoObservedFields:
         project, result = one_lacking_two  # noqa: F811
 
         assert _status(project, "counted") == "completed_with_failures"
-        assert "completed with 1 item-level failure" in result.output
-        assert MISSING_TWO in result.output
-        assert "records skipped" not in result.output
+        assert "completed with 1 item-level failure" in _flat(result.output)
+        assert MISSING_TWO in _flat(result.output)
+        assert "records skipped" not in _flat(result.output)
 
     def test_the_tool_was_handed_every_other_record(self, one_lacking_two):
         project, _result = one_lacking_two  # noqa: F811
@@ -168,10 +175,10 @@ class TestEveryRecordLacksAField:
 
         assert result.exit_code != 0
         assert _status(project, "counted") == "failed"
-        assert (
-            "context_scope.observe field 'prepare.nope' not found in this record" in result.output
+        assert "context_scope.observe field 'prepare.nope' not found in this record" in _flat(
+            result.output
         )
-        assert "guard-filtered" not in result.output
+        assert "guard-filtered" not in _flat(result.output)
         assert "guard" not in " ".join(str(v) for v in _reasons(project, "counted").values())
 
 
@@ -190,10 +197,13 @@ class TestARecordWhoseUpstreamFailedIsNotARefusal:
         assert _status(project, "counted") == "completed"
 
 
-class TestTheGuardDecidesBeforeTheRefusal:
-    def test_a_record_the_guard_skips_is_skipped_not_failed(self, project):  # noqa: F811
-        """The scope refuses the record before the guard runs, but the guard still
-        judges it: one it would skip is a guard skip, as in RECORD mode."""
+class TestAGuardCannotReadARefusedRecord:
+    def test_a_record_lacking_an_observed_field_fails_even_under_a_guard_that_would_skip_it(
+        self,
+        project,  # noqa: F811
+    ):
+        """The guard's own context needs every observed field, so a record the scope
+        refuses is failed before the guard, whatever the guard would have said."""
         _declare(
             project,
             "prepare.summary, prepare.region, prepare.zone",
@@ -204,7 +214,7 @@ class TestTheGuardDecidesBeforeTheRefusal:
 
         assert result.exit_code == 0, result.output
         page_2 = _page(project, 2)
-        assert _disposition(project, page_2, "counted") == "unprocessed"
-        assert _reasons(project, "counted")[page_2] == "guard_prefilter_skip"
-        assert _status(project, "counted") == "completed"
-        assert "item-level failure" not in result.output
+        assert _disposition(project, page_2, "counted") == "failed"
+        assert _reasons(project, "counted")[page_2] == MISSING_TWO
+        assert _status(project, "counted") == "completed_with_failures"
+        assert "guard" not in MISSING_TWO
