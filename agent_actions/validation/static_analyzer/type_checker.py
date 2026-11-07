@@ -274,6 +274,22 @@ class StaticTypeChecker:
             )
             return
 
+        holders = [n for n, f in output_schema.option_fields.items() if root_field in f]
+        if holders and len(holders) < len(output_schema.option_fields):
+            lacking = [n for n in output_schema.option_fields if n not in holders]
+            result.add_warning(
+                StaticTypeWarning(
+                    message=f"Field '{root_field}' of action '{source_agent}' is in "
+                    f"schema_options {', '.join(holders)} but not in {', '.join(lacking)}; "
+                    "it can be absent.",
+                    location=location,
+                    referenced_agent=source_agent,
+                    referenced_field=field_path,
+                    hint="Read it with a default, or guard the reader on the field.",
+                )
+            )
+            return
+
         reads_namespace = is_guard or requirement.location in _NAMESPACE_READS
         if reads_namespace:
             # A read of the action's namespace finds it as stored: what it produced and the

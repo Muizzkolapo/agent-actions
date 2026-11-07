@@ -34,6 +34,10 @@ class OutputSchema:
     # A plain-text (json_mode: false) action stores its answer under this name alone.
     output_field: str | None = None
     load_error: str | None = None
+    # The named schema that failed to load, for the error that names it.
+    failed_schema: str | None = None
+    # A dispatched schema's options, each with the fields it declares.
+    option_fields: dict[str, set[str]] = field(default_factory=dict)
 
     @property
     def observe_fields(self) -> set[str]:

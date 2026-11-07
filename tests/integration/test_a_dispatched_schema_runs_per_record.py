@@ -40,6 +40,7 @@ actions:
   - name: label_page
     intent: "Label the page"
     schema: dispatch_task('dsp_pick_schema')
+    schema_options: [topic_answer, verdict_answer]
     prompt: $w.Label
     context_scope: {{ observe: [source.page_id, source.page_content] }}
 """
@@ -50,9 +51,7 @@ import json
 
 def dsp_pick_schema(context_json):
     page_id = (json.loads(context_json).get("source") or {}).get("page_id", "")
-    if page_id == "p1":
-        return {"name": "topic_answer", "fields": [{"id": "topic", "type": "string"}]}
-    return {"name": "verdict_answer", "fields": [{"id": "verdict", "type": "string"}]}
+    return "topic_answer" if page_id == "p1" else "verdict_answer"
 """
 
 
@@ -70,6 +69,10 @@ def project(tmp_path: Path, run_mode: str = "online", tool: str | None = None) -
     (root / "tools" / "w").mkdir(parents=True)
     (root / "tools" / "w" / "dsp_pick_schema.py").write_text(tool or _TOOL)
     (root / "schema").mkdir()
+    for name, field in (("topic_answer", "topic"), ("verdict_answer", "verdict")):
+        (root / "schema" / f"{name}.yml").write_text(
+            f"name: {name}\nfields:\n  - id: {field}\n    type: string\n"
+        )
     (root / "agent_actions.yml").write_text(_PROJECT)
     (root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
     return root
@@ -123,9 +126,7 @@ import json
 
 def dsp_pick_schema(context_json):
     page_id = (json.loads(context_json).get("source") or {}).get("page_id", "")
-    if page_id == "p1":
-        return {"name": "topic_answer", "fields": [{"id": "topic", "type": "string"}]}
-    return None
+    return "topic_answer" if page_id == "p1" else None
 """
 
 
@@ -136,8 +137,28 @@ def test_a_function_returning_none_fails_that_record_alone(tmp_path):
     output = result.stdout + result.stderr
 
     assert (
-        "dispatch_task('dsp_pick_schema') in schema returned None; "
-        "return a schema mapping or the name of a schema file."
+        "dispatch_task('dsp_pick_schema') in schema returned None, which is not in "
+        "schema_options [topic_answer, verdict_answer]."
     ) in output, output
     assert "AttributeError" not in output, output
     assert keys_by_page(root) == {"p1": {"topic"}, "p2": None}
+
+
+def test_a_dispatch_inside_a_named_schema_file_is_refused(tmp_path):
+    """The render step inlines a named file before pre-flight, so its fields are checked too."""
+    root = project(tmp_path)
+    config = root / "agent_workflow" / "w" / "agent_config" / "w.yml"
+    config.write_text(
+        config.read_text()
+        .replace("schema: dispatch_task('dsp_pick_schema')\n", "schema: field_dispatch\n")
+        .replace("    schema_options: [topic_answer, verdict_answer]\n", "")
+    )
+    (root / "schema" / "field_dispatch.yml").write_text(
+        "name: field_dispatch\nfields:\n  - id: topic\n    type: dispatch_task('dsp_pick_schema')\n"
+    )
+
+    result = run_agac(root, "inspect", "-a", "w", env={"COLUMNS": "400"})
+    output = result.stdout + result.stderr
+
+    assert result.returncode == 1, output
+    assert "calls dispatch_task inside its schema fields" in output, output

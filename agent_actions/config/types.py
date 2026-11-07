@@ -131,6 +131,7 @@ class ActionConfigDict(TypedDict, total=False):
     prompt: str
     schema_name: str
     schema: dict[str, Any]
+    schema_options: list[str]
     json_output_schema: dict[str, Any]
     prompt_debug: bool
 

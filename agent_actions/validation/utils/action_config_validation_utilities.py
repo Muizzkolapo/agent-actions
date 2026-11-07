@@ -48,6 +48,7 @@ class ActionConfigValidationUtilities:
         PROMPT_KEY,
         SCHEMA_NAME_KEY,
         SCHEMA_KEY,
+        "schema_options",
         "tools",
         CHUNK_CONFIG_KEY,
         "conditional_clause",

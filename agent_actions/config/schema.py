@@ -530,6 +530,10 @@ class ActionConfig(_RetryValidators):
         description="Output schema",
         alias="schema",  # noqa: A003 — shadows builtin; rename breaks YAML compat
     )
+    schema_options: list[str] | None = Field(
+        default=None,
+        description="Schema names a schema: dispatch_task(...) may choose from, one per record",
+    )
     granularity: Granularity | None = Field(default=None, description="Execution granularity")
     guard: str | dict[str, Any] | None = Field(
         default=None, description="Condition for action execution"

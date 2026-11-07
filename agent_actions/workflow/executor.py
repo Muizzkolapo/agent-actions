@@ -142,6 +142,15 @@ def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
     return _digest(dependencies)
 
 
+def _compute_schema_options_hash(action_config: ActionConfigDict) -> str | None:
+    """A digest of a dispatched schema's ``schema_options``; None for an action with none.
+
+    None leaves an action without options unstamped, so its earlier stamps stay valid.
+    """
+    options: Any = action_config.get("schema_options")
+    return _digest(list(options)) if options else None
+
+
 def _compute_generation_hash(action_config: ActionConfigDict) -> str:
     """A digest of the generation settings sent with each request; empty for a non-LLM action.
 
@@ -180,6 +189,7 @@ _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], 
     ("dependencies_hash", "dependencies", _compute_dependencies_hash),
     ("generation_hash", "generation settings", _compute_generation_hash),
     ("udf_source_hash", "tool/guard code", _compute_udf_source_hash),
+    ("schema_options_hash", "schema options", _compute_schema_options_hash),
 )
 
 

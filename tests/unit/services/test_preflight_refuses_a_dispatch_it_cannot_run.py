@@ -26,6 +26,7 @@ def _check(tmp_path: Path, function: str, **config) -> None:
     (tools / "pick_schema.py").write_text(TOOL)
     action = {
         "schema": f"dispatch_task('{function}')",
+        "schema_options": ["topic_answer"],
         "tool_path": [str(tmp_path / "tools")],
         "run_mode": "online",
         **config,
@@ -89,3 +90,45 @@ def test_add_dispatch_with_a_dispatched_schema_in_batch_is_refused(tmp_path):
 
 def test_add_dispatch_with_a_dispatched_schema_online_passes(tmp_path):
     _check(tmp_path, "pick_schema", add_dispatch=True)
+
+
+@pytest.mark.parametrize("options", [None, []], ids=["absent", "empty"])
+def test_a_dispatch_with_no_schema_options_is_refused(tmp_path, options):
+    with pytest.raises(PreFlightValidationError) as refused:
+        _check(tmp_path, "pick_schema", schema_options=options)
+
+    assert (
+        "Action 'label_page' takes its schema from dispatch_task('pick_schema') but declares "
+        "no schema_options. List every schema name the function can return under schema_options."
+    ) in str(refused.value)
+
+
+def test_schema_options_without_a_dispatch_is_refused(tmp_path):
+    with pytest.raises(PreFlightValidationError, match="sets schema_options, but its schema"):
+        _check(tmp_path, "pick_schema", schema={"topic": "string"})
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"name": "s", "fields": [{"id": "topic", "type": "dispatch_task('pick_schema')"}]},
+        {
+            "name": "s",
+            "fields": [
+                {
+                    "id": "detail",
+                    "type": "object",
+                    "properties": {"inner": {"type": "dispatch_task('pick_schema')"}},
+                }
+            ],
+        },
+    ],
+    ids=["top_level", "nested"],
+)
+def test_a_dispatch_inside_schema_fields_is_refused_and_names_schema_options(tmp_path, schema):
+    with pytest.raises(PreFlightValidationError) as refused:
+        _check(tmp_path, "pick_schema", schema=schema, schema_options=None)
+
+    message = str(refused.value)
+    assert "calls dispatch_task inside its schema fields" in message
+    assert "list the schemas it can return under schema_options" in message

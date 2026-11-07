@@ -221,7 +221,7 @@ schema:
 
 ## Dynamic Schema Selection
 
-What if different records need different output structures? For example, a quiz generator might need different schemas for multiple-choice and open-ended questions. Set `schema:` to a `dispatch_task()` call and a tool picks the schema for each record. Splitting the records with [guards](../execution/guards.md) into separate actions, each with its own schema, also works.
+Different records can need different output structures. For example, a quiz generator can need one schema for multiple-choice questions and another for open-ended questions. Set `schema:` to a `dispatch_task()` call, and list the schemas it can choose under `schema_options:`. A tool then picks one of them for each record. Splitting the records with [guards](../execution/guards.md) into separate actions, each with its own schema, also works.
 
 ### Basic Usage
 
@@ -229,18 +229,25 @@ What if different records need different output structures? For example, a quiz 
 - name: generate_question
   prompt: $quiz_gen.question_prompt
   schema: dispatch_task('select_question_schema')
+  schema_options: [mc_question_schema, tf_question_schema, open_question_schema]
 ```
 
-For each record, Agent Actions:
-1. Calls `select_question_schema` with the record's context
-2. Uses the schema it returns: a schema definition, or the name of a schema file
-3. Asks the model for that schema and checks the answer against it
+`schema_options` is the action's contract: the full list of shapes it can write. For each record, Agent Actions:
+1. Calls `select_question_schema` with the record's context.
+2. Loads the schema file whose name it returns. The name must be in `schema_options`.
+3. Asks the model for that schema and checks the answer against it.
 
-The function is found by file: `select_question_schema.py` under the project's tool path, defining a function of the same name. `agac inspect` refuses the action when no such file defines it. The value must be exactly one `dispatch_task()` call. It works under `run_mode: online` and `run_mode: batch`; in batch, each row is sent with its own schema. A batch run keeps no `add_dispatch` results, so `agac inspect` refuses `add_dispatch: true` on such an action under `run_mode: batch`.
+Before any action runs, `agac inspect` and `agac run`:
+1. Refuse a `dispatch_task()` schema with no `schema_options`, and `schema_options` with no `dispatch_task()` schema.
+2. Load every schema in `schema_options`. A name with no file is refused.
+3. Find the function as the run finds it: `select_question_schema.py` under the project's tool path, defining a function of the same name.
+4. Refuse a `dispatch_task()` call inside the fields of a fixed schema. A schema chosen per record must be chosen whole.
 
-### Returning a Schema Name
+The value must be exactly one `dispatch_task()` call. It works under `run_mode: online` and `run_mode: batch`; in batch, each row is sent with its own schema. A batch run keeps no `add_dispatch` results, so `agac inspect` refuses `add_dispatch: true` on such an action under `run_mode: batch`.
 
-Return the name of a file in `schema/`. It loads as `schema: <name>` would:
+### The Function
+
+Return one name from `schema_options`:
 
 ```python
 import json
@@ -256,36 +263,7 @@ def select_question_schema(context_json: str) -> str:
     return "open_question_schema"
 ```
 
-### Returning a Schema Definition
-
-Or return the definition itself, in any form a `schema:` block accepts:
-
-```python
-import json
-
-
-def select_output_schema(context_json: str) -> dict:
-    complexity = json.loads(context_json)["source"]["complexity"]
-
-    if complexity == "detailed":
-        return {
-            "name": "detailed_response",
-            "fields": [
-                {"id": "summary", "type": "string"},
-                {"id": "details", "type": "array"},
-                {"id": "confidence", "type": "number"},
-            ],
-        }
-    return {
-        "name": "simple_response",
-        "fields": [
-            {"id": "summary", "type": "string"},
-            {"id": "confidence", "type": "number"},
-        ],
-    }
-```
-
-A returned definition follows the project's `required_by_default`, as a schema file does. An error in the function, a schema name with no file, or any other return value, including `None`, fails that record alone, with `dispatch_task('<function>') in schema returned None; return a schema mapping or the name of a schema file.`
+The chosen schema follows the project's `required_by_default`, as any schema file does. Any other return value, such as a schema definition, `None` or a name outside the list, fails that record alone. The message is `dispatch_task('<function>') in schema returned None, which is not in schema_options [<names>].` An error in the function also fails that record alone.
 
 ### Context Available
 
@@ -305,6 +283,15 @@ def select_schema(context_json: str) -> str:
     return "default_schema"
 ```
 
+### Reading a Dispatched Action
+
+A downstream action reads one of several shapes. `agac inspect` checks each read against all the options:
+
+| Field | Result |
+|-------|--------|
+| In every schema in `schema_options` | Checked like any other field |
+| In some schemas only | Warning: the field can be absent |
+| In no schema | Error |
 
 ### Use Cases
 
@@ -313,8 +300,6 @@ def select_schema(context_json: str) -> str:
 | **Multi-domain content** | Select `technical_schema`, `business_schema`, or `legal_schema` based on content type |
 | **Adaptive complexity** | Use detailed schema for long content, simple schema for short content |
 | **Question types** | Different schemas for multiple-choice, true/false, open-ended questions |
-
-Downstream actions cannot have their reads of a dispatched action checked before the run, because its fields depend on the record; `agac inspect` warns about each such read.
 
 For more details on `dispatch_task()`, see [Dynamic Dispatch](../prompts/dispatch).
 

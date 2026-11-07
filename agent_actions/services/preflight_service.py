@@ -4,6 +4,7 @@ call it without spinning up storage or execution services."""
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -358,14 +359,39 @@ class PreflightService:
     def _check_schema_dispatches(self) -> None:
         """Refuse a ``schema: dispatch_task(...)`` the run could not resolve.
 
-        The function is looked up as the run looks it up, not in the UDF registry. A
-        batch run keeps no ``add_dispatch`` results, so that pairing is refused too.
+        The function is looked up as the run looks it up, not in the UDF registry. The
+        action declares every schema it can choose in ``schema_options``, so pre-flight
+        knows each shape. A ``dispatch_task`` inside a schema's fields has no such list,
+        and a batch run keeps no ``add_dispatch`` results: both are refused.
         """
         problems: list[str] = []
         for action, config in self.action_configs.items():
-            function = schema_dispatch_function(config.get("schema"))
+            schema = config.get("schema")
+            options = config.get("schema_options")
+            function = schema_dispatch_function(schema)
             if function is None:
+                if options is not None:
+                    problems.append(
+                        f"Action '{action}' sets schema_options, but its schema is not a "
+                        "dispatch_task(...) call. Remove schema_options, or set "
+                        "schema: dispatch_task('<function>')."
+                    )
+                if isinstance(schema, (dict, list)) and "dispatch_task(" in json.dumps(
+                    schema, default=str
+                ):
+                    problems.append(
+                        f"Action '{action}' calls dispatch_task inside its schema fields. A "
+                        "schema chosen per record must be chosen whole: set "
+                        "schema: dispatch_task('<function>') and list the schemas it can "
+                        "return under schema_options."
+                    )
                 continue
+            if not options or not all(isinstance(name, str) for name in options):
+                problems.append(
+                    f"Action '{action}' takes its schema from dispatch_task('{function}') but "
+                    "declares no schema_options. List every schema name the function can "
+                    "return under schema_options."
+                )
             problem = _dispatch_lookup_problem(function, resolve_tools_path(config))
             if problem:
                 problems.append(
