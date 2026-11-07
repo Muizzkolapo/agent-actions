@@ -251,9 +251,45 @@ class TestANarrowTerminalCutsNoCount:
 
         cmd._show_summary(backend, [action])
 
-        body = [line for line in buf.getvalue().splitlines() if line.startswith("│")]
-        cells = [cell.strip() for cell in body[0].strip("│").split("│")]
-        assert cells[1] == "1234"
-        assert cells[8] == "1234"
-        assert "…" not in " ".join(body)
-        assert action == "".join(line.strip("│").split("│")[0].strip() for line in body)
+        cells = _summary_cells(buf.getvalue(), action)
+        assert (cells["Success"], cells["Total"]) == ("1234", "1234")
+        assert "…" not in buf.getvalue()
+
+
+class TestFailedChecksHaveTheirOwnColumn:
+    """A record shipped with a failing verdict is stored as a success; the summary names it."""
+
+    def test_failed_checks_have_their_own_column(self):
+        rows = [
+            {"record_id": f"r{n}", "disposition": "success", "reason": "expectations_failed"}
+            for n in range(3)
+        ]
+        rows.append({"record_id": "r4", "disposition": "unprocessed", "reason": "guard_skip"})
+        backend = make_mock_backend({"repaired": rows})
+        cmd, buf = _make_cmd()
+        cmd.console = Console(file=buf, force_terminal=False, width=200)
+
+        cmd._show_summary(backend, ["repaired"])
+
+        cells = _summary_cells(buf.getvalue(), "repaired")
+        columns = ("Success", "Failed checks", "Failed", "Exhausted", "Guard skipped", "Total")
+        assert [cells[c] for c in columns] == ["0", "3", "0", "0", "1", "4"]
+
+    def test_a_success_with_another_reason_stays_in_success(self):
+        backend = make_mock_backend(
+            {
+                "a": [
+                    {"record_id": "r1", "disposition": "success", "reason": "consumed_into_output"},
+                    {"record_id": "r2", "disposition": "success", "reason": "expectations_failed"},
+                    {"record_id": "r3", "disposition": "failed", "reason": "expectations_failed"},
+                ],
+            }
+        )
+        cmd, buf = _make_cmd()
+        cmd.console = Console(file=buf, force_terminal=False, width=200)
+
+        cmd._show_summary(backend, ["a"])
+
+        cells = _summary_cells(buf.getvalue(), "a")
+        columns = ("Success", "Failed checks", "Failed", "Total")
+        assert [cells[c] for c in columns] == ["1", "1", "1", "3"]

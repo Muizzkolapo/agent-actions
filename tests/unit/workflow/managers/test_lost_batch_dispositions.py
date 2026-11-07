@@ -98,6 +98,37 @@ def test_a_record_gets_what_its_row_stands_for(backend, state, reason, expected)
     assert _settled(backend) == {"g1": expected}
 
 
+def _failing(row: dict) -> dict:
+    row["content"][ACTION]["expect"] = {"overall_pass": False, "failed": ["rule"], "outcomes": []}
+    return row
+
+
+def test_a_record_that_shipped_a_failing_verdict_is_settled_as_one(backend):
+    _register(backend)
+    _defer(backend, "g1")
+    _defer(backend, "g2")
+    _store(
+        backend, _failing(_row("g1", "processed", "success")), _row("g2", "processed", "success")
+    )
+
+    assert _settled(backend) == {
+        "g1": (DISPOSITION_SUCCESS, "expectations_failed"),
+        "g2": (DISPOSITION_SUCCESS, None),
+    }
+
+
+def test_a_split_record_with_one_failing_row_is_settled_as_failing_its_checks(backend):
+    _register(backend)
+    _defer(backend, "g1")
+    _store(
+        backend,
+        _row("g1-a", "processed", "success", producer_source_guids=["g1"]),
+        _failing(_row("g1-b", "processed", "success", producer_source_guids=["g1"])),
+    )
+
+    assert _settled(backend) == {"g1": (DISPOSITION_SUCCESS, "expectations_failed")}
+
+
 def test_a_split_record_is_answered_by_the_rows_it_produced(backend):
     _register(backend)
     _defer(backend, "g1")

@@ -79,7 +79,7 @@ def output_record_count(records: list[dict[str, Any]], action: str) -> int:
     return sum(1 for record in records if _produced_output(record, action))
 
 
-def _verdict_of(record: dict[str, Any], action: str) -> dict[str, Any] | None:
+def verdict_of(record: dict[str, Any], action: str) -> dict[str, Any] | None:
     """The verdict *action* wrote on *record*, or None if it wrote none.
 
     Target storage namespaces an action's output under ``content[action]``, and
@@ -103,7 +103,7 @@ def tally_action(action: str, records: list[dict[str, Any]]) -> ActionTally | No
     whose every rule passed are different answers, and reporting the first as
     zeroes would invent a denominator.
     """
-    verdicts = [v for record in records if (v := _verdict_of(record, action))]
+    verdicts = [v for record in records if (v := verdict_of(record, action))]
     if not verdicts:
         return None
     produced = sum(1 for record in records if _produced_output(record, action))

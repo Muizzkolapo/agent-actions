@@ -435,18 +435,22 @@ def _outcome_of(
 ) -> tuple[str, str | None, str | None] | None:
     """(disposition, reason, detail) the collect pass wrote for a record holding *rows*.
 
-    A record answered with any row is ``success``, as a split's rows are. Otherwise its
+    A record answered with any row is ``success``, as a split's rows are, with reason
+    ``expectations_failed`` when one of them shipped a failing verdict. Otherwise its
     row's state and the reason this action gave it say what the collect pass wrote; an
     answer kept empty (``on_empty: skip``) is ``passthrough``.
     """
-    from agent_actions.record.reasons import EMPTY_OUTPUT, UNPROCESSED
+    from agent_actions.processing.result_collector import failed_its_checks
+    from agent_actions.record.reasons import EMPTY_OUTPUT, EXPECTATIONS_FAILED, UNPROCESSED
     from agent_actions.record.state import RecordState
 
     if not rows:
         return None
     states = {row.get("_state") for row in rows}
     if RecordState.PROCESSED.value in states:
-        return (DISPOSITION_SUCCESS, None, None)
+        # As the collect pass marks it: one failing row fails the record.
+        failed = any(failed_its_checks(row, action_name) for row in rows)
+        return (DISPOSITION_SUCCESS, EXPECTATIONS_FAILED if failed else None, None)
     if len(states) != 1:
         return None
     (state,) = states
