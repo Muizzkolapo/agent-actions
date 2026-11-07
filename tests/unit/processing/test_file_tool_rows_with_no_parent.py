@@ -141,7 +141,7 @@ class TestARowThatNamesNoParent:
         assert [row.get("parent_source_guid") for row in rows] == [None, None]
 
     def test_an_ancestor_carried_from_the_input_is_left_alone(self):
-        """The row takes its namespaces from ``original_data[0]``, and the envelope
+        """The row's persistent fields come from ``original_data[0]``, and the envelope
         carries that record's tracking fields with them, so an input that is itself
         an expansion child hands its ancestor to a row with no producer of its own.
 
@@ -164,8 +164,9 @@ class TestARowThatNamesNoParent:
         assert [row.get("parent_source_guid") for row in rows] == ["POOL0", "POOL0"]
 
     def test_it_does_not_take_the_identity_of_the_input_standing_in_for_it(self):
-        """``_resolve_input_record`` stands ``original_data[0]`` in for namespace
-        carry-forward. That is a content decision, not an identity one."""
+        """What every input shares stands in for namespace carry-forward, with
+        ``original_data[0]``'s persistent fields. That is a content decision, not an
+        identity one."""
         rows, _ = reconcile_outputs(invented(1), "a2", records("G0"))
 
         assert rows[0]["source_guid"] != "G0"

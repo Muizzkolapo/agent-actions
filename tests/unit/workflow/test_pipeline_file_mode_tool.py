@@ -308,10 +308,10 @@ def test_synthetic_mixed_with_sourced_records():
     # Nor either input's `prev.q`, which differs between them
     assert "prev" not in result.data[1]["content"]
     assert result.data[0]["content"]["prev"] == {"q": "Q1"}
+    assert result.data[2]["content"]["prev"] == {"q": "Q2"}
 
-    # All records have both upstream and action namespaces
+    # Every record has the action's namespace
     for item in result.data:
-        assert "prev" in item["content"]
         assert "my_file_tool" in item["content"]
 
 

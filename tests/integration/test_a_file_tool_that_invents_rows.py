@@ -133,12 +133,15 @@ def test_an_invented_row_still_carries_what_every_input_shared(inventing):
     carried; `flatten.summary` and `source.page_content` differ and are not, so
     the row holds no input's `source`."""
     read_back = _read_back(inventing, "roll_up")
+    inputs = [r["content"]["flatten"] for r in _raw(inventing, ACTION)]
+    shared = {k: v for k, v in inputs[0].items() if all(i.get(k) == v for i in inputs)}
 
     assert [sorted(r.get("content", {})) for r in read_back] == [
         ["flatten", "roll_up"],
         ["flatten", "roll_up"],
     ]
-    assert [r["content"]["flatten"] for r in read_back] == [{"exam_density": "low"}] * 2
+    assert shared["exam_density"] == "low"
+    assert [r["content"]["flatten"] for r in read_back] == [shared] * 2
 
 
 def test_the_action_below_reads_a_value_from_above_the_roll_up(inventing):
