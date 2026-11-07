@@ -39,13 +39,9 @@ from agent_actions.processing.repair_lineage import (
 from agent_actions.processing.result_collector import write_dispositions
 from agent_actions.processing.strategies import FileToolStrategy, HITLStrategy
 from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
-from agent_actions.processing.types import ProcessingContext
-from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor
+from agent_actions.processing.types import ProcessingContext, ProcessingResult
+from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor, refused_failure
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
-from agent_actions.storage.backend import (
-    DISPOSITION_SKIPPED,
-    DispositionRow,
-)
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.limits import record_indices_to_process
 from agent_actions.utils.safe_format import safe_format_error
@@ -72,27 +68,20 @@ class PipelineConfig:
     retried_records: frozenset[str] = frozenset()
 
 
-def scope_skip_disposition_rows(
-    action_name: str, scope_skipped: list[dict[str, Any]]
-) -> list[DispositionRow]:
-    """The disposition rows for records the scope pass refused.
+def scope_refusals(
+    scope_skipped: list[dict[str, Any]], records: list[dict[str, Any]]
+) -> list[ProcessingResult]:
+    """The failed result for each record the FILE scope pass could not hand the action.
 
-    `detail` is the seventh column and carries which field was missing, or how large the
-    source pool was -- the reason alone says only that something was. A record with no
-    source_guid has nothing to key a disposition on and is left out.
+    A refusal names the record's position in *records*, the pre-scope list, so the
+    tombstone is built from the record as it was handed in. The error is the refusal's
+    detail, which names every missing field or the source pool searched; the collector
+    writes the disposition from it, as it does for a record the tool itself refused.
+    The guard does not judge such a record: its context needs every observed field.
     """
     return [
-        (
-            action_name,
-            str(skip["source_guid"]),
-            DISPOSITION_SKIPPED,
-            skip["reason"],
-            None,
-            None,
-            skip.get("detail"),
-        )
+        refused_failure(records[skip["position"]], skip.get("detail") or skip["reason"])
         for skip in scope_skipped
-        if skip.get("source_guid")
     ]
 
 
@@ -847,19 +836,10 @@ class ProcessingPipeline:
                 source_data=source_data,
                 agent_config=cast(dict[str, Any], self.config.action_config),
             )
-            if scope_skipped and self.config.storage_backend:
-                batch = scope_skip_disposition_rows(self.config.action_name, scope_skipped)
-                if batch:
-                    try:
-                        self.config.storage_backend.set_dispositions_batch(batch)
-                    except Exception:
-                        logger.exception(
-                            "Failed to batch-write %d scope-skip dispositions for %s",
-                            len(batch),
-                            self.config.action_name,
-                        )
             # Matched to `filtered`, not to `data`: the guard pairs the two lists by
-            # position, so the pre-drop list failed the whole file over one drop.
+            # position, so the pre-drop list failed the whole file over one drop. A
+            # refused record is a failure of this action, collected with the rest; the
+            # guard cannot read it, since its context needs every observed field.
             dropped = {skip["position"] for skip in scope_skipped}
             pre_observe = [record for at, record in enumerate(data) if at not in dropped]
             replaced = {guid for row in stored_here if (guid := row.get("source_guid"))}
@@ -870,6 +850,7 @@ class ProcessingPipeline:
                 raw_records=pre_observe,
                 repair_inputs=offered_to_repair,
                 whole_file=whole_file,
+                refused=scope_refusals(scope_skipped, data),
             )
             # A row the tool wrote again as it was is the row it was, and what reads it
             # still answers for it.

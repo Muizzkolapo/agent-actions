@@ -474,7 +474,7 @@ class TestObserveFieldMissing:
         assert len(skipped) == 1
         assert skipped[0]["source_guid"] == "g2"
 
-    def test_summary_warning_logged(self):
+    def test_no_warning_is_logged_for_a_refused_record(self):
         """One summary WARNING for N skipped records, not N individual warnings."""
         from unittest.mock import patch
 
@@ -485,13 +485,10 @@ class TestObserveFieldMissing:
                 records, scope, action_name="test_action"
             )
         assert len(skipped) == 5
-        # Per-record logs are DEBUG, not WARNING
-        for call in mock_logger.warning.call_args_list:
-            assert "Skipping record" not in str(call)
-        # One summary WARNING
-        assert mock_logger.warning.call_count == 1
-        summary_msg = mock_logger.warning.call_args[0][0] % mock_logger.warning.call_args[0][1:]
-        assert "5 of 5 records skipped" in summary_msg
+        # Per-record logs are DEBUG, not WARNING, and there is no summary line either:
+        # each refusal is the record's failure (or a guard skip), reported by the collector.
+        assert mock_logger.warning.call_count == 0
+        assert mock_logger.debug.call_count >= 5
 
     def test_null_namespace_still_enriches(self):
         """Null namespace (guard-skipped upstream) still enriches — not skipped."""
