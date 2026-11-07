@@ -177,7 +177,9 @@ def test_an_invented_row_is_given_no_producer_of_its_own(inventing):
 
 def test_a_retry_below_it_rolls_the_file_up_again(inventing):
     """The rows claim no record, and none needs to: a retry reaching the file hands
-    the tool all of it and replaces both rows, so nothing is left to attribute."""
+    the tool all of it and writes both rows again. Written again exactly as they
+    were, they are the rows they were and keep their identity, as any row does; the
+    actions below keep what they hold for them."""
     before = {r["source_guid"] for r in _raw(inventing, "roll_up")}
     selected = _record_ids(inventing, ACTION)[1]
     _fail(inventing, selected, ACTION)
@@ -190,7 +192,7 @@ def test_a_retry_below_it_rolls_the_file_up_again(inventing):
     assert [r["content"]["roll_up"]["summary"] for r in after] == [
         f"rollup {half} over {RECORDS}" for half in (1, 2)
     ]
-    assert before.isdisjoint(r["source_guid"] for r in after)
+    assert {r["source_guid"] for r in after} == before
 
 
 def test_the_records_it_rolled_up_are_all_still_accounted_for(inventing):
