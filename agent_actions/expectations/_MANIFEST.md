@@ -75,7 +75,6 @@ reads the `expectations:` block of the action's resolved schema — the load pip
 named schema into the config and drops its name, so the inlined dict is the authority and the
 name route is only a fallback. A judged expectation's `context:` refs are auto-injected
 into the producing action's `context_scope.observe` for the inline form only, so a named suite's
-refs are inert. The prompt trace stores the original prompt against the final response, so a
-record repaired on a later iteration has a trace whose prompt did not produce it. `_structural`
+refs are inert. `_structural`
 is reserved as an outcome id by convention; collision is prevented by control flow, since a
 structural failure returns its own result instead of running the suite.

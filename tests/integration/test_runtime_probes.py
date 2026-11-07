@@ -179,6 +179,26 @@ class TestHonestyProbe:
         assert _action_complete_data(r)["repaired"]["guard_skipped"] == 1
         assert _action_complete_data(r)["observed"]["guard_skipped"] == 0
 
+    def test_honesty_probe_traces_every_attempt(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob("*.db")
+        rows = stored_rows(
+            db,
+            "select record_id, attempt, compiled_prompt, response_text from prompt_trace "
+            "where action_name = 'repaired' order by record_id, attempt",
+        )
+        by_record: dict[str, list[int]] = {}
+        for record_id, attempt, _, _ in rows:
+            by_record.setdefault(record_id, []).append(attempt)
+        assert len(rows) == 9
+        assert sorted(by_record.values()) == [[0, 1, 2]] * 3
+        for _, attempt, prompt, response in rows:
+            assert response, f"attempt {attempt} has no response"
+            repairing = "Regenerate the complete output" in prompt
+            assert repairing is (attempt > 0), (attempt, prompt[-200:])
+
     @staticmethod
     def _project(tmp_path, run_mode="online"):
         project = tmp_path / "honesty_probe"
