@@ -12,6 +12,7 @@ from agent_actions.errors import (
     mark_every_record_failed,
 )
 from agent_actions.errors import terminal_failure as build_terminal_failure
+from agent_actions.expectations.report import verdict_of
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
@@ -24,6 +25,7 @@ from agent_actions.processing.types import ProcessingContext, ProcessingResult, 
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     CONSUMED_INTO_OUTPUT,
+    EXPECTATIONS_FAILED,
     GUARD_FILTER,
     GUARD_SKIP,
     GUARD_SKIP_REASONS,
@@ -145,7 +147,9 @@ class CollectionStats:
 
     @property
     def only_guard_outcomes(self) -> bool:
-        """True when every collected record was guard-filtered or skipped.
+        """True when something was collected and every record was guard-filtered or skipped.
+
+        With nothing collected no guard acted, so it is False.
 
         A guard skip is collected UNPROCESSED, so it is not among them; a SKIPPED
         result is an empty answer ``on_empty: skip`` kept.
@@ -160,7 +164,7 @@ class CollectionStats:
         total: int = sum(
             value for f in fields(self) if isinstance(value := getattr(self, f.name), int)
         )
-        return bool((self.skipped + self.filtered) == total)
+        return total > 0 and (self.skipped + self.filtered) == total
 
     def terminal_failure(
         self,
@@ -304,6 +308,38 @@ def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
     except (TypeError, ValueError):
         logger.debug("Could not serialize input snapshot: %s", type(source).__name__, exc_info=True)
         return None
+
+
+def failed_its_checks(row: dict[str, Any], action_name: str) -> bool:
+    """Whether *row* shipped carrying its own verdict with ``overall_pass`` false.
+
+    The one test of "this record failed its checks": every mode, kind and granularity
+    reaches the collector with the verdict under the action's own namespace. A failed
+    ``warn`` or ``info`` rule never sets ``overall_pass`` false, so it does not count.
+    """
+    verdict = verdict_of(row, action_name)
+    return verdict is not None and verdict.get("overall_pass") is False
+
+
+def _split_by_failed_checks(
+    data: list[dict[str, Any]], action_name: str
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+    """Rows of a bundled result split into (failing, passing), and the records that failed.
+
+    A record fails if any of its rows does. The store keeps one success row per record,
+    so splitting one record across both lists would keep whichever was queued first.
+    A row with no source_guid is a record of its own.
+    """
+    flagged = [failed_its_checks(d, action_name) for d in data]
+    failed_guids = {d.get("source_guid") for d, f in zip(data, flagged, strict=True) if f}
+    failed_guids.discard(None)
+    failed_guids.discard("")
+    unidentified = sum(
+        1 for d, f in zip(data, flagged, strict=True) if f and not d.get("source_guid")
+    )
+    failing = [d for d in data if d.get("source_guid") in failed_guids]
+    passing = [d for d in data if d.get("source_guid") not in failed_guids]
+    return failing, passing, len(failed_guids) + unidentified
 
 
 def _per_item_dispositions(
@@ -490,6 +526,7 @@ def collect_results_from_processing_results(
     pending_dispositions: list[DispositionRow] = []
     echoed: set[str] = set()
     guard_skipped_count = 0
+    checks_failed_count = 0
     carried_rows = 0
 
     for idx, result in enumerate(results):
@@ -584,25 +621,38 @@ def collect_results_from_processing_results(
                     status="success",
                 )
             )
-            if storage_backend and result.source_guid:
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_SUCCESS,
-                        None,
-                        None,
-                        None,
-                        None,
+            if result.source_guid:
+                # One record, however many rows it expanded into.
+                failed_checks = any(failed_its_checks(d, action_name) for d in data)
+                checks_failed_count += int(failed_checks)
+                if storage_backend:
+                    pending_dispositions.append(
+                        (
+                            action_name,
+                            result.source_guid,
+                            DISPOSITION_SUCCESS,
+                            EXPECTATIONS_FAILED if failed_checks else None,
+                            None,
+                            None,
+                            None,
+                        )
                     )
-                )
-            elif storage_backend and result.source_guid is None and data:
-                _per_item_dispositions(
-                    pending_dispositions,
-                    action_name,
-                    data,
-                    DISPOSITION_SUCCESS,
-                )
+            elif result.source_guid is None and data:
+                # A bundled FILE result: each row carries its record's own source_guid.
+                failing, passing, records_failed = _split_by_failed_checks(data, action_name)
+                checks_failed_count += records_failed
+                if storage_backend:
+                    _per_item_dispositions(
+                        pending_dispositions, action_name, passing, DISPOSITION_SUCCESS
+                    )
+                    if failing:
+                        _per_item_dispositions(
+                            pending_dispositions,
+                            action_name,
+                            failing,
+                            DISPOSITION_SUCCESS,
+                            reason=EXPECTATIONS_FAILED,
+                        )
             if storage_backend:
                 for guid in result.collapse_contributor_guids:
                     pending_dispositions.append(
@@ -988,6 +1038,8 @@ def collect_results_from_processing_results(
         storage_backend.credit_rows_collected(action_name, len(output) - carried_rows)
         if guard_skipped_count:
             storage_backend.credit_guard_skips(action_name, guard_skipped_count)
+        if checks_failed_count:
+            storage_backend.credit_checks_failed(action_name, checks_failed_count)
 
     return output, CollectionStats(
         causes=tuple(causes),

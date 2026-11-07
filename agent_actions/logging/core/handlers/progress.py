@@ -24,6 +24,16 @@ def _actions(count: int) -> str:
     return f"{count} action" if count == 1 else f"{count} actions"
 
 
+def _failed_checks(count: int) -> str:
+    """'N failed their checks', for an action line."""
+    return f"{count} failed its checks" if count == 1 else f"{count} failed their checks"
+
+
+def _records_failed_checks(count: int) -> str:
+    """'N records failed their checks', for the workflow line."""
+    return f"{_records(count)} failed {'its' if count == 1 else 'their'} checks"
+
+
 class ProgressRenderer(ConsoleEventHandler):
     """Renders workflow, step and action events as one grouped progress stream.
 
@@ -73,8 +83,16 @@ class ProgressRenderer(ConsoleEventHandler):
                 parts.append(f"{event.data[key]} {label}")
         if failed:
             parts.append(f"{failed} failed")
+        failed_checks = event.data.get("records_failed_checks", 0)
+        if failed_checks:
+            parts.append(_records_failed_checks(failed_checks))
 
-        icon = self._icon("✗", "FAILED", "red") if failed else self._icon("✓", "DONE", "green")
+        if failed:
+            icon = self._icon("✗", "FAILED", "red")
+        elif failed_checks:
+            icon = self._icon("⚠", "WARN", "yellow")
+        else:
+            icon = self._icon("✓", "DONE", "green")
         line = f"\n{icon} {elapsed} — {', '.join(parts)}"
         empty = event.data.get("empty_final_actions") or []
         if empty:
@@ -163,10 +181,21 @@ class ProgressRenderer(ConsoleEventHandler):
         model = self._model(event)
         if model:
             detail.append(f"({model})")
-        line = f"  {self._icon('✓', 'OK', 'green')} {self._subject(event)}{' '.join(detail)}"
+        failed_checks = event.data.get("checks_failed", 0)
+        # A record shipped with a failing verdict is a success by design; the icon and
+        # the count are what say it did not pass.
+        icon = (
+            self._icon("⚠", "WARN", "yellow") if failed_checks else self._icon("✓", "OK", "green")
+        )
+        line = f"  {icon} {self._subject(event)}{' '.join(detail)}"
+        notes = []
         guard_skipped = event.data.get("guard_skipped", 0)
         if guard_skipped:
-            line += f" — {guard_skipped} skipped by guard"
+            notes.append(f"{guard_skipped} skipped by guard")
+        if failed_checks:
+            notes.append(_failed_checks(failed_checks))
+        if notes:
+            line += " — " + ", ".join(notes)
         return line
 
     def _action_skip(self, event: BaseEvent) -> str:

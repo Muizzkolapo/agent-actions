@@ -26,10 +26,10 @@ One row per action, with a count per disposition:
 
 ```
                               Dispositions: my_workflow
-┃ Action  ┃ Success ┃ Failed ┃ Exhausted ┃ Guard skipped ┃ Unprocessed ┃ Passthrough ┃ Filtered ┃ Total ┃ Records ┃
-│ extract │      25 │      0 │         0 │             0 │           0 │           0 │        0 │    25 │      25 │
-│ rewrite │       4 │      0 │         0 │            21 │           0 │           0 │        0 │    25 │      25 │
-│ split   │       1 │      0 │         0 │             0 │           0 │           0 │        0 │     1 │       5 │
+┃ Action  ┃ Success ┃ Failed checks ┃ Failed ┃ Exhausted ┃ Guard skipped ┃ Unprocessed ┃ Passthrough ┃ Filtered ┃ Total ┃ Records ┃
+│ extract │      25 │             0 │      0 │         0 │             0 │           0 │           0 │        0 │    25 │      25 │
+│ rewrite │       4 │             0 │      0 │         0 │            21 │           0 │           0 │        0 │    25 │      25 │
+│ split   │       1 │             0 │      0 │         0 │             0 │           0 │           0 │        0 │     1 │       5 │
 ```
 
 The table is printed at its full width. In a terminal narrower than that, its lines wrap
@@ -38,6 +38,7 @@ instead of cutting a count or an action name short.
 | Disposition | Meaning |
 |-------------|---------|
 | **Success** | The record was processed by the action |
+| **Failed checks** | The record was processed and shipped with a failing [expectations](../validation/expectations.md) verdict, as `on_exhausted: return_last` and `repair: none` ship it. Stored as `success` with reason `expectations_failed`: it is not a failure, nothing reading it is blocked, and `agac retry` does not re-run it. Counted apart from **Success** so the columns still add up to **Total** |
 | **Failed** | Processing failed for the record |
 | **Exhausted** | The record failed and its retries are used up |
 | **Guard skipped** | The action's guard skipped the record and it flows on unchanged. Stored as `unprocessed` (see below) |
