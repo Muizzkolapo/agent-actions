@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  `schema: dispatch_task('fn')` now works under `run_mode: batch`: each row is compiled with
+  the schema its function returns for that record and sent with it. Batch compiled one schema
+  for the whole action, with no record to hand the function. A batch run keeps no
+  `add_dispatch` results, so `agac inspect` refuses `add_dispatch: true` there.
+time: 2026-11-07T12:00:00Z

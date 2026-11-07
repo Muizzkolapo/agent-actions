@@ -110,6 +110,8 @@ class BaseBatchClient(ABC):
                     f"Record {row.get('target_id', row.get('id', '?'))} missing 'content' key. "
                     "Every record must have namespaced content in the additive model."
                 )
+            # A row of an action whose schema is chosen per record carries its own.
+            row_schema = row.pop("compiled_schema", None)
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
@@ -121,7 +123,10 @@ class BaseBatchClient(ABC):
                 },
                 metadata=row,
             )
-            provider_task = self.format_task_for_provider(batch_task, schema)
+            task_schema = row_schema if row_schema is not None else schema
+            provider_task = self.format_task_for_provider(
+                batch_task, task_schema if json_mode else None
+            )
             tasks.append(provider_task)
 
         return tasks

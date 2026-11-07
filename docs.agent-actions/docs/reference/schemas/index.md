@@ -236,11 +236,7 @@ For each record, Agent Actions:
 2. Uses the schema it returns: a schema definition, or the name of a schema file
 3. Asks the model for that schema and checks the answer against it
 
-The function is found by file: `select_question_schema.py` under the project's tool path, defining a function of the same name. `agac inspect` refuses the action when no such file defines it. The value must be exactly one `dispatch_task()` call.
-
-:::note Online only
-A dispatched schema needs `run_mode: online`. `agac inspect` refuses it under `run_mode: batch`.
-:::
+The function is found by file: `select_question_schema.py` under the project's tool path, defining a function of the same name. `agac inspect` refuses the action when no such file defines it. The value must be exactly one `dispatch_task()` call. It works under `run_mode: online` and `run_mode: batch`; in batch, each row is sent with its own schema. A batch run keeps no `add_dispatch` results, so `agac inspect` refuses `add_dispatch: true` on such an action under `run_mode: batch`.
 
 ### Returning a Schema Name
 

@@ -358,25 +358,25 @@ class PreflightService:
     def _check_schema_dispatches(self) -> None:
         """Refuse a ``schema: dispatch_task(...)`` the run could not resolve.
 
-        The function is looked up as the run looks it up, not in the UDF registry. Batch
-        compiles one schema for every row, so a dispatched schema there is refused.
+        The function is looked up as the run looks it up, not in the UDF registry. A
+        batch run keeps no ``add_dispatch`` results, so that pairing is refused too.
         """
         problems: list[str] = []
         for action, config in self.action_configs.items():
             function = schema_dispatch_function(config.get("schema"))
             if function is None:
                 continue
-            if _token(config.get("run_mode")) == "batch":
-                problems.append(
-                    f"Action '{action}' takes its schema from dispatch_task, which runs once "
-                    "per record and is supported only with run_mode: online. Set "
-                    "'run_mode: online' on this action."
-                )
-                continue
             problem = _dispatch_lookup_problem(function, resolve_tools_path(config))
             if problem:
                 problems.append(
                     f"Action '{action}' dispatches its schema to '{function}', {problem}"
+                )
+            run_mode = config.get("run_mode")
+            if config.get("add_dispatch") and _token(run_mode) == "batch":
+                problems.append(
+                    f"Action '{action}' sets add_dispatch with a schema chosen by "
+                    "dispatch_task, and a batch run keeps no dispatch results. Set "
+                    "'run_mode: online' on this action, or remove add_dispatch."
                 )
         if problems:
             raise PreFlightValidationError(

@@ -1,8 +1,8 @@
 """Pre-flight refuses a `schema: dispatch_task(...)` the run could not resolve.
 
 The run finds the function as a file named for it under the tools path, defining a
-function of that name. A name with no such file, or a dispatched schema in batch, which
-compiles one schema for every row, would otherwise fail only once records were sent.
+function of that name. A name with no such file would otherwise fail only once records
+were sent. Online and batch both resolve it per record, so both are held to this alone.
 """
 
 from __future__ import annotations
@@ -55,14 +55,13 @@ def test_a_file_without_the_function_is_refused(tmp_path):
         _check(tmp_path, "other")
 
 
-def test_a_dispatched_schema_in_batch_is_refused(tmp_path):
-    with pytest.raises(PreFlightValidationError) as refused:
-        _check(tmp_path, "pick_schema", run_mode="batch")
+def test_a_dispatched_schema_in_batch_passes(tmp_path):
+    _check(tmp_path, "pick_schema", run_mode="batch")
 
-    assert (
-        "Action 'label_page' takes its schema from dispatch_task, which runs once per "
-        "record and is supported only with run_mode: online."
-    ) in str(refused.value)
+
+def test_a_missing_function_in_batch_is_refused_too(tmp_path):
+    with pytest.raises(PreFlightValidationError, match="dispatches its schema to 'no_such_fn'"):
+        _check(tmp_path, "no_such_fn", run_mode="batch")
 
 
 def test_a_call_with_an_argument_is_looked_up_by_its_function(tmp_path):
@@ -79,3 +78,14 @@ def test_a_tool_file_that_fails_to_import_is_named_as_such(tmp_path):
 
     assert "broken_pick.py could not be imported" in str(refused.value)
     assert "no tool file defines it" not in str(refused.value)
+
+
+def test_add_dispatch_with_a_dispatched_schema_in_batch_is_refused(tmp_path):
+    with pytest.raises(PreFlightValidationError) as refused:
+        _check(tmp_path, "pick_schema", run_mode="batch", add_dispatch=True)
+
+    assert "sets add_dispatch with a schema chosen by dispatch_task" in str(refused.value)
+
+
+def test_add_dispatch_with_a_dispatched_schema_online_passes(tmp_path):
+    _check(tmp_path, "pick_schema", add_dispatch=True)
