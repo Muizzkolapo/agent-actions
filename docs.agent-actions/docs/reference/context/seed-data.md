@@ -17,6 +17,8 @@ defaults:
       grading_rubric: $file:rubric.yaml
 ```
 
+A FILE tool and a FILE HITL action get the declared seed too: observe `seed.rules` and each item of the tool's input holds `rules`, a flat key like any observed field. A `drop` under `seed` (`drop: [seed.rules.internal_notes]`) is applied to that item as it is to a prompt. The seed reaches the tool's input only, never a stored row: an item the tool returns is stored without the entries the seed supplied.
+
 ### File Reference Syntax
 
 | Syntax | Description |

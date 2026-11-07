@@ -845,6 +845,7 @@ class ProcessingPipeline:
                 ),
                 action_name=self.config.action_name,
                 source_data=source_data,
+                agent_config=cast(dict[str, Any], self.config.action_config),
             )
             if scope_skipped and self.config.storage_backend:
                 batch = scope_skip_disposition_rows(self.config.action_name, scope_skipped)
