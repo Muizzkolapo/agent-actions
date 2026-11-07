@@ -19,6 +19,7 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "parent_source_guid",
         "producer_source_guids",
         "repeat_of_source_guid",
+        "_seed",
         "lineage",
         "node_id",
         "metadata",
