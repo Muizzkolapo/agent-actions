@@ -118,8 +118,9 @@ NO_KEYS = {"OPENAI_API_KEY": "", "ANTHROPIC_API_KEY": "", "OLLAMA_API_KEY": ""}
 
 
 class TestInspect:
-    def test_a_workflow_on_the_mock_inspects_with_no_key_at_any_level(self, tmp_path):
-        result = run_agac(_project(tmp_path, "agac-provider"), "inspect", "-a", "repair_auto")
+    @pytest.mark.parametrize("vendor", ["agac-provider", "ollama_local", "llamafile"])
+    def test_a_keyless_workflow_inspects_with_no_key_at_any_level(self, tmp_path, vendor):
+        result = run_agac(_project(tmp_path, vendor), "inspect", "-a", "repair_auto", env=NO_KEYS)
 
         assert "missing required configuration" not in result.stdout + result.stderr
         assert result.returncode == 0, result.stdout + result.stderr
