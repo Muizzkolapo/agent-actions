@@ -18,9 +18,14 @@ from rich.text import Text
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
-from agent_actions.record.reasons import GUARD_SKIP_REASONS, HALTED_ON_EXHAUSTED
+from agent_actions.record.reasons import (
+    EXPECTATIONS_FAILED,
+    GUARD_SKIP_REASONS,
+    HALTED_ON_EXHAUSTED,
+)
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
+    DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
@@ -78,6 +83,7 @@ class DispositionsCommand:
         table = Table(title=f"Dispositions: {self.agent_name}")
         table.add_column("Action", style="cyan")
         table.add_column("Success", justify="right", style="green")
+        table.add_column("Failed checks", justify="right", style="yellow")
         table.add_column("Failed", justify="right", style="red")
         table.add_column("Exhausted", justify="right", style="red")
         table.add_column("Guard skipped", justify="right", style="yellow")
@@ -103,6 +109,12 @@ class DispositionsCommand:
                 if row.get("disposition") == DISPOSITION_UNPROCESSED
                 and row.get("reason") in GUARD_SKIP_REASONS
             )
+            failed_checks = sum(
+                1
+                for row in rows
+                if row.get("disposition") == DISPOSITION_SUCCESS
+                and row.get("reason") == EXPECTATIONS_FAILED
+            )
 
             total = sum(counts.values())
             if total == 0:
@@ -110,7 +122,8 @@ class DispositionsCommand:
 
             table.add_row(
                 action,
-                str(counts.get("success", 0)),
+                str(counts.get("success", 0) - failed_checks),
+                str(failed_checks),
                 str(counts.get("failed", 0)),
                 str(counts.get("exhausted", 0)),
                 str(guard_skipped),
@@ -133,7 +146,10 @@ class DispositionsCommand:
                 "run that stopped early. Guard skipped counts the records the "
                 "action's guard skipped: they are stored as unprocessed, so a later "
                 "run sends them again once the guard passes, and --quarantined lists "
-                "them with that reason.[/dim]"
+                "them with that reason. Failed checks counts the records shipped "
+                "with a verdict that did not pass (on_exhausted: return_last, "
+                "repair: none): they are stored as successes, so nothing reading them "
+                "is blocked and retry does not re-run them.[/dim]"
             )
         elif not action_level:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")

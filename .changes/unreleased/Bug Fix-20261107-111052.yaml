@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: An action that collected no record is no longer reported as guard-filtered. With nothing collected, the guard-outcome check read 0 of 0 as "every record was a guard outcome", so the action got a node-level skip reading "All records filtered" when no guard had acted, as an action whose every record was refused can.
+time: 2026-11-07T11:10:52.804136Z

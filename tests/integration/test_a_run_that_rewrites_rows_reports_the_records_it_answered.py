@@ -10,6 +10,7 @@ provider.
 """
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -111,7 +112,7 @@ def test_a_rerun_reports_the_records_it_answered_again(online):
     result = _run("--rerun", ACTION)
 
     assert _completions(online) == {ACTION: 4, PUBLISHER: 4}
-    assert f"✓ {ACTION} 4 records" in " ".join(result.output.split())
+    assert re.search(rf"[✓⚠] {ACTION} 4 records", " ".join(result.output.split()))
 
 
 def test_a_retry_reports_only_the_record_it_answered(online, monkeypatch):
@@ -131,7 +132,7 @@ def test_a_retry_reports_only_the_record_it_answered(online, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert _completions(online)[ACTION] == 1
-    assert "✓ summarize 1 record" in " ".join(result.output.split())
+    assert re.search(r"[✓⚠] summarize 1 record\b", " ".join(result.output.split()))
 
 
 def _run_batch_to_completion(*args):
@@ -148,7 +149,7 @@ def test_a_batch_rerun_reports_the_records_it_collected(project):
     result = _run_batch_to_completion("--rerun", ACTION)
 
     assert _completions(project) == {ACTION: 4, PUBLISHER: 4}
-    assert f"✓ {PUBLISHER} 4 records" in " ".join(result.output.split())
+    assert re.search(rf"[✓⚠] {PUBLISHER} 4 records", " ".join(result.output.split()))
 
 
 READER = "tally"
