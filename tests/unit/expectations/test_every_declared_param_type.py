@@ -33,6 +33,11 @@ DECLARED = [
     ("no_forbidden_phrases", "phrases", "list"),
     ("contains_terms_from", "min_matches", "number"),
     ("contains_terms_from", "terms", "list"),
+    ("llm_judge", "rule", "string"),
+    ("llm_judge", "model", "string"),
+    ("llm_judge", "votes", "number"),
+    ("llm_judge", "context", "list"),
+    ("expression", "condition", "string"),
 ]
 
 
@@ -46,12 +51,18 @@ def test_the_built_ins_declare_exactly_these_param_types():
         (etype.name, param, kind)
         for etype in (registry.get(name) for name in registry.known_types())
         for param, kind in etype.param_types.items()
+        if param != "row_condition"
     )
 
     assert in_registry == sorted(DECLARED)
     for name in {type_name for type_name, _, _ in DECLARED}:
         etype = registry.get(name)
-        assert set(etype.param_types) == etype.params - {"row_condition"}
+        assert set(etype.param_types) == etype.params
+
+
+def test_every_type_takes_row_condition_as_a_string():
+    for name in registry.known_types():
+        assert registry.get(name).param_types["row_condition"] == "string"
 
 
 @pytest.mark.parametrize(("type_name", "param", "kind"), DECLARED, ids=lambda v: str(v))

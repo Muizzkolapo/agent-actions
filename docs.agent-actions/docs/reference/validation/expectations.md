@@ -110,12 +110,14 @@ agac expect list -a my_workflow --action summarize
 | `match_like_pattern` | `like_pattern` (string) *(required)*, `negate` (boolean) | Value matches a SQL `LIKE` pattern across its whole length — `%` is any run, `_` exactly one character, everything else literal |
 | `no_forbidden_phrases` | `phrases` (list) *(required)*, `case_sensitive` (boolean) | Value doesn't contain any of a list of substrings |
 | `contains_terms_from` | `terms` (list) *(required)*, `min_matches` (number) | Value contains at least `min_matches` (default 1) terms from a list |
-| `expression` | `condition` *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
+| `expression` | `condition` (string) *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
 
 Each parameter takes the value type shown. A value of another type is refused when the rule is
 loaded, at preflight and at run time, with the same message. A list parameter given as a string
 is refused too: `params` hold literal values, so `terms: source.essay` would be the text
 `source.essay`, not the field. A number is never a boolean, and a list is never a number.
+The same holds for [`llm_judge`](#llm_judge)'s parameters and for the universal
+[`row_condition`](#row-conditions), which is a string under every type, your own included.
 
 ```
 quote_in_source: type 'contains_terms_from' takes parameter 'terms' as a list, got str 'source.essay'; params hold literal values, so a field name here is not read
@@ -216,10 +218,10 @@ Preflight validates every condition before any LLM call: syntax, the dangerous-p
 
 | Param | Default | Purpose |
 |-------|---------|---------|
-| `rule` | *(required)* | The natural-language criterion the judge evaluates |
-| `votes` | `1` | Run the judge this many times independently and take the majority; a tie **fails closed** (an even split never counts as a pass) |
-| `model` | the action's own `model_name` | Override which model does the judging |
-| `context` | none | List of `action.field` refs, resolved from the *same* `context_scope` machinery as prompts, and passed to the judge as grounding text |
+| `rule` (string) | *(required)* | The natural-language criterion the judge evaluates |
+| `votes` (number) | `1` | Run the judge this many times independently and take the majority; a tie **fails closed** (an even split never counts as a pass) |
+| `model` (string) | the action's own `model_name` | Override which model does the judging |
+| `context` (list) | none | List of `action.field` refs, resolved from the *same* `context_scope` machinery as prompts, and passed to the judge as grounding text |
 
 ### `context:` auto-injection
 
@@ -543,6 +545,7 @@ A record without `question_type` waives the rule; one that has it is checked. Wr
 `agac inspect` validates an `expect:` block before any LLM call is made:
 
 - `votes` must be a positive integer.
+- Every parameter must be the value type its type declares — see [Deterministic expectation types](#deterministic-expectation-types) and [`llm_judge`](#llm_judge).
 - `context` must be a list of `action.field` strings; each referenced action must exist upstream and each field must appear in that action's declared output.
 - Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected — including for [your own registered types](#extending-with-your-own-checks), whose declared parameters are enforced exactly like built-ins'.
 - Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not, and rules declared on a field, which already have one.
