@@ -5,7 +5,9 @@ sidebar_position: 6
 
 # Retry & Error Handling
 
-Retry handles transient errors (rate limits, network issues, server errors) with exponential backoff. An online action waits up to 1 second after the first failed attempt, up to 2 seconds after the second, and so on, doubling up to a cap of 60 seconds; each wait is a random time between zero and that limit. Neither value is configurable.
+Retry handles transient errors (rate limits, network issues, server errors) with exponential backoff. An online action waits up to `base_delay` (1 second unless you set it) after the first failed attempt, up to twice that after the second, and so on, doubling up to `max_delay` (60 seconds unless you set it); each wait is a random time between zero and that limit.
+
+When a rate-limit error carries the provider's `Retry-After` (read from OpenAI, Anthropic and Groq errors, and from a [declared endpoint](../configuration/endpoints.md)'s), the action waits exactly that long instead, as `retry-after-ms`, seconds or an HTTP date. A request for longer than `max_delay` waits `max_delay` and logs a warning with both numbers. The OpenAI, Anthropic and Groq SDKs retry twice on their own before the error reaches this retry, so a rate-limited request can be sent more times than `max_attempts`.
 
 Retry is **off until a `retry:` block turns it on**, on the action or under `defaults:`, where
 it applies to every action that writes no block of its own. Inside a block, `enabled` is `true`,
@@ -44,6 +46,8 @@ actions:
 | `enabled` | bool | `true` | A `retry:` block turns retry on unless it sets `enabled: false`. Other fields below take effect only when `enabled` is `true`. |
 | `max_attempts` | int | `3` | Attempts per record in all, the first call or batch included (1-10). `1` never retries. |
 | `on_exhausted` | string | `return_last` | Behavior when retries exhausted |
+| `base_delay` | float | `1.0` | Seconds the backoff may wait after the first failed attempt; the limit doubles after each one (more than 0, at most 300). Online actions only. |
+| `max_delay` | float | `60.0` | The longest wait in seconds, a provider's `Retry-After` included (more than 0, at most 3600, and at least `base_delay`). Online actions only. |
 
 ### Exhaustion Behavior
 

@@ -376,6 +376,26 @@ class RetryConfig(BaseModel):
         default="return_last",
         description="Behavior when max_attempts exhausted: return_last or raise",
     )
+    base_delay: float = Field(
+        default=1.0,
+        gt=0,
+        le=300,
+        description="Backoff limit in seconds after the first failed attempt; doubles each attempt",
+    )
+    max_delay: float = Field(
+        default=60.0,
+        gt=0,
+        le=3600,
+        description="Longest wait in seconds, a provider's Retry-After included",
+    )
+
+    @model_validator(mode="after")
+    def validate_max_delay_covers_base_delay(self) -> "RetryConfig":
+        if self.max_delay < self.base_delay:
+            raise ValueError(
+                f"max_delay ({self.max_delay:g}) must be at least base_delay ({self.base_delay:g})"
+            )
+        return self
 
 
 class HitlConfig(BaseModel):

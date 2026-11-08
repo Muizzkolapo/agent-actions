@@ -1,6 +1,7 @@
 """Retry service for handling transport-layer failures in LLM calls."""
 
 import logging
+import math
 import random
 import time
 from collections.abc import Callable
@@ -137,18 +138,7 @@ class RetryService:
                 if is_retriable_error(e):
                     log_context = f" ({context})" if context else ""
                     if attempt < self.max_attempts:
-                        delay = min(self.base_delay * (2 ** (attempt - 1)), self.max_delay)
-                        jittered = random.uniform(0, delay)
-                        logger.info(
-                            "Retry attempt %d/%d%s: %s - %s (backoff %.2fs)",
-                            attempt,
-                            self.max_attempts,
-                            log_context,
-                            reason,
-                            str(e),
-                            jittered,
-                        )
-                        time.sleep(jittered)
+                        time.sleep(self._wait_before_retry(e, attempt, log_context, reason))
                         continue
                     else:
                         logger.warning(
@@ -181,6 +171,30 @@ class RetryService:
             exhausted=True,
             last_error=safe_format_error(last_error) if last_error is not None else None,
         )
+
+    def _wait_before_retry(
+        self, error: Exception, attempt: int, log_context: str, reason: str
+    ) -> float:
+        """The provider's Retry-After when the error carries one, capped at max_delay; else backoff."""
+        prefix = f"Retry attempt {attempt}/{self.max_attempts}{log_context}: {reason} - {error}"
+        context = getattr(error, "context", None)
+        retry_after = context.get("retry_after") if isinstance(context, dict) else None
+        if retry_after is None or math.isnan(retry_after):
+            delay = min(self.base_delay * (2 ** (attempt - 1)), self.max_delay)
+            jittered = random.uniform(0, delay)
+            logger.info("%s (backoff %.2fs)", prefix, jittered)
+            return jittered
+        asked = max(float(retry_after), 0.0)
+        if asked > self.max_delay:
+            logger.warning(
+                "%s (provider asked for %.2fs; waiting max_delay %.2fs)",
+                prefix,
+                asked,
+                self.max_delay,
+            )
+            return self.max_delay
+        logger.info("%s (waiting %.2fs, as the provider's Retry-After asked)", prefix, asked)
+        return asked
 
 
 def create_retry_service_from_config(
