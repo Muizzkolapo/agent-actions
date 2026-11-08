@@ -1,6 +1,5 @@
 import logging
 from collections.abc import Iterable
-from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -113,25 +112,22 @@ class Cleaner:
         if not directories:
             click.echo(f"No directories to clean for agent '{self.agent}'.")
             return
-        # Before asking: a run in progress reads and writes every one of these.
-        with self._run_lock(io_dir):
-            self._clean(io_dir, directories)
-
-    def _run_lock(self, io_dir: Path) -> AbstractContextManager[None]:
-        """The workflow's run lock, or nothing to hold where no store exists.
-
-        The lock lives in the store, so with no store no run holds it, and taking it
-        would create the store folder this command may be about to keep out of.
-        """
         from agent_actions.storage.run_lock import hold_run_lock, run_lock_path
 
         workflow = Path(self.agent).stem
-        if not run_lock_path(io_dir, workflow).parent.is_dir():
-            return nullcontext()
-        return hold_run_lock(io_dir, workflow)
+        lock_file = run_lock_path(io_dir, workflow)
+        # Read before the lock, which creates the store folder to hold its file. A store
+        # holding only that file names no batch, and opening it would create a database.
+        had_store = lock_file.parent.is_dir() and list(lock_file.parent.iterdir()) != [lock_file]
+        # Taken in every case and before asking: with no store yet, a run that starts
+        # while the prompt waits would create one, lock it, and lose what this deletes.
+        with hold_run_lock(io_dir, workflow):
+            self._clean(io_dir, directories, had_store, lock_file)
 
-    def _clean(self, io_dir: Path, directories: list[Path]) -> None:
-        reclaims_records = self.remove_all and (io_dir / "store").is_dir()
+    def _clean(
+        self, io_dir: Path, directories: list[Path], had_store: bool, lock_file: Path
+    ) -> None:
+        reclaims_records = self.remove_all and had_store
         if not self.force and (not self._confirm(directories, reclaims_records)):
             click.echo("Aborted – nothing was cleaned.")
             return
@@ -157,7 +153,7 @@ class Cleaner:
         failures = []
         for directory in directories:
             try:
-                self.agent_manager.clean_directory(self.agent, directory)
+                self.agent_manager.clean_directory(self.agent, directory, keep=lock_file)
             except OSError as e:
                 failures.append((directory, e))
                 logger.warning("Failed to clean %s: %s", directory, e)

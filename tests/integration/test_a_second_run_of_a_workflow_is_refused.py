@@ -253,4 +253,6 @@ def test_a_clean_runs_once_no_run_holds_the_workflow(tmp_path):
     result = _agac(root, "clean", "-a", "one_run", "--force", "--all")
 
     assert result.returncode == 0, _output(result)
-    assert not (root / "agent_workflow" / "one_run" / "agent_io" / "store").exists()
+    store = root / "agent_workflow" / "one_run" / "agent_io" / "store"
+    # Only the run lock file stays, held through the delete.
+    assert [p.name for p in store.iterdir()] == ["one_run.db.lock"]
