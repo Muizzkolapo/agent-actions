@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  Retry now waits as long as a provider's `Retry-After` asks, read as `retry-after-ms`,
+  seconds or an HTTP date, capped at `max_delay`. Before, agac parsed the header and then
+  waited a random backoff of up to 1, 2, 4 seconds anyway. The backoff's `base_delay` and
+  `max_delay` can now be set in a `retry:` block; before, the code read them but the schema
+  refused them, so they were always 1 and 60 seconds.
+time: 2026-11-07T20:00:00Z

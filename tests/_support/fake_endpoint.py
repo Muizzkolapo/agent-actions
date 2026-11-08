@@ -50,6 +50,8 @@ class FakeEndpoint:
         self.content: str | None = None
         # When set, every error reply carries exactly this message.
         self.error_message: str | None = None
+        # The Retry-After header every 429 reply carries.
+        self.retry_after = "0"
         # A credential the server no longer takes: every request carrying it gets a 401.
         self.refuse_authorization: str | None = None
         self._refusal_barrier: threading.Barrier | None = None
@@ -148,7 +150,7 @@ def _handler_for(endpoint: FakeEndpoint) -> type[BaseHTTPRequestHandler]:
             self.send_response(status)
             self.send_header("content-type", "application/json")
             if status == 429:
-                self.send_header("retry-after", "0")
+                self.send_header("retry-after", endpoint.retry_after)
             self.send_header("content-length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
