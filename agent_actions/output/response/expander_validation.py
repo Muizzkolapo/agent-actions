@@ -4,7 +4,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.config.endpoints import project_endpoint
-from agent_actions.llm.config.vendor import vendor_names
+from agent_actions.llm.config.vendor import api_key_env_var, vendor_names, vendor_needs_api_key
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import (
     HITL_FILE_GRANULARITY_ERROR,
@@ -115,13 +115,13 @@ def validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
     Raises:
         ConfigValidationError: If any required field is missing
     """
+    vendor = str(agent.get("model_vendor") or "")
     required_fields = {
-        "model_vendor": agent.get("model_vendor"),
+        "model_vendor": vendor,
         "model_name": agent.get("model_name"),
         "api_key": agent.get("api_key"),
     }
-    # A declared endpoint carries its own credential source.
-    if project_endpoint(str(agent.get("model_vendor") or "")) is not None:
+    if vendor and not vendor_needs_api_key(vendor):
         del required_fields["api_key"]
     missing_fields = [field for field, value in required_fields.items() if not value]
     if missing_fields:
@@ -136,6 +136,8 @@ def validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
             reason="Required configuration fields are missing after hierarchy resolution",
             context={
                 "action_name": action_name,
+                "model_vendor": vendor or None,
+                "api_key_env_var": api_key_env_var(vendor) if vendor else None,
                 "missing_fields": missing_fields,
                 "missing_display": missing_display,
                 "operation": "expand_actions_to_agents",

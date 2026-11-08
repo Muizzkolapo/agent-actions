@@ -246,7 +246,8 @@ Both delegate to `PromptUtils.process_dispatch_in_text()` with `preserve_type_on
 │       → no api_key/base_url written on an endpoint action    │
 │       validate_required_fields()                             │
 │       → model_vendor + model_name + api_key (LLM only;      │
-│         an endpoint action needs no api_key)                 │
+│         none when vendor_needs_api_key() is False:           │
+│         agac-provider, ollama_local, llamafile, endpoints)   │
 │                                                              │
 │   6.  process_schema_config()                                │
 │       → compiled schema passthrough OR template replacement  │

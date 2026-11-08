@@ -95,6 +95,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         missing_fields = context.get("missing_fields", [])
         missing_display = context.get("missing_display", missing_fields)
 
+        api_key_line = f"api_key: ${{{context.get('api_key_env_var') or 'YOUR_PROVIDER_API_KEY'}}}"
         fields_str = ", ".join([f"'{f}'" for f in missing_display])
         details = f"Action '{action_name}' is missing required configuration: {fields_str}\n\n"
         details += "These fields were not found at any level (project → workflow → action)."
@@ -111,7 +112,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             elif field == "model_name":
                 fix_parts.append("     model_name: claude-3-5-sonnet-20241022")
             elif field == "api_key":
-                fix_parts.append("     api_key: ${ANTHROPIC_API_KEY}")
+                fix_parts.append("     " + api_key_line)
 
         fix_parts.extend(
             [
@@ -127,7 +128,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             elif field == "model_name":
                 fix_parts.append("     model_name: claude-3-5-sonnet-20241022")
             elif field == "api_key":
-                fix_parts.append("     api_key: ${ANTHROPIC_API_KEY}")
+                fix_parts.append("     " + api_key_line)
 
         fix_parts.extend(
             [
@@ -144,7 +145,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             elif field == "model_name":
                 fix_parts.append("       model_name: claude-3-5-sonnet-20241022")
             elif field == "api_key":
-                fix_parts.append("       api_key: ${ANTHROPIC_API_KEY}")
+                fix_parts.append("       " + api_key_line)
 
         return UserError(
             category="Configuration Error",

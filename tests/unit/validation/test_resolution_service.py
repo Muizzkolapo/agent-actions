@@ -50,7 +50,7 @@ class TestApiKeyChecks:
     @pytest.mark.parametrize(
         ("action", "vendor"),
         [
-            # tool and hitl carry the NO_KEY_REQUIRED sentinel
+            # tool and hitl take no key
             pytest.param("my_tool", "tool", id="tool"),
             pytest.param("review", "hitl", id="hitl"),
             # no config to check an unknown vendor against

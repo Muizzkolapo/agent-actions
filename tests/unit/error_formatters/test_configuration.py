@@ -131,3 +131,29 @@ class TestAnErrorThatMentionsSchemaValidationKeepsItsOwnWords:
         assert error.title == "Schema validation failed"
         assert "'items' is required" in error.details
         assert "items" in error.details
+
+
+class TestTheApiKeyFixLine:
+    """The api_key fix line names the variable the expander put in the context."""
+
+    def _fix(self, formatter, context):
+        exc = ConfigValidationError(
+            "api_key", "Required configuration fields are missing after hierarchy resolution"
+        )
+        message = "Required configuration fields are missing after hierarchy resolution"
+        return formatter.format(exc, exc, message, context).fix
+
+    def test_it_names_the_variable_in_the_context(self, formatter):
+        context = {
+            "action_name": "a",
+            "missing_fields": ["api_key"],
+            "api_key_env_var": "GROQ_API_KEY",
+        }
+
+        assert self._fix(formatter, context).count("api_key: ${GROQ_API_KEY}") == 3
+
+    def test_without_a_variable_it_names_a_neutral_placeholder(self, formatter):
+        fix = self._fix(formatter, {"action_name": "a", "missing_fields": ["api_key"]})
+
+        assert fix.count("api_key: ${YOUR_PROVIDER_API_KEY}") == 3
+        assert "ANTHROPIC_API_KEY" not in fix
