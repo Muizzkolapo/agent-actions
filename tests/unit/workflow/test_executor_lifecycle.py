@@ -672,7 +672,7 @@ class TestTrackActionStart:
     @pytest.mark.parametrize(
         ("action_config", "action_type"),
         [
-            pytest.param({"model_vendor": "tool"}, "tool", id="tool_vendor"),
+            pytest.param({"kind": "tool", "model_vendor": "tool"}, "tool", id="tool_vendor"),
             pytest.param({"kind": "hitl"}, "hitl", id="hitl_kind"),
             pytest.param({}, "llm", id="llm_by_default"),
         ],

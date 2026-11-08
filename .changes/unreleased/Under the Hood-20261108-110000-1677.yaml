@@ -1,0 +1,8 @@
+kind: Under the Hood
+body: >-
+  An action's kind is set once when the config loads, from kind (also from defaults:) or
+  model_vendor, and every site reads kind alone. The sites used to decide again, each by
+  its own rule, so agac inspect and agac run could treat one action differently: a
+  model_vendor of Tool is now a tool everywhere, and the static analyzer ranks hitl over
+  tool as the expander does.
+time: 2026-11-08T11:00:00Z

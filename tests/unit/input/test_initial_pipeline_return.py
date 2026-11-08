@@ -273,10 +273,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
     @pytest.mark.parametrize(
         "config",
         [
-            {"model_vendor": "tool"},
+            {"kind": "tool", "model_vendor": "tool"},
             {"kind": "tool"},
         ],
-        ids=["model_vendor=tool", "kind=tool"],
+        ids=["loaded-tool", "kind=tool"],
     )
     def test_tool_action_empty_output_raises(self, online_ctx, config):
         """Tool action with success but empty output must raise."""

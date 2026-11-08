@@ -134,6 +134,7 @@ class TestAGuardedFieldAToolObserves:
 def _tool_config(name, *, json_output_schema, observe, guard=None):
     """Build a tool action config dict as it appears in action_configs at runtime."""
     config = {
+        "kind": "tool",
         "model_vendor": "tool",
         "json_output_schema": json_output_schema,
         "context_scope": {"observe": observe},
@@ -459,6 +460,7 @@ class TestApplyGuardNullableSchemaFixes:
                 (
                     "consumer",
                     {
+                        "kind": "tool",
                         "model_vendor": "tool",
                         "context_scope": {"observe": ["extract.data"]},
                     },
@@ -514,6 +516,7 @@ class TestApplyGuardNullableSchemaFixes:
                     (
                         "cons",
                         {
+                            "kind": "tool",
                             "model_vendor": "tool",
                             "json_output_schema": {
                                 "type": "object",
@@ -525,6 +528,7 @@ class TestApplyGuardNullableSchemaFixes:
                     (
                         "mid",
                         {
+                            "kind": "tool",
                             "model_vendor": "tool",
                             "json_output_schema": {
                                 "type": "object",

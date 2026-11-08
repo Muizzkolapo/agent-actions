@@ -160,7 +160,12 @@ class TestTheUdfSourceDigest:
         )
 
     def test_a_tool_and_its_guard_each_count(self, monkeypatch):
-        tool = {"model_vendor": "tool", "model_name": "Tag", "conditional_clause": "gate"}
+        tool = {
+            "kind": "tool",
+            "model_vendor": "tool",
+            "model_name": "Tag",
+            "conditional_clause": "gate",
+        }
         self._registered(monkeypatch, tag="t1", gate="g1")
         base = _compute_udf_source_hash(tool)
         self._registered(monkeypatch, tag="t2", gate="g1")
@@ -174,12 +179,12 @@ class TestTheUdfSourceDigest:
 
     def test_a_udf_not_loaded_is_not_compared(self, monkeypatch):
         self._registered(monkeypatch)
-        tool = {"model_vendor": "tool", "model_name": "tag"}
+        tool = {"kind": "tool", "model_vendor": "tool", "model_name": "tag"}
         assert _compute_udf_source_hash(tool) is None
         assert _edits_since({"udf_source_hash": "old"}, tool) == []
 
     def test_an_edit_is_named_and_an_old_stamp_names_none(self, monkeypatch):
-        tool = {"model_vendor": "tool", "model_name": "tag"}
+        tool = {"kind": "tool", "model_vendor": "tool", "model_name": "tag"}
         self._registered(monkeypatch, tag="t1")
         stamp = {"udf_source_hash": _compute_udf_source_hash(tool)}
         self._registered(monkeypatch, tag="t2")

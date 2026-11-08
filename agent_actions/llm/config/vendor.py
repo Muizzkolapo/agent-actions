@@ -44,8 +44,7 @@ def runs_in_batch(action_config: Mapping[str, Any]) -> bool:
     if action_config.get("run_mode") != RunMode.BATCH:
         return False
     kind = getattr(action_config.get("kind"), "value", action_config.get("kind"))
-    vendor = getattr(action_config.get("model_vendor"), "value", action_config.get("model_vendor"))
-    return not ({str(kind or "").lower(), str(vendor or "").lower()} & ONLINE_ONLY_VENDORS)
+    return kind not in ONLINE_ONLY_VENDORS
 
 
 def effective_run_mode(action_config: Mapping[str, Any]) -> RunMode:

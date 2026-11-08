@@ -23,17 +23,16 @@ def is_file_granularity(granularity: Any) -> bool:
 
 
 def routing_kind(agent: dict[str, Any]) -> str:
-    """The client the runtime sends this action to: ``"hitl"``, ``"tool"`` or ``"llm"``.
+    """What the action is: ``"hitl"``, ``"tool"`` or ``"llm"``, from ``kind`` or ``model_vendor``.
 
-    Read as the runtime reads it: ``kind`` (inherited from ``defaults:`` like any other
-    field) or ``model_vendor``. HITL is matched case-blind as the pipeline matches it; a
-    tool exactly, as the invocation factory matches it.
+    The expander writes the answer to ``kind`` once, so a loaded config is read by its
+    ``kind`` alone; only a reader of the raw YAML calls this. ``kind`` is inherited from
+    ``defaults:`` like any other field. Both names are matched case-blind.
     """
-    from agent_actions.processing.helpers import _is_tool_action
-
-    if _token(agent.get("kind")) == "hitl" or _token(agent.get("model_vendor")) == "hitl":
+    named = {_token(agent.get("kind")), _token(agent.get("model_vendor"))}
+    if "hitl" in named:
         return "hitl"
-    if _is_tool_action(agent):
+    if "tool" in named:
         return "tool"
     return "llm"
 
@@ -209,10 +208,9 @@ def validate_version_merge_output_namespaces(agent: dict[str, Any], action_name:
     content's own top-level keys, so a field named for a framework namespace replaces it —
     and for ``source`` the record keeps nothing a later action can resolve the document
     from. A record-granularity action nests, so the same field collides with nothing.
-    Either ``kind`` or ``model_vendor`` names the tool, as the spreading strategy is chosen.
     """
     granularity = str(agent.get("granularity") or get_default("granularity")).lower()
-    is_tool = agent.get("kind") == "tool" or agent.get("model_vendor") == "tool"
+    is_tool = agent.get("kind") == "tool"
     if granularity != "file" or not is_tool or not agent.get("version_consumption_config"):
         return
     taken = sorted(_declared_output_fields(agent) & RUNTIME_BUS_NAMESPACES)

@@ -225,7 +225,7 @@ class PreflightService:
         impl_refs = {
             c["model_name"]
             for c in configs
-            if c.get("model_vendor") == "tool" and isinstance(c.get("model_name"), str)
+            if c.get("kind") == "tool" and isinstance(c.get("model_name"), str)
         }
         guard_refs = {
             c["conditional_clause"] for c in configs if isinstance(c.get("conditional_clause"), str)
@@ -347,7 +347,7 @@ class PreflightService:
     def _check_udfs_are_loaded(self) -> None:
         for action, config in self.action_configs.items():
             names = [config.get("conditional_clause")]
-            if config.get("model_vendor") == "tool":
+            if config.get("kind") == "tool":
                 names.append(config.get("model_name"))
             for name in filter(None, names):
                 try:
