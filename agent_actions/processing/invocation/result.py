@@ -20,6 +20,9 @@ class InvocationResult:
     recovery_metadata: RecoveryMetadata | None = None
     # The schema a ``schema: dispatch_task(...)`` chose for this record.
     output_schema: str | None = None
+    # The repair attempt whose response this result carries, for its trace row; None
+    # leaves the trace on the newest row.
+    trace_attempt: int | None = None
 
     @classmethod
     def immediate(
@@ -29,6 +32,7 @@ class InvocationResult:
         passthrough_fields: dict[str, Any] | None = None,
         recovery: RecoveryMetadata | None = None,
         output_schema: str | None = None,
+        trace_attempt: int | None = None,
     ) -> "InvocationResult":
         """Create an immediate execution result."""
         return cls(
@@ -38,6 +42,7 @@ class InvocationResult:
             passthrough_fields=passthrough_fields or {},
             recovery_metadata=recovery,
             output_schema=output_schema,
+            trace_attempt=trace_attempt,
         )
 
     @classmethod
