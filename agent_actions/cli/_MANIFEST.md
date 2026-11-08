@@ -24,7 +24,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
 | `compile` | Function | Alias for render — compile workflow configuration. | - |
-| `dispositions.py` | Module | Inspect record-level processing dispositions per action. `--quarantined` lists failed, exhausted and unprocessed records (`QUARANTINED_DISPOSITIONS`), the last with the reason no answer reached them. The summary splits unprocessed rows into `Guard skipped` (reason in `record.reasons.GUARD_SKIP_REASONS`, the same set the collector counts for the run line) and `Unprocessed` (the rest); the columns still add up to `Total`. The summary table is printed at its full width (`_print_whole`), wider than a narrow terminal if it has to be, so no count or action name is cut short. | `cli`, `storage`, `validation` |
+| `dispositions.py` | Module | Inspect record-level processing dispositions per action. `--quarantined` lists failed, exhausted and unprocessed records (`QUARANTINED_DISPOSITIONS`), the last with the reason no answer reached them. The summary splits unprocessed rows into `Guard skipped` (reason in `record.reasons.GUARD_SKIP_REASONS`, the same set the collector counts for the run line) and `Unprocessed` (the rest); the columns still add up to `Total`. The summary, `--quarantined` and action-level tables are printed at their full width (`renderers.whole_table.print_whole`), wider than a narrow terminal if they have to be, so no count, record ID or action name is cut short. | `cli`, `storage`, `validation` |
 | `DispositionsCommand` | Class | Implementation of the dispositions command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the dispositions command. | - |
 | `dispositions` | Function | Inspect record-level processing dispositions per action. | - |
@@ -38,7 +38,7 @@
 | `example` | Function | Example command group. | - |
 | `example_list` | Function | List available example projects from GitHub. | - |
 | `example_install` | Function | Install an example project. | - |
-| `expect.py` | Module | Inspect the expectation rules an action would run, and report the verdicts a run stored. | `cli`, `expectations`, `storage`, `validation` |
+| `expect.py` | Module | Inspect the expectation rules an action would run, and report the verdicts a run stored. The report's per-rule table is printed at its full width (`renderers.whole_table.print_whole`), so a rule id or type is not cut short on a narrow terminal. | `cli`, `expectations`, `storage`, `validation` |
 | `ExpectListCommand` | Class | Implementation of the expect list command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Resolve each action's suite through the runner's own loader and print it. | - |
 | `expect` | Function | Expect command group. | - |

@@ -10,12 +10,11 @@ from pathlib import Path
 
 import click
 from rich.console import Console
-from rich.measure import Measurement
-from rich.segment import Segments
 from rich.table import Table
 from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.renderers.whole_table import print_whole
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.record.reasons import GUARD_SKIP_REASONS, HALTED_ON_EXHAUSTED
@@ -32,7 +31,6 @@ logger = logging.getLogger(__name__)
 QUARANTINED_DISPOSITIONS = FAILURE_DISPOSITIONS | {DISPOSITION_UNPROCESSED}
 
 # Wide enough that measuring a table at it never shrinks a column.
-_UNBOUNDED_WIDTH = 10_000
 
 
 class DispositionsCommand:
@@ -124,7 +122,7 @@ class DispositionsCommand:
         action_level = self._action_level_rows(backend, actions)
 
         if table.row_count:
-            self._print_whole(table)
+            print_whole(self.console, table)
             self.console.print(
                 "[dim]Total counts the input records the action consumed, one "
                 "disposition each; Records counts what is stored under it now. "
@@ -139,21 +137,6 @@ class DispositionsCommand:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")
 
         self._show_action_level(action_level)
-
-    def _print_whole(self, table: Table) -> None:
-        """Print *table* at its full width, wider than the terminal if it has to be.
-
-        Fitted to a narrow terminal, Rich cuts cells short, and a count cut to
-        "12…" or an action name cut to "merg…" is a wrong answer. A line that
-        wraps loses nothing.
-        """
-        natural = Measurement.get(
-            self.console, self.console.options.update(width=_UNBOUNDED_WIDTH), table
-        ).maximum
-        # Rendered here and printed uncropped: setting console.width instead would pin
-        # the console to one width for every print after this one.
-        options = self.console.options.update(width=max(self.console.width, natural))
-        self.console.print(Segments(self.console.render(table, options)), crop=False)
 
     @staticmethod
     def _records_stored(backend) -> dict[str, int] | None:
@@ -201,7 +184,7 @@ class DispositionsCommand:
                 halted = True
             table.add_row(action, state, Text((row.get("reason") or "")[:100]))
 
-        self.console.print(table)
+        print_whole(self.console, table)
         if halted:
             self.console.print(
                 "[yellow]A halted action is not re-run by 'agac run'. Resume it with "
@@ -235,7 +218,7 @@ class DispositionsCommand:
         action_level = self._action_level_rows(backend, actions)
 
         if found:
-            self.console.print(table)
+            print_whole(self.console, table)
         elif not action_level:
             self.console.print("[green]No quarantined records found.[/green]")
 

@@ -20,6 +20,7 @@ from rich.text import Text
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.inspect_base import render_title_row
+from agent_actions.cli.renderers.whole_table import print_whole
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.expectations.report import (
     ActionTally,
@@ -427,7 +428,7 @@ class ExpectReportCommand:
                     Text(_rate(rule.pass_rate)),
                 )
 
-            self.console.print(table)
+            print_whole(self.console, table)
 
 
 def _format_percent(percent: float) -> str:

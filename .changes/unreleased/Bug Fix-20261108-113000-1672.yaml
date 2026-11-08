@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  agac dispositions --quarantined, its action-level table and the agac expect report
+  per-rule table print whole on a narrow terminal, as the dispositions summary does, so a
+  record ID, action name, rule id or type is no longer cut short with an ellipsis.
+time: 2026-11-08T11:30:00Z
