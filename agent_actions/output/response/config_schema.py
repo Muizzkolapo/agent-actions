@@ -6,64 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from agent_actions.config.schema import ChunkConfig
 from agent_actions.config.types import RunMode
-from agent_actions.errors import ValidationError
 from agent_actions.llm.config.vendor import canonical_vendor, vendor_names
-from agent_actions.utils.constants import DANGEROUS_PATTERNS, contains_dangerous_pattern
-
-
-class SkipConditionConfig(BaseModel):
-    """Configuration for action skip conditions."""
-
-    condition_type: Literal[
-        "previous_outputs_empty", "previous_outputs_count", "field_condition", "custom"
-    ] = Field(description="Type of skip condition")
-    action_name: str | None = Field(
-        default=None, description="Name of the action to check outputs for"
-    )
-    threshold: int | None = Field(default=None, description="Threshold for count-based conditions")
-    comparison: Literal["==", "!=", "<", "<=", ">", ">="] | None = Field(
-        default="==", description="Comparison operator for threshold"
-    )
-    field_path: str | None = Field(
-        default=None, description="Path to field in previous outputs (dot notation)"
-    )
-    expected_value: Any | None = Field(
-        default=None, description="Expected value for field condition"
-    )
-    expression: str | None = Field(
-        default=None, description="Safe expression for custom conditions (no eval())"
-    )
-
-    @field_validator("expression")
-    @classmethod
-    def validate_expression(cls, v, info):
-        """Validate custom expressions for safety."""
-        if v and info.data.get("condition_type") == "custom":
-            expr_lower = v.lower()
-            matched = contains_dangerous_pattern(expr_lower, DANGEROUS_PATTERNS)
-            if matched:
-                raise ValidationError(
-                    f"Expression contains potentially dangerous operation: {matched}",
-                    context={
-                        "expression": v,
-                        "dangerous_pattern": matched,
-                        "operation": "validate_skip_condition",
-                        "failed_field": "expression",
-                        "expected": (
-                            "Safe custom expression without dangerous patterns "
-                            "like exec, eval, __import__, etc."
-                        ),
-                        "actual_value": v,
-                        "suggestion": (
-                            f'Remove the dangerous pattern "{matched}" from your '
-                            "skip condition expression. Use safe comparison "
-                            "operators only."
-                        ),
-                    },
-                )
-        return v
-
-    model_config = ConfigDict(extra="forbid")
 
 
 class DefaultAgentConfig(BaseModel):
@@ -130,9 +73,6 @@ class AgentConfig(BaseModel):
     conditional_clause: str | None = Field(
         default=None, description="UDF guard condition, written by the expander"
     )
-    skip_condition: SkipConditionConfig | None = Field(
-        default=None, description="Safe skip condition configuration"
-    )
     request_timeout: float | None = Field(
         default=None,
         strict=True,
@@ -161,5 +101,4 @@ class AgentConfig(BaseModel):
 __all__ = [
     "DefaultAgentConfig",
     "AgentConfig",
-    "SkipConditionConfig",
 ]

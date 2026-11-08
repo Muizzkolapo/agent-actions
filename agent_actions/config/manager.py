@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 # otherwise pass through silently instead of being refused.
 _REMOVED_AGENT_SPELLINGS = {
     "depends_on": "dependencies",
-    "skip_if": "skip_condition",
 }
 
 
