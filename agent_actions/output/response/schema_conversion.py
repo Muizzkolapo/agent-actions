@@ -240,7 +240,17 @@ def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]
         raise KeyError(f"Field missing both 'id' and 'name' keys: {field}")
     target_field = field.get("mappings", {}).get(target_system.lower(), field_id)
     prop: dict[str, Any] = {"type": field["type"]}
-    for k in ("title", "description", "pattern", "minItems", "maxItems"):
+    for k in (
+        "title",
+        "description",
+        "pattern",
+        "minItems",
+        "maxItems",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+    ):
         if k in field:
             prop[k] = field[k]
     if field["type"] == "array" and "items" in field:

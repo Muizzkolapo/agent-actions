@@ -8,6 +8,7 @@ Uses seeded randomness for reproducibility while providing variety.
 import hashlib
 import json
 import logging
+import math
 import random
 import threading
 from dataclasses import dataclass
@@ -442,6 +443,54 @@ class FakeDataGenerator:
                 return cls._generate_array(schema, attempt, field_name)
             return cls._generate_string(attempt, field_name=field_name)
 
+    # The formats _generate_formatted_string can produce; any other gets a sentence.
+    KNOWN_FORMATS = frozenset(
+        {"email", "uri", "url", "date", "date-time", "time", "uuid", "hostname", "ipv4", "ipv6"}
+    )
+
+    @staticmethod
+    def _length_bounds(schema: dict[str, Any]) -> tuple[int, int] | None:
+        """The length range a string schema declares; None when it declares none.
+
+        A missing `minLength` is 0; a missing `maxLength` is 200 above `minLength`.
+        """
+        low, high = schema.get("minLength"), schema.get("maxLength")
+        if low is None and high is None:
+            return None
+        shortest = 0 if low is None else int(low)
+        return shortest, shortest + 200 if high is None else int(high)
+
+    @staticmethod
+    def _numeric_bounds(
+        schema: dict[str, Any],
+    ) -> tuple[int | float, int | float, bool, bool] | None:
+        """``(low, high, low_open, high_open)`` a schema declares; None when it declares none.
+
+        `exclusiveMinimum`/`exclusiveMaximum` make a side open. A missing low side is 0 when
+        the high side is above 0, else 1000 below it; a missing high side is 1000 above the low.
+        Values are kept as written, so an integer bound stays exact.
+        """
+
+        def number(key: str) -> int | float | None:
+            value = schema.get(key)
+            return value if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+        low, low_open = number("minimum"), False
+        exclusive_low = number("exclusiveMinimum")
+        if exclusive_low is not None and (low is None or exclusive_low >= low):
+            low, low_open = exclusive_low, True
+        high, high_open = number("maximum"), False
+        exclusive_high = number("exclusiveMaximum")
+        if exclusive_high is not None and (high is None or exclusive_high <= high):
+            high, high_open = exclusive_high, True
+        if high is None:
+            if low is None:
+                return None
+            high = low + 1000
+        elif low is None:
+            low = 0 if high > 0 else high - 1000
+        return low, high, low_open, high_open
+
     @classmethod
     def _generate_string(
         cls,
@@ -449,8 +498,39 @@ class FakeDataGenerator:
         schema: dict | None = None,
         field_name: str | None = None,
     ) -> str:
-        """Generate a contextually appropriate string."""
+        """Generate a contextually appropriate string, sized to any declared length bound."""
         schema = schema or {}
+        text = cls._generate_unsized_string(attempt, schema, field_name)
+        bounds = cls._length_bounds(schema)
+        # A formatted value padded with prose or cut short is no longer that format.
+        if (
+            bounds is None
+            or schema.get("format") in cls.KNOWN_FORMATS
+            or bounds[0] <= len(text) <= bounds[1]
+        ):
+            return text
+        rng = cls._get_rng()
+        low, high = bounds
+        while len(text) < low:
+            text = f"{text} {cls._generate_sentence(attempt, rng)}"
+        return cls._cut_at_word(text, max(low, 1), high)
+
+    @staticmethod
+    def _cut_at_word(text: str, shortest: int, longest: int) -> str:
+        """*text* cut to at most *longest* characters, at a word boundary when that keeps *shortest*."""
+        if len(text) <= longest:
+            return text
+        space = text.rfind(" ", 0, longest + 1)
+        return text[:space] if space >= shortest else text[:longest]
+
+    @classmethod
+    def _generate_unsized_string(
+        cls,
+        attempt: int,
+        schema: dict[str, Any],
+        field_name: str | None = None,
+    ) -> str:
+        """A contextually appropriate string, before any length bound is applied."""
         rng = cls._get_rng()
         field_lower = (field_name or "").lower()
 
@@ -611,6 +691,31 @@ class FakeDataGenerator:
         maximum = schema.get("maximum", 1000)
         multiple_of = schema.get("multipleOf")
 
+        bounds = cls._numeric_bounds(schema)
+        if bounds is not None:
+            low, high, low_open, high_open = bounds
+
+            def inside(value: float) -> bool:
+                above = value > low if low_open else value >= low
+                below = value < high if high_open else value <= high
+                return above and below
+
+            if multiple_of:
+                step = float(multiple_of)
+                first = math.floor(low / step) + 1 if low_open else math.ceil(low / step)
+                last = math.ceil(high / step) - 1 if high_open else math.floor(high / step)
+                if first <= last:
+                    k = rng.randint(first, last)
+                    # Float division can put the first or last step just past an edge.
+                    for candidate in (k, k + 1, k - 1):
+                        stepped = round(candidate * step, 10)
+                        if inside(stepped):
+                            return stepped
+            value = round(rng.uniform(low, high), 2)
+            if not inside(value):
+                value = (low + high) / 2
+            return float(value)
+
         # Context-aware generation
         if field_lower:
             if any(x in field_lower for x in ["price", "cost", "amount", "total"]):
@@ -649,6 +754,21 @@ class FakeDataGenerator:
 
         minimum = schema.get("minimum", 0)
         maximum = schema.get("maximum", 1000)
+
+        bounds = cls._numeric_bounds(schema)
+        if bounds is not None:
+            low, high, low_open, high_open = bounds
+            first = math.floor(low) + 1 if low_open else math.ceil(low)
+            last = math.ceil(high) - 1 if high_open else math.floor(high)
+            raw_step = schema.get("multipleOf")
+            step = 0
+            if isinstance(raw_step, int | float) and not isinstance(raw_step, bool):
+                step = int(raw_step) if float(raw_step).is_integer() else 0
+            if step > 0:
+                first_step, last_step = -(-first // step), last // step
+                if first_step <= last_step:
+                    return rng.randint(first_step, last_step) * step
+            return rng.randint(first, last) if first <= last else first
 
         # Context-aware generation
         if field_lower:
@@ -808,11 +928,11 @@ class FakeDataGenerator:
             return field["enum"][idx]
 
         if field_type == "string":
-            return cls._generate_string(attempt, field_name=field_id)
+            return cls._generate_string(attempt, field, field_id)
         elif field_type == "number":
-            return cls._generate_number(attempt, field_name=field_id)
+            return cls._generate_number(attempt, field, field_id)
         elif field_type == "integer":
-            return cls._generate_integer(attempt, field_name=field_id)
+            return cls._generate_integer(attempt, field, field_id)
         elif field_type == "boolean":
             return cls._generate_boolean(attempt, field_name=field_id)
         elif field_type == "array":
@@ -903,6 +1023,47 @@ class FakeDataGenerator:
         }
 
         return response
+
+    @staticmethod
+    def offered_answer_shapes(prompt: str) -> list[dict[str, Any]] | None:
+        """The JSON objects a prompt's last line offers as its answer: two or more, joined by ` or `.
+
+        None when that line holds anything else. A single object is not an offer, so a prompt
+        that ends with a rendered record still gets prose.
+        """
+        lines = [line.strip() for line in prompt.splitlines() if line.strip()]
+        if not lines:
+            return None
+        line, decoder, shapes, pos = lines[-1], json.JSONDecoder(), [], 0
+        while True:
+            try:
+                shape, pos = decoder.raw_decode(line, pos)
+            except ValueError:
+                return None
+            if not isinstance(shape, dict):
+                return None
+            shapes.append(shape)
+            if pos == len(line):
+                return shapes if len(shapes) > 1 else None
+            if not line.startswith(" or ", pos):
+                return None
+            pos += len(" or ")
+
+    @classmethod
+    def generate_offered_answer(cls, shapes: list[dict[str, Any]], prompt: str) -> str:
+        """One of the offered shapes, chosen by an RNG seeded by *prompt* alone.
+
+        Each string value becomes a generated sentence. One prompt always gets one answer.
+        """
+        seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
+        cls.set_context(seed=seed, prompt=prompt)
+        rng = cls._get_rng()
+        shape = rng.choice(shapes)
+        answer = {
+            key: cls._generate_sentence(1, rng) if isinstance(value, str) else value
+            for key, value in shape.items()
+        }
+        return json.dumps(answer)
 
     @classmethod
     def generate_text_response(cls, prompt: str, attempt: int = 1) -> str:

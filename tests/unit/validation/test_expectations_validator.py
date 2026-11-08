@@ -305,7 +305,11 @@ def test_defaulted_expect_is_skipped_without_project_context():
             id="context-malformed-ref",
         ),
         # a defect, not a crash
-        pytest.param({"rule": "x", "context": 5}, "context must be a list", id="context-non-list"),
+        pytest.param(
+            {"rule": "x", "context": 5},
+            "takes parameter 'context' as a list, got int 5",
+            id="context-non-list",
+        ),
     ],
 )
 def test_llm_judge_bad_params_is_a_defect(params, fragment):
@@ -427,7 +431,7 @@ def test_valid_expression_entry_has_no_defects():
         ),
         pytest.param(
             {"id": "floor", "type": "expression", "params": {"condition": 5}},
-            "condition must be a non-empty string",
+            "takes parameter 'condition' as a string, got int 5",
             id="non-string-condition",
         ),
         pytest.param(
@@ -619,7 +623,9 @@ def test_repair_on_a_tool_action_is_a_defect():
 
 def test_repair_on_a_tool_vendor_action_is_a_defect():
     defects = find_expectation_defects(
-        action_config(model_vendor="tool", expect={"repair": "auto", "expectations": NOT_NULL}),
+        action_config(
+            kind="tool", model_vendor="tool", expect={"repair": "auto", "expectations": NOT_NULL}
+        ),
         {"a": {"options"}},
     )
     assert any("tool" in m for m in defects["a"])

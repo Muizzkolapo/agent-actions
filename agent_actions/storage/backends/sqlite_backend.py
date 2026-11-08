@@ -1787,8 +1787,12 @@ class SQLiteBackend(StorageBackend):
         record_id: str,
         response_text: str,
         parent_record_id: str | None = None,
+        attempt: int | None = None,
     ) -> None:
         """Attach the LLM response to the newest trace row for a prepared task.
+
+        With ``attempt``, to that attempt's row: a repair loop can ship an earlier
+        attempt's response, which belongs beside the prompt that drew it.
 
         Keyed on the prepare-time id, not the durable guid: only a per-run id
         can answer "which prompt produced this on this run" without reaching a
@@ -1817,6 +1821,7 @@ class SQLiteBackend(StorageBackend):
                     WHERE id = (
                         SELECT id FROM prompt_trace
                         WHERE action_name = ? AND record_id IN (?, ?)
+                          AND (? IS NULL OR attempt = ?)
                         ORDER BY (record_id = ?) DESC, attempt DESC, id DESC LIMIT 1
                     )
                     """,
@@ -1826,6 +1831,8 @@ class SQLiteBackend(StorageBackend):
                         action_name,
                         record_id,
                         parent_record_id or record_id,
+                        attempt,
+                        attempt,
                         record_id,
                     ),
                 )

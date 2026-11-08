@@ -224,7 +224,7 @@ class TestInitialPipelineGuardSkipAndToolAction:
             patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats())
+            MockProc.return_value.process.return_value = ([], CollectionStats(filtered=1))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
 
@@ -273,10 +273,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
     @pytest.mark.parametrize(
         "config",
         [
-            {"model_vendor": "tool"},
+            {"kind": "tool", "model_vendor": "tool"},
             {"kind": "tool"},
         ],
-        ids=["model_vendor=tool", "kind=tool"],
+        ids=["loaded-tool", "kind=tool"],
     )
     def test_tool_action_empty_output_raises(self, online_ctx, config):
         """Tool action with success but empty output must raise."""

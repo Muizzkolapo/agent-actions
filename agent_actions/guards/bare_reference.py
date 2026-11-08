@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 
@@ -77,7 +78,7 @@ def spreads_output_flat(action_config: Mapping) -> bool:
     cannot drift: only a FILE-granularity version-merge tool behaves this way.
     """
     granularity = str(action_config.get("granularity") or "").lower()
-    is_tool = action_config.get("kind") == "tool" or action_config.get("model_vendor") == "tool"
+    is_tool = routing_kind(dict(action_config)) == "tool"
     return bool(granularity == "file" and is_tool and action_config.get("version_consumption"))
 
 

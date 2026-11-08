@@ -6,7 +6,7 @@ import pytest
 
 from agent_actions.errors import ConfigValidationError
 from agent_actions.input.preprocessing.staging.field_validation import (
-    validate_source_reads_below,
+    validate_staged_source_reads,
 )
 
 ROWS = [{"content": {"source": {"title": "a"}}, "source_guid": "g1"}]
@@ -27,7 +27,7 @@ def test_it_is_not_asked_when_every_read_is_held():
     def never() -> bool:
         raise AssertionError("asked although no read is missing")
 
-    validate_source_reads_below(
+    validate_staged_source_reads(
         ROWS, "staging/a.json", "first", _configs("source.title"), conclusive=never
     )
 
@@ -46,5 +46,5 @@ def test_it_is_asked_once_for_every_missing_read():
         "context_scope": {"observe": ["source.other"]},
     }
     with pytest.raises(ConfigValidationError, match="source.body"):
-        validate_source_reads_below(ROWS, "staging/a.json", "first", configs, conclusive=once)
+        validate_staged_source_reads(ROWS, "staging/a.json", "first", configs, conclusive=once)
     assert asked == [1]

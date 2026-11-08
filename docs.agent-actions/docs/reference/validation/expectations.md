@@ -9,7 +9,7 @@ Schema validation catches structural problems — missing fields, wrong types. I
 
 `expect:` adds a validation layer on top of schema and guards: deterministic checks (length, forbidden phrases, allowed values, regex) plus LLM-judged checks (`llm_judge`) that ask a model whether a value satisfies an arbitrary natural-language rule, optionally grounded against other actions' output.
 
-How much authority those results carry is up to you. Under `repair: none` they are pure reporting — the verdict rides along on the record and blocks nothing, so pair it with a [guard](../execution/guards.md) if you want it to gate anything. Under a repair policy the same rules drive [regeneration](#repairing-instead-of-observing), and can tombstone a record or halt the run outright.
+How much authority those results carry is up to you. Under `repair: none` they are pure reporting — the verdict rides along on the record and blocks nothing, so pair it with a [guard](../execution/guards.md) if you want it to gate anything. The run still says how many records failed: the action's line turns `⚠` and ends `— N failed their checks`, and [`agac dispositions`](../cli/dispositions.md) counts them under **Failed checks**. Under a repair policy the same rules drive [regeneration](#repairing-instead-of-observing), and can tombstone a record or halt the run outright.
 
 ## Quick example
 
@@ -110,12 +110,14 @@ agac expect list -a my_workflow --action summarize
 | `match_like_pattern` | `like_pattern` (string) *(required)*, `negate` (boolean) | Value matches a SQL `LIKE` pattern across its whole length — `%` is any run, `_` exactly one character, everything else literal |
 | `no_forbidden_phrases` | `phrases` (list) *(required)*, `case_sensitive` (boolean) | Value doesn't contain any of a list of substrings |
 | `contains_terms_from` | `terms` (list) *(required)*, `min_matches` (number) | Value contains at least `min_matches` (default 1) terms from a list |
-| `expression` | `condition` *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
+| `expression` | `condition` (string) *(required)* | A guard-syntax condition evaluated against the whole record — see [Expressions](#expressions) |
 
 Each parameter takes the value type shown. A value of another type is refused when the rule is
 loaded, at preflight and at run time, with the same message. A list parameter given as a string
 is refused too: `params` hold literal values, so `terms: source.essay` would be the text
 `source.essay`, not the field. A number is never a boolean, and a list is never a number.
+The same holds for [`llm_judge`](#llm_judge)'s parameters and for the universal
+[`row_condition`](#row-conditions), which is a string under every type, your own included.
 
 ```
 quote_in_source: type 'contains_terms_from' takes parameter 'terms' as a list, got str 'source.essay'; params hold literal values, so a field name here is not read
@@ -216,10 +218,14 @@ Preflight validates every condition before any LLM call: syntax, the dangerous-p
 
 | Param | Default | Purpose |
 |-------|---------|---------|
-| `rule` | *(required)* | The natural-language criterion the judge evaluates |
-| `votes` | `1` | Run the judge this many times independently and take the majority; a tie **fails closed** (an even split never counts as a pass) |
-| `model` | the action's own `model_name` | Override which model does the judging |
-| `context` | none | List of `action.field` refs, resolved from the *same* `context_scope` machinery as prompts, and passed to the judge as grounding text |
+| `rule` (string) | *(required)* | The natural-language criterion the judge evaluates |
+| `votes` (number) | `1` | Run the judge this many times independently and take the majority; a tie **fails closed** (an even split never counts as a pass) |
+| `model` (string) | the action's own `model_name` | Override which model does the judging |
+| `context` (list) | none | List of `action.field` refs, resolved from the *same* `context_scope` machinery as prompts, and passed to the judge as grounding text |
+
+### Testing a judge offline
+
+On `model_vendor: agac-provider` the judge gets a verdict object back, so a judged rule can be exercised with no network and no key. The mock picks `passed: true` or `passed: false` with its seeded generator and writes a generated sentence as the `reason`. The same rule and value give the same verdict on every run, and different values reach both verdicts, so the pass and the fail path both run. The verdict carries no judgement of the value; it tests the plumbing, not the rule.
 
 ### `context:` auto-injection
 
@@ -308,7 +314,7 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 
 | `on_exhausted` | What ships |
 |---|---|
-| `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
+| `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. It is stored `success` with reason `expectations_failed`: not cascade-blocked, not re-run by `agac retry`, and the action still ends `completed`. The run line says so (`⚠ summarize  4 records in 0.1s — 3 failed their checks`), and so does `agac dispositions` (**Failed checks**). If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
 | `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count. The record is stored `exhausted`, online and under batch alike, and the action ends `completed_with_failures` (`failed` when no record succeeds); `agac retry` runs it again |
 | `raise` | Nothing — the run halts with an error naming the action and the still-failing rules. The halt is recorded, online and under batch alike: the next `agac run` refuses the action without calling the model, and [`agac retry`](../cli/retry.md#a-retry-resumes-a-halted-action-in-full) resumes it. Under batch the records it stopped at are stored `exhausted`, not as answers |
 
@@ -543,6 +549,7 @@ A record without `question_type` waives the rule; one that has it is checked. Wr
 `agac inspect` validates an `expect:` block before any LLM call is made:
 
 - `votes` must be a positive integer.
+- Every parameter must be the value type its type declares — see [Deterministic expectation types](#deterministic-expectation-types) and [`llm_judge`](#llm_judge).
 - `context` must be a list of `action.field` strings; each referenced action must exist upstream and each field must appear in that action's declared output.
 - Unknown parameters for a given `type` (e.g. `phrases` on `not_null`) are rejected — including for [your own registered types](#extending-with-your-own-checks), whose declared parameters are enforced exactly like built-ins'.
 - Every entry must carry a `field:` (empty strings and empty lists are rejected too) — except `expression`, which must not, and rules declared on a field, which already have one.
@@ -598,6 +605,5 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 - **Record granularity only for repair.** One file-granularity call produces the whole file, so a single failing record would regenerate all of them; preflight refuses `repair` on a `granularity: file` action. Observe mode works there — a response holding many records has each one validated and annotated independently, the same as an action whose LLM returns a JSON array.
 - **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight. Observe mode works at record granularity.
 - **A tool or HITL action at file granularity never runs its rules.** Those actions are processed by a strategy that does not evaluate expectations, and preflight does not refuse the combination, so an `expect:` block on one is silently inert. `kind: hitl` is always file granularity, so this is true of every HITL action. [`agac expect list`](../cli/expect.md#rules-that-will-not-run) marks such an action rather than implying its rules run.
-- **The prompt trace shows the original prompt.** A record repaired on iteration 2 or later has a stored trace pairing the *first* prompt with the *final* response, and that response carries the attached verdict.
 - **`context:` refs are single-level.** `action.field` only — no nested paths into a wildcard element (`action.items[*].text` is not valid inside a `context:` ref).
 - **Budget is per run, not persisted.** `judge_budget` resets each time the workflow runs; it does not track spend across separate `agac run` invocations.

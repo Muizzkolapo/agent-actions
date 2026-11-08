@@ -8,10 +8,11 @@ from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.tooling.code_scanner import scan_tool_functions
-from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_OUTPUT_JSON_SCHEMA
+from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
 
 from .data_flow_graph import InputSchema, OutputSchema
 
@@ -158,12 +159,11 @@ class SchemaExtractor:
         """Extract output schema from action config."""
         output = OutputSchema()
 
-        kind = agent_config.get("kind", DEFAULT_ACTION_KIND)
-        model_vendor = agent_config.get("model_vendor", "")
+        kind = routing_kind(agent_config)
 
-        if kind == "tool" or model_vendor == "tool":
+        if kind == "tool":
             self._extract_tool_schema(agent_config, output, schema_loader)
-        elif kind == "hitl" or model_vendor == "hitl":
+        elif kind == "hitl":
             self._extract_hitl_schema(output)
         else:
             self._extract_llm_schema(agent_config, output, schema_loader)
@@ -180,12 +180,11 @@ class SchemaExtractor:
         """Extract input schema from action config."""
         input_schema = InputSchema()
 
-        kind = agent_config.get("kind", DEFAULT_ACTION_KIND)
-        model_vendor = agent_config.get("model_vendor", "")
+        kind = routing_kind(agent_config)
 
-        if kind == "tool" or model_vendor == "tool":
+        if kind == "tool":
             self._extract_tool_input_schema(agent_config, input_schema)
-        elif kind == "hitl" or model_vendor == "hitl":
+        elif kind == "hitl":
             pass
         else:
             self._extract_llm_input_schema(agent_config, input_schema, reference_extractor)

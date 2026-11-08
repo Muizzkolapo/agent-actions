@@ -33,6 +33,7 @@ from agent_actions.logging.events import (
     ActionSkipEvent,
     BatchCompleteEvent,
 )
+from agent_actions.processing.run_counts import RunCounts, counting
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
     EVERY_INPUT_FAILED,
@@ -171,7 +172,7 @@ def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
     """
     cfg: dict[str, Any] = action_config  # type: ignore[assignment]
     names = [cfg.get("conditional_clause")]
-    if cfg.get("model_vendor") == "tool":
+    if cfg.get("kind") == "tool":
         names.append(cfg.get("model_name"))
     digests: dict[str, str] = {}
     for name in filter(None, names):
@@ -356,6 +357,9 @@ class ExecutionMetrics:
     # Of record_count, the rows the action's guard skipped this execution: they
     # are stored as tombstones and counted as rows like any other.
     guard_skipped: int = 0
+    # Records this execution shipped carrying a verdict whose overall_pass is false
+    # (on_exhausted: return_last, repair: none). Stored as successes.
+    checks_failed: int = 0
 
 
 @dataclass
@@ -1235,15 +1239,8 @@ class ActionExecutor:
     def _track_action_start(self, params: ActionRunParams) -> None:
         """Track action start if run_tracker is available."""
         if self.run_tracker is not None and self.run_id is not None:
-            model_vendor = params.action_config.get("model_vendor", "")
-            action_kind = params.action_config.get("kind", "")
-
-            if model_vendor == "tool" or action_kind == "tool":
-                action_type = "tool"
-            elif model_vendor == "hitl" or action_kind == "hitl":
-                action_type = "hitl"
-            else:
-                action_type = DEFAULT_ACTION_KIND
+            action_kind = params.action_config.get("kind")
+            action_type = action_kind if action_kind in ("tool", "hitl") else DEFAULT_ACTION_KIND
 
             self.run_tracker.record_action_start(
                 run_id=self.run_id,
@@ -1259,14 +1256,17 @@ class ActionExecutor:
         duration: float,
         batch_status: str | None,
         pre_run_count: int,
+        counts: RunCounts | None = None,
     ) -> ActionExecutionResult:
         """Handle successful action run result.
 
         ``pre_run_count`` is the backend's ``rows_collected`` tally for this action
         captured BEFORE the runner executed.  The change against the post-run
         reading is what this execution produced — the stored row total would
-        read 0 for a run that replaces rows already stored.
+        read 0 for a run that replaces rows already stored. ``counts`` holds what
+        this execution's collections found.
         """
+        counts = counts or RunCounts()
         if batch_status == "batch_submitted":
             self.deps.state_manager.update_status(
                 params.action_name,
@@ -1305,7 +1305,8 @@ class ActionExecutor:
             )
 
         record_count = self._count_after_the_run(params.action_name, duration, pre_run_count)
-        guard_skipped = self._guard_skips_this_run(params.action_name)
+        guard_skipped = counts.guard_skipped
+        checks_failed = counts.checks_failed
 
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
@@ -1322,7 +1323,10 @@ class ActionExecutor:
                 output_folder=output_folder,
                 status=final_status,
                 metrics=ExecutionMetrics(
-                    duration=duration, record_count=record_count, guard_skipped=guard_skipped
+                    duration=duration,
+                    record_count=record_count,
+                    guard_skipped=guard_skipped,
+                    checks_failed=checks_failed,
                 ),
             )
 
@@ -1347,6 +1351,7 @@ class ActionExecutor:
                 files_processed=0,
                 record_count=record_count,
                 guard_skipped=guard_skipped,
+                checks_failed=checks_failed,
             ),
         )
 
@@ -1366,20 +1371,6 @@ class ActionExecutor:
             )
         collected: int = storage_backend.rows_collected(action_name)
         return collected
-
-    def _guard_skips_this_run(self, action_name: str) -> int:
-        """Take the backend's guard-skip tally for *action_name*, which then reads zero.
-
-        Taken when the execution starts and again when it completes, so the second
-        reading is what this execution's collections credited.
-        """
-        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
-        if storage_backend is None:
-            raise RuntimeError(
-                f"Cannot count guard skips for {action_name!r}: no storage backend on action_runner"
-            )
-        taken: int = storage_backend.take_guard_skips(action_name)
-        return taken
 
     def _records_written_this_run(self, action_name: str, pre_run_count: int) -> int:
         """Rows this execution produced: the rows credited since *pre_run_count*."""
@@ -2173,12 +2164,13 @@ class ActionExecutor:
             action_name, action_idx, action_config, start_time
         )
         try:
-            output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
-                action_name,
-                output_directory,
-                action_config,
-                workflow_metadata=self.deps.action_runner.workflow_metadata,
-            )
+            with counting() as counts:
+                output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
+                    action_name,
+                    output_directory,
+                    action_config,
+                    workflow_metadata=self.deps.action_runner.workflow_metadata,
+                )
         except Exception as e:
             return self._handle_batch_exception(
                 action_name, action_idx, action_config, start_time, e
@@ -2193,6 +2185,7 @@ class ActionExecutor:
             batch_status,
             duration,
             pre_run_count,
+            counts,
         )
 
     async def _handle_batch_check_async(
@@ -2210,13 +2203,14 @@ class ActionExecutor:
             action_name, action_idx, action_config, start_time
         )
         try:
-            output_folder, batch_status = await asyncio.to_thread(
-                self.deps.batch_manager.handle_batch_agent,
-                action_name,
-                output_directory,
-                action_config,
-                workflow_metadata=self.deps.action_runner.workflow_metadata,
-            )
+            with counting() as counts:
+                output_folder, batch_status = await asyncio.to_thread(
+                    self.deps.batch_manager.handle_batch_agent,
+                    action_name,
+                    output_directory,
+                    action_config,
+                    workflow_metadata=self.deps.action_runner.workflow_metadata,
+                )
         except Exception as e:
             return self._handle_batch_exception(
                 action_name, action_idx, action_config, start_time, e
@@ -2231,6 +2225,7 @@ class ActionExecutor:
             batch_status,
             duration,
             pre_run_count,
+            counts,
         )
 
     def _count_before_the_check(
@@ -2246,10 +2241,7 @@ class ActionExecutor:
         tracked a start, so the failure is recorded with one.
         """
         try:
-            count = self._count_records_for_action(action_name)
-            # Drop what an earlier execution left: what this check collects is counted.
-            self._guard_skips_this_run(action_name)
-            return count
+            return self._count_records_for_action(action_name)
         except Exception as error:
             params = ActionRunParams(
                 action_name=action_name,
@@ -2315,13 +2307,16 @@ class ActionExecutor:
         batch_status: str,
         duration: float,
         pre_run_count: int,
+        counts: RunCounts | None = None,
     ) -> ActionExecutionResult:
         """Map batch_manager result to status, events, and ActionExecutionResult.
 
         ``pre_run_count`` is the backend's ``rows_collected`` tally captured BEFORE
         the batch result was processed.  Used for the per-execution delta —
-        see ``_handle_run_success`` for the rationale.
+        see ``_handle_run_success`` for the rationale. ``counts`` holds what this
+        check's collections found.
         """
+        counts = counts or RunCounts()
         if batch_status == "completed":
             wall_clock = self._compute_batch_wall_clock(action_name, duration)
             final_status = self._resolve_completion_status(action_name)
@@ -2346,7 +2341,8 @@ class ActionExecutor:
                 )
 
             record_count = self._count_after_the_run(action_name, wall_clock, pre_run_count)
-            guard_skipped = self._guard_skips_this_run(action_name)
+            guard_skipped = counts.guard_skipped
+            checks_failed = counts.checks_failed
             self.deps.state_manager.update_status(
                 action_name,
                 final_status,
@@ -2363,7 +2359,10 @@ class ActionExecutor:
                 output_folder=output_folder,
                 status=final_status,
                 metrics=ExecutionMetrics(
-                    duration=wall_clock, record_count=record_count, guard_skipped=guard_skipped
+                    duration=wall_clock,
+                    record_count=record_count,
+                    guard_skipped=guard_skipped,
+                    checks_failed=checks_failed,
                 ),
             )
 
@@ -2469,7 +2468,6 @@ class ActionExecutor:
         except Exception as error:
             self._record_store_failure(params.action_name, _elapsed(params), error)
             raise
-        self._guard_skips_this_run(params.action_name)  # drop what an earlier execution left
         return count
 
     def _count_after_the_run(self, action_name: str, duration: float, pre_run_count: int) -> int:
@@ -2548,13 +2546,14 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-            output_folder = self.deps.action_runner.run_action(
-                params.action_config,
-                params.action_name,
-                None,
-                params.action_idx,
-                correlated_input=correlated_input,
-            )
+            with counting() as counts:
+                output_folder = self.deps.action_runner.run_action(
+                    params.action_config,
+                    params.action_name,
+                    None,
+                    params.action_idx,
+                    correlated_input=correlated_input,
+                )
         except AllVersionsFilteredError as avf:
             return self._handle_all_versions_filtered(params, avf)
         except NoInputFilesError as nothing:
@@ -2570,7 +2569,7 @@ class ActionExecutor:
             configured_run_mode=effective_run_mode(params.action_config),
         )
         return self._handle_run_success(
-            params, output_folder, duration, batch_status, pre_run_count
+            params, output_folder, duration, batch_status, pre_run_count, counts
         )
 
     async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
@@ -2580,14 +2579,15 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-            output_folder = await asyncio.to_thread(
-                self.deps.action_runner.run_action,
-                params.action_config,
-                params.action_name,
-                None,
-                params.action_idx,
-                correlated_input=correlated_input,
-            )
+            with counting() as counts:
+                output_folder = await asyncio.to_thread(
+                    self.deps.action_runner.run_action,
+                    params.action_config,
+                    params.action_name,
+                    None,
+                    params.action_idx,
+                    correlated_input=correlated_input,
+                )
         except AllVersionsFilteredError as avf:
             return self._handle_all_versions_filtered(params, avf)
         except NoInputFilesError as nothing:
@@ -2603,7 +2603,7 @@ class ActionExecutor:
             configured_run_mode=effective_run_mode(params.action_config),
         )
         return self._handle_run_success(
-            params, output_folder, duration, batch_status, pre_run_count
+            params, output_folder, duration, batch_status, pre_run_count, counts
         )
 
     def __repr__(self):

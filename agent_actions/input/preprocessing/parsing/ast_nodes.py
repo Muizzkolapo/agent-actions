@@ -410,7 +410,9 @@ def evaluate_node(
             try:
                 right_value = evaluate_node(node.right, data, functions)
             except MissingFieldError as e:
-                if isinstance(node.right, FieldNode):
+                # A dotted field is a reference this record lacks, as on the left; only
+                # an undotted one is taken for an unquoted string.
+                if isinstance(node.right, FieldNode) and "." not in node.right.field_path:
                     field_name = node.right.field_path
                     left_repr = node.left.field_path if isinstance(node.left, FieldNode) else "..."
                     raise GuardSemanticError(

@@ -65,7 +65,7 @@ def create_dynamic_agent(
         tools_path = resolve_tools_path(agent_config)
 
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
-    is_tool = model_vendor == "tool"
+    is_tool = agent_config.get("kind") == "tool"
 
     context_data = ContextService.prepare_context_data(context_data_str, is_tool)
 

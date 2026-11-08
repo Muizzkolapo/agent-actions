@@ -106,7 +106,6 @@ class StorageBackend(ABC):
         self._format_version_written = False
         self._format_version_checked = False
         self._rows_collected: dict[str, int] = {}
-        self._guard_skips_collected: dict[str, int] = {}
         self._rows_collected_lock = threading.Lock()
         self._staged_this_run: dict[str, set[str]] = {}
 
@@ -124,32 +123,6 @@ class StorageBackend(ABC):
         """Rows credited to *action_name* by :meth:`credit_rows_collected` so far."""
         with self._rows_collected_lock:
             return self._rows_collected.get(action_name, 0)
-
-    def credit_guard_skips(self, action_name: str, count: int) -> None:
-        """Add *count* records an action's guard skipped this run to its tally.
-
-        Stored as ``unprocessed``, a guard skip reads like any record nothing answered;
-        this is what lets the run say how many of the rows it counts are the guard's.
-        Carried-forward rows are not credited. In memory only.
-        """
-        with self._rows_collected_lock:
-            self._guard_skips_collected[action_name] = (
-                self._guard_skips_collected.get(action_name, 0) + count
-            )
-
-    def guard_skips_collected(self, action_name: str) -> int:
-        """Guard skips credited to *action_name* since the tally was last taken."""
-        with self._rows_collected_lock:
-            return self._guard_skips_collected.get(action_name, 0)
-
-    def take_guard_skips(self, action_name: str) -> int:
-        """Return *action_name*'s guard-skip tally and set it back to zero.
-
-        Taken as an execution starts, which drops anything an earlier one left, and
-        again as it completes, which is then what that execution collected.
-        """
-        with self._rows_collected_lock:
-            return self._guard_skips_collected.pop(action_name, 0)
 
     def note_staged_records(self, action_name: str, source_guids: Iterable[str]) -> None:
         """Add records a first stage's walk found staged to what it found this run.
@@ -999,11 +972,14 @@ class StorageBackend(ABC):
         record_id: str,
         response_text: str,
         parent_record_id: str | None = None,
+        attempt: int | None = None,
     ) -> None:
         """Attach the LLM response to the newest trace row for a prepared task.
 
         Pass ``parent_record_id`` when the record may be an expansion child,
-        whose own id was minted after its prompt ran.
+        whose own id was minted after its prompt ran. Pass ``attempt`` to attach it
+        to that attempt's row instead: a repair loop can ship an earlier attempt's
+        response.
 
         No-op if the trace does not exist. This is telemetry — must not raise.
         """

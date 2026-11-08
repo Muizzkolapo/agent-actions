@@ -171,13 +171,33 @@ class TestHonestyProbe:
 
         line = next(row for row in r.output.splitlines() if " repaired  " in row)
         assert "repaired  4 records in" in line
-        assert line.rstrip().endswith("— 1 skipped by guard")
+        assert "— 1 skipped by guard" in line
         for action in ("observed", "warned"):
             other = next(row for row in r.output.splitlines() if f" {action}  " in row)
             assert "skipped by guard" not in other
 
         assert _action_complete_data(r)["repaired"]["guard_skipped"] == 1
         assert _action_complete_data(r)["observed"]["guard_skipped"] == 0
+
+    def test_honesty_probe_traces_every_attempt(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob("*.db")
+        rows = stored_rows(
+            db,
+            "select record_id, attempt, compiled_prompt, response_text from prompt_trace "
+            "where action_name = 'repaired' order by record_id, attempt",
+        )
+        by_record: dict[str, list[int]] = {}
+        for record_id, attempt, _, _ in rows:
+            by_record.setdefault(record_id, []).append(attempt)
+        assert len(rows) == 9
+        assert sorted(by_record.values()) == [[0, 1, 2]] * 3
+        for _, attempt, prompt, response in rows:
+            assert response, f"attempt {attempt} has no response"
+            repairing = "Regenerate the complete output" in prompt
+            assert repairing is (attempt > 0), (attempt, prompt[-200:])
 
     @staticmethod
     def _project(tmp_path, run_mode="online"):
@@ -192,7 +212,7 @@ class TestHonestyProbe:
     def _repaired_line(output: str) -> str:
         """The completion line of `repaired`, unwrapped, up to the next completion icon."""
         flat = " ".join(output.split())
-        (line,) = re.findall(r"✓ repaired \d+ records in [^✓]*", flat)
+        (line,) = re.findall(r"[✓⚠] repaired \d+ records in [^✓⚠]*", flat)
         return line
 
     def test_a_sequential_run_names_the_guard_skip_too(self, tmp_path):
@@ -221,7 +241,9 @@ class TestHonestyProbe:
             outputs.append(result.stdout + result.stderr)
 
         assert result.returncode == 0, outputs[-1]
-        completing = next(out for out in outputs if "✓ repaired" in " ".join(out.split()))
+        completing = next(
+            out for out in outputs if re.search(r"[✓⚠] repaired \d+ records", " ".join(out.split()))
+        )
         line = self._repaired_line(completing)
         assert "repaired 4 records in" in line
         assert "— 1 skipped by guard" in line
@@ -234,5 +256,61 @@ class TestHonestyProbe:
         assert shown.returncode == 0, shown.stdout + shown.stderr
 
         cells = _summary_cells(shown.stdout, "repaired")
-        assert (cells["Success"], cells["Guard skipped"], cells["Unprocessed"]) == ("3", "1", "0")
-        assert (cells["Total"], cells["Records"]) == ("4", "4")
+        assert (cells["Failed checks"], cells["Guard skipped"], cells["Unprocessed"]) == (
+            "3",
+            "1",
+            "0",
+        )
+        assert (cells["Success"], cells["Total"], cells["Records"]) == ("0", "4", "4")
+
+    def test_honesty_probe_reports_failed_checks(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        flat = r.flat
+        assert "⚠ observed 4 records in" in flat
+        assert "— 4 failed their checks" in flat
+        assert "⚠ repaired 4 records in" in flat
+        assert "— 1 skipped by guard, 3 failed their checks" in flat
+        # Its own line: under parallel execution a log line can follow it in the output.
+        (warned,) = [row.strip() for row in r.output.splitlines() if " warned  4 records in" in row]
+        assert warned.startswith("✓ warned  4 records in")
+        assert "failed their checks" not in warned
+        assert re.search(r"⚠ [0-9.]+s — 3 completed, 7 records failed their checks", flat)
+
+    def test_honesty_probe_stores_failed_checks_as_successes(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob("*.db")
+        held = sorted(
+            stored_rows(
+                db,
+                "select action_name, disposition, ifnull(reason, 'NULL'), count(*) "
+                "from record_disposition where record_id != '__node__' group by 1, 2, 3",
+            )
+        )
+        assert held == [
+            ("observed", "success", "expectations_failed", 4),
+            ("repaired", "success", "expectations_failed", 3),
+            ("repaired", "unprocessed", "guard_skip", 1),
+            ("warned", "success", "NULL", 4),
+        ]
+
+        shown = run_agac(r.project, "dispositions", "-a", "honesty_probe", env={"COLUMNS": "200"})
+        observed = _summary_cells(shown.stdout, "observed")
+        warned = _summary_cells(shown.stdout, "warned")
+        assert (observed["Success"], observed["Failed checks"]) == ("0", "4")
+        assert (warned["Success"], warned["Failed checks"]) == ("4", "0")
+
+    def test_retry_finds_nothing_to_rerun_in_records_that_only_failed_their_checks(self, run):
+        r = run("honesty_probe")
+        assert r.returncode == 0, r.output
+
+        dry = run_agac(r.project, "retry", "-a", "honesty_probe", "--dry-run")
+        listed = dry.stdout + dry.stderr
+
+        assert dry.returncode == 0, listed
+        assert "Nothing to retry" in listed
+        assert "observed" not in listed
+        assert "repaired" not in listed

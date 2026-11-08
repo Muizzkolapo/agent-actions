@@ -18,6 +18,7 @@ from agent_actions.input.context.normalizer import (
     normalize_context_scope,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.utils.constants import (
     DEFAULT_ACTION_KIND,
     JSON_MODE_KEY,
@@ -1241,8 +1242,19 @@ class WorkflowStaticAnalyzer:
         if not filter_guarded:
             return warnings
 
-        # Step 2: Build dependency sets from raw config for each action.
+        from agent_actions.prompt.context.scope_inference import expand_version_base_names
+        from agent_actions.validation.dep_observe_validator import upstream_through_dependencies
+
+        action_configs = {
+            action.get("name", "unknown"): action for action in actions if isinstance(action, dict)
+        }
+        upstream = upstream_through_dependencies(action_configs)
+
+        # Step 2: Build dependency sets from raw config for each action. A declared
+        # dependency delivers records (an input); a name only in context_scope is read
+        # for context and delivers none, unless the action declares no dependencies.
         action_deps: dict[str, set[str]] = {}
+        action_inputs: dict[str, set[str]] = {}
         for action in actions:
             if not isinstance(action, dict):
                 continue
@@ -1253,6 +1265,7 @@ class WorkflowStaticAnalyzer:
                 for dep in deps_list:
                     if isinstance(dep, str):
                         deps.add(dep)
+            declared = expand_version_base_names(sorted(deps), list(action_configs))
             # Also infer from context_scope references.
             context_scope = action.get("context_scope", {})
             if isinstance(context_scope, dict):
@@ -1265,6 +1278,7 @@ class WorkflowStaticAnalyzer:
                                 if ns not in SPECIAL_NAMESPACES:
                                     deps.add(ns)
             action_deps[name] = deps
+            action_inputs[name] = set(declared) if declared else deps
 
         # Step 3: For each consumer with fan-in deps, check observe refs.
         warned_pairs: set[tuple[str, str]] = set()
@@ -1302,12 +1316,16 @@ class WorkflowStaticAnalyzer:
             if not hazard_sources:
                 continue
 
-            # Identify alternate dependency paths (deps that are NOT the
-            # filter-guarded action and could deliver the same record).
+            # Identify alternate dependency paths: inputs that are NOT the filter-guarded
+            # action and do not run below it, so a record it filtered can still arrive.
             for filtered_action, field_refs in hazard_sources.items():
-                alt_deps = deps - {filtered_action}
+                alt_deps = {
+                    dep
+                    for dep in action_inputs.get(consumer_name, set())
+                    if dep != filtered_action and filtered_action not in upstream.get(dep, set())
+                }
                 if not alt_deps:
-                    continue  # No alternate path — record can't arrive
+                    continue  # Every input passed the filter, or none bypasses it
 
                 pair = (filtered_action, consumer_name)
                 if pair in warned_pairs:
@@ -1350,10 +1368,9 @@ class WorkflowStaticAnalyzer:
         Resolves granularity the way the config expander does: HITL defaults to
         file, everything else falls back to the workflow's own defaults block.
         """
-        kind = action.get("kind")
-        vendor = action.get("model_vendor")
-        is_hitl = kind == "hitl" or vendor == "hitl"
-        if not is_hitl and kind != "tool" and vendor != "tool":
+        kind = routing_kind(action)
+        is_hitl = kind == "hitl"
+        if kind == "llm":
             return False
 
         granularity = action.get("granularity")
@@ -1646,12 +1663,11 @@ class WorkflowStaticAnalyzer:
         name = action_config.get("name", "unknown")
 
         # Determine action type
-        kind = action_config.get("kind", DEFAULT_ACTION_KIND)
-        model_vendor = action_config.get("model_vendor", "")
+        kind = routing_kind(action_config)
 
-        if kind == "tool" or model_vendor == "tool":
+        if kind == "tool":
             agent_kind = ActionKind.TOOL
-        elif kind == "hitl" or model_vendor == "hitl":
+        elif kind == "hitl":
             agent_kind = ActionKind.HITL
         else:
             agent_kind = ActionKind.LLM
@@ -2055,7 +2071,7 @@ def apply_guard_nullable_schema_fixes(
 
     consumers: list[tuple[str, dict[str, Any], list[tuple[str, str]]]] = []
     for consumer_name, consumer_config in action_configs.items():
-        if consumer_config.get("model_vendor") != "tool":
+        if consumer_config.get("kind") != "tool":
             continue
         json_schema = consumer_config.get("json_output_schema")
         context_scope = consumer_config.get("context_scope")

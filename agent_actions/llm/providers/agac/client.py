@@ -254,8 +254,14 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
-        # Generate text response based on prompt
-        content = FakeDataGenerator.generate_text_response(seed_key, attempt)
+        # A prompt that ends by offering the answer's exact shapes gets one of them back.
+        shapes = FakeDataGenerator.offered_answer_shapes(prompt)
+        if shapes:
+            # Seeded without the attempt: every judge call of an action shares one attempt
+            # counter, so a verdict seeded with it would depend on the calls before it.
+            content = FakeDataGenerator.generate_offered_answer(shapes, seed_key)
+        else:
+            content = FakeDataGenerator.generate_text_response(seed_key, attempt)
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 

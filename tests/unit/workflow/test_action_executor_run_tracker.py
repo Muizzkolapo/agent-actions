@@ -57,8 +57,8 @@ class TestExecutorRunTrackerInit:
         ("action_config", "action_type"),
         [
             pytest.param({"model_vendor": "openai", "model_name": "gpt-4"}, "llm", id="llm"),
-            pytest.param({"model_vendor": "tool"}, "tool", id="tool"),
-            pytest.param({"model_vendor": "hitl"}, "hitl", id="hitl"),
+            pytest.param({"kind": "tool", "model_vendor": "tool"}, "tool", id="tool"),
+            pytest.param({"kind": "hitl", "model_vendor": "hitl"}, "hitl", id="hitl"),
         ],
     )
     def test_track_action_start_records_the_action_type(self, executor, action_config, action_type):

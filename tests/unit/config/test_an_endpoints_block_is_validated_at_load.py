@@ -534,7 +534,7 @@ def test_a_workflow_in_the_legacy_shape_registers_a_valid_block(tmp_path, endpoi
 
     agents = _manager(root, LEGACY, "legacy").get_user_agents()
 
-    assert agents == LEGACY["legacy"]["agents"]
+    assert agents == [{**LEGACY["legacy"]["agents"][0], "kind": "tool"}]
     assert set(endpoints.project_endpoints()) == {"lab-vllm", "azure-gpt", "vertex-gemini"}
 
 

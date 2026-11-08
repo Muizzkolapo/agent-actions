@@ -185,13 +185,12 @@ class ActionExpander:
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
 
-        # Every decision below that depends on what the action is reads this one value,
-        # worked out as the runtime works it out.
+        # Decided once here; every later reader, here and at run time, reads kind alone.
+        # A tool or HITL action routes to its own client whatever vendor it inherits.
         action_kind = routing_kind(agent)
-        # HITL is a non-LLM action type and should always route to the HITL client,
-        # regardless of inherited/default model_vendor.
-        if action_kind == "hitl":
-            agent["model_vendor"] = "hitl"
+        agent["kind"] = action_kind
+        if action_kind in {"tool", "hitl"}:
+            agent["model_vendor"] = action_kind
 
         # Tool and HITL actions must always run online — they cannot be batched.
         # Only inherit run_mode from defaults for LLM actions; for tool/hitl, fall

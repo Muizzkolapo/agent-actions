@@ -18,6 +18,8 @@ from agent_actions.logging.events import (
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
+from agent_actions.record.reasons import EXPECTATIONS_FAILED
+from agent_actions.storage.backend import DISPOSITION_SUCCESS
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
@@ -165,6 +167,7 @@ class WorkflowEventLogger:
             metrics = getattr(params.result, "metrics", None)
             record_count = metrics.record_count if metrics is not None else 0
             guard_skipped = metrics.guard_skipped if metrics is not None else 0
+            checks_failed = metrics.checks_failed if metrics is not None else 0
             config = params.action_config or {}
             fire_event(
                 ActionCompleteEvent(
@@ -175,6 +178,7 @@ class WorkflowEventLogger:
                     output_path=params.result.output_folder or "",
                     record_count=record_count,
                     guard_skipped=guard_skipped,
+                    checks_failed=checks_failed,
                     tokens=tokens,
                     mode=params.run_mode,
                     model_vendor=config.get("model_vendor") or "",
@@ -223,11 +227,36 @@ class WorkflowEventLogger:
                 actions_skipped=summary.get("skipped", 0),
                 actions_failed=summary.get("failed", 0),
                 empty_final_actions=empty,
+                records_failed_checks=self._records_that_failed_their_checks(),
             )
         )
 
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_completed()
+
+    def _storage_backend(self):
+        executor = getattr(self.services.core, "action_executor", None)
+        runner = getattr(getattr(executor, "deps", None), "action_runner", None)
+        return getattr(runner, "storage_backend", None)
+
+    def _records_that_failed_their_checks(self) -> int:
+        """Records the workflow's actions hold that shipped with a failing verdict.
+
+        Read from the store, as the action counts beside it are read from the status
+        file: a batch workflow finishes over several runs, and the line must count what
+        the earlier runs collected.
+        """
+        backend = self._storage_backend()
+        if backend is None:
+            return 0
+        return sum(
+            1
+            for name in self.execution_order
+            for row in backend.get_disposition(
+                name, disposition=DISPOSITION_SUCCESS, snapshots=False
+            )
+            if row.get("reason") == EXPECTATIONS_FAILED
+        )
 
     def _final_actions_left_empty(self) -> list[str]:
         """Actions nothing reads that completed or were skipped holding no record.
@@ -236,8 +265,7 @@ class WorkflowEventLogger:
         not finished.
         """
         executor = getattr(self.services.core, "action_executor", None)
-        runner = getattr(getattr(executor, "deps", None), "action_runner", None)
-        backend = getattr(runner, "storage_backend", None)
+        backend = self._storage_backend()
         if executor is None or backend is None:
             return []
         state = self.services.core.state_manager

@@ -2,13 +2,13 @@
 
 An `agents:` block never passes the expander, and a project's `default_agent_config:`
 is laid under each agent at merge, so `AgentConfig` is where those routes meet the
-actions format. Pre-flight keys its API-key check and key probe on the canonical name,
-so an agent that kept `google` would be checked against no key at all and read valid.
+actions format. The merged config is what later readers take the vendor from, so it
+holds one name whatever route the agent came by.
 """
 
 from agent_actions.config.manager import ConfigManager
+from agent_actions.llm.config.vendor import api_key_env_var
 from agent_actions.output.response.config_schema import AgentConfig
-from agent_actions.validation.preflight.resolution_service import _get_api_key_env_name
 
 
 def _manager(default_agent_config: dict | None = None) -> ConfigManager:
@@ -44,8 +44,6 @@ class TestAnAgentThatWritesGoogle:
         assert manager.agent_configs["a1"].model_vendor == "gemini"
 
     def test_the_key_preflight_asks_for_is_the_gemini_one(self):
-        """Why one name matters: no key is named for `google` any more, so an agent
-        that kept it would skip the check that its key is set."""
         manager = _manager()
         manager.merge_agent_configs(
             [{"agent_type": "a1", "model_vendor": "google", "model_name": "m", "chunk_config": {}}]
@@ -53,7 +51,8 @@ class TestAnAgentThatWritesGoogle:
 
         vendor = manager.agent_configs["a1"].model_vendor
 
-        assert _get_api_key_env_name(vendor) == "GEMINI_API_KEY"
+        assert vendor == "gemini"
+        assert api_key_env_var(vendor) == "GEMINI_API_KEY"
 
 
 class TestWhatTheAliasDoesNotTouch:

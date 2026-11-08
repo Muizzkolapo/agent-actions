@@ -66,8 +66,9 @@ class TestActionConfigForbidsUnknownKeys:
             pytest.param({"chunk_size": "big"}, "chunk_size", id="chunk_size_str"),
             pytest.param({"run_mode": "invalid"}, "run_mode", id="run_mode_invalid"),
             pytest.param({"run_mode": "realtime"}, "run_mode", id="run_mode_realtime"),
-            # old spelling of skip_condition
+            # retired with skip_condition: a guard skips records
             pytest.param({"skip_if": "x > 1"}, "skip_if", id="skip_if"),
+            pytest.param({"skip_condition": "x > 1"}, "skip_condition", id="skip_condition"),
             # old spelling of dependencies
             pytest.param({"depends_on": ["other"]}, "depends_on", id="depends_on"),
         ],

@@ -1,14 +1,16 @@
 """An action's guard-skip count is what one execution collected, on every path out.
 
-The backend tally lives as long as the process. The executor takes it as an execution
-starts, which drops what an earlier one left, and again as it completes; the second
-reading reaches ``ActionCompleteEvent`` from the sequential and the parallel loop alike.
+The executor opens a counter around each execution, so a collection made before it
+counts nowhere, and the count reaches ``ActionCompleteEvent`` from the sequential and
+the parallel loop alike.
 """
 
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from agent_actions.logging.events import ActionCompleteEvent
+from agent_actions.processing.result_collector import CollectionStats
+from agent_actions.processing.run_counts import add_collection
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.executor import (
     ActionExecutionResult,
@@ -24,8 +26,18 @@ from agent_actions.workflow.managers.state import ActionStateManager, ActionStat
 from agent_actions.workflow.models import ActionLogParams
 
 
-def _deps(takes):
-    """Executor deps whose backend answers successive guard-skip takes from *takes*."""
+def _collects(guard_skipped: int, returns):
+    """A stand-in for the runner or batch manager whose collection found *guard_skipped*."""
+
+    def run(*_args, **_kwargs):
+        add_collection(CollectionStats(unprocessed=guard_skipped, guard_skipped=guard_skipped))
+        return returns
+
+    return run
+
+
+def _deps():
+    """Executor deps over a mocked backend."""
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
@@ -40,7 +52,6 @@ def _deps(takes):
     backend.has_disposition.return_value = False
     backend.get_failed_items.return_value = []
     backend.rows_collected.side_effect = [10, 14]
-    backend.take_guard_skips.side_effect = takes
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     deps.output_manager.resolve_correlated_input.return_value = None
     deps.batch_manager.check_batch_submission.return_value = None
@@ -48,9 +59,10 @@ def _deps(takes):
 
 
 def test_an_online_execution_reports_only_the_skips_it_collected():
-    # 5 left by an earlier execution in this process, 2 collected by this one.
-    deps = _deps([5, 2])
-    deps.action_runner.run_action.return_value = "/out"
+    # 5 collected outside any execution in this process, 2 by this one.
+    add_collection(CollectionStats(unprocessed=5, guard_skipped=5))
+    deps = _deps()
+    deps.action_runner.run_action.side_effect = _collects(2, "/out")
     params = ActionRunParams("agent_a", 0, {"kind": "llm"}, True, datetime.now())
 
     with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
@@ -61,8 +73,8 @@ def test_an_online_execution_reports_only_the_skips_it_collected():
 
 
 def test_a_batch_collection_reports_only_the_skips_it_collected():
-    deps = _deps([5, 3])
-    deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
+    deps = _deps()
+    deps.batch_manager.handle_batch_agent.side_effect = _collects(3, ("/output", "completed"))
 
     with patch("agent_actions.workflow.executor.fire_event"):
         result = ActionExecutor(deps)._handle_batch_check(
@@ -92,3 +104,26 @@ def test_the_sequential_loop_passes_the_count_to_the_event():
         c.args[0] for c in fire.call_args_list if isinstance(c.args[0], ActionCompleteEvent)
     ]
     assert (event.data["record_count"], event.data["guard_skipped"]) == (4, 1)
+
+
+def test_parallel_executions_each_count_their_own_skips():
+    """Each execution runs its collection in a worker thread, as the parallel loop does."""
+    import asyncio
+
+    def _params(name):
+        return ActionRunParams(name, 0, {"kind": "llm"}, True, datetime.now())
+
+    first_deps, second_deps = _deps(), _deps()
+    first_deps.action_runner.run_action.side_effect = _collects(2, "/out")
+    second_deps.action_runner.run_action.side_effect = _collects(7, "/out")
+
+    async def both():
+        return await asyncio.gather(
+            ActionExecutor(first_deps)._execute_action_run_async(_params("agent_a")),
+            ActionExecutor(second_deps)._execute_action_run_async(_params("agent_b")),
+        )
+
+    with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
+        first, second = asyncio.run(both())
+
+    assert (first.metrics.guard_skipped, second.metrics.guard_skipped) == (2, 7)

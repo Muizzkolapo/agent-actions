@@ -1,6 +1,7 @@
 """The on_empty=warn reason must be tool-aware for tool actions (declared by
 either `kind` or `model_vendor`) and keep the LLM wording for everything else."""
 
+from agent_actions.output.response.expander import ActionExpander
 from agent_actions.processing.strategies.online_llm import _empty_warn_reason
 
 
@@ -15,10 +16,22 @@ def test_tool_action_by_kind_gets_tool_aware_reason():
 
 
 def test_tool_action_by_model_vendor_gets_tool_aware_reason():
-    # A tool declared via model_vendor (kind left at its LLM default) is routed
-    # and executed as a tool, so its empty-output reason must be tool-aware too.
-    cfg = {"model_vendor": "tool", "name": "flatten_code", "on_empty": "warn"}
-    assert cfg.get("kind") != "tool"  # isolate the model_vendor path — kind is not the trigger
+    # A tool declared via model_vendor reaches the run with the kind the loader set.
+    (cfg,) = ActionExpander.expand_actions_to_agents(
+        {
+            "name": "wf",
+            "defaults": {"model_vendor": "openai", "model_name": "gpt-4", "api_key": "k"},
+            "actions": [
+                {
+                    "name": "flatten_code",
+                    "intent": "i",
+                    "model_vendor": "tool",
+                    "impl": "m.f",
+                    "schema": {"x": "string"},
+                }
+            ],
+        }
+    )["wf"]
     reason = _empty_warn_reason(cfg, agent_name="flatten_code", source_guid="rec-v-9")
     assert "Tool" in reason
     assert "empty list" in reason
