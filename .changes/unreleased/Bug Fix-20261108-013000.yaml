@@ -1,9 +1,0 @@
-kind: Bug Fix
-body: >-
-  A second `agac run` or `agac retry` of a workflow that has a run in progress now exits 1
-  before it loads, clears or submits anything: `Another run of workflow 'X' is in progress
-  (pid N). Wait for it to finish or stop it, then run again.` Before, both runs did all the
-  work, and in batch mode both submitted a batch job. The lock is a file beside the
-  workflow's database, and the operating system releases it when the run exits or is
-  killed. Runs of different workflows, and read-only commands, are not blocked.
-time: 2026-11-08T01:30:00Z

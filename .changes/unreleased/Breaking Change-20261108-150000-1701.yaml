@@ -1,7 +1,0 @@
-kind: Breaking Change
-body: >-
-  skip_condition, and its old spelling skip_if, is refused at load with a hint to skip records
-  with a guard (condition plus on_false: skip). No actions: workflow could set it, and on the
-  older agents: surface its model and its only reader disagreed on its shape, so it rarely did
-  anything. SkipConditionStrategy and SkipConditionConfig are removed.
-time: 2026-11-08T15:00:00Z

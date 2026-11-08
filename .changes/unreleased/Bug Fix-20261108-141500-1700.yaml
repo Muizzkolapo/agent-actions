@@ -1,6 +1,0 @@
-kind: Bug Fix
-body: >-
-  A warning that an action below the first reads a source field no staged row holds prints
-  once per staged file per run, not twice. The walk's pre-check logs it; the processing pass
-  runs the same check without logging.
-time: 2026-11-08T14:15:00Z

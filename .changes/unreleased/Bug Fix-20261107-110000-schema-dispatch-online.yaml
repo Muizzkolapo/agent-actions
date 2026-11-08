@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  `schema: dispatch_task('fn')` now works in online runs: each record gets the schema its
-  function returns, a schema definition or the name of a schema file. Every record used to
-  fail with `Schema file 'dispatch_task('fn')' not found`. `agac inspect` refuses a function
-  the run could not find or import.
-time: 2026-11-07T11:00:00Z
