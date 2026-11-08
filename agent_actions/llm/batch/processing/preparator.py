@@ -25,7 +25,11 @@ from agent_actions.output.response.dispatch_injection import schema_dispatch_fun
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import quarantine_reason
 from agent_actions.processing.result_collector import _safe_set_disposition
-from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
+from agent_actions.processing.task_preparer import (
+    TaskPreparer,
+    get_task_preparer,
+    write_trace_row,
+)
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
@@ -66,14 +70,17 @@ def _stops_the_action(error: Exception) -> bool:
     return is_action_fatal(error) or isinstance(error, (ConfigurationError, TemplateVariableError))
 
 
-def _append_feedback(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]) -> None:
+def _append_feedback(
+    tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]
+) -> list[dict[str, Any]]:
     """Append each record's validation feedback to the prompt it will be sent with.
 
     Called on the pre-provider rows, whose ``prompt`` becomes the provider's
     system message. A record with no entry is left alone, but that is an
     invariant violation worth seeing: feedback is built from the same failed set
-    these rows come from.
+    these rows come from. Returns the rows whose prompt changed.
     """
+    changed: list[dict[str, Any]] = []
     for task in tasks:
         key = str(task.get("target_id", ""))
         feedback = feedback_by_id.get(key)
@@ -85,6 +92,8 @@ def _append_feedback(tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]
             )
             continue
         task["prompt"] = f"{task.get('prompt', '')}\n\n{feedback}"
+        changed.append(task)
+    return changed
 
 
 class BatchTaskPreparator:
@@ -209,7 +218,17 @@ class BatchTaskPreparator:
         # into its own wire format — the converted task keeps neither target_id
         # nor prompt, so there is nothing left to attach it to afterwards.
         if feedback_by_id:
-            _append_feedback(tasks_builder, feedback_by_id)
+            # The trace row written while preparing holds the prompt before feedback;
+            # store the prompt this round actually sends in its place.
+            for task in _append_feedback(tasks_builder, feedback_by_id):
+                write_trace_row(
+                    prep_context,
+                    record_id=task["target_id"],
+                    source_guid=context_map_builder[task["target_id"]].get("source_guid"),
+                    prompt=task["prompt"],
+                    llm_context=task["content"],
+                    attempt=attempt,
+                )
 
         # Finalize tasks with provider
         provider_config = agent_config.copy()
