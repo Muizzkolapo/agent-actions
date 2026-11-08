@@ -19,8 +19,6 @@ def test_an_llm_action_under_batch_takes_the_batch_path(run_mode):
         {"kind": "hitl", "model_vendor": "hitl"},
         {"kind": ActionKind.TOOL, "model_vendor": "openai"},
         {"kind": ActionKind.HITL},
-        {"model_vendor": "tool"},
-        {"model_vendor": "HITL"},
     ],
 )
 def test_a_tool_or_hitl_action_under_batch_stays_online(config):

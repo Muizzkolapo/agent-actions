@@ -44,27 +44,28 @@ def test_a_hitl_agent_at_record_granularity_is_refused(entry):
 
 
 @pytest.mark.parametrize(
-    "entry",
+    ("entry", "kind"),
     [
-        {"kind": "tool", "model_vendor": "tool", "granularity": "file"},
-        {"model_vendor": "tool", "granularity": "file"},
-        {"kind": "hitl", "model_vendor": "hitl", "granularity": "file"},
-        {"model_vendor": "hitl", "granularity": "file"},
-        {**MODEL, "granularity": "record"},
-        MODEL,
+        ({"kind": "tool", "model_vendor": "tool", "granularity": "file"}, "tool"),
+        ({"model_vendor": "tool", "granularity": "file"}, "tool"),
+        ({"kind": "hitl", "model_vendor": "hitl", "granularity": "file"}, "hitl"),
+        ({"model_vendor": "hitl", "granularity": "file"}, "hitl"),
+        ({**MODEL, "granularity": "record"}, "llm"),
+        (MODEL, "llm"),
     ],
     ids=["tool_kind", "tool_vendor", "hitl_file", "hitl_vendor_file", "llm_record", "llm_unset"],
 )
-def test_an_agent_its_kind_can_run_is_returned_as_written(entry):
+def test_an_agent_its_kind_can_run_is_returned_with_its_kind(entry, kind):
     (agent,) = _agents(entry)
 
-    assert agent == {"agent_type": "label_page", **entry}
+    assert agent == {"agent_type": "label_page", **entry, "kind": kind}
 
 
-def test_a_mixed_case_tool_vendor_is_held_to_the_llm_rule_as_the_runtime_routes_it():
-    """The tool client is chosen by an exact `model_vendor == "tool"` match, so `Tool` runs as an LLM."""
-    with pytest.raises(ConfigurationError, match="FILE granularity is only supported"):
-        _agents({"model_vendor": "Tool", "granularity": "file"})
+def test_a_mixed_case_tool_vendor_is_a_tool():
+    """`kind` is set once at load, case-blind, so `Tool` is the tool the runtime runs."""
+    (agent,) = _agents({"model_vendor": "Tool", "granularity": "file"})
+
+    assert (agent["kind"], agent["model_vendor"]) == ("tool", "tool")
 
 
 @pytest.mark.parametrize(

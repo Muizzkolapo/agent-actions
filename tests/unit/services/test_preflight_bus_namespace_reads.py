@@ -45,8 +45,8 @@ def _warnings(configs, monkeypatch):
 
 def test_a_tool_and_a_guard_reading_an_impl_name_are_named(monkeypatch):
     configs = {
-        "upstream": {"model_vendor": "tool", "model_name": "m_upstream"},
-        "reader": {"model_vendor": "tool", "model_name": "bus_read_tool"},
+        "upstream": {"kind": "tool", "model_vendor": "tool", "model_name": "m_upstream"},
+        "reader": {"kind": "tool", "model_vendor": "tool", "model_name": "bus_read_tool"},
         "judged": {"model_vendor": "openai", "conditional_clause": "bus_read_guard"},
     }
 
@@ -58,8 +58,13 @@ def test_a_tool_and_a_guard_reading_an_impl_name_are_named(monkeypatch):
 
 def test_a_versioned_actions_base_name_is_a_bus_key(monkeypatch):
     configs = {
-        "vote_1": {"model_vendor": "tool", "model_name": "m", "version_base_name": "vote"},
-        "merge": {"model_vendor": "tool", "model_name": "bus_read_versions"},
+        "vote_1": {
+            "kind": "tool",
+            "model_vendor": "tool",
+            "model_name": "m",
+            "version_base_name": "vote",
+        },
+        "merge": {"kind": "tool", "model_vendor": "tool", "model_name": "bus_read_versions"},
     }
 
     assert _warnings(configs, monkeypatch) == []

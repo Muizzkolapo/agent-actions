@@ -171,7 +171,7 @@ def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
     """
     cfg: dict[str, Any] = action_config  # type: ignore[assignment]
     names = [cfg.get("conditional_clause")]
-    if cfg.get("model_vendor") == "tool":
+    if cfg.get("kind") == "tool":
         names.append(cfg.get("model_name"))
     digests: dict[str, str] = {}
     for name in filter(None, names):
@@ -1235,15 +1235,8 @@ class ActionExecutor:
     def _track_action_start(self, params: ActionRunParams) -> None:
         """Track action start if run_tracker is available."""
         if self.run_tracker is not None and self.run_id is not None:
-            model_vendor = params.action_config.get("model_vendor", "")
-            action_kind = params.action_config.get("kind", "")
-
-            if model_vendor == "tool" or action_kind == "tool":
-                action_type = "tool"
-            elif model_vendor == "hitl" or action_kind == "hitl":
-                action_type = "hitl"
-            else:
-                action_type = DEFAULT_ACTION_KIND
+            action_kind = params.action_config.get("kind")
+            action_type = action_kind if action_kind in ("tool", "hitl") else DEFAULT_ACTION_KIND
 
             self.run_tracker.record_action_start(
                 run_id=self.run_id,

@@ -8,7 +8,7 @@ from agent_actions.workflow.pipeline import _whole_file_readers
 CASES = [
     ({"kind": "tool", "granularity": "File"}, True),
     ({"kind": "tool", "granularity": "file"}, True),
-    ({"model_vendor": "tool", "granularity": "File"}, True),
+    ({"kind": "tool", "model_vendor": "tool", "granularity": "File"}, True),
     ({"kind": "tool", "granularity": "Record"}, False),
     ({"kind": "tool"}, False),
     ({"kind": "hitl", "granularity": "File"}, False),
@@ -23,9 +23,8 @@ def test_the_predicate_agrees_with_the_pipeline(config, expected):
     """`ProcessingPipeline` hands a file whole when its granularity is file and it is a
     tool action, read the same way here so the two cannot drift apart."""
     kind = str(config.get("kind") or "").lower()
-    vendor = str(config.get("model_vendor") or "").lower()
     granularity = str(config.get("granularity") or "").lower()
-    pipeline_says = granularity == "file" and (kind == "tool" or vendor == "tool")
+    pipeline_says = granularity == "file" and kind == "tool"
 
     assert replaces_its_file_whole(config) is expected
     assert pipeline_says is expected

@@ -24,7 +24,7 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.processing.unified import UnifiedProcessor
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.utils.constants import CHUNK_CONFIG_KEY, MODEL_VENDOR_KEY
+from agent_actions.utils.constants import CHUNK_CONFIG_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.limits import record_indices_to_process
 
@@ -978,9 +978,7 @@ def _process_online_mode_with_record_processor(
     # Tool actions that return empty output should be treated as failures
     # rather than silently succeeding (mirrors pipeline.py check).
     if data_chunk and not processed_items and stats.success > 0:
-        kind = str(ctx.agent_config.get("kind") or "").lower()
-        vendor = str(ctx.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
-        if kind == "tool" or vendor == "tool":
+        if ctx.agent_config.get("kind") == "tool":
             raise RuntimeError(
                 f"Tool action '{ctx.agent_name}' produced 0 output records "
                 f"from {len(data_chunk)} input item(s) — tool returned empty result"

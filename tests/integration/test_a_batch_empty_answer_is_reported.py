@@ -24,7 +24,7 @@ def _process(config, context_map, content):  # noqa: F811
     )
 
 
-@pytest.mark.parametrize("tool", [{"kind": "tool"}, {"model_vendor": "tool"}])
+@pytest.mark.parametrize("tool", [{"kind": "tool"}, {"kind": "tool", "model_vendor": "tool"}])
 def test_a_tool_s_empty_answer_is_not_blamed_on_the_model(action_config, context_map, tool):  # noqa: F811
     (result,) = _process({**action_config, **tool}, context_map, [])
 

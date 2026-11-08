@@ -623,7 +623,9 @@ def test_repair_on_a_tool_action_is_a_defect():
 
 def test_repair_on_a_tool_vendor_action_is_a_defect():
     defects = find_expectation_defects(
-        action_config(model_vendor="tool", expect={"repair": "auto", "expectations": NOT_NULL}),
+        action_config(
+            kind="tool", model_vendor="tool", expect={"repair": "auto", "expectations": NOT_NULL}
+        ),
         {"a": {"options"}},
     )
     assert any("tool" in m for m in defects["a"])

@@ -13,8 +13,8 @@ CASES = [
     ({"kind": "hitl", "granularity": "File"}, True),
     ({"kind": "llm", "granularity": "File"}, False),
     ({"kind": "llm", "granularity": "Record"}, False),
-    ({"model_vendor": "tool", "granularity": "file"}, True),
-    ({"model_vendor": "hitl", "granularity": "file"}, True),
+    ({"kind": "tool", "model_vendor": "tool", "granularity": "file"}, True),
+    ({"kind": "hitl", "model_vendor": "hitl", "granularity": "file"}, True),
     ({}, False),
 ]
 
@@ -24,11 +24,10 @@ def test_the_predicate_agrees_with_the_strategy_the_pipeline_would_pick(config, 
     """Pinned against `_select_strategy` itself, so the two cannot drift apart."""
     online = object()
     kind = str(config.get("kind") or "").lower()
-    vendor = str(config.get("model_vendor") or "").lower()
     pipeline = SimpleNamespace(
         granularity=str(config.get("granularity") or "").lower(),
-        is_tool_action=kind == "tool" or vendor == "tool",
-        is_hitl_action=kind == "hitl" or vendor == "hitl",
+        is_tool_action=kind == "tool",
+        is_hitl_action=kind == "hitl",
         _online_strategy=online,
     )
     routed_away = ProcessingPipeline._select_strategy(pipeline) is not online
