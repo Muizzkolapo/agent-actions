@@ -62,29 +62,29 @@ def _reasons(backend) -> dict[str, tuple[str, str | None]]:
 def test_a_failing_verdict_is_success_with_its_reason(backend):
     result = ProcessingResult.success(data=[_row("g1", _verdict(False))], source_guid="g1")
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g1": ("success", EXPECTATIONS_FAILED)}
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1
 
 
 def test_a_passing_verdict_keeps_no_reason(backend):
     result = ProcessingResult.success(data=[_row("g1", _verdict(True))], source_guid="g1")
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g1": ("success", None)}
-    assert backend.take_checks_failed("a") == 0
+    assert stats.checks_failed == 0
 
 
 def test_a_warn_only_failure_is_not_counted(backend):
     verdict = _verdict(True, warn_failed=True)
     result = ProcessingResult.success(data=[_row("g1", verdict)], source_guid="g1")
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g1": ("success", None)}
-    assert backend.take_checks_failed("a") == 0
+    assert stats.checks_failed == 0
 
 
 def test_bundled_file_rows_are_marked_one_by_one(backend):
@@ -92,31 +92,31 @@ def test_bundled_file_rows_are_marked_one_by_one(backend):
         data=[_row("g1", _verdict(False)), _row("g2", _verdict(True))], source_guid=None
     )
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {
         "g1": ("success", EXPECTATIONS_FAILED),
         "g2": ("success", None),
     }
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1
 
 
 def test_a_row_without_a_verdict_is_untouched(backend):
     result = ProcessingResult.success(data=[_row("g1", None)], source_guid="g1")
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g1": ("success", None)}
-    assert backend.take_checks_failed("a") == 0
+    assert stats.checks_failed == 0
 
 
 def test_a_record_that_expands_counts_once(backend):
     rows = [_row("g1", _verdict(False)), _row("g1", _verdict(False))]
     result = ProcessingResult.success(data=rows, source_guid="g1")
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1
 
 
 @pytest.mark.parametrize(
@@ -143,7 +143,7 @@ def test_an_empty_source_guid_costs_the_other_records_nothing(backend):
         ProcessingResult.success(data=[_row("g2", _verdict(False))], source_guid="g2"),
     ]
 
-    collect_results_from_processing_results(results, "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results(results, "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g2": ("success", EXPECTATIONS_FAILED)}
     stored = [
@@ -164,33 +164,33 @@ def test_a_bundled_record_with_mixed_rows_is_one_failed_record(backend):
     ]
     result = ProcessingResult.success(data=rows, source_guid=None)
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {
         "g1": ("success", EXPECTATIONS_FAILED),
         "g2": ("success", None),
     }
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1
 
 
 def test_a_bundled_failing_row_without_a_guid_is_still_counted(backend):
     rows = [_row("g1", _verdict(False)), {"content": {"a": {"expect": _verdict(False)}}}]
     result = ProcessingResult.success(data=rows, source_guid=None)
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g1": ("success", EXPECTATIONS_FAILED)}
-    assert backend.take_checks_failed("a") == 2
+    assert stats.checks_failed == 2
 
 
 def test_one_failing_row_of_an_expanded_record_marks_the_record(backend):
     rows = [_row("g1", _verdict(True)), _row("g1", _verdict(False))]
     result = ProcessingResult.success(data=rows, source_guid="g1")
 
-    collect_results_from_processing_results([result], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([result], "a", storage_backend=backend)
 
     assert _reasons(backend) == {"g1": ("success", EXPECTATIONS_FAILED)}
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1
 
 
 def _carried_as_file_mode(row):
@@ -218,9 +218,9 @@ def test_a_carried_record_with_a_failing_verdict_is_not_counted_again(backend, c
     carried = carry(_row("old", _verdict(False)))
     new = ProcessingResult.success(data=[_row("new", _verdict(False))], source_guid="new")
 
-    collect_results_from_processing_results([carried, new], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results([carried, new], "a", storage_backend=backend)
 
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1
     assert "old" not in _reasons(backend)
 
 
@@ -232,7 +232,7 @@ def test_a_record_resumed_as_one_result_per_row_is_one_failed_record(backend):
         ProcessingResult.success(data=[_row("g1", _verdict(False))], source_guid="g1"),
     ]
 
-    collect_results_from_processing_results(results, "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results(results, "a", storage_backend=backend)
 
     assert {row[3] for row in backend.handed if row[1] == "g1"} == {EXPECTATIONS_FAILED}
     stored = [
@@ -242,4 +242,4 @@ def test_a_record_resumed_as_one_result_per_row_is_one_failed_record(backend):
         )
     ]
     assert stored == [("g1", EXPECTATIONS_FAILED)]
-    assert backend.take_checks_failed("a") == 1
+    assert stats.checks_failed == 1

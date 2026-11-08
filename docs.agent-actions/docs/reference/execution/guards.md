@@ -105,8 +105,12 @@ reports a missing field and filters; `IS NULL` alone lets it through, and logs n
 doing it. Preflight refuses a field written without its prefix and the misspellings it can prove
 (see [Context Access](#context-access)):
 `summarize.descriptio IS NULL` is refused when `summarize`'s schema lists its fields. Against an
-action with no schema, or one whose schema sets `additionalProperties`, the same guard filters
-nothing and says nothing.
+action with no schema, or one whose schema sets `additionalProperties`, preflight cannot prove the
+misspelling: it warns `Cannot validate field 'descriptio'`, and the guard passes every record.
+A guard on a `source.` field that no staged row holds, on the first action or on any action
+below it, logs a warning when the run reads the staged file:
+`Action 'tag' guards on source.scroe, but no record staged from staging/rows.json holds 'scroe'.`
+The run goes on, and the guard decides what each record does.
 
 ### Boolean Values
 
@@ -198,11 +202,18 @@ so preflight refuses it and names `source.page_content`.
 
 A guard reads the seed data its action declares under `context_scope.seed`, the same data
 the action's prompt reads, so `seed.thresholds.min_score >= 0.5` reads a value from a
-reference file. A clause compares a field with a literal value. A clause that compares two
-fields, such as `score_review.score >= seed.thresholds.min_score`, is refused before the run
-with `compares field 'score_review.score' to bare identifier 'seed.thresholds.min_score'`. To
-gate on such a comparison, compute it in an upstream tool action and guard on the tool's
-result, for example `check_score.passes == true`. Every declared seed key is visible to the guard, including
+reference file.
+
+A clause compares a field with a literal value or with another field:
+`score_review.score >= seed.thresholds.min_score` and `extract.score < extract.limit` both
+work. Preflight checks a field on the right as it checks one on the left, so a misspelled
+action name, schema field or seed key is refused on either side. A field on the right needs
+its prefix, as on the left. An undotted name there is taken for an
+unquoted string and refused: `status == approved` gives
+`compares field 'status' to bare identifier 'approved'`. A record that lacks a field on
+either side does not match, so `on_false` decides what happens to it.
+
+Every declared seed key is visible to the guard, including
 one the action `drop`s. Preflight refuses a guard that reads a seed key its action does not
 declare, as it refuses a prompt that reads one.
 

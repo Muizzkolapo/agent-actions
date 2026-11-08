@@ -1,7 +1,7 @@
 """Records shipped with a failing verdict reach the action line and the workflow line.
 
-The action line: the backend tally is taken as an execution starts, dropping what an
-earlier one left, and again as it completes; the second reading goes on the metrics.
+The action line: the executor opens a counter around each execution, so what an earlier
+execution collected is not counted again, and the count goes on the metrics.
 The workflow line: read from the store, so a batch workflow finishing over several runs
 counts what the earlier runs collected.
 """
@@ -10,6 +10,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 from agent_actions.logging.events import ActionCompleteEvent, WorkflowCompleteEvent
+from agent_actions.processing.result_collector import CollectionStats
+from agent_actions.processing.run_counts import add_collection
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.executor import (
@@ -26,8 +28,18 @@ from agent_actions.workflow.managers.state import ActionStateManager, ActionStat
 from agent_actions.workflow.models import ActionLogParams
 
 
-def _deps(failed_takes):
-    """Executor deps whose backend answers successive failed-checks takes from *failed_takes*."""
+def _collects(checks_failed: int, returns):
+    """A stand-in for the runner or batch manager whose collection found *checks_failed*."""
+
+    def run(*_args, **_kwargs):
+        add_collection(CollectionStats(success=checks_failed, checks_failed=checks_failed))
+        return returns
+
+    return run
+
+
+def _deps():
+    """Executor deps over a mocked backend."""
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.batch_manager = MagicMock(spec=BatchLifecycleManager)
@@ -42,8 +54,6 @@ def _deps(failed_takes):
     backend.has_disposition.return_value = False
     backend.get_failed_items.return_value = []
     backend.rows_collected.side_effect = [10, 14, 14, 18]
-    backend.take_guard_skips.return_value = 0
-    backend.take_checks_failed.side_effect = failed_takes
     deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
     deps.output_manager.resolve_correlated_input.return_value = None
     deps.batch_manager.check_batch_submission.return_value = None
@@ -57,9 +67,10 @@ def _online(executor: ActionExecutor) -> ActionExecutionResult:
 
 
 def test_an_online_execution_reports_only_the_failures_it_collected():
-    # 5 left by an earlier execution in this process, 3 collected by this one.
-    deps = _deps([5, 3])
-    deps.action_runner.run_action.return_value = "/out"
+    # 5 collected outside any execution in this process, 3 by this one.
+    add_collection(CollectionStats(success=5, checks_failed=5))
+    deps = _deps()
+    deps.action_runner.run_action.side_effect = _collects(3, "/out")
     executor = ActionExecutor(deps)
 
     result = _online(executor)
@@ -69,8 +80,8 @@ def test_an_online_execution_reports_only_the_failures_it_collected():
 
 
 def test_a_batch_collection_reports_only_the_failures_it_collected():
-    deps = _deps([5, 4])
-    deps.batch_manager.handle_batch_agent.return_value = ("/output", "completed")
+    deps = _deps()
+    deps.batch_manager.handle_batch_agent.side_effect = _collects(4, ("/output", "completed"))
     executor = ActionExecutor(deps)
 
     with patch("agent_actions.workflow.executor.fire_event"):
@@ -86,8 +97,9 @@ def test_a_batch_collection_reports_only_the_failures_it_collected():
 
 
 def test_a_second_execution_reports_only_its_own_failures():
-    deps = _deps([9, 3, 9, 4])
-    deps.action_runner.run_action.return_value = "/out"
+    deps = _deps()
+    runs = iter([_collects(3, "/out"), _collects(4, "/out")])
+    deps.action_runner.run_action.side_effect = lambda *a, **k: next(runs)(*a, **k)
     executor = ActionExecutor(deps)
 
     first, second = _online(executor), _online(executor)

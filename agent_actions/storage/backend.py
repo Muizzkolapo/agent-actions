@@ -106,8 +106,6 @@ class StorageBackend(ABC):
         self._format_version_written = False
         self._format_version_checked = False
         self._rows_collected: dict[str, int] = {}
-        self._guard_skips_collected: dict[str, int] = {}
-        self._checks_failed_collected: dict[str, int] = {}
         self._rows_collected_lock = threading.Lock()
         self._staged_this_run: dict[str, set[str]] = {}
 
@@ -125,52 +123,6 @@ class StorageBackend(ABC):
         """Rows credited to *action_name* by :meth:`credit_rows_collected` so far."""
         with self._rows_collected_lock:
             return self._rows_collected.get(action_name, 0)
-
-    def credit_guard_skips(self, action_name: str, count: int) -> None:
-        """Add *count* records an action's guard skipped this run to its tally.
-
-        Stored as ``unprocessed``, a guard skip reads like any record nothing answered;
-        this is what lets the run say how many of the rows it counts are the guard's.
-        Carried-forward rows are not credited. In memory only.
-        """
-        with self._rows_collected_lock:
-            self._guard_skips_collected[action_name] = (
-                self._guard_skips_collected.get(action_name, 0) + count
-            )
-
-    def guard_skips_collected(self, action_name: str) -> int:
-        """Guard skips credited to *action_name* since the tally was last taken."""
-        with self._rows_collected_lock:
-            return self._guard_skips_collected.get(action_name, 0)
-
-    def take_guard_skips(self, action_name: str) -> int:
-        """Return *action_name*'s guard-skip tally and set it back to zero.
-
-        Taken as an execution starts, which drops anything an earlier one left, and
-        again as it completes, which is then what that execution collected.
-        """
-        with self._rows_collected_lock:
-            return self._guard_skips_collected.pop(action_name, 0)
-
-    def credit_checks_failed(self, action_name: str, count: int) -> None:
-        """Add *count* records an action shipped with a failing verdict this run.
-
-        Stored as ``success`` with reason ``expectations_failed``, so nothing else
-        treats them as failures; this is what lets the run say how many there were.
-        Carried-forward rows are not credited. In memory only.
-        """
-        with self._rows_collected_lock:
-            self._checks_failed_collected[action_name] = (
-                self._checks_failed_collected.get(action_name, 0) + count
-            )
-
-    def take_checks_failed(self, action_name: str) -> int:
-        """Return *action_name*'s failed-checks tally and set it back to zero.
-
-        Taken as an execution starts and as it completes, as :meth:`take_guard_skips` is.
-        """
-        with self._rows_collected_lock:
-            return self._checks_failed_collected.pop(action_name, 0)
 
     def note_staged_records(self, action_name: str, source_guids: Iterable[str]) -> None:
         """Add records a first stage's walk found staged to what it found this run.

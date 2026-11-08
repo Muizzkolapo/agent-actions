@@ -405,6 +405,86 @@ class TestFilterFaninObserveHazard:
         warnings = _filter_fanin_warnings(result)
         assert len(warnings) == 1
 
+    def test_an_observed_ancestor_is_not_an_input_path(self):
+        """A name observed for context only delivers no record, so it is no bypass."""
+        workflow = _make_workflow(
+            _llm_action("tag", schema_fields=["name", "score"]),
+            _llm_action(
+                "check",
+                schema_fields=["seen"],
+                guard={"condition": "tag.score < 5", "on_false": "filter"},
+                dependencies=["tag"],
+                observe=["tag.name"],
+            ),
+            _llm_action(
+                "final",
+                dependencies=["check"],
+                observe=["check.seen", "tag.name"],
+            ),
+        )
+
+        result = WorkflowStaticAnalyzer(workflow).analyze()
+
+        assert _filter_fanin_warnings(result) == []
+
+    def test_an_input_below_the_filter_is_not_a_bypass(self):
+        """Every record through an input below the filter has passed the filter."""
+        workflow = _make_workflow(
+            _llm_action(
+                "extract",
+                schema_fields=["award_basis"],
+                guard={"condition": "approved == true", "on_false": "filter"},
+            ),
+            _llm_action(
+                "compute",
+                schema_fields=["score"],
+                dependencies=["extract"],
+                observe=["extract.award_basis"],
+            ),
+            _llm_action(
+                "explain",
+                dependencies=["compute"],
+                observe=["extract.award_basis", "compute.score"],
+            ),
+        )
+
+        result = WorkflowStaticAnalyzer(workflow).analyze()
+
+        assert _filter_fanin_warnings(result) == []
+
+    def test_a_sibling_input_is_named_and_an_ancestor_is_not(self):
+        """The message names only the inputs that bypass the filter."""
+        workflow = _make_workflow(
+            _llm_action("tag", schema_fields=["name", "score"]),
+            _llm_action(
+                "check",
+                schema_fields=["seen"],
+                guard={"condition": "tag.score < 5", "on_false": "filter"},
+                dependencies=["tag"],
+                observe=["tag.name"],
+            ),
+            _llm_action(
+                "side",
+                schema_fields=["seen"],
+                dependencies=["tag"],
+                observe=["tag.name"],
+            ),
+            _llm_action(
+                "final",
+                dependencies=["check", "side"],
+                observe=["check.seen", "side.seen", "tag.name"],
+            ),
+        )
+
+        result = WorkflowStaticAnalyzer(workflow).analyze()
+
+        (warning,) = _filter_fanin_warnings(result)
+        assert warning.message == (
+            "Action 'final' observes 'check.seen' but 'check' has guard with "
+            "on_false: \"filter\". Records may arrive at 'final' via alternate "
+            "dependency 'side' with 'check' namespace as null."
+        )
+
     def test_existing_guard_skip_tests_unaffected(self):
         """Existing skip-guard warnings still work — no regression."""
         workflow = _make_workflow(
