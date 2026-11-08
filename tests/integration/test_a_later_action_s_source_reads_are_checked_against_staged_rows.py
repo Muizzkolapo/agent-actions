@@ -1,13 +1,13 @@
-"""An action below the first reading a `source` field no staged row holds is refused (1537).
+"""A `source` field no staged row holds is checked before any record is stored or sent.
 
-The first action's reads are checked against the rows staging prepares (1518, 1522),
-but an action below it that observed, prompted or guarded on a `source` field no
-staged row holds passed pre-flight and then failed (or filtered) every record. Those
-reads are now checked against the same rows, before any record is stored or sent,
-naming the action, the field and the staged file.
+An action below the first that observes, prompts or guards on such a field is
+checked against the rows staging prepares, naming the action, the field and the
+staged file. A first action's own guard reads are checked against the same rows;
+its prompt and observe reads are covered by the first-record render.
 
-Where another staged file may hold the field, or the read is a passthrough (which
-leaves a missing field out, for a first action too), it is a warning instead.
+A read that must succeed for every record is refused. Where another staged file may
+hold the field, or the read may not fail a record (a passthrough leaves a missing
+field out; a guard can test for it with `IS NULL`), it is a warning instead.
 
 Every case is a real `agac run` through the CLI, with the mock provider for LLM actions.
 """
@@ -55,6 +55,7 @@ def _project(
     staged: dict[str, str] | None = None,
     file_type: str = "txt",
     data_source: str | None = None,
+    first: str = FIRST,
 ) -> Path:
     root = base / "project"
     directory = root / "agent_workflow" / WORKFLOW
@@ -87,7 +88,7 @@ defaults:
   api_key: OPENAI_API_KEY
   data_source: {source}
 actions:
-{FIRST}{later}"""
+{first}{later}"""
     )
     for name, text in (staged if staged is not None else {"doc.txt": TEXT}).items():
         (staging / name).write_text(text)
@@ -300,6 +301,25 @@ def test_a_guard_on_a_field_no_row_holds_warns_and_runs(tmp_path, clause, passed
     assert "Action 'second' guards on source.page_content" in output, output
     assert len(_stored(root, "first")) == 1, output
     assert len(_stored(root, "second")) == passed, output
+
+
+@pytest.mark.parametrize(
+    ("clause", "passed"),
+    [("source.page_content == 'x'", 0), ("source.page_content IS NULL", 1)],
+    ids=["compare", "is-null"],
+)
+def test_a_first_action_guard_on_a_field_no_row_holds_warns_and_runs(tmp_path, clause, passed):
+    """The first action's guard reads are checked as a later action's are; the guard decides."""
+    first = FIRST + f'    guard: {{ condition: "{clause}", on_false: filter }}\n'
+    root = _project(tmp_path, "", first=first)
+
+    result = _run(root)
+
+    output = _output(result)
+    assert result.returncode == 0, output
+    assert "Action 'first' guards on source.page_content" in output, output
+    assert "doc.txt holds 'page_content'" in output, output
+    assert len(_stored(root, "first")) == passed, output
 
 
 @pytest.mark.parametrize(
