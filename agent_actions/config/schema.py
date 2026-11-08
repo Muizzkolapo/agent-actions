@@ -643,6 +643,15 @@ class ActionConfig(_RetryValidators):
         default=None, ge=1, le=32, description="Max concurrent workers for Ollama batch processing"
     )
 
+    # --- Online record concurrency (LLM actions) ---
+    record_concurrency: int | None = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=32,
+        description="Records of an online LLM action in flight at once (1-32; default 1)",
+    )
+
     # --- Expander-consumed keys ---
     chunk_config: ChunkConfig | None = Field(default=None, description="Chunking configuration")
     chunk_size: int | None = Field(default=None, gt=0, description="Chunk size")
@@ -781,6 +790,13 @@ class DefaultsConfig(_RetryValidators):
         ge=1,
         le=32,
         description="Default max concurrent workers for Ollama batch processing",
+    )
+    record_concurrency: int | None = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=32,
+        description="Default records of an online LLM action in flight at once (1-32)",
     )
 
 

@@ -1,0 +1,8 @@
+kind: Enhancement or New Feature
+body: >-
+  An online LLM action can send several records at once with `record_concurrency` (1-32, on the
+  action, in `defaults:` or project-wide; default 1). At most that many records are in flight
+  per action (an `llm_judge` with `votes` sends that many calls for each); each record is checkpointed as its answer arrives, and the output keeps input
+  order. It is refused on tool, hitl and batch actions that write it, and ignored when they
+  inherit it.
+time: 2026-11-07T21:00:00Z

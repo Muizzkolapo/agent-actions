@@ -85,6 +85,9 @@ class DefaultAgentConfig(BaseModel):
     request_timeout: float | None = Field(
         default=None, strict=True, gt=0, allow_inf_nan=False, description="Default request timeout"
     )
+    record_concurrency: int | None = Field(
+        default=None, strict=True, ge=1, le=32, description="Default record concurrency"
+    )
     model_config = ConfigDict(extra="allow")
 
 
@@ -139,6 +142,13 @@ class AgentConfig(BaseModel):
         gt=0,
         allow_inf_nan=False,
         description="Seconds one LLM request may take before it fails as a retriable error",
+    )
+    record_concurrency: int | None = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=32,
+        description="Records of an online LLM action in flight at once",
     )
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn", description="What an empty answer does to its record or action"

@@ -123,6 +123,7 @@ class ActionConfigDict(TypedDict, total=False):
     temperature: float
     max_tokens: int
     request_timeout: float  # seconds per LLM request; unset keeps the SDK's own
+    record_concurrency: int  # online LLM records in flight at once; unset is 1
 
     # Dependencies & flow
     dependencies: list[str]

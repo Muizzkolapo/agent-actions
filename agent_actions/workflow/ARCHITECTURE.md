@@ -230,7 +230,7 @@ still `running` to failed, recording the run's error on it, and the run exits
 non-zero. `agac retry` writes the node-level failure such an action could not store
 and re-runs it in full, as for any failure of the action's own.
 
-Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. True I/O overlap is between different actions only; within a single action, processing is synchronous.
+Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. Different actions overlap on their own threads. Within one online LLM action, records run one at a time unless `record_concurrency` is above 1; then `OnlineLLMStrategy` keeps up to that many in flight on a thread pool of its own.
 
 ---
 
@@ -902,8 +902,9 @@ _execute_action_run_async wraps synchronous run_action in
 asyncio.to_thread(). This means:
 
   - Parallel execution = thread-based (GIL applies to CPU work)
-  - True overlap only for I/O between different actions
-  - Within a single action, processing is fully synchronous
+  - Overlap between different actions, each on its own thread
+  - Within one action, records run one at a time unless an online LLM
+    action sets record_concurrency (a bounded window of worker threads)
   - The threading.Lock in ActionStateManager protects status writes
 
 If you add async I/O inside run_action (e.g., aiohttp calls):

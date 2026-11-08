@@ -4,9 +4,13 @@ Handles per-record processing: prepare task, invoke LLM, handle response,
 transform output.
 """
 
+import contextvars
+import functools
 import logging
 import sqlite3
-from dataclasses import replace
+from collections.abc import Callable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -33,7 +37,11 @@ from agent_actions.logging.events.data_pipeline_events import (
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.helpers import _empty_warn_reason, _is_empty_output
+from agent_actions.processing.helpers import (
+    _empty_warn_reason,
+    _is_empty_output,
+    _is_tool_action,
+)
 from agent_actions.processing.invocation import InvocationStrategy, InvocationStrategyFactory
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import (
@@ -82,6 +90,16 @@ def _create_item_context(
         record_index=index,
         current_item=item if isinstance(item, dict) else None,
     )
+
+
+@dataclass
+class _Tally:
+    """What one pass has settled so far, for its progress events."""
+
+    total: int
+    settled: int = 0
+    successes: int = 0
+    failures: int = 0
 
 
 def _reject_schema_echo_result(result: ProcessingResult, action_name: str) -> ProcessingResult:
@@ -211,116 +229,15 @@ class OnlineLLMStrategy:
             )
         )
 
-        results: list[ProcessingResult] = []
-        successes = 0
-        failures = 0
-
-        for idx, item in enumerate(records):
-            try:
-                item_context = _create_item_context(context, idx, item)
-                result = self.process_record(item, item_context)
-                result = _reject_schema_echo_result(result, context.action_name)
-                results.append(result)
-
-                if result.status == ProcessingStatus.SUCCESS:
-                    successes += 1
-                elif result.status == ProcessingStatus.FAILED:
-                    failures += 1
-
-                # Checkpoint: commit this record's result to SQLite immediately
-                # so interrupted runs can resume from where they left off.
-                if context.storage_backend and result.source_guid:
-                    self._checkpoint_record(result, context)
-
-                if (idx + 1) % 10 == 0 or (idx + 1) == len(records):
-                    fire_event(
-                        BatchProcessingProgressEvent(
-                            action_name=context.agent_name,
-                            processed=idx + 1,
-                            total=len(records),
-                            successes=successes,
-                            failures=failures,
-                        )
-                    )
-
-            except RecordContextError as e:
-                # Per-record recoverable — build tombstone, continue processing
-                record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
-                logger.warning(
-                    "[%s] Record %s prep failed (context incomplete): %s",
-                    context.agent_name,
-                    record_id,
-                    e,
-                )
-                result = _build_prep_failed_result(item, context, str(e))
-                results.append(result)
-                failures += 1
-            except TemplateVariableError as e:
-                fire_event(
-                    TemplateRenderingFailedEvent(
-                        action_name=context.agent_name,
-                        missing_variables=e.missing_variables,
-                        error_message=str(e),
-                    )
-                )
-                if not e.missing_variables:
-                    # No variable to blame: a malformed template (already marked
-                    # action-fatal where it was parsed) or a render failure this
-                    # record's data provoked. Either way, not a tombstone.
-                    raise
-                # Missing variables — per-record recoverable
-                record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
-                logger.warning(
-                    "[%s] Record %s prep failed (missing template vars): %s",
-                    context.agent_name,
-                    record_id,
-                    e,
-                )
-                result = _build_prep_failed_result(item, context, str(e))
-                results.append(result)
-                failures += 1
-            except (ConfigurationError, EmptyOutputError) as e:
-                mark_action_fatal(e)
-                raise
-            except ExpectationsExhaustedError:
-                # on_exhausted: raise means halt the run, not fail the record.
-                raise
-            except Exception as e:
-                # An on_exhausted: raise halt is action-fatal by definition —
-                # the config asked the run to stop. Flattening it into a record
-                # result discards the policy with the exception.
-                if raised_by_exhaustion_policy(e):
-                    raise
-                # A tool's output that fails its schema is failed here too: it is
-                # checked one record at a time, so it indicts this record alone.
-                # The result collector reports this record to the user, for
-                # online and batch alike. This copy carries the traceback for
-                # the log file, and the item index the collector cannot know.
-                logger.exception(
-                    "[%s] Error processing item %d: %s",
-                    context.agent_name,
-                    idx,
-                    str(e),
-                    extra=DIAGNOSTIC,
-                )
-                input_record = item if isinstance(item, dict) else None
-                # Read the stamped guid — a first-stage record is stamped at
-                # ingestion/unified before processing, so re-deriving here would hash the
-                # now-stamped item and diverge from the persisted source_data key.
-                source_guid = input_record.get("source_guid") if input_record else None
-                source_snapshot = (
-                    TaskPreparer._prepare_source_snapshot(item) if context.is_first_stage else None
-                )
-                failed_result = ProcessingResult.failed(
-                    # The cause, unwrapped: every layer above renders this, and
-                    # the item index is already on the log line just above.
-                    error=safe_format_error(e),
-                    source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
-                )
-                results.append(failed_result)
-                failures += 1
+        tally = _Tally(total=len(records))
+        results: list[ProcessingResult | None] = [None] * len(records)
+        limit = self._record_concurrency() if len(records) > 1 else 1
+        if limit > 1:
+            self._invoke_window(records, context, limit, results, tally)
+        else:
+            for idx, item in enumerate(records):
+                answer = functools.partial(self._answer, idx, item, context)
+                results[idx] = self._settle(idx, item, context, answer, tally)
 
         elapsed_time = (datetime.now(UTC) - start_time).total_seconds()
         fire_event(
@@ -331,7 +248,205 @@ class OnlineLLMStrategy:
             )
         )
 
-        return results
+        return [result for result in results if result is not None]
+
+    def _record_concurrency(self) -> int:
+        """How many of this action's records may be in flight at once; 1 unless set.
+
+        A tool action that inherited the key still runs one record at a time: a UDF is
+        user code with no thread-safety promise.
+        """
+        if _is_tool_action(self._agent_config):
+            return 1
+        return int(self._agent_config.get("record_concurrency") or 1)
+
+    def _answer(self, idx: int, item: Any, context: ProcessingContext) -> ProcessingResult:
+        """One record's result: everything that may run off the coordinating thread."""
+        item_context = _create_item_context(context, idx, item)
+        result = self.process_record(item, item_context)
+        return _reject_schema_echo_result(result, context.action_name)
+
+    def _invoke_window(
+        self,
+        records: list[dict[str, Any]],
+        context: ProcessingContext,
+        limit: int,
+        results: list[ProcessingResult | None],
+        tally: _Tally,
+    ) -> None:
+        """Answer records with at most *limit* in flight, settling each as it completes.
+
+        Nothing is queued beyond the window, so an action-fatal error leaves at most
+        *limit* answers unsettled. Settling (checkpoint, counts, progress) stays on this
+        thread, so the store and the counters have one writer.
+        """
+        with ThreadPoolExecutor(max_workers=limit, thread_name_prefix="record") as pool:
+            in_flight: dict[Future[ProcessingResult], int] = {}
+            try:
+                self._fill_and_settle(pool, in_flight, records, context, limit, results, tally)
+            except (KeyboardInterrupt, SystemExit):
+                self._keep_answers_in_flight(in_flight, context)
+                raise
+
+    def _fill_and_settle(
+        self,
+        pool: ThreadPoolExecutor,
+        in_flight: dict[Future[ProcessingResult], int],
+        records: list[dict[str, Any]],
+        context: ProcessingContext,
+        limit: int,
+        results: list[ProcessingResult | None],
+        tally: _Tally,
+    ) -> None:
+        """Keep the window full and settle each record as it completes."""
+        next_idx = 0
+        while next_idx < len(records) or in_flight:
+            while next_idx < len(records) and len(in_flight) < limit:
+                # Each record runs in a copy of this context, so its events and
+                # model call are logged against this action.
+                future = pool.submit(
+                    contextvars.copy_context().run,
+                    self._answer,
+                    next_idx,
+                    records[next_idx],
+                    context,
+                )
+                in_flight[future] = next_idx
+                next_idx += 1
+            done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+            for future in sorted(done, key=in_flight.__getitem__):
+                idx = in_flight.pop(future)
+                results[idx] = self._settle(idx, records[idx], context, future.result, tally)
+
+    def _keep_answers_in_flight(
+        self, in_flight: dict[Future[ProcessingResult], int], context: ProcessingContext
+    ) -> None:
+        """On an interrupt, wait for the records already sent and checkpoint their answers.
+
+        Nothing more is sent. An answer already paid for is kept, so the resumed run
+        does not send that record again; one that raised is left for the resume.
+        """
+        for future in sorted(in_flight, key=in_flight.__getitem__):
+            if future.exception() is not None:
+                continue
+            result = future.result()
+            if context.storage_backend and result.source_guid:
+                self._checkpoint_record(result, context)
+
+    def _settle(
+        self,
+        idx: int,
+        item: Any,
+        context: ProcessingContext,
+        answer: Callable[[], ProcessingResult],
+        tally: _Tally,
+    ) -> ProcessingResult:
+        """Take one record's answer and count, checkpoint and report it.
+
+        Per-record errors (RecordContextError, missing template vars) become
+        tombstones; action-fatal errors re-raise marked.
+        """
+        tally.settled += 1
+        try:
+            result = answer()
+
+            if result.status == ProcessingStatus.SUCCESS:
+                tally.successes += 1
+            elif result.status == ProcessingStatus.FAILED:
+                tally.failures += 1
+
+            # Checkpoint: commit this record's result to SQLite immediately
+            # so interrupted runs can resume from where they left off.
+            if context.storage_backend and result.source_guid:
+                self._checkpoint_record(result, context)
+
+            if tally.settled % 10 == 0 or tally.settled == tally.total:
+                fire_event(
+                    BatchProcessingProgressEvent(
+                        action_name=context.agent_name,
+                        processed=tally.settled,
+                        total=tally.total,
+                        successes=tally.successes,
+                        failures=tally.failures,
+                    )
+                )
+            return result
+
+        except RecordContextError as e:
+            # Per-record recoverable — build tombstone, continue processing
+            record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
+            logger.warning(
+                "[%s] Record %s prep failed (context incomplete): %s",
+                context.agent_name,
+                record_id,
+                e,
+            )
+            tally.failures += 1
+            return _build_prep_failed_result(item, context, str(e))
+        except TemplateVariableError as e:
+            fire_event(
+                TemplateRenderingFailedEvent(
+                    action_name=context.agent_name,
+                    missing_variables=e.missing_variables,
+                    error_message=str(e),
+                )
+            )
+            if not e.missing_variables:
+                # No variable to blame: a malformed template (already marked
+                # action-fatal where it was parsed) or a render failure this
+                # record's data provoked. Either way, not a tombstone.
+                raise
+            # Missing variables — per-record recoverable
+            record_id = item.get("source_guid", idx) if isinstance(item, dict) else idx
+            logger.warning(
+                "[%s] Record %s prep failed (missing template vars): %s",
+                context.agent_name,
+                record_id,
+                e,
+            )
+            tally.failures += 1
+            return _build_prep_failed_result(item, context, str(e))
+        except (ConfigurationError, EmptyOutputError) as e:
+            mark_action_fatal(e)
+            raise
+        except ExpectationsExhaustedError:
+            # on_exhausted: raise means halt the run, not fail the record.
+            raise
+        except Exception as e:
+            # An on_exhausted: raise halt is action-fatal by definition —
+            # the config asked the run to stop. Flattening it into a record
+            # result discards the policy with the exception.
+            if raised_by_exhaustion_policy(e):
+                raise
+            # A tool's output that fails its schema is failed here too: it is
+            # checked one record at a time, so it indicts this record alone.
+            # The result collector reports this record to the user, for
+            # online and batch alike. This copy carries the traceback for
+            # the log file, and the item index the collector cannot know.
+            logger.exception(
+                "[%s] Error processing item %d: %s",
+                context.agent_name,
+                idx,
+                str(e),
+                extra=DIAGNOSTIC,
+            )
+            input_record = item if isinstance(item, dict) else None
+            # Read the stamped guid — a first-stage record is stamped at
+            # ingestion/unified before processing, so re-deriving here would hash the
+            # now-stamped item and diverge from the persisted source_data key.
+            source_guid = input_record.get("source_guid") if input_record else None
+            source_snapshot = (
+                TaskPreparer._prepare_source_snapshot(item) if context.is_first_stage else None
+            )
+            tally.failures += 1
+            return ProcessingResult.failed(
+                # The cause, unwrapped: every layer above renders this, and
+                # the item index is already on the log line just above.
+                error=safe_format_error(e),
+                source_guid=source_guid,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
 
     @staticmethod
     def _checkpoint_record(result: ProcessingResult, context: ProcessingContext) -> None:

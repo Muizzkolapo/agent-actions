@@ -185,6 +185,7 @@ Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped 
 | `is_operational` | boolean | Enable/disable action (default: true) |
 | `on_empty` | string | What an empty answer does: `warn` (default) fails the record and the run goes on, `error` fails the action, `skip` passes the record through as a tombstone |
 | `retry` | object | Retry configuration for transport-layer failures |
+| `record_concurrency` | integer | How many records of an online LLM action are sent at once (1-32; default 1, one at a time). Can also be set in `defaults:` or the project's `default_agent_config:`. See [Record concurrency](#record-concurrency) |
 | `request_timeout` | number | Seconds one LLM request may take, greater than 0. A request still unanswered then fails that attempt as a network error, which [`retry`](../execution/retry.md) retries like any other; when the attempts run out the record fails and the run names the timeout. Unset (the default), each provider SDK keeps its own timeout. Can also be set in `defaults:` or the project's `default_agent_config:`. See [Request timeout](#request-timeout) |
 
 ### Request timeout
@@ -204,6 +205,20 @@ actions:
 - The OpenAI, Groq and Anthropic SDKs retry a timed-out request twice on their own before reporting it, so with those vendors one attempt can last up to three times `request_timeout` plus their short backoff.
 - On a [declared endpoint](./endpoints.md), an action's `request_timeout` outranks the endpoint's `timeout_seconds`; unset, `timeout_seconds` applies.
 - Online requests only. In `run_mode: batch` the provider runs the batch on its side and `request_timeout` is not applied, including to the in-process batch for `ollama_local` and `ollama_cloud`.
+
+### Record concurrency
+
+`record_concurrency` lets an online LLM action send up to that many records at once, instead of waiting for each answer before it sends the next. Each record is checkpointed as soon as its answer arrives, and the action's output keeps input order. In a sequential run, Ctrl-C sends nothing more: the run waits for the records already sent, keeps their answers, and then stops, so a resumed run sends only the records that have no answer. In a parallel run (`--execution-mode parallel`, or chosen automatically) Ctrl-C does not reach an action that is running, with or without this key: it goes on sending its records, up to `record_concurrency` at a time, until it ends.
+
+```yaml
+defaults:
+  record_concurrency: 4    # every online LLM action
+```
+
+- The most requests in flight are `--concurrency-limit` (actions at once) times `record_concurrency`, times `votes` for an `llm_judge` that sets it. Choose it against your provider's rate limit: a 429 in one record is retried by that record alone, and the others keep sending.
+- Written on a tool or hitl action, or on an action that runs in `run_mode: batch`, it is refused at load. Inherited from `defaults:` by one of them, it is ignored.
+- It does not change any answer, so editing it keeps the answers an action holds.
+- Above 1, the token usage the run records for the action is not that action's (it is empty, or the previous action's), and a `judge_budget` can be spent twice on one value when two records judge it at the same moment.
 
 :::note Granularity Constraints
 - **File granularity** is supported for tool and HITL actions (`kind: tool`, `kind: hitl`)
