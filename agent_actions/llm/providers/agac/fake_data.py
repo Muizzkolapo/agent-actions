@@ -443,20 +443,53 @@ class FakeDataGenerator:
                 return cls._generate_array(schema, attempt, field_name)
             return cls._generate_string(attempt, field_name=field_name)
 
-    @staticmethod
-    def _declared_bounds(
-        schema: dict[str, Any], low_key: str, high_key: str, span: float
-    ) -> tuple[float, float] | None:
-        """The range a schema declares with *low_key*/*high_key*; None when it declares neither.
+    # The formats _generate_formatted_string can produce; any other gets a sentence.
+    KNOWN_FORMATS = frozenset(
+        {"email", "uri", "url", "date", "date-time", "time", "uuid", "hostname", "ipv4", "ipv6"}
+    )
 
-        A one-sided bound is widened by *span* on the open side.
+    @staticmethod
+    def _length_bounds(schema: dict[str, Any]) -> tuple[int, int] | None:
+        """The length range a string schema declares; None when it declares none.
+
+        A missing `minLength` is 0; a missing `maxLength` is 200 above `minLength`.
         """
-        low, high = schema.get(low_key), schema.get(high_key)
+        low, high = schema.get("minLength"), schema.get("maxLength")
+        if low is None and high is None:
+            return None
+        shortest = 0 if low is None else int(low)
+        return shortest, shortest + 200 if high is None else int(high)
+
+    @staticmethod
+    def _numeric_bounds(
+        schema: dict[str, Any],
+    ) -> tuple[int | float, int | float, bool, bool] | None:
+        """``(low, high, low_open, high_open)`` a schema declares; None when it declares none.
+
+        `exclusiveMinimum`/`exclusiveMaximum` make a side open. A missing low side is 0 when
+        the high side is above 0, else 1000 below it; a missing high side is 1000 above the low.
+        Values are kept as written, so an integer bound stays exact.
+        """
+
+        def number(key: str) -> int | float | None:
+            value = schema.get(key)
+            return value if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+        low, low_open = number("minimum"), False
+        exclusive_low = number("exclusiveMinimum")
+        if exclusive_low is not None and (low is None or exclusive_low >= low):
+            low, low_open = exclusive_low, True
+        high, high_open = number("maximum"), False
+        exclusive_high = number("exclusiveMaximum")
+        if exclusive_high is not None and (high is None or exclusive_high <= high):
+            high, high_open = exclusive_high, True
         if high is None:
-            return None if low is None else (float(low), float(low) + span)
-        if low is None:
-            low = min(0.0, high) if low_key == "minLength" else high - span
-        return float(low), float(high)
+            if low is None:
+                return None
+            high = low + 1000
+        elif low is None:
+            low = 0 if high > 0 else high - 1000
+        return low, high, low_open, high_open
 
     @classmethod
     def _generate_string(
@@ -468,12 +501,16 @@ class FakeDataGenerator:
         """Generate a contextually appropriate string, sized to any declared length bound."""
         schema = schema or {}
         text = cls._generate_unsized_string(attempt, schema, field_name)
-        bounds = cls._declared_bounds(schema, "minLength", "maxLength", 200)
+        bounds = cls._length_bounds(schema)
         # A formatted value padded with prose or cut short is no longer that format.
-        if bounds is None or schema.get("format") or bounds[0] <= len(text) <= bounds[1]:
+        if (
+            bounds is None
+            or schema.get("format") in cls.KNOWN_FORMATS
+            or bounds[0] <= len(text) <= bounds[1]
+        ):
             return text
         rng = cls._get_rng()
-        low, high = int(bounds[0]), int(bounds[1])
+        low, high = bounds
         while len(text) < low:
             text = f"{text} {cls._generate_sentence(attempt, rng)}"
         return cls._cut_at_word(text, max(low, 1), high)
@@ -654,14 +691,30 @@ class FakeDataGenerator:
         maximum = schema.get("maximum", 1000)
         multiple_of = schema.get("multipleOf")
 
-        bounds = cls._declared_bounds(schema, "minimum", "maximum", 1000)
+        bounds = cls._numeric_bounds(schema)
         if bounds is not None:
-            low, high = bounds
+            low, high, low_open, high_open = bounds
+
+            def inside(value: float) -> bool:
+                above = value > low if low_open else value >= low
+                below = value < high if high_open else value <= high
+                return above and below
+
             if multiple_of:
-                first, last = math.ceil(low / multiple_of), math.floor(high / multiple_of)
+                step = float(multiple_of)
+                first = math.floor(low / step) + 1 if low_open else math.ceil(low / step)
+                last = math.ceil(high / step) - 1 if high_open else math.floor(high / step)
                 if first <= last:
-                    return round(rng.randint(first, last) * float(multiple_of), 10)
-            return min(max(round(rng.uniform(low, high), 2), low), high)
+                    k = rng.randint(first, last)
+                    # Float division can put the first or last step just past an edge.
+                    for candidate in (k, k + 1, k - 1):
+                        stepped = round(candidate * step, 10)
+                        if inside(stepped):
+                            return stepped
+            value = round(rng.uniform(low, high), 2)
+            if not inside(value):
+                value = (low + high) / 2
+            return float(value)
 
         # Context-aware generation
         if field_lower:
@@ -702,10 +755,20 @@ class FakeDataGenerator:
         minimum = schema.get("minimum", 0)
         maximum = schema.get("maximum", 1000)
 
-        bounds = cls._declared_bounds(schema, "minimum", "maximum", 1000)
+        bounds = cls._numeric_bounds(schema)
         if bounds is not None:
-            low, high = math.ceil(bounds[0]), math.floor(bounds[1])
-            return rng.randint(low, high) if low <= high else low
+            low, high, low_open, high_open = bounds
+            first = math.floor(low) + 1 if low_open else math.ceil(low)
+            last = math.ceil(high) - 1 if high_open else math.floor(high)
+            raw_step = schema.get("multipleOf")
+            step = 0
+            if isinstance(raw_step, int | float) and not isinstance(raw_step, bool):
+                step = int(raw_step) if float(raw_step).is_integer() else 0
+            if step > 0:
+                first_step, last_step = -(-first // step), last // step
+                if first_step <= last_step:
+                    return rng.randint(first_step, last_step) * step
+            return rng.randint(first, last) if first <= last else first
 
         # Context-aware generation
         if field_lower:
