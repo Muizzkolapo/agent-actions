@@ -376,6 +376,26 @@ class RetryConfig(BaseModel):
         default="return_last",
         description="Behavior when max_attempts exhausted: return_last or raise",
     )
+    base_delay: float = Field(
+        default=1.0,
+        gt=0,
+        le=300,
+        description="Backoff limit in seconds after the first failed attempt; doubles each attempt",
+    )
+    max_delay: float = Field(
+        default=60.0,
+        gt=0,
+        le=3600,
+        description="Longest wait in seconds, a provider's Retry-After included",
+    )
+
+    @model_validator(mode="after")
+    def validate_max_delay_covers_base_delay(self) -> "RetryConfig":
+        if self.max_delay < self.base_delay:
+            raise ValueError(
+                f"max_delay ({self.max_delay:g}) must be at least base_delay ({self.base_delay:g})"
+            )
+        return self
 
 
 class HitlConfig(BaseModel):
@@ -625,6 +645,15 @@ class ActionConfig(_RetryValidators):
         default=None, ge=1, le=32, description="Max concurrent workers for Ollama batch processing"
     )
 
+    # --- Online record concurrency (LLM actions) ---
+    record_concurrency: int | None = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=32,
+        description="Records of an online LLM action in flight at once (1-32; default 1)",
+    )
+
     # --- Expander-consumed keys ---
     chunk_config: ChunkConfig | None = Field(default=None, description="Chunking configuration")
     chunk_size: int | None = Field(default=None, gt=0, description="Chunk size")
@@ -763,6 +792,13 @@ class DefaultsConfig(_RetryValidators):
         ge=1,
         le=32,
         description="Default max concurrent workers for Ollama batch processing",
+    )
+    record_concurrency: int | None = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=32,
+        description="Default records of an online LLM action in flight at once (1-32)",
     )
 
 

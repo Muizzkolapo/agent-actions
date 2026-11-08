@@ -92,6 +92,39 @@ class TestExtractRetryAfter:
         setup(e)
         assert _extract_retry_after(e) == expected
 
+    @staticmethod
+    def _with_headers(headers: dict[str, str]) -> Exception:
+        e = FakeRateLimitError("test")
+        e.response = MagicMock(headers=headers)
+        return e
+
+    @pytest.mark.parametrize(
+        ("headers", "expected"),
+        [
+            pytest.param({"retry-after-ms": "1500"}, 1.5, id="milliseconds"),
+            pytest.param({"retry-after-ms": "1500", "retry-after": "9"}, 1.5, id="ms_first"),
+            pytest.param({"retry-after-ms": "soon", "retry-after": "9"}, 9.0, id="bad_ms"),
+            pytest.param({"retry-after": "3"}, 3.0, id="seconds"),
+            pytest.param({"retry-after": "-4"}, 0.0, id="negative_seconds"),
+            pytest.param({"retry-after": "Wed, 21 Oct 2015 07:28:00 GMT"}, 0.0, id="past_date"),
+            pytest.param({"retry-after": "next tuesday"}, None, id="garbage"),
+            pytest.param({"retry-after": "nan"}, None, id="nan_seconds"),
+            pytest.param({"retry-after-ms": "NaN", "retry-after": "4"}, 4.0, id="nan_ms"),
+        ],
+    )
+    def test_each_retry_after_form(self, headers, expected):
+        assert _extract_retry_after(self._with_headers(headers)) == expected
+
+    def test_an_http_date_ahead_is_the_seconds_until_it(self):
+        from datetime import UTC, datetime, timedelta
+        from email.utils import format_datetime
+
+        ahead = format_datetime(datetime.now(UTC) + timedelta(seconds=5), usegmt=True)
+
+        seconds = _extract_retry_after(self._with_headers({"retry-after": ahead}))
+
+        assert seconds is not None and 4.0 <= seconds <= 5.0
+
 
 class TestWrapVendorErrorTypeBased:
     """Tests for type-based error classification (OpenAI/Anthropic/Groq style)."""

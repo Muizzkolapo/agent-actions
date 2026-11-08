@@ -8,7 +8,10 @@ how to classify vendor-specific exception types into our unified error hierarchy
 """
 
 import logging
+import math
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -34,26 +37,38 @@ TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
 
 
 def _extract_retry_after(e: Exception) -> float | None:
-    """Extract retry-after header from an API error response.
+    """Seconds the provider asked to wait, from the error's response headers; None if unreadable.
 
-    Works with OpenAI, Anthropic, and Groq SDKs that expose
-    `response.headers` on their exception objects.
-
-    Args:
-        e: The API exception with potential response headers
-
-    Returns:
-        Parsed retry-after value as float, or None if not available
+    Reads `retry-after-ms`, then `retry-after` as seconds or as an HTTP date. A wait in the
+    past is 0; a value that is not a number (`nan` included) is unreadable. Works with SDKs that expose `response.headers` (OpenAI, Anthropic, Groq).
     """
     if not hasattr(e, "response") or not e.response:
         return None
-    retry_after = e.response.headers.get("retry-after")
+    headers = e.response.headers
+    milliseconds = headers.get("retry-after-ms")
+    if milliseconds:
+        try:
+            seconds = float(milliseconds) / 1000
+        except ValueError:
+            seconds = math.nan
+        if not math.isnan(seconds):
+            return max(seconds, 0.0)
+    retry_after = headers.get("retry-after")
     if not retry_after:
         return None
     try:
-        return float(retry_after)
+        seconds = float(retry_after)
     except ValueError:
+        seconds = math.nan
+    if not math.isnan(seconds):
+        return max(seconds, 0.0)
+    try:
+        when = parsedate_to_datetime(str(retry_after))
+    except (TypeError, ValueError):
         return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return max((when - datetime.now(UTC)).total_seconds(), 0.0)
 
 
 @dataclass(frozen=True)
