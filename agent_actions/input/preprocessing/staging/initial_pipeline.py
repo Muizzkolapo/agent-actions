@@ -251,12 +251,15 @@ class StagedFile:
     src_text: Any
 
 
-def _check_and_prepare(ctx: InitialStageContext, content: Any, file_type: str) -> StagedFile:
+def _check_and_prepare(
+    ctx: InitialStageContext, content: Any, file_type: str, *, warn: bool = True
+) -> StagedFile:
     """Prepare one staged file's records as the run mode does, and run every check.
 
     The document rule, the reserved-name check, the seed-selector check on every
     prepared row for every action, and the first-record template render, in that
     order. Nothing is stored or sent here; the caller decides what happens next.
+    *warn* false keeps the checks that only warn quiet, for a file already checked.
     """
     run_mode = RunMode.BATCH if runs_in_batch(ctx.agent_config) else RunMode.ONLINE
     logger.info(
@@ -336,6 +339,7 @@ def _check_and_prepare(ctx: InitialStageContext, content: Any, file_type: str) -
         action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
         conclusive=lambda: _rows_hold_every_staged_source(ctx, file_type),
         hint=_text_chunk_hint(file_type),
+        warn=warn,
     )
 
     return StagedFile(content, file_type, run_mode, relative_path, data_chunk, src_text)
@@ -361,7 +365,9 @@ def precheck_staged_file(ctx: InitialStageContext) -> None:
 def process_initial_stage(ctx: InitialStageContext):
     """Process input files through the initial stage pipeline. Returns output file path."""
     content, file_type = _read_staged_file(ctx)
-    staged = _check_and_prepare(ctx, content, file_type)
+    # precheck_staged_file ran these checks on this file before the walk processed
+    # the first, and logged their warnings then.
+    staged = _check_and_prepare(ctx, content, file_type, warn=False)
     run_mode, data_chunk, src_text = staged.run_mode, staged.data_chunk, staged.src_text
     if ctx.storage_backend is not None and isinstance(data_chunk, list):
         # Every record staged, before a repair or a limit narrows them: a record the

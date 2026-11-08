@@ -446,3 +446,21 @@ def test_an_api_source_is_checked_against_the_rows_it_fetched(tmp_path, observe,
     else:
         assert result.returncode == 0, _output(result)
         assert len(_stored(root, "second")) == 1, _output(result)
+
+
+@pytest.mark.parametrize(
+    "staged",
+    [{"doc.txt": TEXT}, {"a.txt": TEXT, "b.txt": TEXT}],
+    ids=["one-file", "two-files"],
+)
+def test_each_warning_prints_once_per_staged_file(tmp_path, staged):
+    """The walk checks every file before processing it, and only that pass logs (1700)."""
+    root = _project(tmp_path, _later_guard("source.page_content IS NULL"), staged=staged)
+
+    result = _run(root)
+
+    output = _output(result)
+    assert result.returncode == 0, output
+    for name in staged:
+        warning = f"guards on source.page_content, but no record staged from staging/{name}"
+        assert output.count(warning) == 1, output

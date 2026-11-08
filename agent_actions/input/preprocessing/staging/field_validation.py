@@ -77,6 +77,7 @@ def validate_staged_source_reads(
     *,
     conclusive: Callable[[], bool],
     hint: str | None = None,
+    warn: bool = True,
 ) -> None:
     """Check the `source` fields the actions read against the fields no staged record holds.
 
@@ -86,7 +87,8 @@ def validate_staged_source_reads(
     first-record render checks its other reads). A read that every record needs is
     refused. When the records are not *conclusive* (other staged files may hold the
     field; asked only once a read is missing), when the read may not fail a record, or
-    when the action's own guard reads the field first, it is logged as a warning instead.
+    when the action's own guard reads the field first, it is logged as a warning instead,
+    unless *warn* is false.
     """
     if not records:
         return
@@ -128,7 +130,7 @@ def validate_staged_source_reads(
                 and rows_are_conclusive()
             ):
                 refusals.append(message)
-            else:
+            elif warn:
                 logger.warning("%s. Records from that file will not have it.", message)
 
     if refusals:
