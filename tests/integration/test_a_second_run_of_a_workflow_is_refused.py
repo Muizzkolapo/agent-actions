@@ -177,3 +177,44 @@ def test_another_workflow_is_not_blocked(tmp_path):
 
     assert result.returncode == 0, _output(result)
     assert len(_stored(root, "other_run")) == 1, _output(result)
+
+
+def test_a_filter_is_refused_while_another_holds_the_workflow(tmp_path):
+    """`--filter` writes dispositions, rows, the status file and the manifest (1698)."""
+    root = _project(tmp_path)
+    first = _agac(root, "run", "-a", "one_run")
+    assert first.returncode == 0, _output(first)
+
+    with _held(root, "one_run"):
+        result = _agac(
+            root, "retry", "-a", "one_run", "--filter", "echo:some-record", "--reason", "known bad"
+        )
+
+    output = _output(result)
+    assert result.returncode == 1, output
+    assert "Another run of workflow 'one_run' is in progress (pid 48211)" in output, output
+    assert "Nothing was filtered" not in output, output
+
+
+def test_a_filter_dry_run_is_not_refused(tmp_path):
+    root = _project(tmp_path)
+    first = _agac(root, "run", "-a", "one_run")
+    assert first.returncode == 0, _output(first)
+
+    with _held(root, "one_run"):
+        result = _agac(
+            root,
+            "retry",
+            "-a",
+            "one_run",
+            "--filter",
+            "echo:some-record",
+            "--reason",
+            "known bad",
+            "--dry-run",
+        )
+
+    # It writes nothing, so it reads past the lock and answers for the record.
+    output = _output(result)
+    assert "in progress" not in output, output
+    assert "Nothing was filtered" in output, output

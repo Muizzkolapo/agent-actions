@@ -11,7 +11,7 @@ from rich.console import Console
 from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import RetryCommand, _manifest_path, _read_manifest
 from agent_actions.cli.workflow_loader import load_workflow
-from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     DISPOSITION_FILTERED,
@@ -20,6 +20,7 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
     DispositionRow,
 )
+from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.pipeline import _actions_below
 
@@ -44,6 +45,15 @@ class RetryFilterCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
+        if self.args.dry_run:
+            self._filter(paths, project_root)
+            return
+        # Before the store is opened: a filter rewrites dispositions, target rows, the
+        # status file and the retry manifest, which a run or retry also writes.
+        with hold_run_lock(paths.io_dir, self.agent_name):
+            self._filter(paths, project_root)
+
+    def _filter(self, paths: ProjectPaths, project_root: Path | None) -> None:
         backend = get_storage_backend(
             workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
         )

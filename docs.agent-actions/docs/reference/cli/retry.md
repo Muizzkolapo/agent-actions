@@ -12,7 +12,7 @@ The `retry` command re-runs failed or exhausted records from an action forward, 
 agac retry -a <workflow-name> [options]
 ```
 
-A retry takes the same lock as [`run`](./run.md#concurrent-runs): while a run or another retry of the workflow is in progress, it exits 1 with `Another run of workflow '<workflow>' is in progress`. `--dry-run` and `--filter` do not take the lock.
+A retry takes the same lock as [`run`](./run.md#concurrent-runs): while a run or another retry of the workflow is in progress, it exits 1 with `Another run of workflow '<workflow>' is in progress`. `--filter` takes it too, since it rewrites dispositions, stored rows, the status file and the retry manifest. `--dry-run` writes nothing and does not take it.
 
 ## Options
 
