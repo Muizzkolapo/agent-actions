@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  The docs site pins react and react-dom to the same exact version (19.3.1), and Dependabot
+  updates the two in one pull request. A bump of react alone had left react-dom at 19.3.0,
+  and the docs build refuses mismatched React versions, so Deploy Docs failed on every
+  commit to main.
+time: 2026-11-08T19:00:00Z
