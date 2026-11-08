@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  The preflight warning "Records may arrive at 'X' via alternate dependency ..." below a
-  filter guard now fires only when one of the action's dependencies can deliver a record
-  that the filter did not see. An action it only observes for context, or a dependency
-  that runs below the filter, no longer counts as a path around it. The warning names
-  only the dependencies that bypass the filter.
-time: 2026-11-07T22:45:00Z

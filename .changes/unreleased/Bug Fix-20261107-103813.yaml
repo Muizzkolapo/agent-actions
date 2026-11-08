@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: A record that `expect:` repaired online now has one prompt trace per attempt. The trace used to pair the first prompt with the final response, so a record repaired on a later attempt showed a prompt that did not produce it, and the responses the loop discarded were lost. Each repair prompt is now stored as the next attempt beside the response it drew, and `agac traces` shows them in order.
-time: 2026-11-07T10:38:13.072497Z

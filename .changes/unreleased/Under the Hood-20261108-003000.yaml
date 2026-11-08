@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: >-
-  `LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS` is removed. No code read it; the one file-lock
-  timeout in use is `ATOMIC_LOCK_TIMEOUT_SECONDS`, read by the run tracker. The internal
-  defaults page lists only that one.
-time: 2026-11-08T00:30:00Z

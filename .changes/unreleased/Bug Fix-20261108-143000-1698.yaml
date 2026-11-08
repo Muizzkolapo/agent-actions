@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  agac retry --filter takes the workflow's run lock, as agac run and agac retry do, and exits
-  1 while a run or retry of the workflow is in progress. It rewrites dispositions, stored rows,
-  the status file and the retry manifest, so a run in progress could undo it. A dry run still
-  reads past the lock.
-time: 2026-11-08T14:30:00Z

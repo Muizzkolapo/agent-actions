@@ -1,9 +1,0 @@
-kind: Under the Hood
-body: >-
-  The guard-skip and failed-check counts on the run line come from what one execution's
-  collections returned (CollectionStats.guard_skipped and checks_failed, gathered by a
-  counter the executor opens around the run or batch check), not from tallies kept on the
-  storage backend and taken twice. A path that skipped the completion take can no longer
-  leave a stale count, and StorageBackend loses five methods, including
-  guard_skips_collected, which only tests called.
-time: 2026-11-08T12:00:00Z
