@@ -424,7 +424,7 @@ properties:
 | `gemini` | Written into the prompt text online; `response_schema` in a batch | Sent as guidance |
 | `cohere` | `response_format` `json_object` with the schema; only field names in the prompt | [Cohere's structured-output docs](https://docs.cohere.com/docs/structured-outputs) list these keys as unsupported |
 | `ollama_cloud` | Written into the prompt text | Sent as guidance |
-| `agac-provider` (mock) | Read by the mock | Generated values stay inside `minimum`/`maximum` and `minLength`/`maxLength`, which win over the mock's field-name rules: a field named `email` with `minLength: 40` gets text, not an address. Inside an array's `items`, where `format` is kept, a known `format` wins over a length bound |
+| `agac-provider` (mock) | Read by the mock | Generated values stay inside `minimum`/`maximum` and `minLength`/`maxLength`, which win over the mock's field-name rules: a field named `email` with `minLength: 40` gets text, not an address. Inside an array's `items` or an object's `properties`, where `format` is kept, a known `format` wins over a length bound |
 
 Whatever the vendor, an LLM action's answer is checked after it arrives against the `minimum`, `maximum` and `enum` the schema file writes, not string length; an out-of-range value logs a schema validation warning. A [declared endpoint](../configuration/endpoints.md) also checks its reply against the schema it sent, so a value outside `minimum` or `maximum` fails the record.
 
