@@ -21,7 +21,7 @@ from rich.text import Text
 from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
-from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.processing.disposition_gate import (
     answered_by_repair,
@@ -39,6 +39,7 @@ from agent_actions.storage.backend import (
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.workflow.pipeline import _actions_below
@@ -154,7 +155,14 @@ class RetryCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
+        if self.args.dry_run:
+            self._retry(paths, project_root)
+            return
+        # Before the store is opened: a retry rewrites dispositions and runs the workflow.
+        with hold_run_lock(paths.io_dir, self.agent_name):
+            self._retry(paths, project_root)
 
+    def _retry(self, paths: ProjectPaths, project_root: Path | None) -> None:
         backend = get_storage_backend(
             workflow_path=str(paths.io_dir.parent),
             workflow_name=self.agent_name,
