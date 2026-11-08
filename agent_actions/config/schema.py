@@ -103,6 +103,8 @@ _RETIRED_CONFIG_KEYS: dict[str, str] = {
     "policy": "",
     "reduce_key": _FILE_GRANULARITY_REPLACES_REDUCE_KEY,
     "reprompt": _EXPECT_REPLACES_REPROMPT,
+    "skip_condition": "skip an action's records with a guard: condition plus on_false: skip",
+    "skip_if": "skip an action's records with a guard: condition plus on_false: skip",
     "version_mode": _VERSION_ORDER_HINT,
     "where_clause": "filter records with a guard: condition plus on_false: filter",
 }

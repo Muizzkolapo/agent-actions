@@ -562,7 +562,7 @@ fire_event(ActionCompleteEvent(
 
 #### ActionSkipEvent
 
-Emitted when an action is skipped, for example when its guard condition filters every record or its `skip_condition` is true.
+Emitted when an action is skipped, for example when its guard condition filters every record.
 
 ```python
 from agent_actions.logging.events import ActionSkipEvent
