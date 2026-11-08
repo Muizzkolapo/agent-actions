@@ -21,6 +21,7 @@ from agent_actions.logging.events import (
     ResultCollectionStartedEvent,
 )
 from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
+from agent_actions.processing.run_counts import add_collection
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
@@ -126,6 +127,9 @@ def _short_guid(source_guid: object) -> str:
     return text.split("-", 1)[0]
 
 
+_SUB_COUNTS = frozenset({"guard_skipped", "checks_failed"})
+
+
 @dataclass
 class CollectionStats:
     """Counts from result collection — returned alongside output records."""
@@ -144,6 +148,11 @@ class CollectionStats:
     # Why the failures failed, in encounter order. Not a count, so it is
     # excluded from the total below.
     causes: tuple[str, ...] = ()
+    # Sub-counts, not statuses, so also excluded from the total below: the rows a
+    # guard skipped (stored as unprocessed) and the records shipped with a failing
+    # verdict (stored as success).
+    guard_skipped: int = 0
+    checks_failed: int = 0
 
     @property
     def only_guard_outcomes(self) -> bool:
@@ -162,7 +171,9 @@ class CollectionStats:
         # import annotations` a field's type is the string "int", and matching
         # on it silently selects nothing.
         total: int = sum(
-            value for f in fields(self) if isinstance(value := getattr(self, f.name), int)
+            value
+            for f in fields(self)
+            if f.name not in _SUB_COUNTS and isinstance(value := getattr(self, f.name), int)
         )
         return total > 0 and (self.skipped + self.filtered) == total
 
@@ -1021,13 +1032,8 @@ def collect_results_from_processing_results(
 
     if storage_backend is not None:
         storage_backend.credit_rows_collected(action_name, len(output) - carried_rows)
-        if guard_skipped_count:
-            storage_backend.credit_guard_skips(action_name, guard_skipped_count)
-        checks_failed = len(failed_guids) + unidentified_failed
-        if checks_failed:
-            storage_backend.credit_checks_failed(action_name, checks_failed)
 
-    return output, CollectionStats(
+    collection = CollectionStats(
         causes=tuple(causes),
         success=stats["success"],
         failed=stats["failed"],
@@ -1038,7 +1044,11 @@ def collect_results_from_processing_results(
         unprocessed=stats["unprocessed"],
         carry_forward=stats["carry_forward"],
         carried_success=stats["carried_success"],
+        guard_skipped=guard_skipped_count,
+        checks_failed=len(failed_guids) + unidentified_failed,
     )
+    add_collection(collection)
+    return output, collection
 
 
 class ResultCollector:
