@@ -18,16 +18,9 @@ class TestStorageDefaults:
 
 
 class TestLockDefaults:
-    def test_simple_lock_timeout(self):
-        assert LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS == 5.0
-        assert isinstance(LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS, float)
-
     def test_atomic_lock_timeout(self):
         assert LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS == 10.0
         assert isinstance(LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS, float)
-
-    def test_atomic_greater_than_simple(self):
-        assert LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS > LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS
 
 
 class TestOllamaDefaults:

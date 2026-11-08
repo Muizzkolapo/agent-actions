@@ -29,11 +29,10 @@ base_url = os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
 
 ### LockDefaults
 
-File-lock timeouts are split: the simple (shared/read) timeout is shorter than the atomic (exclusive read-modify-write) timeout. Only the atomic timeout is read at run time, by the run tracker; no code reads the simple timeout.
+File locks use one timeout: the atomic (exclusive read-modify-write) timeout, read by the run tracker.
 
 | Constant | Type | Value | Description |
 |----------|------|-------|-------------|
-| `SIMPLE_LOCK_TIMEOUT_SECONDS` | float | `5.0` | Timeout for shared/read file locks |
 | `ATOMIC_LOCK_TIMEOUT_SECONDS` | float | `10.0` | Timeout for exclusive read-modify-write locks |
 
 ### OllamaDefaults

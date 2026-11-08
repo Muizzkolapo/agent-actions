@@ -12,7 +12,6 @@ class StorageDefaults:
 class LockDefaults:
     """Defaults for portalocker file-lock timeouts."""
 
-    SIMPLE_LOCK_TIMEOUT_SECONDS: float = 5.0
     ATOMIC_LOCK_TIMEOUT_SECONDS: float = 10.0
 
 
