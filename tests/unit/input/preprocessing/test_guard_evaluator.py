@@ -6,6 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+# Imported before any test patches scope_builder.build_field_context_with_history:
+# both bind that name at import, so a first import under the patch would keep the
+# mock for every later test in the process.
+import agent_actions.input.preprocessing.field_resolution.context_provider  # noqa: F401
+import agent_actions.prompt.service  # noqa: F401
 from agent_actions.input.preprocessing.filtering.evaluator import (
     GuardEvaluator,
     GuardResult,

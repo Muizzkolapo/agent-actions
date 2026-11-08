@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  tests/unit/input passes when run alone in file order. A guard evaluator test patched
+  build_field_context_with_history while prompt.service was first imported, so that module
+  kept the mock and later prompt builds read its fake source.
+time: 2026-11-08T14:00:00Z
