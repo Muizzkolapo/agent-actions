@@ -122,7 +122,7 @@ agac example install contract_reviewer my_project
 
 ## clean
 
-The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/`, a directory the framework does not write — on a project without one, a plain `clean` finds nothing to remove. Your staged input is untouched. Anything beyond that is opt-in.
+The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/`, a directory the framework does not write — on a project without one, a plain `clean` finds nothing to remove. Your staged input is untouched. Anything beyond that is opt-in. While a run or retry of the workflow is in progress, `clean` exits 1 with `Another run of workflow '<workflow>' is in progress` and removes nothing (see [Concurrent runs](./run.md#concurrent-runs)).
 
 ```bash
 agac clean -a <workflow-name> [options]

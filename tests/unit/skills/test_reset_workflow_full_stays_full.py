@@ -190,3 +190,38 @@ class TestTheHelperItself:
         base.mkdir(parents=True)
 
         assert script.release_batch_records(root, base, "wf") is True
+
+
+class TestARunInProgress:
+    """--full deletes the store a run is writing, and the run lock with it (1699)."""
+
+    @staticmethod
+    def _hold(base):
+        import portalocker
+
+        path = base / "store" / "wf.db.lock"
+        return portalocker.Lock(path, mode="a+", flags=portalocker.LOCK_EX | portalocker.LOCK_NB)
+
+    @pytest.mark.parametrize("framework", [True, False], ids=["framework", "plain-python"])
+    def test_a_full_reset_is_refused_while_a_run_holds_the_workflow(
+        self, script, project, monkeypatch, framework
+    ):
+        root, base = project
+        if not framework:
+            _import_failing_on(monkeypatch, lambda n: n.startswith("agent_actions"), ImportError)
+
+        with self._hold(base), pytest.raises(SystemExit) as refused:
+            _run_full(script, monkeypatch, root)
+
+        assert "Another run of workflow 'wf' is in progress" in str(refused.value)
+        assert (base / "store").exists()
+        assert (base / "target").exists()
+
+    def test_a_full_reset_runs_once_the_run_has_ended(self, script, project, monkeypatch):
+        root, base = project
+        with self._hold(base):
+            pass
+
+        _run_full(script, monkeypatch, root)
+
+        assert not (base / "store").exists()

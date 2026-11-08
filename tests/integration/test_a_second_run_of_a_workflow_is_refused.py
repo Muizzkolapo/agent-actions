@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import portalocker
+import pytest
 
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
@@ -218,3 +219,38 @@ def test_a_filter_dry_run_is_not_refused(tmp_path):
     output = _output(result)
     assert "in progress" not in output, output
     assert "Nothing was filtered" in output, output
+
+
+@pytest.mark.parametrize("flags", [[], ["--target"], ["--all"]], ids=["source", "target", "all"])
+def test_a_clean_is_refused_while_another_holds_the_workflow(tmp_path, flags):
+    """`clean` deletes what a run reads and writes, `--all` the lock file with it (1699)."""
+    root = _project(tmp_path)
+    first = _agac(root, "run", "-a", "one_run")
+    assert first.returncode == 0, _output(first)
+    io_dir = root / "agent_workflow" / "one_run" / "agent_io"
+    for sub in ("source", "target"):
+        (io_dir / sub / "echo").mkdir(parents=True, exist_ok=True)
+        (io_dir / sub / "echo" / "kept.json").write_text("[]")
+
+    with _held(root, "one_run"):
+        result = _agac(root, "clean", "-a", "one_run", "--force", *flags)
+
+    output = _output(result)
+    assert result.returncode == 1, output
+    assert "Another run of workflow 'one_run' is in progress (pid 48211)" in output, output
+    assert (io_dir / "store" / "one_run.db.lock").exists(), output
+    assert (io_dir / "staging" / "rows.json").exists(), output
+    assert (io_dir / "source" / "echo" / "kept.json").exists(), output
+    assert (io_dir / "target" / "echo" / "kept.json").exists(), output
+    assert len(_stored(root, "one_run")) == 1, output
+
+
+def test_a_clean_runs_once_no_run_holds_the_workflow(tmp_path):
+    root = _project(tmp_path)
+    first = _agac(root, "run", "-a", "one_run")
+    assert first.returncode == 0, _output(first)
+
+    result = _agac(root, "clean", "-a", "one_run", "--force", "--all")
+
+    assert result.returncode == 0, _output(result)
+    assert not (root / "agent_workflow" / "one_run" / "agent_io" / "store").exists()
