@@ -41,12 +41,16 @@ def _find_comparison_nodes(node: ASTNode) -> list[ComparisonNode]:
 
 
 def _check_bare_identifier_rhs(ast_root: ASTNode, clause: str, action_name: str) -> list[str]:
-    """Flag comparisons whose RHS is a bare identifier (usually an unquoted string)."""
+    """Flag comparisons whose RHS is a bare identifier (usually an unquoted string).
+
+    A dotted RHS is a field reference (``tag.score <= tag.limit``); the reference
+    checks refuse a misspelled one.
+    """
     from agent_actions.input.preprocessing.parsing.ast_nodes import FieldNode
 
     errors: list[str] = []
     for comparison in _find_comparison_nodes(ast_root):
-        if comparison.right is not None and isinstance(comparison.right, FieldNode):
+        if isinstance(comparison.right, FieldNode) and "." not in comparison.right.field_path:
             field = comparison.right.field_path
             left_repr = (
                 comparison.left.field_path if isinstance(comparison.left, FieldNode) else "..."

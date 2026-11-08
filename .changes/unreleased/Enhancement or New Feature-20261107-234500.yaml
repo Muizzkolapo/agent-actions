@@ -1,0 +1,10 @@
+kind: Enhancement or New Feature
+body: >-
+  A guard clause can compare two fields, such as `score_review.score >=
+  seed.thresholds.min_score` or `extract.score < extract.limit`. Preflight checks a
+  field on the right as it checks one on the left, so a misspelled action name, schema
+  field or seed key is refused on either side. A record that lacks a field
+  does not match, and `on_false` decides what happens to it; it no longer makes the guard
+  refuse every later record. An undotted name on the right, such as `status == approved`,
+  is still refused as an unquoted string.
+time: 2026-11-07T23:45:00Z
