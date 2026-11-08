@@ -26,7 +26,6 @@ def _bare_manager() -> ConfigManager:
 
 _REMOVED = [
     pytest.param("depends_on", ["producer"], id="depends_on"),
-    pytest.param("skip_if", "1 == 2", id="skip_if"),
 ]
 
 
@@ -92,15 +91,12 @@ class TestDefaultAgentConfigRefusesRemovedSpellings:
         """`default_agent_config:` lives in a different file from the workflow, so
         an error that does not name the surface sends the reader to the wrong one."""
         cm = _bare_manager()
-        cm.default_config = {"default_agent_config": {"depends_on": ["ghost"], "skip_if": "1 == 1"}}
+        cm.default_config = {"default_agent_config": {"depends_on": ["ghost"]}}
 
         with pytest.raises(ConfigurationError) as excinfo:
             cm.merge_agent_configs([{"agent_type": "consumer", "chunk_config": {}}])
 
-        assert excinfo.value.context["replacements"] == {
-            "depends_on": "dependencies",
-            "skip_if": "skip_condition",
-        }
+        assert excinfo.value.context["replacements"] == {"depends_on": "dependencies"}
         assert "default_agent_config" in str(excinfo.value)
 
     def test_canonical_spellings_in_project_block_still_accepted(self):
@@ -109,7 +105,6 @@ class TestDefaultAgentConfigRefusesRemovedSpellings:
         cm.default_config = {
             "default_agent_config": {
                 "dependencies": ["producer"],
-                "skip_condition": {"condition_type": "previous_outputs_empty"},
             }
         }
 
@@ -117,7 +112,6 @@ class TestDefaultAgentConfigRefusesRemovedSpellings:
 
         merged = cm.agent_configs["consumer"]
         assert merged.dependencies == ["producer"]
-        assert merged.skip_condition is not None
 
     def test_real_load_path_refuses_hoisted_spelling(self, tmp_path):
         """Through the whole path the issue reports: load_configs -> validate_agent_name

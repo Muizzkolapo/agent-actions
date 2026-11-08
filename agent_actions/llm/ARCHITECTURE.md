@@ -888,7 +888,8 @@ Config (YAML):                     Runtime:
 
 
 Providers that skip key resolution:
-  OllamaLocal  → api_key_env_name = "NO_KEY_REQUIRED", invoke() skips get_api_key
+  OllamaLocal  → api_key_env_name = None, invoke() skips get_api_key
+  llamafile    → RuntimeProfileClient.get_api_key() returns NO_KEY_PLACEHOLDER
   Tool/HITL    → not BaseClient subclasses, no get_api_key call
   AGAC (mock)  → overrides get_api_key() to return "agac-mock-key"
 

@@ -15,6 +15,7 @@ from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.error_handler import ErrorHandler
 from agent_actions.utils.error_wrap import as_validation_error
@@ -234,8 +235,8 @@ class ConfigRenderingService:
             "json_mode": action.get("json_mode", get_default("json_mode")),
         }
 
-        kind = action.get("kind")
-        if kind:
+        kind = routing_kind(action)
+        if action.get("kind") or kind != "llm":
             agent_entry["kind"] = kind
             if kind == "tool":
                 agent_entry["model_vendor"] = "tool"

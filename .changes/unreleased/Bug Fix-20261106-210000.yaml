@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  An action on a vendor that takes no key (`agac-provider`, `ollama_local`, `llamafile`) no
+  longer needs an `api_key` at any level. Expansion asked every LLM vendor for one, so
+  `agac inspect` and `agac run` refused such an action until a dummy key was written in, even
+  though preflight and the run never read it. Expansion and preflight now read one rule. When a
+  vendor that does take a key is missing one, the fix text names that vendor's own variable
+  (for example `${OPENAI_API_KEY}`) instead of always `${ANTHROPIC_API_KEY}`.
+time: 2026-11-06T21:00:00Z

@@ -1,0 +1,9 @@
+kind: Bug Fix
+body: >-
+  A schema field's `minimum`, `maximum`, `minLength` and `maxLength` now reach the provider. The
+  schema compiler copied a fixed list of keys that left them out, so no provider, real or mock,
+  was told a field's range, although the schema file accepted them and the docs showed them.
+  Two checks read the schema as it is sent and now hold these bounds too: a declared endpoint's
+  reply outside `minimum` or `maximum` fails its record, and a tool action's output that breaks
+  any of the four is refused, as one inside an array's `items` already was.
+time: 2026-11-07T10:30:00Z

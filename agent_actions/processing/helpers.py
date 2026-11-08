@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent_actions.utils.constants import MODEL_VENDOR_KEY, SCHEMA_KEY, VERDICT_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
@@ -91,8 +91,7 @@ def _choose_dispatched_schema(
 
     if schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is None:
         return agent_config, {}, None
-    vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
-    if vendor in {"tool", "hitl"}:
+    if agent_config.get("kind") in {"tool", "hitl"}:
         return agent_config, {}, None
 
     from pathlib import Path
@@ -120,7 +119,7 @@ def _choose_dispatched_schema(
 
 
 def _is_tool_action(agent_config: dict[str, Any]) -> bool:
-    return agent_config.get("kind") == "tool" or agent_config.get("model_vendor") == "tool"
+    return agent_config.get("kind") == "tool"
 
 
 def replaces_its_file_whole(agent_config: dict[str, Any]) -> bool:
@@ -130,10 +129,8 @@ def replaces_its_file_whole(agent_config: dict[str, Any]) -> bool:
     reaches any record of a file hands the tool all of them and replaces what the file
     held. A HITL action, though file granularity too, decides record by record.
     """
-    kind = str(agent_config.get("kind") or "").lower()
-    vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     granularity = str(agent_config.get("granularity") or "").lower()
-    return granularity == "file" and (kind == "tool" or vendor == "tool")
+    return granularity == "file" and agent_config.get("kind") == "tool"
 
 
 def bypasses_expectations(agent_config: dict[str, Any]) -> bool:
@@ -143,11 +140,8 @@ def bypasses_expectations(agent_config: dict[str, Any]) -> bool:
     compose an expectation service, so rules declared on them are inert. HITL is
     always file granularity.
     """
-    kind = str(agent_config.get("kind") or "").lower()
-    vendor = str(agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     granularity = str(agent_config.get("granularity") or "").lower()
-    synchronous = kind in ("tool", "hitl") or vendor in ("tool", "hitl")
-    return granularity == "file" and synchronous
+    return granularity == "file" and agent_config.get("kind") in ("tool", "hitl")
 
 
 def _reject_schema_echo_items(response: Any, agent_name: str) -> Any:
@@ -204,13 +198,8 @@ def _content_keys(record: Any) -> int:
 
 
 def _empty_warn_reason(action_config: Any, agent_name: str, source_guid: str | None) -> str:
-    """Reason text for the on_empty=warn branch; tool-aware for tool actions.
-
-    A tool action is identified by either `kind` or `model_vendor` being
-    ``"tool"`` (the same signal that routed and executed it as a tool), so the
-    reason names the empty tool output rather than blaming the LLM.
-    """
-    if action_config.get("kind") == "tool" or action_config.get("model_vendor") == "tool":
+    """Reason text for the on_empty=warn branch; it names a tool's empty output, not the LLM."""
+    if action_config.get("kind") == "tool":
         return f"Tool '{agent_name}' returned an empty list of records for input {source_guid}"
     return f"Empty LLM response for record '{source_guid}'"
 

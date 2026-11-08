@@ -56,6 +56,9 @@ class WorkflowCompleteEvent(BaseEvent):
     total_tokens: int = 0
     # Final actions (nothing reads them) that completed or were skipped holding no record.
     empty_final_actions: list[str] = field(default_factory=list)
+    # Records the workflow's actions hold that shipped a verdict whose overall_pass is
+    # false, read from the store: a batch workflow counts what earlier runs collected.
+    records_failed_checks: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -74,6 +77,7 @@ class WorkflowCompleteEvent(BaseEvent):
             "actions_failed": self.actions_failed,
             "total_tokens": self.total_tokens,
             "empty_final_actions": list(self.empty_final_actions),
+            "records_failed_checks": self.records_failed_checks,
         }
 
     @property
@@ -157,6 +161,8 @@ class ActionCompleteEvent(BaseEvent):
     kind: str = ""
     # Of record_count, the rows the guard skipped this execution.
     guard_skipped: int = 0
+    # Records this execution shipped carrying a verdict whose overall_pass is false.
+    checks_failed: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -179,6 +185,7 @@ class ActionCompleteEvent(BaseEvent):
             "model_name": self.model_name,
             "kind": self.kind,
             "guard_skipped": self.guard_skipped,
+            "checks_failed": self.checks_failed,
         }
 
     @property

@@ -3,6 +3,7 @@
 from agent_actions.config.types import RunMode
 from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
@@ -24,10 +25,9 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
         run_mode = RunMode(raw_run_mode) if isinstance(raw_run_mode, str) else raw_run_mode
 
         if run_mode == RunMode.BATCH:
-            kind = normalized_entry.get("kind", "").lower()
             model_vendor = str(normalized_entry.get("model_vendor", "")).lower()
             # The pipeline runs these online inside a batch run.
-            runs_online = kind in ONLINE_ONLY_VENDORS or model_vendor in ONLINE_ONLY_VENDORS
+            runs_online = routing_kind(normalized_entry) in ONLINE_ONLY_VENDORS
 
             if model_vendor and not runs_online:
                 # Imported here: the preflight module loads the client registry.

@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 # otherwise pass through silently instead of being refused.
 _REMOVED_AGENT_SPELLINGS = {
     "depends_on": "dependencies",
-    "skip_if": "skip_condition",
 }
 
 
@@ -406,9 +405,12 @@ class ConfigManager:
                 kind = routing_kind(agent)
                 name = agent.get("name") or agent.get("agent_type", "?")
                 validate_granularity_for_kind(kind, agent.get("granularity"), name)
+                agent = {**agent, "kind": kind}
+                if kind in {"tool", "hitl"}:
+                    agent["model_vendor"] = kind
                 # A HITL review sees the whole dataset in one step, as in the actions format.
                 if kind == "hitl" and agent.get("granularity") is None:
-                    agent = {**agent, "granularity": "file"}
+                    agent["granularity"] = "file"
                 agents.append(agent)
             return agents
 

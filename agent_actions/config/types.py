@@ -129,10 +129,9 @@ class ActionConfigDict(TypedDict, total=False):
     chunk_config: dict[str, Any]
     context_scope: ContextScopeDict
 
-    # Guard / skip
+    # Guard
     guard: GuardConfigDict
     conditional_clause: str
-    skip_condition: str
 
     # Optional features
     add_dispatch: bool

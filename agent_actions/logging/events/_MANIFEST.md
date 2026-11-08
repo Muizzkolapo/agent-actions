@@ -17,7 +17,7 @@ and provide formatter hooks for the CLI/tracing system.
 |------|------|-------------|---------|
 | `formatters.py` | Module | Formatters that render runtime events for CLI output. | `logging`, `cli` |
 | `types.py` | Module | Defines `EventCategories` and `_safe_value_repr`. No re-exports — consumers import from category modules directly. | `logging` |
-| `workflow_events.py` | Module | Workflow lifecycle (W), step lifecycle (W004/W005) and action execution (A) events. 10 classes. `ActionCompleteEvent.guard_skipped` (data key `guard_skipped`) is the part of `record_count` the action's guard skipped this execution. | `logging` |
+| `workflow_events.py` | Module | Workflow lifecycle (W), step lifecycle (W004/W005) and action execution (A) events. 10 classes. `ActionCompleteEvent.guard_skipped` (data key `guard_skipped`) is the part of `record_count` the action's guard skipped this execution. `ActionCompleteEvent.checks_failed` is the records the execution shipped with a failing verdict; `WorkflowCompleteEvent.records_failed_checks` is the records the workflow's actions hold that failed their checks, read from the store. | `logging` |
 | `batch_events.py` | Module | Batch processing events (B prefix). 9 classes. | `logging` |
 | `llm_events.py` | Module | LLM interaction (L) and template rendering (T) events. 6 classes. | `logging` |
 | `validation_events.py` | Module | Validation (V), data parsing (D), guard (G), and recovery (R) events. 9 classes. | `logging` |

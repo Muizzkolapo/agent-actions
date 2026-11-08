@@ -28,7 +28,7 @@ and chunking/lineage support).
 | `normalize_context_scope()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `normalize_all_agent_configs()` | `agent_config/{workflow}.yml` | Transforms | `context_scope` |
 | `process_initial_stage()` | `agent_io/staging/` | Reads | `run_mode`, `record_limit`, `chunk_config`, `data_source` (`file_type`) |
-| `validate_source_reads_below()` | `agent_io/staging/`, `agent_config/{workflow}.yml`, `prompt_store/{workflow}.md` | Validates | `context_scope.observe`, `context_scope.passthrough`, `prompt`, `guard`, `dependencies` |
+| `validate_staged_source_reads()` | `agent_io/staging/`, `agent_config/{workflow}.yml`, `prompt_store/{workflow}.md` | Validates | `context_scope.observe`, `context_scope.passthrough`, `prompt`, `guard`, `dependencies` |
 | `GuardFilter.filter_item()` | `agent_config/{workflow}.yml` | Reads | `guard.where` |
 | `GuardEvaluator.evaluate()` | `agent_config/{workflow}.yml` | Reads | `guard` |
 

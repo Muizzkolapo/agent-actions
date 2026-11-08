@@ -32,6 +32,13 @@ _REGISTRY: dict[str, ExpectationType] = {}
 # framework's argument rather than any one check's.
 _UNIVERSAL_PARAMS = frozenset({"row_condition"})
 
+# A row_condition is a guard condition, so it is a string under any type,
+# including a project-defined one that declares no types of its own.
+_UNIVERSAL_PARAM_TYPES: Mapping[str, ParamKind] = {"row_condition": "string"}
+
+# List parameters whose items name fields, so the literal-value note is wrong for them.
+_FIELD_REFERENCE_PARAMS = frozenset({("llm_judge", "context")})
+
 
 @dataclass(frozen=True)
 class ExpectationType:
@@ -53,6 +60,7 @@ class ExpectationType:
         # Unioned here rather than at each registration site so no path can
         # register a type that silently rejects the universal arguments.
         object.__setattr__(self, "params", self.params | _UNIVERSAL_PARAMS)
+        object.__setattr__(self, "param_types", {**self.param_types, **_UNIVERSAL_PARAM_TYPES})
 
 
 def register(
@@ -101,8 +109,8 @@ def param_type_defects(etype: ExpectationType, params: Mapping[str, Any]) -> lis
     """Each supplied parameter whose value is not the type its check declares.
 
     A null optional parameter is left to its check, as YAML writes an omitted value
-    that way. A type that declares no parameter types, as a project-defined one
-    does, is not checked.
+    that way. A project-defined type declares no types for its own parameters, so
+    only its ``row_condition`` is checked.
     """
     defects: list[str] = []
     for name, kind in etype.param_types.items():
@@ -117,7 +125,11 @@ def param_type_defects(etype: ExpectationType, params: Mapping[str, Any]) -> lis
             f"type '{etype.name}' takes parameter '{name}' as {_KIND_WORDS[kind]}, "
             f"got {type(value).__name__} {value!r}"
         )
-        if kind == "list" and isinstance(value, str):
+        if (
+            kind == "list"
+            and isinstance(value, str)
+            and (etype.name, name) not in _FIELD_REFERENCE_PARAMS
+        ):
             message += "; params hold literal values, so a field name here is not read"
         defects.append(message)
     return defects
@@ -354,6 +366,7 @@ _REGISTRY["llm_judge"] = ExpectationType(
     frozenset({"rule", "model", "votes", "context"}),
     frozenset({"rule"}),
     _llm_judge_unreachable,
+    param_types={"rule": "string", "model": "string", "votes": "number", "context": "list"},
 )
 
 _REGISTRY["expression"] = ExpectationType(
@@ -362,4 +375,5 @@ _REGISTRY["expression"] = ExpectationType(
     frozenset({"condition"}),
     _expression_unreachable,
     "record",
+    {"condition": "string"},
 )

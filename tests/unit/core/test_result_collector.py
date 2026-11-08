@@ -765,8 +765,8 @@ class TestCollectionStatsOnlyGuardOutcomes:
             pytest.param(CollectionStats(filtered=5), True, id="all-filtered"),
             pytest.param(CollectionStats(skipped=3), True, id="all-skipped"),
             pytest.param(CollectionStats(filtered=2, skipped=3), True, id="filtered-and-skipped"),
-            # All-zero stats: 0 == 0 → True (preserves existing behavior).
-            pytest.param(CollectionStats(), True, id="all-zeros"),
+            # Nothing collected: no guard acted.
+            pytest.param(CollectionStats(), False, id="all-zeros"),
             pytest.param(CollectionStats(unprocessed=5), False, id="unprocessed-blocks"),
             pytest.param(CollectionStats(success=1), False, id="success-blocks"),
             pytest.param(CollectionStats(failed=1), False, id="failed-blocks"),
@@ -784,6 +784,9 @@ class TestCollectionStatsOnlyGuardOutcomes:
     )
     def test_only_guard_outcomes(self, stats, expected):
         assert stats.only_guard_outcomes is expected
+
+    def test_nothing_collected_is_not_a_guard_outcome(self):
+        assert CollectionStats().only_guard_outcomes is False
 
 
 # ---------------------------------------------------------------------------
@@ -807,6 +810,12 @@ class TestTerminalFailure:
         backend.set_disposition.assert_called_once()
         call_args = backend.set_disposition.call_args
         assert call_args[0][2] == "skipped"
+
+    def test_nothing_collected_writes_no_guard_filtered_row(self):
+        """Records came in, none was collected: no guard acted, so nothing is marked filtered."""
+        backend = MagicMock()
+        assert CollectionStats().terminal_failure("act", [1, 2], [], backend) is None
+        backend.set_disposition.assert_not_called()
 
     def test_guard_only_with_output_does_not_write(self):
         """Guard outcomes but output exists (passthrough) → no disposition, no raise."""

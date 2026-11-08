@@ -83,7 +83,9 @@ A free-form canonical reason string giving the specific cause (see
 `agent_actions/record/reasons.py`). Common values include `success`, `guard_filter`,
 `guard_skip`, `guard_prefilter_skip`, `upstream_unprocessed`, `tool_missing_record`,
 `prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`,
-`expectations_exhausted`, `consumed_into_output`, `consumed_into_another_record` (an
+`expectations_exhausted`, `expectations_failed` (a `success` record that shipped with a
+failing [expectations](../validation/expectations.md) verdict under `on_exhausted: return_last`
+or `repair: none`; still a success, so nothing below is blocked), `consumed_into_output`, `consumed_into_another_record` (an
 `unprocessed` record at a fan-in that one branch's `granularity: File` tool folded into another
 record's row), and `batch_not_returned` (a `failed`
 record a batch provider left out of its results, which no retry will send again).

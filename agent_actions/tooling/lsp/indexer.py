@@ -11,6 +11,8 @@ from ruamel.yaml import YAML
 from agent_actions.config.path_config import get_tool_dirs, load_project_config
 from agent_actions.config.schema import version_variant_names
 from agent_actions.errors import ConfigValidationError
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.file_utils import load_structured_file, read_python_source
 from agent_actions.utils.path_utils import resolve_relative_to
@@ -313,7 +315,7 @@ def _index_workflow_lines(
 
         # Schema reference
         schema_match = re.search(r"schema:\s*(\w+)", line)
-        if schema_match:
+        if schema_match and not _dispatches_schema(line[schema_match.start(1) :]):
             current_action.schema_ref = schema_match.group(1)
             _add_reference(
                 index,
@@ -553,6 +555,11 @@ def _populate_versions_summary(action_meta: ActionMetadata, action_data: dict) -
         action_meta.versions_summary = "; ".join(summaries)
 
 
+def _dispatches_schema(value: str) -> bool:
+    """Whether a ``schema:`` line's value is a dispatch call, which names no schema file."""
+    return schema_dispatch_function(value.split(" #", 1)[0].strip()) is not None
+
+
 def _unquoted(raw: str) -> tuple[str, int]:
     """Strip YAML's surrounding quotes, returning the value and how far the start moved."""
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
@@ -614,7 +621,7 @@ def _populate_from_parsed(
     # The one shape that inverts namespacing. Same three conditions the framework's own
     # validate_version_merge_output_namespaces uses, so the two cannot drift.
     granularity = str(action_data.get("granularity") or "").lower()
-    is_tool = action_data.get("kind") == "tool" or action_data.get("model_vendor") == "tool"
+    is_tool = routing_kind(action_data) == "tool"
     action_meta.spreads_output_flat = bool(
         granularity == "file" and is_tool and action_data.get("version_consumption")
     )

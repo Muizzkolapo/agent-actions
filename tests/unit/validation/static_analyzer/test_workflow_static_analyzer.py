@@ -187,8 +187,8 @@ class TestWorkflowStaticAnalyzer:
 
         assert schemas["review"]["kind"] == "hitl"
 
-    def test_kind_precedence_tool_over_hitl(self):
-        """Test classification precedence: tool > hitl > llm."""
+    def test_kind_precedence_matches_the_loader(self):
+        """Classified by routing_kind, as the expander classifies it: hitl > tool > llm."""
         workflow_config = {
             "actions": [
                 {
@@ -202,8 +202,7 @@ class TestWorkflowStaticAnalyzer:
         analyzer = WorkflowStaticAnalyzer(workflow_config)
         schemas = analyzer.get_action_schemas()
 
-        # tool check comes first, so model_vendor="tool" wins
-        assert schemas["ambiguous"]["kind"] == "tool"
+        assert schemas["ambiguous"]["kind"] == "hitl"
 
 
 class TestAnalyzeWorkflowFunction:

@@ -44,8 +44,7 @@ def runs_in_batch(action_config: Mapping[str, Any]) -> bool:
     if action_config.get("run_mode") != RunMode.BATCH:
         return False
     kind = getattr(action_config.get("kind"), "value", action_config.get("kind"))
-    vendor = getattr(action_config.get("model_vendor"), "value", action_config.get("model_vendor"))
-    return not ({str(kind or "").lower(), str(vendor or "").lower()} & ONLINE_ONLY_VENDORS)
+    return kind not in ONLINE_ONLY_VENDORS
 
 
 def effective_run_mode(action_config: Mapping[str, Any]) -> RunMode:
@@ -81,7 +80,9 @@ class BaseVendorConfig(BaseModel):
     """Base configuration for all LLM vendors."""
 
     vendor_type: VendorType = Field(..., description="Type of LLM vendor")
-    api_key_env_name: str = Field(..., description="Environment variable name for API key")
+    api_key_env_name: str | None = Field(
+        ..., description="Environment variable the API key is read from; None when it takes none"
+    )
     model_name: str = Field(..., description="Model name to use")
     default_timeout: int = Field(default=60, ge=1, description="Default request timeout in seconds")
     json_mode: bool = Field(default=True, description="Enable JSON mode by default")
@@ -151,7 +152,7 @@ class OllamaLocalConfig(BaseVendorConfig):
     """
 
     vendor_type: Literal[VendorType.OLLAMA_LOCAL] = VendorType.OLLAMA_LOCAL
-    api_key_env_name: str = "NO_KEY_REQUIRED"
+    api_key_env_name: None = None
     base_url: str = Field(default=OllamaDefaults.BASE_URL, description="Ollama local server URL")
 
 
@@ -169,27 +170,19 @@ class OllamaCloudConfig(BaseVendorConfig):
 
 
 class ToolVendorConfig(BaseVendorConfig):
-    """Configuration for tool-based vendors (non-LLM).
-
-    Tool actions run local Python functions, so api_key_env_name is a
-    no-op placeholder required by the base class.
-    """
+    """Configuration for tool-based vendors (non-LLM); a tool runs local Python and takes no key."""
 
     vendor_type: Literal[VendorType.TOOL] = VendorType.TOOL
-    api_key_env_name: str = "TOOL_NO_KEY_REQUIRED"
+    api_key_env_name: None = None
     model_name: str = "tool"
     json_mode: bool = False
 
 
 class HitlVendorConfig(BaseVendorConfig):
-    """Configuration for HITL workflow vendor (non-LLM).
-
-    HITL actions do not call external APIs, so api_key_env_name is a
-    no-op placeholder required by the base class.
-    """
+    """Configuration for HITL workflow vendor (non-LLM); it calls no external API and takes no key."""
 
     vendor_type: Literal[VendorType.HITL] = VendorType.HITL
-    api_key_env_name: str = "HITL_NO_KEY_REQUIRED"
+    api_key_env_name: None = None
     model_name: str = "hitl"
     json_mode: bool = True
 
@@ -198,7 +191,7 @@ class AgacProviderConfig(BaseVendorConfig):
     """Configuration for Agac mock provider (testing/development)."""
 
     vendor_type: Literal[VendorType.AGAC_PROVIDER] = VendorType.AGAC_PROVIDER
-    api_key_env_name: str = "AGAC_NO_KEY_REQUIRED"
+    api_key_env_name: None = None
     json_mode: bool = True
 
 
@@ -214,6 +207,38 @@ VendorConfig = (
     | HitlVendorConfig
     | AgacProviderConfig
 )
+
+VENDOR_CONFIGS: dict[str, type[BaseVendorConfig]] = {
+    VendorType.OPENAI.value: OpenAIConfig,
+    VendorType.ANTHROPIC.value: AnthropicConfig,
+    VendorType.GEMINI.value: GeminiConfig,
+    VendorType.GROQ.value: GroqConfig,
+    VendorType.COHERE.value: CohereConfig,
+    VendorType.OLLAMA_LOCAL.value: OllamaLocalConfig,
+    VendorType.OLLAMA_CLOUD.value: OllamaCloudConfig,
+    VendorType.TOOL.value: ToolVendorConfig,
+    VendorType.HITL.value: HitlVendorConfig,
+    VendorType.AGAC_PROVIDER.value: AgacProviderConfig,
+}
+
+
+def api_key_env_var(vendor: str) -> str | None:
+    """The variable a vendor's key is read from by default; None if it takes none or is unknown."""
+    config = VENDOR_CONFIGS.get(canonical_vendor(vendor.lower()))
+    return config.model_fields["api_key_env_name"].default if config else None
+
+
+def vendor_needs_api_key(vendor: str) -> bool:
+    """Whether an action on *vendor* must name an api_key; an unknown vendor is assumed to."""
+    from agent_actions.llm.config.endpoints import project_endpoint
+
+    name = canonical_vendor(vendor.lower())
+    profile = RUNTIME_PROFILES.get(name)
+    if profile is not None:
+        return profile.api_key_required
+    if project_endpoint(name) is not None:
+        return False
+    return name not in VENDOR_CONFIGS or api_key_env_var(name) is not None
 
 
 __all__ = [
@@ -232,4 +257,7 @@ __all__ = [
     "HitlVendorConfig",
     "AgacProviderConfig",
     "VendorConfig",
+    "VENDOR_CONFIGS",
+    "api_key_env_var",
+    "vendor_needs_api_key",
 ]

@@ -244,3 +244,19 @@ class TestStorageStats:
         stats = backend.get_storage_stats()
         assert stats["trace_count"] == 3
         assert stats["trace_stats"] == {"act1": 2, "act2": 1}
+
+
+def test_a_response_can_be_attached_to_an_earlier_attempt(tmp_path):
+    from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+    backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
+    backend.initialize()
+    for attempt in (0, 1):
+        backend.write_prompt_trace("act", "r1", f"prompt {attempt}", attempt=attempt)
+
+    backend.update_prompt_trace_response("act", "r1", "answer", attempt=0)
+    backend.update_prompt_trace_response("act", "r1", "newest")
+
+    rows = {row["attempt"]: row["response_text"] for row in backend.get_prompt_traces("act")}
+    assert rows == {0: "answer", 1: "newest"}
+    backend.close()
