@@ -252,6 +252,21 @@ keep the `deferred` mark they were submitted with, and the next run settles them
 The default concurrency limit is 5 actions. If your agentic workflow has many parallel actions and you're hitting rate limits, consider reducing this. If you have capacity, increase it up to 50.
 :::
 
+## Concurrent runs
+
+A run holds a lock on `agent_io/store/<workflow>.db.lock` until it exits. A second
+`agac run` or `agac retry` of the same workflow exits 1 before it loads anything:
+
+```
+Problem: RunInProgressError: Another run of workflow 'ql_trace_probe' is in progress (pid 48211). Wait for it to finish or stop it, then run again.
+```
+
+Runs of different workflows do not block each other. Read-only commands (`inspect`,
+`records`, `status`, `traces`, `preview`, `dispositions`, `retry --dry-run`) never take the
+lock. The operating system releases the lock when the run exits or is killed, so no lock is
+left behind. A run that submits a batch job exits, so the next run can collect it.
+`agac clean --all` deletes the store folder, lock file included; do not run it during a run.
+
 ## See Also
 
 - **[Tool Actions](../tools/)** - Creating custom tools with `@udf_tool`

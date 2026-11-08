@@ -163,6 +163,10 @@ def test_the_refusal_names_where_grouping_is_still_reachable(surface, tmp_path):
     )
 
 
+def _databases(project: Path) -> list[Path]:
+    return sorted((project / "agent_workflow" / WORKFLOW / "agent_io" / "store").glob("*.db"))
+
+
 @pytest.mark.parametrize("surface", ["action", "project"])
 def test_nothing_is_processed_before_the_refusal(surface, tmp_path):
     """The bug was a run that reported success: three records through the joining
@@ -172,9 +176,8 @@ def test_nothing_is_processed_before_the_refusal(surface, tmp_path):
     _, output = _run(project)
 
     assert "completed" not in output, f"the run processed records it should refuse: {output}"
-    assert not (project / "agent_workflow" / WORKFLOW / "agent_io" / "store").exists(), (
-        "the refusal landed after the store was written"
-    )
+    # The run lock sits in store/ from the start; the database is what a run writes.
+    assert not _databases(project), "the refusal landed after the store was written"
 
 
 def test_the_same_workflow_without_the_key_still_runs(tmp_path):
@@ -183,9 +186,11 @@ def test_the_same_workflow_without_the_key_still_runs(tmp_path):
     Without the key the fan-in is the shape it always was — one call per input record,
     both branches in its context — and that is what the key failed to change.
     """
-    code, output = _run(_project(tmp_path, surface="none"))
+    project = _project(tmp_path, surface="none")
+    code, output = _run(project)
 
     assert code == 0, output
+    assert _databases(project), output
     assert f"✓ {JOINED}" in output, output
     # Named, not a bare "3 records": the branches report that too, so an unnamed count
     # passes while the joining action regressed to one execution — the bug's own shape.

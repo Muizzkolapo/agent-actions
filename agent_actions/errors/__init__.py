@@ -88,6 +88,7 @@ from agent_actions.errors.processing import (
 from agent_actions.errors.resources import (
     DependencyError,
     ResourceError,
+    RunInProgressError,
 )
 
 # Validation errors
@@ -160,6 +161,7 @@ __all__ = [
     # Resources
     "ResourceError",
     "DependencyError",
+    "RunInProgressError",
     # Operations
     "OperationalError",
     "AgentExecutionError",

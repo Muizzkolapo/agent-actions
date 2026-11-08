@@ -13,8 +13,9 @@ import click
 from agent_actions.cli.args import RunCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.workflow_loader import load_workflow
-from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
+from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
 
@@ -67,6 +68,12 @@ class RunCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
         )
+        # Before anything loads, clears or submits: `--fresh` clears the store inside
+        # load_workflow, so a later lock would wipe a run in progress before refusing.
+        with hold_run_lock(paths.io_dir, self.agent_name):
+            return self._run_holding_the_lock(paths, project_root)
+
+    def _run_holding_the_lock(self, paths: ProjectPaths, project_root: Path | None) -> str:
         PromptValidator().validate(paths.prompt_dir, config={"workflow_name": self.agent_name})
         workflow = load_workflow(
             self.agent_name,

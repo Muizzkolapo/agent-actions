@@ -13,3 +13,7 @@ class DependencyError(ResourceError):
     """Raised when a required dependency is not provided or cannot be loaded."""
 
     pass
+
+
+class RunInProgressError(ResourceError):
+    """Raised when another process holds the workflow's run lock."""

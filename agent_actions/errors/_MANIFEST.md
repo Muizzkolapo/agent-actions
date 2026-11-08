@@ -67,6 +67,7 @@
 | `resources.py` | Module | Resource-related errors (memory, dependencies, etc). | `errors` |
 | `ResourceError` | Class | Base exception for resource-related errors. | - |
 | `DependencyError` | Class | Raised when a required dependency is not provided or cannot be loaded. | - |
+| `RunInProgressError` | Class | Raised by `storage.run_lock.hold_run_lock` when another process holds the workflow's run lock: a second `agac run` or `agac retry` of the workflow. | - |
 | `validation.py` | Module | Validation-related errors. | `errors` |
 | `ValidationError` | Class | Base exception for validation failures. | - |
 | `PromptValidationError` | Class | Raised when prompt validation fails. | - |
