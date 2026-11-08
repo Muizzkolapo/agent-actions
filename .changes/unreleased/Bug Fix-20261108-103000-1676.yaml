@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  The editor no longer flags a valid schema: dispatch_task('fn') as an unresolved schema.
+  The LSP indexer tells a dispatch call from a schema file name with
+  schema_dispatch_function, the test agac inspect and agac run use.
+time: 2026-11-08T10:30:00Z
