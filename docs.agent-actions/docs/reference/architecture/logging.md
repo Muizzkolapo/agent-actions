@@ -170,6 +170,20 @@ there are none:
   ✓ repaired  4 records in 0.2s (agac-provider/mock) — 1 skipped by guard
 ```
 
+An action that shipped records with a failing [expectations](../validation/expectations.md) verdict
+(`on_exhausted: return_last`, `repair: none`) turns `⚠` (`WARN` without color) and says how
+many; the workflow line counts every such record the workflow's actions hold, read from the
+store, so a batch workflow finishing over several runs counts what the earlier runs
+collected. It turns `⚠` too, unless an action failed, which keeps `✗`. The exit code does not change: gate CI on verdicts with `agac expect report --fail-under`.
+
+```
+  ⚠ observed  4 records in 0.1s (agac-provider/mock) — 4 failed their checks
+  ⚠ repaired  4 records in 0.1s (agac-provider/mock) — 1 skipped by guard, 3 failed their checks
+  ✓ warned  4 records in 0.1s (agac-provider/mock)
+
+⚠ 0.1s — 3 completed, 7 records failed their checks
+```
+
 A batch action's duration is marked `(batch)` so provider
 queue time does not read as local work.
 

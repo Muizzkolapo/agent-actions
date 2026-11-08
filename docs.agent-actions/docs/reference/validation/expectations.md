@@ -9,7 +9,7 @@ Schema validation catches structural problems — missing fields, wrong types. I
 
 `expect:` adds a validation layer on top of schema and guards: deterministic checks (length, forbidden phrases, allowed values, regex) plus LLM-judged checks (`llm_judge`) that ask a model whether a value satisfies an arbitrary natural-language rule, optionally grounded against other actions' output.
 
-How much authority those results carry is up to you. Under `repair: none` they are pure reporting — the verdict rides along on the record and blocks nothing, so pair it with a [guard](../execution/guards.md) if you want it to gate anything. Under a repair policy the same rules drive [regeneration](#repairing-instead-of-observing), and can tombstone a record or halt the run outright.
+How much authority those results carry is up to you. Under `repair: none` they are pure reporting — the verdict rides along on the record and blocks nothing, so pair it with a [guard](../execution/guards.md) if you want it to gate anything. The run still says how many records failed: the action's line turns `⚠` and ends `— N failed their checks`, and [`agac dispositions`](../cli/dispositions.md) counts them under **Failed checks**. Under a repair policy the same rules drive [regeneration](#repairing-instead-of-observing), and can tombstone a record or halt the run outright.
 
 ## Quick example
 
@@ -310,7 +310,7 @@ Handing over the payload is what separates this from `retry`: an authored prompt
 
 | `on_exhausted` | What ships |
 |---|---|
-| `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
+| `return_last` (default) | The last attempt, with its failing verdict attached, so a downstream guard can filter on it. It is stored `success` with reason `expectations_failed`: not cascade-blocked, not re-run by `agac retry`, and the action still ends `completed`. The run line says so (`⚠ summarize  4 records in 0.1s — 3 failed their checks`), and so does `agac dispositions` (**Failed checks**). If that last attempt is not a record at all (every iteration failed structurally), there is nothing to annotate and it becomes a tombstone instead |
 | `fail` | An `expectations_exhausted` tombstone carrying the failed rule ids and the iteration count. The record is stored `exhausted`, online and under batch alike, and the action ends `completed_with_failures` (`failed` when no record succeeds); `agac retry` runs it again |
 | `raise` | Nothing — the run halts with an error naming the action and the still-failing rules. The halt is recorded, online and under batch alike: the next `agac run` refuses the action without calling the model, and [`agac retry`](../cli/retry.md#a-retry-resumes-a-halted-action-in-full) resumes it. Under batch the records it stopped at are stored `exhausted`, not as answers |
 
@@ -601,6 +601,5 @@ Prefer the tiers in this order: a built-in type (zero code), an `expression` con
 - **Record granularity only for repair.** One file-granularity call produces the whole file, so a single failing record would regenerate all of them; preflight refuses `repair` on a `granularity: file` action. Observe mode works there — a response holding many records has each one validated and annotated independently, the same as an action whose LLM returns a JSON array.
 - **Tool actions cannot repair.** Re-running a deterministic UDF yields the same output, so `repair` on a `kind: tool` action is refused at preflight. Observe mode works at record granularity.
 - **A tool or HITL action at file granularity never runs its rules.** Those actions are processed by a strategy that does not evaluate expectations, and preflight does not refuse the combination, so an `expect:` block on one is silently inert. `kind: hitl` is always file granularity, so this is true of every HITL action. [`agac expect list`](../cli/expect.md#rules-that-will-not-run) marks such an action rather than implying its rules run.
-- **The prompt trace shows the original prompt.** A record repaired on iteration 2 or later has a stored trace pairing the *first* prompt with the *final* response, and that response carries the attached verdict.
 - **`context:` refs are single-level.** `action.field` only — no nested paths into a wildcard element (`action.items[*].text` is not valid inside a `context:` ref).
 - **Budget is per run, not persisted.** `judge_budget` resets each time the workflow runs; it does not track spend across separate `agac run` invocations.

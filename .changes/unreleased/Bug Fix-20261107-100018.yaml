@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A record shipped with a failing expectations verdict no longer reads as a clean success. Under `on_exhausted: return_last` or `repair: none` such a record is still stored as a success, so nothing below is blocked and `agac retry` does not re-run it, but its disposition now carries the reason `expectations_failed`. The action line turns ⚠ and says `— N failed their checks`, the workflow line totals them (`⚠ 0.1s — 3 completed, 7 records failed their checks`), and `agac dispositions` counts them in a `Failed checks` column. The exit code is unchanged.'
+time: 2026-11-07T10:00:18.152983Z
