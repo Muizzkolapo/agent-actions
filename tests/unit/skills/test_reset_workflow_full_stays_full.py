@@ -79,7 +79,8 @@ class TestWithoutTheFramework:
 
         _run_full(script, monkeypatch, root)
 
-        assert not (base / "store").exists()
+        # Only the run lock file stays, held through the wipe.
+        assert [p.name for p in (base / "store").iterdir()] == ["wf.db.lock"]
         assert "warning" not in capsys.readouterr().err
 
     def test_a_record_that_would_be_stranded_keeps_the_store(
@@ -224,4 +225,4 @@ class TestARunInProgress:
 
         _run_full(script, monkeypatch, root)
 
-        assert not (base / "store").exists()
+        assert [p.name for p in (base / "store").iterdir()] == ["wf.db.lock"]

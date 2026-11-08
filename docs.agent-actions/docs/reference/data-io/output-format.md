@@ -229,7 +229,7 @@ Remove previous outputs before a fresh run:
 agac run -a my_workflow --fresh
 ```
 
-`--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`) without deleting the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the store, and asks for confirmation unless `--force` is set.
+`--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`) without deleting the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the database in the store, and asks for confirmation unless `--force` is set. The store folder stays, holding only the empty run lock file `<workflow>.db.lock`.
 
 ## See Also
 

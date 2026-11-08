@@ -389,8 +389,10 @@ agac preview -w {workflow} --stats                  # storage stats
 # Soft reset: clears agent_status so next run starts from scratch (keeps DB)
 python3 scripts/reset_workflow.py {workflow}
 
-# Full reset: wipes source, store, target and status, and reclaims what a provider
-# recorded locally about this workflow's batches (the store is what names them)
+# Full reset: wipes source, target, status and the store (all but its run lock file),
+# and reclaims what a provider recorded locally about this workflow's batches (the
+# store is what names them). It exits while a run of the workflow is in progress
+# (with a plain python3 on Windows it cannot check, and only warns).
 python3 scripts/reset_workflow.py {workflow} --full
 ```
 

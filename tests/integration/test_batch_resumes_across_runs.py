@@ -305,14 +305,15 @@ class TestTheRecordHasAnEndOfLife:
 
     def test_clean_all_leaves_no_store_behind_when_there_was_none(self, project):
         """Reading the registry opens the store, and the list of directories to
-        remove was settled before that — so a store made here is never cleaned."""
+        remove was settled before that — so a database made here is never cleaned.
+        The run lock file `clean` holds is the one thing it leaves."""
         store = project / "agent_workflow" / WORKFLOW / "agent_io" / "store"
         assert not store.exists(), "the fixture already has a store"
 
         cleaned = run_agac(project, "clean", "-a", WORKFLOW, "--all", "-f")
         assert cleaned.returncode == 0, cleaned.stdout + cleaned.stderr
 
-        assert not store.exists()
+        assert [p.name for p in store.iterdir()] == [f"{WORKFLOW}.db.lock"]
 
     def test_asking_where_records_live_creates_nothing(self, scoped_to):
         """A project that never submitted a batch must not gain a `.agac/` for
