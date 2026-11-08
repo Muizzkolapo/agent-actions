@@ -48,7 +48,7 @@ Each trace prints as:
 <the response, or (none) if it has not arrived>
 ```
 
-A record that [`expect:`](../validation/expectations.md) repaired online has one trace per attempt: attempt 0 is the first prompt, and each attempt after it is the prompt that call was sent, beside the response it drew. After a failed rule, under `repair: auto` that prompt has the previous response and the failed rules appended; under `repair: retry` it is the original prompt again; under a `prompt:` of your own it is your template. After a schema failure it follows `structural:`, which by default re-sends the original prompt. The response that shipped, with its verdict, is on the attempt that drew it: the last one, or the one before it when a repair call failed.
+A record that [`expect:`](../validation/expectations.md) repaired has one trace per attempt, online and in batch: attempt 0 is the first prompt, and each attempt after it is the prompt that call was sent, beside the response it drew. After a failed rule, under `repair: auto` that prompt has the previous response and the failed rules appended; under `repair: retry` it is the original prompt again; under a `prompt:` of your own it is your template. After a schema failure it follows `structural:`, which by default re-sends the original prompt. The response that shipped, with its verdict, is on the attempt that drew it: the last one, or the one before it when a repair call failed. In a batch run, each repair round writes the prompt that round sent, and the last attempt holds the response that shipped.
 
 ## Errors
 

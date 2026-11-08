@@ -277,7 +277,7 @@ def _check_and_prepare(
 
     from agent_actions.input.preprocessing.staging.field_validation import (
         validate_seed_selectors,
-        validate_source_reads_below,
+        validate_staged_source_reads,
         validate_staging_field_names,
     )
 
@@ -332,11 +332,11 @@ def _check_and_prepare(
         action_configs=ctx.action_configs,
         workflow_metadata=ctx.workflow_metadata,
     )
-    validate_source_reads_below(
+    validate_staged_source_reads(
         records=data_chunk,
         file_path=ctx.file_path,
         first_action=ctx.agent_name,
-        action_configs=ctx.action_configs or {},
+        action_configs={**(ctx.action_configs or {}), ctx.agent_name: ctx.agent_config},
         conclusive=lambda: _rows_hold_every_staged_source(ctx, file_type),
         hint=_text_chunk_hint(file_type),
         warn=warn,

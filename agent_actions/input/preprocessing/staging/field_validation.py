@@ -69,7 +69,7 @@ _READS_A_RECORD_MAY_LACK = {
 }
 
 
-def validate_source_reads_below(
+def validate_staged_source_reads(
     records: list[Any],
     file_path: str,
     first_action: str,
@@ -79,13 +79,15 @@ def validate_source_reads_below(
     hint: str | None = None,
     warn: bool = True,
 ) -> None:
-    """Refuse an action below *first_action* reading a `source` field no staged record holds.
+    """Check the `source` fields the actions read against the fields no staged record holds.
 
-    Below the first stage a record's `source` is the row staged for it, which no action
-    adds to, so these records are every `source` the actions below can read from this
-    file. When they are not *conclusive* (other staged files may hold the field; asked
-    only once a read is missing), when the read may not fail a record, or when the
-    action's own guard reads the field first, the read is logged as a warning instead,
+    A record's `source` is the row staged for it, which no action adds to, so these
+    records are every `source` the actions can read from this file. Every read of an
+    action below *first_action* is checked, and *first_action*'s own guard reads (the
+    first-record render checks its other reads). A read that every record needs is
+    refused. When the records are not *conclusive* (other staged files may hold the
+    field; asked only once a read is missing), when the read may not fail a record, or
+    when the action's own guard reads the field first, it is logged as a warning instead,
     unless *warn* is false.
     """
     if not records:
@@ -108,8 +110,10 @@ def validate_source_reads_below(
             answer.append(conclusive())
         return answer[0]
 
-    for action_name in _actions_below(first_action, action_configs):
-        reads = _source_reads(action_configs[action_name])
+    for action_name in [first_action, *_actions_below(first_action, action_configs)]:
+        reads = _source_reads(action_configs.get(action_name) or {})
+        if action_name == first_action:
+            reads = [(location, field) for location, field in reads if location.startswith("guard")]
         # The guard runs first and decides what a record without the field does.
         guarded = {field for location, field in reads if location.startswith("guard")}
         for location, field in reads:
