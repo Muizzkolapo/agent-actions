@@ -42,6 +42,7 @@ SIMPLE_CONFIG_FIELDS = {
     # Retry configuration (transport-layer failure handling)
     "retry": None,  # Default: None (retry disabled unless configured)
     "request_timeout": None,  # Default: None (each SDK's own per-request timeout)
+    "record_concurrency": None,  # Default: None (one online LLM record at a time)
     # Runtime-consumed fields (providers and managers read these from agent dict)
     "anthropic_version": None,
     "enable_prompt_caching": None,

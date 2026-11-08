@@ -98,7 +98,10 @@ class TestTheStrategyAndTheCollectorAgree:
     def _strategy(self):
         from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 
-        return OnlineLLMStrategy.__new__(OnlineLLMStrategy)
+        strategy = OnlineLLMStrategy.__new__(OnlineLLMStrategy)
+        # invoke reads the action's config for record_concurrency; none is set here.
+        strategy._agent_config = {}
+        return strategy
 
     def _context(self):
         from agent_actions.processing.types import ProcessingContext

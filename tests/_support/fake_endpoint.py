@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
@@ -52,6 +53,11 @@ class FakeEndpoint:
         self.error_message: str | None = None
         # The Retry-After header every 429 reply carries.
         self.retry_after = "0"
+        # Seconds every request is held before its reply, and the most held at once.
+        self.delay = 0.0
+        self.peak_in_flight = 0
+        self._in_flight = 0
+        self._count_lock = threading.Lock()
         # A credential the server no longer takes: every request carrying it gets a 401.
         self.refuse_authorization: str | None = None
         self._refusal_barrier: threading.Barrier | None = None
@@ -145,7 +151,16 @@ def _handler_for(endpoint: FakeEndpoint) -> type[BaseHTTPRequestHandler]:
                 "body": body,
             }
             endpoint.requests.append(request)
-            status, payload = endpoint.answer(body, request["headers"])
+            with endpoint._count_lock:
+                endpoint._in_flight += 1
+                endpoint.peak_in_flight = max(endpoint.peak_in_flight, endpoint._in_flight)
+            try:
+                if endpoint.delay:
+                    time.sleep(endpoint.delay)
+                status, payload = endpoint.answer(body, request["headers"])
+            finally:
+                with endpoint._count_lock:
+                    endpoint._in_flight -= 1
             data = json.dumps(payload).encode()
             self.send_response(status)
             self.send_header("content-type", "application/json")

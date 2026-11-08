@@ -58,7 +58,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 `UnifiedProcessor.process()` reads the action's stored rows for one file (carry-forward, the
 carry of a repair, `answered_since_stored`, `checkpointed_answers`, and `has_target_file`, which tells a carry from
 checkpoint rows from one from the stored file) and `OnlineLLMStrategy.invoke()` writes a
-checkpoint row per record, both under `ProcessingContext.target_relative_path`: the name the
+checkpoint row per record (from the coordinating thread only, also when `record_concurrency` keeps several records in flight on worker threads; results return in input order, checkpoints in completion order), both under `ProcessingContext.target_relative_path`: the name the
 caller stores the file under, and by which it clears the file's checkpoint rows once written.
 
 **Internal only**: `ProcessingStatus`, `ProcessingResult`, `ProcessingContext`, `GuardStatus`, `PreparedTask`, `PreparationContext`, `RetryState`, `RetryMetadata`, `EvaluationMetadata`, `ExpectationsMetadata`, `RecoveryMetadata`, `CollectionStats` -- no direct project surface.

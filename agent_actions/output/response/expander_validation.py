@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import api_key_env_var, vendor_names, vendor_needs_api_key
@@ -172,6 +173,35 @@ def validate_endpoint_action(
                 f"remove {key} from the action",
                 context={"action": action_name, "vendor": vendor},
             )
+
+
+_ONE_RECORD_AT_A_TIME = {
+    "tool": "a tool action runs its records one at a time",
+    "hitl": "a hitl action reviews its records together",
+}
+
+
+def validate_record_concurrency(
+    action: dict[str, Any], agent: dict[str, Any], kind: str, action_name: str
+) -> None:
+    """Refuse record_concurrency written on an action that cannot run records concurrently.
+
+    The action as written is checked: a value inherited from defaults is ignored by a tool,
+    hitl or batch action, not refused. ``kind`` is the action's ``routing_kind``.
+    """
+    if "record_concurrency" not in action:
+        return
+    reason = _ONE_RECORD_AT_A_TIME.get(kind)
+    if reason is None and agent.get("run_mode") == RunMode.BATCH:
+        reason = "a batch action's records run at the provider"
+    if reason is None:
+        return
+    raise ConfigValidationError(
+        "record_concurrency",
+        f"Action '{action_name}' sets record_concurrency, but {reason}.\n"
+        f"Remove record_concurrency from '{action_name}'.",
+        context={"action": action_name, "kind": kind},
+    )
 
 
 def _declared_output_fields(agent: dict[str, Any]) -> set[str]:

@@ -35,7 +35,7 @@ Tool and HITL actions always run online, also in a batch workflow. A `run_mode: 
 
 ## Online Mode
 
-Requests process synchronously with immediate responses.
+Requests process synchronously with immediate responses. An LLM action sends one record at a time unless it sets [`record_concurrency`](../configuration/index.md#record-concurrency).
 
 ```yaml
 defaults:

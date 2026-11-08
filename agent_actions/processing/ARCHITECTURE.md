@@ -115,7 +115,8 @@ Input records (from staging or upstream action)
 │  │  OnlineLLMStrategy (per-record)                 │ │
 │  │  strategies/online_llm.py:134                   │ │
 │  │                                                 │ │
-│  │  for each record:                               │ │
+│  │  for each record (up to record_concurrency at   │ │
+│  │  once; steps 1-2 on worker threads, 3 on this): │ │
 │  │    1. TaskPreparer.prepare()                    │ │
 │  │       → resolve context, render prompt,         │ │
 │  │         evaluate per-record guard               │ │

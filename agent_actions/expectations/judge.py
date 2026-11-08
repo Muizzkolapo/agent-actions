@@ -13,6 +13,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -214,14 +215,18 @@ class JudgeBudget:
 
     def __init__(self, max_calls: int | None) -> None:
         self._remaining = max_calls
+        # Records of one action can run concurrently, so the check and the decrement
+        # must be one step.
+        self._lock = threading.Lock()
 
     def try_acquire(self) -> bool:
-        if self._remaining is None:
+        with self._lock:
+            if self._remaining is None:
+                return True
+            if self._remaining <= 0:
+                return False
+            self._remaining -= 1
             return True
-        if self._remaining <= 0:
-            return False
-        self._remaining -= 1
-        return True
 
     @property
     def remaining(self) -> int | None:
