@@ -21,6 +21,8 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -36,6 +38,53 @@ def remove(p: Path) -> None:
         shutil.rmtree(p)
     elif p.exists():
         p.unlink()
+
+
+@contextmanager
+def held_run_lock(base: Path, workflow: str) -> Iterator[None]:
+    """Hold the lock `agac run` takes for the reset, or exit while a run holds it.
+
+    It is an advisory lock on store/<workflow>.db.lock: agac's own module where the
+    framework imports, else the same flock the operating system gives it. With no
+    store no run holds it, and nothing is created.
+    """
+    path = base / "store" / f"{workflow}.db.lock"
+    if not path.parent.is_dir():
+        yield
+        return
+    try:
+        from agent_actions.errors import RunInProgressError
+        from agent_actions.storage.run_lock import hold_run_lock
+    except ImportError:
+        pass
+    else:
+        try:
+            with hold_run_lock(base, workflow):
+                yield
+        except RunInProgressError as exc:
+            sys.exit(f"error: {exc}")
+        return
+    try:
+        import fcntl
+    except ImportError:
+        print(
+            "warning: cannot check for a run in progress here; make sure none is.",
+            file=sys.stderr,
+        )
+        yield
+        return
+    with open(path, "a+", encoding="utf-8") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            sys.exit(
+                f"error: Another run of workflow '{workflow}' is in progress. "
+                "Wait for it to finish or stop it, then reset again."
+            )
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
@@ -100,6 +149,23 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
     return released
 
 
+def _full_reset(root: Path, base: Path, workflow: str, status: Path) -> None:
+    print(
+        f"Full reset: wiping source, store, target, and status under {base}, "
+        "and reclaiming this workflow's local batch records"
+    )
+    # The store is what names these batches. Removing it over a record that
+    # would not go puts that payload out of reach of every command.
+    reclaimed = release_batch_records(root, base, workflow)
+    if not reclaimed:
+        print("Keeping store/: it is what names the batches whose records stayed.")
+    for sub in ("target", "source", "store") if reclaimed else ("target", "source"):
+        remove(base / sub)
+    remove(status)
+    (base / "target").mkdir(parents=True, exist_ok=True)
+    print("Done.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workflow")
@@ -118,20 +184,8 @@ def main() -> None:
     status = base / ".agent_status.json"
 
     if args.full:
-        print(
-            f"Full reset: wiping source, store, target, and status under {base}, "
-            "and reclaiming this workflow's local batch records"
-        )
-        # The store is what names these batches. Removing it over a record that
-        # would not go puts that payload out of reach of every command.
-        reclaimed = release_batch_records(root, base, args.workflow)
-        if not reclaimed:
-            print("Keeping store/: it is what names the batches whose records stayed.")
-        for sub in ("target", "source", "store") if reclaimed else ("target", "source"):
-            remove(base / sub)
-        remove(status)
-        (base / "target").mkdir(parents=True, exist_ok=True)
-        print("Done.")
+        with held_run_lock(base, args.workflow):
+            _full_reset(root, base, args.workflow, status)
     else:
         print(f"Soft reset: clearing {status} (keeps DB and source)")
         remove(status)

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Iterable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import click
 
 from agent_actions.errors import (
     AgentNotFoundError,
+    RunInProgressError,
 )
 from agent_actions.errors import (
     FileSystemError as AgentFileSystemError,
@@ -33,6 +35,8 @@ class Cleaner:
             self._run()
         except AgentNotFoundError as exc:
             raise click.ClickException(f"Agent '{self.agent}' was not found.") from exc
+        except RunInProgressError:
+            raise
         except AgentFileSystemError as exc:
             raise click.ClickException(str(exc)) from exc
         except Exception as exc:
@@ -109,6 +113,24 @@ class Cleaner:
         if not directories:
             click.echo(f"No directories to clean for agent '{self.agent}'.")
             return
+        # Before asking: a run in progress reads and writes every one of these.
+        with self._run_lock(io_dir):
+            self._clean(io_dir, directories)
+
+    def _run_lock(self, io_dir: Path) -> AbstractContextManager[None]:
+        """The workflow's run lock, or nothing to hold where no store exists.
+
+        The lock lives in the store, so with no store no run holds it, and taking it
+        would create the store folder this command may be about to keep out of.
+        """
+        from agent_actions.storage.run_lock import hold_run_lock, run_lock_path
+
+        workflow = Path(self.agent).stem
+        if not run_lock_path(io_dir, workflow).parent.is_dir():
+            return nullcontext()
+        return hold_run_lock(io_dir, workflow)
+
+    def _clean(self, io_dir: Path, directories: list[Path]) -> None:
         reclaims_records = self.remove_all and (io_dir / "store").is_dir()
         if not self.force and (not self._confirm(directories, reclaims_records)):
             click.echo("Aborted – nothing was cleaned.")

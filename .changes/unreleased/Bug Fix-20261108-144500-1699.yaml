@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  agac clean, in every mode, and the skills' reset_workflow.py --full take the workflow's run
+  lock and exit 1 while a run or retry is in progress, removing nothing. clean --all deleted
+  the store folder with the lock file in it, so a second run then passed the lock check.
+time: 2026-11-08T14:45:00Z

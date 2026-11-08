@@ -265,7 +265,7 @@ Runs of different workflows do not block each other. Read-only commands (`inspec
 `records`, `status`, `traces`, `preview`, `dispositions`, `retry --dry-run`) never take the
 lock. The operating system releases the lock when the run exits or is killed, so no lock is
 left behind. A run that submits a batch job exits, so the next run can collect it.
-`agac clean --all` deletes the store folder, lock file included; do not run it during a run.
+`agac clean`, in every mode, and the skills' `reset_workflow.py --full` take the lock too, and exit 1 while a run holds it: they delete what the run reads and writes, and `--all` the lock file with it.
 
 ## See Also
 
