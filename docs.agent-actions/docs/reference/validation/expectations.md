@@ -223,6 +223,10 @@ Preflight validates every condition before any LLM call: syntax, the dangerous-p
 | `model` (string) | the action's own `model_name` | Override which model does the judging |
 | `context` (list) | none | List of `action.field` refs, resolved from the *same* `context_scope` machinery as prompts, and passed to the judge as grounding text |
 
+### Testing a judge offline
+
+On `model_vendor: agac-provider` the judge gets a verdict object back, so a judged rule can be exercised with no network and no key. The mock picks `passed: true` or `passed: false` with its seeded generator and writes a generated sentence as the `reason`. The same rule and value give the same verdict on every run, and different values reach both verdicts, so the pass and the fail path both run. The verdict carries no judgement of the value; it tests the plumbing, not the rule.
+
 ### `context:` auto-injection
 
 Every ref in `context:` is automatically added to the action's own `context_scope.observe` at load time — you don't need to also list it there by hand (and if you do, it's deduplicated, not doubled). This covers an action's inline `expectations:` list and the rules of its own schema; a named `suite:` is the exception, because a suite is not loadable at the layer that does the injection, so list its refs in `observe:` yourself. This is what makes `retrieve_passage.passage_text` available to the judge in the example above even though `answer_is_grounded` lives on a different action than `retrieve_passage`.
