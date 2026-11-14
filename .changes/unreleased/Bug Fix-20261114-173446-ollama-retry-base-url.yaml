@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: An ollama_local or ollama_cloud batch retry or repair round now goes to the base_url of the action and uses its batch_max_workers. When the round got its client in a later run than the first submission, it was built without these two values, so it went to OLLAMA_HOST, OLLAMA_CLOUD_HOST or the default host, and used the default worker count. Also, two batch actions with the same base_url and a different batch_max_workers no longer share one client with the worker count of the first action.
+time: 2026-11-14T17:34:46Z
