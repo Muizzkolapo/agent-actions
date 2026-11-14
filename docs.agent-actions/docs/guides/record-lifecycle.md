@@ -1,18 +1,18 @@
 ---
 title: Record Lifecycle
-description: How records flow through an agentic workflow — states, transitions, and the audit trail
+description: How a record moves through a workflow, with its states, its transitions and its audit trail
 sidebar_position: 3
 ---
 
 # Record Lifecycle
 
-A record enters your agentic workflow as raw input. It exits carrying the accumulated output of every action that touched it, a full state history, and metadata about every retry, skip, and failure along the way.
+A record enters your workflow as raw input. When the record exits, it carries the output of each action that processed it and a full state history. It also carries metadata about each retry, skip and failure on its path.
 
-This guide explains how that works — from the state machine that governs each record, to the audit trail that makes every decision traceable.
+This guide explains the state machine that controls each record. It also explains the audit trail, which lets you trace each decision.
 
 ## The Record Envelope
 
-When Agent Actions reads your input data, it gives each item a `source_guid` and wraps it in a **record envelope**. After the first action runs, the stored record looks like this:
+When Agent Actions reads your input data, it gives each record a `source_guid`. It then puts the record in a **record envelope**. After the first action runs, the stored record has this shape:
 
 ```json
 {
@@ -27,11 +27,11 @@ When Agent Actions reads your input data, it gives each item a `source_guid` and
 }
 ```
 
-The `content` dict starts with your input under `source` and grows as each action adds its output under a namespace key. A source record carries no `_state` until the first action stamps it. The `_state_history` accumulates every transition the record goes through.
+At the start, the `content` dict holds your input under `source`. Each action adds its output under a namespace key, so the dict becomes larger. A source record has no `_state` until the first action sets it. The `_state_history` collects each transition of the record.
 
 ## The State Machine
 
-Every record has a `_state` field governed by a finite state machine. There are 6 possible states:
+Each record has a `_state` field. A finite state machine controls this field. The field has 6 possible states:
 
 ```mermaid
 flowchart TD
@@ -52,17 +52,17 @@ flowchart TD
     GS -->|boundary reset| A
 ```
 
-Three categories:
+The states are in three categories:
 
 | Category | States | Behavior |
 |----------|--------|----------|
-| **Processable** | `active` | Ready for the next action |
-| **Resettable** | `processed`, `guard_skipped` | Reset to `active` at the next action boundary |
-| **Terminal** | `cascade_skipped`, `failed`, `exhausted` | Record stops flowing. No further actions process it. |
+| **Processable** | `active` | The record is ready for the next action. |
+| **Resettable** | `processed`, `guard_skipped` | The state changes to `active` at the next action boundary. |
+| **Terminal** | `cascade_skipped`, `failed`, `exhausted` | The record stops. No more actions process it. |
 
 ## How Records Flow Through Actions
 
-Consider what happens when a record passes through three actions:
+This example shows a record that goes through three actions:
 
 ```yaml
 actions:
@@ -73,7 +73,7 @@ actions:
 
 ### Step 1: First action processes the record
 
-The executor sends the record to `classify_ticket`. The LLM returns structured output. The framework wraps it under the action's namespace and transitions the state:
+The executor sends the record to `classify_ticket`. The LLM returns structured output. The framework puts the output under the namespace of the action and changes the state:
 
 ```json
 {
@@ -89,7 +89,7 @@ The executor sends the record to `classify_ticket`. The LLM returns structured o
 
 ### Step 2: Boundary reset
 
-Before the next action runs, the executor resets `processed` back to `active`:
+Before the next action runs, the executor changes the state from `processed` to `active` again:
 
 ```json
 {
@@ -103,7 +103,7 @@ Before the next action runs, the executor resets `processed` back to `active`:
 
 ### Step 3: Next action adds its output
 
-`extract_entities` runs. Its output goes under its own namespace. The `content` dict grows:
+`extract_entities` runs. Its output goes under its own namespace. The `content` dict becomes larger:
 
 ```json
 {
@@ -120,11 +120,11 @@ Before the next action runs, the executor resets `processed` back to `active`:
 }
 ```
 
-Each action adds to the record. Nothing gets overwritten. The history grows. The content accumulates.
+Each action adds data to the record. No action overwrites data. The history becomes longer, and the content collects the output of each action.
 
 ## Guard Skips
 
-When a guard condition evaluates to false, the action doesn't run. The record transitions to `guard_skipped`:
+When a guard condition is false, the action does not run. The state of the record changes to `guard_skipped`:
 
 ```yaml
 - name: rewrite_response
@@ -134,7 +134,7 @@ When a guard condition evaluates to false, the action doesn't run. The record tr
     on_false: skip
 ```
 
-If the review passed, `rewrite_response` is skipped:
+If the review passed, the guard skips `rewrite_response`:
 
 ```json
 {
@@ -146,25 +146,25 @@ If the review passed, `rewrite_response` is skipped:
 }
 ```
 
-Here's the part that people don't expect: **a skipped record is still a live record**. It resets to `active` at the next boundary and continues downstream with all its data intact. The skip means "this action had nothing to do," not "this record is done."
+Many users do not expect this behavior: **a skipped record is still a live record**. The state of the record changes to `active` at the next boundary. The record then continues downstream, and all of its data stays. The skip means "this action had nothing to do". It does not mean "this record is done".
 
 ## Terminal States: When a Record Stops
 
-Three states are terminal — the record stops flowing:
+Three states are terminal. When a record is in a terminal state, the record stops:
 
 ### `failed`
 
-An action hit an unrecoverable error. The record won't be processed by downstream actions.
+An action had an error that it cannot recover from. Downstream actions do not process the record.
 
 ### `cascade_skipped`
 
-An upstream action failed or was exhausted. Rather than attempt processing with incomplete data, the framework cascade-skips all downstream actions for this record. No wasted LLM calls.
+An upstream action failed or was exhausted. The framework does not try to process incomplete data. It cascade-skips all downstream actions for this record. Thus no LLM calls are wasted.
 
 ### `exhausted`
 
-The action retried multiple times and never succeeded. The record carries the best-effort result (if `on_exhausted: return_last`) or empty content.
+The action tried again many times and did not succeed. If `on_exhausted: return_last` is set, the record carries the result of the last attempt as a best-effort result. If not, the record carries empty content.
 
-When the executor encounters a terminal record at an action boundary, it propagates `cascade_skipped` downstream instead of resetting to `active`:
+When the executor finds a terminal record at an action boundary, it does not change the state to `active`. It sends `cascade_skipped` downstream:
 
 ```json
 {
@@ -178,7 +178,7 @@ When the executor encounters a terminal record at an action boundary, it propaga
 }
 ```
 
-You can read this history and see exactly where it broke and what was skipped as a result.
+This history shows the action where the record failed. It also shows the actions that the framework skipped because of the failure.
 
 ## The Single Transition Function
 
@@ -188,44 +188,49 @@ All state changes go through one function:
 RecordEnvelope.transition(record, new_state, action_name, reason)
 ```
 
-This function:
-1. Validates the transition is legal (you can't go from `failed` to `processed`)
-2. Sets `_state` to the new value
-3. Appends to `_state_history` with timestamp, action name, from/to states, and reason
-4. Sets `_state_schema_version` so readers can detect stale records
+This function does these operations:
 
-Framework code changes `_state` and `_state_history` through this function, so state is set the same way on every path.
+1. It makes sure that the transition is legal. For example, a record cannot go from `failed` to `processed`.
+2. It sets `_state` to the new value.
+3. It adds an entry to `_state_history` with the timestamp, the action name, the from and to states, and the reason.
+4. It sets `_state_schema_version`, so that readers can find stale records.
+
+Framework code changes `_state` and `_state_history` only through this function. Thus the framework sets the state in the same way on each path.
 
 ## The Audit Trail: `_state_history`
 
-Every record carries its complete transition history in `_state_history`. Each entry contains:
+Each record carries its full transition history in `_state_history`. Each entry contains these fields:
 
 | Field | Description |
 |-------|-------------|
-| `timestamp` | ISO 8601 timestamp of the transition |
-| `action` | Which action triggered the transition |
-| `from` | Previous state (or `null` for the first transition) |
-| `to` | New state |
-| `reason` | Why the transition happened (`success`, `guard_skip`, `downstream_reset`, etc.) |
+| `timestamp` | The ISO 8601 timestamp of the transition |
+| `action` | The action that caused the transition |
+| `from` | The previous state (or `null` for the first transition) |
+| `to` | The new state |
+| `reason` | The reason for the transition (`success`, `guard_skip`, `downstream_reset` and other values) |
 | `detail` | Optional additional context |
 
-The history is capped at 64 entries (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`) to bound memory usage. Because each action contributes 2–4 transitions per record (downstream-reset to `active` plus a final state, plus one entry per retry), workflows with roughly 16 or more actions can start seeing older entries dropped. The framework logs this the first time truncation fires for each action in a process. It describes a framework constant rather than anything you configure, so it is written to `events.json` at WARNING but kept off the terminal; run with `-v` to see it there:
+The history has a maximum of 64 entries (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`). This limit puts a maximum on memory usage. Each action adds 2–4 transitions to each record: a downstream reset to `active`, a final state, and one entry for each retry. Thus a workflow with approximately 16 or more actions can start to lose older entries.
+
+The framework writes a log message the first time that truncation occurs for each action in a process. The message is about a framework constant, not about a setting that you configure. Thus the framework writes it to `events.json` at WARNING, but does not show it on the terminal. To see it on the terminal, run with `-v`:
 
 ```
 _state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'.
 ```
 
-When this line appears in `events.json`, the record's oldest transitions have already been lost for that action. Subsequent truncations for the same action are silent by design (one log per action per process, so the diagnostic doesn't become per-record spam).
+When this line appears in `events.json`, the oldest transitions of the record for that action are already lost. Later truncations for the same action are silent by design. The framework writes one log message for each action in each process, so that the diagnostic does not repeat for each record.
 
-:::tip
-You can filter records by their history to answer questions like "which records were guard-skipped at action X?" or "which records required retries?" — without needing separate log aggregation.
+:::note
+You can filter records by their history to answer questions such as "which records were guard-skipped at action X?" or "which records required retries?". You do not need separate log aggregation for this.
 :::
 
 ### Failure Forensics: `input_snapshot`
 
-When a record reaches a terminal failure state (`failed` or `exhausted`) through the result collection pipeline, the disposition store captures the input record at the moment of failure in the `input_snapshot` column of `record_disposition`. This covers online, batch, and file-tool processing paths. The snapshot preserves the data that was being processed when the failure occurred — even after batch context maps and temporary recovery files have been cleaned up.
+A record can reach a terminal failure state (`failed` or `exhausted`) through the result collection path. Then the disposition store captures the input record at the time of the failure. It writes the input record to the `input_snapshot` column of `record_disposition`. This applies to the online, batch and file-tool processing paths.
 
-The snapshot is serialized as JSON and stored compressed by the storage backend. A snapshot longer than 10,240 characters is replaced by a JSON object with `"__truncated__": true` and a `partial` field holding the first 8,192 characters. Print it with [`agac records --snapshots`](../reference/cli/records):
+The snapshot keeps the data that the action processed when the failure occurred. The snapshot stays after the framework removes the batch context maps and the temporary recovery files.
+
+The framework serializes the snapshot as JSON, and the storage backend stores it compressed. If a snapshot is longer than 10,240 characters, a JSON object replaces it. This object has `"__truncated__": true` and a `partial` field that holds the first 8,192 characters. To print the snapshot, use [`agac records --snapshots`](../reference/cli/records):
 
 ```bash
 agac records -w <workflow> --snapshots
@@ -233,19 +238,19 @@ agac records -w <workflow> --snapshots
 
 ## Field Categories
 
-The record envelope manages three categories of framework fields:
+The record envelope controls three categories of framework fields:
 
 | Category | Fields | Behavior |
 |----------|--------|----------|
-| **Tracking** | `source_guid`, `parent_source_guid`, `version_correlation_id`, `aggregated_by`, `folded_sources` | Set once at record creation. Stable identity that never changes. |
-| **Lifecycle** | `_state_history`, `_state_schema_version` | Cumulative — carried forward and appended to across all actions. |
-| **Stage** | `_state`, `target_id`, `metadata`, `content`, `lineage`, `node_id`, etc. | Rebuilt per action. Not carried forward — enrichers set these fresh at each stage. |
+| **Tracking** | `source_guid`, `parent_source_guid`, `version_correlation_id`, `aggregated_by`, `folded_sources` | The framework sets these fields one time, when it creates the record. They are a stable identity that never changes. |
+| **Lifecycle** | `_state_history`, `_state_schema_version` | Cumulative. The framework carries these fields forward and adds to them in each action. |
+| **Stage** | `_state`, `target_id`, `metadata`, `content`, `lineage`, `node_id` and other fields | The framework makes these fields again for each action. It does not carry them forward. Enrichers set new values at each stage. |
 
-All three categories are considered **framework fields** and are excluded from user-visible content. Your action outputs live under `content.{action_name}` — framework fields never leak into that namespace.
+All three categories are **framework fields**. The framework does not show them in user-visible content. The outputs of your actions are under `content.{action_name}`. Framework fields never go into that namespace.
 
 ## A Complete Record
 
-A record that finishes a 7-action agentic workflow looks like this:
+This is a record at the end of a workflow with 7 actions:
 
 ```json
 {
@@ -284,17 +289,17 @@ A record that finishes a 7-action agentic workflow looks like this:
 }
 ```
 
-One dict. Seven namespaces in `content`. Thirteen entries in `_state_history`. You can answer any question about this record — what happened, in what order, what each action produced — by reading this single object.
+The record is one dict, with seven namespaces in `content` and thirteen entries in `_state_history`. You can answer any question about this record from this single object: what occurred, in what order, and what each action produced.
 
 ## Batch Mode: Across Process Boundaries
 
-In online mode, the record lives in memory for the entire run. In batch mode, the record crosses process boundaries — it's persisted to SQLite after each action. A new process polls for results and picks up where the previous one left off.
+In online mode, the record stays in memory for the full run. In batch mode, the record goes across process boundaries. The framework writes the record to SQLite after each action. A new process polls for results and continues from the point where the previous process stopped.
 
-The record survives this because `_state_history` spans both processes. The `source_guid` ties everything together. From the record's perspective, it doesn't matter how many processes touched it or how much time passed between actions.
+The record stays complete because `_state_history` includes the transitions from the two processes. The `source_guid` connects all of the data. For the record, the number of processes and the time between actions have no effect.
 
 ## See Also
 
-- [Data Lineage](../reference/data-io/data-lineage.md) — how `target_id`, `parent_target_id`, and `root_target_id` track ancestry
-- [Guards](../reference/execution/guards.md) — conditional execution and guard skip behavior
-- [Batch Recovery](../reference/execution/batch-recovery.md) — retry and repair mechanics
-- [Prompt Traces](../reference/data-io/prompt-traces.md) — LLM request/response observability per record
+- [Data Lineage](../reference/data-io/data-lineage.md): How `target_id`, `parent_target_id` and `root_target_id` record the ancestry of a record
+- [Guards](../reference/execution/guards.md): Conditional execution and the behavior of a guard skip
+- [Batch Recovery](../reference/execution/batch-recovery.md): How retry and repair operate
+- [Prompt Traces](../reference/data-io/prompt-traces.md): The LLM request and response of each record
