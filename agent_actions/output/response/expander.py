@@ -31,6 +31,7 @@ from .expander_merge import (
     initialize_optional_fields,
     merge_directive_value,
     merge_expect,
+    merge_vendor_params,
     process_chunk_config,
 )
 from .expander_schema import (
@@ -305,6 +306,13 @@ class ActionExpander:
             action.get("expect"),
             agent,
         )
+
+        # Left out when unset, so a project's default_agent_config value still applies.
+        vendor_params = merge_vendor_params(
+            defaults.get("vendor_params"), action.get("vendor_params")
+        )
+        if vendor_params is not None:
+            agent["vendor_params"] = vendor_params
 
         # Union context: refs into observe so infer_dependencies picks up the
         # source action automatically. The action's inline list, or its resolved

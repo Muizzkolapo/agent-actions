@@ -111,7 +111,7 @@ the run actually did, not what the run was asked to do. The action also stores `
 The data that the action reads has its own digests: `context_scope_hash` over its `context_scope` (observe,
 passthrough, drop and seed) and `dependencies_hash` over its `dependencies`. How the action
 is asked also has a digest: `generation_hash` over the generation settings that an LLM action sends
-(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty` and `presence_penalty`).
+(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty` and `vendor_params`).
 `generation_hash` is empty for a tool or hitl action, because such an action sends no generation settings. The code that the action runs also has a digest:
 `udf_source_hash`. It covers the files that its tool (`impl`) and its UDF guard were loaded from, as
 they were when the run loaded them. The model and these four digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change

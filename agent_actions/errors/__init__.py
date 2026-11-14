@@ -45,6 +45,7 @@ from agent_actions.errors.external_services import (
     NetworkError,
     PromptTooLargeError,
     RateLimitError,
+    ResponseTruncatedError,
     VendorAPIError,
 )
 
@@ -153,6 +154,7 @@ __all__ = [
     "NetworkError",
     "RateLimitError",
     "PromptTooLargeError",
+    "ResponseTruncatedError",
     # File System
     "FileSystemError",
     "FileLoadError",

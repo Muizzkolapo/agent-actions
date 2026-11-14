@@ -84,6 +84,9 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             body["max_tokens"] = batch_task.model_config["max_tokens"]
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        from agent_actions.llm.providers.openai.client import OpenAIClient
+
+        OpenAIClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))
         return {
             "custom_id": batch_task.custom_id,
             "method": "POST",

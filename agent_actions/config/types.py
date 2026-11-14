@@ -124,6 +124,7 @@ class ActionConfigDict(TypedDict, total=False):
     max_tokens: int
     request_timeout: float  # seconds per LLM request; unset means the default
     record_concurrency: int  # online LLM records in flight at once; unset is 1
+    vendor_params: dict[str, Any]  # passed to the vendor SDK request as written
 
     # Dependencies & flow
     dependencies: list[str]

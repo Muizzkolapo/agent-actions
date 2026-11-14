@@ -46,6 +46,25 @@ _STATUS_MAPPING = {
 _STATES_WITH_RESULTS = frozenset({"JOB_STATE_SUCCEEDED", "JOB_STATE_PARTIALLY_SUCCEEDED"})
 
 
+# GenerateContentConfig fields a request carries beside generation_config, not in it.
+_REQUEST_LEVEL_FIELDS = frozenset(
+    {"safety_settings", "system_instruction", "tool_config", "cached_content", "labels"}
+)
+
+
+def _join_vendor_params(request: dict[str, Any], vendor_params: dict[str, Any] | None) -> None:
+    """Put each ``vendor_params`` key where a batch request line carries it."""
+    from agent_actions.llm.providers.gemini.client import GeminiClient
+
+    for key, value in (vendor_params or {}).items():
+        if key in GeminiClient.VENDOR_PARAMS.reserved:
+            continue
+        if key in _REQUEST_LEVEL_FIELDS:
+            request[key] = value
+        else:
+            request.setdefault("generation_config", {})[key] = value
+
+
 class GeminiBatchClient(BaseBatchClient):
     """
     Gemini Batch API implementation of the BaseBatchClient interface.
@@ -115,6 +134,7 @@ class GeminiBatchClient(BaseBatchClient):
         if schema:
             request["response_schema"] = schema
             request["response_mime_type"] = "application/json"
+        _join_vendor_params(request, batch_task.model_config.get("vendor_params"))
         return {"key": batch_task.custom_id, "request": request}
 
     def _extract_custom_id(self, raw_response: dict[str, Any]) -> str:

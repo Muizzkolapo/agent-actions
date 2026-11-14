@@ -219,6 +219,8 @@ class WorkflowResolutionService:
             result.add_error(error)
         for warning in endpoint_warnings:
             result.add_warning(warning)
+        for error in self._check_vendor_params():
+            result.add_error(error)
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
             errors, warnings, targets = self._check_api_keys()
@@ -827,6 +829,47 @@ class WorkflowResolutionService:
                 )
             )
 
+        return errors
+
+    # ── Vendor request parameters ──────────────────────────────────────
+
+    def _check_vendor_params(self) -> list[StaticTypeError]:
+        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets."""
+        from agent_actions.errors import DependencyError
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+        from agent_actions.llm.realtime.services.invocation import _resolve_client
+
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            vendor_params = config.get(VENDOR_PARAMS_KEY)
+            vendor = (config.get("model_vendor") or "").lower()
+            if not vendor_params or not vendor:
+                continue
+            try:
+                spec = getattr(_resolve_client(vendor), "VENDOR_PARAMS", None)
+            except DependencyError:
+                continue  # A missing SDK is reported on its own.
+            # A tool or hitl action sends no request; it may inherit the block from defaults.
+            if spec is None:
+                continue
+            for problem in spec.defects(vendor_params):
+                errors.append(
+                    StaticTypeError(
+                        message=f"Action '{action_name}': vendor_params for '{vendor}': {problem}.",
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field=VENDOR_PARAMS_KEY,
+                            raw_reference=f"{VENDOR_PARAMS_KEY}={sorted(vendor_params)}",
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field=VENDOR_PARAMS_KEY,
+                        hint=(
+                            "vendor_params takes the keyword arguments of the vendor SDK's "
+                            "request; a parameter newer than the installed SDK goes under "
+                            "extra_body where the SDK has it."
+                        ),
+                    )
+                )
         return errors
 
     # ── Vendor run-mode compatibility ──────────────────────────────────

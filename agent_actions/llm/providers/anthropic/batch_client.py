@@ -122,14 +122,21 @@ class AnthropicBatchClient(BaseBatchClient):
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
         )
+        from agent_actions.llm.providers.anthropic.client import AnthropicClient
+
+        vendor_params = batch_task.model_config.get("vendor_params") or {}
         if schema:
             tools = self._create_json_tool_from_schema(schema)
             if tools:
-                tool_name = tools[0]["name"]
                 params["tools"] = tools
-                params["tool_choice"] = {"type": "tool", "name": tool_name}
+                tool_choice = AnthropicClient._schema_tool_choice(
+                    tools, {"vendor_params": vendor_params}
+                )
+                if tool_choice is not None:
+                    params["tool_choice"] = tool_choice
         if self.enable_prompt_caching:
             params["extra_headers"] = PROMPT_CACHING_BETA_HEADER
+        AnthropicClient.VENDOR_PARAMS.apply_to_body(params, vendor_params)
         return {"custom_id": batch_task.custom_id, "params": params}
 
     def _extract_error_from_response(self, raw_response: Any) -> str | None:

@@ -54,6 +54,16 @@ class RateLimitError(VendorAPIError):
     pass
 
 
+class ResponseTruncatedError(VendorAPIError):
+    """Raised when the output budget ran out before the model wrote any answer.
+
+    Retriable: a model that thinks first spends a different share of the budget on
+    each attempt.
+    """
+
+    pass
+
+
 class PromptTooLargeError(VendorAPIError):
     """Raised when the assembled prompt exceeds the model's context window."""
 

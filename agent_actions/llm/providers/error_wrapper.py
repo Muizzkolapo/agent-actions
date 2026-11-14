@@ -12,10 +12,17 @@ import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from enum import Enum
+from typing import Any
 
 import httpx
 
-from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
+from agent_actions.errors import (
+    NetworkError,
+    RateLimitError,
+    ResponseTruncatedError,
+    VendorAPIError,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMErrorEvent, RateLimitEvent
 from agent_actions.logging.filters import _redact_sensitive_data
@@ -230,3 +237,46 @@ def wrap_vendor_error(
 
     # Unknown exception type — return as-is for caller to handle
     return e
+
+
+# Each vendor's word for "the output budget ran out" (Gemini and Cohere write it in capitals).
+_TRUNCATED_STOP_REASONS = frozenset({"max_tokens", "length"})
+
+
+def stop_reason_name(reason: Any) -> str | None:
+    """A vendor's stop or finish reason as plain text; an enum by its value."""
+    if reason is None:
+        return None
+    if isinstance(reason, Enum):
+        reason = reason.value
+    return str(reason)
+
+
+def is_truncated(reason: Any) -> bool:
+    """Whether the model stopped because the output budget ran out."""
+    name = stop_reason_name(reason)
+    return name is not None and name.lower() in _TRUNCATED_STOP_REASONS
+
+
+def empty_response_error(
+    vendor_label: str, stop_reason: Any, *, model_name: str, vendor: str, operation: str
+) -> VendorAPIError:
+    """The error for a response that holds no answer, naming why the model stopped.
+
+    A stop at the output limit is a ``ResponseTruncatedError``, which the retry policy retries.
+    """
+    reason = stop_reason_name(stop_reason)
+    message = f"Empty response content from {vendor_label} API (stop_reason={reason})"
+    context = {
+        "model_name": model_name,
+        "vendor": vendor,
+        "api_operation": operation,
+        "stop_reason": reason,
+    }
+    if is_truncated(reason):
+        return ResponseTruncatedError(
+            f"{message}: the output budget ran out before any answer; raise max_tokens, "
+            "or lower the thinking budget in vendor_params",
+            context=context,
+        )
+    return VendorAPIError(message, context=context)

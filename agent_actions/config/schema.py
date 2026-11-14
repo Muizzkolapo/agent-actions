@@ -625,6 +625,10 @@ class ActionConfig(_RetryValidators):
         default=None, ge=-2.0, le=2.0, description="Presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
+    vendor_params: dict[str, Any] | None = Field(
+        default=None,
+        description="Request parameters passed to the vendor SDK as written, over the defaults' key by key",
+    )
 
     # --- Runtime-consumed keys (from AgentConfig) ---
     anthropic_version: str | None = Field(
@@ -757,6 +761,9 @@ class DefaultsConfig(_RetryValidators):
         default=None, ge=-2.0, le=2.0, description="Default presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
+    vendor_params: dict[str, Any] | None = Field(
+        default=None, description="Default request parameters passed to the vendor SDK"
+    )
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
     expect: ExpectConfig | None = Field(
         default=None,

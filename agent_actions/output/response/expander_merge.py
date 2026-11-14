@@ -206,3 +206,12 @@ def merge_expect(defaults: Any, action: Any) -> dict[str, Any] | None:
     # An empty dict is the bare block — "read my own schema" — so it survives
     # the merge as a block rather than collapsing to no block at all.
     return {**copy.deepcopy(base or {}), **copy.deepcopy(override or {})}
+
+
+def merge_vendor_params(base: Any, override: Any) -> dict[str, Any] | None:
+    """*override*'s ``vendor_params`` over *base*'s, key by key; ``None`` when neither has any."""
+    base = base if isinstance(base, dict) else None
+    override = override if isinstance(override, dict) else None
+    if base is None and override is None:
+        return None
+    return {**copy.deepcopy(base or {}), **copy.deepcopy(override or {})}

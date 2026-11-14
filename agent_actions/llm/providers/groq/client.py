@@ -23,10 +23,18 @@ from groq import Groq
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.error_wrapper import (
+    VendorErrorMapping,
+    empty_response_error,
+    is_truncated,
+    wrap_vendor_error,
+)
 from agent_actions.llm.providers.generation_params import (
+    ALWAYS_RESERVED,
+    VendorParamSpec,
     connect_limited_timeout_kwargs,
     extract_generation_params,
+    sdk_keyword_params,
 )
 from agent_actions.llm.providers.mixins import JSONResponseMixin
 from agent_actions.logging.core.manager import fire_event
@@ -65,6 +73,11 @@ class GroqClient(BaseClient, JSONResponseMixin):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "temperature", "max_tokens"],
     }
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
+        accepted=sdk_keyword_params(groq.resources.chat.completions.Completions.create),
+        reserved=ALWAYS_RESERVED,
+        merged=frozenset({"extra_headers", "extra_body", "extra_query"}),
+    )
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -104,7 +117,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         start_time = time.perf_counter()
         try:
-            llm = client.chat.completions.create(**json_completion_kwargs)
+            llm = client.chat.completions.create(
+                **GroqClient.VENDOR_PARAMS.apply(json_completion_kwargs, agent_config)
+            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
@@ -169,7 +184,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         start_time = time.perf_counter()
         try:
-            response = client.chat.completions.create(**completion_kwargs)
+            response = client.chat.completions.create(
+                **GroqClient.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
+            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
@@ -179,6 +196,15 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)
 
+        choice = response.choices[0] if getattr(response, "choices", None) else None
+        if choice is not None and not choice.message.content and is_truncated(choice.finish_reason):
+            raise empty_response_error(
+                "Groq",
+                choice.finish_reason,
+                model_name=model_name,
+                vendor="groq",
+                operation="chat.completions.create",
+            )
         try:
             response_content = response.choices[0].message.content
             return ResponseBuilder.wrap_non_json(response_content, agent_config)
