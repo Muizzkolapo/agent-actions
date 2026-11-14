@@ -416,7 +416,9 @@ render_pipeline_with_templates(yaml_path, templates_folder)
   Step 2: Parse YAML
   Step 3: Resolve prompt references ($file.block --> inline text)
   Step 4: Expand versioned actions (versions: {param: i, range: [1,3]})
-  Step 5: Compile schemas (schema_name: "foo" --> inline schema from file)
+  Step 5: Compile schemas (schema_name: "foo" --> inline schema from file;
+          inline shorthand --> unified fields; a bare `array` becomes an array
+          of strings and logs a warning that names the action and field)
   |
   --> Fully self-contained YAML string
 ```

@@ -355,3 +355,53 @@ class TestCompileActionSchemasWarning:
         # No warning should fire — valid shorthand gets expanded
         for call in mock_warn.call_args_list:
             assert "not in shorthand or compiled format" not in call[0][0]
+
+
+def _bare_array_message(action: str, field: str) -> str:
+    return (
+        f"Action '{action}': inline schema field '{field}' is a bare 'array', so it is read "
+        "as an array of strings and an item of any other type fails. Write 'array[string]' "
+        "for strings or 'array[object]' for objects."
+    )
+
+
+class TestBareArrayWarning:
+    """Expanding a bare 'array' to an array of strings warns for each such field."""
+
+    def test_each_bare_array_field_warns_and_typed_arrays_do_not(self, tmp_path, caplog):
+        _setup_project(tmp_path)
+        action = {
+            "name": "pick",
+            "schema": {
+                "candidates": "array",
+                "picks": "array!",
+                "tags": "array[string]",
+                "rows": "array[object]",
+                "pairs": "array[object:{'q': 'string'}]",
+                "title": "string",
+            },
+        }
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions.prompt.render_workflow"):
+            _compile_action_schemas(action, project_root=tmp_path)
+
+        warned = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert warned == [
+            _bare_array_message("pick", "candidates"),
+            _bare_array_message("pick", "picks"),
+        ]
+        items = {f["id"]: f.get("items") for f in action["schema"]["fields"]}
+        assert items["candidates"] == {"type": "string"}
+        assert items["picks"] == {"type": "string"}
+
+    def test_typed_arrays_alone_give_no_warning(self, tmp_path, caplog):
+        _setup_project(tmp_path)
+        action = {
+            "name": "pick",
+            "schema": {"tags": "array[string]!", "rows": "array[object]", "title": "string"},
+        }
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions.prompt.render_workflow"):
+            _compile_action_schemas(action, project_root=tmp_path)
+
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == []
