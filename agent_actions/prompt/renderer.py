@@ -353,9 +353,9 @@ class ConfigRenderingService:
         template_dir: str | Path,
         output_dir: str | Path | None = None,
         project_root: Path | None = None,
-    ) -> ActionConfigMap:
+    ) -> str:
         """
-        Render templates and load configuration data.
+        Render templates, then load and validate the configuration data.
 
         Args:
             agent_name: Name of the agent.
@@ -365,7 +365,7 @@ class ConfigRenderingService:
             project_root: Optional project root for resolving relative paths.
 
         Returns:
-            Parsed configuration data as a dictionary.
+            The rendered workflow YAML, so a caller loads it without a second render.
 
         Raises:
             FileNotFoundError: If required files are not found.
@@ -427,4 +427,4 @@ class ConfigRenderingService:
             "Successfully completed render and load config",
             extra={"operation": "render and load config", "agent_name": agent_name},
         )
-        return config
+        return rendered_template
