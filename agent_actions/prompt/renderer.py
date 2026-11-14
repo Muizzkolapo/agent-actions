@@ -354,23 +354,9 @@ class ConfigRenderingService:
         output_dir: str | Path | None = None,
         project_root: Path | None = None,
     ) -> str:
-        """
-        Render templates, then load and validate the configuration data.
+        """Render the workflow file, validate it, and return the rendered YAML.
 
-        Args:
-            agent_name: Name of the agent.
-            config_path: Path to the agent configuration file.
-            template_dir: Path to the template directory.
-            output_dir: Path to the output directory.
-            project_root: Optional project root for resolving relative paths.
-
-        Returns:
-            The rendered workflow YAML, so a caller loads it without a second render.
-
-        Raises:
-            FileNotFoundError: If required files are not found.
-            TemplateRenderingError: If template rendering fails.
-            ConfigurationError: If configuration parsing fails.
+        A caller parses the returned text, so the file is not rendered a second time.
         """
         logger.debug(
             "Starting render and load config",

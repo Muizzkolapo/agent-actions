@@ -185,18 +185,10 @@ class ConfigManager:
     def _load_single_config(
         self, config_path: str, config_type: str, rendered: str | None = None
     ) -> dict[str, Any]:
-        """Load and parse a single config file with template rendering.
+        """Parse *rendered*, or render *config_path* first when no text is given.
 
-        Args:
-            config_path: Path to the config file.
-            config_type: Human-readable config type for events/errors (e.g. "workflow", "default").
-            rendered: The file already rendered; given it, the file is not rendered again.
-
-        Returns:
-            Parsed config dictionary.
-
-        Raises:
-            ConfigurationError: On rendering, YAML parsing, or unexpected errors.
+        *config_type* names the file in events and errors ("workflow", "default").
+        Every failure is raised as a ``ConfigurationError``.
         """
         from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
