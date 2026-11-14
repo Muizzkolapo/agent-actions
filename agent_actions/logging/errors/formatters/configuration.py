@@ -5,6 +5,7 @@ from typing import Any
 from agent_actions.errors import UDFLoadError
 from agent_actions.errors.preflight import PreFlightValidationError
 
+from ..docs_links import CONFIGURATION, MISSING_REQUIRED_FIELD, SCHEMA_VALIDATION_ERROR
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -73,7 +74,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 details=details,
                 fix=self._hint_or(context, "Check your YAML/JSON syntax and required fields"),
                 context=context,
-                docs_url="https://docs.runagac.com/config/schema",
+                docs_url=SCHEMA_VALIDATION_ERROR,
             )
 
         return self._format_invalid_configuration(message, context)
@@ -86,7 +87,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             details=message,
             fix=self._hint_or(context, "Check your agent configuration file for errors"),
             context=context,
-            docs_url="https://docs.runagac.com/config",
+            docs_url=CONFIGURATION,
         )
 
     def _format_missing_required_fields_error(self, _message: str, context: dict) -> UserError:
@@ -153,7 +154,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             details=details,
             fix="\n".join(fix_parts),
             context={"action": action_name, "missing_fields": missing_display},
-            docs_url="https://docs.runagac.com/core-concepts/configuration-hierarchy",
+            docs_url=MISSING_REQUIRED_FIELD,
         )
 
     def _format_missing_env_var_error(self, _message: str, context: dict) -> UserError:

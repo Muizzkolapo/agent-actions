@@ -5,6 +5,7 @@ from typing import Any
 
 from agent_actions.errors import UDFLoadError
 
+from ..docs_links import TOOL_DISCOVERY, TOOL_IMPORT_FAILURE
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -75,7 +76,7 @@ class UDFLoadErrorFormatter(ErrorFormatter):
                 "`tool_path` in your workflow config to a directory that exists."
             ),
             context=ctx or None,
-            docs_url="https://docs.runagac.com/user-defined-functions",
+            docs_url=TOOL_DISCOVERY,
         )
 
     def _format_import_failure(
@@ -135,7 +136,7 @@ class UDFLoadErrorFormatter(ErrorFormatter):
             details=details,
             fix=fix,
             context=ctx or None,
-            docs_url="https://docs.runagac.com/user-defined-functions",
+            docs_url=TOOL_IMPORT_FAILURE,
         )
 
     @staticmethod

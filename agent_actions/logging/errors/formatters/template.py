@@ -3,6 +3,7 @@
 from difflib import SequenceMatcher
 from typing import Any
 
+from ..docs_links import TEMPLATE_FIELD_REFERENCE
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -55,7 +56,7 @@ class TemplateErrorFormatter(ErrorFormatter):
                 "template_line": context.get("template_line"),
                 "mode": context.get("mode"),
             },
-            docs_url="https://docs.runagac.com/config/prompting",
+            docs_url=TEMPLATE_FIELD_REFERENCE,
         )
 
     def _format_variable_diagnostic(
