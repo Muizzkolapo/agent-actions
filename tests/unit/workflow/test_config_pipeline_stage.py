@@ -3,7 +3,7 @@
 Covers:
 - pipeline_stage key (not operation) to avoid overwriting inner context
 - isinstance guard when .context is not a dict
-- agent name propagation
+- workflow name propagation, including a failure before the config file has parsed
 - Exception without .context attribute
 - Exception with existing .context dict
 - UDFLoadError raised from _discover_udfs_from_path is enriched with the
@@ -18,14 +18,9 @@ from agent_actions.errors import ConfigurationError, UDFLoadError
 from agent_actions.workflow.config_pipeline import (
     _discover_udfs_from_path,
     _run_config_stage,
+    load_workflow_configs,
 )
-
-
-def _make_manager(agent_name: str = "test_agent") -> MagicMock:
-    """Return a mock ConfigManager with the given agent_name."""
-    manager = MagicMock()
-    manager.agent_name = agent_name
-    return manager
+from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 
 
 class TestRunConfigStage:
@@ -33,13 +28,11 @@ class TestRunConfigStage:
 
     def test_success_returns_value(self):
         """Happy path: function return value is passed through."""
-        manager = _make_manager()
-        result = _run_config_stage(lambda: 42, "load_configs", manager)
+        result = _run_config_stage(lambda: 42, "load_configs", "test_agent")
         assert result == 42
 
     def test_enriches_with_pipeline_stage_not_operation(self):
         """Must use 'pipeline_stage' key so inner 'operation' is preserved."""
-        manager = _make_manager()
         inner = ConfigurationError(
             "template error",
             context={"operation": "template_rendering", "config_path": "/a/b.yml"},
@@ -49,7 +42,7 @@ class TestRunConfigStage:
             raise inner
 
         with pytest.raises(ConfigurationError) as exc_info:
-            _run_config_stage(fail, "load_configs", manager)
+            _run_config_stage(fail, "load_configs", "test_agent")
 
         ctx = exc_info.value.context
         # Inner 'operation' must NOT be overwritten
@@ -60,13 +53,12 @@ class TestRunConfigStage:
 
     def test_exception_without_context_attr(self):
         """Bare Exception (no .context) gets a fresh dict."""
-        manager = _make_manager("my_agent")
 
         def fail():
             raise ValueError("oops")
 
         with pytest.raises(ValueError) as exc_info:
-            _run_config_stage(fail, "validate_agent_name", manager)
+            _run_config_stage(fail, "validate_agent_name", "my_agent")
 
         ctx = exc_info.value.context
         assert isinstance(ctx, dict)
@@ -75,7 +67,6 @@ class TestRunConfigStage:
 
     def test_exception_with_existing_context_dict(self):
         """Exception that already has a dict .context gets enriched additively."""
-        manager = _make_manager()
         err = RuntimeError("fail")
         err.context = {"existing_key": "preserved"}
 
@@ -83,7 +74,7 @@ class TestRunConfigStage:
             raise err
 
         with pytest.raises(RuntimeError) as exc_info:
-            _run_config_stage(fail, "merge_agent_configs", manager)
+            _run_config_stage(fail, "merge_agent_configs", "test_agent")
 
         ctx = exc_info.value.context
         assert ctx["existing_key"] == "preserved"
@@ -91,7 +82,6 @@ class TestRunConfigStage:
 
     def test_exception_with_non_dict_context_replaced(self):
         """If .context is a non-dict (e.g. string), it gets replaced with a fresh dict."""
-        manager = _make_manager()
         err = RuntimeError("fail")
         err.context = "not a dict"
 
@@ -99,7 +89,7 @@ class TestRunConfigStage:
             raise err
 
         with pytest.raises(RuntimeError) as exc_info:
-            _run_config_stage(fail, "determine_execution_order", manager)
+            _run_config_stage(fail, "determine_execution_order", "test_agent")
 
         ctx = exc_info.value.context
         assert isinstance(ctx, dict)
@@ -107,26 +97,56 @@ class TestRunConfigStage:
 
     def test_passes_args_to_function(self):
         """Extra args are forwarded to the wrapped function."""
-        manager = _make_manager()
         values = []
 
         def fn(a, b):
             values.append((a, b))
 
-        _run_config_stage(fn, "test_stage", manager, "x", "y")
+        _run_config_stage(fn, "test_stage", "test_agent", "x", "y")
         assert values == [("x", "y")]
 
-    def test_manager_without_agent_name_falls_back(self):
-        """When manager has no agent_name attr, uses 'unknown'."""
-        manager = MagicMock(spec=[])  # No attributes at all
+    def test_a_failure_before_the_config_parses_names_the_workflow(self):
+        """The workflow name comes from the config path, which is known before the file parses."""
+        manager = MagicMock()
+        manager.agent_name = None
+        manager.load_configs.side_effect = ConfigurationError("render failed")
+        config = WorkflowRuntimeConfig(
+            paths=WorkflowPaths(
+                constructor_path="/p/agent_workflow/quiz/agent_config/quiz.yml",
+                user_code_path=None,
+                default_path="/p/agent_actions.yml",
+            ),
+            use_tools=False,
+            manager=manager,
+        )
 
-        def fail():
-            raise RuntimeError("boom")
+        with pytest.raises(ConfigurationError) as exc_info:
+            load_workflow_configs(config, MagicMock(), fire_events=False)
 
-        with pytest.raises(RuntimeError) as exc_info:
-            _run_config_stage(fail, "load_configs", manager)
+        assert exc_info.value.context["agent"] == "quiz"
+        assert exc_info.value.context["pipeline_stage"] == "load_configs"
 
-        assert exc_info.value.context["agent"] == "unknown"
+    def test_the_initialization_event_names_the_workflow_before_the_config_parses(self):
+        manager = MagicMock()
+        manager.agent_name = None
+        manager.load_configs.side_effect = ConfigurationError("render failed")
+        config = WorkflowRuntimeConfig(
+            paths=WorkflowPaths(
+                constructor_path="/p/agent_workflow/quiz/agent_config/quiz.yml",
+                user_code_path=None,
+                default_path="/p/agent_actions.yml",
+            ),
+            use_tools=False,
+            manager=manager,
+        )
+
+        with patch("agent_actions.workflow.config_pipeline.fire_event") as fired:
+            with pytest.raises(ConfigurationError):
+                load_workflow_configs(config, MagicMock(), fire_events=True)
+
+        (event,) = [call.args[0] for call in fired.call_args_list]
+        assert type(event).__name__ == "WorkflowInitializationStartEvent"
+        assert event.workflow_name == "quiz"
 
 
 class TestDiscoverUDFsFromPathTypedHandling:
