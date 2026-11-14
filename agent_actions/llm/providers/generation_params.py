@@ -9,6 +9,7 @@ with vendor-specific key mapping and stop-sequence normalisation.
 import inspect
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from types import ModuleType
 from typing import Any
 
 import httpx
@@ -155,14 +156,16 @@ def request_timeout_kwargs(agent_config: dict[str, Any]) -> dict[str, Any]:
     return {"timeout": request_timeout_seconds(agent_config)}
 
 
-def connect_limited_timeout(seconds: float) -> httpx.Timeout:
+def connect_limited_timeout(seconds: float, sdk: ModuleType) -> Any:
     """*seconds* for the request, with the short connect limit the openai-style SDKs keep.
 
-    A bare number would set the connect timeout to *seconds* as well.
+    Built with *sdk*'s own ``Timeout``: an SDK on httpx2 (anthropic 1.x, openai 3.x)
+    refuses httpx's. A bare number would set the connect timeout to *seconds* as well.
     """
-    return httpx.Timeout(seconds, connect=LLMDefaults.CONNECT_TIMEOUT_SECONDS)
+    timeout_class = getattr(sdk, "Timeout", None) or httpx.Timeout
+    return timeout_class(seconds, connect=LLMDefaults.CONNECT_TIMEOUT_SECONDS)
 
 
-def connect_limited_timeout_kwargs(agent_config: dict[str, Any]) -> dict[str, Any]:
-    """The action's request timeout as the ``timeout`` kwarg of an SDK that takes httpx's."""
-    return {"timeout": connect_limited_timeout(request_timeout_seconds(agent_config))}
+def connect_limited_timeout_kwargs(agent_config: dict[str, Any], sdk: ModuleType) -> dict[str, Any]:
+    """The action's request timeout as the ``timeout`` kwarg of *sdk*'s request."""
+    return {"timeout": connect_limited_timeout(request_timeout_seconds(agent_config), sdk)}

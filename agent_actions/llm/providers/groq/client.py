@@ -112,7 +112,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
             **extract_generation_params(
                 agent_config, extra_params=("frequency_penalty", "presence_penalty")
             ),
-            **connect_limited_timeout_kwargs(agent_config),
+            **connect_limited_timeout_kwargs(agent_config, groq),
         }
 
         start_time = time.perf_counter()
@@ -167,7 +167,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
             "messages": envelope.to_dicts(),
             "model": model_name,
             **params,
-            **connect_limited_timeout_kwargs(agent_config),
+            **connect_limited_timeout_kwargs(agent_config, groq),
         }
 
         # Generate request ID for correlation

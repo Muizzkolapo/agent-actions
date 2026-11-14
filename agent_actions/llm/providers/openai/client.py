@@ -87,7 +87,7 @@ class OpenAIClient(BaseClient):
 
     @classmethod
     def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
-        return connect_limited_timeout_kwargs(agent_config)
+        return connect_limited_timeout_kwargs(agent_config, openai)
 
     @classmethod
     def call_json(

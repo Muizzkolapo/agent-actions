@@ -109,3 +109,31 @@ def test_a_declared_endpoint_refuses_text_mode_before_any_request(timeout):
         _call(_endpoint_client(), _config(timeout, json_mode=False))
 
     assert sdk.return_value.chat.completions.create.call_args_list == []
+
+
+class _OwnTimeout:
+    """An SDK's own Timeout class, as one on httpx2 exports it; httpx's it refuses."""
+
+    def __init__(self, read: float, *, connect: float):
+        self.read, self.connect = read, connect
+
+
+# vendor -> (the SDK module whose Timeout the request must use, run one request)
+_OWN_SDK = {
+    "anthropic": ("anthropic", _anthropic),
+    "openai": ("openai", _openai),
+    "groq": ("groq", _groq),
+    "endpoint": ("openai", lambda config: _openai_family(_OPENAI, _endpoint_client(), config)),
+}
+
+
+@pytest.mark.parametrize("vendor", sorted(_OWN_SDK))
+def test_the_timeout_is_built_with_the_sdks_own_class(vendor, monkeypatch):
+    """Anthropic 1.x and OpenAI 3.x run on httpx2 and refuse an httpx.Timeout."""
+    module, run = _OWN_SDK[vendor]
+    monkeypatch.setattr(f"{module}.Timeout", _OwnTimeout)
+
+    sent = run(_config(2.5))
+
+    assert isinstance(sent, _OwnTimeout)
+    assert (sent.read, sent.connect) == (2.5, 5.0)
