@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A configuration error raised while the workflow config renders (an inline schema that does not parse, a Jinja syntax error, a missing prompt file) now names the workflow in `agac inspect`, `agac expect list` and `agac expect report`, where it printed `Invalid configuration in agent ''None''` and `Agent: None`. The `Workflow initialization started` event of a run names the workflow too, where it said `unknown`. A workflow file whose `name:` differs from its file name is now refused under the requested name (`agent ''w''`, with `agent_name: other` in the context), where `agac inspect` printed the `name:` value.'
+time: 2026-11-14T19:15:00Z
