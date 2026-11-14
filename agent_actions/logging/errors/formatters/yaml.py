@@ -7,6 +7,7 @@ import yaml
 
 from agent_actions.errors import UDFLoadError
 
+from ..docs_links import TROUBLESHOOTING
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -65,7 +66,7 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
             details="\n".join(details_parts),
             fix=fix,
             context={"file_path": yaml_context["file_path"]} if yaml_context["file_path"] else None,
-            docs_url="https://docs.runagac.com/troubleshooting/yaml-errors",
+            docs_url=TROUBLESHOOTING,
         )
 
     def _extract_yaml_context(self, context: dict[str, Any]) -> dict[str, Any]:

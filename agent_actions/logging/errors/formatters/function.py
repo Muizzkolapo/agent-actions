@@ -9,6 +9,7 @@ from agent_actions.errors import (
     UDFLoadError,
 )
 
+from ..docs_links import FUNCTION_NOT_FOUND
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -79,7 +80,7 @@ class FunctionNotFoundFormatter(ErrorFormatter):
                 "function_name": function_name,
                 "similar_functions": similar[:3] if similar else None,
             },
-            docs_url="https://docs.runagac.com/user-defined-functions",
+            docs_url=FUNCTION_NOT_FOUND,
         )
 
     def _find_similar_functions(self, target: str, available: list[str]) -> list[str]:

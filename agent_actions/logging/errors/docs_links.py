@@ -1,0 +1,15 @@
+"""Documentation pages that error messages link to; the only module that names the docs site."""
+
+DOCS_BASE = "https://docs.runagac.com/docs/"
+
+PROVIDER_CONFIGURATION = DOCS_BASE + "installation#provider-configuration"
+CONFIGURATION = DOCS_BASE + "reference/configuration"
+WORKFLOW_CONFIGURATION = DOCS_BASE + "reference/configuration#agentic-workflow-configuration"
+VENDOR_SUPPORT = DOCS_BASE + "reference/configuration#vendor-support"
+MISSING_REQUIRED_FIELD = DOCS_BASE + "reference/configuration/defaults#missing-required-field"
+TROUBLESHOOTING = DOCS_BASE + "guides/troubleshooting"
+SCHEMA_VALIDATION_ERROR = DOCS_BASE + "guides/troubleshooting#schemavalidationerror"
+TEMPLATE_FIELD_REFERENCE = DOCS_BASE + "guides/troubleshooting#template-variable-error"
+FUNCTION_NOT_FOUND = DOCS_BASE + "reference/tools#function-not-found"
+TOOL_DISCOVERY = DOCS_BASE + "reference/tools#tool-discovery"
+TOOL_IMPORT_FAILURE = DOCS_BASE + "reference/tools#a-tool-file-that-fails-to-import"

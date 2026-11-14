@@ -16,5 +16,6 @@ and translation helpers for CLI/agent reporting.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `docs_links.py` | Module | The documentation pages that error messages link to: one constant per link, built from one site root. No other module names the docs site, so each link a formatter prints is a constant here. | `errors`, `logging` |
 | `translator.py` | Module | Maps internal errors to higher-level user-facing messages (used by CLI); the root cause's text is masked by registered value (`redact_known_secrets`), never by the key-name rules, which would mangle a message that names a config key. | `errors`, `logging` |
 | `user_error.py` | Module | Definitions of user-facing error types and helper constructors. | `errors`, `logging` |

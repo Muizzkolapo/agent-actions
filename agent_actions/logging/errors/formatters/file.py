@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..docs_links import WORKFLOW_CONFIGURATION
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -46,7 +47,7 @@ class FileErrorFormatter(ErrorFormatter):
                         "agac run --agent <existing-agent>"
                     ),
                     context=context,
-                    docs_url="https://docs.runagac.com/agents/create",
+                    docs_url=WORKFLOW_CONFIGURATION,
                 )
 
             return UserError(

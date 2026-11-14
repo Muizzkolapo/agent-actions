@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..docs_links import PROVIDER_CONFIGURATION
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -57,5 +58,5 @@ class AuthenticationErrorFormatter(ErrorFormatter):
             details="Your API key is invalid, expired, or not set",
             fix=fix_msg,
             context=context,
-            docs_url="https://docs.runagac.com/setup/authentication",
+            docs_url=PROVIDER_CONFIGURATION,
         )
