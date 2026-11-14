@@ -5,57 +5,61 @@ sidebar_position: 6
 
 # Prompt Traces
 
-> **Storage backend:** SQLite. Traces are stored in `agent_io/store/<workflow>.db`, table `prompt_trace`.
+:::note[Storage backend]
+SQLite. Traces are stored in `agent_io/store/<workflow>.db`, table `prompt_trace`.
+:::
 
-Every time an action processes a record, Agent Actions captures a **prompt trace** — the compiled prompt sent to the model and the raw response received. Traces are stored in the `prompt_trace` table of your workflow's SQLite database. A tool action is traced too: its `model_vendor` is `tool` and its `model_name` is the tool name.
+Every time an action processes a record, Agent Actions captures a **prompt trace**. A prompt trace is the compiled prompt sent to the model and the raw response received. Traces are stored in the `prompt_trace` table of the SQLite database of your workflow. A tool action is also traced. Its `model_vendor` is `tool` and its `model_name` is the tool name.
 
 ## What Gets Captured
 
 | Field | Description |
 |-------|-------------|
 | `compiled_prompt` | The fully rendered Jinja template sent to the LLM |
-| `llm_context` | JSON-serialized context dict (template variables) |
-| `response_text` | Raw LLM response text |
-| `model_name` | Model identifier (e.g., `llama3.2:latest`, `gpt-4o-mini`) |
-| `model_vendor` | Provider name (e.g., `ollama_local`, `openai`) |
+| `llm_context` | The context dict, serialized to JSON (template variables) |
+| `response_text` | The raw response text of the LLM |
+| `model_name` | The model identifier (for example, `llama3.2:latest`, `gpt-4o-mini`) |
+| `model_vendor` | The provider name (for example, `ollama_local`, `openai`) |
 | `run_mode` | `online` (real-time) or `batch` |
-| `prompt_length` | Character count of the compiled prompt |
-| `context_length` | Character count of the LLM context sent to the model |
-| `response_length` | Character count of the LLM response |
-| `attempt` | Attempt number (0 = initial, 1+ = repair iterations) |
-| `source_guid` | Durable identity of the record that was prompted |
+| `prompt_length` | The character count of the compiled prompt |
+| `context_length` | The character count of the LLM context sent to the model |
+| `response_length` | The character count of the LLM response |
+| `attempt` | The attempt number (0 = initial, 1+ = repair iterations) |
+| `source_guid` | The durable identity of the record that was prompted |
 | `run_id` | The workflow run that wrote the row |
-| `answered_under` | JSON: the config the record was answered under. Holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash` |
+| `answered_under` | JSON: the config that the record was answered under. It holds `config_hash` (prompt, schema and guard), `model_name`, `model_vendor`, `context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash` |
 
-Traces carry two identifiers, and which one to join on depends on the question
-you are asking.
+Traces carry two identifiers. The identifier to join on depends on the question
+that you ask.
 
 - `source_guid` is the **durable** identity of the record that was prompted. It
-  is the same value `record_disposition.record_id` holds, so it is the key for
-  auditing across tables — "was this record prompted, and what did it get?" —
-  and it is stable across runs.
-- `record_id` is the **prepare-time** `target_id`, which is minted afresh every
-  run (and, for a record an action expands into several, again per child). Join
-  on it to ask "which prompt produced this record on this run", since it cannot
-  reach a row an earlier run left behind. A record produced by an expansion
-  reaches its prompt through its `parent_target_id`, because its own id did not
-  exist yet when the prompt ran.
+  is the same value that `record_disposition.record_id` holds. Thus it is the key
+  for audits across tables ("was this record prompted, and what did it get?"). It
+  is stable across runs.
+- `record_id` is the **prepare-time** `target_id`. A new value is minted in every
+  run. For a record that an action expands into several records, a new value is
+  minted again for each child. Join on it to ask
+  "which prompt produced this record on this run". The reason is that it cannot reach a row that an earlier run left.
+  A record produced by an expansion reaches its prompt through its
+  `parent_target_id`. The reason is that its own id did not exist yet when the
+  prompt ran.
 
-Both apply to online and batch alike. Rows written before `source_guid` and
-`run_id` existed leave them `NULL`.
+Both identifiers apply to online and batch alike. Rows written before `source_guid`
+and `run_id` existed have `NULL` in these columns.
 
-A [config edit](../cli/run#when-you-edit-the-workflow) re-runs nothing, so one action can
-hold answers from more than one config. `answered_under` says which config answered each
+A [config edit](../cli/run#when-you-edit-the-workflow) re-runs nothing. Thus one action can
+hold answers from more than one config. `answered_under` tells which config answered each
 record. It holds the same keys as the `answered_under` stamp of the action in
-`agent_io/.agent_status.json`, so the two compare directly. Rows written before this column
-existed leave it `NULL`. A row is written when its prompt is built, before the model is
-called, so a row with no `response_text` was prompted under that config but not answered:
-the run stopped before the answer came back.
+`agent_io/.agent_status.json`. Thus you can compare the two directly.
 
-An action stopped partway keeps its traces when it resumes, the rows of attempts that
-failed included: they are the record of what was asked, and under which config. So a record
-can hold a failed attempt under the old config beside its answer under the new one. The
-latest row of each record is the one its answer came from:
+Rows written before this column existed have `NULL` in it. A row is written when its prompt
+is built, before the model is called. Thus a row with no `response_text` was prompted under
+that config but not answered. The run stopped before the answer came back.
+
+An action that stopped partway keeps its traces when it resumes, including the rows of
+attempts that failed. These rows show what was asked, and under which config. Thus a record
+can hold a failed attempt under the old config beside its answer under the new config. The
+latest row of each record is the row that its answer came from:
 
 ```sql
 SELECT source_guid, attempt, json_extract(answered_under, '$.model_name') AS model
@@ -73,37 +77,38 @@ WHERE action_name = 'classify';
 
 ## How Long Traces Are Kept
 
-Traces stay across runs that build on what an action already answered: a
-resumed run, and `agac retry`, keep the traces of the records they do not ask
-again beside those of the records they do. They are cleared when the answers
-they describe are replaced:
+Traces stay across runs that build on what an action already answered. A
+resumed run and `agac retry` keep the traces of the records that they do not ask
+again. They keep these traces beside the traces of the records that they ask again.
+Traces are cleared when the answers that they describe are replaced:
 
-- `agac run --fresh` clears every action's traces.
-- An action that runs again over every record clears its own traces, and those
-  of every action reading it that runs again with it. That happens on
-  `agac run --rerun`, when its stored output is gone, and when its limits
-  changed. A config edit or a change to the staged input clears nothing: the
-  traces of the answers that stand are kept, each naming the config it was
-  answered under, and so are those of a record no longer staged.
+- `agac run --fresh` clears the traces of every action.
+- An action that runs again over every record clears its own traces. It also
+  clears the traces of every action that reads it and runs again with it. This
+  occurs on `agac run --rerun`, when its stored output is gone, and when its
+  limits changed. A config edit or a change to the staged input clears nothing.
+  The traces of the answers that stand are kept, and each trace names the config
+  that it was answered under. The traces of a record that is no longer staged are
+  also kept.
 - A failed or skipped action that runs again from the start clears its traces.
 
-Otherwise, storage maintenance keeps the traces of the most recent
+In all other cases, storage maintenance keeps the traces of the most recent
 `storage.prompt_trace_retention_runs` calendar days on which traces were written
 (`0` never prunes).
 
 ## Viewing Traces in VS Code
 
-The VS Code extension attaches each record's trace to the record in the Query Results panel, matched by `target_id`. Card view shows these sections, in this order after the identity header:
+The VS Code extension attaches the trace of each record to the record in the Query Results panel. It matches them by `target_id`. Card view shows these sections, in this order, after the identity header:
 
-1. **Prompt Trace** — collapsible; shows the compiled prompt, with the model name and run mode as badges
-2. **Input Data** — collapsible; the record's input namespaces
-3. **Raw Response** — collapsible; the text the LLM returned
+1. **Prompt Trace** — collapsible. It shows the compiled prompt, with the model name and run mode as badges.
+2. **Input Data** — collapsible. The input namespaces of the record.
+3. **Raw Response** — collapsible. The text that the LLM returned.
 4. **Action Output**
 5. **Metadata** — collapsible, shown last
 
 ### JSON View
 
-In JSON view, the trace appears as a nested `_trace` field on each record:
+In JSON view, the trace is a nested `_trace` field on each record:
 
 ```json
 {
@@ -121,7 +126,7 @@ In JSON view, the trace appears as a nested `_trace` field on each record:
 
 ## Reading a Trace
 
-The store keeps the prompt, context and response text compressed. Read them with `agac traces`:
+The store keeps the prompt, context and response text in compressed form. Read them with `agac traces`:
 
 ```bash
 # Every trace of an action, as plain text
@@ -136,7 +141,7 @@ agac traces -w <workflow> -a classify_issue --json
 
 ## Querying Trace Metadata
 
-The other columns are plain values, so SQL still answers questions about traces:
+The other columns are plain values. Thus SQL still answers questions about traces:
 
 ```bash
 sqlite3 agent_io/store/<workflow>.db
@@ -165,4 +170,4 @@ GROUP BY action_name, record_id
 HAVING max_attempts > 0;
 ```
 
-`compiled_prompt`, `llm_context` and `response_text` read as blobs in `sqlite3`. `agac traces` reads rows stored as text as well as compressed rows.
+`compiled_prompt`, `llm_context` and `response_text` show as blobs in `sqlite3`. `agac traces` reads rows stored as text and also compressed rows.

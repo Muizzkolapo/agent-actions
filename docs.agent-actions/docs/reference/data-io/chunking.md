@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Chunking
 
-Chunking splits large text documents (`.txt`, `.md`, `.html`, `.pdf`, `.docx`) into smaller pieces that fit within LLM context limits. Rows of JSON, CSV, TSV and Excel files are not chunked. Agent Actions supports multiple chunking strategies optimized for different use cases.
+Chunking splits large text documents (`.txt`, `.md`, `.html`, `.pdf`, `.docx`) into smaller pieces that fit in the context limits of the LLM. The records of JSON, CSV, TSV and Excel files are not chunked. Agent Actions supports multiple chunking strategies. Each strategy is optimized for different use cases.
 
 ## Configuration
 
@@ -23,27 +23,27 @@ default_agent_config:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `chunk_size` | 300 | Maximum size per chunk (tokens or characters) |
-| `chunk_overlap` | 10 | Overlap between consecutive chunks |
-| `split_method` | `tiktoken` | Chunking strategy: `tiktoken`, `chars`, `spacy`, or the name of a custom split function (see below) |
-| `tokenizer_model` | `cl100k_base` | Tokenizer used to measure chunk size |
+| `chunk_size` | 300 | The maximum size of each chunk (tokens or characters) |
+| `chunk_overlap` | 10 | The overlap between consecutive chunks |
+| `split_method` | `tiktoken` | The chunking strategy: `tiktoken`, `chars`, `spacy` or the name of a custom split function (see below) |
+| `tokenizer_model` | `cl100k_base` | The tokenizer that measures the chunk size |
 
-These four are the only keys `chunk_config` takes; anything else is refused at load, naming the field it resembles. Each can also be written as a key of its own on an action, in `defaults:`, or in `default_agent_config:`.
+`chunk_config` takes only these four keys. Any other key is refused at load, and the error names the field that it resembles. You can also write each of these keys as a separate key on an action, in `defaults:` or in `default_agent_config:`.
 
-Settings merge by name, not by block, so a block that omits a name keeps whatever a wider level set for it. Nearest wins, and within a level the block wins over a key beside it:
+Settings merge by name, not by block. Thus a block that omits a name keeps the value that a wider level set for that name. The nearest level has priority. In one level, the block has priority over a key beside it:
 
 ```
 default_agent_config key  <  default_agent_config block  <  defaults: key
   <  defaults: block  <  action key  <  action block
 ```
 
-For `tiktoken` and `chars` splits, an overlap at or above the chunk size is refused at load rather than at the split, since merging by name can pair a nearer size with a wider overlap.
+For `tiktoken` and `chars` splits, an overlap at or above the chunk size is refused at load, not at the split. The reason is that merging by name can pair a nearer size with a wider overlap.
 
-The defaults are tuned for the framework's own short-document benchmarks. The examples below show larger values (4000 / 8000) tuned for OpenAI-class context windows — start there for production workloads on long documents.
+The defaults are tuned for the short-document benchmarks of the framework. The examples below show larger values (4000 / 8000), tuned for OpenAI-class context windows. For production workloads on long documents, start with these larger values.
 
 ### Per-Action Override
 
-Override chunking for specific actions:
+Override the chunking for specific actions:
 
 ```yaml
 actions:
@@ -58,7 +58,7 @@ actions:
 
 ### tiktoken (Default)
 
-Token-based chunking using OpenAI's tokenizer:
+Token-based chunking with the tokenizer of OpenAI:
 
 ```yaml
 chunk_config:
@@ -67,7 +67,7 @@ chunk_config:
   split_method: tiktoken
 ```
 
-**When to use:** OpenAI models, precise token control, optimizing for context limits.
+**When to use:** OpenAI models, precise token control, optimization for context limits.
 
 ### chars
 
@@ -84,7 +84,7 @@ chunk_config:
 
 ### spacy
 
-Semantic chunking using spaCy NLP—splits at sentence boundaries:
+Semantic chunking with spaCy NLP. It splits at sentence boundaries:
 
 ```yaml
 chunk_config:
@@ -93,15 +93,15 @@ chunk_config:
   split_method: spacy
 ```
 
-**When to use:** Preserving sentence integrity, natural language content, quality over speed.
+**When to use:** Sentences that must stay complete, natural language content, quality that is more important than speed.
 
 ### Custom split function
 
-Any other `split_method` value names a Python module and function of that name in the `tools/` folder (or the folder `TOOLS_PATH` names). The function takes `(text, chunk_size, overlap, tokenizer_model)` and returns a list of strings.
+Any other `split_method` value names a Python module and a function of that name in the `tools/` folder (or in the folder that `TOOLS_PATH` names). The function takes `(text, chunk_size, overlap, tokenizer_model)` and returns a list of strings.
 
 ## Overlap
 
-Overlap ensures context is not lost at chunk boundaries. Overlapping sections appear in both adjacent chunks.
+Overlap makes sure that context is not lost at chunk boundaries. Overlapping sections occur in both adjacent chunks.
 
 ### Recommended Overlap
 
@@ -142,7 +142,7 @@ actions:
 
 ### Downstream Aggregation
 
-When you need to combine results from all chunks:
+When you need to combine the results from all chunks:
 
 ```yaml
 actions:
@@ -158,10 +158,10 @@ actions:
 
 ## Best Practices
 
-1. **Match split method to model**: Use `tiktoken` for OpenAI models, `chars` for others
-2. **Account for prompt size**: Leave room for your prompt template in the chunk size
-3. **Test boundaries**: Run `agac run -a <workflow> --file-limit 1`, then read the first action's records with `agac records -w <workflow> -a <action>` to see each chunk
+1. **Match split method to model**: Use `tiktoken` for OpenAI models. Use `chars` for other models.
+2. **Account for prompt size**: Leave space in the chunk size for your prompt template.
+3. **Test boundaries**: Run `agac run -a <workflow> --file-limit 1`. Then read the records of the first action with `agac records -w <workflow> -a <action>` to see each chunk.
 
 ## Disabling Chunking
 
-To process a document whole, set a `chunk_size` larger than the document. Omitting `chunk_config` does not turn chunking off: the defaults above apply.
+To process a document as one piece, set a `chunk_size` larger than the document. If you omit `chunk_config`, chunking is not disabled. The defaults above apply.

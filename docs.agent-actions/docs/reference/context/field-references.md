@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Field References
 
-Field references access data from upstream actions using `{{ action_name.field }}` syntax, where `action_name` is the name of the upstream action: `{{ extract_facts.candidate_facts_list }}`.
+A field reference gets data from an upstream action with the `{{ action_name.field }}` syntax. `action_name` is the name of the upstream action. For example: `{{ extract_facts.candidate_facts_list }}`.
 
 ## Syntax
 
@@ -29,7 +29,7 @@ context_scope:
 
 ## Reference Structure
 
-A field reference consists of:
+A field reference has this structure:
 
 ```
 action_name.field_path
@@ -37,14 +37,14 @@ action_name.field_path
 
 | Component | Description | Example |
 |-----------|-------------|---------|
-| `action_name` | Name of the upstream action | `extract_facts` |
-| `field_path` | Path to the field (dot-separated for nested) | `response.data.count` |
+| `action_name` | The name of the upstream action | `extract_facts` |
+| `field_path` | The path to the field (a dot separates each level of a nested field) | `response.data.count` |
 
-`action_name.field` reads what the action produced: the fields its schema lists, plus the `expect` verdict its expectations attach. A field the action only observes or passes through is not in its namespace, so pre-flight refuses a reference to it there. Read such a field from the action that produced it, such as `source.url`.
+`action_name.field` reads the output of the action. The output is the fields that its schema lists, plus the `expect` verdict that its expectations attach. A field that the action only observes or passes through is not in its namespace. Thus pre-flight refuses a reference to that field in that namespace. Read such a field from the action that produced it, for example `source.url`.
 
 ## Reserved Action Names
 
-Action names cannot use reserved namespaces. The following names are disallowed:
+An action name cannot be a reserved namespace. These names are not permitted:
 
 - `action`
 - `context_scope`
@@ -55,11 +55,11 @@ Action names cannot use reserved namespaces. The following names are disallowed:
 - `version`
 - `workflow`
 
-`action`, `prompt` and `schema` are reserved words, not namespaces: no record carries them. Write `{{ extract_facts.count }}`, not `{{ action.extract_facts.count }}`. Pre-flight refuses a prompt, guard or `context_scope` entry that reads through one of them, and names the spelling to write.
+`action`, `prompt` and `schema` are reserved words, not namespaces. No record carries them. Write `{{ extract_facts.count }}`, not `{{ action.extract_facts.count }}`. Pre-flight refuses a prompt, a guard or a `context_scope` entry that reads through one of these words. Pre-flight also names the correct spelling.
 
 ### Nested Field Access
 
-Access deeply nested fields with dot notation:
+Use dot notation to get deeply nested fields:
 
 ```yaml
 # Upstream output:
@@ -79,7 +79,7 @@ prompt: |
 
 ### source
 
-The `source` reference accesses the input data for the current record:
+The `source` reference gets the input data of the current record:
 
 ```yaml
 prompt: |
@@ -89,7 +89,7 @@ prompt: |
 
 ### seed
 
-The `seed` reference accesses static seed data loaded via `context_scope.seed`:
+The `seed` reference gets the static seed data that `context_scope.seed` loads:
 
 ```yaml
 defaults:
@@ -136,7 +136,7 @@ prompt: |
 
 ## Dependencies
 
-An action reads only the actions upstream of it through its `dependencies`. List each action it reads, or an action downstream of it:
+An action reads only the actions that are upstream of it through its `dependencies`. List each action that it reads, or an action downstream of that action:
 
 ```yaml
 - name: validate
@@ -147,14 +147,14 @@ An action reads only the actions upstream of it through its `dependencies`. List
 
 ## Best Practices
 
-1. **Use explicit dependencies** - Every referenced action must be upstream of the action through its `dependencies`
-2. **Use Jinja2 syntax** - `{{ action_name.field }}` for prompts
-3. **Use selector syntax** - `action_name.field` for guards and context_scope
-4. **Use schema command** - Run `agac schema -a <workflow>` to see the fields each action takes and produces
+1. **Use explicit dependencies** - Each action that a reference names must be upstream of the action through its `dependencies`.
+2. **Use Jinja2 syntax** - Use `{{ action_name.field }}` in prompts.
+3. **Use selector syntax** - Use `action_name.field` in guards and context_scope.
+4. **Use the schema command** - Run `agac schema -a <workflow>` to see the fields that each action takes and produces.
 
 ## Version Field Patterns
 
-Each iteration of a version action keeps its output in its own namespace (`extract_strategies_1`, `extract_strategies_2`). A consumer declares `version_consumption` and uses wildcard syntax to reference all iterations:
+Each iteration of a version action keeps its output in a separate namespace (`extract_strategies_1`, `extract_strategies_2`). A consumer declares `version_consumption` and uses the wildcard syntax to refer to all iterations:
 
 ```yaml
 - name: analyze_strategies
@@ -167,7 +167,7 @@ Each iteration of a version action keeps its output in its own namespace (`extra
       - extract_strategies.*  # Matches the namespaces extract_strategies_1, extract_strategies_2, ...
 ```
 
-See [Version Actions](../execution/versions) for complete documentation.
+See [Version Actions](../execution/versions) for the complete documentation.
 
 ## See Also
 
