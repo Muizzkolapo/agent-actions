@@ -57,12 +57,12 @@ BaseValidator (ABC)
   |     - detects suspicious keys (typos in JSON Schema keywords)
   |     - validates $ref references resolve
   |
-  +--> PromptValidator     Validates prompt_store/*.md files
+  +--> PromptValidator     Validates the prompt files it is given
   |     - prompt ID extraction (delegates to PromptLoader.get_all_prompt_names)
-  |     - duplicate ID detection (within-file = error, cross-file = warning)
+  |     - duplicate ID detection within one file (an ID may repeat across files)
   |     - unclosed {prompt_id}...{end_prompt} blocks
   |     - file size limits (PromptDefaults.MAX_PROMPT_SIZE_BYTES)
-  |     - workflow-scoped: only validates {workflow_name}.md when config provided
+  |     - validates only the files in the list it is given, once per resolved path
   |
   +--> PathValidator       Validates file/directory paths
         - existence, readability, writability, executability
@@ -432,7 +432,7 @@ schema is never valid output.
 
 9. **ConfigValidator dispatches on an "operation" key.** Unlike the other validators that take direct data, `ConfigValidator.validate()` expects `data["operation"]` to be one of `"validate_agent_config_file_meta"` or `"validate_agent_entries"`. Passing raw config data without an operation key will produce an error, not a validation.
 
-10. **PromptValidator validates differently with/without workflow_name.** When `config["workflow_name"]` is provided, only `{workflow_name}.md` is validated. Without it, every `.md` file in the prompt directory is scanned. Cross-file duplicate prompt IDs are warnings (not errors) because the runtime loads prompts per-workflow.
+10. **PromptValidator validates only the files it is given.** `validate()` takes a list of prompt file paths and checks each resolved path once; it ignores `config`, which the base class signature carries. `agac run` gives it the files that `PromptLoader.load_prompt` read while `load_workflow` ran (`PromptLoader.record_loads()`), nested `load_prompt` tags included, also when the load raises; a file the workflow does not load is not checked. An empty list gives no warnings or errors. A prompt ID used twice in one file is an error; an ID in two files is not reported, because a `$file.ID` reference names its file.
 
 11. **ActionEntryValidationOrchestrator stops on critical failure.** If `ActionEntryStructureValidator` returns `is_critical_failure=True` (entry is not a dict), the remaining 7 validators never run. This means you will only see structural errors, not semantic ones, until the structure is fixed.
 

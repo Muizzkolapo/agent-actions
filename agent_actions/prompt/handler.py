@@ -3,6 +3,9 @@
 import logging
 import re
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 import jinja2
@@ -40,6 +43,9 @@ def _prompt_store_dirs(root: Path) -> list[Path]:
     return [d for d in dirs if d.is_dir()]
 
 
+_load_record: ContextVar[list[Path] | None] = ContextVar("prompt_load_record", default=None)
+
+
 def _searched_places(root: Path) -> str:
     store = PathType.PROMPT_STORE.value
     return f"{root / store} and {root / _WORKFLOWS_DIR / '*' / store}"
@@ -47,6 +53,17 @@ def _searched_places(root: Path) -> str:
 
 class PromptLoader:
     """Loads and validates prompts from markdown content."""
+
+    @staticmethod
+    @contextmanager
+    def record_loads() -> Iterator[list[Path]]:
+        """Yield a list that gets each prompt file `load_prompt` reads in the block, once."""
+        files: list[Path] = []
+        token = _load_record.set(files)
+        try:
+            yield files
+        finally:
+            _load_record.reset(token)
 
     @staticmethod
     def discover_prompt_files(project_root: Path | None = None) -> list[Path]:
@@ -166,6 +183,9 @@ class PromptLoader:
         prompt_file_path = matches[0]
         logger.debug("Found prompt file at: %s", prompt_file_path)
         content = prompt_file_path.read_text(encoding="utf-8")
+        record = _load_record.get()
+        if record is not None and prompt_file_path not in record:
+            record.append(prompt_file_path)
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
         PromptLoader.validate_prompt_blocks(prompt_file_path.name, content)
         return PromptLoader.extract_prompt(content, prompt_key)

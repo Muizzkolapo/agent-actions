@@ -238,8 +238,10 @@ The inspect commands do NOT use this helper -- `BaseInspectCommand._load_inspect
 RunCommand.execute()
   │
   ├─ ProjectPathsFactory.create_project_paths()    ← auto_create=True (default)
-  ├─ PromptValidator().validate()                   ← check prompt files exist
-  ├─ load_workflow(... fresh=, verify_keys=)        ← load + validate config
+  ├─ load_workflow(... fresh=, verify_keys=)        ← load + validate config, inside
+  │                                                    PromptLoader.record_loads()
+  ├─ PromptValidator().validate(prompt_files)       ← lint the prompt files the load read,
+  │                                                    also when the load raises
   │
   ├─ RunTracker.start_workflow_run()                ← docs tracking (run_results.json)
   ├─ LoggerFactory.initialize(output_dir=...)       ← Phase 4 logging init

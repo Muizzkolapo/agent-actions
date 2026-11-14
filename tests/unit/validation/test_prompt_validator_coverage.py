@@ -114,27 +114,15 @@ class TestReadPromptFile:
 
 
 class TestCheckPromptIdDuplicates:
-    """Test duplicate prompt ID detection across files."""
+    """Test duplicate prompt ID detection within one file."""
 
     def test_no_duplicates(self, validator):
-        all_seen: set[str] = set()
-        dups, cross = validator._check_prompt_id_duplicates("file.md", ["id1", "id2"], all_seen)
-        assert dups == set()
-        assert cross == []
+        assert validator._check_prompt_id_duplicates("file.md", ["id1", "id2"]) == set()
+        assert validator.get_errors() == []
 
     def test_within_file_duplicates(self, validator):
-        all_seen: set[str] = set()
-        dups, cross = validator._check_prompt_id_duplicates("file.md", ["id1", "id1"], all_seen)
-        assert "id1" in dups
-        assert validator.has_errors()
-
-    def test_cross_file_duplicates(self, validator):
-        all_seen: set[str] = {"id1"}
-        dups, cross = validator._check_prompt_id_duplicates("file2.md", ["id1"], all_seen)
-        assert cross == ["id1"]
-        # Cross-file duplicates are warnings, not errors
-        assert not validator.has_errors()
-        assert any("duplicate" in str(w).lower() for w in validator.get_warnings())
+        assert validator._check_prompt_id_duplicates("file.md", ["id1", "id1"]) == {"id1"}
+        assert validator.get_errors() == ["Duplicate prompt IDs found in file 'file.md': id1."]
 
 
 # ---------------------------------------------------------------------------
@@ -189,63 +177,29 @@ class TestValidateSinglePromptFile:
     def test_valid_prompt_file(self, validator, tmp_path):
         f = tmp_path / "prompt.md"
         f.write_text("# My Prompt\n{prompt analyze}\nDo analysis\n{end_prompt}")
-        all_ids: set[str] = set()
-        count = validator._validate_single_prompt_file(f, all_ids)
+        count = validator._validate_single_prompt_file(f)
         assert count == 1
-        assert "analyze" in all_ids
+        assert validator.get_errors() == []
 
     def test_oversized_file_returns_zero(self, validator, tmp_path):
         f = tmp_path / "big.md"
         f.write_text("x" * (101 * 1024))
-        count = validator._validate_single_prompt_file(f, set())
+        count = validator._validate_single_prompt_file(f)
         assert count == 0
 
     def test_file_with_no_sections_warns(self, validator, tmp_path):
         f = tmp_path / "plain.md"
         f.write_text("Just some text without headings or prompts.")
-        count = validator._validate_single_prompt_file(f, set())
+        count = validator._validate_single_prompt_file(f)
         assert count == 0
         assert len(validator.get_warnings()) > 0
 
     def test_file_with_duplicate_ids(self, validator, tmp_path):
         f = tmp_path / "dup.md"
         f.write_text("{prompt analyze}\nDo A\n{end_prompt}\n{prompt analyze}\nDo B\n{end_prompt}")
-        count = validator._validate_single_prompt_file(f, set())
+        count = validator._validate_single_prompt_file(f)
         assert count == 0
         assert validator.has_errors()
-
-
-# ---------------------------------------------------------------------------
-# validate()
-# ---------------------------------------------------------------------------
-
-
-class TestResolvePromptFiles:
-    """Test _resolve_prompt_files scoping logic."""
-
-    def test_no_workflow_name_returns_all_md(self, tmp_path):
-        (tmp_path / "a.md").write_text("a")
-        (tmp_path / "b.md").write_text("b")
-        result = PromptValidator._resolve_prompt_files(tmp_path, None)
-        assert len(result) == 2
-
-    def test_workflow_name_returns_only_matching_file(self, tmp_path):
-        (tmp_path / "my_workflow.md").write_text("wf")
-        (tmp_path / "other.md").write_text("other")
-        result = PromptValidator._resolve_prompt_files(tmp_path, "my_workflow")
-        assert len(result) == 1
-        assert result[0].name == "my_workflow.md"
-
-    def test_workflow_name_missing_file_falls_back_to_all(self, tmp_path):
-        (tmp_path / "other.md").write_text("other")
-        result = PromptValidator._resolve_prompt_files(tmp_path, "missing_workflow")
-        assert len(result) == 1
-        assert result[0].name == "other.md"
-
-    def test_empty_string_workflow_name_returns_all(self, tmp_path):
-        (tmp_path / "a.md").write_text("a")
-        result = PromptValidator._resolve_prompt_files(tmp_path, "")
-        assert len(result) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -256,85 +210,59 @@ class TestResolvePromptFiles:
 class TestValidateMethod:
     """Test the public validate() entry point."""
 
-    def test_non_path_data(self, validator):
-        result = validator.validate("not a path")
+    @pytest.mark.parametrize(
+        "data",
+        [pytest.param("not a list", id="string"), pytest.param(["a.md"], id="list-of-strings")],
+    )
+    def test_data_that_is_not_a_list_of_paths_is_an_error(self, validator, data):
+        result = validator.validate(data)
         assert result is False
-        assert any("path object" in e.lower() for e in validator.get_errors())
+        assert validator.get_errors() == ["Validation data must be a list of prompt file paths."]
 
-    def test_nonexistent_directory(self, validator, tmp_path):
-        result = validator.validate(tmp_path / "missing")
+    def test_no_files_is_a_clean_pass_with_nothing_reported(self, validator):
+        result = validator.validate([])
+        assert result is True
+        assert validator.get_errors() == []
+        assert validator.get_warnings() == []
+
+    def test_valid_files(self, validator, tmp_path):
+        first = tmp_path / "prompt1.md"
+        second = tmp_path / "prompt2.md"
+        first.write_text("# Prompt 1\n{prompt first}\nContent\n{end_prompt}")
+        second.write_text("# Prompt 2\n{prompt second}\nContent\n{end_prompt}")
+        result = validator.validate([first, second])
+        assert result is True
+        assert validator.get_errors() == []
+        assert validator.get_warnings() == []
+
+    def test_only_the_given_files_are_checked(self, validator, tmp_path):
+        given = tmp_path / "given.md"
+        given.write_text("# Bad\n{prompt given}\n{end_prompt}")
+        (tmp_path / "other.md").write_text("# Bad\n{prompt other}\n{end_prompt}")
+        result = validator.validate([given])
         assert result is False
+        assert validator.get_errors() == ["Empty prompt content for ID 'given' in file 'given.md'."]
 
-    def test_path_is_file(self, validator, tmp_path):
-        f = tmp_path / "file.txt"
-        f.write_text("hi")
-        result = validator.validate(f)
+    def test_an_id_in_two_files_is_not_reported(self, validator, tmp_path):
+        a = tmp_path / "a.md"
+        b = tmp_path / "b.md"
+        a.write_text("# Prompt A\n{prompt shared}\nContent A\n{end_prompt}")
+        b.write_text("# Prompt B\n{prompt shared}\n{end_prompt}")
+        result = validator.validate([a, b])
         assert result is False
-        assert any("not a directory" in e for e in validator.get_errors())
+        assert validator.get_errors() == ["Empty prompt content for ID 'shared' in file 'b.md'."]
+        assert validator.get_warnings() == []
 
-    def test_empty_directory_warns(self, validator, tmp_path):
-        result = validator.validate(tmp_path)
-        assert result is True
-        assert len(validator.get_warnings()) > 0
-
-    def test_directory_with_valid_prompts(self, validator, tmp_path):
-        (tmp_path / "prompt1.md").write_text("# Prompt 1\n{prompt first}\nContent\n{end_prompt}")
-        (tmp_path / "prompt2.md").write_text("# Prompt 2\n{prompt second}\nContent\n{end_prompt}")
-        result = validator.validate(tmp_path)
-        assert result is True
-        assert not validator.has_errors()
-
-    def test_cross_file_duplicates(self, validator, tmp_path):
-        (tmp_path / "a.md").write_text("# Prompt A\n{prompt shared}\nContent A\n{end_prompt}")
-        (tmp_path / "b.md").write_text("# Prompt B\n{prompt shared}\nContent B\n{end_prompt}")
-        result = validator.validate(tmp_path)
-        # Cross-file duplicates are warnings (not errors), so validation passes
-        assert result is True
-        assert any("duplicate" in w.lower() for w in validator.get_warnings())
-
-
-# ---------------------------------------------------------------------------
-# validate() with workflow_name scoping
-# ---------------------------------------------------------------------------
-
-
-class TestValidateWorkflowScoping:
-    """Test that workflow_name config scopes which files are validated."""
-
-    def test_scoped_to_workflow_skips_other_files(self, validator, tmp_path):
-        """Files belonging to other workflows must not be scanned."""
-        (tmp_path / "my_workflow.md").write_text(
-            "# My Workflow\n{prompt analyze}\nDo analysis\n{end_prompt}"
-        )
-        # This file belongs to another workflow and has no prompt sections,
-        # which would normally trigger a warning if scanned.
-        (tmp_path / "other_workflow.md").write_text("Just plain text, no prompts.")
-        result = validator.validate(tmp_path, config={"workflow_name": "my_workflow"})
-        assert result is True
-        assert not validator.has_errors()
-        # The warning about "no prompt sections" should NOT appear because
-        # other_workflow.md was never scanned.
-        assert not any("other_workflow" in w for w in validator.get_warnings())
-
-    def test_scoped_validation_still_catches_errors(self, validator, tmp_path):
-        """Malformed prompts in the current workflow file must still be caught."""
-        (tmp_path / "bad_workflow.md").write_text("{prompt analyze}\nContent without closing")
-        result = validator.validate(tmp_path, config={"workflow_name": "bad_workflow"})
+    def test_a_file_given_under_two_names_is_checked_once(self, validator, tmp_path):
+        real = tmp_path / "real.md"
+        real.write_text("# Real\n{prompt real}\n{end_prompt}")
+        alias = tmp_path / "alias.md"
+        alias.symlink_to(real)
+        other = tmp_path / "other.md"
+        other.write_text("# Other\n{prompt other}\n{end_prompt}")
+        result = validator.validate([alias, real, other])
         assert result is False
-        assert any("unclosed" in e.lower() for e in validator.get_errors())
-
-    def test_no_config_falls_back_to_all_files(self, validator, tmp_path):
-        """Without config, all .md files are scanned (backward compat)."""
-        (tmp_path / "a.md").write_text("# A\n{prompt first}\nContent\n{end_prompt}")
-        (tmp_path / "b.md").write_text("# B\n{prompt second}\nContent\n{end_prompt}")
-        result = validator.validate(tmp_path)
-        assert result is True
-        assert not validator.has_errors()
-
-    def test_workflow_file_missing_falls_back_to_all(self, validator, tmp_path):
-        """When the workflow's prompt file does not exist, fall back to all .md files."""
-        (tmp_path / "other.md").write_text("# Title\n{prompt p1}\ncontent\n{end_prompt}")
-        result = validator.validate(tmp_path, config={"workflow_name": "nonexistent"})
-        assert result is True
-        # Should not warn about missing workflow-named file
-        assert not any("nonexistent.md" in w for w in validator.get_warnings())
+        assert validator.get_errors() == [
+            "Empty prompt content for ID 'real' in file 'alias.md'.",
+            "Empty prompt content for ID 'other' in file 'other.md'.",
+        ]
