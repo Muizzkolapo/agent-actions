@@ -5,31 +5,31 @@ sidebar_position: 1
 
 # Reference
 
-This is your comprehensive guide to Agent Actions features. Whether you're building your first agentic workflow or debugging a complex multi-action pipeline, you'll find detailed documentation here.
+The reference section documents the features of Agent Actions in detail. Use it when you build your first workflow, and when you debug a complex workflow with many actions.
 
 ## Quick Links
 
-**Building Agentic Workflows**
+**Building Workflows**
 
-- [Configuration](./configuration/) — Project, agentic workflow, and action settings
-- [Context](./context/) — Data flow between actions
-- [Prompts](./prompts/) — Prompt templates with Jinja2
-- [Schemas](./schemas/) — JSON Schema validation
+- [Configuration](./configuration/): Project, workflow and action settings
+- [Context](./context/): Data flow between actions
+- [Prompts](./prompts/): Prompt templates with Jinja2
+- [Schemas](./schemas/): JSON Schema validation
 
-**Running Agentic Workflows**
+**Running Workflows**
 
-- [Execution](./execution/) — Run modes, guards, granularity
-- [Validation](./validation/) — Pre-flight checks and output expectations
-- [Tools](./tools/) — Custom tools with `@udf_tool`
+- [Execution](./execution/): Run modes, guards and granularity
+- [Validation](./validation/): Pre-flight checks and output expectations
+- [Tools](./tools/): Custom tools with `@udf_tool`
 
 **Understanding the System**
 
-- [Architecture](./architecture/) — DAG execution model
-- [Data I/O](./data-io/) — File formats and directories
+- [Architecture](./architecture/): The DAG execution model
+- [Data I/O](./data-io/): File formats and directories
 
 ## Core Concepts
 
-Think of an agentic workflow like an assembly line. Each action is a station that takes input, does its work, and passes output to the next station. The diagram below shows how actions connect and how features like validation and guards attach to each action:
+Each action in a workflow receives input, does its work and sends its output to the next action. A workflow is similar to an assembly line, in which each action is a station. The diagram shows how actions connect. It also shows how features such as validation and guards attach to each action:
 
 ```mermaid
 flowchart LR
@@ -49,23 +49,23 @@ flowchart LR
     A2 -.-> G
 ```
 
-Notice how each action can have its own schema validation, context scope, and guards. This modularity lets you build complex pipelines while keeping each piece testable.
+Each action can have its own schema validation, context scope and guards. Because of this modularity, you can build complex workflows and still test each action.
 
-**Agentic Workflow** — A DAG of actions defined in YAML. Actions declare dependencies, and the engine handles execution order automatically.
+**Workflow**: A DAG (directed acyclic graph) of actions that you define in YAML. Actions declare dependencies, and the engine sets the execution order automatically.
 
-**Action** — A single step: either an LLM call or a Python tool. Each action has inputs, a prompt/function, and validated outputs.
+**Action**: One unit of work in a workflow. An action is an LLM call or a Python tool. Each action has inputs, a prompt or a function, and validated outputs.
 
-**Field Reference** — Access upstream outputs in prompts using syntax like `{{ extract_facts.facts }}`. Think of these like spreadsheet formulas—they point to cells that will be filled in when the referenced action completes.
+**Field Reference**: A field reference gets an upstream output into a prompt, with syntax such as `{{ extract_facts.facts }}`. The field gets its value when the referenced action completes. Thus a field reference is similar to a formula in a spreadsheet that points to a cell.
 
-**Context Scope** — Control what data flows between actions using `observe`, `drop`, and `passthrough`.
+**Context Scope**: Controls what data flows between actions, with `observe`, `drop` and `passthrough`.
 
-**Guard** — Conditional execution: skip or filter actions based on data conditions. Guards are quality checkpoints—if input doesn't meet standards, the action is skipped entirely.
+**Guard**: Conditional execution. A guard skips or filters actions based on data conditions. A guard is a quality checkpoint. If the input does not meet the standards, the guard skips the action entirely.
 
-**Schema** — JSON Schema validation for outputs. An `expect:` repair policy regenerates invalid responses. Note that schema validation catches structural errors but can't verify semantic correctness—a response might match your schema but still contain incorrect information.
+**Schema**: JSON Schema validation for outputs. An `expect:` repair policy regenerates responses that are not valid. Schema validation finds structural errors, but it cannot verify semantic correctness. A response might match your schema but still contain incorrect information.
 
-## Example: Fact Extraction Agentic Workflow
+## Example: Fact Extraction Workflow {/* #example-fact-extraction-agentic-workflow */}
 
-Let's walk through a simple agentic workflow that extracts facts from documents and validates them:
+This simple workflow extracts facts from documents and validates the facts:
 
 ```yaml
 name: fact_extraction
@@ -96,8 +96,8 @@ actions:
       on_false: skip
 ```
 
-Consider what happens when `extract_facts` returns an empty list. The guard on `validate_facts` checks the condition and skips the action entirely—no API call is made. This prevents unnecessary work and saves tokens.
+If `extract_facts` returns an empty list, the guard on `validate_facts` checks the condition and skips the action entirely. Agent Actions makes no API call. Thus the guard prevents unnecessary work and saves tokens.
 
 ## Supported Providers
 
-Agent Actions supports OpenAI, Anthropic, Google, Groq, Cohere, and Ollama. You can mix providers in the same agentic workflow—use different models for different actions based on cost or capability. See [Configuration](./configuration/) for setup details.
+Agent Actions supports OpenAI, Anthropic, Google, Groq, Cohere and Ollama. You can mix providers in the same workflow. Use different models for different actions, based on cost or capability. For setup details, see [Configuration](./configuration/).

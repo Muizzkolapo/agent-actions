@@ -6,8 +6,8 @@ sidebar_position: 1
 
 # API Reference
 
-Programmatic interfaces for Agent Actions.
+This section documents the programmatic interfaces of Agent Actions.
 
 | Module | Description |
 |--------|-------------|
-| [Logging](./logging.md) | Structured logging and telemetry API |
+| [Logging](./logging.md) | The API for structured logging and telemetry |

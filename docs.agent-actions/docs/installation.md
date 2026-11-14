@@ -1,17 +1,17 @@
 ---
 title: Installation
-description: How to install and set up Agent Actions
+description: Install and configure Agent Actions
 sidebar_position: 2
 ---
 
 # Installation
 
-Agent Actions is available on PyPI and can be installed with pip, pipx, or uv. Let's get you set up to run your first agentic workflow.
+Agent Actions is available on PyPI. You can install it with pip, pipx or uv. This page tells you how to install Agent Actions and configure it to run your first workflow.
 
 ## Requirements
 
 - Python 3.11 or higher
-- At least one LLM provider API key (OpenAI, Anthropic, etc.)
+- An API key for one or more LLM providers (for example OpenAI or Anthropic)
 
 ## Quick Install
 
@@ -39,14 +39,14 @@ pipx install agent-actions
 agac --version
 ```
 
-You should see output like:
+The output is similar to this:
 ```
 Agent Actions CLI v2.0.0
 ```
 
 ## Provider Configuration
 
-Set API keys as environment variables or in a `.env` file.
+Set the API keys as environment variables or in a `.env` file.
 
 ### Environment Variables
 
@@ -82,12 +82,14 @@ Agent Actions loads the `.env` file in the project root, the directory that hold
 | Google | `GEMINI_API_KEY` | Any model supported by the Gemini API |
 | Groq | `GROQ_API_KEY` | Any model supported by the Groq API |
 | Cohere | `COHERE_API_KEY` | Any model supported by the Cohere API |
-| Ollama (local) | (none) | Any model you've pulled locally |
+| Ollama (local) | (none) | Any model that you pulled to your computer |
 | Ollama Cloud | `OLLAMA_API_KEY` | Any model hosted on ollama.com |
 
 ## Local Models with Ollama
 
-**What if you want to run models locally without API keys?** Ollama lets you run open-source models on your own hardware. This is useful for development, privacy-sensitive workloads, or when you want to avoid API costs entirely. Note that local models may have different capabilities than cloud providers—test your agentic workflow with your target model before deploying.
+Ollama runs open-source models on your own hardware, without API keys. Use Ollama for development, for workloads with private data, or to have no API costs.
+
+Local models may have different capabilities from the models of cloud providers. Before you deploy, test your workflow with your target model.
 
 ```bash
 # Install Ollama
@@ -103,7 +105,7 @@ ollama pull llama3.1
 
 ## Local Models with an OpenAI-compatible Server
 
-**Running llamafile?** Start it as a server on port 8080 and set `model_vendor: llamafile`. No key and no `base_url` are needed:
+To use llamafile, start it as a server on port 8080. Then set `model_vendor: llamafile`. You do not need a key or a `base_url`:
 
 ```bash
 ./llamafile -m model.gguf --server --port 8080
@@ -111,7 +113,7 @@ ollama pull llama3.1
 
 See [Named local runtimes](reference/configuration/index.md#named-local-runtimes).
 
-**What if your local server speaks the OpenAI API instead?** llamafile, LM Studio and vLLM all serve the OpenAI chat API on a local port. Use the `openai` vendor and point the action at the server with `base_url`. Each action keeps its own `base_url`, so one workflow can send some actions to the local server and the rest to OpenAI.
+A local server can also use the OpenAI API. llamafile, LM Studio and vLLM all serve the OpenAI chat API on a local port. For these servers, use the `openai` vendor. Then set `base_url` on the action to the address of the server. Each action keeps its own `base_url`. Thus one workflow can send some actions to the local server and the other actions to OpenAI.
 
 ```bash
 # Start llamafile as a server (measured with llamafile 0.10.6)
@@ -133,7 +135,12 @@ actions:
     model_name: gpt-4o-mini
 ```
 
-Two limits apply. A `base_url` action must use `run_mode: online`, because the Batch API is served only by OpenAI; preflight refuses the combination. And give every `base_url` action a schema: without one the client asks for `json_object` output, which some local servers do not enforce. See [OpenAI-compatible servers](reference/configuration/index.md#openai-compatible-servers) for the full reference.
+Two limits apply:
+
+1. A `base_url` action must use `run_mode: online`, because only OpenAI serves the Batch API. Preflight refuses the combination of `base_url` and batch mode.
+2. Give each `base_url` action a schema. Without a schema, the client asks for `json_object` output, and some local servers do not enforce that output format.
+
+For the full reference, see [OpenAI-compatible servers](reference/configuration/index.md#openai-compatible-servers).
 
 ## Upgrading
 
@@ -146,7 +153,7 @@ pip install --upgrade agent-actions
 
 ## Development Installation
 
-For contributing to Agent Actions:
+To contribute to Agent Actions, install the development version:
 
 ```bash
 git clone https://github.com/Muizzkolapo/agent-actions.git
@@ -161,7 +168,7 @@ pip install -e ".[dev]"
 
 ## Next Steps
 
-Now that you have Agent Actions installed, let's build something:
+After you install Agent Actions, continue with these pages:
 
-- **[Tutorials](./tutorials/)** - Build your first agentic workflow
-- **[CLI Reference](./reference/cli/)** - Complete command documentation
+- **[Tutorials](./tutorials/)**: Build your first workflow
+- **[CLI Reference](./reference/cli/)**: The documentation of all commands

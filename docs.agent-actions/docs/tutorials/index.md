@@ -1,20 +1,20 @@
 ---
 title: Tutorials
-description: Step-by-step tutorials for learning Agent Actions
+description: Step-by-step tutorials that teach Agent Actions
 sidebar_position: 1
 ---
 
 # Tutorials
 
-Learn Agent Actions through hands-on tutorials.
+These tutorials teach Agent Actions through practical exercises.
 
 ## Your First Workflow
 
-Let's build your first agentic workflow. You'll create a two-action pipeline that extracts product data and generates marketing content—a common pattern for automating content creation.
+In this tutorial, you build your first workflow. The workflow has two actions. The first action extracts product data. The second action generates marketing content. This pattern is common when you automate content creation.
 
-## What You'll Build
+## The Workflow That You Build {/* #what-youll-build */}
 
-Think of an agentic workflow like an assembly line. Each action is a station: it receives input, does its work, and passes output to the next station. Here's the simple workflow you'll create:
+Each action in a workflow receives input, does its work and sends its output to the next action. A workflow is similar to an assembly line, in which each action is a station. The diagram shows the workflow that you create:
 
 ```mermaid
 flowchart LR
@@ -23,9 +23,9 @@ flowchart LR
     G --> O[Marketing Copy]
 ```
 
-The first action extracts structured data from raw text. The second action uses that data to generate polished marketing copy.
+The first action extracts structured data from raw text. The second action uses the structured data to generate marketing copy.
 
-## 1. Set Up Your Project
+## 1. Create Your Project {/* #1-set-up-your-project */}
 
 Initialize a new project:
 
@@ -34,11 +34,9 @@ agac init my_workflow
 cd my_workflow
 ```
 
-:::tip
-Want a fully working example instead? Run `agac init example contract_reviewer my_workflow` to scaffold a complete project you can run immediately. See all examples with `agac init list`.
-:::
+To start from a full working example, run `agac init example contract_reviewer my_workflow`. The command scaffolds a complete project that you can run immediately. To see all examples, run `agac init list`.
 
-This creates the standard project structure:
+The `agac init my_workflow` command creates the standard project structure:
 
 ```
 my_workflow/
@@ -51,9 +49,9 @@ my_workflow/
 └── tools/                 # Custom Python functions
 ```
 
-**`agent_actions.yml`** is the project marker file. It tells Agent Actions this directory is a project and stores default configuration like the name of your API key variable and model settings. Without it, commands that read the project fail with `Project not found`.
+**`agent_actions.yml`** is the project marker file. The file tells Agent Actions that the directory is a project. The file also stores the default configuration, for example the name of the environment variable for your API key and the model settings. If the file does not exist, the commands that read the project fail with `Project not found`.
 
-For this tutorial, you'll create a workflow under `agent_workflow/`:
+For this tutorial, you create a workflow in `agent_workflow/`:
 
 ```
 agent_workflow/
@@ -69,7 +67,7 @@ agent_workflow/
 
 ## 2. Define Your Schemas
 
-**Why schemas matter:** When an LLM generates output, how do you know it's valid? Schemas act as contracts—they define exactly what structure you expect, and Agent Actions validates every response against them. If the LLM returns malformed data, an `expect:` repair policy regenerates the output, up to `max_iterations` times (default 3).
+**Why schemas matter:** A schema defines the exact structure that you expect from the LLM. Agent Actions validates each response against the schema. Thus a schema is a contract for the output. If the LLM returns malformed data, an `expect:` repair policy regenerates the output, up to `max_iterations` times (default 3).
 
 Create these schema files:
 
@@ -110,9 +108,9 @@ Create these schema files:
 }
 ```
 
-## 3. Create Your Agentic Workflow
+## 3. Create Your Workflow {/* #3-create-your-agentic-workflow */}
 
-Here's where it gets interesting. The workflow configuration defines your actions and how data flows between them. Notice how `generate_content` references fields from `extract_data` using `{{ extract_data.field }}` syntax—this is how actions share data. Every action declares a `context_scope`, and a field a prompt references must be listed in it.
+The workflow configuration defines your actions and how data flows between the actions. The `generate_content` action refers to fields of `extract_data` with the `{{ extract_data.field }}` syntax. Actions share data through these field references. Each action declares a `context_scope`. Each field that a prompt refers to must be in the `context_scope` of the action.
 
 **`agent_workflow/product_pipeline/agent_config/product_pipeline.yml`**:
 
@@ -185,9 +183,9 @@ tool_path: ["tools"]
 seed_data_path: seed_data
 ```
 
-Agent Actions stores all workflow outputs in `agent_io/store/<workflow>.db` automatically — no storage config is required.
+Agent Actions automatically stores all workflow outputs in `agent_io/store/<workflow>.db`. You do not need a storage configuration.
 
-Use whichever provider you have an API key for. For example, with Anthropic:
+Use a provider for which you have an API key. This example uses Anthropic:
 
 ```yaml
 default_agent_config:
@@ -196,13 +194,13 @@ default_agent_config:
   model_name: claude-sonnet-4-20250514
 ```
 
-## 6. Run Your Agentic Workflow
+## 6. Run Your Workflow {/* #6-run-your-agentic-workflow */}
 
 ```bash
 agac run -a product_pipeline
 ```
 
-You should see output like this:
+The output is similar to this:
 
 ```
 Starting agent run for: product_pipeline
@@ -216,7 +214,7 @@ Step 2/2 generate_content
 ✓ 3.9s — 2 completed
 ```
 
-Print the content `generate_content` stored for each record. The content holds one entry per namespace the record carries (the store keeps records compressed, so read them with the CLI rather than sqlite3):
+Print the content that `generate_content` stored for each record. The content holds one entry for each namespace that the record carries. The store keeps the records compressed. Thus, read the records with the CLI, not with sqlite3:
 
 ```bash
 agac records -w product_pipeline -a generate_content --field content
@@ -244,18 +242,18 @@ agac records -w product_pipeline -a generate_content --field content
 ]
 ```
 
-## What Just Happened?
+## What Agent Actions Did {/* #what-just-happened */}
 
-Let's walk through what Agent Actions did behind the scenes:
+Agent Actions did these operations:
 
-1. **extract_data** read from `staging/`, called the LLM, and validated the output against the `product_data` schema
-2. **generate_content** received extract_data's output via `{{ extract_data.field }}` references, generated marketing content, and validated against the `marketing_content` schema
+1. **extract_data** read from `staging/`, called the LLM and validated the output against the `product_data` schema
+2. **generate_content** received the output of extract_data through `{{ extract_data.field }}` references. It generated marketing content and validated the content against the `marketing_content` schema
 3. Both actions wrote their records as rows in the `target_data` table of `agent_io/store/product_pipeline.db`
 
-**What if the LLM returns invalid JSON?** If you configure `expect:` with a repair policy, Agent Actions regenerates the output, up to `max_iterations` times, until it conforms to your schema. See [Expectations](../reference/validation/expectations.md) to enable this.
+**Invalid JSON from the LLM:** You can configure `expect:` with a repair policy. Then Agent Actions regenerates the output until it conforms to your schema, up to `max_iterations` times. To enable the repair policy, see [Expectations](../reference/validation/expectations.md).
 
 ## Next Steps
 
-- **[Key Concepts](./concepts)** — Understand actions, dependencies, and context
-- **[Custom Tools](../guides/custom-tools)** — Add Python tools to your agentic workflow
-- **[Design Patterns](../guides/design-patterns)** — Learn reusable agentic workflow patterns
+- **[Key Concepts](./concepts)**: Actions, dependencies and context
+- **[Custom Tools](../guides/custom-tools)**: Add Python tools to your workflow
+- **[Design Patterns](../guides/design-patterns)**: Workflow patterns that you can use again
