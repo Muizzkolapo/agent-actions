@@ -225,7 +225,7 @@ class SchemaLoader:
                 item_type = field_type[6:-1]
                 if item_type.startswith("object:"):
                     properties_str = item_type[7:]
-                    items_def = SchemaLoader._parse_object_properties(properties_str)
+                    items_def = SchemaLoader._parse_object_properties(properties_str, field_name)
                     field_def = {
                         "id": field_name,
                         "type": "array",
@@ -262,7 +262,7 @@ class SchemaLoader:
         return unified_schema
 
     @staticmethod
-    def _parse_object_properties(properties_str: str) -> dict:
+    def _parse_object_properties(properties_str: str, field_name: str) -> dict:
         """Parse object properties from string notation (e.g., "{'prop': 'type'}")."""
         try:
             properties_str = properties_str.strip()
@@ -270,6 +270,15 @@ class SchemaLoader:
                 properties_dict = ast.literal_eval(properties_str)
             except (ValueError, SyntaxError):
                 properties_dict = json.loads(properties_str)
+            if not isinstance(properties_dict, dict):
+                raise SchemaValidationError(
+                    f"Inline schema field '{field_name}' gives its object fields as a "
+                    f"{type(properties_dict).__name__}, not a mapping of field names to "
+                    f"types: '{properties_str}'",
+                    validation_type="structure",
+                    hint="Write the item fields as a mapping, e.g. "
+                    "\"array[object:{'name': 'string', 'age': 'number'}]\"",
+                )
             schema_properties = {}
             required_fields = []
             for prop_name, prop_type in properties_dict.items():
