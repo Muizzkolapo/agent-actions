@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar, NoReturn
 
+import openai
 from openai import Omit
 
 from agent_actions.errors import ConfigurationError, ConfigValidationError, VendorAPIError
@@ -167,7 +168,7 @@ class EndpointClient(OpenAIClient):
     def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
         """Only an action's own ``request_timeout``; unset, the endpoint's timeout governs."""
         timeout = agent_config.get("request_timeout")
-        return {} if timeout is None else {"timeout": connect_limited_timeout(timeout)}
+        return {} if timeout is None else {"timeout": connect_limited_timeout(timeout, openai)}
 
     @classmethod
     def call_json(

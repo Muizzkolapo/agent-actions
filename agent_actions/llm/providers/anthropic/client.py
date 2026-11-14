@@ -188,7 +188,7 @@ class AnthropicClient(BaseClient):
 
         start_time = time.perf_counter()
         try:
-            timeout = connect_limited_timeout_kwargs(agent_config)
+            timeout = connect_limited_timeout_kwargs(agent_config, anthropic)
             if AnthropicClient._needs_streaming(api_args):
                 with client.messages.stream(**api_args, **timeout) as stream:
                     response = stream.get_final_message()
