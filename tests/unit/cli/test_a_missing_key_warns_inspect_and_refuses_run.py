@@ -87,8 +87,8 @@ class TestTheCommandLine:
 
         output = _flat(result.output)
         assert result.exit_code != 0
-        assert "Authentication Error" in output
-        assert "export OPENAI_API_KEY=your-key" in output
+        assert output.count(ERROR) == 1
+        assert HINT in output
         assert "connection check skipped" not in output
 
 

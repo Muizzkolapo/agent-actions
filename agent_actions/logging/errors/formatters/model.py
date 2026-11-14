@@ -11,6 +11,8 @@ class ModelErrorFormatter(ErrorFormatter):
     """Handles model validation errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
+        if self._is_preflight_refusal(exc, root):
+            return False
         message_lower = message.lower()
         model_patterns = [
             "unsupported model",
