@@ -5,42 +5,44 @@ sidebar_position: 10
 
 # Troubleshooting
 
-> **Storage backend:** Action outputs live in SQLite at `agent_io/store/<workflow>.db`, in the table `target_data`.
+:::note[Storage backend]
+Action outputs are in SQLite at `agent_io/store/<workflow>.db`, in the table `target_data`.
+:::
 
-What happens when something goes wrong in your agentic workflow? This guide helps you debug and fix common errors. Let's explore the error types, their causes, and how to resolve them.
+This guide helps you debug and correct common errors in your workflow. It gives the error types, their causes and their fixes.
 
 ## Error Types
 
 ### SchemaValidationError
 
-Occurs when a tool returns data that the action's `schema:` does not accept. The framework checks each item a tool returns against that schema.
+This error occurs when a tool returns data that the `schema:` of the action does not accept. The framework checks each item that a tool returns against that schema.
 
 ```
 Output schema validation failed for UDF 'add_answer_text' (item 0) at target_word_counts -> correct_answer_words: 18 is not of type 'string'
 ```
 
-`(item N)` appears when the tool returns a list. `at root` means the failure is on the item itself, not on one field.
+`(item N)` appears when the tool returns a list. `at root` means that the failure is on the item itself, not on one field.
 
 **Context Fields:**
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| `error_path` | Path to failing field, joined by `->` (`root` for the item itself) | `target_word_counts -> correct_answer_words` |
-| `failed_value` | The actual value received | `18`, `'some text'`, `['a', 'b']` |
-| `schema_constraint` | Expected schema rule | `{'type': 'string'}` |
-| `function` | Tool that failed | `add_answer_text` |
-| `validation_type` | Which side was validated | `output` |
-| `item_index` | Position in the returned list, or `None` | `0` |
+| `error_path` | The path to the field that failed, joined by `->` (`root` for the item itself) | `target_word_counts -> correct_answer_words` |
+| `failed_value` | The value that the framework received | `18`, `'some text'`, `['a', 'b']` |
+| `schema_constraint` | The expected schema rule | `{'type': 'string'}` |
+| `function` | The tool that failed | `add_answer_text` |
+| `validation_type` | The side that the framework validated | `output` |
+| `item_index` | The position in the returned list, or `None` | `0` |
 
 ### RecordContextError (Record Namespace)
 
-Occurs when a downstream action tries to read fields from an upstream action's output, but the expected fields are missing. This typically means the upstream action stored corrupted or empty data.
+This error occurs when a downstream action tries to read fields from the output of an upstream action, but the expected fields are missing. Typically, this means that the upstream action stored corrupted or empty data.
 
 ```
 [RECORD NAMESPACE] 'generate_optimal_code': declared fields ['explanation'] not found. Available: ['optimal_code']
 ```
 
-When none of the declared fields exist in the upstream output, the framework logs a warning instead and treats the upstream namespace as null for that record. A prompt that reads a field from it then fails, and the error names the reason:
+If none of the declared fields exist in the upstream output, the framework logs a warning instead. Then the framework treats the upstream namespace as null for that record. A prompt that reads a field from that namespace then fails. The error names the reason:
 
 ```
 [OBSERVE NULL-SAFE] 'generate_optimal_code': namespace has zero overlap with declared fields ['optimal_code'] (actual keys: ['additionalProperties', 'properties', 'required', 'title', 'type']) — treating as null
@@ -50,15 +52,15 @@ When none of the declared fields exist in the upstream output, the framework log
 
 | Cause | What happened | Fix |
 |-------|--------------|-----|
-| Schema-echo | LLM returned the JSON Schema definition instead of data | Add `expect: {repair: auto}` — the validator detects schema-echo payloads and the repair loop regenerates |
-| Empty object | LLM returned `{}` | Same fix — empty objects are rejected when the schema declares fields |
-| Existing poison | Bad data already in `target_data` from a previous run | Re-run the upstream action with a repair policy, or manually clean the SQLite row |
+| Schema-echo | The LLM returned the JSON Schema definition, not data. | Add `expect: {repair: auto}`. The validator detects schema-echo payloads, and the repair loop generates the output again. |
+| Empty object | The LLM returned `{}`. | Use the same fix. The framework rejects an empty object when the schema declares fields. |
+| Existing poison | Bad data from a previous run is already in `target_data`. | Run the upstream action again with a repair policy. Or clean the SQLite row manually. |
 
-**Behavior:** When a single record has incomplete namespace data, the framework logs a WARNING (`Record <source_guid> prep failed (context incomplete)`), stores that record as failed, and continues with the remaining records in the file. One bad record does not fail an entire file of valid records.
+**Behavior:** If one record has incomplete namespace data, the framework logs a WARNING (`Record <source_guid> prep failed (context incomplete)`). The framework stores that record as failed, and continues with the remaining records in the file. One bad record does not fail a full file of valid records.
 
 ### AgentActionsError
 
-Top-level agentic workflow failure. This wraps other errors to provide the full context of what went wrong.
+This error is a top-level workflow failure. It wraps other errors to give the full context of the failure.
 
 ```
 AgentActionsError: Error generating target: <underlying error>
@@ -67,9 +69,9 @@ AgentActionsError: Error generating target: <underlying error>
 
 ## Common Errors & Fixes
 
-Let's walk through the most common errors and how to fix them.
+This section gives the most common errors and their fixes.
 
-### Template Variable Error
+### Template Field Reference Error {/* #template-variable-error */}
 
 **Error:**
 ```
@@ -85,17 +87,17 @@ Template rendering failed for agent 'write_question'
 Fix: Check that 'classify' produces the referenced field.
 ```
 
-**Cause:** Template references a field that doesn't exist in the namespace. The error message shows:
-- Whether the namespace (e.g., `classify`) exists
-- Whether the field exists within that namespace
-- Available fields you can use instead
-- A suggestion if there's a similar field name (typo detection)
+**Cause:** The template refers to a field that does not exist in the namespace. The error message shows:
+- Whether the namespace (for example, `classify`) exists
+- Whether the field exists in that namespace
+- The available fields that you can use in its place
+- A suggestion, if a similar field name exists (typo detection)
 
 **Fix options:**
 
-1. **Check the field name** - Use the suggested alternative if it's a typo
-2. **Verify the dependency** - Ensure the action producing this field is in your `dependencies` list
-3. **Check the upstream action's output** - Verify the action produces the expected field
+1. **Check the field name.** If the field name is a typo, use the suggested alternative.
+2. **Verify the dependency.** Make sure that the action that produces this field is in your `dependencies` list.
+3. **Check the output of the upstream action.** Make sure that the action produces the expected field.
 
 ---
 
@@ -106,7 +108,7 @@ Fix: Check that 'classify' produces the referenced field.
 A staged input must be rows; found dict. Wrap it in an array: [ ... ].
 ```
 
-**Cause:** The staging file's top level is a wrapper object, not the list of records staging reads. This happens when your JSON file has metadata alongside the actual records.
+**Cause:** The top level of the staging file is a wrapper object, not the list of records that staging reads. This occurs when your JSON file has metadata beside the actual records.
 
 **Wrong format:**
 ```json
@@ -119,7 +121,7 @@ A staged input must be rows; found dict. Wrap it in an array: [ ... ].
 }
 ```
 
-Prompt expects `{{ source.content }}` but `source` is the wrapper, not individual items.
+The prompt expects `{{ source.content }}`, but `source` is the wrapper, not the individual records.
 
 **Correct format:**
 ```json
@@ -131,17 +133,17 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
 
 **Fix options:**
 
-1. **Restructure input** - Extract the array into the staging file. This is
-   usually what you want: one record per item, so `{{ source.content }}` resolves.
+1. **Restructure the input.** Extract the array into the staging file. Usually, you want this
+   option: one record for each item, so `{{ source.content }}` resolves.
    ```python
    data = json.load(open("wrapper.json"))
    records = data["items"]
    json.dump(records, open("staging/data.json", "w"))
    ```
 
-2. **Keep the wrapper as one record** - If the document really is a single
-   record, put it in an array. It then stages as one record whose fields are
-   `exam_name` and `items`, and the prompt loops over the array inside it:
+2. **Keep the wrapper as one record.** If the document really is one record, put it in an
+   array. The document then stages as one record whose fields are `exam_name` and `items`.
+   The prompt loops over the array inside that record:
    ```json
    [
      {
@@ -156,8 +158,8 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
    {% endfor %}
    ```
 
-3. **Add a preprocessing action** - With the file wrapped as in option 2, a
-   first action can expand the one record into many:
+3. **Add a preprocessing action.** If the file is wrapped as in option 2, a first action can
+   expand the one record into many records:
    ```yaml
    - name: extract_items
      kind: tool
@@ -173,14 +175,14 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
 18 is not of type 'string'
 ```
 
-**Cause:** The tool returned an integer where the action's `schema:` declares a string.
+**Cause:** The tool returned an integer where the `schema:` of the action declares a string.
 
-**Fix:** Convert in your tool:
+**Fix:** Convert the value in your tool:
 ```python
 data['field'] = str(data['field'])
 ```
 
-Or change the field's type in the action's `schema:`.
+Or change the type of the field in the `schema:` of the action.
 
 ---
 
@@ -191,9 +193,9 @@ Or change the field's type in the action's `schema:`.
 'Audit client code...' is not of type 'array'
 ```
 
-**Cause:** String value where array expected.
+**Cause:** The value is a string where the schema expects an array.
 
-**Fix:** Normalize in your tool:
+**Fix:** Normalize the value in your tool:
 ```python
 answer_text = data["upstream_action"]["answer_text"]
 if isinstance(answer_text, str):
@@ -209,11 +211,11 @@ if isinstance(answer_text, str):
 'new_field' was unexpected
 ```
 
-The full message reads `Additional properties are not allowed ('new_field' was unexpected)`.
+The full message is `Additional properties are not allowed ('new_field' was unexpected)`.
 
-**Cause:** The tool returned a field that the action's `schema:` does not declare.
+**Cause:** The tool returned a field that the `schema:` of the action does not declare.
 
-**Fix:** Declare the field in the action's `schema:`, or remove it from the tool's return value.
+**Fix:** Declare the field in the `schema:` of the action. Or remove the field from the return value of the tool.
 
 ---
 
@@ -224,9 +226,9 @@ The full message reads `Additional properties are not allowed ('new_field' was u
 'greater_than' is not of type 'integer'
 ```
 
-**Cause:** The schema constrains the values of an object field to one type (for example `additionalProperties: {type: integer}`), but the tool returned a string value.
+**Cause:** The schema limits the values of an object field to one type (for example `additionalProperties: {type: integer}`), but the tool returned a string value.
 
-**Fix:** Return values of the declared type, or loosen the field in the schema file to a plain `type: object`.
+**Fix:** Return values of the declared type. Or, in the schema file, change the field to the less strict plain `type: object`.
 
 ---
 
@@ -237,9 +239,9 @@ The full message reads `Additional properties are not allowed ('new_field' was u
 'question' is a required property
 ```
 
-**Cause:** The action's `schema:` requires the field but the tool didn't return it. When the tool sets the field only inside a branch, pre-flight usually refuses the workflow before it runs and names the line; see [Required Output Field Set Only in a Branch](../reference/tools/index.md#required-output-field-set-only-in-a-branch).
+**Cause:** The `schema:` of the action requires the field, but the tool did not return it. If the tool sets the field only inside a branch, pre-flight usually refuses the workflow before it runs. Pre-flight then names the line. See [Required Output Field Set Only in a Branch](../reference/tools/index.md#required-output-field-set-only-in-a-branch).
 
-**Fix:** Ensure tool returns all required fields:
+**Fix:** Make sure that the tool returns all required fields:
 ```python
 @udf_tool()
 def my_function(data: dict) -> dict:
@@ -249,7 +251,7 @@ def my_function(data: dict) -> dict:
     }
 ```
 
-Or enable repair for LLM actions:
+Or, for LLM actions, enable repair:
 ```yaml
 expect:
   repair: auto
@@ -259,65 +261,65 @@ expect:
 
 ## Declared Endpoints
 
-The texts most often met from the `endpoints:` block of `agent_actions.yml` and from an action that selects one with `model_vendor`. Every load rule is on the [Endpoints](../reference/configuration/endpoints.md) page.
+This table gives the messages that occur most often for the `endpoints:` block of `agent_actions.yml`, and for an action that selects an endpoint with `model_vendor`. The [Endpoints](../reference/configuration/endpoints.md) page gives all the load rules.
 
 | Message | Stage | What to do |
 |---------|-------|------------|
-| `endpoints.<name>: unknown key 'format'` | load | Remove the key; an endpoint has `url`, `auth`, `headers` and `timeout_seconds` only. |
-| `endpoints.<name>: '<name>' is a built-in vendor; choose another endpoint name` | load | Rename the endpoint; built-in names (`openai`, `llamafile`, ...) are taken. |
+| `endpoints.<name>: unknown key 'format'` | load | Remove the key. An endpoint has only `url`, `auth`, `headers` and `timeout_seconds`. |
+| `endpoints.<name>: '<name>' is a built-in vendor; choose another endpoint name` | load | Rename the endpoint. The built-in names (`openai`, `llamafile`, ...) are already in use. |
 | `endpoints.<name>: auth is required; write 'auth: none' for an endpoint that takes no credential` | load | Add `auth: none`, `auth: { env: NAME }` or `auth: { command: [...] }`. |
-| `endpoints.<name>.url: give the base URL, for example http://gpu-box:8000/v1; agac adds /chat/completions` | load | Drop `/chat/completions` from the url. |
-| `endpoints.<name>.headers.<H>: write a credential as ${ENV_VAR}, not as a literal value` | load | Put the value in an environment variable and write `${NAME}`. |
-| `Action '<a>': endpoint '<name>' runs with structured output only; set json_mode: true and add a schema` | preflight | Endpoints run with structured output only; give the action a schema. |
-| `Action '<a>': endpoint '<name>' reads NAME, which is not set` | preflight | Export the variable the endpoint reads for its credential, url or header. |
-| `Action '<a>': endpoint '<name>' auth command 'x' is not on PATH` | preflight | Install the command or add its directory to PATH. |
-| `Action '<a>': endpoint '<name>' takes its credential from endpoints.<name>.auth; remove api_key from the action` | load | Remove `api_key` (or `base_url`) from the action; the endpoint carries them. |
-| `Action '<a>': vendor '<name>' does not support run_mode: batch.` | preflight | Set `run_mode: online`; endpoints run online only. |
-| `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys` | Check the credential in `endpoints.<name>.auth`. At record time a 401 shows as the vendor's own error text; with `command` auth the command is run once more before the record fails. |
-| `endpoint '<name>' could not be reached: ...` | `--verify-keys` | Check `endpoints.<name>.url` and that the server is running. |
-| `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion: check the url, the model name and the server's own log. |
-| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` when the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`, or put one (vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean a wrong model name or parameter: read the server's text. |
-| `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed; run it by hand from the project root and fix `endpoints.<name>.auth`. Its stderr is never shown, since it can hold the secret. |
-| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema; the record is dispositioned `parse_error`. Check the model and the schema. |
+| `endpoints.<name>.url: give the base URL, for example http://gpu-box:8000/v1; agac adds /chat/completions` | load | Remove `/chat/completions` from the url. |
+| `endpoints.<name>.headers.<H>: write a credential as ${ENV_VAR}, not as a literal value` | load | Put the value in an environment variable. Then write `${NAME}`. |
+| `Action '<a>': endpoint '<name>' runs with structured output only; set json_mode: true and add a schema` | preflight | Endpoints run with structured output only. Give the action a schema. |
+| `Action '<a>': endpoint '<name>' reads NAME, which is not set` | preflight | Export the variable that the endpoint reads for its credential, url or header. |
+| `Action '<a>': endpoint '<name>' auth command 'x' is not on PATH` | preflight | Install the command, or add its directory to PATH. |
+| `Action '<a>': endpoint '<name>' takes its credential from endpoints.<name>.auth; remove api_key from the action` | load | Remove `api_key` (or `base_url`) from the action. The endpoint carries these values. |
+| `Action '<a>': vendor '<name>' does not support run_mode: batch.` | preflight | Set `run_mode: online`. Endpoints run online only. |
+| `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys` | Check the credential in `endpoints.<name>.auth`. At record time, a 401 shows as the error text of the vendor. With `command` auth, the framework runs the command one more time before the record fails. |
+| `endpoint '<name>' could not be reached: ...` | `--verify-keys` | Check `endpoints.<name>.url`. Make sure that the server is running. |
+| `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion. Check the url, the model name and the log of the server. |
+| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` if the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`. Or put such a server (vLLM, TGI, a LiteLLM proxy) in front of this server. A 400 can also mean a wrong model name or parameter. Read the text of the server. |
+| `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed. Run the command manually from the project root. Then correct `endpoints.<name>.auth`. The framework never shows the stderr of the command, because the stderr can hold the secret. |
+| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The framework gives the record the disposition `parse_error`. Check the model and the schema. |
 
 ## Debugging with Prompt Traces
 
-When an LLM action produces unexpected output, the fastest path to understanding "why" is inspecting the compiled prompt and raw response. Agent Actions captures both automatically.
+If an LLM action produces unexpected output, examine the compiled prompt and the raw response. This is the fastest way to find the cause. Agent Actions captures the two automatically.
 
-:::warning
-Prompt traces only exist for **LLM actions**. Tool (UDF) actions do not generate prompt traces. If a tool action produces empty or wrong output, debug the tool function directly — check the input data it receives, not prompt_trace.
+:::warning[CAUTION]
+Prompt traces exist only for **LLM actions**. Tool actions do not generate prompt traces. If a tool action produces empty or wrong output, debug the tool code directly. Check the input data that the tool receives, not prompt_trace.
 :::
 
 ### Using the Data Explorer
 
-1. Run `agac docs` to generate the documentation catalog
-2. Open the Data Explorer in your browser
-3. Navigate to the action's output in the Data tab
-4. Find the record with unexpected output
-5. Click the **Prompt Trace** accordion below the record — it shows:
-   - **Compiled Prompt**: The exact text the LLM received (with all template variables resolved)
-   - **LLM Response**: The raw text the LLM returned (before parsing)
+1. Run `agac docs` to generate the documentation catalog.
+2. Open the Data Explorer in your browser.
+3. Go to the output of the action in the Data tab.
+4. Find the record with unexpected output.
+5. Click the **Prompt Trace** accordion below the record. The accordion shows:
+   - **Compiled Prompt**: The exact text that the LLM received, with all field references resolved.
+   - **LLM Response**: The raw text that the LLM returned, before parsing.
 
 ### What to Look For
 
-- **Missing context**: Template variables resolved to empty strings or wrong values — check your `context_scope` and dependency chain
-- **Ambiguous instructions**: The prompt doesn't clearly constrain the output format — tighten the prompt template
-- **Schema mismatch**: The LLM response doesn't match the expected JSON structure — consider adding an `expect:` block with a repair policy
-- **Model badge**: Check if the model name matches what you expected — a misconfigured provider can route to the wrong model
+- **Missing context**: Field references resolved to empty strings or wrong values. Check your `context_scope` and the dependency chain.
+- **Ambiguous instructions**: The prompt does not clearly constrain the output format. Make the prompt template more strict.
+- **Schema mismatch**: The LLM response does not match the expected JSON structure. Consider an `expect:` block with a repair policy.
+- **Model badge**: Check if the model name matches the model that you expected. A misconfigured provider can route to the wrong model.
 
 ### Reading Traces From the Command Line
 
-To read many records' traces at once, print them with `agac traces` (add `--record <target_id>` for one record, `--json` for a list):
+To read the traces of many records at one time, print them with `agac traces`. Add `--record <target_id>` for one record, or `--json` for a list:
 
 ```bash
 agac traces -w my_workflow -a classify_issue
 ```
 
-See [Prompt Traces reference](../reference/data-io/prompt-traces.md) for the full table schema and query examples.
+For the full table schema and query examples, see [Prompt Traces reference](../reference/data-io/prompt-traces.md).
 
 ### Inspecting Failed Record Input Snapshots
 
-When records fail or exhaust retries, the framework captures the input record at the moment of failure. The store keeps these snapshots compressed, so print them with [`agac records --snapshots`](../reference/cli/records) rather than querying the table:
+When records fail or exhaust retries, the framework captures the input record at the moment of failure. The store keeps these snapshots compressed. Thus, to print them, use [`agac records --snapshots`](../reference/cli/records), not a query on the table:
 
 ```bash
 # Every failed or exhausted record, with the input it was processed with
@@ -330,31 +332,31 @@ agac records -w <workflow> --snapshots --source-guid <source_guid>
 
 ---
 
-## Debugging Agentic Workflows
+## Debugging Workflows {/* #debugging-agentic-workflows */}
 
-When an error occurs, resist the urge to start changing code immediately. Follow this systematic approach to understand what went wrong before fixing it.
+If an error occurs, do not change the code immediately. First, do the steps below to find the cause of the error. Then correct it.
 
 ### Step 1: Parse the Error
 
-Extract key information from the error message. Agent Actions provides structured error context—use it:
+Get the key information from the error message. Agent Actions gives structured error context. Use this context:
 
-1. **What type?** `SchemaValidationError`, `AgentActionsError`, etc.
-2. **Which field?** Look at the path after `at` in the message (`error_path`)
-3. **What value and what expected?** Read the end of the message (`failed_value`, `schema_constraint`)
-4. **Which action?** Look at the action name the error prefixes, or `function` and `agent_name`
+1. **Type**: Find the error type, for example `SchemaValidationError` or `AgentActionsError`.
+2. **Field**: Read the path after `at` in the message (`error_path`).
+3. **Value and expected value**: Read the end of the message (`failed_value`, `schema_constraint`).
+4. **Action**: Read the action name at the start of the error, or `function` and `agent_name`.
 
 ### Step 2: Find the Source Record
 
-Use `source_guid` to trace the record. Each action's output is a JSON array stored compressed in the `data` column of the `target_data` table, keyed by `action_name`; `agac records --source-guid` finds the record in every action that holds it:
+Use `source_guid` to trace the record. Each action stores its output as a JSON array, compressed in the `data` column of the `target_data` table, with `action_name` as the key. `agac records --source-guid` finds the record in each action that holds it:
 
 ```bash
 # Find every action that produced a record with this source_guid
 agac records -w <workflow> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f --field _action
 ```
 
-### Step 3: Check Node Outputs
+### Step 3: Check Action Outputs {/* #step-3-check-node-outputs */}
 
-Compare data at each stage. Select the same record at each step by its `source_guid` (the store keeps records compressed, so [`agac records`](../reference/cli/records) reads them rather than sqlite3):
+Compare the data at each action. Select the same record at each action by its `source_guid`. The store keeps records compressed, so use [`agac records`](../reference/cli/records) to read them, not sqlite3:
 
 ```bash
 # Input to failing action — fetch the matching record
@@ -366,7 +368,7 @@ agac records -w <workflow> -a <previous_action> --source-guid 37812c37-80a2-596b
 
 ### Step 4: Enable Debug Mode
 
-Get detailed tracebacks:
+To get detailed tracebacks, run this command:
 
 ```bash
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
@@ -374,7 +376,7 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
 ### Step 5: Enable Prompt Debug
 
-See rendered prompts for LLM actions:
+To see the rendered prompts of LLM actions, use this configuration:
 
 ```yaml
 - name: my_action
@@ -384,21 +386,21 @@ See rendered prompts for LLM actions:
 
 ## Data Lineage
 
-Here's where it gets interesting: every record in Agent Actions maintains tracking fields that let you trace its journey through the agentic workflow. This lineage data is invaluable for debugging.
+Each record in Agent Actions has tracking fields. You can use these fields to trace the path of the record through the workflow. This lineage data is very useful for debugging.
 
 ### source_guid
 
-Original content UUID. **Never changes** through the agentic workflow.
+The UUID of the original content. It **never changes** in the workflow.
 
 ```json
 "source_guid": "37812c37-80a2-596b-8747-8f93e7a34e7f"
 ```
 
-Use this to trace any record back to its source, regardless of how many actions it has passed through.
+Use `source_guid` to trace any record to its source. The number of actions that the record went through does not matter.
 
 ### lineage
 
-Array of all node_ids visited. Grows at each node.
+An array of all the node_ids that the record visited. The array grows at each node.
 
 ```json
 "lineage": [
@@ -408,11 +410,11 @@ Array of all node_ids visited. Grows at each node.
 ]
 ```
 
-The `_0` suffix indicates this was the first record from an action that returned several records for one input.
+The `_0` suffix shows that this record was the first record from an action that returned several records for one input.
 
 ### node_id
 
-Identifies the specific processing node:
+The node_id identifies the specific processing node:
 
 ```
 classify_ticket_693094fb-...       # Single output
@@ -422,7 +424,7 @@ seed_rows_361c54c6-..._1           # Expansion, index 1
 
 ### Action Output Storage
 
-Action outputs are stored as JSON arrays in the `target_data` table of `agent_io/store/<workflow>.db`, keyed by `(action_name, relative_path)`. List what each action produced:
+The framework stores action outputs as JSON arrays in the `target_data` table of `agent_io/store/<workflow>.db`, keyed by `(action_name, relative_path)`. To list what each action produced, run this command:
 
 ```bash
 sqlite3 agent_io/store/<workflow>.db "
@@ -432,7 +434,7 @@ sqlite3 agent_io/store/<workflow>.db "
 "
 ```
 
-Typical layout for a multi-action workflow:
+This is a typical layout for a workflow with many actions:
 
 ```
 target_data
@@ -443,7 +445,7 @@ target_data
 
 ## Reading Namespaced Fields in a Tool
 
-A tool receives the fields it observes, nested under each action name:
+A tool receives the fields that it observes, nested under each action name:
 
 ```python
 @udf_tool()
@@ -455,10 +457,10 @@ def safe_function(data: dict) -> dict:
 
 ## The repair loop
 
-What happens when an LLM returns invalid JSON, or output that breaks a rule you
-declared? Rather than failing immediately, Agent Actions can regenerate with
-feedback about what went wrong. This is the repair loop, and it is driven by an
-action's `expect:` block.
+An LLM can return invalid JSON, or output that breaks a rule that you declared. Then Agent
+Actions can generate the output again with feedback about the failure, and not fail
+immediately. This mechanism is the repair loop. The `expect:` block of an action controls the
+repair loop.
 
 ### Configuration
 
@@ -472,27 +474,27 @@ expect:
   on_exhausted: return_last # return_last | fail | raise
 ```
 
-To disable: omit the `expect:` block.
+To disable repair, omit the `expect:` block.
 
 ### Configuration Options
 
 | Option | Description |
 |--------|-------------|
-| `repair` | `none` (observe only), `retry` (re-send the original prompt), or `auto` (send the failure detail and hint) |
-| `structural` | Same choices, for a response the schema rejects (default: `retry`) |
-| `max_iterations` | Total generations, counting the first (1-10, default: 3) |
-| `on_exhausted` | Behavior when iterations run out: `return_last`, `fail`, `raise` |
+| `repair` | `none` (observe only), `retry` (send the original prompt again), or `auto` (send the failure detail and the hint) |
+| `structural` | The same choices, for a response that the schema rejects (default: `retry`) |
+| `max_iterations` | The total number of generations, with the first generation counted (1-10, default: 3) |
+| `on_exhausted` | The behavior when no iterations remain: `return_last`, `fail`, `raise` |
 
 ### When to Use
 
-Consider what your agentic workflow needs:
+Consider what your workflow needs:
 
-- **Simple schemas** — Low `max_iterations` (2-3)
-- **Complex schemas** — Higher `max_iterations` (4-5)
-- **Critical outputs** — More iterations, `on_exhausted: raise`
+- **Simple schemas**: A low `max_iterations` (2-3)
+- **Complex schemas**: A higher `max_iterations` (4-5)
+- **Critical outputs**: More iterations, and `on_exhausted: raise`
 
-:::warning
-Repair adds latency and token cost. For high-volume agentic workflows, consider fixing schema issues at the source rather than relying on regeneration.
+:::danger[WARNING]
+Repair adds latency and token cost. For a high-volume workflow, consider a fix of the schema problems at the source, not a dependence on regeneration.
 :::
 
 ## Log Analysis
@@ -506,8 +508,8 @@ agent_io/logs/events.1.json    # previous run (up to events.5.json)
 
 ### Search Patterns
 
-Events are JSON Lines. Structured fields live under the `.data` object
-(e.g. `.data.action_name`); `message` and `level` are top-level.
+The events are in JSON Lines format. The structured fields are under the `.data` object
+(for example, `.data.action_name`). `message` and `level` are top-level fields.
 
 ```bash
 # Find all schema validation errors
@@ -522,7 +524,7 @@ jq -c 'select(.message | test("answer_text"))' agent_io/logs/events.json
 
 ### Execution History
 
-Check `artefact/runs.json` for execution metrics:
+For execution metrics, read `artefact/runs.json`:
 
 ```bash
 # Count failed runs
@@ -534,7 +536,7 @@ grep -A5 '"status": "FAILED"' artefact/runs.json | tail -20
 
 ## Quick Reference
 
-These commands and patterns are your debugging toolkit.
+This section gives the commands and the patterns for debugging.
 
 ### Debug Commands
 
@@ -547,31 +549,31 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 
 | Error Pattern | Quick Fix |
 |---------------|-----------|
-| `X is not of type 'string'` | `str(value)` or change the type in the action's `schema:` |
+| `X is not of type 'string'` | `str(value)`, or change the type in the `schema:` of the action |
 | `X is not of type 'array'` | `[value] if isinstance(value, str) else value` |
-| `X was unexpected` | Declare the field in the action's `schema:` or stop returning it |
-| `X is a required property` | Return field from tool or use `expect: {repair: auto}` |
-| `X is not of type 'integer'` inside an object field | Return values of the declared type or loosen the field to `type: object` |
+| `X was unexpected` | Declare the field in the `schema:` of the action, or do not return the field |
+| `X is a required property` | Return the field from the tool, or use `expect: {repair: auto}` |
+| `X is not of type 'integer'` in an object field | Return values of the declared type, or change the field to the less strict `type: object` |
 
 ### Debug Checklist
 
-When debugging agentic workflow errors, work through this checklist:
+To debug a workflow error, do the steps in this checklist:
 
-1. [ ] Read full error message, note `error_path` and `failed_value`
-2. [ ] Find record by `source_guid` in node outputs
-3. [ ] Compare data before/after failing action
-4. [ ] Check the fields the tool returns match the action's `schema:`
-5. [ ] Enable `prompt_debug: true` for LLM actions
-6. [ ] Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG` for tracebacks
-7. [ ] Consider `expect: {repair: auto, max_iterations: 3}` for LLM schema failures
+1. [ ] Read the full error message. Note `error_path` and `failed_value`.
+2. [ ] Find the record by `source_guid` in the action outputs.
+3. [ ] Compare the data upstream and downstream of the failing action.
+4. [ ] Make sure that the fields that the tool returns match the `schema:` of the action.
+5. [ ] For LLM actions, enable `prompt_debug: true`.
+6. [ ] To get tracebacks, run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG`.
+7. [ ] For LLM schema failures, consider `expect: {repair: auto, max_iterations: 3}`.
 
-Most errors fall into one of two categories: schema mismatches (the data structure doesn't match expectations) or missing fields (required data wasn't provided). The checklist above helps you identify which category you're dealing with.
+Most errors are in one of two categories. In a schema mismatch, the data structure does not match the expectations. In a missing field, the required data was not provided. The checklist above helps you find the category of your error.
 
 ## Dependency Patterns
 
 ### Understanding Fan-in vs Parallel
 
-When using multiple dependencies, understanding the pattern detection is crucial:
+If an action has more than one dependency, it is important to know how the framework detects the pattern:
 
 ```yaml
 # Pattern 1: Parallel Branches (MERGE)
@@ -585,17 +587,17 @@ dependencies: [extract, enrich, validate]
 # Execution count: one per source record that reaches the action (order of the list changes nothing)
 ```
 
-To aggregate several records into one — a roll-up, a deduplication, a count across
-the file — give the consuming action `granularity: File`. A `kind: tool` action at
-File granularity is handed every record of a file in one call, so it can group them
-by whichever field it likes and return as many rows as the grouping produces.
-`examples/map_reduce_fanin_check` shows the shape.
+To aggregate several records into one record, give the consuming action `granularity: File`.
+Examples of aggregation are a roll-up, a deduplication and a count across the file. A
+`kind: tool` action at File granularity receives all the records of a file in one call. Thus
+the action can group the records by any field, and return as many records as the grouping
+produces. `examples/map_reduce_fanin_check` shows the shape.
 
 ### Fan-in Dependency Not in context_scope
 
 **Symptom:** Preflight refuses the workflow with `dependency 'enrich' declared but not referenced in context_scope`.
 
-**Cause:** Every dependency of a fan-in is an input, and each one needs at least one field declared in `context_scope`:
+**Cause:** Each dependency of a fan-in is an input. Each dependency needs at least one field declared in `context_scope`:
 
 ```yaml
 # REFUSED - enrich and validate are dependencies with no fields declared
@@ -617,11 +619,17 @@ by whichever field it likes and return as many rows as the grouping produces.
 
 ### Unexpected Execution Count
 
-**Symptom:** Action executes more/fewer times than expected.
+**Symptom:** The action runs more times or fewer times than expected.
 
 **Debug:**
-1. Check if dependencies are parallel branches (same base name) or different actions
-2. For fan-in: one execution per source record after the branches are merged. A record a guard filtered out in any branch is dropped; one a guard skipped arrives with that branch's fields null. A branch that returns several records per input runs once per record, each paired with the other branches' record for its source; two branches that both split one source fail the action, even when a guard below one of them keeps a single record of its split; a record one branch's `granularity: File` tool folded into another record's row is not run, and is `unprocessed` with reason `consumed_into_another_record` ([Context Scope](../reference/context/context-scope.md) lists the shapes)
-3. For parallel: merged outputs determine execution count
-4. For `granularity: File`: one execution per input file, whatever its record count
+1. Check if the dependencies are parallel branches (same base name) or different actions.
+2. For fan-in, the action runs one time for each source record after the branches merge. These rules apply:
+   - If a guard filtered out a record in any branch, the framework drops the record.
+   - If a guard skipped a record, the record arrives with the fields of that branch set to null.
+   - A branch that returns several records for each input runs one time for each record. Each record is paired with the record of the other branches for its source.
+   - If two branches both split one source, the action fails. This occurs even when a guard downstream of one of the branches keeps a single record of its split.
+   - The `granularity: File` tool of one branch can fold a record into the row of another record. The action does not run that record. The record is `unprocessed`, with the reason `consumed_into_another_record`.
 
+   [Context Scope](../reference/context/context-scope.md) lists the shapes.
+3. For parallel branches, the merged outputs set the execution count.
+4. For `granularity: File`, the action runs one time for each input file, for any record count of the file.
