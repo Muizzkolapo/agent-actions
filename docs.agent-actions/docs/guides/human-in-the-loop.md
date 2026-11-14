@@ -1,16 +1,16 @@
 ---
 title: Human-in-the-Loop (HITL)
-description: Add manual review and approval gates to your agentic workflows
+description: Add manual review and approval gates to your workflows
 sidebar_position: 5
 ---
 
 # Human-in-the-Loop (HITL) Review
 
-Human-in-the-Loop (HITL) actions let you pause workflow execution for manual review and approval. This is essential when you need human judgment before proceeding—like reviewing AI-generated content, approving data transformations, or quality-checking critical outputs.
+A Human-in-the-Loop (HITL) action pauses the workflow for manual review and approval. Use a HITL action when a person must decide before the workflow continues. For example, a person can review AI-generated content, approve data transformations, or check the quality of critical outputs.
 
 ## Quick Start
 
-Add a HITL action to your workflow:
+To add a HITL action, put this configuration in your workflow:
 
 ```yaml
 actions:
@@ -28,11 +28,12 @@ actions:
         - extract_data.*  # Data to review
 ```
 
-When the agentic workflow reaches this action:
+When the workflow gets to this action, this sequence occurs:
+
 1. The terminal prints `HITL approval UI ready at: http://localhost:3001`. Open that URL in your browser.
-2. Workflow pauses and waits for your decision
-3. You review each record and approve/reject
-4. After submitting, the workflow continues automatically
+2. The workflow pauses and waits for your decision.
+3. You review each record, and you approve or reject it.
+4. After you submit, the workflow continues automatically.
 
 ## How It Works
 
@@ -40,9 +41,11 @@ When the agentic workflow reaches this action:
 
 HITL actions use a **client-server architecture**:
 
-- **HitlClient**: Validates config, starts server, blocks workflow execution
-- **HitlServer**: Flask server serving the review UI at localhost
-- **Browser UI**: Interactive approval interface with per-record navigation
+- **HitlClient**: Validates the config, starts the server and blocks the workflow.
+- **HitlServer**: A Flask server that serves the review UI at localhost.
+- **Browser UI**: An interactive approval interface that shows one record at a time.
+
+The diagram shows the sequence from the start of the HITL action to the return of the decision:
 
 ```mermaid
 sequenceDiagram
@@ -65,26 +68,26 @@ sequenceDiagram
 
 ### Review UI Features
 
-The browser UI provides:
+The browser UI has these features:
 
-- **Per-record navigation**: Review each record individually with auto-advance
+- **Per-record navigation**: You review each record separately. After each decision, the UI goes to the next record automatically.
 - **Keyboard shortcuts**:
-  - `A` - Approve current record
-  - `R` - Reject current record
-  - `J` / `↓` - Next record
-  - `K` / `↑` - Previous record
-  - `S` - Skip to the next pending record
-  - `N` - Focus the reviewer note
-  - `?` - Show the shortcut list
+  - `A`: Approve the current record.
+  - `R`: Reject the current record.
+  - `J` / `↓`: Go to the next record.
+  - `K` / `↑`: Go to the previous record.
+  - `S`: Go to the next pending record.
+  - `N`: Focus the reviewer note.
+  - `?`: Show the shortcut list.
 - **Inspector tabs**:
-  - **Review**: Structured display of the record and your decision
-  - **JSON**: Raw JSON for debugging
-- **Progress tracking**: Visual progress bar and stats (pending/approved/rejected)
-- **State persistence**: Refresh the page without losing your reviews
-- **Auto-shutdown**: Server closes automatically after submission
-- **One tab for every file**: The action reviews its input one file at a time,
-  each on a new server at the same address. After you submit a file (or its
-  timeout runs out), the tab loads the next file as soon as it is ready
+  - **Review**: A structured view of the record and your decision.
+  - **JSON**: The raw JSON, for debugging.
+- **Progress tracking**: A progress bar and counts (pending, approved, rejected).
+- **State persistence**: You can refresh the page, and your reviews stay.
+- **Auto-shutdown**: The server stops automatically after you submit.
+- **One tab for every file**: The action reviews its input one file at a time.
+  Each file has a new server at the same address. After you submit a file (or
+  its timeout ends), the tab loads the next file when it is ready.
 
 ## Configuration
 
@@ -102,14 +105,14 @@ hitl:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `port` | int | 3001 | Server port (1024-65535). If busy, tries up to 5 consecutive ports. |
-| `instructions` | str | *(required)* | Instructions displayed in review UI. Be clear and specific. |
-| `timeout` | int | 300 | Seconds each file waits for its review. On a timeout the server shuts down, partial reviews are saved, and that file's records are marked failed so `agac retry` can resume. |
-| `require_comment_on_reject` | bool | true | If true, rejecting a record requires a comment explaining why. |
+| `port` | int | 3001 | The server port (1024-65535). If the port is busy, HITL tries a maximum of 5 consecutive ports. |
+| `instructions` | str | *(required)* | The instructions that the review UI shows. Write clear and specific instructions. |
+| `timeout` | int | 300 | The number of seconds that each file waits for its review. On a timeout, the server stops and saves the partial reviews. The records of that file are marked failed, so that `agac retry` can continue the review. |
+| `require_comment_on_reject` | bool | true | If true, the reviewer must write a comment that explains why the record is rejected. |
 
 ### Workflow-Level Default Timeout
 
-Set a default HITL timeout for all HITL actions in the workflow using `defaults.hitl_timeout`. Individual actions can still override this value.
+To set a default timeout for all HITL actions in the workflow, use `defaults.hitl_timeout`. Each action can still override this value.
 
 ```yaml
 defaults:
@@ -133,16 +136,18 @@ actions:
 
 **Resolution order:** action `hitl.timeout` > `defaults.hitl_timeout` > 300s hardcoded default.
 
-:::note Minimum timeout
-The minimum allowed value is 5 seconds (useful for testing). For real reviews, use at least 60 seconds — reviewers need time to read instructions and inspect records.
+For real reviews, use a timeout of at least 60 seconds. Reviewers need time to read the instructions and examine the records.
+
+:::note[Minimum timeout]
+The minimum value is 5 seconds. This value is useful for tests.
 :::
 
 ### Granularity
 
-HITL actions always use **FILE granularity** — all records are presented in a single review session. Within that session, the reviewer can navigate between records, approve or reject each individually, and submit once. (File granularity here means one UI session for the entire batch, not one session per record.)
+HITL actions always use **FILE granularity**. The UI shows all records in a single review session. In that session, the reviewer can go from record to record, approve or reject each record separately, and submit one time. (Here, file granularity means one UI session for the full batch, not one session for each record.)
 
-:::warning Record granularity not supported
-Setting `granularity: record` on a HITL action raises a `ConfigurationError`. Record granularity would launch a separate approval UI per record, which is broken UX. If you need per-record filtering before HITL, use a guard to pre-filter records.
+:::warning[CAUTION]
+**Record granularity is not supported.** If you set `granularity: record` on a HITL action, the action raises a `ConfigurationError`. Record granularity would start a separate approval UI for each record, which is broken UX. If you must filter each record before HITL, use a guard to filter the records first.
 :::
 
 ```yaml
@@ -156,7 +161,7 @@ Setting `granularity: record` on a HITL action raises a `ConfigurationError`. Re
       - extract_data.*
 ```
 
-**Output**: Each record gets its own `hitl_status`, `user_comment`, and `timestamp` under the HITL action's namespace, based on per-record review decisions in the UI.
+**Output**: Each record gets its own `hitl_status`, `user_comment` and `timestamp` under the namespace of the HITL action. These values come from the decision for that record in the UI.
 
 ```json
 [
@@ -183,28 +188,28 @@ Setting `granularity: record` on a HITL action raises a `ConfigurationError`. Re
 ]
 ```
 
-Downstream actions access HITL fields via the namespace: `review_data.hitl_status`, `review_data.user_comment`.
+Downstream actions read HITL fields through the namespace: `review_data.hitl_status`, `review_data.user_comment`.
 
 ## Output Schema
 
-HITL actions return decisions in a standardized format:
+HITL actions return decisions in a standard format:
 
 ### Response Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `hitl_status` | str | `"approved"` or `"rejected"` — the only values that reach downstream actions |
-| `user_comment` | str | Optional comment from reviewer |
-| `timestamp` | str | ISO-8601 timestamp (UTC) when review was submitted |
-| `record_reviews` | list | (FILE mode only) Per-record decisions |
+| `hitl_status` | str | `"approved"` or `"rejected"`. These are the only values that reach downstream actions. |
+| `user_comment` | str | An optional comment from the reviewer |
+| `timestamp` | str | The ISO-8601 timestamp (UTC) of the submission of the review |
+| `record_reviews` | list | (FILE mode only) The decision for each record |
 
 ### Accessing HITL Decisions Downstream
 
-HITL decision fields (`hitl_status`, `user_comment`, `timestamp`) are stored under the HITL action's namespace in the record content. Downstream actions access them using the action name as a namespace prefix (e.g., `review_data.hitl_status`).
+The framework stores the HITL decision fields (`hitl_status`, `user_comment`, `timestamp`) under the namespace of the HITL action in the record content. To read these fields, a downstream action uses the action name as a namespace prefix (for example, `review_data.hitl_status`).
 
 #### Guards
 
-Guards evaluate against namespaced fields — use the HITL action name as the namespace prefix:
+Guards examine namespaced fields. Use the HITL action name as the namespace prefix:
 
 ```yaml
 - name: process_approved_data
@@ -233,18 +238,18 @@ guard:
   on_false: skip
 ```
 
-:::note No guard is needed for timeouts or server failures
-A review that does not complete never produces a reviewed record. A file that
-times out has its records marked failed, and a server that cannot start fails
-the action, so `hitl_status` downstream is always `approved` or `rejected` — a
-guard like `hitl_status != 'timeout'` can never fire.
+:::note[No guard is needed for timeouts or server failures]
+A review that does not complete never produces a reviewed record. When a file
+times out, its records are marked failed. When a server cannot start, the
+action fails. Thus `hitl_status` downstream is always `approved` or
+`rejected`. A guard such as `hitl_status != 'timeout'` can never fire.
 :::
 
 ## Usage Patterns
 
 ### Pattern 1: Quality Gate
 
-Approve AI-generated content before using it:
+Approve AI-generated content before the workflow uses it:
 
 ```yaml
 actions:
@@ -273,7 +278,7 @@ actions:
 
 ### Pattern 2: Batch Approval
 
-Review and filter a dataset before processing:
+Review and filter a dataset before the workflow processes it:
 
 ```yaml
 actions:
@@ -300,7 +305,7 @@ actions:
 
 ### Pattern 3: Checkpoint Review
 
-Pause between workflow stages for manual inspection:
+Pause between two stages of the workflow for a manual inspection:
 
 ```yaml
 actions:
@@ -326,7 +331,7 @@ actions:
 
 ### Pattern 4: Pre-filtered HITL Review
 
-Use a guard on the HITL action itself to show only flagged records to the reviewer:
+Put a guard on the HITL action to show only flagged records to the reviewer:
 
 ```yaml
 actions:
@@ -347,13 +352,13 @@ actions:
         - auto_review_quality.*
 ```
 
-The guard runs per-record before the HITL UI launches. Only records where `decision == "review"` appear in the approval UI. See [Guards with File Granularity](../reference/execution/guards.md#guards-with-file-granularity) for how `on_false` modes behave.
+The guard runs on each record before the HITL UI starts. Only the records where `decision == "review"` appear in the approval UI. For the behavior of each `on_false` mode, see [Guards with File Granularity](../reference/execution/guards.md#guards-with-file-granularity).
 
 ## Debugging & Troubleshooting
 
-### Guard Filters or Skips All Items
+### Guard Filters or Skips All Records {/* #guard-filters-or-skips-all-items */}
 
-If your downstream guard filters/skips **every** item (even approved ones), the most common causes are:
+Your downstream guard can filter or skip **every** record (also the approved records). These are the most common causes:
 
 **1. Missing action name prefix in the guard condition**
 
@@ -365,18 +370,23 @@ condition: "hitl_status == 'approved'"
 condition: "review_data.hitl_status == 'approved'"
 ```
 
-Guard conditions use dotted namespace paths. Fields like `hitl_status` are accessed under the HITL action name, just like any other upstream field.
+Guard conditions use dotted namespace paths. A guard reads a field such as `hitl_status` under the HITL action name, the same as any other upstream field.
 
 **2. Wrong field name**
 
-Field names are case-sensitive. Verify the exact field name in your data:
-- The HITL server produces `hitl_status` (snake_case)
-- Your storage layer may display it as `hitlStatus` (camelCase)
-- Use the field name as it appears **during processing**, which is `hitl_status`
+Field names are case-sensitive. Make sure that you use the exact field name in your data:
+- The HITL server produces `hitl_status` (snake_case).
+- Your storage layer may show it as `hitlStatus` (camelCase).
+- Use the field name that the workflow uses **during processing**, which is `hitl_status`.
 
 **3. Default passthrough behavior**
 
-`passthrough_on_error: true` (the default) does **not** rescue a field the clause cannot find. A missing field is reclassified as *not matched*, so `on_false` applies; and a bare field name that exists inside a namespace is a semantic error, which bypasses `passthrough_on_error` altogether. Either way the item is filtered or skipped, not passed through. The same is true when the field resolves to `None` and the comparison merely evaluates to `False`.
+`passthrough_on_error: true` (the default) does **not** help when the clause cannot find a field:
+
+- The guard classifies a missing field as *not matched*. Thus `on_false` applies.
+- A bare field name that exists inside a namespace is a semantic error. A semantic error does not go through `passthrough_on_error` at all.
+
+In the two cases, the guard filters or skips the record. The guard does not pass the record through. The result is the same when the field resolves to `None` and the comparison only evaluates to `False`.
 
 ### Find the Review URL
 
@@ -390,32 +400,32 @@ The framework does not open the browser for you.
 
 ### State Refresh Issue
 
-The server saves each decision to a state file under the action's output directory, in `hitl/.hitl_reviews_<hash>.json`, and the page reloads its decisions from `/api/review-state`. If refreshing the page shows all records as "pending":
+The server saves each decision to a state file under the output directory of the action, in `hitl/.hitl_reviews_<hash>.json`. The page loads its decisions again from `/api/review-state`. If all records show as "pending" after you refresh the page, do these steps:
 
-1. **Check browser console** for the warning `Could not restore review state`.
-2. **Check the state file** exists and holds your decisions.
-3. **Check the run log** for `HITL state file record count mismatch ... starting fresh`. The server discards a state file whose record count differs from the current records.
+1. **Check the browser console** for the warning `Could not restore review state`.
+2. **Check the state file.** Make sure that it exists and holds your decisions.
+3. **Check the run log** for `HITL state file record count mismatch ... starting fresh`. The server discards a state file if its record count is different from the count of the current records.
 
 ### Port Conflicts
 
-If the configured port is busy:
+If the configured port is busy, HITL shows this message:
 
 ```
 WARNING: Port 3001 in use, using 3002 instead
 ```
 
-HITL tries up to 5 consecutive ports. If all are busy:
+HITL tries a maximum of 5 consecutive ports. If all of these ports are busy, HITL shows this error:
 
 ```
 NetworkError: Could not find available port near 3001
 Attempted ports: [3001, 3002, 3003, 3004, 3005]
 ```
 
-**Fix**: Close unused servers or configure a different port range.
+**Fix**: Stop the servers that you do not use, or configure a different port range.
 
 ### Timeout Handling
 
-If the review isn't completed within the timeout:
+This section applies if the review does not complete before the timeout:
 
 ```yaml
 hitl:
@@ -423,23 +433,26 @@ hitl:
 ```
 
 The timeout applies to each input file separately. After a file times out:
-- Its server shuts down, and the review moves on to the next file
-- Decisions you already made on it are saved to disk
-- **Its records are marked failed**, with a warning naming the file. The run
-  never carries them downstream as reviewed: the action ends completed with
-  failures (`partial` in the run summary), or failed when no file was reviewed
-- `agac retry -a <workflow>` reopens the UI for those files only, with your
-  earlier decisions restored, so you resume where you left off
+- The server of the file stops, and the review continues with the next file.
+- The framework saves to disk the decisions that you already made on the file.
+- **The records of the file are marked failed**, with a warning that names the
+  file. The run never sends them downstream as reviewed records. The action
+  ends as completed with failures (`partial` in the run summary). If no file
+  was reviewed, the action ends as failed.
+- `agac retry -a <workflow>` opens the UI again for those files only. Your
+  earlier decisions are restored, so you continue from the point where you
+  stopped.
 
-When the approval UI cannot start (for example, every port in its range is
-taken), no decision was made, so nothing is written to the records and the
-action fails with the reason. Fix the cause and re-run.
+The approval UI can fail to start (for example, if each port in its range is
+in use). Then no decision was made. Thus the framework writes nothing to the
+records, and the action fails with the reason. If the approval UI does not
+start, correct the cause. Then run the workflow again.
 
 ## Advanced Topics
 
 ### Custom Ports
 
-Configure port at workflow level to avoid conflicts:
+To prevent conflicts, configure the port at the workflow level:
 
 ```yaml
 actions:
@@ -460,57 +473,60 @@ actions:
 
 ### Workflow Continuation
 
-After clicking "Submit Reviews":
+After you click "Submit Reviews", this sequence occurs:
 
-1. ✅ **Workflow continues immediately**, and the file's server shuts down
-2. ✅ **The tab waits for the next file** and loads it when its server is up,
-   at the same address
-3. Message shown: "Submitted. This tab loads the next file when one is ready;
-   close it once the run has finished."
+1. ✅ **The workflow continues immediately**, and the server of the file stops.
+2. ✅ **The tab waits for the next file.** When the server of the next file
+   is ready, the tab loads it at the same address.
+3. The tab shows this message: "Submitted. This tab loads the next file when one is ready; close it once the run has finished."
 
-Each page carries the review session it was served for. A request it sends
-after its file's review has ended is refused by the next file's server and
-changes nothing there: a tab left open on an earlier file cannot submit,
-time out or shut down the file under review.
+Each page carries the review session that the server served it for. The page
+can send a request after the review of its file has ended. Then the server of
+the next file refuses the request, and the request changes nothing on that
+server. Thus a tab that stays open on an earlier file cannot submit, time out
+or stop the file under review.
 
 ### Security Notes
 
-- ✅ Server binds to `127.0.0.1` (localhost only, no network exposure)
-- ✅ HTML escaping prevents XSS
-- ✅ CSP headers with per-request nonce; `Cache-Control: no-store` on every response
-- ⚠️ Not suitable for remote or multi-user reviews (use webhooks instead)
+- ✅ The server binds to `127.0.0.1` (localhost only, no network exposure).
+- ✅ HTML escaping prevents XSS.
+- ✅ CSP headers with a nonce for each request. `Cache-Control: no-store` on every response.
+- ⚠️ Not suitable for remote or multi-user reviews (use webhooks instead).
 
-> **Trust boundary is loopback.** Any process running as your user on the
-> same machine can reach `http://localhost:{port}/`. The HITL UI is designed
-> as a single-user local tool — if you run it on a shared multi-user host,
-> any other user with shell access can read the record under review and
-> approve/reject it. Use a different review mechanism (webhooks, ticketing)
-> in that case.
+> **The trust boundary is loopback.** Any process that runs as your user on the
+> same machine can reach `http://localhost:{port}/`. The HITL UI is a
+> single-user local tool. If you run it on a shared multi-user host, it is not
+> private. On that host, any other user with shell access can read the record
+> under review. That user can also
+> approve or reject the record. In that case, use a different review mechanism
+> (webhooks, ticketing).
 
 ### Testing HITL Actions
 
 #### Bypassing review in a smoke run
 
-Setting `AGAC_HITL_AUTO_APPROVE=true` makes every HITL action approve every
-record without opening the UI. It exists so end-to-end smoke runs do not block
-on a human.
+If you set `AGAC_HITL_AUTO_APPROVE=true`, every HITL action approves every
+record and does not open the UI. This variable exists so that end-to-end smoke
+runs do not wait for a person.
 
 ```bash
 AGAC_HITL_AUTO_APPROVE=true agac run -a my_workflow --fresh
 ```
 
-:::danger This fabricates an approval no human gave
-While the variable is set, **every approval gate in every workflow becomes a
-rubber stamp**. Records are written with `hitl_status: approved` and the
-comment `auto-approved (smoke test)`, which is the only trace in the data that
-no human reviewed them.
+:::danger[WARNING]
+**This variable makes an approval that no person gave.** While the variable is
+set, **every approval gate in every workflow approves all records with no
+review**. The records get `hitl_status: approved` and the comment
+`auto-approved (smoke test)`. This comment is the only trace in the data that
+no person reviewed them.
 
-Each affected action logs a warning naming the variable and the record count.
-Export it per-command as shown above rather than in your shell profile, and
-never set it in an environment that produces data you intend to keep.
+Each affected action logs a warning that names the variable and the record
+count. Export the variable for one command, as the example shows. Do not
+export it in your shell profile. Never set it in an environment that produces
+data that you want to keep.
 :::
 
-For unit tests, mock the HITL decision instead:
+For unit tests, mock the HITL decision:
 
 ```python
 from agent_actions.llm.providers.hitl.client import HitlClient
@@ -531,6 +547,6 @@ def test_workflow_with_hitl(monkeypatch):
 
 ## See Also
 
-- [Design Patterns](./design-patterns.md) - Workflow orchestration patterns
-- [Context Scope](../reference/context/context-scope.md) - Control data flow with observe/drop/passthrough
-- [Key Concepts](../tutorials/concepts.md) - Understanding actions, dependencies, and conditional execution
+- [Design Patterns](./design-patterns.md): Patterns to orchestrate a workflow
+- [Context Scope](../reference/context/context-scope.md): Control the data flow with observe, drop and passthrough
+- [Key Concepts](../tutorials/concepts.md): Actions, dependencies and conditional execution

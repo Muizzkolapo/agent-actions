@@ -1,27 +1,27 @@
 ---
 title: Design Patterns
-description: Agentic workflow patterns for building AI systems
+description: Workflow patterns to build AI systems with Agent Actions
 sidebar_position: 2
 ---
 
 # Design Patterns
 
-Agentic AI systems follow well-established design patterns. Understanding these patterns helps you choose the right architecture for your use case and implement it correctly with Agent Actions.
+Agentic AI systems follow known design patterns. When you know these patterns, you can choose the correct architecture for your use case. You can then build that architecture correctly with Agent Actions.
 
 ## Pattern Categories
 
 | Category | Patterns | When to Use |
 |----------|----------|-------------|
-| **Deterministic** | Sequential, Parallel, Map-Reduce | Predictable workflows with known steps |
-| **Dynamic** | Coordinator, Conditional Routing | Adaptive workflows that respond to data |
-| **Iterative** | Review & Critique, Refinement Loop | Quality-critical outputs requiring validation |
-| **Hybrid** | Tool + LLM | Mixing deterministic logic with AI reasoning |
+| **Deterministic** | Sequential, Parallel, Map-Reduce | Predictable workflows with known actions |
+| **Dynamic** | Coordinator, Conditional Routing | Adaptive workflows that change with the data |
+| **Iterative** | Review & Critique, Refinement Loop | Quality-critical outputs that need validation |
+| **Hybrid** | Tool + LLM | Deterministic logic together with AI reasoning |
 
 ---
 
-## Sequential Pipeline
+## Sequential Workflow {/* #sequential-pipeline */}
 
-The simplest pattern: actions execute in a predefined linear order where each output becomes the next input.
+This is the simplest pattern. The actions run in a linear order that you define. The output of each action becomes the input of the next action.
 
 ```mermaid
 flowchart LR
@@ -122,21 +122,21 @@ actions:
 ```
 
 **Advantages:**
-- Simple to build and debug
-- Predictable execution order
-- No orchestration overhead
+- It is simple to build and debug.
+- The execution order is predictable.
+- It has no orchestration overhead.
 
 **Limitations:**
-- No parallelization—each step waits for the previous
-- Cannot skip unnecessary steps
+- It has no parallelization. Each action waits for the previous action.
+- It cannot skip unnecessary actions.
 
-**Use cases:** Document processing, content optimization, data enrichment pipelines
+**Use cases:** Document processing, content optimization, data enrichment workflows
 
 ---
 
 ## Parallel Processing
 
-Multiple actions execute simultaneously when they share a dependency but don't depend on each other. Agent Actions detects these opportunities automatically.
+Two or more actions run at the same time when they share a dependency but do not depend on each other. Agent Actions finds these actions automatically.
 
 ```mermaid
 flowchart LR
@@ -245,19 +245,23 @@ actions:
         - parse_resume.skills
 ```
 
-:::tip[Fan-in Pattern]
+:::note[Fan-in Pattern]
 
-When multiple different actions feed into one action, the system uses **fan-in**: every dependency is an input, and their outputs for the same source record are merged into one record before the action runs. The action runs once per merged record, so each execution sees every branch's data for the same source record, and the order of `dependencies` changes nothing. A branch that returns several records per input is paired record by record with the other branches' record for that source. Two branches that each split the same source record cannot be paired, and the action fails with a message naming them.
+When two or more different actions send data into one action, the system uses **fan-in**. Each dependency is an input. Before the action runs, the system merges the outputs of the dependencies for the same source record into one record.
+
+The action runs one time for each merged record. Thus each execution sees the data of every branch for the same source record. The order of `dependencies` changes nothing.
+
+A branch can return several records for each input. The system then pairs each of these records with the record of the other branches for that source. Two branches that each split the same source record cannot be paired. In that case, the action fails with a message that names the two branches.
 
 :::
 
 **Advantages:**
-- Reduces latency through concurrent execution
-- Gathers diverse perspectives simultaneously
+- Concurrent execution decreases latency.
+- It collects different perspectives at the same time.
 
 **Limitations:**
-- Higher resource utilization
-- Synthesis logic can be complex when results conflict
+- It uses more resources.
+- The synthesis logic can be complex when results conflict.
 
 **Use cases:** Multi-aspect evaluation, document analysis, feature extraction
 
@@ -265,7 +269,7 @@ When multiple different actions feed into one action, the system uses **fan-in**
 
 ## Map-Reduce
 
-Split large inputs into chunks, process each in parallel, then aggregate results. This pattern scales to handle documents of any size.
+This pattern splits a large input into chunks, processes each chunk in parallel, and then aggregates the results. The pattern scales to documents of any size.
 
 ```mermaid
 flowchart TD
@@ -343,25 +347,25 @@ actions:
         - analyze_clause.*
 ```
 
-The aggregate action sets `granularity: File`, so one call receives every analyzed clause of the input file. A tool action without it runs once per record.
+The aggregate action sets `granularity: File`. Thus one call receives every analyzed clause of the input file. A tool action without this setting runs one time for each record.
 
 **Advantages:**
-- Handles arbitrarily large inputs
-- Parallel clause processing reduces latency
+- It can process inputs of any size.
+- Parallel processing of the clauses decreases latency.
 
 **Limitations:**
-- Clause boundaries can split important cross-references
-- Aggregation must reconcile clauses that interact with each other
+- Clause boundaries can split important cross-references.
+- The aggregation must reconcile clauses that interact with each other.
 
 **Use cases:** Contract review, legal document analysis, research paper summarization
 
-See [Granularity](../reference/execution/granularity) for record and file modes.
+For the record mode and the file mode, see [Granularity](../reference/execution/granularity).
 
 ---
 
 ## Conditional Routing
 
-Route data to different handlers based on content. Guards evaluate conditions and skip actions that don't apply—no API call, no cost.
+This pattern sends data to different handlers, based on the content. Guards evaluate conditions and skip the actions that do not apply. A skipped action makes no API call and has no cost.
 
 ```mermaid
 flowchart TB
@@ -456,22 +460,22 @@ actions:
 ```
 
 **Advantages:**
-- Optimizes cost by skipping irrelevant actions
-- Adapts processing to data characteristics
+- It decreases cost because it skips actions that do not apply.
+- The processing changes with the characteristics of the data.
 
 **Limitations:**
-- Guard conditions must be deterministic
-- Complex routing logic can be hard to debug
+- Guard conditions must be deterministic.
+- Complex routing logic can be hard to debug.
 
 **Use cases:** Order processing, content-type routing, priority-based handling
 
-See [Guards](../reference/execution/guards) for complete documentation.
+For the full documentation, see [Guards](../reference/execution/guards).
 
 ---
 
 ## Review and Critique
 
-A generator creates output; a critic evaluates it against criteria. This pattern improves quality for high-stakes outputs.
+A generator creates output. A critic evaluates the output against criteria. This pattern improves the quality of high-stakes outputs.
 
 ```mermaid
 flowchart LR
@@ -601,12 +605,12 @@ actions:
 ```
 
 **Advantages:**
-- Catches errors before they reach customers
-- Provides audit trail of quality checks
+- It finds errors before they get to customers.
+- It gives an audit trail of the quality checks.
 
 **Limitations:**
-- Increases latency and cost
-- Critic may have blind spots similar to generator
+- It increases latency and cost.
+- The critic may have blind spots similar to the blind spots of the generator.
 
 **Use cases:** Marketing copy, legal drafts, compliance-sensitive content
 
@@ -614,7 +618,7 @@ actions:
 
 ## Iterative Refinement
 
-Repeatedly improve output until quality thresholds are met. Use an `expect:` repair policy for automatic regeneration on validation failures.
+This pattern improves the output again and again until it meets the quality thresholds. To generate the output again automatically when validation fails, use an `expect:` repair policy.
 
 ```yaml
 actions:
@@ -630,7 +634,7 @@ actions:
       max_iterations: 3
 ```
 
-For multi-stage refinement with parallel strategy generation, use versioned actions:
+For refinement in two or more stages, with strategies that run in parallel, use versioned actions:
 
 ```yaml
 name: translation_pipeline
@@ -724,22 +728,22 @@ actions:
 ```
 
 **Advantages:**
-- Achieves quality difficult in single attempts
-- Automatic recovery from validation failures
+- It gets a quality that is difficult to get in one attempt.
+- It recovers automatically from validation failures.
 
 **Limitations:**
-- Each cycle increases latency and cost
-- Requires well-defined exit conditions
+- Each cycle increases latency and cost.
+- It needs clear exit conditions.
 
 **Use cases:** Translation, content localization, quality-critical text generation
 
-See [Expectations](../reference/validation/expectations.md) for automatic refinement.
+For automatic refinement, see [Expectations](../reference/validation/expectations.md).
 
 ---
 
 ## Coordinator Pattern
 
-A central action analyzes requests and dispatches to specialized handlers. Use guards for dynamic routing based on classification results.
+A central action analyzes each request and sends it to a specialized handler. For dynamic routing based on the classification results, use guards.
 
 ```mermaid
 flowchart TB
@@ -839,22 +843,22 @@ actions:
 ```
 
 **Advantages:**
-- Flexible routing based on content
-- Specialized handlers for each document type
+- The routing is flexible and based on the content.
+- Each document type has a specialized handler.
 
 **Limitations:**
-- Coordinator adds latency
-- Routing errors cascade to wrong handlers
+- The coordinator adds latency.
+- A routing error sends the data to the wrong handler, and the error continues downstream.
 
 **Use cases:** Document processing, email triage, multi-format data ingestion
 
-See [Dispatch Tool](../reference/prompts/dispatch) for advanced routing.
+For advanced routing, see [Dispatch Tool](../reference/prompts/dispatch).
 
 ---
 
 ## Tool + LLM Hybrid
 
-Mix deterministic tools with LLM reasoning. Tools handle API calls, calculations, and data transformations; LLMs handle understanding and generation.
+This pattern uses deterministic tools together with LLM reasoning. Tools do the API calls, the calculations and the data transformations. LLMs understand and generate the text.
 
 ```mermaid
 flowchart LR
@@ -951,16 +955,16 @@ actions:
 ```
 
 **Advantages:**
-- Guaranteed correctness for deterministic operations
-- LLM focuses on what it does best (language), tools handle data
+- Deterministic operations are always correct.
+- The LLM does the work that it does best (language). Tools do the data work.
 
 **Limitations:**
-- Tools must be stateless
-- Error handling spans two paradigms
+- Tools must be stateless.
+- Error handling covers two paradigms.
 
 **Use cases:** E-commerce enrichment, API integration, data validation, report generation
 
-See [Custom Tools](./custom-tools) for building tools.
+To build tools, see [Custom Tools](./custom-tools).
 
 ---
 
@@ -968,22 +972,28 @@ See [Custom Tools](./custom-tools) for building tools.
 
 | If you need... | Use this pattern |
 |----------------|------------------|
-| Simple, predictable workflow | Sequential |
-| Faster processing of independent tasks | Parallel |
-| Handle large documents | Map-Reduce |
-| Route based on content | Conditional Routing |
+| A simple, predictable workflow | Sequential |
+| Faster processing of independent actions | Parallel |
+| Processing of large documents | Map-Reduce |
+| Routing based on content | Conditional Routing |
 | High-quality, validated outputs | Review and Critique |
 | Automatic error recovery | Iterative Refinement |
 | Flexible request handling | Coordinator |
-| Mix AI with deterministic logic | Tool + LLM Hybrid |
+| AI together with deterministic logic | Tool + LLM Hybrid |
 
-Most real agentic workflows combine multiple patterns. A product review analyzer might use Parallel for multi-scorer consensus, Conditional Routing for quality-based filtering, and Tool + LLM Hybrid for deterministic aggregation alongside AI-generated responses.
+Most real workflows use two or more patterns together. For example, a product review analyzer might use these patterns:
+
+- Parallel, for a consensus of many scorers.
+- Conditional Routing, to filter by quality.
+- Tool + LLM Hybrid, for deterministic aggregation together with AI-generated responses.
 
 ---
 
-## Production Example: Vote-Aggregate-Guard Pipeline
+## Production Example: Vote-Aggregate-Guard Workflow {/* #production-example-vote-aggregate-guard-pipeline */}
 
-This pattern from a production quiz generation system shows how to combine versioned parallel execution, tool-based aggregation, and guard filtering into a quality gate pipeline.
+This pattern comes from a production system that generates quizzes. It shows a quality gate that uses three features together: versioned parallel execution, aggregation in a tool, and guard filtering.
+
+In the diagram, three versions of `vote_quality` run in parallel. A tool aggregates the votes. The guard sends a record to `generate_answer` or drops it:
 
 ```mermaid
 flowchart LR
@@ -994,7 +1004,7 @@ flowchart LR
     D -->|filter| F[dropped]
 ```
 
-**Step 1: Parallel voting** — Three independent LLM voters assess quality:
+**Step 1: Parallel voting.** Three independent LLM voters assess the quality:
 
 ```yaml
 - name: vote_quality
@@ -1007,7 +1017,7 @@ flowchart LR
   schema: quality_vote
 ```
 
-**Step 2: Aggregate votes** — A tool counts votes and determines the verdict:
+**Step 2: Aggregate votes.** A tool counts the votes and decides the verdict:
 
 ```yaml
 - name: aggregate_votes
@@ -1037,7 +1047,7 @@ def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
     }
 ```
 
-**Step 3: Guard gate** — Only records that passed voting continue:
+**Step 3: Guard gate.** Only the records that passed the vote continue:
 
 ```yaml
 - name: generate_answer
@@ -1049,15 +1059,19 @@ def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
   prompt: $my_workflow.Generate_Answer
 ```
 
-This pattern scales to any quality gate: use it for content moderation, fact-checking, or multi-reviewer approval pipelines. The key insight is that each voter runs independently (no shared context between versions), the tool performs deterministic aggregation, and the guard enforces the decision.
+This pattern scales to any quality gate. Use it for content moderation, fact-checking, or approval workflows with many reviewers. The pattern has three important properties:
+
+- Each voter runs independently. The versions share no context.
+- The tool does a deterministic aggregation.
+- The guard enforces the decision.
 
 ---
 
 ## Next Steps
 
-Explore the features that make these patterns possible:
+These features make the patterns possible:
 
-- **[Guards](../reference/execution/guards)** — Conditional execution
-- **[Granularity](../reference/execution/granularity)** — Record and file modes
-- **[Context Scope](../reference/context/context-scope)** — Data flow control
-- **[Expectations](../reference/validation/expectations.md)** — Automatic refinement on failures
+- **[Guards](../reference/execution/guards)**: Conditional execution
+- **[Granularity](../reference/execution/granularity)**: Record and file modes
+- **[Context Scope](../reference/context/context-scope)**: Control of the data flow
+- **[Expectations](../reference/validation/expectations.md)**: Automatic refinement on failures
