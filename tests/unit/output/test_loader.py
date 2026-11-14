@@ -118,4 +118,4 @@ class TestParseObjectPropertiesGuard:
     def test_non_string_property_type_raises(self):
         """Nested dict inside object properties raises SchemaValidationError."""
         with pytest.raises(SchemaValidationError, match="non-string type"):
-            SchemaLoader._parse_object_properties("{'sub': {'type': 'string'}}")
+            SchemaLoader._parse_object_properties("{'sub': {'type': 'string'}}", "rows")
