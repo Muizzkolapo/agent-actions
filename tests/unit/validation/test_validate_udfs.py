@@ -109,7 +109,7 @@ _CLEAR_REGISTRY = "agent_actions.validation.validate_udfs.clear_registry"
 # end-to-end in test_validate_udfs_is_a_complete_gate.py.
 _SKIP_STRUCTURAL = patch(
     "agent_actions.validation.validate_udfs.ValidateUDFsCommand._run_structural_preflight",
-    new=lambda self: None,
+    new=lambda self, rendered_workflow: None,
 )
 
 

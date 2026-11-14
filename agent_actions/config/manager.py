@@ -184,8 +184,8 @@ class ConfigManager:
 
     def _load_single_config(
         self, config_path: str, config_type: str, rendered: str | None = None
-    ) -> dict[str, Any]:
-        """Parse *rendered*, or render *config_path* first when no text is given.
+    ) -> tuple[dict[str, Any], str]:
+        """Parse *rendered*, or render *config_path* first; return the config and the text.
 
         *config_type* names the file in events and errors ("workflow", "default").
         Every failure is raised as a ``ConfigurationError``.
@@ -211,7 +211,7 @@ class ConfigManager:
                     },
                 )
             fire_event(ConfigLoadEvent(config_file=str(config_path), config_type=config_type))
-            return loaded
+            return loaded, rendered
         except TemplateRenderingError as e:
             config_name = Path(config_path).name
             raise ConfigurationError(
@@ -243,11 +243,11 @@ class ConfigManager:
             ) from e
 
     def load_configs(self):
-        self.user_config = self._load_single_config(
+        self.user_config, self.rendered_workflow = self._load_single_config(
             self.constructor_path, "workflow", self.rendered_workflow
         )
         if self.default_path:
-            self.default_config = self._load_single_config(self.default_path, "default")
+            self.default_config, _ = self._load_single_config(self.default_path, "default")
         # Resolve tool_path with priority: workflow > default > project config
         user_tool_path = None
         if isinstance(self.user_config, dict):

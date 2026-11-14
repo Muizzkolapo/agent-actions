@@ -40,10 +40,12 @@ class WorkflowInspector:
         agent_name: str,
         project_root: Path | None = None,
         user_code_path: str | None = None,
+        rendered_workflow: str | None = None,
     ):
         self.agent_name = agent_name
         self.project_root = project_root
         self.user_code_path = user_code_path
+        self.rendered_workflow = rendered_workflow
         self.paths: ProjectPaths = ProjectPathsFactory.create_project_paths(
             agent_name, agent_name, auto_create=False, project_root=project_root
         )
@@ -79,6 +81,7 @@ class WorkflowInspector:
             ),
             use_tools=False,
             project_root=self.project_root,
+            rendered_workflow=self.rendered_workflow,
         )
 
         metadata = load_workflow_configs(runtime_config, quiet_console, fire_events=False)
