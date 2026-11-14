@@ -1,12 +1,12 @@
 ---
 title: Custom Tools
-description: Extend agentic workflows with Python tools
+description: Add Python tools to your workflows
 sidebar_position: 3
 ---
 
 # Custom Tools
 
-Add custom code to your workflows for validation, transformation, API calls, or any deterministic logic.
+A tool adds custom code to your workflow. Use tools for validation, transformation, API calls or any other deterministic logic.
 
 :::note
 Tools support Python only.
@@ -28,7 +28,7 @@ def validate_product_price(data: dict[str, Any]) -> dict[str, Any]:
     return data
 ```
 
-**Reference in workflow**:
+**Reference in the workflow**:
 ```yaml
 actions:
   - name: price_validator
@@ -41,7 +41,7 @@ actions:
         - source.*
 ```
 
-Agent Actions discovers tools automatically—no module paths needed. A tool action must declare an `intent` and a `schema` for the fields it returns. This tool returns `data` unchanged, so its schema is `{ source: object }`.
+Agent Actions discovers tools automatically. You do not need module paths. A tool action must declare an `intent` and a `schema` for the fields that it returns. This tool returns `data` unchanged. Thus its schema is `{ source: object }`.
 
 ## Tool Signature
 
@@ -125,7 +125,7 @@ def calculate_order_totals(data: dict[str, Any]) -> dict[str, Any]:
 
 ## File-Level Tools
 
-For operations that need access to all records at once (deduplication, aggregation, cross-record analysis), use `Granularity.FILE`. FILE tools receive a list with one item per record, each holding the fields the action observes as flat keys.
+Some operations need access to all records at once, for example deduplication, aggregation and cross-record analysis. For these operations, use `Granularity.FILE`. A FILE tool receives a list with one item for each record. Each item holds the fields that the action observes, as flat keys.
 
 ```python
 from agent_actions import udf_tool
@@ -144,17 +144,17 @@ def deduplicate_questions(data: list[dict]) -> list[dict]:
     return result
 ```
 
-**Key differences from record-level tools:**
+**Key differences between file-level tools and record-level tools:**
 
 | | Record-level | File-level |
 |---|---|---|
-| Input | Single `dict` with namespaced upstream data | `list[dict]` — each item holds the observed fields as flat keys |
-| Read fields | `data["action_name"]["field"]` | `record["field"]`; a named field is always bare, and only a real collision gives a key `record["action_name.field"]` |
-| Passthrough | Return modified dict | Return the item you received |
+| Input | One `dict` with namespaced upstream data | `list[dict]`. Each item holds the observed fields as flat keys |
+| Read fields | `data["action_name"]["field"]` | `record["field"]`. A named field is always bare. Only a real collision gives a key `record["action_name.field"]` |
+| Passthrough | Return the modified dict | Return the item that you received |
 | New records | N/A | Return `FileUDFResult` with `source_index: None` |
 
-:::tip Lineage tracking
-The framework tracks the identity of each item it hands the tool. When you return an item you received, lineage extends automatically. When you return a `FileUDFResult` output declaring `source_index: None` (aggregation), the framework creates fresh lineage. You never manage `node_id` directly.
+:::note[Lineage tracking]
+The framework tracks the identity of each item that it gives to the tool. When you return an item that you received, the lineage extends automatically. When you return a `FileUDFResult` output that declares `source_index: None` (aggregation), the framework creates new lineage. You never manage `node_id` directly.
 :::
 
 ## CLI Commands
