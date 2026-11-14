@@ -38,6 +38,7 @@ def report() -> int:
                 "tempdir": tempfile.gettempdir(),
                 "random": random.random(),
                 "tz": time.tzname[0],
+                "defer_pydantic_build": os.environ.get("DEFER_PYDANTIC_BUILD"),
             }
         )
     )

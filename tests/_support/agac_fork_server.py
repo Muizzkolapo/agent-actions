@@ -10,8 +10,12 @@ child sets again what a fresh interpreter reads at startup: the environment (in 
 dir an import cached, and stdout/stderr. If the caller hangs up (a timeout, Ctrl-C, a dead
 pytest), the supervisor kills the child, as `subprocess.run` does.
 
+A variable the package sets as it is imported is set again in each child, unless the
+call sets it: a fresh agac that uses `os.environ.setdefault` does the same.
+
 Known differences from a fresh process: every call shares the warm process's string hash
-seed; stdout and stderr are unlinked files, not pipes; a traceback starts in this file.
+seed; stdout and stderr are unlinked files, not pipes; a traceback starts in this file; a
+variable the import sets without regard to the environment still yields to the call's.
 """
 
 from __future__ import annotations
@@ -147,10 +151,13 @@ def _connect_standard_streams(stdout_fd: int, stderr_fd: int) -> None:
     os.dup2(stderr_fd, 2)
 
 
-def _become_agac(request: dict[str, Any]) -> None:
+def _become_agac(request: dict[str, Any], set_at_import: dict[str, str]) -> None:
     os.chdir(request["cwd"])
     os.environ.clear()
     os.environ.update(request["env"])
+    # A fresh agac sets these as it imports the package, after it read its environment.
+    for key, value in set_at_import.items():
+        os.environ.setdefault(key, value)
     time.tzset()
     tempfile.tempdir = None
     sys.argv = list(request["argv"])
@@ -160,7 +167,11 @@ def main() -> None:
     socket_path, agac = sys.argv[1], sys.argv[2]
     # A script's sys.path[0] is the folder of its resolved path.
     sys.path[0] = os.path.dirname(os.path.realpath(agac))
+    before_import = dict(os.environ)
     importlib.import_module("agent_actions.cli.main")
+    set_at_import = {
+        key: value for key, value in os.environ.items() if before_import.get(key) != value
+    }
     # The child's normal interpreter exit would otherwise walk every imported object
     # (about 0.17 s against 0.05 s on the audit machine); frozen objects are skipped.
     gc.freeze()
@@ -179,7 +190,7 @@ def main() -> None:
 
     request = _serve(listener, parent, os.path.dirname(socket_path))
 
-    _become_agac(request)
+    _become_agac(request, set_at_import)
     module_name, function_name = request.get("entry", "agent_actions.cli.main:main").split(":")
     sys.exit(getattr(importlib.import_module(module_name), function_name)())
 

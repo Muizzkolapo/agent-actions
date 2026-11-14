@@ -122,6 +122,18 @@ def test_the_temp_dir_and_time_zone_follow_each_call(tmp_path):
     assert (second["tempdir"], second["tz"]) == (str(tmp_path / "t2"), "BBB")
 
 
+def test_a_variable_the_package_sets_as_it_imports_is_set_in_each_child_unless_the_call_sets_it(
+    tmp_path, monkeypatch
+):
+    # agent_actions/__init__.py sets this default. This process imported the package too,
+    # so the variable is removed here: a call then hands the child an environment without it.
+    monkeypatch.delenv("DEFER_PYDANTIC_BUILD", raising=False)
+
+    assert _report(tmp_path)["defer_pydantic_build"] == "false"
+    called = _report(tmp_path, env={"DEFER_PYDANTIC_BUILD": "true"})
+    assert called["defer_pydantic_build"] == "true"
+
+
 def test_two_calls_draw_different_random_numbers(tmp_path):
     assert _report(tmp_path)["random"] != _report(tmp_path)["random"]
 
