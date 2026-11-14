@@ -28,4 +28,5 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `__init__.py` | Module | Package entry point. Sets `DEFER_PYDANTIC_BUILD=false` (unless it is set already) before any provider SDK is imported, so the SDKs build their response models at import, not in several record threads at once. | - |
 | `__version__.py` | Module | Agent Actions version. | - |
