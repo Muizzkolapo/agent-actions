@@ -25,7 +25,10 @@ from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     wrap_vendor_error,
 )
-from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.generation_params import (
+    extract_generation_params,
+    request_timeout_seconds,
+)
 from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
     JSONResponseMixin,
@@ -56,10 +59,8 @@ def _build_client(api_key: str) -> genai.Client:
 
 
 def _timeout_options(agent_config: dict[str, Any]) -> dict[str, Any]:
-    """The action's ``request_timeout`` as per-request http_options; google-genai takes ms."""
-    timeout = agent_config.get("request_timeout")
-    if timeout is None:
-        return {}
+    """The action's request timeout as per-request http_options; google-genai takes ms."""
+    timeout = request_timeout_seconds(agent_config)
     return {"http_options": types.HttpOptions(timeout=math.ceil(timeout * 1000))}
 
 
@@ -166,8 +167,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
                 stop_as_list=True,
             )
-            config_kwargs = {**gen_params, **_timeout_options(agent_config)}
-            config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+            config = types.GenerateContentConfig(**gen_params, **_timeout_options(agent_config))
             envelope = MessageBuilder.build("gemini", prompt_config, context_data, json_mode=False)
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config

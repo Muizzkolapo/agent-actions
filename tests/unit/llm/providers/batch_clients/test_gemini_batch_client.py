@@ -204,3 +204,12 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
         with pytest.raises(VendorAPIError):
             provider.retrieve_results("nonexistent-batch-id", str(tmp_path))
+
+
+def test_the_gemini_batch_client_waits_600_seconds_per_request():
+    from agent_actions.llm.providers.gemini import batch_client
+
+    with patch.object(batch_client.genai, "Client") as sdk:
+        batch_client.GeminiBatchClient(api_key="k")
+
+    assert sdk.call_args.kwargs["http_options"] == {"api_version": "v1alpha", "timeout": 600_000}

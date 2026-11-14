@@ -33,6 +33,7 @@ from agent_actions.llm.config.runtime_profiles import (
     RUNTIME_PROFILES,
     RuntimeProfile,
 )
+from agent_actions.llm.providers.generation_params import connect_limited_timeout
 from agent_actions.llm.providers.openai.client import OpenAIClient
 from agent_actions.logging.filters import register_secret
 from agent_actions.utils.constants import JSON_MODE_KEY
@@ -161,6 +162,12 @@ class EndpointClient(OpenAIClient):
             "default_headers": headers,
             "timeout": endpoint.timeout_seconds,
         }
+
+    @classmethod
+    def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        """Only an action's own ``request_timeout``; unset, the endpoint's timeout governs."""
+        timeout = agent_config.get("request_timeout")
+        return {} if timeout is None else {"timeout": connect_limited_timeout(timeout)}
 
     @classmethod
     def call_json(

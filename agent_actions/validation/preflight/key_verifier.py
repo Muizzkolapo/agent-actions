@@ -135,7 +135,9 @@ def _probe_gemini(target: ProbeTarget) -> ProbeResult:
     try:
         from google import genai
 
-        client = genai.Client(api_key=target.api_key)
+        client = genai.Client(
+            api_key=target.api_key, http_options={"timeout": _PROBE_TIMEOUT_SECONDS * 1000}
+        )
         next(iter(client.models.list(config={"page_size": 1})))
         return ProbeResult(vendor="gemini", ok=True)
     except ImportError:
@@ -148,8 +150,10 @@ def _probe_gemini(target: ProbeTarget) -> ProbeResult:
         err_str = str(e).lower()
         if "401" in err_str or "403" in err_str or "api key" in err_str:
             return ProbeResult(vendor="gemini", ok=False, error=str(e))
-        # Build transient type tuple from optional Google SDK exceptions
-        transient_types: list[type] = []
+        from agent_actions.llm.providers.error_wrapper import TRANSPORT_ERRORS
+
+        # The SDK lets its transport's errors through unwrapped.
+        transient_types: list[type] = list(TRANSPORT_ERRORS)
         try:
             from google.api_core.exceptions import ServiceUnavailable
             from google.auth.exceptions import TransportError
@@ -157,12 +161,7 @@ def _probe_gemini(target: ProbeTarget) -> ProbeResult:
             transient_types.extend([ServiceUnavailable, TransportError])
         except ImportError:
             pass
-        if (transient_types and isinstance(e, tuple(transient_types))) or (
-            "timeout" in err_str or "connection" in err_str
-        ):
-            logger.warning("Could not verify gemini key: %s (proceeding — transient)", e)
-            return ProbeResult(vendor="gemini", ok=True)
-        return ProbeResult(vendor="gemini", ok=False, error=f"{_INFRA_ERROR_PREFIX}: {e}")
+        return _classify_sdk_exception("gemini", e, (), tuple(transient_types))
 
 
 # ── Registry ──────────────────────────────────────────────────────────

@@ -3,10 +3,14 @@
 import ssl
 from unittest.mock import MagicMock, patch
 
+import httpx
+import pytest
+
 from agent_actions.validation.preflight.key_verifier import (
     ProbeResult,
     ProbeTarget,
     _probe_anthropic,
+    _probe_gemini,
     _probe_groq,
     _probe_openai,
     verify_keys,
@@ -345,3 +349,36 @@ class TestVerifyKeysIntegration:
         assert len(result.errors) == 1
         assert "not set" in result.errors[0].message
         mock_verify.assert_not_called()
+
+
+def test_the_gemini_probe_waits_the_probe_timeout():
+    with patch("google.genai.Client") as sdk:
+        _probe_gemini(ProbeTarget("gemini", "AIza-validkey"))
+
+    assert sdk.call_args.kwargs["http_options"] == {"timeout": 5000}
+
+
+@pytest.mark.parametrize(
+    "error",
+    [httpx.ReadTimeout("timed out"), httpx.ConnectError("refused"), TimeoutError("timed out")],
+    ids=["read_timeout", "connect_error", "builtin_timeout"],
+)
+def test_a_gemini_probe_that_cannot_reach_the_vendor_proceeds(error):
+    with patch("google.genai.Client") as sdk:
+        sdk.return_value.models.list.side_effect = error
+        result = _probe_gemini(ProbeTarget("gemini", "AIza-validkey"))
+
+    assert (result.ok, result.error) == (True, None)
+
+
+def test_a_gemini_probe_with_a_refused_key_fails():
+    from google.genai import errors as genai_errors
+
+    with patch("google.genai.Client") as sdk:
+        sdk.return_value.models.list.side_effect = genai_errors.ClientError(
+            400, {"error": {"message": "API key not valid. Please pass a valid API key."}}
+        )
+        result = _probe_gemini(ProbeTarget("gemini", "AIza-badkey"))
+
+    assert result.ok is False
+    assert "API key not valid" in result.error

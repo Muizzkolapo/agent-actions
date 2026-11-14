@@ -25,7 +25,7 @@ from typing import Any
 
 from ollama import Client
 
-from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
+from agent_actions.config.defaults import LLMDefaults, OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
 from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
 from agent_actions.llm.providers.ollama.failure_injection import (
@@ -57,6 +57,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         vendor_slug: str = "ollama_local",
         cloud: bool = False,
         max_workers: int | None = None,
+        timeout: float = LLMDefaults.REQUEST_TIMEOUT_SECONDS,
     ):
         self.vendor_slug = vendor_slug
         self.cloud = cloud
@@ -78,10 +79,11 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             self.client = Client(
                 host=self.base_url,
                 headers={"Authorization": f"Bearer {api_key}"},
+                timeout=timeout,
             )
         else:
             self.base_url = base_url or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
-            self.client = Client(host=self.base_url)
+            self.client = Client(host=self.base_url, timeout=timeout)
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
