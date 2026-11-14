@@ -1,15 +1,15 @@
 # Logging Architecture
 
-agent-actions uses an event-based logging architecture providing both user-friendly CLI output and detailed structured logs for debugging and analytics.
+agent-actions uses an event-based logging architecture. It gives CLI output that is easy for users to read, and detailed structured logs for debugging and analytics.
 
 ## Overview
 
 The logging system has two primary goals:
 
-1. **User-facing output** - Clean, formatted progress messages during workflow execution
-2. **Structured logs** - Complete execution trace for debugging, analytics, and integration
+1. **User-facing output** - Clean, formatted progress messages while the workflow runs
+2. **Structured logs** - A complete execution trace for debugging, analytics and integration
 
-All logging flows through a central EventManager that dispatches events to registered handlers.
+All logging goes through a central EventManager. The EventManager sends events to the registered handlers.
 
 ## Architecture Diagram
 
@@ -64,11 +64,11 @@ All logging flows through a central EventManager that dispatches events to regis
 
 **Location:** `agent_actions/logging/core/manager.py`
 
-The EventManager is a singleton that:
+The EventManager is a singleton (one instance only). It does these functions:
 - Receives all events from the application
-- Enriches events with correlation context (workflow_name, correlation_id, etc.)
-- Routes events to registered handlers
-- Manages handler lifecycle
+- Adds correlation context to events (workflow_name, correlation_id and other keys)
+- Routes events to the registered handlers
+- Manages the lifecycle of the handlers
 
 **Key Methods:**
 ```python
@@ -87,62 +87,62 @@ with manager.context(workflow_name="my_workflow"):
 
 ### Event Types
 
-**Location:** `agent_actions/logging/events/` holds one module per category of events. `types.py` there holds the category constants, and the base class, `BaseEvent`, lives in `agent_actions/logging/core/events.py`.
+**Location:** `agent_actions/logging/events/` holds one module for each category of events. The `types.py` file in that directory holds the category constants. The base class, `BaseEvent`, is in `agent_actions/logging/core/events.py`.
 
-Events are dataclasses that represent specific occurrences in the system. The event class name is the `event_type` written to `events.json`:
+Events are dataclasses. Each event represents a specific occurrence in the system. The name of the event class is the `event_type` that Agent Actions writes to `events.json`:
 
 **Event Categories:**
-- `workflow` - Workflow lifecycle events
-- `action` - Action execution events
+- `workflow` - Events for the lifecycle of the workflow
+- `action` - Events for action execution
 - `batch` - Batch job operations
 - `llm` - LLM requests and responses
 - `validation` - Validation results
-- `cache`, `template`, `data`, `guard`, `recovery` - Cache, template rendering, data loading, guard evaluation and retry events
-- `configuration`, `initialization`, `plugin` - Configuration loading, CLI start-up and tool discovery events
-- `data_processing`, `file_io`, `schema`, `transformation` - Record pipeline, file, schema and transformation events
+- `cache`, `template`, `data`, `guard`, `recovery` - Events for the cache, template rendering, data loading, guard evaluation and retries
+- `configuration`, `initialization`, `plugin` - Events for configuration loading, CLI start-up and tool discovery
+- `data_processing`, `file_io`, `schema`, `transformation` - Events for record processing, files, schemas and transformations
 
 An event that sets no category has the category `system`.
 
 **Common Events:**
-- `WorkflowStartEvent` - Workflow execution begins
-- `WorkflowCompleteEvent` - Workflow execution completes
-- `WorkflowFailedEvent` - Workflow execution fails
-- `ActionStartEvent` - Action begins processing
-- `ActionCompleteEvent` - Action completes successfully
-- `ActionSkipEvent` - Action skipped (guard condition)
-- `ActionFailedEvent` - Action fails with error
-- `BatchSubmittedEvent` - Batch job submitted
-- `BatchCompleteEvent` - Batch job completes
-- `ValidationStartEvent` - Validation begins
+- `WorkflowStartEvent` - The workflow starts
+- `WorkflowCompleteEvent` - The workflow completes
+- `WorkflowFailedEvent` - The workflow fails
+- `ActionStartEvent` - The action starts to process
+- `ActionCompleteEvent` - The action completes successfully
+- `ActionSkipEvent` - The action was skipped (guard condition)
+- `ActionFailedEvent` - The action fails with an error
+- `BatchSubmittedEvent` - The batch job was submitted
+- `BatchCompleteEvent` - The batch job completes
+- `ValidationStartEvent` - Validation starts
 - `ValidationCompleteEvent` - Validation passes
 - `ValidationErrorEvent` - Validation fails
 
 ### Handlers
 
-Handlers receive events and perform actions (output to console, write to file, etc.).
+Handlers receive events and do work on them (for example, show output on the console or write to a file).
 
 #### ConsoleEventHandler
 
 **Location:** `agent_actions/logging/core/handlers/console.py`
 
-Formats events for user-facing CLI output using Rich.
+Formats events for the CLI output that users see. It uses Rich.
 
 **Features:**
-- Color-coded output by event type
-- Timestamp display
-- Category filtering (workflow, action and batch events by default); warnings and errors show whatever their category
+- Output with a color for each event type
+- Shows the timestamp
+- Filters by category (workflow, action and batch events by default). Warnings and errors show for all categories.
 - Verbose mode shows all events
-- Drops events marked diagnostic unless the run is verbose
+- Drops events marked diagnostic, unless the run is verbose
 
 #### ProgressRenderer
 
 **Location:** `agent_actions/logging/core/handlers/progress.py`
 
-The console handler a run installs. It consumes the workflow, step and action
-events and renders them as one grouped progress stream: one line per action,
-under the dependency step that produced it. Anything it does not recognise falls
-through to `ConsoleEventHandler`'s formatting, so warnings and errors from any
-module are untouched.
+The console handler that a run installs. It reads the workflow, step and action
+events. It shows them as one grouped progress stream, with one line for each action.
+Each action line is under the dependency step of that action. If it does not recognise an event, the
+formatting of `ConsoleEventHandler` applies. Thus warnings and errors from all
+modules do not change.
 
 **Example Output:**
 ```
@@ -161,20 +161,20 @@ Step 12/12 2 actions: auto_review_note, describe_confusion_risk
 ✓ 0.6s — 16 completed, 2 skipped
 ```
 
-An action reports once, on completion; `--verbose` additionally announces each
-one as it starts. The record count includes the rows the action's guard skipped, kept
-as tombstones; `— N skipped by guard` says how many those are, and is left off when
-there are none:
+An action reports one time, when it completes. With `--verbose`, each action also reports
+when it starts. The record count includes the records that the guard of the action skipped. Agent Actions
+keeps these records as tombstones. `— N skipped by guard` gives the number of these records. The line
+does not show this text when there are no skipped records:
 
 ```
   ✓ repaired  4 records in 0.2s (agac-provider/mock) — 1 skipped by guard
 ```
 
-An action that shipped records with a failing [expectations](../validation/expectations.md) verdict
-(`on_exhausted: return_last`, `repair: none`) turns `⚠` (`WARN` without color) and says how
-many; the workflow line counts every such record the workflow's actions hold, read from the
-store, so a batch workflow finishing over several runs counts what the earlier runs
-collected. It turns `⚠` too, unless an action failed, which keeps `✗`. The exit code does not change: gate CI on verdicts with `agac expect report --fail-under`.
+Some actions ship records with a failing [expectations](../validation/expectations.md) verdict
+(`on_exhausted: return_last`, `repair: none`). The line of such an action turns to `⚠` (`WARN` without color). The line also gives
+the number of these records. The workflow line counts every such record that the actions of the workflow hold. It reads the count from the
+store. Thus, if a batch workflow completes over several runs, the count includes the records that the earlier runs
+collected. The workflow line also turns to `⚠`, unless an action failed. If an action failed, the workflow line keeps `✗`. The exit code does not change. To gate CI on verdicts, use `agac expect report --fail-under`.
 
 ```
   ⚠ observed  4 records in 0.1s (agac-provider/mock) — 4 failed their checks
@@ -184,24 +184,24 @@ collected. It turns `⚠` too, unless an action failed, which keeps `✗`. The e
 ⚠ 0.1s — 3 completed, 7 records failed their checks
 ```
 
-A batch action's duration is marked `(batch)` so provider
-queue time does not read as local work.
+The duration of a batch action has the mark `(batch)`. Thus the queue time at the provider
+does not look like local work.
 
 #### JSONFileHandler
 
 **Location:** `agent_actions/logging/core/handlers/json_file.py`
 
-Writes events to a JSON file in NDJSON format (one JSON object per line).
+Writes events to a JSON file in NDJSON format (one JSON object on each line).
 
 **Features:**
-- Buffered writes (configurable buffer size)
+- Buffered writes (you can configure the buffer size)
 - Creates parent directories automatically
-- NDJSON format for easy streaming and parsing
-- Full event payload with metadata
+- NDJSON format, which is easy to stream and parse
+- The full event payload, with metadata
 
-**Output Location:** `{workflow}/agent_io/logs/events.json` holds every level. A second handler writes `{workflow}/agent_io/logs/errors.json`, which holds ERROR events only.
+**Output Location:** `{workflow}/agent_io/logs/events.json` holds all levels. A second handler writes `{workflow}/agent_io/logs/errors.json`, which holds only ERROR events.
 
-**Example Entry** (one line in the file, indented here to read):
+**Example Entry** (one line in the file, shown here with indents so that you can read it):
 ```json
 {
   "event_type": "WorkflowStartEvent",
@@ -229,13 +229,13 @@ Writes events to a JSON file in NDJSON format (one JSON object per line).
 
 **Location:** `agent_actions/logging/events/handlers/run_results.py`
 
-Collects workflow execution data and outputs a `run_results.json` artifact.
+Collects data about the workflow run and writes a `run_results.json` artifact.
 
 **Features:**
-- Tracks action execution status, timing, and token usage
-- Aggregates total token counts
-- Records output folders for each action
-- Captures error messages and skip reasons
+- Tracks the execution status, the timing and the token usage of each action
+- Adds the token counts into totals
+- Records the output folder of each action
+- Records error messages and skip reasons
 
 **Output Location:** `{workflow}/agent_io/logs/run_results.json`
 
@@ -301,17 +301,17 @@ LoggerFactory.initialize(
 )
 ```
 
-This:
-1. Creates EventManager singleton
-2. Registers ProgressRenderer (the console handler for a run)
-3. Registers JSONFileHandler (writes every level to `{output_dir}/logs/events.json`)
-4. Registers a second JSONFileHandler (writes ERROR events to `{output_dir}/logs/errors.json`)
-5. Registers RunResultsCollector (writes `{output_dir}/logs/run_results.json`)
-6. Sets up LoggingBridgeHandler to convert `logger.*` calls to events
+This call does these steps:
+1. Creates the EventManager singleton.
+2. Registers ProgressRenderer (the console handler for a run).
+3. Registers JSONFileHandler (writes all levels to `{output_dir}/logs/events.json`).
+4. Registers a second JSONFileHandler (writes ERROR events to `{output_dir}/logs/errors.json`).
+5. Registers RunResultsCollector (writes `{output_dir}/logs/run_results.json`).
+6. Configures LoggingBridgeHandler to convert `logger.*` calls to events.
 
 ### 2. Event Emission
 
-Events can be emitted two ways:
+Code can emit events in two ways:
 
 **Direct Events:**
 ```python
@@ -324,7 +324,7 @@ fire_event(WorkflowStartEvent(
 ))
 ```
 
-**Python Logging (automatically converted to events):**
+**Python Logging (converted to events automatically):**
 ```python
 import logging
 logger = logging.getLogger(__name__)
@@ -335,7 +335,7 @@ logger.error("Failed to process")   # Becomes LogEvent with ERROR level
 
 ### 3. Event Enrichment
 
-EventManager automatically enriches events with correlation context:
+EventManager automatically adds correlation context to events:
 
 ```python
 # Set context once
@@ -351,7 +351,7 @@ fire_event(ActionStartEvent(action_name="extract_data"))
 
 ### 4. Handler Dispatch
 
-EventManager routes events to handlers based on acceptance criteria:
+EventManager routes events to handlers. The acceptance criteria of each handler decide which events it gets:
 
 ```python
 class ConsoleEventHandler:
@@ -369,14 +369,14 @@ class ConsoleEventHandler:
 
 ### 5. Output Generation
 
-Handlers process events and generate output:
-- **ConsoleHandler** → Rich-formatted terminal output
-- **JSONFileHandler** → Append to `events.json`
-- **RunResultsCollector** → Aggregate data, write `run_results.json` on flush
+Handlers process events and make output:
+- **ConsoleHandler** → Terminal output, formatted with Rich
+- **JSONFileHandler** → Adds to the end of `events.json`
+- **RunResultsCollector** → Collects data, and writes `run_results.json` on flush
 
 ## Context Propagation
 
-`manager.context()` overlays context values for the code inside the block, for each thread and coroutine separately:
+`manager.context()` puts context values over the current values for the code inside the block. It does this for each thread and each coroutine separately:
 
 ```python
 with manager.context(workflow_name="upstream", correlation_id="abc123"):
@@ -386,11 +386,11 @@ with manager.context(workflow_name="upstream", correlation_id="abc123"):
 # Context automatically restores after block
 ```
 
-This ensures proper attribution of events to the correct workflow or action.
+Thus each event goes to the correct workflow or action.
 
-Each action runs inside `manager.context(action_name=..., action_index=...)`, so every event
-it fires, from its worker threads too, names it in `meta`. Actions of one step run at once,
-which is why the action is never set with `set_context()`: that value is shared by all of them.
+Each action runs inside `manager.context(action_name=..., action_index=...)`. Thus every event
+that the action fires, also from its worker threads, names the action in `meta`. The actions of one step run at the same time.
+That is why Agent Actions never sets the action with `set_context()`. All the actions share that value.
 
 ## Testing
 
@@ -459,7 +459,7 @@ def test_console_handler():
 
 ### Logging Levels
 
-Console verbosity can be controlled:
+You can control the verbosity of the console:
 
 ```bash
 # Default: INFO level, workflow/action/batch categories
@@ -477,25 +477,25 @@ agac --quiet run -a my_workflow
 
 ### File Handler
 
-The file handler only attaches when a workflow run passes `output_dir` to
-`LoggerFactory.initialize()` — `agac run`, `agac retry` and the `agac batch` commands do this once the
-run's own output directory is known:
+The file handler attaches only when a workflow run passes `output_dir` to
+`LoggerFactory.initialize()`. The `agac run`, `agac retry` and `agac batch` commands do this when they know the
+output directory of the run:
 
 ```python
 LoggerFactory.initialize(output_dir=agent_folder, workflow_name=..., invocation_id=run_id)
 ```
 
-It writes `{output_dir}/logs/events.json` (all levels) and
-`{output_dir}/logs/errors.json` (ERROR level only). A command that isn't
-executing a workflow — `agac inspect`, `validate-udfs`, and other read-only
-paths — never supplies `output_dir`, so it registers no file handler and
+The file handler writes `{output_dir}/logs/events.json` (all levels) and
+`{output_dir}/logs/errors.json` (ERROR level only). A command that does not
+run a workflow never supplies `output_dir`. Examples are `agac inspect`, `validate-udfs` and other read-only
+paths. Thus such a command registers no file handler and
 writes nothing to disk.
 
 ## Best Practices
 
 ### 1. Use Typed Events
 
-Don't use BaseEvent directly. Create specific event classes:
+Do not use BaseEvent directly. Create specific event classes:
 
 ```python
 # Good
@@ -513,7 +513,7 @@ fire_event(BaseEvent(
 
 ### 2. Clear Messages
 
-Event messages should be human-readable and actionable:
+Event messages should be easy for a person to read, and should tell the reader what to do:
 
 ```python
 # Good
@@ -525,7 +525,7 @@ message="done"
 
 ### 3. Structured Data
 
-Put machine-readable data in the `data` dict:
+Put data that a machine reads in the `data` dict:
 
 ```python
 fire_event(ActionCompleteEvent(
@@ -554,7 +554,7 @@ The event class builds the `message` and the `data` dict from its fields. The `d
 
 ### 4. Use Context Managers
 
-For nested execution contexts:
+Use context managers for nested execution contexts:
 
 ```python
 with manager.context(workflow_name="upstream"):
@@ -566,7 +566,7 @@ with manager.context(workflow_name="upstream"):
 
 ### 5. Flush Before Exit
 
-Always flush handlers before exiting:
+Always flush the handlers before the program exits:
 
 ```python
 try:
@@ -577,7 +577,7 @@ finally:
 
 ## Console Output
 
-Do not call `console.print()` from framework code to report progress. Fire an event instead, and the console handler formats it:
+Do not call `console.print()` from framework code to report progress. Fire an event. The console handler formats the event:
 
 ```python
 fire_event(ActionCompleteEvent(
@@ -590,7 +590,7 @@ fire_event(ActionCompleteEvent(
 
 ### Buffering
 
-JSONFileHandler buffers events before writing:
+JSONFileHandler buffers events before it writes them:
 
 ```python
 json_handler = JSONFileHandler(
@@ -603,7 +603,7 @@ json_handler = JSONFileHandler(
 
 ### Handler Acceptance
 
-Handlers filter events early to avoid unnecessary processing:
+Handlers filter events early. This prevents unnecessary processing:
 
 ```python
 def accepts(self, event: BaseEvent) -> bool:
@@ -614,7 +614,7 @@ def accepts(self, event: BaseEvent) -> bool:
 
 ### Context Copying
 
-EventManager copies context to avoid mutation issues:
+EventManager copies the context. This prevents problems from mutation:
 
 ```python
 # invocation_id and correlation_id are set on the event's meta;
