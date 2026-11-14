@@ -1,14 +1,4 @@
-"""Tests for _run_config_stage in config_pipeline.py.
-
-Covers:
-- pipeline_stage key (not operation) to avoid overwriting inner context
-- isinstance guard when .context is not a dict
-- workflow name propagation, including a failure before the config file has parsed
-- Exception without .context attribute
-- Exception with existing .context dict
-- UDFLoadError raised from _discover_udfs_from_path is enriched with the
-  searched and requested paths and re-raised typed.
-"""
+"""A config stage error carries the workflow name and the stage, and keeps any inner context."""
 
 from unittest.mock import MagicMock, patch
 
