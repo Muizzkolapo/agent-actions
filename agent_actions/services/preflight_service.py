@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import (
+    AgentActionsError,
     ConfigValidationError,
     FunctionNotFoundError,
     PromptValidationError,
+    enrich_exception_context,
 )
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.models.action_schema import FieldSource
@@ -124,6 +126,14 @@ class PreflightService:
         self.schema_service: WorkflowSchemaService | None = None
 
     def validate(self) -> None:
+        """Run every check; a refusal carries the workflow name as ``agent``."""
+        try:
+            self._run_checks()
+        except AgentActionsError as e:
+            enrich_exception_context(e, agent=self.agent_name)
+            raise
+
+    def _run_checks(self) -> None:
         # 0. Every tool and UDF guard named was loaded. A missing one would fail only when
         # its action runs, after every action before it has run.
         self._check_udfs_are_loaded()

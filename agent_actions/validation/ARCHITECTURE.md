@@ -142,7 +142,9 @@ WorkflowStaticAnalyzer.analyze()
 `PreflightService.validate` (`services/preflight_service.py`) refuses the run on any error, with
 the full report, warnings included. Without an error it prints the warnings itself, one grouped
 `Pre-flight: static analysis` block with each distinct finding once, so `agac run` and
-`agac inspect` show them; before 1536 they printed only beside an error.
+`agac inspect` show them; before 1536 they printed only beside an error. Every refusal it raises
+carries the workflow name as `agent`, so each command that runs pre-flight names the workflow
+in the refusal's title.
 
 ### DataFlowGraph
 
