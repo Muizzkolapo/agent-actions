@@ -47,30 +47,22 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         mock_file.name = "files/test-file-123"
         mock_client.files.upload.return_value = mock_file
         mock_client.files.download.return_value = b'{"key": "test-1", "response": {"candidates": [{"content": {"parts": [{"text": "test"}]}}]}}\n'
-        with patch.dict(
-            "sys.modules",
-            {
-                "google": Mock(),
-                "google.genai": mock_genai_module,
-                "google.genai.types": mock_types_module,
-            },
-        ):
-            with patch("agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True):
+        with patch("agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True):
+            with patch(
+                "agent_actions.llm.providers.gemini.batch_client.genai",
+                mock_genai_module,
+            ):
                 with patch(
-                    "agent_actions.llm.providers.gemini.batch_client.genai",
-                    mock_genai_module,
+                    "agent_actions.llm.providers.gemini.batch_client.types",
+                    mock_types_module,
                 ):
-                    with patch(
-                        "agent_actions.llm.providers.gemini.batch_client.types",
-                        mock_types_module,
-                    ):
-                        from agent_actions.llm.providers.gemini.batch_client import (
-                            GeminiBatchClient,
-                        )
+                    from agent_actions.llm.providers.gemini.batch_client import (
+                        GeminiBatchClient,
+                    )
 
-                        provider = GeminiBatchClient(api_key="test-gemini-key")
-                        provider.client = mock_client
-                        yield provider
+                    provider = GeminiBatchClient(api_key="test-gemini-key")
+                    provider.client = mock_client
+                    yield provider
 
     @pytest.fixture
     def provider_success_response_json(self):
