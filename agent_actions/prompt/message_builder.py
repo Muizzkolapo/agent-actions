@@ -325,15 +325,8 @@ class MessageBuilder:
             style=style,
         )
 
-        if enable_prompt_caching and provider == "anthropic":
-            messages = [
-                LLMMessage(
-                    role=m.role,
-                    content=m.content,
-                    cache_control={"type": "ephemeral"},
-                )
-                for m in messages
-            ]
+        if enable_prompt_caching:
+            messages = MessageBuilder._mark_for_caching(provider, messages)
 
         # Token overflow pre-flight guard — always runs.
         # When model_name is unknown, falls back to _DEFAULT_CONTEXT_LIMIT.
@@ -368,6 +361,7 @@ class MessageBuilder:
         user_content: str,
         *,
         schema: dict[str, Any] | None = None,
+        enable_prompt_caching: bool = False,
     ) -> LLMMessageEnvelope:
         """Build a message envelope for a batch provider call.
 
@@ -400,12 +394,24 @@ class MessageBuilder:
                 LLMMessage(role="system", content=effective_prompt),
                 LLMMessage(role="user", content=user_content),
             ]
+        if enable_prompt_caching:
+            messages = MessageBuilder._mark_for_caching(provider, messages)
         return LLMMessageEnvelope(
             messages=messages,
             prompt_body=prompt,
         )
 
     # -- internals -----------------------------------------------------------
+
+    @staticmethod
+    def _mark_for_caching(provider: str, messages: list[LLMMessage]) -> list[LLMMessage]:
+        """Mark each message as a prompt-cache breakpoint; only Anthropic reads the mark."""
+        if provider != "anthropic":
+            return messages
+        return [
+            LLMMessage(role=m.role, content=m.content, cache_control={"type": "ephemeral"})
+            for m in messages
+        ]
 
     @staticmethod
     def _get_config(provider: str) -> ProviderMessageConfig:

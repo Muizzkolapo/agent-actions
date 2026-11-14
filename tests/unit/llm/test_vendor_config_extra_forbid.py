@@ -56,10 +56,6 @@ class TestVendorConfigAcceptsValidFields:
         config = OpenAIConfig(model_name="gpt-4o", frequency_penalty=0.5)
         assert config.frequency_penalty == 0.5
 
-    def test_anthropic_version(self):
-        config = AnthropicConfig(model_name="claude-3", anthropic_version="2024-01-01")
-        assert config.anthropic_version == "2024-01-01"
-
     def test_base_temperature(self):
         config = OpenAIConfig(model_name="gpt-4o", temperature=0.7)
         assert config.temperature == 0.7

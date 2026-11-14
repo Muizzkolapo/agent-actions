@@ -585,7 +585,6 @@ class ConfigManager:
                 "prompt": "",
                 "schema_name": "",
                 "code_path": "",
-                "anthropic_version": "",
             }
             for field, default_value in optional_string_defaults.items():
                 if field in config_dict and config_dict[field] is None:

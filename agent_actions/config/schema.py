@@ -93,6 +93,7 @@ _FILE_GRANULARITY_REPLACES_REDUCE_KEY = (
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "anthropic_version": "the Anthropic SDK sets the API version",
     "constraints": "write the instruction into the action's prompt",
     "enable_caching": "Anthropic prompt caching is enable_prompt_caching",
     "ephemeral": "",
@@ -631,9 +632,6 @@ class ActionConfig(_RetryValidators):
     )
 
     # --- Runtime-consumed keys (from AgentConfig) ---
-    anthropic_version: str | None = Field(
-        default=None, description="API version header for Anthropic requests"
-    )
     enable_prompt_caching: bool | None = Field(
         default=None, description="Enable Anthropic prompt caching"
     )
@@ -780,9 +778,6 @@ class DefaultsConfig(_RetryValidators):
     chunk_overlap: int | None = Field(default=None, ge=0, description="Default chunk overlap")
 
     # --- Read out of defaults by field inheritance ---
-    anthropic_version: str | None = Field(
-        default=None, description="Default API version header for Anthropic requests"
-    )
     enable_prompt_caching: bool | None = Field(
         default=None, description="Default Anthropic prompt caching setting"
     )

@@ -1,9 +1,4 @@
-"""Tests for Anthropic prompt caching in online mode.
-
-Verifies that enable_prompt_caching=True produces the beta header and
-cache_control markers in the online client, while leaving batch mode
-and non-Anthropic providers unaffected.
-"""
+"""Tests for Anthropic prompt caching: cache_control markers and the beta header."""
 
 from __future__ import annotations
 
@@ -325,15 +320,28 @@ class TestCallApiCachingIntegration:
 
 
 # ---------------------------------------------------------------------------
-# Batch client — no regression
+# Batch envelope
 # ---------------------------------------------------------------------------
 
 
 class TestBatchClientNoRegression:
-    """Batch client prompt caching still works after message_builder changes."""
+    """The batch envelope is marked for caching only when asked, by the online rule."""
+
+    def test_batch_caching_marks_each_message(self):
+        envelope = MessageBuilder.build_for_batch(
+            "anthropic", PROMPT, CONTEXT, enable_prompt_caching=True
+        )
+        assert [msg.cache_control for msg in envelope.messages] == [CACHE_CONTROL_MARKER] * 2
+
+    def test_batch_caching_marks_nothing_for_another_provider(self):
+        for provider in ("openai", "gemini"):
+            envelope = MessageBuilder.build_for_batch(
+                provider, PROMPT, CONTEXT, enable_prompt_caching=True
+            )
+            assert all(msg.cache_control is None for msg in envelope.messages), provider
 
     def test_batch_build_for_batch_no_cache_control(self):
-        """build_for_batch does NOT inject cache_control (batch has its own header path)."""
+        """Caching off by default: no message is marked."""
         envelope = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT)
         for msg in envelope.messages:
             assert msg.cache_control is None

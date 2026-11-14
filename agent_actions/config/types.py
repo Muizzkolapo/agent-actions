@@ -142,7 +142,6 @@ class ActionConfigDict(TypedDict, total=False):
     defaults: dict[str, Any]  # output fields a tool UDF synthesizes; read by the dag-fit check
 
     # Anthropic-specific
-    anthropic_version: str
     enable_prompt_caching: bool
 
     # Versioning
@@ -194,8 +193,6 @@ class ActionEntryDict(TypedDict, total=False):
     conditional_clause: str | None
     add_dispatch: bool | None
     # Anthropic-specific configuration options
-    # API version header for Anthropic requests (e.g., "2023-06-01")
-    anthropic_version: str | None
     # Enable Anthropic's prompt caching feature for improved performance
     enable_prompt_caching: bool | None
     # Control field flow: observe (LLM context), drop (block), passthrough (output)

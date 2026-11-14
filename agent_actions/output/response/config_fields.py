@@ -44,7 +44,6 @@ SIMPLE_CONFIG_FIELDS = {
     "request_timeout": None,  # Default: None (the provider client applies the default timeout)
     "record_concurrency": None,  # Default: None (one online LLM record at a time)
     # Runtime-consumed fields (providers and managers read these from agent dict)
-    "anthropic_version": None,
     "enable_prompt_caching": None,
     # Chunking defaults (used by expander_merge, initial_pipeline)
     "chunk_size": 300,

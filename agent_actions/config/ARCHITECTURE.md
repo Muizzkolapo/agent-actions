@@ -393,7 +393,7 @@ In `get_all_agent_configs_as_dicts()`, after all merging is done, `kind=="tool"`
 
 ### 11. None fields are coerced to empty strings for downstream safety
 
-`get_all_agent_configs_as_dicts()` converts several `None`-valued optional fields to `""` (or their domain defaults). This prevents downstream code from crashing on `None` where it expects a string (template rendering, conditional checks, etc.). The coerced fields include `conditional_clause`, `granularity`, `run_mode`, `prompt`, `schema_name`, `code_path`, and `anthropic_version`.
+`get_all_agent_configs_as_dicts()` converts several `None`-valued optional fields to `""` (or their domain defaults). This prevents downstream code from crashing on `None` where it expects a string (template rendering, conditional checks, etc.). The coerced fields include `conditional_clause`, `granularity`, `run_mode`, `prompt`, `schema_name` and `code_path`.
 
 ### 12. Dependencies are inferred, not just declared
 
