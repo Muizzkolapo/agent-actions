@@ -27,6 +27,8 @@ class FunctionNotFoundFormatter(ErrorFormatter):
             return False
         if isinstance(exc, self._HANDLED_TYPES) or isinstance(root, self._HANDLED_TYPES):
             return True
+        if self._is_preflight_refusal(exc, root):
+            return False
         if "function" in message.lower() and "not found" in message.lower():
             return True
 

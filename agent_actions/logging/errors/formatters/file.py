@@ -15,6 +15,8 @@ class FileErrorFormatter(ErrorFormatter):
         file_error_types = ["FileNotFoundError", "PermissionError", "FileLoadError"]
         if any(name in file_error_types for name in exc_names):
             return True
+        if self._is_preflight_refusal(exc, root):
+            return False
 
         message_lower = message.lower()
         file_patterns = [

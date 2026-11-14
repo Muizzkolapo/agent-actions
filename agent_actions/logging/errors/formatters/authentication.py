@@ -17,6 +17,8 @@ class AuthenticationErrorFormatter(ErrorFormatter):
 
         if any("Auth" in name for name in exc_names):
             return True
+        if self._is_preflight_refusal(exc, root):
+            return False
 
         message_lower = message.lower()
         auth_patterns = [
