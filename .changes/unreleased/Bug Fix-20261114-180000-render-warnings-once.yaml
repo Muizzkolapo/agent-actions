@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: agac run, retry, schema and dispositions now render the workflow config once, so each warning the render logs prints once, as it does in agac inspect. Before, these commands rendered the workflow file two times, and a warning such as "inline schema field 'candidates' is a bare 'array'" printed two times.
+time: 2026-11-14T18:00:00Z

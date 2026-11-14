@@ -50,7 +50,9 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  ┌────────────────────────────────────────────────────────┐     │
 │  │  Read workflow YAML (agent_config/{name}.yml)           │     │
 │  │  Read default YAML (agent_actions.yml)                  │     │
-│  │  Jinja2-render both files (template vars from env)      │     │
+│  │  Jinja2-render both files (template vars from env);     │     │
+│  │  a workflow text already rendered by the caller is      │     │
+│  │  parsed as given, not rendered again                    │     │
 │  │  yaml.safe_load() → raw dicts                           │     │
 │  │  Resolve tool_path (workflow > default > project)       │     │
 │  └──────────────────────────┬─────────────────────────────┘     │

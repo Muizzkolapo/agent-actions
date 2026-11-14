@@ -82,7 +82,7 @@
 | `RetryFilterCommand` | Class | Implementation of `agac retry --filter`. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Validate every target, then filter them and what their failure left below. | - |
 | `workflow_loader.py` | Module | Shared workflow loading helper for CLI commands. | `cli`, `validation` |
-| `load_workflow` | Function | Load and validate a workflow configuration. | - |
+| `load_workflow` | Function | Load and validate a workflow configuration. It renders the workflow file once and hands the rendered text to `AgentWorkflow` (`WorkflowRuntimeConfig.rendered_workflow`), so the config pipeline does not render it again and each render warning prints once. | - |
 | `schema.py` | Module | Schema command for the Agent Actions CLI. | `cli`, `errors`, `orchestration`, `prompt_generation`, `response_processing`, `services`, `utilities` |
 | `SchemaCommand` | Class | Implementation of the schema command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the schema command. | - |

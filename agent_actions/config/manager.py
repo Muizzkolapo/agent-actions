@@ -161,10 +161,18 @@ def _refuse_removed_spellings_or_raise(
 
 
 class ConfigManager:
-    def __init__(self, constructor_path: str, default_path: str, project_root: Path | None = None):
+    def __init__(
+        self,
+        constructor_path: str,
+        default_path: str,
+        project_root: Path | None = None,
+        rendered_workflow: str | None = None,
+    ):
+        """``rendered_workflow`` is the workflow file already rendered; given it, no render runs."""
         self.constructor_path = constructor_path
         self.default_path = default_path
         self.project_root = project_root
+        self.rendered_workflow = rendered_workflow
         self.user_config: dict[str, Any] | None = None
         self.default_config: dict[str, Any] | None = None
         self.agent_name: str | None = None
@@ -174,27 +182,23 @@ class ConfigManager:
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
 
-    def _load_single_config(self, config_path: str, config_type: str) -> dict[str, Any]:
-        """Load and parse a single config file with template rendering.
+    def _load_single_config(
+        self, config_path: str, config_type: str, rendered: str | None = None
+    ) -> dict[str, Any]:
+        """Parse *rendered*, or render *config_path* first when no text is given.
 
-        Args:
-            config_path: Path to the config file.
-            config_type: Human-readable config type for events/errors (e.g. "workflow", "default").
-
-        Returns:
-            Parsed config dictionary.
-
-        Raises:
-            ConfigurationError: On rendering, YAML parsing, or unexpected errors.
+        *config_type* names the file in events and errors ("workflow", "default").
+        Every failure is raised as a ``ConfigurationError``.
         """
         from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
         fire_event(ConfigLoadStartEvent(config_file=str(config_path)))
         try:
-            config_data = render_pipeline_with_templates(
-                config_path, self.template_dir, project_root=self.project_root
-            )
-            loaded = yaml.safe_load(config_data)
+            if rendered is None:
+                rendered = render_pipeline_with_templates(
+                    config_path, self.template_dir, project_root=self.project_root
+                )
+            loaded = yaml.safe_load(rendered)
             if not isinstance(loaded, dict):
                 config_name = Path(config_path).name
                 raise ConfigurationError(
@@ -239,7 +243,9 @@ class ConfigManager:
             ) from e
 
     def load_configs(self):
-        self.user_config = self._load_single_config(self.constructor_path, "workflow")
+        self.user_config = self._load_single_config(
+            self.constructor_path, "workflow", self.rendered_workflow
+        )
         if self.default_path:
             self.default_config = self._load_single_config(self.default_path, "default")
         # Resolve tool_path with priority: workflow > default > project config

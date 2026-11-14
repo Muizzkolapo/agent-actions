@@ -59,6 +59,7 @@ def load_workflow_configs(
             config.paths.constructor_path,
             config.paths.default_path,
             project_root=config.project_root,
+            rendered_workflow=config.rendered_workflow,
         )
 
     manager = config.manager
