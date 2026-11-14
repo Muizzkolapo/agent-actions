@@ -110,6 +110,7 @@ class AgentWorkflow:
             project_root=self.config.resolve_project_root(),
             workflow_config_path=self.config.paths.constructor_path,
             verify_keys=self.config.verify_keys,
+            sends_requests=self.config.sends_requests,
         )
         service.validate()
         # Reuse the rebuilt schema service to avoid a second pass.

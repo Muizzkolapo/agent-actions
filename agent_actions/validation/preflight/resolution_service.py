@@ -15,7 +15,7 @@ import re
 import shutil
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from agent_actions.config.path_config import (
     SeedFileError,
@@ -65,12 +65,17 @@ def _endpoint_error(action_name: str, field: str, message: str, hint: str) -> St
 
 def _endpoint_environment_errors(
     action_name: str, subject: str, endpoint: Endpoint
-) -> list[StaticTypeError]:
-    """The variables and the command an endpoint reads, checked against this environment."""
-    errors: list[StaticTypeError] = []
+) -> tuple[list[StaticTypeError], list[StaticTypeError]]:
+    """The variables and the command an endpoint reads, checked against this environment.
+
+    Returns (absent, invalid): a variable not set or a command not on PATH, then a
+    variable whose value breaks a url rule.
+    """
+    absent: list[StaticTypeError] = []
+    invalid: list[StaticTypeError] = []
 
     def unset(message: str, variable: str) -> None:
-        errors.append(
+        absent.append(
             _endpoint_error(
                 action_name,
                 "model_vendor",
@@ -88,7 +93,7 @@ def _endpoint_environment_errors(
         except ConfigurationError as exc:
             # A literal url was checked at load; only a variable's value can fail here.
             rule = exc.context["reason"].split(": ", 1)[-1]
-            errors.append(
+            invalid.append(
                 _endpoint_error(
                     action_name,
                     "model_vendor",
@@ -102,7 +107,7 @@ def _endpoint_environment_errors(
     if auth is not None and auth.env is not None and not os.environ.get(auth.env):
         unset(f"{subject} reads {auth.env}, which is not set", auth.env)
     if auth is not None and auth.command is not None and shutil.which(auth.command[0]) is None:
-        errors.append(
+        absent.append(
             _endpoint_error(
                 action_name,
                 "model_vendor",
@@ -116,7 +121,45 @@ def _endpoint_environment_errors(
             if not os.environ.get(variable):
                 unset(f"{subject} reads {variable} for header {header}, which is not set", variable)
 
-    return errors
+    return absent, invalid
+
+
+_Issue = TypeVar("_Issue", StaticTypeError, StaticTypeWarning)
+
+
+def _unset_key_issue(
+    issue_type: type[_Issue],
+    env_var_name: str,
+    action_name: str,
+    required_by: str,
+    suffix: str = "",
+) -> _Issue:
+    return issue_type(
+        message=(
+            f"API key environment variable '{env_var_name}' is not set "
+            f"(required by {required_by}){suffix}"
+        ),
+        location=FieldLocation(
+            agent_name=action_name, config_field="api_key", raw_reference=env_var_name
+        ),
+        referenced_agent=action_name,
+        referenced_field="api_key",
+        hint=f"Set the environment variable: export {env_var_name}=...",
+    )
+
+
+def _unset_key_warning(env_var_name: str, users: list[tuple[str, str]]) -> StaticTypeWarning:
+    """One warning per unset variable, naming the actions and vendors that read it."""
+    first_action, first_vendor = users[0]
+    if len(users) == 1:
+        required_by = f"action '{first_action}', vendor '{first_vendor}'"
+    else:
+        names = ", ".join(action for action, _ in users[:3]) + (", ..." if len(users) > 3 else "")
+        vendors = ", ".join(f"'{vendor}'" for vendor in sorted({vendor for _, vendor in users}))
+        required_by = f"{len(users)} actions: {names}; vendor(s) {vendors}"
+    return _unset_key_issue(
+        StaticTypeWarning, env_var_name, first_action, required_by, "; connection check skipped"
+    )
 
 
 _SEED_FORMATS = {".json": "JSON", ".yml": "YAML", ".yaml": "YAML", ".csv": "CSV"}
@@ -151,11 +194,16 @@ class WorkflowResolutionService:
         workflow_config_path: str | None = None,
         project_root: Path | None = None,
         verify_keys: bool = False,
+        *,
+        sends_requests: bool = True,
     ):
         self.action_configs = action_configs
         self.workflow_config_path = workflow_config_path
         self.project_root = project_root
         self.verify_keys = verify_keys
+        # False for a check that sends nothing: a credential absent from this
+        # environment is then a warning, since the run's environment may hold it.
+        self.sends_requests = sends_requests
         # Declared endpoints the workflow uses, with the first model named for each.
         self._endpoint_models: dict[str, str] = {}
 
@@ -166,8 +214,11 @@ class WorkflowResolutionService:
         # Before the key probe, so a refused action is never probed at the wrong endpoint.
         for error in self._check_vendor_base_url():
             result.add_error(error)
-        for error in self._check_endpoint_actions():
+        endpoint_errors, endpoint_warnings = self._check_endpoint_actions()
+        for error in endpoint_errors:
             result.add_error(error)
+        for warning in endpoint_warnings:
+            result.add_warning(warning)
         for error in self._check_vendor_params():
             result.add_error(error)
 
@@ -268,14 +319,18 @@ class WorkflowResolutionService:
                 )
             )
 
-    def _check_endpoint_actions(self) -> list[StaticTypeError]:
+    def _check_endpoint_actions(
+        self,
+    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning]]:
         """Hold an action on a declared endpoint to the endpoint rules.
 
         An endpoint runs with structured output only, so the action needs json_mode
         and a schema. Its url, credential and header variables must be set and a
-        command auth must be on PATH; those are reported once per endpoint.
+        command auth must be on PATH; those are reported once per endpoint, and
+        an absent one is a warning when nothing is sent.
         """
         errors: list[StaticTypeError] = []
+        warnings: list[StaticTypeWarning] = []
         check_environment = os.environ.get("AA_SKIP_ENV_VALIDATION") != "1"
         checked: set[str] = set()
 
@@ -309,9 +364,32 @@ class WorkflowResolutionService:
 
             if check_environment and vendor not in checked:
                 checked.add(vendor)
-                errors.extend(_endpoint_environment_errors(action_name, subject, endpoint))
+                absent, invalid = _endpoint_environment_errors(action_name, subject, endpoint)
+                errors.extend(invalid)
+                self._report_absent(absent, errors, warnings)
 
-        return errors
+        return errors, warnings
+
+    def _report_absent(
+        self,
+        absent: list[StaticTypeError],
+        errors: list[StaticTypeError],
+        warnings: list[StaticTypeWarning],
+    ) -> None:
+        """File each absent credential as an error, or as a warning when nothing is sent."""
+        if self.sends_requests:
+            errors.extend(absent)
+            return
+        for issue in absent:
+            warnings.append(
+                StaticTypeWarning(
+                    message=f"{issue.message}; connection check skipped",
+                    location=issue.location,
+                    referenced_agent=issue.referenced_agent,
+                    referenced_field=issue.referenced_field,
+                    hint=issue.hint,
+                )
+            )
 
     # ── API key checks ─────────────────────────────────────────────────
 
@@ -320,14 +398,16 @@ class WorkflowResolutionService:
     ) -> tuple[list[StaticTypeError], list[StaticTypeWarning], list[ProbeTarget]]:
         """Check that all required API key env vars are set.
 
-        Returns (errors, warnings, targets).  Missing keys are errors.
-        targets holds one probe target per resolved vendor (deduplicated)
-        for optional downstream probing.
+        Returns (errors, warnings, targets). A missing key is an error, or a
+        warning when this check sends no request. targets holds one probe target
+        per resolved vendor (deduplicated) for optional downstream probing.
         """
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
         # Deduplicated (vendor, base_url) → probe target (first seen wins).
         targets: dict[tuple[str, str | None], ProbeTarget] = {}
+        # Unset variable → (action, vendor) pairs that read it, in action order.
+        unset_keys: dict[str, list[tuple[str, str]]] = {}
 
         for action_name, config in self.action_configs.items():
             vendor = canonical_vendor((config.get("model_vendor") or "").lower())
@@ -348,22 +428,17 @@ class WorkflowResolutionService:
             key_value = os.environ.get(env_var_name, "")
 
             if not key_value:
-                errors.append(
-                    StaticTypeError(
-                        message=(
-                            f"API key environment variable '{env_var_name}' is not set "
-                            f"(required by action '{action_name}', vendor '{vendor}')"
-                        ),
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field="api_key",
-                            raw_reference=env_var_name,
-                        ),
-                        referenced_agent=action_name,
-                        referenced_field="api_key",
-                        hint=f"Set the environment variable: export {env_var_name}=your_key_here",
+                if self.sends_requests:
+                    errors.append(
+                        _unset_key_issue(
+                            StaticTypeError,
+                            env_var_name,
+                            action_name,
+                            f"action '{action_name}', vendor '{vendor}'",
+                        )
                     )
-                )
+                else:
+                    unset_keys.setdefault(env_var_name, []).append((action_name, vendor))
                 continue
 
             # Only the openai client sends requests to a configured base_url,
@@ -373,6 +448,9 @@ class WorkflowResolutionService:
                 targets[(vendor, base_url)] = ProbeTarget(
                     vendor=vendor, api_key=key_value, base_url=base_url
                 )
+
+        for env_var_name, users in unset_keys.items():
+            warnings.append(_unset_key_warning(env_var_name, users))
 
         return errors, warnings, list(targets.values())
 

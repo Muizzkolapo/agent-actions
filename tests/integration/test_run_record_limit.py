@@ -34,7 +34,9 @@ def _configs(project, **kwargs):
     paths = ProjectPathsFactory.create_project_paths(
         WORKFLOW, WORKFLOW, auto_create=True, project_root=project
     )
-    workflow = load_workflow(WORKFLOW, paths, project, read_only=True, **kwargs)
+    workflow = load_workflow(
+        WORKFLOW, paths, project, sends_requests=True, read_only=True, **kwargs
+    )
     return workflow.action_configs
 
 
@@ -84,7 +86,9 @@ def _multi_action_project(tmp_path, monkeypatch):
     paths = ProjectPathsFactory.create_project_paths(
         MULTI, MULTI, auto_create=True, project_root=root
     )
-    return load_workflow(MULTI, paths, root, read_only=True, record_limit=5).action_configs
+    return load_workflow(
+        MULTI, paths, root, sends_requests=True, read_only=True, record_limit=5
+    ).action_configs
 
 
 @pytest.mark.parametrize(

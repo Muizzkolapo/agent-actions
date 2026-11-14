@@ -181,7 +181,7 @@ the state it was opened to read.
 
 ## `load_workflow()` Shared Helper
 
-`workflow_loader.py` provides a single function used by `run`, `retry`, `schema`, and `dispositions`:
+`workflow_loader.py` provides a single function used by `run`, `retry`, `retry --filter`, `schema`, and `dispositions`:
 
 ```
 load_workflow(agent_name, paths, project_root, ...)
@@ -196,6 +196,7 @@ load_workflow(agent_name, paths, project_root, ...)
          use_tools=...,
          fresh=...,
          verify_keys=...,
+         sends_requests=...,     ← required: does this command call a model?
          project_root=...,
        ),
        read_only=...,            ← suppresses the startup state reset
@@ -207,6 +208,18 @@ load_workflow(agent_name, paths, project_root, ...)
 | `run` | `False` | reset-before-execute is the intent |
 | `schema`, `dispositions` | `True` | pure reads |
 | `retry` | `True` | reads the disposition table *after* loading, then makes its own status transitions |
+
+`sends_requests` is a required keyword: each command states whether it will call a
+model. With `False`, preflight reports an API key or endpoint credential absent from
+this environment as a warning ending `; connection check skipped`, because the run's
+environment may hold it. With `True`, the same finding refuses the load.
+
+| command | `sends_requests` |
+|---------|------------------|
+| `run` | `True` |
+| `retry` | `True`; `False` with `--dry-run` |
+| `retry --filter`, `schema`, `dispositions` | `False` |
+| `inspect`, `expect list`, `validate-udfs` (through `WorkflowInspector`) | `False` |
 
 `retry` is the case that shows why this matters: it calls `_find_failures()`
 after constructing the workflow, so with the reset in place it reported
@@ -293,7 +306,7 @@ RetryCommand.execute()
 ```
 
 All inherit from `BaseInspectCommand` which provides:
-- `_load_inspector()` — read-only workflow load + preflight (`verify_keys=False`)
+- `_load_inspector()` — read-only workflow load + preflight (`verify_keys=False`; a missing API key is a warning, not an error)
 - `_analyze_dependencies()` for inferring data flow
 - `_get_action_schema()`, `_get_output_fields()` helpers
 
