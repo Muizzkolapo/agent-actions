@@ -11,6 +11,7 @@ from agent_actions.logging.core.handlers.bridge import (
     LoggingBridgeHandler,
 )
 from agent_actions.logging.core.manager import EventManager
+from tests._support.logs import only_through
 
 
 @pytest.fixture(autouse=True)
@@ -85,13 +86,8 @@ class TestLoggingBridgeHandlerEmit:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.emit")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test message")
+        with only_through(LoggingBridgeHandler(), "test.emit") as logger:
+            logger.info("Test message")
 
         assert len(capture.events) == 1
         assert capture.events[0].message == "Test message"
@@ -102,13 +98,8 @@ class TestLoggingBridgeHandlerEmit:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.log_event")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test message")
+        with only_through(LoggingBridgeHandler(), "test.log_event") as logger:
+            logger.info("Test message")
 
         event = capture.events[0]
         assert isinstance(event, LogEvent)
@@ -120,17 +111,12 @@ class TestLoggingBridgeHandlerEmit:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.levels")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.debug("debug")
-        logger.info("info")
-        logger.warning("warning")
-        logger.error("error")
-        logger.critical("critical")
+        with only_through(LoggingBridgeHandler(), "test.levels") as logger:
+            logger.debug("debug")
+            logger.info("info")
+            logger.warning("warning")
+            logger.error("error")
+            logger.critical("critical")
 
         levels = [e.level for e in capture.events]
         assert levels[0] == EventLevel.DEBUG
@@ -145,13 +131,8 @@ class TestLoggingBridgeHandlerEmit:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.source")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test message")  # Line number will be captured
+        with only_through(LoggingBridgeHandler(), "test.source") as logger:
+            logger.info("Test message")  # Line number will be captured
 
         event = capture.events[0]
         assert isinstance(event, LogEvent)
@@ -177,13 +158,8 @@ class TestCategoryExtraction:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger(logger_name)
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test")
+        with only_through(LoggingBridgeHandler(), logger_name) as logger:
+            logger.info("Test")
 
         assert capture.events[0].category == category
 
@@ -214,13 +190,8 @@ class TestExtraFieldsCopying:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.extra")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("Test", extra={key: value})
+        with only_through(LoggingBridgeHandler(), "test.extra") as logger:
+            logger.info("Test", extra={key: value})
 
         assert capture.events[0].data.get(key) == value
 
@@ -262,16 +233,11 @@ class TestErrorHandling:
         manager = EventManager.get()
         manager.register(capture)
 
-        handler = LoggingBridgeHandler()
-        logger = logging.getLogger("test.exception")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        try:
-            raise ValueError("Test error")
-        except ValueError:
-            logger.exception("An error occurred")
+        with only_through(LoggingBridgeHandler(), "test.exception") as logger:
+            try:
+                raise ValueError("Test error")
+            except ValueError:
+                logger.exception("An error occurred")
 
         event = capture.events[0]
         assert isinstance(event, LogEvent)
