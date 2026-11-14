@@ -89,3 +89,16 @@ def test_run_prints_a_warning_for_each_bare_array_field_and_none_for_typed_ones(
     assert _message("picks") in flat, output
     assert _message("tags") not in flat, output
     assert _message("rows") not in flat, output
+
+
+def test_run_prints_each_bare_array_warning_once(tmp_path):
+    project = _project(tmp_path)
+
+    result = run_agac(project, "run", "-a", "w", "--fresh")
+    output = result.stdout + result.stderr
+    flat = " ".join(output.split())
+
+    assert result.returncode == 0, output
+    for field in ("candidates", "picks"):
+        assert _message(field) in flat, output
+        assert flat.count(_message(field)) == 1, output
