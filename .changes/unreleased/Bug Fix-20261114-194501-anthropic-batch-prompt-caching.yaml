@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "enable_prompt_caching now applies in batch mode. An Anthropic batch action that enables it sends each request with its system prompt and message marked cache_control ephemeral, as online does, on the first submission and on each retry and repair round. Before, the setting did not reach the batch client. Two actions that differ only in this setting no longer share a batch client."
+time: 2026-11-14T19:45:01+00:00

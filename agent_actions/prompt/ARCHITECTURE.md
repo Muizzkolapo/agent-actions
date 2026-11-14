@@ -343,7 +343,7 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |     SYSTEM_ONLY      --> [{role: "system", content: body}]
   |       (TAGGED + context --> splits into system + user for injection safety)
   |
-  6. Anthropic prompt caching
+  6. Anthropic prompt caching (build_for_batch applies the same rule)
   |     --> Adds cache_control: {type: "ephemeral"} to messages
   |
   7. Token overflow pre-flight

@@ -600,7 +600,7 @@ BaseVendorConfig (Pydantic, extra="forbid")
 │  └── default_timeout  (seconds)
 │
 ├── OpenAIConfig      + frequency_penalty, presence_penalty, top_k
-├── AnthropicConfig   + anthropic_version, enable_prompt_caching, tools_mode
+├── AnthropicConfig   + enable_prompt_caching, tools_mode
 ├── GeminiConfig      + safety_settings, generation_config
 ├── GroqConfig        (no extras)
 ├── CohereConfig      + k (top-k), p (top-p)

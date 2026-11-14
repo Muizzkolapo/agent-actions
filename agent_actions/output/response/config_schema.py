@@ -69,9 +69,6 @@ class AgentConfig(BaseModel):
     prompt_debug: bool = Field(
         default=False, description="Enable debug output showing prompts being sent to the agent"
     )
-    anthropic_version: str | None = Field(
-        default=None, description="API version header for Anthropic requests (e.g., '2023-06-01')"
-    )
     enable_prompt_caching: bool | None = Field(
         default=None,
         description="Enable Anthropic's prompt caching feature for improved performance",

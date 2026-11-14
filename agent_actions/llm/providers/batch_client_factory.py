@@ -190,7 +190,6 @@ def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
     api_key = _resolve_api_key(config, "ANTHROPIC_API_KEY")
     return cls(  # type: ignore[no-any-return]
         api_key=api_key,
-        version=config.get("anthropic_version"),
         enable_prompt_caching=config.get("enable_prompt_caching", False),
     )
 

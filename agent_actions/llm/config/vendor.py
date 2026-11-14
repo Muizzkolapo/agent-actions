@@ -112,7 +112,6 @@ class AnthropicConfig(BaseVendorConfig):
 
     vendor_type: Literal[VendorType.ANTHROPIC] = VendorType.ANTHROPIC
     api_key_env_name: str = "ANTHROPIC_API_KEY"
-    anthropic_version: str = Field(default="2023-06-01", description="API version header")
     enable_prompt_caching: bool = Field(default=False, description="Enable prompt caching")
     tools_mode: bool = Field(default=True, description="Use tools for JSON responses")
 

@@ -38,7 +38,6 @@ class AnthropicBatchClient(BaseBatchClient):
     def __init__(
         self,
         api_key: str | None = None,
-        version: str | None = None,
         enable_prompt_caching: bool = False,
     ):
         """
@@ -46,10 +45,8 @@ class AnthropicBatchClient(BaseBatchClient):
 
         Args:
             api_key: Anthropic API key
-            version: API version header (e.g., "2023-06-01")
             enable_prompt_caching: Whether to enable prompt caching feature
         """
-        self.version = version or "2023-06-01"
         self.enable_prompt_caching = enable_prompt_caching
         try:
             import anthropic
@@ -108,16 +105,19 @@ class AnthropicBatchClient(BaseBatchClient):
         }
         """
         envelope = MessageBuilder.build_for_batch(
-            "anthropic", batch_task.prompt, batch_task.user_content, schema=schema
+            "anthropic",
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            enable_prompt_caching=self.enable_prompt_caching,
         )
         # Anthropic batch: system is a top-level param, user content is the message
         params = {
             "model": batch_task.model_config.get("model_name", self._get_default_model()),
             "messages": envelope.to_dicts(role="user"),
         }
-        system_dicts = envelope.to_dicts(role="system")
-        if system_dicts and system_dicts[0]["content"]:
-            params["system"] = system_dicts[0]["content"]
+        if any(m.content for m in envelope.messages if m.role == "system"):
+            params["system"] = envelope.to_dicts(role="system")[0]["content"]
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
@@ -134,8 +134,6 @@ class AnthropicBatchClient(BaseBatchClient):
                 )
                 if tool_choice is not None:
                     params["tool_choice"] = tool_choice
-        if self.enable_prompt_caching:
-            params["extra_headers"] = PROMPT_CACHING_BETA_HEADER
         AnthropicClient.VENDOR_PARAMS.apply_to_body(params, vendor_params)
         return {"custom_id": batch_task.custom_id, "params": params}
 
@@ -273,7 +271,6 @@ class AnthropicBatchClient(BaseBatchClient):
         return {
             "model": self._get_attribute_or_key(message, "model"),
             "stop_reason": self._get_attribute_or_key(message, "stop_reason"),
-            "anthropic_version": self.version,
             "result_type": result_type,
         }
 
@@ -309,7 +306,10 @@ class AnthropicBatchClient(BaseBatchClient):
                 data = json.load(f)
                 tasks = data["requests"]
 
-            batch_response = self.client.messages.batches.create(requests=tasks)
+            batch_response = self.client.messages.batches.create(
+                requests=tasks,
+                extra_headers=PROMPT_CACHING_BETA_HEADER if self.enable_prompt_caching else None,
+            )
             batch_id = batch_response.id
             status = batch_response.processing_status
             logger.info("Anthropic batch job created with ID: %s", batch_id)
@@ -418,9 +418,6 @@ class AnthropicBatchClient(BaseBatchClient):
         self, agent_config: dict[str, Any]
     ) -> tuple[bool, str | None]:
         """Validate Anthropic-specific configuration."""
-        anthropic_version = agent_config.get("anthropic_version")
-        if anthropic_version and not isinstance(anthropic_version, str):
-            return (False, "anthropic_version must be a string")
         enable_prompt_caching = agent_config.get("enable_prompt_caching")
         if enable_prompt_caching is not None and not isinstance(enable_prompt_caching, bool):
             return (False, "enable_prompt_caching must be a boolean")

@@ -26,7 +26,7 @@ def _client_settings(agent_config: dict[str, Any] | None) -> dict[str, Any]:
     settings: dict[str, Any] = {}
     if config.get("base_url"):
         settings["base_url"] = config["base_url"]
-    for key in ("batch_max_workers", "request_timeout"):
+    for key in ("batch_max_workers", "request_timeout", "enable_prompt_caching"):
         if config.get(key) is not None:
             settings[key] = config[key]
     return settings

@@ -79,7 +79,7 @@ class AnthropicClient(BaseClient):
         "supports_tools": True,
         "supports_vision": True,
         "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens", "anthropic_version"],
+        "optional_fields": ["api_key", "temperature", "max_tokens"],
     }
     VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
         accepted=sdk_keyword_params(anthropic.resources.messages.Messages.create),
