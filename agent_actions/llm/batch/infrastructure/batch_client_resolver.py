@@ -17,10 +17,19 @@ from agent_actions.logging.events.cache_events import CacheHitEvent, CacheMissEv
 from agent_actions.utils.constants import API_KEY_KEY
 
 
-def _request_timeout_setting(agent_config: dict[str, Any] | None) -> dict[str, Any]:
-    """The action's own ``request_timeout`` for the factory; unset, the factory applies the default."""
-    timeout = (agent_config or {}).get("request_timeout")
-    return {} if timeout is None else {"request_timeout": timeout}
+def _client_settings(agent_config: dict[str, Any] | None) -> dict[str, Any]:
+    """The action's settings a batch client is built with, apart from its API key.
+
+    An unset value is left out, so the factory applies its environment variable or default.
+    """
+    config = agent_config or {}
+    settings: dict[str, Any] = {}
+    if config.get("base_url"):
+        settings["base_url"] = config["base_url"]
+    for key in ("batch_max_workers", "request_timeout"):
+        if config.get(key) is not None:
+            settings[key] = config[key]
+    return settings
 
 
 class BatchClientResolver:
@@ -95,14 +104,9 @@ class BatchClientResolver:
         )
 
         try:
-            client_config: dict[str, Any] = {}
+            client_config = _client_settings(agent_config)
             if agent_config.get(API_KEY_KEY):
                 client_config["api_key"] = BaseClient.get_api_key(agent_config)
-            if agent_config.get("base_url"):
-                client_config["base_url"] = agent_config["base_url"]
-            if agent_config.get("batch_max_workers") is not None:
-                client_config["batch_max_workers"] = agent_config["batch_max_workers"]
-            client_config.update(_request_timeout_setting(agent_config))
 
             client = BatchClientFactory.create_client(client_type, client_config)
 
@@ -183,7 +187,7 @@ class BatchClientResolver:
 
         if client_type:
             # With the action's config, only the client built for exactly that config will
-            # do: a sibling's may wait a different request timeout.
+            # do: a sibling's may send to another host or wait another timeout.
             cached = (
                 self._client_cache.get(self._build_cache_key(client_type, agent_config))
                 if agent_config
@@ -202,7 +206,7 @@ class BatchClientResolver:
             )
             config = {
                 **self._resolve_api_key_config(client_type, agent_config),
-                **_request_timeout_setting(agent_config),
+                **_client_settings(agent_config),
             }
             try:
                 return BatchClientFactory.create_client(client_type, config)
@@ -337,12 +341,9 @@ class BatchClientResolver:
     def _build_cache_key(client_type: str, agent_config: dict[str, Any]) -> str:
         _raw = agent_config.get(API_KEY_KEY) or ""
         api_key = _raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw
-        base_url = agent_config.get("base_url") or ""
-        discriminator = f"{api_key}|{base_url}"
-        request_timeout = agent_config.get("request_timeout")
-        if request_timeout is not None:
-            discriminator += f"|{request_timeout}"
-        if api_key or base_url or request_timeout is not None:
+        settings = _client_settings(agent_config)
+        if api_key or settings:
+            discriminator = "|".join([api_key, *(f"{k}={v}" for k, v in sorted(settings.items()))])
             key_hash = hashlib.sha256(discriminator.encode()).hexdigest()[:12]
             return f"{client_type}:{key_hash}"
         return client_type
