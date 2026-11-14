@@ -5,34 +5,36 @@ sidebar_position: 1
 
 # Record Lifecycle
 
-Every record flowing through an Agent Actions workflow carries metadata that tracks its progress through the pipeline. This page documents the `_state` field, the `_state_history` array, and the disposition system.
+Each record in an Agent Actions workflow carries metadata. The metadata tracks the progress of the record through the workflow. This page describes the `_state` field, the `_state_history` array and the disposition system.
 
 ## The `_state` Field
 
-Every record has a `_state` field governed by a finite state machine. There are **6 producible states**:
+Each record has a `_state` field. A finite state machine controls the value of this field. The state machine can produce **6 states**:
 
 | State | Category | Behavior |
 |-------|----------|----------|
-| `active` | Processable | Ready for the next action |
-| `processed` | Resettable | Reset to `active` at the next action boundary |
-| `guard_skipped` | Resettable | Reset to `active` at the next action boundary |
-| `cascade_skipped` | Terminal | Record stops flowing — upstream dependency failed |
-| `failed` | Terminal | Record hit an unrecoverable error |
-| `exhausted` | Terminal | Record exhausted all repair iterations |
+| `active` | Processable | The record is ready for the next action. |
+| `processed` | Resettable | The framework resets the state to `active` at the next action boundary. |
+| `guard_skipped` | Resettable | The framework resets the state to `active` at the next action boundary. |
+| `cascade_skipped` | Terminal | The record stops. An upstream dependency failed. |
+| `failed` | Terminal | The record had an unrecoverable error. |
+| `exhausted` | Terminal | The record used all the repair iterations. |
 
-> **Note:** `committed` and `guard_deferred` are not `RecordState` members, so the state machine produces only the six states above. A record in target storage that carries any other `_state` value is rejected when a downstream action loads it, with a `ConfigurationError` (`Record has unrecognised '_state' value ...`).
+:::note
+`committed` and `guard_deferred` are not members of `RecordState`. Thus the state machine produces only the six states above. A record in target storage can carry any other `_state` value. When a downstream action loads that record, the framework rejects it. The error is a `ConfigurationError` (`Record has unrecognised '_state' value ...`).
+:::
 
-Three categories:
+The states are in three categories:
 
 | Category | States | Behavior |
 |----------|--------|----------|
-| **Processable** | `active` | Ready for the next action |
-| **Resettable** | `processed`, `guard_skipped` | Reset to `active` at the next action boundary |
-| **Terminal** | `cascade_skipped`, `failed`, `exhausted` | Record stops flowing. No further actions process it. |
+| **Processable** | `active` | The record is ready for the next action. |
+| **Resettable** | `processed`, `guard_skipped` | The framework resets the state to `active` at the next action boundary. |
+| **Terminal** | `cascade_skipped`, `failed`, `exhausted` | The record stops. No downstream action processes it. |
 
 ## The `_state_history` Array
 
-Each state transition appends to `_state_history`:
+Each state transition adds an entry to `_state_history`:
 
 ```json
 {
@@ -43,64 +45,79 @@ Each state transition appends to `_state_history`:
 }
 ```
 
-`from` is `null` when the action stamps the record for the first time. Each entry also carries a `timestamp` and a `detail`. At the next action boundary the framework appends a second entry that resets a `processed` or `guard_skipped` record to `active` with reason `downstream_reset`.
+When the action stamps the record for the first time, `from` is `null`. Each entry also has a `timestamp` and a `detail`. At the next action boundary, the framework adds a second entry. This entry resets a `processed` or `guard_skipped` record to `active`, with the reason `downstream_reset`.
 
 ### History Capping
 
-The `_state_history` array is capped at **64 entries** (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`). In workflows with roughly 16 or more actions, histories can reach this limit and the oldest entries are dropped. The framework emits a WARNING log the first time this happens for a given action in a process:
+The `_state_history` array holds a maximum of **64 entries** (`STATE_HISTORY_CAP` in `agent_actions/record/envelope.py`). In a workflow with approximately 16 or more actions, a history can reach this limit. Then the framework removes the oldest entries. The first time that this occurs for an action in a process, the framework writes a WARNING log:
 
 ```
 _state_history capped at 64 entries; dropped N oldest transition(s) for action='<name>'. Fires at most once per action per process.
 ```
 
-The log fires at most once per action per process to avoid per-record spam. It is written to `events.json` but kept off the terminal, since the cap is a framework constant rather than anything you configure; run with `-v` to see it there. When it appears, `_state_history` for that action has already lost its oldest transitions.
+The framework writes the log a maximum of one time for each action in each process. This limit prevents one log for each record. The framework writes the log to `events.json`, but not to the terminal. The reason is that the cap is a framework constant, not a value that you configure. To see the log on the terminal, run with `-v`. When the log appears, the `_state_history` of that action has already lost its oldest transitions.
 
 ## Dispositions
 
-The `record_disposition` table records, per action and record, **what happened** (the
-`disposition` column) and **why** (the `reason` column). There is no `reason_class`
+The `record_disposition` table records **what happened** (the `disposition` column) and
+**why** (the `reason` column), for each action and record. The table has no `reason_class`
 column.
 
 ### `disposition` column
 
-A fixed enum of eight values (see `Disposition` in
-`agent_actions/storage/backend.py`). Most follow from the record's final `_state`:
+The `disposition` column holds one of eight fixed enum values (see `Disposition` in
+`agent_actions/storage/backend.py`). Most of the values come from the final `_state` of the record:
 
 | Disposition | Meaning |
 |-------------|---------|
-| `success` | Action completed successfully |
-| `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
-| `skipped` | WHERE clause excluded the record from this action |
-| `filtered` | Guard condition was false; record excluded from output. In a batch run it is written when the batch is submitted, since the record is sent nothing |
-| `unprocessed` | Not answered: a dependency didn't produce output (cascade casualty), or a guard skipped it |
-| `deferred` | In-flight HITL/batch awaiting resolution. A batch record still `deferred` once its batch is collected, because the store refused its outcome, gets the outcome its stored row stands for from the next `agac run` or `agac retry` |
-| `exhausted` | All repair iterations failed |
-| `failed` | Unrecoverable error. Online, a `failed` or `exhausted` the store refuses to record fails the action with the store error, so `agac retry` still reaches the record |
+| `success` | The action completed successfully. |
+| `passthrough` | The action answered with nothing. The framework keeps the record as a tombstone (`on_empty: skip`). |
+| `skipped` | A WHERE clause excluded the record from this action. |
+| `filtered` | The guard condition was false. The record is excluded from the output. In a batch run, the framework writes this disposition when it submits the batch, because it sends nothing for the record. |
+| `unprocessed` | The action did not answer the record. A dependency did not produce output (cascade casualty), or a guard skipped the record. |
+| `deferred` | A HITL or batch record is in flight and waits for resolution. A batch record can stay `deferred` after its batch is collected, if the store refused its outcome. The next `agac run` or `agac retry` gives that record the outcome that its stored row represents. |
+| `exhausted` | All repair iterations failed. |
+| `failed` | An unrecoverable error occurred. In an online run, if the store refuses to record a `failed` or `exhausted` disposition, the action fails with the store error. Thus `agac retry` still reaches the record. |
 
 ### `reason` column
 
-A free-form canonical reason string giving the specific cause (see
-`agent_actions/record/reasons.py`). Common values include `success`, `guard_filter`,
-`guard_skip`, `guard_prefilter_skip`, `upstream_unprocessed`, `tool_missing_record`,
-`prep_failed`, `empty_output`, `parse_error`, `retry_exhausted`,
-`expectations_exhausted`, `expectations_failed` (a `success` record that shipped with a
-failing [expectations](../validation/expectations.md) verdict under `on_exhausted: return_last`
-or `repair: none`; still a success, so nothing below is blocked), `consumed_into_output`, `consumed_into_another_record` (an
-`unprocessed` record at a fan-in that one branch's `granularity: File` tool folded into another
-record's row), and `batch_not_returned` (a `failed`
-record a batch provider left out of its results, which no retry will send again).
+The `reason` column holds a free-form canonical reason string. The string gives the specific
+cause (see `agent_actions/record/reasons.py`). Common values include:
 
-> **Note:** `upstream_unprocessed` and `tool_missing_record` are `reason` strings, not
-> `disposition` values — the matching disposition for both is `unprocessed`. Query the
-> `disposition` column for the outcome category and the `reason` column for the specific
-> cause. A guard skip is `unprocessed` too in both run modes, with reason `guard_skip`, or
-> `guard_prefilter_skip` for an action of `granularity: file`, so the guard judges the
-> record again on the next run.
+- `success`
+- `guard_filter`
+- `guard_skip`
+- `guard_prefilter_skip`
+- `upstream_unprocessed`
+- `tool_missing_record`
+- `prep_failed`
+- `empty_output`
+- `parse_error`
+- `retry_exhausted`
+- `expectations_exhausted`
+- `expectations_failed`: A `success` record that shipped with a failing
+  [expectations](../validation/expectations.md) verdict under `on_exhausted: return_last` or
+  `repair: none`. The record is still a success, so it blocks no downstream action.
+- `consumed_into_output`
+- `consumed_into_another_record`: An `unprocessed` record at a fan-in. The `granularity: File`
+  tool of one branch folded this record into the row of another record.
+- `batch_not_returned`: A `failed` record that a batch provider omitted from its results. No
+  retry sends this record again.
+
+Query the `disposition` column for the outcome category. Query the `reason` column for the
+specific cause.
+
+:::note
+`upstream_unprocessed` and `tool_missing_record` are `reason` strings, not `disposition`
+values. The matching disposition for the two strings is `unprocessed`. A guard skip is also
+`unprocessed` in the two run modes. Its reason is `guard_skip`, or `guard_prefilter_skip` for
+an action of `granularity: file`. Thus the guard examines the record again on the next run.
+:::
 
 ### The cause on an `upstream_unprocessed` tombstone
 
-The row an action stores for a record an action above it failed, exhausted or skipped
-names what blocked it, in its `metadata`:
+If an upstream action failed, exhausted or skipped a record, an action stores a row for that
+record. The `metadata` of this row names the cause of the block:
 
 ```json
 "metadata": {
@@ -112,24 +129,33 @@ names what blocked it, in its `metadata`:
 }
 ```
 
-`upstream_action` is the first action that blocked the record, not the one directly
-above: every action below it repeats the same cause. `upstream_state` is the state that
-action left the record in (`failed`, `exhausted` or `cascade_skipped`, the last for a
-record it did not answer for a reason of its own, such as `batch_not_returned`), and
-`upstream_reason` is that action's reason. Below a fan-in, it names the branch that
-blocked the merged record. When nothing on the record names the action, only
-`upstream_state` is there.
+`upstream_action` is the first action that blocked the record. It is not the action directly
+upstream. Each action downstream of the first action repeats the same cause.
 
-A fan-in's tombstone for a record one branch folded into another record's row has reason
-`consumed_into_another_record`, `upstream_action` naming the `granularity: File` tool that
-folded it, `upstream_reason: consumed_into_output`, and `consumed_into`, the `source_guid` of
-the row it went into. It has no `upstream_state`: the tool answered the record. The actions
-below the fan-in skip it as `upstream_unprocessed`, naming the same cause. A version merge
-(`version_consumption`) leaves the same tombstone for a record one version of a versioned
-`granularity: File` tool folded into another record's row while another version kept it.
+`upstream_state` is the state in which that action left the record: `failed`, `exhausted` or
+`cascade_skipped`. The state is `cascade_skipped` when the action did not answer the record for
+a reason of its own, for example `batch_not_returned`. `upstream_reason` is the reason of that
+action.
+
+Downstream of a fan-in, the metadata names the branch that blocked the merged record. If no
+data on the record names the action, only `upstream_state` is present.
+
+One branch of a fan-in can fold a record into the row of another record. The tombstone of the
+fan-in for that record has these fields:
+
+- The reason `consumed_into_another_record`.
+- `upstream_action`, which names the `granularity: File` tool that folded the record.
+- `upstream_reason: consumed_into_output`.
+- `consumed_into`, which is the `source_guid` of the row that received the record.
+
+This tombstone has no `upstream_state`, because the tool answered the record. The actions
+downstream of the fan-in skip the record as `upstream_unprocessed`, and they name the same
+cause. A version merge (`version_consumption`) leaves the same tombstone in one case. One
+version of a versioned `granularity: File` tool folded a record into the row of another record,
+and another version kept the record.
 
 ## Version Correlation
 
-When using `version_consumption: merge`, records are correlated via `version_correlation_id`, `root_target_id`, and `parent_target_id`. On root records (records with no parent), `parent_target_id` is **absent** from the JSON object — not `null`. Always use a presence check (`"parent_target_id" in record`) rather than a null check.
+With `version_consumption: merge`, the framework correlates records with `version_correlation_id`, `root_target_id` and `parent_target_id`. On a root record (a record with no parent), `parent_target_id` is **absent** from the JSON object. Its value is not `null`. Always use a presence check (`"parent_target_id" in record`), not a null check.
 
-Every version of a source record carries the same `version_correlation_id`, derived from the workflow's name and the record, so a version answered again later, from another checkout, worktree or mount, still merges with the versions it kept. Ids stored by an agac release before this one also took in the project's path. When a merge meets a record whose versions carry different ids, it warns, naming the record, and the merge holds that record in parts, each short of a version. Run `agac run --rerun <version base>` (`--rerun vote` for `vote_1` … `vote_N`) to answer every version under one id.
+All versions of a source record carry the same `version_correlation_id`. The framework derives this id from the name of the workflow and from the record. Thus a version that is answered again later, from a different checkout, worktree or mount, still merges with the versions that it kept. In an agac release before this one, the stored ids also included the project path. If a merge finds a record whose versions carry different ids, the merge writes a warning that names the record. The merge then holds that record in parts, and each part is missing a version. To answer all versions under one id, run `agac run --rerun <version base>` (`--rerun vote` for `vote_1` … `vote_N`).
