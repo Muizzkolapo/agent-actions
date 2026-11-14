@@ -103,7 +103,7 @@ class ValidateUDFsCommand:
                 "error_type": "not_found",
             }
 
-        structural = self._run_structural_preflight()
+        structural = self._run_structural_preflight(config_manager.rendered_workflow)
         if structural is not None:
             return structural
 
@@ -116,7 +116,7 @@ class ValidateUDFsCommand:
             "action_names": self._extract_action_names(config),
         }
 
-    def _run_structural_preflight(self) -> dict[str, Any] | None:
+    def _run_structural_preflight(self, rendered_workflow: str | None) -> dict[str, Any] | None:
         """Run the same structural pass inspect/schema/run do. None if it passes.
 
         UDF references and structure are disjoint checks — a broken ``impl:``
@@ -130,7 +130,11 @@ class ValidateUDFsCommand:
         from agent_actions.services.workflow_inspector import WorkflowInspector
 
         try:
-            WorkflowInspector(self.agent_name, user_code_path=str(self.user_code)).validate()
+            WorkflowInspector(
+                self.agent_name,
+                user_code_path=str(self.user_code),
+                rendered_workflow=rendered_workflow,
+            ).validate()
         except Exception as e:
             return {"valid": False, "error": e, "error_type": "structural"}
         return None

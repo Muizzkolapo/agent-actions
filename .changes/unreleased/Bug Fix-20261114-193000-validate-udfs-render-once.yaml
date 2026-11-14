@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: agac validate-udfs now renders the workflow file once, so each warning about the content of that file prints once, for example "inline schema field 'candidates' is a bare 'array'". Before, it rendered the workflow file two times, and such a warning printed two times. A warning about a template in templates/ still prints once for each file that is rendered.
+time: 2026-11-14T19:30:00Z
