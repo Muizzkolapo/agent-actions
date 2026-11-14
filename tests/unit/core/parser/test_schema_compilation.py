@@ -17,7 +17,6 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.render_workflow import (
     _compile_action_schemas,
     _compile_workflow_schemas,
-    _expand_inline_schema,
     _is_inline_schema_dict,
 )
 
@@ -69,8 +68,14 @@ class TestSchemaLoadingViaCompilation:
         assert "not found" in errors[0]
 
 
+def _expand_inline_schema(inline_schema):
+    action = {"name": "a", "schema": inline_schema}
+    _compile_action_schemas(action)
+    return action["schema"]
+
+
 class TestExpandInlineSchema:
-    """Tests for _expand_inline_schema function."""
+    """The render step compiles an inline shorthand schema to unified fields."""
 
     def test_expand_simple_fields(self):
         """Test expanding simple field types."""
@@ -130,6 +135,23 @@ class TestExpandInlineSchema:
         items_field = next(f for f in result["fields"] if f["id"] == "items")
         assert items_field["type"] == "array"
         assert items_field["items"]["type"] == "string"
+
+    def test_expand_array_of_objects_keeps_the_item_fields(self):
+        result = _expand_inline_schema({"rows": "array[object:{'q': 'string!', 'n': 'number'}]"})
+
+        (rows,) = result["fields"]
+        assert rows["type"] == "array"
+        assert rows["items"] == {
+            "type": "object",
+            "properties": {"q": {"type": "string"}, "n": {"type": "number"}},
+            "required": ["q"],
+        }
+
+    def test_expand_array_of_objects_with_no_fields_stays_a_plain_object(self):
+        result = _expand_inline_schema({"rows": "array[object]"})
+
+        (rows,) = result["fields"]
+        assert rows["items"] == {"type": "object"}
 
 
 class TestIsInlineSchemaDict:
