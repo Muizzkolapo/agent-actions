@@ -5,7 +5,7 @@ sidebar_position: 3
 
 # Artifacts & Run Tracking
 
-Agent Actions generates artifacts for debugging, auditing, and resuming interrupted runs. Understanding this structure helps you inspect what happened during execution and diagnose issues.
+Agent Actions makes artifacts for debugging, for audits and to resume interrupted runs. If you know this structure, you can examine what occurred during execution and find the cause of problems.
 
 ## Complete Directory Structure
 
@@ -44,7 +44,7 @@ project/
 
 **Path:** `agent_io/logs/.manifest.json`
 
-The manifest holds the execution plan for the workflow run: the action order, the levels and the dependencies. It is created when the workflow starts. The top-level `status` and `completed_at` are set when the run ends. The per-action `status`, `started_at`, `completed_at`, `record_count` and `error` fields stay at their starting values during a run; read per-action state from `.agent_status.json`.
+The manifest holds the execution plan for the workflow run: the action order, the levels and the dependencies. The framework makes the manifest when the workflow starts. The framework sets the top-level `status` and `completed_at` when the run ends. During a run, the `status`, `started_at`, `completed_at`, `record_count` and `error` fields of each action stay at their start values. To read the state of each action, use `.agent_status.json`.
 
 ```json
 {
@@ -74,21 +74,21 @@ The manifest holds the execution plan for the workflow run: the action order, th
 }
 ```
 
-`pid` and `host_id` identify the process that owns the run. A process killed
-outright never records a terminal status, so readers use them to check whether
-that process still exists and report its in-flight actions as `interrupted`
-rather than showing them as running forever. `host_id` is a hash of the
-hostname, not the hostname, because this file is published by `agac docs`.
+`pid` and `host_id` identify the process that owns the run. A process that is killed
+immediately never records a terminal status. Thus readers use `pid` and `host_id` to find if
+that process still exists. If it does not exist, readers report its active actions as `interrupted`.
+They do not show these actions as running forever. `host_id` is a hash of the
+hostname, not the hostname, because `agac docs` publishes this file.
 A reader that finds no `pid`, or a `host_id` that is not its own, makes no
-judgement at all.
+decision.
 
-The VS Code Workflow Navigator reads this file to display the sidebar tree view and DAG visualization.
+The VS Code Workflow Navigator reads this file. It uses the data to show the sidebar tree view and the DAG (directed acyclic graph) view.
 
 ### Action Status (`.agent_status.json`)
 
 **Path:** `agent_io/.agent_status.json`
 
-Persists per-action execution state for resumable runs:
+This file keeps the execution state of each action, so that a run can resume:
 
 ```json
 {
@@ -100,136 +100,169 @@ Persists per-action execution state for resumable runs:
 }
 ```
 
-A completed action also stores what it ran under, so the next run can tell an
-action that is genuinely finished from one that was cut short. `record_limit` and
-`file_limit` are the limits that were **in force** — from the workflow config,
-the flag, or the environment variable, whichever won — not the ones the config
-asks for. Alongside them are `records_processed` and `truncated`, which say what
-the run actually did rather than what it was asked for, and `model_name`,
-`model_vendor` and a `config_hash` over the prompt, schema and guard. What the action
-reads has digests of its own: `context_scope_hash` over its `context_scope` (observe,
-passthrough, drop and seed) and `dependencies_hash` over its `dependencies`, and how it
-is asked has one too: `generation_hash` over the generation settings an LLM action sends
-(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty` and `presence_penalty`;
-empty for a tool or hitl action, which sends none). The code it runs has one as well:
-`udf_source_hash` over the files its tool (`impl`) and its UDF guard were loaded from, as
-they were when the run loaded them. The model and these four are deliberately outside `config_hash`, so adding them could not rotate
-every stored digest at once and name every completed action as edited after an upgrade.
+A completed action also stores the conditions that it ran under. Thus the next run can tell an
+action that is really finished from an action that stopped before its end. `record_limit` and
+`file_limit` are the limits that were **in force**, not the limits that the config
+asks for. The limit in force comes from the workflow config, the flag or the environment variable, whichever won.
+With them are `records_processed` and `truncated`. These keys say what
+the run actually did, not what the run was asked to do. The action also stores `model_name`,
+`model_vendor` and a `config_hash` over the prompt, the schema and the guard.
 
-These are what count as an edit to a completed action: its prompt, schema, guard,
-model, context scope, dependencies, generation settings, or the code of its tool or UDF
-guard. An edit re-runs nothing: the action keeps its
-answers, and so does every action reading it. Each run names the edit, for example
+The data that the action reads has its own digests: `context_scope_hash` over its `context_scope` (observe,
+passthrough, drop and seed) and `dependencies_hash` over its `dependencies`. How the action
+is asked also has a digest: `generation_hash` over the generation settings that an LLM action sends
+(`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty` and `presence_penalty`).
+`generation_hash` is empty for a tool or hitl action, because such an action sends no generation settings. The code that the action runs also has a digest:
+`udf_source_hash`. It covers the files that its tool (`impl`) and its UDF guard were loaded from, as
+they were when the run loaded them. The model and these four digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change
+all stored digests at the same time. They also could not name each completed action as edited after an upgrade.
+
+A change to one of these items counts as an edit to a completed action:
+
+- Its prompt, its schema or its guard
+- Its model
+- Its context scope
+- Its dependencies
+- Its generation settings
+- The code of its tool or of its UDF guard
+
+An answer is the output that an action gives for a record. An edit re-runs nothing. The action keeps its
+answers, and each action that reads it also keeps its answers. Each run names the edit, for example
 `recap was edited since it completed (context scope): its answers stand, and only records
 it has not answered use the edit. Run again with --rerun recap to answer every record under
-the edit`, until `agac run --rerun recap` answers the action and every action reading it
-under the new config (see [When you edit the workflow](../cli/run#when-you-edit-the-workflow)).
-Reordering or repeating the entries of an `observe`, `passthrough` or `drop` list is not
-an edit; reordering `dependencies` is, since a fan-in merges its inputs in that order. A
-tool or guard is tracked by its whole file, so an edit anywhere in that file names every
-action whose tool or guard it defines; a module the file imports is not tracked, and neither
-are the contents of a seed data file, so use `--rerun` or `--fresh` after changing one. A stamp written before a digest existed holds no value
-for it, so an edit it would have caught is not named until the action next completes.
+the edit`, until `agac run --rerun recap` answers the action and its readers under the new config.
+See [When you edit the workflow](../cli/run#when-you-edit-the-workflow).
 
-A changed `record_limit` re-runs the action only when it could have held
-something back. An untruncated run processed everything there was, so a limit at
-or above that count would drop nothing either and the action stays complete; a
-run that did truncate never vouches for any limit, and a stamp that cannot say —
-written before these counts existed, by a run that never sliced, or by one that
-lost an input file to an error, since records it never reached were never counted
-— keeps the coarse rule and re-runs. `file_limit` has no count to reason from and stays
-coarse throughout: any change to it re-runs the action, including a change to a
-value larger than the number of files. A limit that changes re-runs the action and every
-action reading it.
+If you reorder or repeat the entries of an `observe`, `passthrough` or `drop` list, that change is not
+an edit. If you reorder `dependencies`, that change is an edit, because a fan-in merges its inputs in that order. The framework
+tracks a tool or a guard by its whole file. Thus an edit anywhere in that file names each
+action whose tool or guard that file defines. The framework does not track a module that the file imports, or
+the contents of a seed data file. Thus, after you change one of these, use `--rerun` or `--fresh`. A stamp written before a digest existed holds no value
+for that digest. Thus the framework does not name an edit that the digest would catch until the action completes again.
 
-A first-stage action (one with no `dependencies`) also stores `staged_input`: the
-relative path, size and modification time of every input file it read. When a later
-run finds a file added, removed or changed, it logs which and puts that action and
-every completed action reading it back to `pending`, keeping their answers. They run
-again and answer only the records the change added or changed (a changed record has a
-new `source_guid`, so it is a new record). A record no staged file holds any more
-loses its rows, its dispositions and its checkpoints at that action and at every action
-reading it, once a walk has read every staged file; its prompt traces stay. Nothing is
-forgotten under a file limit, after a file failed to read, or by `agac retry`.
-`--rerun` answers every record again. Untouched staging still skips. A stamp written before this key existed holds no value and is
-left alone until the action next completes.
+A changed `record_limit` re-runs the action only when the old limit could have held
+back some records. An untruncated run processed all of the records that there were. Thus a limit at
+or above that count would also drop nothing, and the action stays complete. A
+run that did truncate gives no guarantee for any limit. Some stamps cannot say what the run processed:
 
-An action also records, when it starts work, what that work is answered under:
-`answered_under`, holding the same `config_hash`, `model_name`, `model_vendor`,
-`context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash`. A run that stops partway
-through an action — killed, interrupted, or stopped by an error — leaves the records it
-finished, and the next run keeps them. If the prompt, schema, guard, model, context scope,
-dependencies, generation settings or tool or guard code were edited in between — the same edits as for a completed action, above —
-the run names the edit and answers only the rest under it. When the action kept any
-answer, a batch sent and not yet collected included, its stamps stay at the config those
-answers were given under (`kept_answers_under` in the status file), so every later run names the edit until
-`--rerun` answers every record under it. An action that may hold answers from more than one
-config is marked so (`answers_under_more_than_one_config`), and each run says so even after
-the edit is undone. A change to a module a tool imports or to the contents of
-a seed data file is not seen, so run `agac run --rerun <action>` or `--fresh` to answer
-everything again after one. A guard's verdict is not kept: the run that resumes the action puts each
-record to the guard again, so a record its code now skips is skipped, and one it now
+- A stamp written before these counts existed.
+- A stamp written by a run that never sliced.
+- A stamp written by a run that lost an input file to an error. The run never counted the records that it never got to.
+
+These stamps keep the coarse rule, and the action re-runs. `file_limit` has no count to reason from, and it always
+uses the coarse rule. Any change to it re-runs the action. This includes a change to a
+value larger than the number of files. A limit that changes re-runs the action and each
+action that reads it.
+
+A first-stage action (an action with no `dependencies`) also stores `staged_input`. This key holds the
+relative path, the size and the modification time of each input file that the action read. When a later
+run finds a file that was added, removed or changed, the run logs which file. It then sets that action and
+each completed action that reads it back to `pending`. These actions keep their answers. They run
+again and answer only the records that the change added or changed. (A changed record has a
+new `source_guid`, so it is a new record.)
+
+A record that no staged file holds any more
+loses its rows, its dispositions and its checkpoints at that action. It also loses them at each action
+that reads it. This occurs after a walk has read all of the staged files. The prompt traces of the record stay. The framework
+forgets nothing under a file limit, after a file failed to read, or during `agac retry`.
+`--rerun` answers each record again. Staging that did not change still skips. A stamp written before this key existed holds no value. The framework does
+not change that stamp until the action completes again.
+
+When an action starts work, it also records the config that the work is answered under.
+This is `answered_under`, which holds the same `config_hash`, `model_name`, `model_vendor`,
+`context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash`. A run can stop partway
+through an action because it is killed, interrupted or stopped by an error. That run leaves the records that it
+finished, and the next run keeps them. Between the two runs, the prompt, schema, guard, model, context scope,
+dependencies, generation settings or tool or guard code can be edited. These are the same edits as for a completed action, above.
+After such an edit, the next run names the edit and answers only the remaining records under it.
+
+If the action kept any
+answer, its stamps stay at the config that those
+answers were given under (`kept_answers_under` in the status file). A batch that was sent and not yet collected counts as a kept answer. Thus each later run names the edit until
+`--rerun` answers each record under it. An action that may hold answers from more than one
+config has a mark (`answers_under_more_than_one_config`). Each run reports the mark, also after
+the edit is undone. The framework does not see a change to a module that a tool imports, or to the contents of
+a seed data file. Thus, after such a change, run `agac run --rerun <action>` or `--fresh` to answer
+all records again.
+
+The framework does not keep the verdict of a guard. The run that resumes the action gives each
+record to the guard again. Thus a record that the guard code now skips is skipped, and a record that it now
 passes is answered. The exception is a record of a batch action whose batch was out, or
-finished and not yet collected, when the run stopped: it keeps the answer that batch
-brings, since the guard judged it when the batch was sent and collecting it judges
-nothing. A record finished in a file the stopped run had not written yet is
-answered again when an earlier run had stored that file, since the stored row predates
-its answer. A file the store fails to write, on a full disk or a database error, stops
-the action this way: the run ends `failed`, and the next one writes that file. Online,
-the run writes the action's other files first, and after a `--rerun` each run that fails
+finished and not yet collected, when the run stopped. That record keeps the answer that the batch
+brings. The reason is that the guard judged the record when the batch was sent, and the collection of the batch judges
+nothing.
+
+A record can be finished in a file that the stopped run did not write yet. If an earlier run stored that file, the record is
+answered again. The reason is that the stored row is older than
+its answer. The store can fail to write a file, on a full disk or a database error. That failure also stops the action
+in this way. The run ends `failed`, and the next run writes that file. Online,
+the run first writes the other files of the action. After a `--rerun`, each run that fails
 to store the file asks for its records again, as above. A batch collect pass stops at the
-file, and a later run collects it and the files after it without sending any of them
-again. An `agac retry` records what the records it does not name were answered under
-instead — the stamp of the action's last completion, or what its last run recorded if it
-never completed — so a retry, stopped or finished, keeps the edit named on the next run.
-Each prompt trace row records the config its record was answered under, the retried
-records included.
+file. A later run collects that file and the files after it, and it does not send any of them
+again.
 
-A reset leaves what the action stored in place, and the re-run replaces it file by file.
-A file in which every record of the re-run fails — the model's answers do not parse, or
-a tool of record granularity raises on each or answers each with output its schema
-refuses, or a tool of file granularity raises on the file — is stored with those
-failures, as a file
-in which only some fail is, so neither the action nor what reads it keeps a row answered
-before the reset, and `agac retry` asks for them again. Outside a reset, a run that
-answers nothing in a file and fails some of it leaves what that file held.
+For the records that it does not name, an `agac retry` instead records the config that those records were answered under.
+That config is the stamp of the last completion of the action. If the action
+never completed, it is the config that the last run recorded. Thus a retry, stopped or finished, keeps the edit named on the next run.
+Each prompt trace row records the config that its record was answered under. This includes the retried
+records.
 
-Staged input is the source of truth for what an action holds. An action reset after
-its input was removed — by an edit applied with `--rerun`, or by a limit given on the command
-line — finds no input file, is skipped, and its stored output is deleted along with
-its readers'. Restore the input and run again to rebuild them. A reset after only
-some of its input files were removed deletes what it stored for those files, once it
-has read every file still there, and so do its readers; a batch action does this when
-it submits. A file that failed to process keeps its output. Nothing is deleted by a run
-that a file limit stopped before its last file, by one that could not list part of its
-input or read what its upstream stored, or by an `agac retry` repairing the records it
-names. A retry that names none, as one resuming a halted action does, runs its actions
-in full and deletes as a run does. A version merge sees every file its versions hold
-whatever its file limit, so before it runs it deletes what it stored for a file none of
-them holds, under `agac retry` too. Restore the files and run with `--fresh` to rebuild
-them. A file every version holds empty leaves the merge, and what reads it, holding
-nothing for that file. What a merge stores is only its answers: `agac retry`, or a run
-resumed after it stopped, keeps them for each record it does not ask again.
+A reset leaves the data that the action stored in place. The re-run replaces that data file by file.
+Sometimes every record of the re-run fails in a file, for one of these causes:
+
+- The answers of the model do not parse.
+- A tool of record granularity raises an error on each record, or answers each record with output that its schema refuses.
+- A tool of file granularity raises an error on the file.
+
+The framework stores such a file with those
+failures, in the same way as a file
+in which only some records fail. Thus the action and its readers keep no row answered
+before the reset, and `agac retry` asks for those records again. Outside a reset, a run that
+answers nothing in a file and fails some of it leaves the data that the file held.
+
+Staged input is the source of truth for the data that an action holds. An action can be reset after
+its input was removed, by an edit applied with `--rerun` or by a limit given on the command
+line. Such an action finds no input file and is skipped. The framework deletes its stored output and
+the stored output of its readers. To rebuild them, restore the input and run again.
+
+A reset can occur after only
+some of the input files of the action were removed. The action then deletes the data that it stored for those files, after it
+has read each file that is still there. Its readers do the same. A batch action does this when
+it submits. A file that failed to process keeps its output. These runs delete nothing:
+
+- A run that a file limit stopped before its last file.
+- A run that could not list part of its input, or could not read the data that its upstream action stored.
+- An `agac retry` that repairs the records that it names.
+
+A retry that names no record, for example a retry that resumes a halted action, runs its actions
+in full. It deletes data in the same way as a run.
+
+A version merge sees each file that its versions hold,
+whatever its file limit. Thus, before it runs, it deletes the data that it stored for a file that no version
+holds. This also occurs under `agac retry`. To rebuild
+them, restore the files and run with `--fresh`. If each version holds a file empty, the merge and its readers hold
+nothing for that file. A merge stores only its answers. `agac retry`, or a run
+resumed after it stopped, keeps them for each record that it does not ask again.
 
 | Status | Description |
 |--------|-------------|
-| `pending` | Not yet executed |
-| `running` | Currently executing |
-| `completed` | Successfully finished |
-| `completed_with_failures` | Finished, but one or more records failed or were exhausted |
-| `failed` | Terminated with error |
-| `interrupted` | The run was killed while this action was executing, or the process that owned it no longer exists |
-| `skipped` | Skipped by guard; because a dependency (or version source) failed or was skipped; because every version source came back empty; or because the action found no input file. A skipped action whose input holds nothing holds nothing either: the rows it stored before are deleted. One whose input still holds rows (a failed run keeps its answers) keeps its own |
-| `batch_submitted` | Batch job submitted, awaiting results |
-| `checking_batch` | The run is checking whether a submitted batch has finished |
+| `pending` | The action did not run yet |
+| `running` | The action runs now |
+| `completed` | The action finished successfully |
+| `completed_with_failures` | The action finished, but one or more records failed or were exhausted |
+| `failed` | The action stopped with an error |
+| `interrupted` | The run was killed while this action ran, or the process that owned it no longer exists |
+| `skipped` | The action was skipped. The cause is one of these: a guard, a failed or skipped dependency (or version source), or no input file. The skip also occurs when all version sources come back empty. If the input of a skipped action holds nothing, the action also holds nothing. The framework deletes the rows that the action stored before. If its input still holds rows (a failed run keeps its answers), the action keeps its own rows |
+| `batch_submitted` | The batch job was submitted, and the framework waits for the results |
+| `checking_batch` | The run checks if a submitted batch has finished |
 
-Re-running a workflow skips completed actions and resumes from the failure point, keeping what an action stopped partway had finished, edited or not. A completed first-stage action whose staged input files changed runs again, with everything reading it, answering only the records the change added or changed.
+When you run a workflow again, the run skips completed actions and resumes from the failure point. It keeps the records that a stopped action finished, edited or not. A completed first-stage action whose staged input files changed runs again, with all of its readers. It answers only the records that the change added or changed.
 
 ### Run Results (`run_results.json`)
 
 **Path:** `agent_io/logs/run_results.json`
 
-Summary of the workflow execution with per-action metrics:
+This file is a summary of the workflow execution, with the metrics of each action:
 
 ```json
 {
@@ -267,18 +300,18 @@ Summary of the workflow execution with per-action metrics:
 }
 ```
 
-An action with a guard also carries a `guard_stats` object with the `condition`, the counts `passed` and `filtered`, and `on_false`.
+An action that has a guard also carries a `guard_stats` object. The object holds the `condition`, the counts `passed` and `filtered`, and `on_false`.
 
 ### Run History (`runs.json`)
 
 **Path:** `artefact/runs.json`
 
-`runs.json` is the cumulative catalog of past workflow executions surfaced by the documentation site. Every `agac run` writes to it twice via `RunTracker`:
+`runs.json` is the cumulative catalog of past workflow executions. The documentation site shows this catalog. Each `agac run` writes to it two times, through `RunTracker`:
 
-- At start — a new execution entry is inserted at the front of `executions` with `status: "running"`, `started_at` and `total_actions`; each action adds its own entry as it starts and finishes.
-- At end — the entry is updated with the final `status` (`SUCCESS` / `FAILED` / `PAUSED`), `ended_at`, `duration_seconds`, and any `error_message`. Aggregate workflow metrics (`success_rate`, `avg_duration_seconds`) are recomputed in the same write.
+- At the start — `RunTracker` puts a new execution entry at the front of `executions`, with `status: "running"`, `started_at` and `total_actions`. Each action adds its own entry when it starts and when it finishes.
+- At the end — `RunTracker` updates the entry with the final `status` (`SUCCESS` / `FAILED` / `PAUSED`), `ended_at`, `duration_seconds` and any `error_message`. The same write calculates the aggregate workflow metrics (`success_rate`, `avg_duration_seconds`) again.
 
-`agac docs` reads `runs.json` to render the Run History view in the documentation site; if the file is missing when `agac docs` runs, an empty catalog is initialized so the page renders even before the first run completes.
+`agac docs` reads `runs.json` to render the Run History view in the documentation site. If the file is missing when `agac docs` runs, `agac docs` makes an empty catalog. Thus the page renders even before the first run completes.
 
 ```json
 {
@@ -323,13 +356,13 @@ An action with a guard also carries a `guard_stats` object with the `condition`,
 }
 ```
 
-The most recent 100 executions are kept; older entries roll off as new runs land. The authoritative per-run summary is still `agent_io/logs/run_results.json` — that file captures the full per-action breakdown for the single run that produced it.
+The file keeps the 100 most recent executions. When new runs occur, the framework removes the oldest entries. The authoritative summary of each run is still `agent_io/logs/run_results.json`. That file holds the full data of each action for the one run that made it.
 
 ### Events Log (`events.json`)
 
 **Path:** `agent_io/logs/events.json`
 
-Telemetry of the current workflow run in JSON Lines format (one event per line). Earlier runs are in `events.1.json` (newest) to `events.N.json`:
+This file holds the telemetry of the current workflow run in JSON Lines format (one event on each line). Earlier runs are in `events.1.json` (newest) to `events.N.json`:
 
 ```jsonl
 {"event_type": "WorkflowStartEvent", "code": "W001", "level": "info", "category": "workflow", "message": "Running workflow product_pipeline (4 actions)", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:00Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"workflow_name": "product_pipeline", "action_count": 4, "execution_mode": "parallel"}}
@@ -341,24 +374,24 @@ Telemetry of the current workflow run in JSON Lines format (one event per line).
 {"event_type": "StepCompleteEvent", "code": "W005", "level": "info", "category": "workflow", "message": "Step 2/3 complete in 2.10s", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:04Z", "correlation_id": null, "invocation_id": null, "thread_id": null}, "data": {"step_index": 1, "total_steps": 3, "elapsed_time": 2.1, "completed": 1, "partial": 0, "skipped": 0, "failed": 0, "unfinished": 0, "batch_pending": []}}
 ```
 
-Every line carries the same envelope. A parser should key on `event_type` or `code`;
-the payload is always under `data`, and the timestamp under `meta`, never at the top
+Each line carries the same envelope. A parser should use `event_type` or `code` as the key.
+The payload is always under `data`, and the timestamp is always under `meta`. They are never at the top
 level.
 
 | Key | What it holds |
 |-----|---------------|
-| `event_type` | The class name, e.g. `ActionStartEvent` |
-| `code` | Stable short code, e.g. `A001` — prefer this over the class name for matching |
+| `event_type` | The class name, for example `ActionStartEvent` |
+| `code` | A stable short code, for example `A001`. To match events, use the code, not the class name |
 | `level` | `debug`, `info`, `warn` or `error` |
-| `category` | Coarse grouping, e.g. `action`, `llm`, `data_processing` |
-| `message` | Rendered human-readable line |
-| `diagnostic` | `true` when the line describes framework internals. The console hides these unless the run is verbose; they are always written here |
-| `meta` | `timestamp`, `correlation_id`, `invocation_id`, `thread_id`, and the run's context: `workflow_name` and, on an event fired while an action runs, that action's `action_name` and `action_index`. Actions of one step run at once, and each event names the action that fired it |
-| `data` | Per-event fields; the shape differs by `event_type` |
+| `category` | A coarse group, for example `action`, `llm`, `data_processing` |
+| `message` | The rendered line that a person can read |
+| `diagnostic` | `true` when the line describes framework internals. The console hides these lines unless the run is verbose. The framework always writes them here |
+| `meta` | `timestamp`, `correlation_id`, `invocation_id`, `thread_id`, and the context of the run. The context is `workflow_name` and, on an event that occurs while an action runs, the `action_name` and `action_index` of that action. The actions of one step run at the same time, and each event names the action that caused it |
+| `data` | The fields of the event. The shape is different for each `event_type` |
 
 #### Event Codes
 
-Codes are prefix + ordinal. The prefix groups related events; it is not always the
+A code is a prefix and an ordinal number. The prefix groups related events. The prefix is not always the
 same string as `category`.
 
 | Prefix | Category | Examples |
@@ -387,36 +420,34 @@ same string as `category`.
 
 #### Recovery Events
 
-- **R001 `RetryExhaustedEvent`** — fired when transport retry gives up. Contains the operation, the attempt count and the last error.
-- **RC004 `ExhaustedRecordEvent`** — fired when a record is exhausted after recovery failed. Contains `action_name`, `record_index`, `source_guid` and `reason`.
+- **R001 `RetryExhaustedEvent`** — occurs when the transport retry stops. It contains the operation, the attempt count and the last error.
+- **RC004 `ExhaustedRecordEvent`** — occurs when a record is exhausted after recovery failed. It contains `action_name`, `record_index`, `source_guid` and `reason`.
 
-A run whose records all succeed first time produces neither. This is by design — the events only fire when recovery actually occurs.
+A run whose records all succeed at the first attempt makes neither event. This is by design. The events occur only when recovery actually occurs.
 
 #### File Lifecycle
 
-`events.json` and `errors.json` hold one workflow run. When `agac run` or `agac retry` starts, each file moves one slot back: `events.json` becomes `events.1.json`, `events.1.json` becomes `events.2.json`, and so on. The last 5 runs are kept; set `AGENT_ACTIONS_LOG_RETAIN_RUNS` to keep a different number (an integer of 1 or more). Other commands that log into the workflow, such as `agac batch`, append to the current run's file and do not rotate it.
+`events.json` and `errors.json` hold one workflow run. When `agac run` or `agac retry` starts, each file moves one position back. `events.json` becomes `events.1.json`, `events.1.json` becomes `events.2.json`, and the sequence continues. The framework keeps the last 5 runs. To keep a different number, set `AGENT_ACTIONS_LOG_RETAIN_RUNS` (an integer of 1 or more). Other commands that log into the workflow, for example `agac batch`, add to the file of the current run. They do not rotate it.
 
-A run file stops taking DEBUG events once it reaches 50 MB, and records `LogFileCapReachedEvent` (FIO008, WARN) once when it does. INFO, WARN and ERROR events are always written. Set `AGENT_ACTIONS_LOG_MAX_BYTES` to change the cap, or to `0` for no cap.
+When a run file gets to 50 MB, it stops taking DEBUG events. At that time, it records `LogFileCapReachedEvent` (FIO008, WARN) one time. The framework always writes INFO, WARN and ERROR events. To change the cap, set `AGENT_ACTIONS_LOG_MAX_BYTES`. For no cap, set it to `0`.
 
-When `--fresh` is passed, every `events*.json` and `errors*.json` file in the workflow's `agent_io/logs/` is **deleted before the run starts**; `events.json` is recreated on the first event write. File watchers must handle the file being absent between rotation or deletion and the first event.
+When you give `--fresh`, the framework **deletes these files before the run starts**. It deletes each `events*.json` and `errors*.json` file in the `agent_io/logs/` folder of the workflow. The framework makes `events.json` again on the first event write. File watchers must accept that the file is absent between the rotation or deletion and the first event.
 
 ### Errors Log (`errors.json`)
 
 **Path:** `agent_io/logs/errors.json`
 
-ERROR-level events only — a filtered subset of `events.json` for quick error diagnosis. Each line has the same envelope as `events.json`:
+This file holds only ERROR-level events. It is a filtered subset of `events.json`, so that you can find errors quickly. Each line has the same envelope as `events.json`:
 
 ```jsonl
 {"event_type": "GuardEvaluationErrorEvent", "code": "G002", "level": "error", "category": "guard", "message": "Guard evaluation failed: Guard condition references field 'src.descx' which does not exist in the data. Available top-level fields: source, src, workflow", "diagnostic": false, "meta": {"timestamp": "2026-03-24T10:00:03+00:00", "correlation_id": "d96faa45"}, "data": {"guard_clause": "src.descx == 'a'", "error": "Guard condition references field 'src.descx' which does not exist in the data. Available top-level fields: source, src, workflow"}}
 ```
 
-:::caution Monitoring change
-`LLMJSONParseErrorEvent` (code L005) is now WARN level — it no longer appears in `errors.json`. Parse errors the repair loop recovers from are not true errors. Consumers monitoring parse failures must switch to `events.json` filtered by code `L005`.
+:::warning[CAUTION]
+`LLMJSONParseErrorEvent` (code L005) is now WARN level. It no longer appears in `errors.json`. A parse error that the repair loop recovers from is not a true error. Consumers that monitor parse failures must use `events.json`, filtered by code `L005`.
 :::
 
-:::tip
-When debugging, check `errors.json` first for a quick overview, then dive into `events.json` for the full trace around the failure timestamp.
-:::
+To debug, examine `errors.json` first for a quick overview. Then examine `events.json` for the full trace near the failure timestamp.
 
 ## Storage Backend (SQLite)
 
@@ -426,24 +457,24 @@ The SQLite database stores structured workflow data:
 
 | Table | Purpose |
 |-------|---------|
-| `source_data` | Input records with deduplication by `source_guid` |
-| `target_data` | Action outputs organized by `action_name` |
-| `record_disposition` | Tracks the fate of individual records |
+| `source_data` | Input records, with deduplication by `source_guid` |
+| `target_data` | Action outputs, in groups by `action_name` |
+| `record_disposition` | What occurred to each record |
 
 ### Record Dispositions
 
 | Disposition | Meaning |
 |-------------|---------|
-| `success` | Record processed successfully |
-| `passthrough` | Answered with nothing, kept as a tombstone (`on_empty: skip`) |
-| `skipped` | Left out of this action before its guard ran, or the whole action was skipped |
-| `deferred` | Sent to a batch provider, awaiting its result |
-| `filtered` | Removed from this action and every action below it (guard with `on_false: filter`) |
-| `exhausted` | Recovery gave up — retry attempts or `expect` iterations spent |
+| `success` | The record was processed successfully |
+| `passthrough` | The answer was empty. The framework keeps the record as a tombstone (`on_empty: skip`) |
+| `skipped` | The framework excluded the record from this action before its guard ran, or the full action was skipped |
+| `deferred` | The record was sent to a batch provider, and the framework waits for its result |
+| `filtered` | The framework removed the record from this action and from each downstream action (guard with `on_false: filter`) |
+| `exhausted` | Recovery stopped. All retry attempts or `expect` iterations were used |
 | `failed` | Processing failed |
-| `unprocessed` | Not answered: an upstream failure cascaded, or a guard with `on_false: skip` skipped it. The next run puts it to the guard again |
+| `unprocessed` | The record has no answer. An upstream failure cascaded, or a guard with `on_false: skip` skipped the record. The next run gives the record to the guard again |
 
-The `failed` and `exhausted` dispositions also store an `input_snapshot` column containing the JSON-serialized input record at the time of failure (an input over 10 KB is stored as a truncation marker holding its first 8,192 characters). This enables post-mortem debugging even after batch recovery files have been cleaned up. Other disposition types do not populate this column.
+The `failed` and `exhausted` dispositions also store an `input_snapshot` column. This column holds the input record, serialized as JSON, at the time of the failure. The framework stores an input over 10 KB as a truncation marker that holds its first 8,192 characters. Thus you can debug after the failure, even after the framework removed the batch recovery files. Other disposition types do not write this column.
 
 ### Querying the Database
 
@@ -460,7 +491,7 @@ SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
 SELECT action_name, disposition, COUNT(*) FROM record_disposition GROUP BY action_name, disposition;
 ```
 
-The `data` column is compressed inside the store; print an action's records with `agac records -w my_workflow -a extract_data` (see [records](../cli/records)), or use the CLI preview command:
+The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -a extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
 
 ```bash
 agac preview -w my_workflow
@@ -490,28 +521,38 @@ Each output record contains tracking metadata:
 }
 ```
 
-A record also carries lifecycle fields such as `_state` and `_state_history`.
+A record also carries lifecycle fields, for example `_state` and `_state_history`.
 
 | Field | Description |
 |-------|-------------|
-| `source_guid` | Links to original input record |
-| `content` | Schema-validated action output, under the action's name |
-| `target_id` | Unique identifier for this output |
-| `node_id` | Action execution identifier |
-| `lineage` | Chain of `node_id`s for provenance tracking |
+| `source_guid` | The link to the original input record |
+| `content` | The action output, validated against the schema, under the name of the action |
+| `target_id` | The unique identifier of this output |
+| `node_id` | The identifier of the action execution |
+| `lineage` | The chain of `node_id`s that shows the origin of the record |
 
 ## Documentation Catalog
 
 **Path:** `artefact/catalog.json` (generated by `agac docs`)
 
-The catalog is a snapshot of your entire project for the documentation site:
+The catalog is a snapshot of your full project for the documentation site:
 
 ```bash
 # Build and serve the documentation site
 agac docs
 ```
 
-The catalog contains: workflow definitions, action metadata, prompt templates, schema definitions, run history, execution metrics, and a bounded tail of the event stream shared across every log the project wrote. See [Documentation Site](../documentation-site) for the full browsable interface.
+The catalog contains these items:
+
+- Workflow definitions
+- Action metadata
+- Prompt templates
+- Schema definitions
+- Run history
+- Execution metrics
+- A bounded tail of the event stream. All of the logs that the project wrote share this tail.
+
+For the full interface that you can browse, see [Documentation Site](../documentation-site).
 
 ## Logs
 
@@ -523,7 +564,7 @@ AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 agac --debug run -a my_workflow
 ```
 
-Events from each run are written to `agent_io/logs/events.json` and `errors.json` in the workflow folder (see above).
+The framework writes the events of each run to `agent_io/logs/events.json` and `errors.json` in the workflow folder (see above).
 
 ## Useful Commands
 
@@ -553,7 +594,7 @@ agac status -a my_workflow
 
 ## See Also
 
-- **[Data I/O](../data-io/)** — Input/output directory structure and storage backends
-- **[Data Lineage](../data-io/data-lineage)** — Tracking records across multi-action workflows
+- **[Data I/O](../data-io/)** — The input and output directory structure, and the storage backends
+- **[Data Lineage](../data-io/data-lineage)** — Track records through workflows that have many actions
 - **[Documentation Site](../documentation-site)** — Interactive project documentation
-- **[Logging](../architecture/logging)** — Event system and log configuration
+- **[Logging](../architecture/logging)** — The event system and the log configuration

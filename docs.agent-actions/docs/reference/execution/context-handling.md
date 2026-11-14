@@ -5,20 +5,20 @@ sidebar_position: 3
 
 # Context Handling
 
-Agent Actions builds prompt context the same way in both batch and online modes. **The template pattern is `{{ source.field }}` in both modes**, and the rest of this page explains why.
+Agent Actions makes the prompt context in the same way in batch mode and in online mode. **The template pattern is `{{ source.field }}` in the two modes.** The rest of this page gives the reason.
 
 ## Mode Differences
 
-There are none, as far as your templates are concerned. Both batch and online start each record with an empty `base` dict and merge in only what `context_scope` admits — under the namespaces it admits them. The final Jinja context is identical in both modes for the same `context_scope` configuration.
+For your templates, the two modes have no differences. In batch mode and in online mode, each record starts with an empty `base` dict. The framework then merges in only the data that `context_scope` admits, under the namespaces that it admits. For the same `context_scope` configuration, the final Jinja context is identical in the two modes.
 
 | Property                       | Online | Batch |
 |--------------------------------|--------|-------|
-| Starting `base` for templates  | `{}`   | `{}`  |
-| Source data injected under     | `source` namespace | `source` namespace |
-| Seed data injected under       | `seed` namespace   | `seed` namespace   |
-| Upstream action output under   | `{action_name}` namespace | `{action_name}` namespace |
-| Correct template pattern       | `{{ source.field }}` | `{{ source.field }}` |
-| Bare `{{ field }}` works       | ❌     | ❌    |
+| The start `base` for templates  | `{}`   | `{}`  |
+| The namespace of the source data | `source` namespace | `source` namespace |
+| The namespace of the seed data   | `seed` namespace   | `seed` namespace   |
+| The namespace of the upstream action output | `{action_name}` namespace | `{action_name}` namespace |
+| The correct template pattern       | `{{ source.field }}` | `{{ source.field }}` |
+| A bare `{{ field }}` works       | No     | No    |
 
 ### Online Mode
 
@@ -52,37 +52,37 @@ Analyze: {{ source.content }}
 Analyze: {{ source.content }}
 ```
 
-**Use `{{ source.field }}` in both batch and online prompts.** The framework injects each record's input under the `source` namespace before rendering, so `{{ source.field }}` resolves to the per-record value identically in both modes.
+**Use `{{ source.field }}` in batch prompts and in online prompts.** Before the framework renders a prompt, it puts the input of each record under the `source` namespace. Thus `{{ source.field }}` gives the value of each record identically in the two modes.
 
-**Do not** use bare `{{ field }}`. `base` is empty before rendering, so `field` is undefined and rendering the template fails (Jinja `StrictUndefined`) — in either mode.
+**Do not** use a bare `{{ field }}`. Before the framework renders the template, `base` is empty. Thus `field` is not defined, and the template render fails (Jinja `StrictUndefined`). This occurs in the two modes.
 
-:::warning Common pitfall
-Neither mode accepts unwrapped variables such as `{{ content }}` in place of `{{ source.content }}`. If a prompt reads `{{ passage }}`, write `{{ source.passage }}` instead.
+:::warning[CAUTION]
+Do not use unwrapped variables, for example `{{ content }}` in place of `{{ source.content }}`. The two modes do not accept them. If a prompt contains `{{ passage }}`, write `{{ source.passage }}` in its place.
 :::
 
 ## Mode-Agnostic Templates
 
-Templates need no `{% if source is defined %}` conditionals or other mode-detection scaffolding. They are mode-agnostic by construction:
+A template does not need `{% if source is defined %}` conditionals or other code that finds the mode. By design, a template works in the two modes:
 
 ```jinja2
 Content: {{ source.content }}
 ```
 
-This renders the same way whether the action's `run_mode` is `online` or `batch`.
+This template renders in the same way when the `run_mode` of the action is `online` and when it is `batch`.
 
 ## Context Variables
 
 | Variable        | Description                  | Available In |
 |-----------------|------------------------------|--------------|
-| `source`        | Input record (always wrapped under this namespace) | Both modes |
-| `seed`          | Static seed data             | Both modes   |
-| `{action_name}` | Previous action output (also a namespace) | Both modes |
+| `source`        | The input record (always under this namespace) | The two modes |
+| `seed`          | Static seed data             | The two modes   |
+| `{action_name}` | The output of an upstream action (also a namespace) | The two modes |
 
-Whatever appears in your `context_scope.observe` list is what reaches the template — under the namespace prefix it was declared with. Nothing is injected at the root level.
+Each item in your `context_scope.observe` list gets to the template. It is under the namespace prefix that the list declares for it. The framework puts no data at the root level.
 
 ## Context Scope
 
-Control data visibility with `context_scope`:
+Use `context_scope` to control which data an action can see:
 
 ```yaml
 actions:
@@ -97,16 +97,16 @@ actions:
         - source.sensitive_field
 ```
 
-The same configuration works identically in both modes.
+The same configuration works identically in the two modes.
 
 ## Best Practices
 
-1. **Always namespace fields in templates** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never bare `{{ field }}`.
-2. **Pick a mode for cost/latency reasons, not for templating reasons** — `run_mode: batch` changes when LLM calls happen, not what context the prompt sees.
-3. **Use seed data for static content** — works identically in both modes.
-4. **Inspect rendered prompts** — `agac traces -w <workflow> -a <action>` shows the exact text the LLM received.
+1. **Always put a namespace on the fields in a template** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never use a bare `{{ field }}`.
+2. **Select a mode for cost or latency, not for templates** — `run_mode: batch` changes when the LLM calls occur. It does not change the context that the prompt sees.
+3. **Use seed data for static content** — seed data works identically in the two modes.
+4. **Examine the rendered prompts** — `agac traces -w <workflow> -a <action>` shows the exact text that the LLM received.
 
 ## See Also
 
-- [Run Modes](./run-modes) — Batch vs online execution (what changes when you flip the mode)
-- [Context Scope](../context/context-scope) — Field visibility configuration
+- [Run Modes](./run-modes) — Batch execution and online execution (what changes when you change the mode)
+- [Context Scope](../context/context-scope) — Configure the fields that an action can see
