@@ -28,7 +28,7 @@
 | `UDFLoadError` | Class | Raised when a UDF module fails to load. `DISCOVERY_SENTINEL` class attribute marks failures of the user-code directory itself (vs. a specific module import), so formatters can render directory-appropriate messages. | - |
 | `AgentNotFoundError` | Class | Raised when a specified agent cannot be found. | - |
 | `ProjectNotFoundError` | Class | Raised when a command requires being in a project but agent_actions.yml is not found. | - |
-| `external_services.py` | Module | External service and vendor API errors. `ExternalServiceError.__init__` guards `endpoint` with `endpoint or "<unknown>"` before interpolation. | `errors` |
+| `external_services.py` | Module | External service and vendor API errors. `ExternalServiceError.__init__` guards `endpoint` with `endpoint or "<unknown>"` before interpolation. `ResponseTruncatedError` (a `VendorAPIError`) is a response the output budget cut off before any answer; the retry policy retries it. | `errors` |
 | `ExternalServiceError` | Class | Base exception for external service interactions. | - |
 | `VendorAPIError` | Class | Raised when an error occurs during a call to a vendor's API. | - |
 | `AnthropicError` | Class | Specific error for Anthropic API failures. | - |

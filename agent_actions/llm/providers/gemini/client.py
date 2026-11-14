@@ -23,9 +23,13 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     VendorErrorMapping,
+    empty_response_error,
+    is_truncated,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
+    ALWAYS_RESERVED,
+    VendorParamSpec,
     extract_generation_params,
     request_timeout_seconds,
 )
@@ -75,6 +79,11 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "temperature", "max_tokens"],
     }
+    # Gemini takes its generation settings in GenerateContentConfig, so these are its fields.
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
+        accepted=frozenset(types.GenerateContentConfig.model_fields),
+        reserved=ALWAYS_RESERVED | {"http_options"},
+    )
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -101,9 +110,14 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 stop_as_list=True,
             )
             config = types.GenerateContentConfig(
-                response_mime_type="application/json",
-                **gen_params,
-                **_timeout_options(agent_config),
+                **GeminiClient.VENDOR_PARAMS.apply(
+                    {
+                        "response_mime_type": "application/json",
+                        **gen_params,
+                        **_timeout_options(agent_config),
+                    },
+                    agent_config,
+                )
             )
             envelope = MessageBuilder.build(
                 "gemini", prompt_config, context_data, schema=schema, json_mode=True
@@ -167,7 +181,11 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
                 stop_as_list=True,
             )
-            config = types.GenerateContentConfig(**gen_params, **_timeout_options(agent_config))
+            config = types.GenerateContentConfig(
+                **GeminiClient.VENDOR_PARAMS.apply(
+                    {**gen_params, **_timeout_options(agent_config)}, agent_config
+                )
+            )
             envelope = MessageBuilder.build("gemini", prompt_config, context_data, json_mode=False)
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config
@@ -211,6 +229,17 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         )
 
         response_text = response_temp.text or ""
+        if not response_text:
+            candidates = getattr(response_temp, "candidates", None) or []
+            finish_reason = getattr(candidates[0], "finish_reason", None) if candidates else None
+            if is_truncated(finish_reason):
+                raise empty_response_error(
+                    "Gemini",
+                    finish_reason,
+                    model_name=model_name,
+                    vendor="gemini",
+                    operation="generate_content",
+                )
 
         logger.debug(
             "Gemini non-JSON response retrieved successfully",

@@ -103,6 +103,9 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        from agent_actions.llm.providers.groq.client import GroqClient
+
+        GroqClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))
 
         return {
             "custom_id": batch_task.custom_id,

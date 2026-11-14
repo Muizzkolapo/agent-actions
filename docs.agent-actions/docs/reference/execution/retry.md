@@ -82,6 +82,7 @@ message of its own, the report names the error by its type.
 | Network Issues | A refused connection. A connection that resets or drops during the response. A timeout, which includes a request that takes longer than [`request_timeout`](../configuration/index.md#request-timeout). A DNS failure. | Yes |
 | Server Errors | HTTP 500, 502, 503, 504 | Yes. The other statuses that Agent Actions retries depend on the provider ([by provider](#provider-support)). |
 | Transient request rejection | A request that the provider refuses with a message that contains `could not parse the JSON body` or `we are currently processing your json schema` | Yes |
+| Cut-off answer | A non-JSON response that holds no answer because the output budget ran out (`stop_reason=max_tokens`, or `length`). The error is a `ResponseTruncatedError` that names the stop reason. See [Vendor parameters](../configuration/index.md#vendor-parameters) | Yes |
 | Invalid Request | A bad API key, malformed input | No |
 | Schema Violation | Invalid JSON output | No (the `expect:` repair loop handles it) |
 

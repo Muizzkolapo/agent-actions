@@ -29,6 +29,7 @@ from agent_actions.llm.config.endpoints import clear_project_endpoints, load_pro
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.expander_merge import merge_vendor_params
 
 if TYPE_CHECKING:
     from agent_actions.output.response.config_schema import AgentConfig
@@ -364,6 +365,11 @@ class ConfigManager:
                 else {}
             )
             merged_defaults = {**project_defaults, **validated_defaults}
+            vendor_params = merge_vendor_params(
+                project_defaults.get("vendor_params"), validated_defaults.get("vendor_params")
+            )
+            if vendor_params is not None:
+                merged_defaults["vendor_params"] = vendor_params
             workflow_name = workflow.name
             config_for_expander = {
                 "name": workflow_name,
@@ -465,7 +471,9 @@ class ConfigManager:
             if self.tool_path:
                 merged_dict["tool_path"] = self.tool_path
             for key, value in agent_dict.items():
-                if key == "chunk_config" and isinstance(value, dict):
+                if key == "vendor_params" and isinstance(value, dict):
+                    merged_dict[key] = merge_vendor_params(merged_dict.get(key), value)
+                elif key == "chunk_config" and isinstance(value, dict):
                     default_chunk = merged_dict.get(key)
                     if not isinstance(default_chunk, dict):
                         default_chunk = {}

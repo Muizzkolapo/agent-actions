@@ -129,7 +129,7 @@ If you edit an action in the configuration, the edit does not run anything again
 - The model of the action (`model_name`, `model_vendor`, in the action or in `defaults`)
 - The prompt, the schema, the guard, `context_scope` and `dependencies`
 - The generation settings that an LLM action sends
-  (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty`,
+  (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty`, `vendor_params`,
   in the action, in `defaults` or in `default_agent_config`)
 - The code of a tool or a UDF guard: the full file that defines it, but not the modules that the file imports
 

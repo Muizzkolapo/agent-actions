@@ -20,12 +20,19 @@ import openai
 from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 
-from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.error_wrapper import (
+    VendorErrorMapping,
+    empty_response_error,
+    stop_reason_name,
+    wrap_vendor_error,
+)
 from agent_actions.llm.providers.generation_params import (
+    ALWAYS_RESERVED,
+    VendorParamSpec,
     connect_limited_timeout_kwargs,
     extract_generation_params,
+    sdk_keyword_params,
 )
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -63,6 +70,11 @@ class OpenAIClient(BaseClient):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "base_url", "temperature", "max_tokens"],
     }
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
+        accepted=sdk_keyword_params(openai.resources.chat.completions.Completions.create),
+        reserved=ALWAYS_RESERVED | {"stream_options"},
+        merged=frozenset({"extra_headers", "extra_body", "extra_query"}),
+    )
 
     @classmethod
     def _error_mapping(cls) -> VendorErrorMapping:
@@ -127,6 +139,7 @@ class OpenAIClient(BaseClient):
             **cls._request_timeout_kwargs(agent_config),
         }
 
+        cls.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
         start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
@@ -154,7 +167,13 @@ class OpenAIClient(BaseClient):
                 "Empty response content from OpenAI API, model=%s",
                 model_name,
             )
-            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
+            finish_reason = stop_reason_name(response.choices[0].finish_reason)
+            return [
+                {
+                    "raw_response": "",
+                    "_parse_error": f"Empty response from API (stop_reason={finish_reason})",
+                }
+            ]
         from agent_actions.utils.json_parsing import parse_llm_json
 
         response_data = parse_llm_json(response_content)
@@ -221,6 +240,7 @@ class OpenAIClient(BaseClient):
             **cls._request_timeout_kwargs(agent_config),
         }
 
+        cls.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
         start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
@@ -235,22 +255,21 @@ class OpenAIClient(BaseClient):
         response_message = response.choices[0].message
         content: str | None = response_message.content
         if content is None:
+            error = empty_response_error(
+                "OpenAI",
+                response.choices[0].finish_reason,
+                model_name=model_name,
+                vendor=cls.VENDOR,
+                operation="chat.completions.create",
+            )
             fire_event(
                 LLMErrorEvent(
                     provider=cls.VENDOR,
                     model=model_name,
                     error_type="EmptyResponse",
-                    error_message="Empty response content from OpenAI API",
+                    error_message=str(error),
                     request_id=request_id,
                 )
             )
-            raise VendorAPIError(
-                "Empty response content from OpenAI API",
-                context={
-                    "model_name": model_name,
-                    "vendor": cls.VENDOR,
-                    "api_operation": "chat.completions.create",
-                    "output_field": agent_config.get("output_field", "raw_response"),
-                },
-            )
+            raise error
         return ResponseBuilder.wrap_non_json(content, agent_config)

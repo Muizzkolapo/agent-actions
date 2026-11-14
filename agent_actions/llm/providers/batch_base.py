@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
+from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils import deep_json
 
@@ -120,6 +121,7 @@ class BaseBatchClient(ABC):
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),
                     "max_tokens": agent_config.get("max_tokens"),
+                    VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
                 },
                 metadata=row,
             )

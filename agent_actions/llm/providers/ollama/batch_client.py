@@ -27,7 +27,7 @@ from ollama import Client
 
 from agent_actions.config.defaults import LLMDefaults, OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
-from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
+from agent_actions.llm.providers.ollama.client import _VENDOR_PARAMS, _extract_ollama_schema
 from agent_actions.llm.providers.ollama.failure_injection import (
     failed_batch_id_for,
     is_injected_failed_batch,
@@ -107,6 +107,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        if batch_task.model_config.get("vendor_params"):
+            body["vendor_params"] = batch_task.model_config.get("vendor_params")
 
         return {
             "custom_id": batch_task.custom_id,
@@ -195,12 +197,13 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                         if not format_param:
                             format_param = "json"
 
-            ollama_response = self.client.chat(
-                model=model,
-                messages=messages,
-                options=options,
-                format=format_param,  # type: ignore[arg-type]
-            )
+            chat_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "options": options,
+                "format": format_param,
+            }
+            ollama_response = self.client.chat(**_VENDOR_PARAMS.apply(chat_kwargs, body))
 
             if should_fail_batch_record(custom_id, idx):
                 logger.debug("[INJECTION] Simulating missing result for %s", custom_id)

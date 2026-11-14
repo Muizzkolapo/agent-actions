@@ -59,6 +59,7 @@ The examples on this page omit the lines that are not the subject of the example
 | `max_tokens` | integer | The maximum number of response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | The stop sequence or sequences that end the generation |
+| `vendor_params` | object | Other request parameters of the vendor SDK. An action's `vendor_params` merge over these key by key. See [Vendor parameters](./index.md#vendor-parameters) |
 | `record_concurrency` | integer | The number of records of an online LLM action that are sent at the same time (1-32). If unset, the value is 1. Tool, hitl and batch actions ignore this field. See [Record concurrency](./index.md#record-concurrency) |
 | `request_timeout` | number | The number of seconds that one LLM request may take (greater than 0). If a request takes longer, that attempt fails and `retry` retries it. If unset, each provider SDK keeps its own timeout. See [Request timeout](./index.md#request-timeout) |
 | `record_limit` | integer | The maximum number of records in each file (default: unlimited). `AGAC_RECORD_LIMIT` caps this value from the environment |

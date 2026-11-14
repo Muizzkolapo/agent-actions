@@ -163,6 +163,7 @@ actions:
 | `max_tokens` | integer | The maximum number of response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | The stop sequence or sequences that end the generation |
+| `vendor_params` | object | Other request parameters of the vendor SDK, passed through as written. See [Vendor parameters](#vendor-parameters) |
 
 :::note[Vendor-Specific Parameter Mapping]
 Agent Actions automatically maps the generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) to the API keys of each vendor:
@@ -171,6 +172,57 @@ Agent Actions automatically maps the generation parameters (`temperature`, `max_
 - **Gemini**: `max_tokens` → `max_output_tokens`, `stop` → `stop_sequences`
 - **Cohere**: `top_p` → `p`, `stop` → `stop_sequences`
 - **Ollama**: `max_tokens` → `num_predict`. The parameters go in the `options` dict. `stop` strings are wrapped in a list.
+:::
+
+### Vendor parameters
+
+`vendor_params` passes any other request parameter of the vendor SDK to the vendor, under the name that the SDK uses. Use it for parameters such as thinking budgets, reasoning effort, `seed` or `top_k`.
+
+```yaml
+defaults:
+  model_vendor: anthropic
+  model_name: claude-haiku-5-5
+  max_tokens: 16000
+  vendor_params:
+    thinking: {type: disabled}
+
+actions:
+  - name: write_quiz
+    vendor_params:
+      top_k: 40
+```
+
+The rules:
+
+- **The keys are the SDK's own.** A key is a keyword argument of the request that the SDK sends. For Gemini, a key is a field of `GenerateContentConfig`. For Ollama, a key is an argument of `chat()`. The value goes to the vendor unchanged.
+- **Preflight checks each key.** `agac inspect` and `agac run` refuse a key that the request does not take. The error names the action, the key and the valid keys. An unknown key never passes silently.
+- **agac sets some keys itself.** Preflight refuses `model`, `messages`, `tools`, `system`, `stream` and `timeout` on every vendor. It also refuses `stream_options` on OpenAI, `request_options` on Cohere and `http_options` on Gemini. Set the timeout with [`request_timeout`](#request-timeout).
+- **A vendor parameter wins.** A key that agac also sets, for example `temperature` or the default `tool_choice`, takes the value from `vendor_params`.
+- **Blocks merge key by key.** An action's `vendor_params` merge over the `vendor_params` in `defaults:`. Those merge over the `vendor_params` in the `default_agent_config:` of the project. A key at a lower level replaces the same key above it. The other keys above it stay.
+- **Some dicts merge too.** Ollama `options` merge into the options that agac sets, so `num_ctx` keeps the `num_predict` that comes from `max_tokens`. `extra_headers`, `extra_query` and `extra_body` merge the same way.
+- **A newer parameter goes in `extra_body`.** If the installed SDK does not know a parameter yet, put it under `extra_body` (Anthropic, OpenAI, Groq). The SDK sends `extra_body` as part of the request body.
+- **Batch requests carry the same keys.** In a batch file, `extra_body` joins the request body. `extra_headers` and `extra_query` do not apply. Gemini batch requests put `safety_settings`, `system_instruction`, `tool_config`, `cached_content` and `labels` beside `generation_config`, and every other key in it.
+- **An agac-provider action ignores the block.** It accepts any key, so a workflow that you switch to the mock provider keeps its `vendor_params`. Tool and hitl actions send no request, and they ignore an inherited block.
+- **An edit counts as a config change.** `vendor_params` is a generation setting, like `temperature`. An edit makes the next run answer the action again.
+
+One example for each vendor:
+
+| Vendor | Example |
+|--------|---------|
+| `anthropic` | `vendor_params: {thinking: {type: enabled, budget_tokens: 4096}, top_k: 40}` |
+| `openai` | `vendor_params: {reasoning_effort: low, seed: 7}` |
+| `groq` | `vendor_params: {reasoning_effort: default, reasoning_format: parsed}` |
+| `gemini` | `vendor_params: {thinking_config: {thinking_budget: 0}, top_k: 40}` |
+| `cohere` | `vendor_params: {k: 40, seed: 7, safety_mode: CONTEXTUAL}` |
+| `ollama_local`, `ollama_cloud` | `vendor_params: {think: false, keep_alive: 10m, options: {num_ctx: 8192, repeat_penalty: 1.1}}` |
+| `llamafile` and other OpenAI-compatible servers | `vendor_params: {seed: 7}` |
+
+:::note[Anthropic: the schema tool, and long answers]
+In JSON mode, an Anthropic request forces the schema tool (`tool_choice: {type: tool, name: <schema>}`), so the model cannot answer in text. When `vendor_params.thinking` is on, the request does not force the tool, because the API refuses a forced tool with thinking. `vendor_params.tool_choice` replaces the default. A request with a `max_tokens` above 21,333 streams, because the SDK refuses a request that it expects to take longer than 10 minutes.
+:::
+
+:::note[An answer that the output budget cuts off]
+A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
 :::
 
 ### Execution Fields

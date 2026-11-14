@@ -803,6 +803,7 @@ class TestOpenAICallJsonParseErrors:
 
         mock_response = _make_openai_style_mocks(None)
         mock_response.choices[0].message.content = None
+        mock_response.choices[0].finish_reason = "length"
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai_cls.return_value = mock_client
@@ -812,7 +813,7 @@ class TestOpenAICallJsonParseErrors:
         result = OpenAIClient.call_json("key", config, "prompt", "data", schema)
 
         assert len(result) == 1
-        assert result[0]["_parse_error"] == "Empty response from API"
+        assert result[0]["_parse_error"] == "Empty response from API (stop_reason=length)"
         assert result[0]["raw_response"] == ""
 
     @patch("agent_actions.llm.providers.openai.client.fire_event")

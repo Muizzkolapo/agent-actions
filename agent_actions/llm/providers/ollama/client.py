@@ -25,11 +25,15 @@ from agent_actions.llm.providers.client_base import BaseClient, warn_schema_with
 from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     VendorErrorMapping,
+    empty_response_error,
+    is_truncated,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
+    VendorParamSpec,
     extract_generation_params,
     request_timeout_kwargs,
+    sdk_keyword_params,
 )
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
@@ -70,6 +74,12 @@ _OLLAMA_ERRORS: tuple[type[Exception], ...] = (
     httpx.HTTPStatusError,
     ResponseError,
     *TRANSPORT_ERRORS,
+)
+
+
+# ``options`` merges into the generation options agac sets, so ``num_ctx`` keeps ``num_predict``.
+_VENDOR_PARAMS = VendorParamSpec(
+    accepted=sdk_keyword_params(Client.chat), merged=frozenset({"options"})
 )
 
 
@@ -174,7 +184,7 @@ def _call_ollama_json(
         if options:
             chat_kwargs["options"] = options
         client = _build_ollama_client(agent_config, api_key, cloud=cloud)
-        response = client.chat(**chat_kwargs)
+        response = client.chat(**_VENDOR_PARAMS.apply(chat_kwargs, agent_config))
     except _OLLAMA_ERRORS as e:
         raise wrap_vendor_error(
             e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
@@ -234,7 +244,7 @@ def _call_ollama_non_json(
         if non_json_options:
             chat_kwargs["options"] = non_json_options
         client = _build_ollama_client(agent_config, api_key, cloud=cloud)
-        response = client.chat(**chat_kwargs)
+        response = client.chat(**_VENDOR_PARAMS.apply(chat_kwargs, agent_config))
     except _OLLAMA_ERRORS as e:
         raise wrap_vendor_error(
             e, model, _ERROR_MAPPING_CLOUD if cloud else _ERROR_MAPPING_LOCAL, request_id
@@ -244,6 +254,11 @@ def _call_ollama_non_json(
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
     maybe_inject_online_failure(model, vendor_slug=vendor_slug)
 
+    done_reason = getattr(response, "done_reason", None)
+    if not response.message.content and is_truncated(done_reason):
+        raise empty_response_error(
+            "Ollama", done_reason, model_name=model, vendor=vendor_slug, operation="chat"
+        )
     return ResponseBuilder.wrap_non_json(response.message.content, agent_config)
 
 
@@ -255,6 +270,7 @@ def _call_ollama_non_json(
 class OllamaLocalClient(BaseClient):
     """Ollama local daemon client — no auth, API-enforced structured output."""
 
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = _VENDOR_PARAMS
     CAPABILITIES: ClassVar[dict[str, Any]] = {
         "supports_json_mode": True,
         "supports_batch": True,
@@ -334,6 +350,7 @@ class OllamaLocalClient(BaseClient):
 class OllamaCloudClient(BaseClient):
     """Ollama Cloud client — Bearer auth, prompt-injected schema."""
 
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = _VENDOR_PARAMS
     CAPABILITIES: ClassVar[dict[str, Any]] = {
         "supports_json_mode": True,
         "supports_batch": True,
