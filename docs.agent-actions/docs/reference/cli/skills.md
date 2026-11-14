@@ -6,26 +6,26 @@ sidebar_position: 5
 
 # skills Command
 
-Skills are bundled knowledge packages that teach AI coding assistants (Claude Code, OpenAI Codex) how to work with Agent Actions workflows. Instead of explaining the framework from scratch every session, you install skills once and the assistant understands YAML syntax, field references, guards, and execution patterns.
+Skills are bundled packages of knowledge. They teach AI coding assistants (Claude Code, OpenAI Codex) how to work with Agent Actions workflows. You install the skills one time. Then the assistant knows the YAML syntax, field references, guards and execution patterns. You do not have to explain the framework from the beginning in each session.
 
 ```bash
 agac skills <subcommand> [options]
 ```
 
-:::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
+:::note[Run from Anywhere]
+You can run this command from any subdirectory in your project.
 :::
 
 ## Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `list` | List available bundled skills |
-| `install` | Install skills to your project |
+| `list` | List the available bundled skills |
+| `install` | Install skills in your project |
 
 ## skills list
 
-List available bundled skills:
+List the available bundled skills:
 
 ```bash
 agac skills list
@@ -33,7 +33,7 @@ agac skills list
 
 ## skills install
 
-Install skills for your AI coding assistant:
+Install the skills for your AI coding assistant:
 
 ```bash
 agac skills install --claude   # For Claude Code
@@ -46,7 +46,7 @@ agac skills install --codex    # For OpenAI Codex
 |--------|-------------|
 | `--claude` | Install skills for Claude Code (`.claude/skills/`) |
 | `--codex` | Install skills for OpenAI Codex (`.codex/skills/`) |
-| `--force` | Overwrite existing skills |
+| `--force` | Overwrite the existing skills |
 
 **Examples:**
 
@@ -61,9 +61,9 @@ agac skills install --codex
 agac skills install --claude --force
 ```
 
-## What Gets Installed
+## Installed Files {/* #what-gets-installed */}
 
-Each skill includes:
+Each skill contains these files:
 
 ```
 .claude/skills/agac-agent-skills/
@@ -72,8 +72,8 @@ Each skill includes:
 └── scripts/           # Helper scripts (inspect_action, reset_workflow)
 ```
 
-Skills are project-scoped - each agent-actions project can have skills installed, and the AI assistant picks them up when you open that project.
+Skills have a project scope. You can install skills in each agent-actions project. The AI assistant reads the skills when you open that project.
 
 ## See Also
 
-- [Editor Setup](../../guides/editor-setup) - LSP support for Go to Definition, Hover, Autocomplete
+- [Editor Setup](../../guides/editor-setup): LSP support for Go to Definition, Hover and Autocomplete
