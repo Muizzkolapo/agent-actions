@@ -14,14 +14,13 @@ to pin that logging's own internals do not come along.
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.core.handlers.bridge import LoggingBridgeHandler
 from agent_actions.logging.core.manager import EventManager
 from agent_actions.logging.filters import RedactingFilter
+from tests._support.logs import only_through
 
 
 @pytest.fixture(autouse=True)
@@ -53,11 +52,8 @@ def _emit(extra: dict | None, *, redact: bool = False) -> dict:
     if redact:
         handler.addFilter(RedactingFilter())
 
-    logger = logging.getLogger("agent_actions.processing.test_bridge")
-    logger.setLevel(logging.DEBUG)
-    logger.handlers = [handler]
-    logger.propagate = False
-    logger.error("something failed", extra=extra or {})
+    with only_through(handler, "agent_actions.processing.test_bridge") as logger:
+        logger.error("something failed", extra=extra or {})
 
     assert capture.events, "no event reached the manager"
     return capture.events[-1].data
@@ -177,16 +173,12 @@ class TestAFormattedRecordDoesNotLeakItsRendering:
         capture = _Capture()
         EventManager.get().register(capture)
         handler = LoggingBridgeHandler()
-        logger = _logging.getLogger("agent_actions.processing.formatted")
-        logger.setLevel(_logging.DEBUG)
-        logger.handlers = [handler]
-        logger.propagate = False
-
-        record = logger.makeRecord(
-            logger.name, _logging.ERROR, "f", 1, "boom", (), None, extra={"custom_id": "c"}
-        )
-        _logging.Formatter("%(asctime)s %(message)s").format(record)
-        handler.emit(record)
+        with only_through(handler, "agent_actions.processing.formatted") as logger:
+            record = logger.makeRecord(
+                logger.name, _logging.ERROR, "f", 1, "boom", (), None, extra={"custom_id": "c"}
+            )
+            _logging.Formatter("%(asctime)s %(message)s").format(record)
+            handler.emit(record)
 
         data = capture.events[-1].data
         assert data["custom_id"] == "c"
