@@ -716,7 +716,8 @@ class TestBuildWatchersForProject:
 
         assert "agent_actions.yml" in patterns
         assert "agent_workflow/*/agent_config/*.yml" in patterns
-        assert "prompt_store/*.md" in patterns
+        assert "prompt_store/**/*.md" in patterns
+        assert "agent_workflow/*/prompt_store/**/*.md" in patterns
 
     def test_tool_dir_pattern_from_config(self, tmp_path: Path):
         """Tool directory patterns are derived from config."""

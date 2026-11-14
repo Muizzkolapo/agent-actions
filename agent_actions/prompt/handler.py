@@ -10,7 +10,6 @@ from jinja2 import meta
 
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathType
-from agent_actions.utils.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +27,42 @@ _RAW_OR_LOAD_TAG = re.compile(
 )
 
 
+_WORKFLOWS_DIR = "agent_workflow"
+
+
+def _prompt_store_dirs(root: Path) -> list[Path]:
+    """The prompt folders that exist: the project's, then each workflow's."""
+    store = PathType.PROMPT_STORE.value
+    dirs = [root / store]
+    workflows = root / _WORKFLOWS_DIR
+    if workflows.is_dir():
+        dirs.extend(wf / store for wf in sorted(workflows.iterdir()) if wf.is_dir())
+    return [d for d in dirs if d.is_dir()]
+
+
+def _searched_places(root: Path) -> str:
+    store = PathType.PROMPT_STORE.value
+    return f"{root / store} and {root / _WORKFLOWS_DIR / '*' / store}"
+
+
 class PromptLoader:
     """Loads and validates prompts from markdown content."""
 
     @staticmethod
     def discover_prompt_files(project_root: Path | None = None) -> list[Path]:
-        """Discover all prompt markdown files under ``prompt_store/``.
-
-        Searches recursively so that prompts organised in subdirectories are
-        found.  Returns a sorted list of ``.md`` file paths.
-        """
-        search_root = resolve_project_root(project_root)
-        prompt_dir = search_root / PathType.PROMPT_STORE.value
-        if not prompt_dir.exists():
-            return []
-        return sorted(prompt_dir.rglob("*.md"))
+        """Every ``.md`` file in the project's ``prompt_store/`` and each workflow's, recursively."""
+        root = resolve_project_root(project_root)
+        found: list[Path] = []
+        seen: set[tuple[str, Path]] = set()
+        for prompt_dir in _prompt_store_dirs(root):
+            for md_file in sorted(prompt_dir.rglob("*.md")):
+                # One file reached twice under one name (a workflow folder linked to the
+                # shared one) is not a copy; a link under another name is its own prompt file.
+                key = (md_file.name, md_file.resolve())
+                if key not in seen:
+                    seen.add(key)
+                    found.append(md_file)
+        return found
 
     @staticmethod
     def extract_prompt(content: str, prompt_name: str) -> str:
@@ -110,10 +130,11 @@ class PromptLoader:
     @staticmethod
     def load_prompt(prompt_name: str, project_root: Path | None = None) -> str:
         """
-        Load a prompt by name ('filename.prompt_key') from .md files in the project tree.
+        Load a prompt by name ('filename.prompt_key') from the prompt folders.
 
         Raises:
-            ValueError: If the prompt file or prompt format is invalid.
+            ValueError: If the prompt format is invalid, or no file or more than one
+                file in the prompt folders has the name.
         """
         if "." not in prompt_name:
             raise ValueError(
@@ -123,18 +144,27 @@ class PromptLoader:
         prompt_file_name, prompt_key = prompt_name.split(".", 1)
         target_filename = f"{prompt_file_name}.md"
 
-        search_root = resolve_project_root(project_root)
-        prompt_file_str = FileHandler.find_file_in_directory(str(search_root), target_filename)
-
-        if not prompt_file_str:
+        root = resolve_project_root(project_root)
+        matches = [
+            path
+            for path in PromptLoader.discover_prompt_files(root)
+            if path.name == target_filename
+        ]
+        if not matches:
             raise ValueError(
                 f"Prompt file '{target_filename}' not found. "
-                f"Searched recursively from {search_root}. "
-                f"Ensure the .md file exists anywhere in your project tree."
+                f"Searched {_searched_places(root)}, with their subfolders."
+            )
+        if len(matches) > 1:
+            listed = "\n    ".join(str(path) for path in matches)
+            raise ValueError(
+                f"Prompt file '{target_filename}' is in {len(matches)} places. A prompt file "
+                f"name must be unique across {_searched_places(root)}. "
+                f"Rename or remove all but one:\n    {listed}"
             )
 
-        logger.debug("Found prompt file at: %s", prompt_file_str)
-        prompt_file_path = Path(prompt_file_str)
+        prompt_file_path = matches[0]
+        logger.debug("Found prompt file at: %s", prompt_file_path)
         content = prompt_file_path.read_text(encoding="utf-8")
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
         PromptLoader.validate_prompt_blocks(prompt_file_path.name, content)

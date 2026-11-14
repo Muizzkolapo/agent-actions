@@ -638,7 +638,8 @@ def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
     for pattern in (
         "agent_actions.yml",
         "agent_workflow/*/agent_config/*.yml",
-        "prompt_store/*.md",
+        "prompt_store/**/*.md",
+        "agent_workflow/*/prompt_store/**/*.md",
     ):
         watchers.append(
             lsp.FileSystemWatcher(
