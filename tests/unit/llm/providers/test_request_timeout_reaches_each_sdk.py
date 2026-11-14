@@ -1,7 +1,7 @@
 """An action's `request_timeout` reaches every provider SDK as its per-request timeout.
 
-Unset, nothing is passed, so each SDK keeps the timeout it has always had. Each SDK
-below is replaced by a mock that records what it was built and called with.
+Unset, every SDK gets the same 600 seconds. Each SDK below is replaced by a mock
+that records what it was built and called with.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from ollama import ChatResponse, Message
 
@@ -54,11 +55,14 @@ def _chat_completion() -> MagicMock:
 
 
 class _Sent:
-    """What one SDK was built with and what its request carried."""
+    """What one SDK was built with and what its request carried; an httpx timeout as its read."""
 
     def __init__(self, built: dict[str, Any], called: dict[str, Any]):
         self.built = built
-        self.called = called
+        self.called = {
+            key: value.read if isinstance(value, httpx.Timeout) else value
+            for key, value in called.items()
+        }
 
 
 def _openai_family(path: str, client: Any) -> Callable[[dict[str, Any]], _Sent]:
@@ -114,42 +118,50 @@ def _ollama(client: Any, api_key: str | None) -> Callable[[dict[str, Any]], _Sen
 
 _OPENAI = "agent_actions.llm.providers.openai.client.OpenAI"
 
-# vendor -> (run one request, where the timeout goes, the value the SDK takes for 2.5s)
-VENDORS: dict[str, tuple[Callable[[dict[str, Any]], _Sent], str, float]] = {
-    "openai": (_openai_family(_OPENAI, OpenAIClient), "called", 2.5),
-    "llamafile": (_openai_family(_OPENAI, PROFILE_CLIENTS["llamafile"]), "called", 2.5),
+# vendor -> (run one request, where the timeout goes, SDK units in one second)
+VENDORS: dict[str, tuple[Callable[[dict[str, Any]], _Sent], str, int]] = {
+    "openai": (_openai_family(_OPENAI, OpenAIClient), "called", 1),
+    "llamafile": (_openai_family(_OPENAI, PROFILE_CLIENTS["llamafile"]), "called", 1),
     "groq": (
         _openai_family("agent_actions.llm.providers.groq.client.Groq", GroqClient),
         "called",
-        2.5,
+        1,
     ),
-    "anthropic": (_anthropic, "called", 2.5),
-    "gemini": (_gemini, "called", 2500),
-    "cohere": (_cohere, "built", 2.5),
-    "ollama_local": (_ollama(OllamaLocalClient, None), "built", 2.5),
-    "ollama_cloud": (_ollama(OllamaCloudClient, "k"), "built", 2.5),
+    "anthropic": (_anthropic, "called", 1),
+    "gemini": (_gemini, "called", 1000),
+    "cohere": (_cohere, "built", 1),
+    "ollama_local": (_ollama(OllamaLocalClient, None), "built", 1),
+    "ollama_cloud": (_ollama(OllamaCloudClient, "k"), "built", 1),
 }
 
 
 @pytest.mark.parametrize("json_mode", [True, False], ids=["json", "text"])
 @pytest.mark.parametrize("vendor", sorted(VENDORS))
 def test_a_set_request_timeout_reaches_the_sdk(vendor, json_mode):
-    run, where, expected = VENDORS[vendor]
+    run, where, unit = VENDORS[vendor]
 
     sent = run(_config(2.5, json_mode))
 
-    assert getattr(sent, where)["timeout"] == expected
+    assert getattr(sent, where)["timeout"] == 2.5 * unit
 
 
 @pytest.mark.parametrize("json_mode", [True, False], ids=["json", "text"])
 @pytest.mark.parametrize("vendor", sorted(VENDORS))
-def test_an_unset_request_timeout_passes_nothing(vendor, json_mode):
-    run, _, _ = VENDORS[vendor]
+def test_an_unset_request_timeout_sends_600_seconds(vendor, json_mode):
+    run, where, unit = VENDORS[vendor]
 
     sent = run(_config(None, json_mode))
 
-    assert "timeout" not in sent.built
-    assert "timeout" not in sent.called
+    assert getattr(sent, where).get("timeout") == 600 * unit
+
+
+@pytest.mark.parametrize("vendor", sorted(VENDORS))
+def test_an_explicit_null_request_timeout_sends_600_seconds(vendor):
+    run, where, unit = VENDORS[vendor]
+
+    sent = run({**_config(None, json_mode=True), "request_timeout": None})
+
+    assert getattr(sent, where).get("timeout") == 600 * unit
 
 
 def _endpoint_client(timeout_seconds: float) -> type[EndpointClient]:
