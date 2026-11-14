@@ -5,13 +5,13 @@ sidebar_position: 1
 
 # Architecture
 
-How does Agent Actions decide which actions run first? How does data flow from one action to the next? Understanding the architecture helps you design better agentic workflows and debug issues when they arise.
+This page describes how Agent Actions sets the order in which actions run, and how data moves from one action to the next action. If you know the architecture, you can design better workflows. You can also debug problems more easily when they occur.
 
-Agent Actions uses a **Directed Acyclic Graph (DAG)** execution model—think of it like a recipe where some steps can happen in parallel (chopping vegetables while water boils) but others must wait for dependencies (you can't strain pasta until it's cooked). This architecture enables parallel execution, deterministic ordering, and clear data flow.
+Agent Actions runs a workflow as a **Directed Acyclic Graph (DAG)**. Some actions can run in parallel. Other actions must wait until their dependencies complete. This model gives parallel execution, a deterministic order and a clear data flow.
 
 ## DAG Execution Model
 
-Let's walk through how actions are organized for execution. The diagram below shows four actions grouped into levels:
+Agent Actions puts actions into levels before it runs them. The diagram below shows four actions in three levels:
 
 ```mermaid
 flowchart TB
@@ -33,23 +33,23 @@ flowchart TB
     A3 --> A4
 ```
 
-Notice that `action_1` and `action_2` have no dependencies, so they can run in parallel. `action_3` waits for both to complete, and `action_4` waits for `action_3`.
+`action_1` and `action_2` have no dependencies. Thus they can run in parallel. `action_3` waits until the two actions complete. `action_4` waits for `action_3`.
 
-Actions are organized into **levels** based on their dependencies:
+The dependencies of an action set its **level**:
 
 | Level | Description | Execution |
 |-------|-------------|-----------|
-| Level 0 | Actions with no dependencies | Execute in parallel |
-| Level 1 | Actions depending only on Level 0 | Execute after Level 0 completes |
-| Level N | Actions depending on Levels 0..N-1 | Execute after all dependencies complete |
+| Level 0 | Actions that have no dependencies | Run in parallel |
+| Level 1 | Actions that depend only on Level 0 | Run after Level 0 completes |
+| Level N | Actions that depend on Levels 0..N-1 | Run after all dependencies complete |
 
-Actions within the same level execute **concurrently** up to the concurrency limit (default: 5, max: 50). This is a practical limitation to avoid overwhelming API rate limits.
+Actions in the same level run **concurrently**, up to the concurrency limit (default: 5, max: 50). The limit is a practical limit. It helps to prevent more requests than the API rate limits allow.
 
 ## Data Flow
 
-You might wonder: how does data get from one action to the next? Field references work like spreadsheet formulas—when you write `{{ extract_facts.facts }}`, you're pointing to a cell that will be filled in when that action completes.
+Data moves through the DAG through **field references**. A field reference such as `{{ extract_facts.facts }}` points to a field of an upstream action. The field gets its value when that upstream action completes. A field reference works like a formula in a spreadsheet that points to a cell.
 
-Data flows through the DAG via **field references**:
+The diagram shows the data flow between three actions:
 
 ```mermaid
 flowchart LR
@@ -70,17 +70,17 @@ flowchart LR
     V_OUT --> R_IN
 ```
 
-The arrows show data dependencies. `validate_facts` can't run until `extract_facts` produces its output.
+The arrows show data dependencies. `validate_facts` cannot run until `extract_facts` produces its output.
 
-When an action references `{{ upstream_action.field }}`:
+When an action refers to `{{ upstream_action.field }}`, Agent Actions does these steps:
 
-1. **Locate** - Find the upstream action's stored records
-2. **Extract** - Read the specified field from the record
-3. **Inject** - Make value available in prompt template
+1. **Locate** - Find the stored records of the upstream action.
+2. **Extract** - Read the specified field from the record.
+3. **Inject** - Make the value available in the prompt template.
 
 ## Component Architecture
 
-Here's how the pieces fit together. Each layer handles a specific concern:
+The diagram shows the components and how they connect. Each layer has one specific function:
 
 ```mermaid
 flowchart TB
@@ -128,57 +128,57 @@ flowchart TB
     REPAIR -.->|"validation failure"| TEMPLATE
 ```
 
-Two recovery loops are visible here:
-- **Transport retry** (Retry → Providers): same request resubmitted with exponential backoff when network errors or rate limits occur
-- **Repair** (Expectations → Template): prompt rebuilt with the failure list when validation fails
+The diagram shows two recovery loops:
+- **Transport retry** (Retry → Providers): If a network error or a rate limit occurs, Agent Actions sends the same request again, with exponential backoff.
+- **Repair** (Expectations → Template): If validation fails, Agent Actions builds the prompt again with the list of failures.
 
-In batch mode, these run as two sequential phases after the batch completes. See [Batch Recovery](../execution/batch-recovery.md) for details.
+In batch mode, the two loops run as two sequential phases after the batch completes. For more information, see [Batch Recovery](../execution/batch-recovery.md).
 
 ## Execution Lifecycle
 
-Let's walk through what happens when you run `agac run -a my_workflow`.
+When you run `agac run -a my_workflow`, Agent Actions does the steps in the subsections that follow.
 
 ### 1. Configuration Loading
 
-1. Parse `agent_actions.yml` (project config)
-2. Parse agentic workflow YAML
-3. Merge configuration hierarchy (project defaults -> agentic workflow defaults -> action)
-4. Validate configuration
+1. Parse `agent_actions.yml` (the project configuration).
+2. Parse the YAML file of the workflow.
+3. Merge the configuration hierarchy (project defaults -> workflow defaults -> action).
+4. Validate the configuration.
 
 ### 2. Pre-flight Validation
 
-1. Check all field references resolve
-2. Validate schema files exist
-3. Verify vendor compatibility
-4. Detect circular dependencies
+1. Make sure that all field references resolve.
+2. Make sure that the schema files exist.
+3. Make sure that the vendors are compatible.
+4. Find circular dependencies.
 
 ### 3. DAG Construction
 
-1. Build dependency graph from action `dependencies`
-2. Compute execution levels
-3. Validate DAG is acyclic
+1. Build the dependency graph from the `dependencies` of each action.
+2. Calculate the execution levels.
+3. Make sure that the DAG is acyclic (has no cycles).
 
 ### 4. Execution
 
-For each level:
-1. Evaluate guards (skip/filter actions)
-2. Prepare prompts (resolve field references, apply context scope)
-3. Execute actions in parallel (up to concurrency limit)
-4. Validate outputs against schemas
-5. Regenerate on expectation failure (if an `expect:` block is set)
-6. Write outputs to the workflow's SQLite store
+For each level, Agent Actions does these steps:
+1. Evaluate the guards (skip or filter actions).
+2. Prepare the prompts (resolve the field references, apply the context scope).
+3. Run the actions in parallel (up to the concurrency limit).
+4. Validate the outputs against the schemas.
+5. If an expectation fails, generate the output again (if an `expect:` block is set).
+6. Write the outputs to the SQLite store of the workflow.
 
 ### 5. Output
 
-- Records per action in the workflow's SQLite store, `agent_io/store/<workflow>.db` (read them with `agac records`)
-- Lineage tracking via `source_guid` and `node_id`
-- Passthrough fields merged from context scope
+- The records of each action, in the SQLite store of the workflow, `agent_io/store/<workflow>.db` (read them with `agac records`)
+- Lineage tracking through `source_guid` and `node_id`
+- Passthrough fields, merged from the context scope
 
-This lineage tracking is important: it lets you trace any output back through the actions that produced it, which is invaluable for debugging and auditing.
+Lineage tracking is important. It lets you trace each output back through the actions that produced it. This is very useful for debugging and audits.
 
 ## See Also
 
-- [Run Modes](../execution/run-modes.md) — Batch vs online execution
+- [Run Modes](../execution/run-modes.md) — Batch execution and online execution
 - [Batch Recovery](../execution/batch-recovery.md) — Two-phase recovery for batch processing
 - [Granularity](../execution/granularity.md) — Record vs file processing
 - [Data I/O](../data-io/) — Directory structure and file formats

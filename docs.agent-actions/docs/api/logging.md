@@ -1,12 +1,12 @@
 # Logging API Reference
 
-Complete API reference for agent-actions' event-based logging system.
+The complete API reference for the event-based logging system of agent-actions.
 
 ## Public API
 
 ### fire_event()
 
-Emit an event to all registered handlers.
+Emits an event to all registered handlers.
 
 ```python
 from agent_actions.logging.core.manager import fire_event
@@ -18,21 +18,21 @@ fire_event(WorkflowStartEvent(
 ))
 ```
 
-**Note:** Every event class sets its own `level`, `category`, `message` and `data` in `__post_init__`. A `message` you pass in is replaced.
+**Note:** Every event class sets its own `level`, `category`, `message` and `data` in `__post_init__`. If you give a `message`, the event class replaces it.
 
 **Parameters:**
-- `event` (BaseEvent): Event instance to fire
+- `event` (BaseEvent): The event instance to fire
 
 **Returns:** None
 
 **Context Enrichment:**
-Before dispatch, the EventManager copies its context into the event's `meta`: `invocation_id` and `correlation_id` go to their own fields, and every other key goes to `meta.extra`.
+Before dispatch, the EventManager copies its context into the `meta` of the event. `invocation_id` and `correlation_id` go to their own fields. Every other key goes to `meta.extra`.
 
 ---
 
 ### get_manager()
 
-Get the EventManager singleton instance.
+Gets the EventManager singleton instance.
 
 ```python
 from agent_actions.logging.core.manager import get_manager
@@ -47,11 +47,11 @@ manager.set_context(workflow_name="my_workflow")
 
 ### LoggerFactory
 
-Factory class for initializing and managing the logging system.
+A factory class that initializes and manages the logging system.
 
 #### LoggerFactory.initialize()
 
-Initialize the unified logging system with event handlers.
+Initializes the unified logging system with event handlers.
 
 ```python
 from agent_actions.logging.factory import LoggerFactory
@@ -67,23 +67,23 @@ manager = LoggerFactory.initialize(
 ```
 
 **Parameters:**
-- `config` (Optional[LoggingConfig]): Logging configuration. If None, keeps the configuration of an earlier call; if there was none, reads the `AGENT_ACTIONS_*` environment variables.
-- `output_dir` (Optional[str | Path]): Directory whose `logs/` subdirectory receives `events.json`, `errors.json` and `run_results.json`. Defaults to None.
-- `workflow_name` (str): Name of the workflow being executed. Defaults to "".
-- `invocation_id` (Optional[str]): Unique ID for this invocation. An 8-character ID is generated if not provided.
-- `verbose` (Optional[bool]): Show DEBUG level events, all categories, and diagnostic events on console. `None` (the default) keeps whatever a previous call configured, so a `force=True` re-init that omits it does not discard the CLI's flags.
-- `quiet` (Optional[bool]): Only show WARN and ERROR events on console. `None` (the default) keeps whatever a previous call configured.
-- `force` (bool): Reinitialize even if already initialized. Defaults to False.
-- `new_run` (bool): Mark the start of a workflow run. The run logs in `output_dir/logs` rotate first, so `events.json` holds this run only. Other commands append to the current run's file. Defaults to False.
+- `config` (Optional[LoggingConfig]): The logging configuration. If None, the factory keeps the configuration that an earlier call set. If there was no earlier call, the factory reads the `AGENT_ACTIONS_*` environment variables.
+- `output_dir` (Optional[str | Path]): The directory whose `logs/` subdirectory receives `events.json`, `errors.json` and `run_results.json`. Defaults to None.
+- `workflow_name` (str): The name of the workflow that runs. Defaults to "".
+- `invocation_id` (Optional[str]): A unique ID for this invocation. If you do not give it, the factory generates an 8-character ID.
+- `verbose` (Optional[bool]): Shows DEBUG level events, all categories and diagnostic events on the console. `None` (the default) keeps the value that a previous call configured. Thus a `force=True` re-init that does not give `verbose` does not discard the flags of the CLI.
+- `quiet` (Optional[bool]): Shows only WARN and ERROR events on the console. `None` (the default) keeps the value that a previous call configured.
+- `force` (bool): Initializes again, also if the system is already initialized. Defaults to False.
+- `new_run` (bool): Marks the start of a workflow run. The run logs in `output_dir/logs` rotate first. Thus `events.json` holds only this run. Other commands append to the file of the current run. Defaults to False.
 
-**Returns:** EventManager instance
+**Returns:** The EventManager instance
 
 **Side Effects:**
-- Creates and registers ProgressRenderer (the run's console handler)
-- Creates and registers two JSONFileHandler instances (if output_dir provided): `logs/events.json` at DEBUG and `logs/errors.json` at ERROR
-- Creates and registers RunResultsCollector (it writes `logs/run_results.json` only if output_dir provided)
-- Sets up LoggingBridgeHandler to convert Python logging to events
-- Sets correlation context (invocation_id, workflow_name)
+- Creates and registers ProgressRenderer (the console handler of the run)
+- Creates and registers two JSONFileHandler instances (if you give output_dir): `logs/events.json` at DEBUG and `logs/errors.json` at ERROR
+- Creates and registers RunResultsCollector (it writes `logs/run_results.json` only if you give output_dir)
+- Configures LoggingBridgeHandler to convert Python logging to events
+- Sets the correlation context (invocation_id, workflow_name)
 
 **Example:**
 ```python
@@ -105,7 +105,7 @@ manager = LoggerFactory.initialize(
 
 #### LoggerFactory.get_logger()
 
-Get a Python logger that routes through the event system.
+Gets a Python logger that routes through the event system.
 
 ```python
 logger = LoggerFactory.get_logger("my_module")
@@ -113,15 +113,15 @@ logger.info("Processing item")  # Converted to LogEvent
 ```
 
 **Parameters:**
-- `name` (str): Logger name. Auto-prefixed with 'agent_actions.' if not already.
+- `name` (str): The logger name. If the name does not start with 'agent_actions.', the factory adds this prefix automatically.
 
-**Returns:** logging.Logger instance. Initializes the factory first if it is not initialized.
+**Returns:** A logging.Logger instance. If the factory is not initialized, the call initializes it first.
 
-**Note:** Every record logged under the `agent_actions` namespace is converted to a LogEvent and routed through EventManager.
+**Note:** Every record logged under the `agent_actions` namespace is converted to a LogEvent. EventManager routes the LogEvent.
 
 #### LoggerFactory.set_context()
 
-Set shared context values for all events.
+Sets shared context values for all events.
 
 ```python
 LoggerFactory.set_context(
@@ -131,15 +131,15 @@ LoggerFactory.set_context(
 ```
 
 **Parameters:**
-- `**kwargs`: Arbitrary context key-value pairs
+- `**kwargs`: Context key-value pairs of any kind
 
 **Returns:** None
 
-**Note:** Context is automatically attached to all events emitted after this call, whatever action fires them. Put a per-action or per-batch value in `EventManager.context()` or in the event's own fields instead.
+The context attaches automatically to all events emitted after this call, for all actions that fire them. Put a value for one action or one batch in `EventManager.context()` or in the fields of the event.
 
 #### LoggerFactory.flush()
 
-Flush all event handlers (write buffered data).
+Flushes all event handlers (writes the buffered data).
 
 ```python
 try:
@@ -150,11 +150,11 @@ finally:
 
 **Returns:** None
 
-**Important:** Always call before process exit to ensure buffered events are written.
+**Important:** Always call this method before the process exits. This makes sure that the buffered events are written.
 
 #### LoggerFactory.get_event_manager()
 
-Get the current EventManager instance.
+Gets the current EventManager instance.
 
 ```python
 manager = LoggerFactory.get_event_manager()
@@ -162,11 +162,11 @@ manager = LoggerFactory.get_event_manager()
 
 **Returns:** Optional[EventManager]
 
-**Returns None if:** LoggerFactory hasn't been initialized yet.
+**Returns None if:** LoggerFactory is not initialized yet.
 
 #### LoggerFactory.reset()
 
-Reset the factory state (for testing).
+Resets the state of the factory (for tests).
 
 ```python
 LoggerFactory.reset()
@@ -174,17 +174,17 @@ LoggerFactory.reset()
 
 **Returns:** None
 
-**Warning:** This clears all handlers and state. Only use in tests.
+**Warning:** This method clears all handlers and the state. Use it only in tests.
 
 ---
 
 ## EventManager
 
-Central event dispatcher that routes events to handlers.
+The central event dispatcher. It routes events to handlers.
 
 ### EventManager.get()
 
-Get the EventManager singleton instance.
+Gets the EventManager singleton instance.
 
 ```python
 from agent_actions.logging.core.manager import EventManager
@@ -198,7 +198,7 @@ manager = EventManager.get()
 
 ### EventManager.initialize()
 
-Mark the EventManager as initialized.
+Marks the EventManager as initialized.
 
 ```python
 manager.initialize()
@@ -206,13 +206,13 @@ manager.initialize()
 
 **Returns:** None
 
-**Note:** This is called automatically by LoggerFactory.initialize().
+**Note:** LoggerFactory.initialize() calls this method automatically.
 
 ---
 
 ### EventManager.register()
 
-Register an event handler.
+Registers an event handler.
 
 ```python
 from agent_actions.logging.core.handlers import ConsoleEventHandler
@@ -222,7 +222,7 @@ manager.register(handler)
 ```
 
 **Parameters:**
-- `handler` (EventHandler): Handler instance with `accepts()`, `handle()` and `flush()` methods. The manager calls `close()` on reset if the handler has one.
+- `handler` (EventHandler): A handler instance with `accepts()`, `handle()` and `flush()` methods. If the handler has a `close()` method, the manager calls it on reset.
 
 **Returns:** None
 
@@ -230,14 +230,14 @@ manager.register(handler)
 
 ### EventManager.unregister()
 
-Remove a registered handler. Does nothing if the handler is not registered.
+Removes a registered handler. If the handler is not registered, the method does nothing.
 
 ```python
 manager.unregister(handler)
 ```
 
 **Parameters:**
-- `handler` (EventHandler): Handler instance to remove
+- `handler` (EventHandler): The handler instance to remove
 
 **Returns:** None
 
@@ -245,7 +245,7 @@ manager.unregister(handler)
 
 ### EventManager.fire()
 
-Fire an event to all registered handlers.
+Fires an event to all registered handlers.
 
 ```python
 from agent_actions.logging.events import WorkflowStartEvent
@@ -255,17 +255,17 @@ manager.fire(event)
 ```
 
 **Parameters:**
-- `event` (BaseEvent): Event to fire
+- `event` (BaseEvent): The event to fire
 
 **Returns:** None
 
-**Note:** Event is enriched with context before being dispatched.
+**Note:** The manager adds the context to the event before it dispatches the event.
 
 ---
 
 ### EventManager.set_context()
 
-Set correlation context for all events.
+Sets the correlation context for all events.
 
 ```python
 manager.set_context(
@@ -279,13 +279,13 @@ manager.set_context(
 
 **Returns:** None
 
-The values are process-wide: every later event in the process carries them in `meta`, whatever action fires it. A per-action or per-batch value belongs in `context()` below, or in the event's own `data` (a batch id is in the batch events' `data.batch_id`).
+The values apply to the full process. Every later event in the process carries them in `meta`, for all actions that fire it. A value for one action or one batch belongs in `context()` below, or in the `data` of the event. For example, a batch id is in `data.batch_id` of the batch events.
 
 ---
 
 ### EventManager.context()
 
-Context manager for temporary context override.
+A context manager that overrides the context temporarily.
 
 ```python
 with manager.context(workflow_name="upstream"):
@@ -295,7 +295,7 @@ with manager.context(workflow_name="upstream"):
 # Context restored to previous value
 ```
 
-The override is local to the current thread or coroutine, and calls can nest.
+The override is local to the current thread or coroutine. Calls can nest.
 
 **Parameters:**
 - `**kwargs`: Temporary context values
@@ -308,7 +308,7 @@ The override is local to the current thread or coroutine, and calls can nest.
 
 ### EventManager.flush()
 
-Flush all registered handlers.
+Flushes all registered handlers.
 
 ```python
 manager.flush()
@@ -320,7 +320,7 @@ manager.flush()
 
 ### EventManager.reset()
 
-Reset EventManager state (for testing).
+Resets the state of the EventManager (for tests).
 
 ```python
 EventManager.reset()
@@ -328,17 +328,17 @@ EventManager.reset()
 
 **Returns:** None
 
-**Warning:** Clears all handlers and context. Only use in tests.
+**Warning:** This method clears all handlers and the context. Use it only in tests.
 
 ---
 
 ## Event Classes
 
-All event classes inherit from `BaseEvent` and are dataclasses.
+All event classes inherit from `BaseEvent`. All event classes are dataclasses.
 
 ### BaseEvent
 
-Base class for all events.
+The base class for all events.
 
 ```python
 from dataclasses import dataclass
@@ -357,12 +357,12 @@ class MyEvent(BaseEvent):
 ```
 
 **Attributes:**
-- `level` (EventLevel): Severity
-- `category` (str): Event category; see [EventCategories](#eventcategories)
-- `message` (str): Human-readable message
+- `level` (EventLevel): The severity
+- `category` (str): The event category. See [EventCategories](#eventcategories)
+- `message` (str): A message that a person can read
 - `meta` (EventMeta): `timestamp`, `correlation_id`, `invocation_id`, `thread_id` and `extra` (the other context keys)
 - `data` (Dict[str, Any]): Structured event data
-- `diagnostic` (bool): Framework internals rather than something the user can act on. Kept by the file handlers, dropped by the console unless verbose
+- `diagnostic` (bool): Marks framework internals, not something that the user can act on. The file handlers keep these events. The console drops them, unless the run is verbose
 - `event_type` (str, read-only property): The event class name, such as `"ActionStartEvent"`
 
 ---
@@ -371,7 +371,7 @@ class MyEvent(BaseEvent):
 
 #### WorkflowStartEvent
 
-Emitted when a workflow starts executing.
+Emitted when a workflow starts to run.
 
 ```python
 from agent_actions.logging.events import WorkflowStartEvent
@@ -383,12 +383,12 @@ fire_event(WorkflowStartEvent(
 ))
 ```
 
-**Note:** The `message` field is generated from `workflow_name` and `action_count`.
+**Note:** The event class generates the `message` field from `workflow_name` and `action_count`.
 
 **Fields:**
 - `workflow_name` (str): Workflow name
-- `action_count` (int): Number of actions in the workflow
-- `execution_mode` (str): `"sequential"` or `"async"`. The workflow runner sets it; it defaults to `"sequential"`
+- `action_count` (int): The number of actions in the workflow
+- `execution_mode` (str): `"sequential"` or `"async"`. The workflow runner sets it. It defaults to `"sequential"`
 
 ---
 
@@ -412,13 +412,13 @@ fire_event(WorkflowCompleteEvent(
 
 **Fields:**
 - `workflow_name` (str): Workflow name
-- `elapsed_time` (float): Total execution time in seconds
-- `actions_completed` (int): Number of actions completed
-- `actions_partial` (int): Number of actions that completed with failed records
-- `actions_skipped` (int): Number of actions skipped
-- `actions_failed` (int): Number of actions failed
-- `total_tokens` (int): Total tokens used
-- `records_failed_checks` (int): Records the workflow's actions hold that shipped with an expectations verdict whose `overall_pass` is false, read from the store as the run ends. A batch workflow finishing over several runs counts what the earlier runs collected. The workflow line turns `⚠` and says `N records failed their checks` when it is above zero
+- `elapsed_time` (float): The total execution time in seconds
+- `actions_completed` (int): The number of actions that completed
+- `actions_partial` (int): The number of actions that completed with failed records
+- `actions_skipped` (int): The number of actions that were skipped
+- `actions_failed` (int): The number of actions that failed
+- `total_tokens` (int): The total number of tokens used
+- `records_failed_checks` (int): The records that the actions of the workflow hold and that shipped with an expectations verdict whose `overall_pass` is false. Agent Actions reads the count from the store when the run ends. If a batch workflow completes over several runs, the count includes the records that the earlier runs collected. When the value is above zero, the workflow line turns to `⚠` and says `N records failed their checks`
 
 ---
 
@@ -440,17 +440,17 @@ fire_event(WorkflowFailedEvent(
 
 **Fields:**
 - `workflow_name` (str): Workflow name
-- `error_message` (str): Error description
-- `error_detail` (str): Further detail on the error
-- `error_type` (str): Exception type name
-- `elapsed_time` (float): Time elapsed before failure
-- `failed_action` (str): Name of the action that failed
+- `error_message` (str): The description of the error
+- `error_detail` (str): More detail about the error
+- `error_type` (str): The name of the exception type
+- `elapsed_time` (float): The time elapsed before the failure
+- `failed_action` (str): The name of the action that failed
 
 ---
 
 #### StepStartEvent
 
-Emitted when a dependency level begins. Fires even when nothing in it is pending.
+Emitted when a dependency level starts. The event fires also when no action in the level is pending.
 
 ```python
 from agent_actions.logging.events import StepStartEvent
@@ -464,16 +464,16 @@ fire_event(StepStartEvent(
 ```
 
 **Fields:**
-- `step_index` (int): Level position, 0-based (rendered 1-based)
-- `total_steps` (int): Number of levels in the run
+- `step_index` (int): The position of the level, 0-based (shown 1-based)
+- `total_steps` (int): The number of levels in the run
 - `actions` (List[str]): Every action in the level
-- `pending` (List[str]): The subset that will actually run
+- `pending` (List[str]): The subset of actions that will actually run
 
 ---
 
 #### StepCompleteEvent
 
-Emitted when a dependency level ends, whatever the outcome.
+Emitted when a dependency level ends, for all outcomes.
 
 ```python
 from agent_actions.logging.events import StepCompleteEvent
@@ -488,9 +488,9 @@ fire_event(StepCompleteEvent(
 
 **Fields:**
 - `step_index` / `total_steps` (int): As above
-- `elapsed_time` (float): Wall time for the level
-- `completed` / `partial` / `skipped` / `failed` / `unfinished` (int): Outcome tallies; they sum to the size of the level
-- `batch_pending` (List[str]): Actions whose batch jobs are still outstanding; non-empty means the level paused rather than finished
+- `elapsed_time` (float): The wall time of the level
+- `completed` / `partial` / `skipped` / `failed` / `unfinished` (int): The number of actions for each outcome. Their sum is the size of the level
+- `batch_pending` (List[str]): The actions whose batch jobs are not complete yet. If the list is not empty, the level paused and did not finish
 
 ---
 
@@ -498,7 +498,7 @@ fire_event(StepCompleteEvent(
 
 #### ActionStartEvent
 
-Emitted when an action starts processing.
+Emitted when an action starts to process.
 
 ```python
 from agent_actions.logging.events import ActionStartEvent
@@ -515,10 +515,10 @@ fire_event(ActionStartEvent(
 
 **Fields:**
 - `action_name` (str): Action name
-- `action_index` (int): Action position in workflow (0-based)
-- `total_actions` (int): Total number of actions
-- `action_type` (str): The action's kind (`"llm"`, `"tool"`, `"hitl"`)
-- `input_path` (str): Path to input file
+- `action_index` (int): The position of the action in the workflow (0-based)
+- `total_actions` (int): The total number of actions
+- `action_type` (str): The kind of the action (`"llm"`, `"tool"`, `"hitl"`)
+- `input_path` (str): The path to the input file
 - `mode` (str): `"online"` or `"batch"`
 
 ---
@@ -546,23 +546,23 @@ fire_event(ActionCompleteEvent(
 
 **Fields:**
 - `action_name` (str): Action name
-- `action_index` (int): Action position in workflow (0-based)
-- `total_actions` (int): Total number of actions
-- `execution_time` (float): Execution time in seconds
-- `output_path` (str): Path to output file
-- `record_count` (int): Number of records this execution produced. A run that replaces rows already stored counts them again, so `agac run --rerun` and `agac retry` report what they answered. Records carried forward from an earlier run are not counted. The `✓ <action>  N records` completion line shows the same number.
-- `guard_skipped` (int): Of `record_count`, the records the action's guard skipped this execution, kept as tombstones. The completion line ends `— N skipped by guard` when it is above zero.
-- `checks_failed` (int): The records this execution shipped carrying an expectations verdict whose `overall_pass` is false (`on_exhausted: return_last`, `repair: none`). They are stored as successes; the completion line turns `⚠` and says `N failed their checks` when it is above zero.
-- `tokens` (Dict[str, int]): Token usage breakdown
+- `action_index` (int): The position of the action in the workflow (0-based)
+- `total_actions` (int): The total number of actions
+- `execution_time` (float): The execution time in seconds
+- `output_path` (str): The path to the output file
+- `record_count` (int): The number of records that this execution produced. If a run replaces records that are already stored, the count includes them again. Thus `agac run --rerun` and `agac retry` report the records that they answered. The count does not include records carried forward from an earlier run. The `✓ <action>  N records` completion line shows the same number.
+- `guard_skipped` (int): The part of `record_count` that the guard of the action skipped in this execution. Agent Actions keeps these records as tombstones. When the value is above zero, the completion line ends with `— N skipped by guard`.
+- `checks_failed` (int): The records that this execution shipped with an expectations verdict whose `overall_pass` is false (`on_exhausted: return_last`, `repair: none`). Agent Actions stores them as successes. When the value is above zero, the completion line turns to `⚠` and says `N failed their checks`.
+- `tokens` (Dict[str, int]): The token usage, item by item
 - `mode` (str): `"online"` or `"batch"`
-- `model_vendor` / `model_name` (str): The model that ran the action; empty for a tool or HITL action
-- `kind` (str): `"llm"`, `"tool"`, `"hitl"`, … — consumers use it to decide whether a model is meaningful
+- `model_vendor` / `model_name` (str): The model that ran the action. Empty for a tool action or a HITL action
+- `kind` (str): `"llm"`, `"tool"`, `"hitl"`, … — consumers use it to decide if a model is meaningful
 
 ---
 
 #### ActionSkipEvent
 
-Emitted when an action is skipped, for example when its guard condition filters every record.
+Emitted when an action is skipped. For example, the guard condition of the action filters every record.
 
 ```python
 from agent_actions.logging.events import ActionSkipEvent
@@ -577,9 +577,9 @@ fire_event(ActionSkipEvent(
 
 **Fields:**
 - `action_name` (str): Action name
-- `action_index` (int): Action position in workflow (0-based)
-- `total_actions` (int): Total number of actions
-- `skip_reason` (str): Why action was skipped
+- `action_index` (int): The position of the action in the workflow (0-based)
+- `total_actions` (int): The total number of actions
+- `skip_reason` (str): The reason why the action was skipped
 - `mode` (str): `"online"` or `"batch"`
 
 ---
@@ -604,13 +604,13 @@ fire_event(ActionFailedEvent(
 
 **Fields:**
 - `action_name` (str): Action name
-- `action_index` (int): Action position in workflow (0-based)
-- `total_actions` (int): Total number of actions
-- `error_message` (str): Error description
-- `error_detail` (str): Further detail on the error
-- `error_type` (str): Exception class name
-- `execution_time` (float): Time elapsed before failure
-- `suggestion` (str): Suggested fix or next step
+- `action_index` (int): The position of the action in the workflow (0-based)
+- `total_actions` (int): The total number of actions
+- `error_message` (str): The description of the error
+- `error_detail` (str): More detail about the error
+- `error_type` (str): The name of the exception class
+- `execution_time` (float): The time elapsed before the failure
+- `suggestion` (str): A suggested fix or the next step
 - `mode` (str): `"online"` or `"batch"`
 
 ---
@@ -633,10 +633,10 @@ fire_event(BatchSubmittedEvent(
 ```
 
 **Fields:**
-- `batch_id` (str): Batch job ID
+- `batch_id` (str): The ID of the batch job
 - `action_name` (str): Action name
-- `request_count` (int): Number of requests in batch
-- `provider` (str): LLM provider
+- `request_count` (int): The number of requests in the batch
+- `provider` (str): The LLM provider
 
 ---
 
@@ -659,13 +659,13 @@ fire_event(BatchCompleteEvent(
 ```
 
 **Fields:**
-- `batch_id` (str): Batch job ID
+- `batch_id` (str): The ID of the batch job
 - `action_name` (str): Action name
-- `total` (int): Total requests in batch
-- `completed` (int): Successfully completed requests
-- `failed` (int): Failed requests
-- `elapsed_time` (float): Total time in seconds
-- `total_tokens` (int): Total tokens used
+- `total` (int): The total number of requests in the batch
+- `completed` (int): The number of requests that completed successfully
+- `failed` (int): The number of requests that failed
+- `elapsed_time` (float): The total time in seconds
+- `total_tokens` (int): The total number of tokens used
 
 ---
 
@@ -685,8 +685,8 @@ fire_event(BatchErrorEvent(
 
 **Fields:**
 - `action_name` (str): Action name
-- `error_message` (str): Error description
-- `error_type` (str): Exception class name
+- `error_message` (str): The description of the error
+- `error_type` (str): The name of the exception class
 
 ---
 
@@ -706,8 +706,8 @@ fire_event(ValidationStartEvent(
 ```
 
 **Fields:**
-- `target` (str): What is being validated
-- `validator` (str): Name of the validator
+- `target` (str): The item that is validated
+- `validator` (str): The name of the validator
 
 ---
 
@@ -726,11 +726,11 @@ fire_event(ValidationCompleteEvent(
 ```
 
 **Fields:**
-- `target` (str): What was validated
-- `validator` (str): Name of the validator
-- `elapsed_time` (float): Validation time in seconds
-- `warning_count` (int): Number of warnings found
-- `error_count` (int): Number of errors found; the event's level is ERROR when this is not 0
+- `target` (str): The item that was validated
+- `validator` (str): The name of the validator
+- `elapsed_time` (float): The validation time in seconds
+- `warning_count` (int): The number of warnings found
+- `error_count` (int): The number of errors found. When this value is not 0, the level of the event is ERROR
 
 ---
 
@@ -749,9 +749,9 @@ fire_event(ValidationErrorEvent(
 ```
 
 **Fields:**
-- `target` (str): What was validated
-- `field` (str): Which field failed
-- `error` (str): Error description
+- `target` (str): The item that was validated
+- `field` (str): The field that failed
+- `error` (str): The description of the error
 - `value` (Any): The invalid value (optional)
 
 ---
@@ -771,10 +771,10 @@ fire_event(ValidationWarningEvent(
 ```
 
 **Fields:**
-- `target` (str): What was validated
-- `field` (str): Which field triggered the warning
-- `warning` (str): Warning message
-- `value` (Any): The problematic value (optional)
+- `target` (str): The item that was validated
+- `field` (str): The field that caused the warning
+- `warning` (str): The warning message
+- `value` (Any): The value that caused the problem (optional)
 
 ---
 
@@ -782,9 +782,9 @@ fire_event(ValidationWarningEvent(
 
 ### EventHandler (Base Class)
 
-Base class for all event handlers.
+The base class for all event handlers.
 
-`EventHandler` is a `Protocol` in `agent_actions.logging.core.protocols`. A handler is any object with these methods; it does not need to subclass it.
+`EventHandler` is a `Protocol` in `agent_actions.logging.core.protocols`. A handler is any object with these methods. A handler does not need to subclass `EventHandler`.
 
 ```python
 from agent_actions.logging.core.events import BaseEvent
@@ -804,18 +804,18 @@ class MyHandler:
 ```
 
 **Methods:**
-- `accepts(event)` → bool: Return True if handler processes this event
-- `handle(event)` → None: Process the event
-- `flush()` → None: Flush buffered data
-- `close()` → None: Release resources. The protocol lists it; the manager calls it on reset and on a forced re-initialize if the handler has it
+- `accepts(event)` → bool: Returns True if the handler processes this event
+- `handle(event)` → None: Processes the event
+- `flush()` → None: Flushes the buffered data
+- `close()` → None: Releases resources. The protocol lists this method. If the handler has it, the manager calls it on reset and on a forced re-initialize
 
 ---
 
 ### ProgressRenderer
 
-The console handler a run installs. Subclasses `ConsoleEventHandler` and renders
-workflow, step and action events as a grouped per-step progress stream; every
-other event falls through to the formatting below.
+The console handler that a run installs. It is a subclass of `ConsoleEventHandler`. It shows
+workflow, step and action events as a progress stream, grouped by step. All
+other events use the formatting below.
 
 ```python
 from agent_actions.logging.core.handlers import ProgressRenderer
@@ -827,7 +827,7 @@ Takes the same parameters as `ConsoleEventHandler`.
 
 ### ConsoleEventHandler
 
-Writes events to the console (stderr), using Rich formatting when Rich is available.
+Writes events to the console (stderr). When Rich is available, it uses Rich formatting.
 
 ```python
 from agent_actions.logging.core.events import EventLevel
@@ -841,12 +841,12 @@ handler = ConsoleEventHandler(
 ```
 
 **Parameters:**
-- `min_level` (EventLevel): Minimum event level to display. Defaults to `EventLevel.INFO`
-- `show_timestamp` (bool): Include timestamp in output. Defaults to True
-- `formatter` (Optional[Callable]): Custom formatter function that takes an event and returns a string
-- `console` (Optional[Any]): Rich console to write to. Defaults to a Rich console on stderr
-- `categories` (Optional[Set[str]]): Event categories to display (None = all). WARN and ERROR events show whatever their category
-- `show_diagnostics` (bool): Display events marked diagnostic. Defaults to False, which drops them at any level
+- `min_level` (EventLevel): The minimum event level to show. Defaults to `EventLevel.INFO`
+- `show_timestamp` (bool): Includes the timestamp in the output. Defaults to True
+- `formatter` (Optional[Callable]): A custom formatter function. It takes an event and returns a string
+- `console` (Optional[Any]): The Rich console to write to. Defaults to a Rich console on stderr
+- `categories` (Optional[Set[str]]): The event categories to show (None = all). WARN and ERROR events show for all categories
+- `show_diagnostics` (bool): Shows events marked diagnostic. Defaults to False, which drops them at all levels
 
 ---
 
@@ -867,19 +867,19 @@ handler = JSONFileHandler(
 ```
 
 **Parameters:**
-- `file_path` (str | Path): Output file path. Parent directories are created
-- `min_level` (EventLevel): Minimum event level to log. Defaults to `EventLevel.DEBUG`
-- `buffer_size` (int): Number of events to buffer before writing. Defaults to 10
-- `max_debug_bytes` (Optional[int]): Past this many bytes in the file, DEBUG events are no longer written. Defaults to None (no cap)
-- `include_all_fields` (bool): True writes each event's full dictionary; False writes only `event_type`, `level`, `message` and `timestamp`. Defaults to True
+- `file_path` (str | Path): The path of the output file. The handler creates the parent directories
+- `min_level` (EventLevel): The minimum event level to log. Defaults to `EventLevel.DEBUG`
+- `buffer_size` (int): The number of events to buffer before a write. Defaults to 10
+- `max_debug_bytes` (Optional[int]): When the file is larger than this number of bytes, the handler stops writing DEBUG events. Defaults to None (no limit)
+- `include_all_fields` (bool): True writes the full dictionary of each event. False writes only `event_type`, `level`, `message` and `timestamp`. Defaults to True
 
-**Output Format:** NDJSON (one JSON object per line)
+**Output Format:** NDJSON (one JSON object on each line)
 
 ---
 
 ### RunResultsCollector
 
-Collects workflow execution results into run_results.json.
+Collects the execution results of the workflow into run_results.json.
 
 ```python
 from agent_actions.logging.events.handlers import RunResultsCollector
@@ -891,15 +891,15 @@ collector = RunResultsCollector(
 ```
 
 **Parameters:**
-- `output_dir` (Optional[str | Path]): Directory to write run_results.json
-- `workflow_name` (str): Name of workflow being executed
+- `output_dir` (Optional[str | Path]): The directory to write run_results.json to
+- `workflow_name` (str): The name of the workflow that runs
 
 **Output:** `{output_dir}/logs/run_results.json`
 
 **Methods:**
-- `accepts(event)`: Returns True for workflow and action category events, plus `RecordEmptyOutputEvent` and `ResultCollectionCompleteEvent`
-- `handle(event)`: Process event and update internal state
-- `flush()`: Write run_results.json to disk
+- `accepts(event)`: Returns True for events in the workflow and action categories, and for `RecordEmptyOutputEvent` and `ResultCollectionCompleteEvent`
+- `handle(event)`: Processes the event and updates the internal state
+- `flush()`: Writes run_results.json to disk
 
 ---
 
@@ -907,7 +907,7 @@ collector = RunResultsCollector(
 
 ### LoggingConfig
 
-Configuration for the logging system.
+The settings for the logging system.
 
 ```python
 from agent_actions.logging.config import LoggingConfig
@@ -918,18 +918,18 @@ LoggerFactory.initialize(config=config)
 ```
 
 **Fields:**
-- `default_level` (str): Default log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"). `from_environment()` reads it from `AGENT_ACTIONS_LOG_LEVEL`, and `AGENT_ACTIONS_DEBUG=1` forces `"DEBUG"`
-- `module_levels` (dict): Per-logger level overrides applied at init. Keys are
-  Python logger names (e.g. `"httpx"`, `"my_module"`), values are level
-  strings. Use this to re-enable a logger the framework clamps by default,
-  or to silence one that's still too chatty.
-- `file_handler` (FileHandlerSettings): `max_bytes` and `backup_count` size and
-  rotate the run log — see [File Handler](#filehandlersettings) below
+- `default_level` (str): The default log level ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"). `from_environment()` reads it from `AGENT_ACTIONS_LOG_LEVEL`. `AGENT_ACTIONS_DEBUG=1` forces `"DEBUG"`
+- `module_levels` (dict): Level overrides for each logger, applied at init. The keys are
+  Python logger names (for example, `"httpx"`, `"my_module"`). The values are level
+  strings. Use this field to enable again a logger that the framework clamps by default.
+  You can also use it to silence a logger that still writes too many messages.
+- `file_handler` (FileHandlerSettings): `max_bytes` and `backup_count` set the size and the rotation
+  of the run log. See [File Handler](#filehandlersettings) below
 
 #### Third-party logger suppression
 
-To keep the CLI focused on framework output, `LoggerFactory.initialize()`
-clamps a curated set of SDK / HTTP loggers to `WARNING` on every init:
+`LoggerFactory.initialize()` clamps a curated set of SDK / HTTP loggers to `WARNING` on every init.
+Thus the CLI shows mainly the output of the framework. The curated set is:
 
 ```
 httpx, httpcore, urllib3, openai, anthropic, ollama, groq,
@@ -937,8 +937,8 @@ cohere, google_genai, googleapiclient, sentence_transformers,
 transformers, pypdf
 ```
 
-To opt back in to verbose output from one of these — or to silence a logger
-not in the curated list — pass `module_levels` when constructing the config:
+To get verbose output again from one of these loggers, pass `module_levels` when you construct the config.
+You can also use `module_levels` to silence a logger that is not in the curated list:
 
 ```python
 from agent_actions.logging.config import LoggingConfig
@@ -954,30 +954,34 @@ config = LoggingConfig(
 LoggerFactory.initialize(config=config)
 ```
 
-Overrides on `agent_actions` and any of its children are refused with a
-stderr warning — the framework root must stay at DEBUG so every event reaches
-`events.json`. Use `default_level` to set the CLI-visible level instead.
+Overrides on `agent_actions` and on all of its children are refused, with a
+warning on stderr. The framework root must stay at DEBUG, so that every event gets to
+`events.json`. To set the level that the CLI shows, use `default_level`.
 
-From the CLI, set the same thing under `logging.module_levels` in
-`agent_actions.yml`: the CLI builds its config with
-`LoggingConfig.from_environment(LoggingConfig.from_project_config(project_config))`
-at boot, so the project block is the base and a set `AGENT_ACTIONS_*` variable
+From the CLI, set the same values under `logging.module_levels` in
+`agent_actions.yml`. At boot, the CLI builds its config with
+`LoggingConfig.from_environment(LoggingConfig.from_project_config(project_config))`.
+Thus the project block is the base. A set `AGENT_ACTIONS_*` variable
 overrides only its own key. `module_levels` has no environment form. See
 [Configuration](../reference/configuration#project-configuration).
 
 #### FileHandlerSettings
 
-`LoggingConfig.file_handler` is a `FileHandlerSettings` with two fields, and
-`LoggerFactory` reads both: `max_bytes` (`logging.file.max_bytes` / `AGENT_ACTIONS_LOG_MAX_BYTES`)
-caps the DEBUG rows written per run file, and `backup_count`
-(`logging.file.backup_count` / `AGENT_ACTIONS_LOG_RETAIN_RUNS`) is how many
-earlier runs are kept. Whether a run-log file handler is registered, and where
-it writes, is decided entirely by the `output_dir` passed to
-`LoggerFactory.initialize()`; the file is always `events.json` at DEBUG. Any
-other `logging.file.*` project key, and the `AGENT_ACTIONS_NO_LOG_FILE`,
-`AGENT_ACTIONS_LOG_FILE`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_FILE_LOG_LEVEL`
-and `AGENT_ACTIONS_LOG_FORMAT` env vars, configure nothing: the CLI reports each
-one that is set on stderr at boot and ignores it (see the architecture doc's File Handler section).
+`LoggingConfig.file_handler` is a `FileHandlerSettings` with two fields.
+`LoggerFactory` reads the two fields:
+
+- `max_bytes` (`logging.file.max_bytes` / `AGENT_ACTIONS_LOG_MAX_BYTES`) sets the
+  limit on the DEBUG rows written to each run file.
+- `backup_count` (`logging.file.backup_count` / `AGENT_ACTIONS_LOG_RETAIN_RUNS`) sets
+  the number of earlier runs to keep.
+
+Only the `output_dir` passed to `LoggerFactory.initialize()` decides if a run-log file
+handler is registered, and where it writes. The file is always `events.json` at DEBUG.
+
+All other `logging.file.*` project keys configure nothing. The
+`AGENT_ACTIONS_NO_LOG_FILE`, `AGENT_ACTIONS_LOG_FILE`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_FILE_LOG_LEVEL`
+and `AGENT_ACTIONS_LOG_FORMAT` env vars also configure nothing. If one of these is set, the CLI reports
+it on stderr at boot and ignores it (see the File Handler section of the architecture doc).
 
 ---
 
@@ -985,7 +989,7 @@ one that is set on stderr at boot and ignores it (see the architecture doc's Fil
 
 ### EventLevel
 
-Event severity levels.
+The event severity levels.
 
 ```python
 from agent_actions.logging.core.events import EventLevel
@@ -1000,7 +1004,7 @@ EventLevel.ERROR    # Error messages
 
 ### EventCategories
 
-Event category strings for filtering. `event.category` holds one of these values.
+The event category strings for filters. `event.category` holds one of these values.
 
 ```python
 from agent_actions.logging.events.types import EventCategories
