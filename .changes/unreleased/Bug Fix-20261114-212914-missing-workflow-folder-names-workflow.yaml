@@ -1,3 +1,3 @@
 kind: Bug Fix
-body: "A workflow whose `agent_config` or `agent_io` folder is missing, or whose name more than one folder holds, is now named in the error on every command. `agac inspect`, `agac expect list`, `agac expect report`, `agac preview`, `agac traces` and `agac records` printed `Invalid configuration in agent 'unknown'`, or `Operation Failed: command` for a name more than one folder holds."
+body: "A workflow whose `agent_config` or `agent_io` folder is missing, or whose name more than one folder holds, is now named in the error title on every command. `agac inspect`, `agac expect list`, `agac expect report`, `agac preview`, `agac traces` and `agac records` printed `Invalid configuration in agent 'unknown'`, or `Operation Failed: command` for a name more than one folder holds."
 time: 2026-11-14T21:29:14Z
