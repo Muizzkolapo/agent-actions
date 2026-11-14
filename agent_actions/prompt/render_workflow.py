@@ -19,7 +19,11 @@ from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.deferred_values import LoadedPrompt, LoadRender
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
-from agent_actions.utils.schema_utils import is_compiled_schema
+from agent_actions.utils.schema_utils import (
+    bare_array_fields,
+    bare_array_warning,
+    is_compiled_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +355,8 @@ def _compile_action_schemas(
     # Handle schema: {field: type} (inline dict) -> expand to unified format
     schema_value = action.get("schema")
     if schema_value and _is_inline_schema_dict(schema_value):
+        for field_name in bare_array_fields(schema_value):
+            logger.warning(bare_array_warning(f"Action '{action_name}'", field_name))
         action["schema"] = _expand_inline_schema(schema_value)
         logger.debug("Expanded inline schema for action '%s'", action_name)
     elif schema_value and isinstance(schema_value, dict) and not is_compiled_schema(schema_value):

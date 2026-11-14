@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: An inline schema field typed bare `array` now gives a warning when the workflow loads. The warning names the action and the field, and tells you to write `array[string]` or `array[object]`, because a bare `array` is read as an array of strings.
+time: 2026-11-14T06:58:50Z
