@@ -5,9 +5,9 @@ sidebar_position: 1
 
 # Validation
 
-What happens when an LLM returns malformed JSON, or a prompt references a field that doesn't exist? Without validation, these errors surface deep in your agentic workflow—often after expensive API calls have already been made.
+Validation finds errors before they cause cost. An LLM can return malformed JSON. A prompt can refer to a field that does not exist. With no validation, these errors occur deep in your workflow. They often occur after the workflow has already sent expensive API calls.
 
-Agent Actions catches these problems through multiple validation layers, from schema analysis through runtime output validation.
+Agent Actions finds these errors with multiple validation layers. The layers start with schema analysis and end with runtime output validation.
 
 ## Validation Types
 
@@ -15,33 +15,33 @@ Agent Actions catches these problems through multiple validation layers, from sc
 |------|------|---------|
 | **Schema Analysis** | Before execution | Analyze field dependencies and schemas |
 | **Schema Validation** | After LLM response | Validate output structure |
-| **Guards** | Before a downstream action runs | Filter or skip a record based on semantic conditions on upstream output |
-| **AI Expectations** | After schema validation | Deterministic + LLM-judged semantic checks, observed and reported |
-| **Expectation Repair** | On expectation failure | Regenerate and re-validate until the suite passes, or exhaust into a verdict, tombstone, or halt |
+| **Guards** | Before a downstream action runs | Filter or skip a record. The guard uses semantic conditions on the upstream output. |
+| **AI Expectations** | After schema validation | Deterministic checks and semantic checks that an LLM judges. Agent Actions observes and reports the results. |
+| **Expectation Repair** | When an expectation fails | Generate the output again and validate it again until the suite passes. If the attempts are exhausted, the result is a verdict, a tombstone or a halt. |
 
 ## Schema Analysis
 
-Use the `schema` command to analyze your workflow's field dependencies before running:
+To analyze the field dependencies of your workflow before you run it, use the `schema` command:
 
 ```bash
 agac schema -a workflow
 ```
 
-This shows input/output schemas for each action, helping you catch field reference errors before making API calls.
+The command shows the input schema and the output schema of each action. Thus you can find field reference errors before the workflow sends API calls.
 
 ### What It Shows
 
 | Information | Description |
 |-------------|-------------|
 | **Action** and **Type** | Each action and its kind (`llm`, `tool`) |
-| **Input** | Fields the action requires from upstream actions or source data |
-| **Output** | Fields the action produces for downstream actions |
+| **Input** | The fields that the action requires from upstream actions or from the source data |
+| **Output** | The fields that the action produces for downstream actions |
 
-Add `--verbose` for a data-flow tree that lists what each action expects and produces, or `--json` for machine-readable output.
+To show a data-flow tree, add `--verbose`. The tree lists the fields that each action expects and produces. To show machine-readable output, add `--json`.
 
 ### Dependency Validation
 
-Loading the workflow config validates dependencies, so a cycle is refused before any action runs (`Circular dependency detected: action_a -> action_b -> action_a`):
+When Agent Actions loads the workflow configuration, it validates the dependencies. Thus Agent Actions refuses a cycle before any action runs (`Circular dependency detected: action_a -> action_b -> action_a`):
 
 ```yaml
 # ERROR: Circular dependency
@@ -54,7 +54,7 @@ actions:
 
 ### Vendor Compatibility
 
-Feature support varies by vendor:
+The supported features are different for each vendor:
 
 | Vendor | JSON Mode | Batch | Tools | Vision |
 |--------|-----------|-------|-------|--------|
@@ -66,15 +66,15 @@ Feature support varies by vendor:
 
 ## Schema Validation
 
-Schema validation catches structural errors but can't verify semantic correctness. A response might match your schema but still contain incorrect information—that's where guards and expectations come in.
+Schema validation finds structural errors. It cannot verify that the content is semantically correct. A response might match your schema and still contain incorrect information. Guards and expectations find these errors.
 
-For schema definition details, see [Schemas](../schemas/index.md).
+For the details of how to define a schema, see [Schemas](../schemas/index.md).
 
 ## Validation Errors
 
 ### Error Categories
 
-Preflight issues about vendor support and file paths carry a `category` in their error context:
+A preflight issue about vendor support or about file paths has a `category` in its error context:
 
 | Category | Examples |
 |----------|----------|
@@ -83,17 +83,17 @@ Preflight issues about vendor support and file paths carry a `category` in their
 
 ### Runtime Error Format
 
-Here's what validation output looks like when problems are found at runtime:
+This example shows the validation output when Agent Actions finds problems at runtime:
 
 ```
 SchemaValidationError: Input schema validation failed for UDF 'add_answer_text'
 at target_word_counts -> correct_answer_words: 18 is not of type 'string'
 ```
 
-The message names the UDF, the path to the field that failed and the reason, so you can fix the issue quickly. The error also carries `function`, `validation_type`, `error_path`, `failed_value` and `schema_constraint` in its context.
+The message gives the name of the tool, the path to the field that failed and the reason. Thus you can fix the issue quickly. The context of the error also has `function`, `validation_type`, `error_path`, `failed_value` and `schema_constraint`.
 
 ## Learn More
 
-- **[Output Validation Pipeline](./output-validation.md)** - Multi-layer validation with guards and expectations
-- **[AI Expectations](./expectations.md)** - Deterministic and LLM-judged semantic checks via `expect:`, and the repair loop that regenerates on failure
-- **[Troubleshooting](../../guides/troubleshooting.md)** - Debug errors, trace data lineage, common fixes
+- **[Output Validation Pipeline](./output-validation.md)** - Validation in multiple layers, with guards and expectations
+- **[AI Expectations](./expectations.md)** - Deterministic checks and LLM-judged semantic checks with `expect:`, and the repair loop that generates the output again when a check fails
+- **[Troubleshooting](../../guides/troubleshooting.md)** - Debug errors, trace the data lineage, and find common fixes

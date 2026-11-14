@@ -5,13 +5,13 @@ sidebar_position: 2
 
 # Output Validation Pipeline
 
-How do you ensure an LLM's output is actually usable? The model might return malformed JSON, miss required fields, or produce technically valid responses that don't meet your quality bar.
+The output validation pipeline makes sure that the output of an LLM is usable. The model might return malformed JSON. It might omit required fields. It might return a response that is technically valid but does not meet your quality level.
 
-Agent Actions addresses this with a multi-layer validation system. Think of it like airport security: each layer catches different problems, and outputs must pass all checks to proceed.
+Agent Actions validates the output in multiple layers. Each layer finds different problems. An output must pass all the checks before it continues. This is similar to airport security, where each checkpoint finds a different problem.
 
 ## Validation Layers
 
-LLM outputs pass through three validation layers. Let's walk through what each layer catches:
+An LLM output goes through three validation layers. The diagram shows the problems that each layer finds and the result of each check:
 
 ```mermaid
 flowchart TD
@@ -26,17 +26,17 @@ flowchart TD
     I -->|Yes| L[Downstream Action Runs]
 ```
 
-Guards run last. A guard sits on a downstream action and reads the output of an action that already passed layers 1 and 2. The framework evaluates it before the downstream action runs.
+Guards run last. A guard is on a downstream action. The guard reads the output of an action that already passed layers 1 and 2. The framework evaluates the guard before the downstream action runs.
 
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
-| **1. JSON** | Structural integrity | Regenerate with error feedback |
-| **2. Schema** | Type/field validation | Schema constraints + `expect:` repair |
-| **3. Guard** | Semantic validation | Condition expressions |
+| **1. JSON** | Make sure that the structure is valid | Generate the output again with error feedback |
+| **2. Schema** | Validate the types and the fields | Schema constraints and `expect:` repair |
+| **3. Guard** | Validate the meaning | Condition expressions |
 
 ## Layer 1: JSON Validation
 
-Ensures the LLM returns valid JSON. If parsing fails and an `expect:` block carries a repair policy, the response is regenerated:
+Layer 1 makes sure that the LLM returns valid JSON. If parsing fails and an `expect:` block has a repair policy, the LLM generates the response again:
 
 ```yaml
 - name: extract_data
@@ -49,11 +49,11 @@ Ensures the LLM returns valid JSON. If parsing fails and an `expect:` block carr
 
 ## Layer 2: Schema Validation
 
-Validates output structure, types, and constraints.
+Layer 2 validates the structure, the types and the constraints of the output.
 
 ### Structural Validation
 
-**Required Fields** - Reject if missing:
+**Required Fields** - Reject the output if a required field is missing:
 
 ```yaml
 # schema/my_schema.yml
@@ -68,7 +68,7 @@ required:
   - content  # Both must be present
 ```
 
-**Type Checking** - Reject wrong types:
+**Type Checking** - Reject a value that has the wrong type:
 
 ```yaml
 properties:
@@ -80,7 +80,7 @@ properties:
 
 ### Value Constraints
 
-**Enums** - Reject values not in list:
+**Enums** - Reject a value that is not in the list:
 
 ```yaml
 properties:
@@ -93,7 +93,7 @@ properties:
     # Rejects: "maybe", "APPROVED", "Approved"
 ```
 
-**Numeric Ranges** - Reject out-of-range values:
+**Numeric Ranges** - Reject a value that is out of the range:
 
 ```yaml
 properties:
@@ -104,7 +104,7 @@ properties:
     # Rejects: -5, 101, 150
 ```
 
-**Constraints the response check does not enforce** - Schema validation of a model response checks `type`, `required`, `enum`, `minimum` and `maximum`, plus the full sub-schema of an array's `items`. It does not check `exclusiveMinimum`, `exclusiveMaximum`, `minLength`, `maxLength`, `pattern`, `minItems` or `maxItems` on a field, so a response that breaks one of them is accepted. Express those rules as [expectations](./expectations.md) instead:
+**Constraints the response check does not enforce** - Schema validation of a model response checks `type`, `required`, `enum`, `minimum` and `maximum`. It also checks the full sub-schema of the `items` of an array. It does not check `exclusiveMinimum`, `exclusiveMaximum`, `minLength`, `maxLength`, `pattern`, `minItems` or `maxItems` on a field. Thus the check accepts a response that breaks one of these constraints. Write these rules as [expectations](./expectations.md) instead:
 
 ```yaml
 expect:
@@ -126,28 +126,28 @@ expect:
 
 ### Schema-Echo and Empty-Object Detection
 
-Beyond type and field checks, schema validation detects two common LLM failure modes that produce valid JSON but useless data:
+Schema validation also finds two common LLM failures. Each failure gives valid JSON but data that you cannot use:
 
-**Schema-echo** — The model returns the JSON Schema definition itself instead of conforming data. For example, given a schema expecting `{ optimal_code: string }`, the LLM returns:
+**Schema-echo** — The model returns the JSON Schema definition, not data that conforms to the schema. For example, the schema expects `{ optimal_code: string }`, and the LLM returns:
 
 ```json
 {"title": "InlineSchema", "type": "object", "properties": {"optimal_code": {"type": "string"}}, "required": [], "additionalProperties": false}
 ```
 
-This is valid JSON and structurally matches a JSON object, but contains zero declared fields. The validator detects this by checking whether the output's top-level keys are JSON Schema meta-keys (such as `title`, `type`, `properties`, `required` and `additionalProperties`) rather than the expected output fields.
+This output is valid JSON, and its structure matches a JSON object. But it contains zero declared fields. To find this failure, the validator checks the top-level keys of the output. It examines whether they are JSON Schema meta-keys (such as `title`, `type`, `properties`, `required` and `additionalProperties`) and not the expected output fields.
 
-**Empty object** — The model returns `{}`. This passes structural validation when no fields are `required`, but is semantically useless. The validator rejects empty objects when the schema declares any output fields, even if none are marked required.
+**Empty object** — The model returns `{}`. If no fields are `required`, an empty object passes structural validation. But it has no meaning that you can use. If the schema declares any output fields, the validator rejects an empty object. This occurs also when no field is marked as required.
 
-Both failures become a structural failure when an `expect:` block carries a repair policy, giving the model another chance to produce valid output.
+When an `expect:` block has a repair policy, the two failures become a structural failure. Thus the model gets another chance to produce valid output.
 
-:::note Meta-key nuance
-If your schema legitimately declares a field named `type` (or another JSON Schema keyword), outputs containing that field are **not** rejected. The check only triggers when the output has *zero* declared schema fields.
+:::note[Meta-key nuance]
+Your schema can correctly declare a field named `type` (or another JSON Schema keyword). The validator does **not** reject an output that contains that field. The check occurs only when the output has *zero* declared schema fields.
 :::
 
 ### Regenerating on Schema Failure
 
-Schema conformance is enforced by an [`expect:`](./expectations.md) block. Its structural gate
-turns a response the schema rejects into a failing outcome the repair loop acts on:
+An [`expect:`](./expectations.md) block makes the output conform to the schema. Its structural gate
+changes a response that the schema rejects into a failed outcome. The repair loop then acts on that outcome:
 
 ```yaml
 - name: generate_analysis
@@ -158,21 +158,21 @@ turns a response the schema rejects into a failing outcome the repair loop acts 
     on_exhausted: return_last
 ```
 
-The block needs no rules of its own — with a repair policy and nothing else it is the structural
-contract: conform to your schema, regenerate when the output does not. Set it once under
-`defaults:` to apply it across a workflow.
+The block does not need rules of its own. A block with a repair policy and nothing else is the structural
+contract. The output must conform to your schema. If it does not conform, the model generates it again. To apply the block to all of a workflow, set it one time under
+`defaults:`.
 
-By default a schema failure re-sends the original prompt unchanged, because a response the schema
-rejected has no partial result worth preserving. `structural: auto` sends the schema feedback
-instead — the setting for a model that mis-formats systematically rather than occasionally.
+By default, a schema failure sends the original prompt again with no change. The reason is that a response that the schema
+rejected has no partial result to keep. `structural: auto` sends the schema feedback
+instead. Use this setting for a model that formats the output incorrectly in a systematic way, not occasionally.
 
-Without an `expect:` block a schema mismatch is logged as a warning and the record ships as it is. A schema-echo item is rejected either way.
+If there is no `expect:` block, Agent Actions logs a schema mismatch as a warning. The record continues with no change. Agent Actions rejects a schema-echo record in the two cases.
 
 ## Layer 3: Guard Validation
 
-Here's where it gets interesting: schema validation catches structural problems, but what about semantic ones? A score of 25 is a valid integer, but maybe you only want to process high-quality content with scores above 85.
+Schema validation finds structural problems. It does not find semantic problems. For example, a score of 25 is a valid integer. But you possibly want to process only high-quality content with scores above 85.
 
-A guard on a downstream action validates semantic and business logic on the output that passed schema validation:
+A guard on a downstream action validates the semantic and business logic. The guard examines the output that passed schema validation:
 
 ### Filter Unwanted Values
 
@@ -208,12 +208,12 @@ A guard on a downstream action validates semantic and business logic on the outp
 
 ### Skip vs Filter
 
-Consider what happens when a guard fails. You have two choices, and they have very different implications:
+When a guard fails, you have two choices. The two choices have very different results:
 
 | Action | Use Case |
 |--------|----------|
-| `filter` | Remove record entirely from agentic workflow |
-| `skip` | Skip this action, but continue processing record |
+| `filter` | Remove the record fully from the workflow |
+| `skip` | Skip this action, but continue to process the record |
 
 ```yaml
 # Filter: Record stops here
@@ -229,9 +229,9 @@ guard:
 
 ## Combining All Layers
 
-Now let's see how these layers work together in real agentic workflows.
+These patterns show how the layers work together in real workflows.
 
-### Pattern: Quality Gate Pipeline
+### Pattern: Quality Gate Workflow {/* #pattern-quality-gate-pipeline */}
 
 ```yaml
 actions:
@@ -270,7 +270,7 @@ actions:
 
 ### Pattern: Two-Stage LLM Validation
 
-Use an LLM action to validate another LLM's output:
+Use an LLM action to validate the output of another LLM:
 
 ```yaml
 actions:
@@ -335,7 +335,7 @@ properties:
 
 ### Pattern: Numeric Threshold with Repair
 
-Force the LLM to return acceptable scores:
+Make the LLM return acceptable scores:
 
 ```yaml
 # Schema with constraints
@@ -370,7 +370,7 @@ properties:
 
 ## Custom Validation with Tool Actions
 
-What if your validation logic is too complex for schema constraints or guard expressions? For example, checking against a blocklist or calling an external API.
+Some validation logic is too complex for schema constraints or guard expressions. For example, the logic checks values against a blocklist or calls an external API.
 
 For complex validation logic, use a tool action:
 
@@ -429,7 +429,7 @@ def validate_content(data: dict) -> dict:
 | Missing field | Schema `required` | No "title" field |
 | Wrong value | Schema `enum` | "maybe" not in ["yes", "no"] |
 | Out of range | Schema `minimum`/`maximum` | Score of 150 (max 100) |
-| Too short/long | Expectation `word_count_between` | Summary < 10 words |
+| Too short or too long | Expectation `word_count_between` | Summary < 10 words |
 | Empty array | Guard `!= []` | No facts extracted |
 | Low score | Guard `>= threshold` | Quality < 85 |
 | Wrong category | Guard `!= value` | Category == "invalid" |
@@ -437,27 +437,27 @@ def validate_content(data: dict) -> dict:
 
 ## Repair vs Guard
 
-When should output be regenerated, and when should it be filtered? The distinction is whether the LLM can fix the problem.
+Use repair when the LLM can fix the problem. Use a guard when the LLM cannot fix the problem. Repair generates the output again. A guard filters the output.
 
 | Aspect | Repair | Guard |
 |--------|--------|-------|
-| **When** | Before accepting output | After output accepted |
-| **Purpose** | Fix LLM mistakes | Filter valid but unwanted |
-| **Action** | Regenerate | Skip/remove record |
-| **Cost** | Additional LLM calls | No additional cost |
-| **Use for** | Structural issues | Semantic filtering |
+| **When** | Before Agent Actions accepts the output | After Agent Actions accepts the output |
+| **Purpose** | Fix LLM mistakes | Filter output that is valid but not wanted |
+| **Action** | Generate the output again | Skip or remove the record |
+| **Cost** | More LLM calls | No more cost |
+| **Use for** | Structural problems | Semantic filters |
 
-**Repair when:**
-- Output is malformed (JSON errors)
-- Schema validation fails
-- A rule names a defect the model can correct
+**Use repair when:**
+- The output is malformed (JSON errors).
+- Schema validation fails.
+- A rule names a defect that the model can correct.
 
-**Guard when:**
-- Output is valid but doesn't meet criteria
-- Filtering based on values (scores, categories)
-- Business logic decisions
+**Use a guard when:**
+- The output is valid but does not meet the criteria.
+- You filter on values (scores, categories).
+- You make business logic decisions.
 
-The limitation: repair costs API tokens. Guards are free. If you're filtering on a value the LLM produced correctly, use a guard — don't regenerate hoping for a different answer.
+The limit is that repair costs API tokens. Guards are free. If you filter on a value that the LLM produced correctly, use a guard. Do not generate the output again in the hope of a different answer.
 
 ## Best Practices
 
@@ -521,7 +521,7 @@ expect:
 
 ### 5. Guard Early to Save Cost
 
-This is important: guards prevent downstream work. Place guards as early as possible in your agentic workflow to avoid wasting API calls on records that will be filtered anyway.
+Guards prevent downstream work. Put guards as early as possible in your workflow. Thus you do not use API calls on records that a guard will filter later.
 
 ```yaml
 # Filter early before expensive actions
@@ -543,7 +543,7 @@ This is important: guards prevent downstream work. Place guards as early as poss
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
-Look for:
+Find these lines in the log:
 ```
 Schema validation warning for 'extract_data': Missing required fields: title
 Schema validation warning for 'extract_data': Field 'status': 'invalid' is not one of ['approved', 'rejected', 'pending']
@@ -555,7 +555,7 @@ Schema validation warning for 'extract_data': Field 'status': 'invalid' is not o
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
-Look for:
+Find these lines in the log:
 ```
 Guard pre-filter for 'generate_output': 0 passed, 0 skipped, 1 filtered, 0 failed, 0 left unjudged for the cascade filter, of 1 total
 [generate_output] All 1 records filtered by guard (score_quality.score >= 85). None of them reaches downstream actions.
@@ -563,9 +563,8 @@ Guard pre-filter for 'generate_output': 0 passed, 0 skipped, 1 filtered, 0 faile
 
 ### Validate Schema Syntax
 
-`agac inspect` loads the workflow through preflight, which validates
-referenced schemas. Malformed schemas surface with a path-attributed
-error and a non-zero exit before any LLM call is made:
+`agac inspect` loads the workflow through preflight. Preflight validates
+the schemas that the workflow refers to. If a schema is malformed, the command shows an error that gives the path. The command exits with a non-zero code before the workflow makes any LLM call:
 
 ```bash
 agac inspect -a workflow_name
