@@ -22,6 +22,7 @@ def load_workflow(
     paths: ProjectPaths,
     project_root: Path | None = None,
     *,
+    sends_requests: bool,
     user_code_path: str | None = None,
     use_tools: bool = False,
     fresh: bool = False,
@@ -31,14 +32,10 @@ def load_workflow(
     record_limit: int | None = None,
     file_limit: int | None = None,
 ) -> AgentWorkflow:
-    """Load and return an initialized AgentWorkflow.
+    """Render the workflow config and construct an AgentWorkflow from it.
 
-    Handles config file resolution, template rendering, and workflow
-    construction.  Callers can access ``workflow.execution_order``,
-    ``workflow.run()``, etc. on the returned object.
-
-    Pass ``read_only`` when the command only inspects persisted state — the
-    startup reset would otherwise clear the statuses and dispositions it reads.
+    ``read_only`` skips the startup reset, which clears the state a read command reads.
+    ``sends_requests=False`` makes an absent credential a warning instead of an error.
     """
     from agent_actions.config.project_paths import find_config_file
     from agent_actions.prompt.renderer import ConfigRenderingService
@@ -71,6 +68,7 @@ def load_workflow(
             fresh=fresh,
             rerun=rerun,
             verify_keys=verify_keys,
+            sends_requests=sends_requests,
             project_root=project_root,
             record_limit=record_limit,
             file_limit=file_limit,

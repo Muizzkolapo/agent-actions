@@ -43,6 +43,7 @@ class SchemaCommand:
             self.agent_name,
             paths,
             project_root,
+            sends_requests=False,
             user_code_path=str(self.user_code) if self.user_code else None,
             read_only=True,
         )

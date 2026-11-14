@@ -79,6 +79,7 @@ class RunCommand:
             self.agent_name,
             paths,
             project_root,
+            sends_requests=True,
             user_code_path=str(self.args.user_code) if self.args.user_code else None,
             use_tools=self.args.use_tools,
             fresh=self.args.fresh,
