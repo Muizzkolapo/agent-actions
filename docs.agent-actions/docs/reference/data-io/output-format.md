@@ -5,9 +5,11 @@ sidebar_position: 3
 
 # Output Format
 
-> **Storage backend:** SQLite. This page describes the SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`).
+:::note[Storage backend]
+SQLite. This page describes the SQLite layout (`agent_io/store/<workflow>.db`, table `target_data`).
+:::
 
-Where does your data end up after an agentic workflow runs? Action outputs are written to a single SQLite database per workflow at `agent_io/store/<workflow>.db`. Every action's output rows live in the `target_data` table, keyed by `action_name`. This layout makes outputs easy to query, durable across reruns, and trivially deduplicable.
+After a workflow runs, the action outputs are in a single SQLite database for each workflow, at `agent_io/store/<workflow>.db`. The output rows of every action are in the `target_data` table, with the key `action_name`. With this layout, outputs are easy to query, durable across reruns and easy to deduplicate.
 
 ## Storage Layout
 
@@ -19,22 +21,22 @@ Where does your data end up after an agentic workflow runs? Action outputs are w
         └── <workflow>.db    # SQLite database — all source, target, disposition, and trace data
 ```
 
-There is exactly one `.db` file per workflow. The framework creates and migrates it automatically on `agac run`.
+There is exactly one `.db` file for each workflow. The framework creates and migrates it automatically on `agac run`.
 
 ## Tables
 
-The SQLite database carries six framework-owned tables:
+The SQLite database has six tables that the framework owns:
 
 | Table                 | Purpose                                                                                  |
 |-----------------------|------------------------------------------------------------------------------------------|
 | `source_data`         | Staged input records, deduplicated by `(relative_path, source_guid)`                     |
-| `target_data`         | Per-action output records — one row per `(action_name, relative_path)`                   |
-| `record_disposition`  | Per-record dispositions (`success`, `failed`, `exhausted`, `skipped`, `filtered`, `passthrough`, `deferred`, `unprocessed`) emitted by each action |
-| `prompt_trace`        | Compiled prompt + LLM response per record per attempt (online and batch)                 |
+| `target_data`         | Output records of each action, one row for each `(action_name, relative_path)` |
+| `record_disposition`  | Dispositions of each record (`success`, `failed`, `exhausted`, `skipped`, `filtered`, `passthrough`, `deferred`, `unprocessed`) that each action emits |
+| `prompt_trace`        | The compiled prompt and the LLM response for each record and each attempt (online and batch) |
 | `prompt_trace_dictionary` | Compression dictionaries for the text columns of `prompt_trace`                    |
 | `checkpoint_output`   | Mid-action checkpoint records (used for resumable batch retrieval and repair recovery) |
 
-Plus one bookkeeping table `workflow_metadata` for run-level key/value state.
+The database also has one bookkeeping table, `workflow_metadata`, for key/value state at the run level.
 
 ## `target_data` Schema
 
@@ -50,11 +52,11 @@ CREATE TABLE target_data (
 )
 ```
 
-Each row stores **all records produced by `action_name` for a given input file** (`relative_path`) as a single JSON array in the `data` column, stored compressed. Read the records with [`agac records`](../cli/records) (recipes below); `sqlite3` shows the column as a blob.
+Each row stores **all records that `action_name` produced for a given input file** (`relative_path`). The row stores these records as a single JSON array in the `data` column, in compressed form. Read the records with [`agac records`](../cli/records) (recipes below). `sqlite3` shows the column as a blob.
 
 ## Record Structure
 
-Each element of the JSON array in `data` is a record. This one comes from an action below the first:
+Each element of the JSON array in `data` is a record. This example record comes from an action downstream of the first action:
 
 ```json
 {
@@ -84,18 +86,18 @@ Each element of the JSON array in `data` is a record. This one comes from an act
 
 | Field                | Description                                                       |
 |----------------------|-------------------------------------------------------------------|
-| `source_guid`        | Links back to the original source row in `source_data`            |
-| `node_id`            | Action that produced this output (includes run UUID)              |
-| `target_id`          | Unique identifier for this output record                          |
-| `parent_target_id`   | ID of the upstream record that produced this output (absent on the first action's records) |
-| `root_target_id`     | `target_id` of the first action's record for this source record (absent on the first action's records) |
-| `content`            | Fields by namespace: the staged input under `source`, each upstream action's output under its name, and this action's output (schema-validated) under its own name |
-| `lineage`            | Array tracking the processing chain                               |
-| `metadata`           | Execution metadata, such as `model` and `provider`                |
+| `source_guid`        | Links to the original source row in `source_data` |
+| `node_id`            | The action that produced this output (includes the run UUID) |
+| `target_id`          | The unique identifier of this output record |
+| `parent_target_id`   | The ID of the upstream record that produced this output (absent on the records of the first action) |
+| `root_target_id`     | The `target_id` of the record of the first action for this source record (absent on the records of the first action) |
+| `content`            | Fields by namespace. The staged input is under `source`. The output of each upstream action is under the name of that action. The output of this action (schema-validated) is under its own name. |
+| `lineage`            | An array that tracks the processing chain |
+| `metadata`           | Execution metadata, for example `model` and `provider` |
 
 ### Metadata Fields
 
-The following fields are metadata and are automatically excluded when extracting content for downstream processing:
+These fields are metadata. They are automatically excluded when content is extracted for downstream processing:
 
 - `source_guid`
 - `parent_source_guid`
@@ -116,36 +118,36 @@ The following fields are metadata and are automatically excluded when extracting
 - `_state_history`
 - `_state_schema_version`
 
-This means when an action references upstream data, it sees the `content` fields organized by upstream action namespace, without these wrappers or system fields.
+Thus, when an action refers to upstream data, it sees the `content` fields, organized by the namespace of each upstream action. It does not see these wrappers or system fields.
 
 ### Record Types
 
-The `_state` field says whether the action's LLM/tool ran for the record:
+The `_state` field tells whether the LLM/tool of the action ran for the record:
 
 | `_state` | Meaning | Content |
 |----------|---------|---------|
-| `processed` | **Processed** — action ran normally | LLM/tool output under the action's namespace |
-| `guard_skipped` | **Skipped** — guard evaluated to false (`on_false: skip`); `metadata.reason` is `guard_skip` | Original content, forwarded with the action's namespace set to `null` |
-| `cascade_skipped` | **Unprocessed** — an upstream action failed or blocked the record; `metadata.reason` names why, such as `upstream_unprocessed` | Original upstream content, preserved for lineage |
-| `failed`, `exhausted` | The action failed on the record, or its retries ran out | Original content, preserved for lineage |
+| `processed` | **Processed** — the action ran normally | LLM/tool output under the namespace of the action |
+| `guard_skipped` | **Skipped** — the guard evaluated to false (`on_false: skip`). `metadata.reason` is `guard_skip`. | Original content, forwarded with the namespace of the action set to `null` |
+| `cascade_skipped` | **Unprocessed** — an upstream action failed or blocked the record. `metadata.reason` names the cause, for example `upstream_unprocessed`. | Original upstream content, preserved for lineage |
+| `failed`, `exhausted` | The action failed on the record, or its retries were exhausted | Original content, preserved for lineage |
 
-A skipped or unprocessed record is a tombstone: it carries `_tombstone: true` and `_tombstone_reason`.
+A skipped or unprocessed record is a tombstone. It carries `_tombstone: true` and `_tombstone_reason`.
 
 ### System Fields
 
-Records may carry underscore-prefixed system fields that control internal processing:
+Records may carry system fields with an underscore prefix. These fields control internal processing:
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `_recovery` | `object` | Recovery metadata — present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records and/or repair for expectation failures). Contains `retry` and/or `expectations` sub-objects with attempt counts and status. |
-| `_state` | `string` | Lifecycle state of the record: `active`, `processed`, `guard_skipped`, `cascade_skipped`, `failed` or `exhausted` |
+| `_recovery` | `object` | Recovery metadata. It is present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records, repair for expectation failures, or both). It contains a `retry` sub-object, an `expectations` sub-object, or both, with attempt counts and status. |
+| `_state` | `string` | The lifecycle state of the record: `active`, `processed`, `guard_skipped`, `cascade_skipped`, `failed` or `exhausted` |
 | `_tombstone` | `true` | The record is a placeholder for a skipped, unprocessed or failed record |
 
-These fields are excluded from content extraction and should not be set by users. See [Batch Recovery](../execution/batch-recovery.md) for the full `_recovery` structure.
+These fields are excluded from content extraction. Users should not set them. See [Batch Recovery](../execution/batch-recovery.md) for the full `_recovery` structure.
 
 ### Content Field
 
-The `content` field holds one namespace per source of data. The action's own output, validated against the schema, sits under the action's name:
+The `content` field holds one namespace for each source of data. The output of the action, validated against the schema, is under the name of the action:
 
 ```json
 "content": {
@@ -164,8 +166,8 @@ For tool actions, the namespace contains the tool return value.
 
 ## Passthrough Fields
 
-Fields from `context_scope.passthrough` are kept on the action's output record, under the
-namespace they came from, not under the action's own namespace and not at the root:
+Fields from `context_scope.passthrough` are kept on the output record of the action, under
+the namespace that they came from. They are not under the namespace of the action, and not at the root:
 
 ```yaml
 # Workflow config, on an action named summarize
@@ -185,12 +187,12 @@ context_scope:
 }
 ```
 
-A later action reads them as `source.url` and `source.metadata`, never as `summarize.url`;
-see [Context Scope](../context/context-scope.md#passthrough-directive).
+A downstream action reads them as `source.url` and `source.metadata`, never as `summarize.url`.
+See [Context Scope](../context/context-scope.md#passthrough-directive).
 
 ## Reading Outputs
 
-### What actions ran, and how many records did each produce
+### List the actions that ran and the record count of each action {/* #what-actions-ran-and-how-many-records-did-each-produce */}
 
 ```bash
 sqlite3 agent_io/store/<workflow>.db "
@@ -200,7 +202,7 @@ sqlite3 agent_io/store/<workflow>.db "
 "
 ```
 
-The `data` column is compressed inside the store, so the records themselves are read with [`agac records`](../cli/records) rather than sqlite3. Each record it prints carries `_action` and `_file`.
+The `data` column is compressed in the store. Thus you read the records themselves with [`agac records`](../cli/records), not with sqlite3. Each record that `agac records` prints carries `_action` and `_file`.
 
 ### Dump every record for one action
 
@@ -214,7 +216,7 @@ agac records -w <workflow> -a extract_facts
 agac records -w <workflow> -a extract_facts --field content.headline
 ```
 
-### Locate the rows for one source record
+### Locate the records for one source record {/* #locate-the-rows-for-one-source-record */}
 
 ```bash
 # Every action's record for that source, each with its _action and target_id
@@ -223,13 +225,13 @@ agac records -w <workflow> --source-guid <source_guid>
 
 ## Clean Outputs
 
-Remove previous outputs before a fresh run:
+Remove the previous outputs before a fresh run:
 
 ```bash
 agac run -a my_workflow --fresh
 ```
 
-`--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`) without deleting the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the database in the store, and asks for confirmation unless `--force` is set. The store folder stays, holding only the empty run lock file `<workflow>.db.lock`.
+`--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`). It does not delete the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the database in the store. It asks for confirmation unless `--force` is set. The store folder stays. It holds only the empty run lock file `<workflow>.db.lock`.
 
 ## See Also
 
@@ -237,4 +239,4 @@ agac run -a my_workflow --fresh
 - [Data Lineage](./data-lineage.md) — Ancestry tracking for parallel branches and merges
 - [Artifacts](../execution/artifacts.md) — Run tracking and detailed output structure
 - [Context Scope](../context/context-scope.md) — Passthrough configuration
-- [Prompt Traces](./prompt-traces.md) — Compiled prompts and LLM responses per record
+- [Prompt Traces](./prompt-traces.md) — Compiled prompts and LLM responses for each record

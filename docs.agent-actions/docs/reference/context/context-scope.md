@@ -5,21 +5,21 @@ sidebar_position: 3
 
 # Context Scope
 
-Context Scope controls data visibility and flow between actions—selecting which upstream namespaces an action can read from the record, what passes through to output, and what gets excluded.
+Context scope controls which data an action can see and how data flows between actions. It selects the upstream namespaces that an action can read from the record. It also selects the fields that pass through to the output and the fields that are excluded.
 
-:::warning Required
-`context_scope` is **required** on every action. Omitting it fails pre-flight with `Action '<name>' has no context_scope. All actions must declare data dependencies via context_scope.` Every action must declare its data dependencies explicitly via `observe`, `passthrough`, or `drop`.
+:::warning[CAUTION]
+**Required:** `context_scope` is **required** on each action. If you omit it, pre-flight fails with `Action '<name>' has no context_scope. All actions must declare data dependencies via context_scope.`. Each action must declare its data dependencies explicitly with `observe`, `passthrough` or `drop`.
 
-Many examples in these docs show a single key and leave `context_scope` out to stay short. They are fragments, not whole actions: add a `context_scope` when you copy one into a workflow.
+Many examples in these docs show a single key and omit `context_scope` to keep the example short. These examples are fragments, not complete actions. When you copy one into a workflow, add a `context_scope`.
 :::
 
 ## Directives
 
 | Directive | Purpose | In LLM Context | In Output |
 |-----------|---------|----------------|-----------|
-| `observe` | Include specific fields in LLM context | Yes | No |
-| `drop` | Remove fields that `observe` brought into context | No | No |
-| `passthrough` | Forward fields directly to output | No | Yes |
+| `observe` | Adds specific fields to the LLM context | Yes | No |
+| `drop` | Removes fields that `observe` added to the context | No | No |
+| `passthrough` | Sends fields directly to the output | No | Yes |
 
 ## Syntax
 
@@ -38,7 +38,7 @@ context_scope:
 
 ## Observe Directive
 
-The `observe` directive selects which upstream namespaces and fields are visible to the action. Only the listed fields are included in the LLM context.
+The `observe` directive selects the upstream namespaces and fields that the action can see. The LLM context contains only the listed fields.
 
 ```yaml
 - name: Cluster_Validation_Agent
@@ -53,7 +53,7 @@ The `observe` directive selects which upstream namespaces and fields are visible
 
 ## Drop Directive
 
-The `drop` directive removes fields from the context that `observe` selected, usually through a wildcard such as `source.*`. `drop` adds nothing: an action with only `drop` has no `source` namespace in its context, and a prompt that reads `source` fails.
+The `drop` directive removes fields that `observe` selected from the context. Usually `observe` selects these fields with a wildcard, for example `source.*`. `drop` adds nothing. An action with only `drop` has no `source` namespace in its context, and a prompt that reads `source` fails.
 
 ```yaml
 - name: fact_extractor
@@ -67,7 +67,7 @@ The `drop` directive removes fields from the context that `observe` selected, us
 
 ## Passthrough Directive
 
-The `passthrough` directive forwards fields directly to the action output **without** including them in the LLM context. Data flows around the LLM rather than through it.
+The `passthrough` directive sends fields directly to the action output. It does **not** add them to the LLM context. The data goes around the LLM, not through it.
 
 ```yaml
 - name: Cluster_Validation_Agent
@@ -80,17 +80,19 @@ The `passthrough` directive forwards fields directly to the action output **with
       - source.url                          # Preserve for downstream
 ```
 
-:::warning Passthrough preserves output — it does not feed downstream context
-`passthrough` keeps a field in **this action's own output record** (for lineage or export). It does **not** make that field available to later actions _through_ this action. A downstream action that needs the value must `observe` it from its **original producing action** (for example `observe: [source.url]`), not from the action that passed it through.
+:::warning[CAUTION]
+**Passthrough keeps the field in the output. It does not add the field to the downstream context.**
 
-In particular, `observe: [some_action.*]` expands only to `some_action`'s own output fields — it does **not** pull in fields that `some_action` merely passed through. An upstream `passthrough` does not satisfy a downstream `observe`: a wildcard leaves the passed-through field out of the context, and an explicit `observe: [some_action.url]` is refused before the run.
+`passthrough` keeps a field in **the output record of this action** (for lineage or export). It does **not** make that field available to downstream actions _through_ this action. If a downstream action needs the value, it must `observe` the value from its **original producing action** (for example `observe: [source.url]`). It must not observe the value from the action that passed it through.
 
-A passed-through field is stored under the namespace it came from, not under the action that passed it through: after `passthrough: [source.url]` on `summarize`, the field is `source.url`. Pre-flight refuses a prompt, `observe` or `passthrough` that reads `summarize.url`, or a field `summarize` only observes, the same way it refuses a field the action's schema does not list.
+In particular, `observe: [some_action.*]` expands only to the output fields of `some_action`. It does **not** add the fields that `some_action` only passed through. An upstream `passthrough` does not satisfy a downstream `observe`. A wildcard leaves the passed-through field out of the context. An explicit `observe: [some_action.url]` is refused before the run.
+
+A passed-through field is stored under the namespace that it came from. It is not stored under the action that passed it through. For example, after `passthrough: [source.url]` on `summarize`, the field is `source.url`. Pre-flight refuses a prompt, `observe` or `passthrough` that reads `summarize.url`. Pre-flight also refuses one that reads a field that `summarize` only observes. It refuses these fields in the same way that it refuses a field that the schema of the action does not list.
 :::
 
 ## Seed Data
 
-Static reference data can be loaded via `seed`. See [Seed Data](./seed-data.md) for details.
+You can load static reference data with `seed`. See [Seed Data](./seed-data.md) for details.
 
 ```yaml
 defaults:
@@ -107,11 +109,13 @@ defaults:
   batch_max_workers: 6
 ```
 
-> **Note:** `data_source`, `expect`, and `batch_max_workers` are workflow-level defaults that can also appear in the `defaults:` block. They are documented in [Defaults](../configuration/defaults.md) and [Run Modes](../execution/run-modes.md).
+:::note
+`data_source`, `expect` and `batch_max_workers` are workflow-level defaults. They can also occur in the `defaults:` block. [Defaults](../configuration/defaults.md) and [Run Modes](../execution/run-modes.md) give the documentation for these keys.
+:::
 
 ## Version Field Patterns
 
-Each iteration of a version action keeps its output in its own namespace, named with the iteration number (`extract_raw_qa_1`, `extract_raw_qa_2`). A consumer declares `version_consumption` and uses wildcard syntax to reference all iterations:
+Each iteration of a version action keeps its output in a separate namespace. The name of the namespace contains the iteration number (`extract_raw_qa_1`, `extract_raw_qa_2`). A consumer declares `version_consumption` and uses the wildcard syntax to refer to all iterations:
 
 ```yaml
 - name: extract_raw_qa
@@ -128,11 +132,11 @@ Each iteration of a version action keeps its output in its own namespace, named 
       - extract_raw_qa.*  # Matches the namespaces extract_raw_qa_1, extract_raw_qa_2, ...
 ```
 
-See [Version Actions](../execution/versions) for complete documentation.
+See [Version Actions](../execution/versions) for the complete documentation.
 
 ## Auto-Inferred Context Dependencies
 
-Actions referenced in `context_scope` or the prompt but **not** in `dependencies` are automatically treated as **context dependencies**. They are read from the record, which carries the namespace of every action upstream of it, so a context dependency must be upstream of the action through its `dependencies`.
+If an action is in `context_scope` or in the prompt but **not** in `dependencies`, it is automatically a **context dependency**. A context dependency is read from the record. The record carries the namespace of each action upstream of it. Thus a context dependency must be upstream of the action through its `dependencies`.
 
 ```yaml
 - name: extract_data
@@ -151,15 +155,16 @@ Actions referenced in `context_scope` or the prompt but **not** in `dependencies
 ```
 
 **How it works:**
-1. `validate_data` is in `dependencies` → its output files are processed as input
-2. `enrich_data` and `extract_data` are only in `context_scope`. They are upstream of `validate_data`, so pre-flight accepts them without a `dependencies` entry
-3. Context dependencies are read from the namespaces on each input record, so the data comes from the same record
+1. `validate_data` is in `dependencies`. Thus its output files are processed as input.
+2. `enrich_data` and `extract_data` are only in `context_scope`. They are upstream of `validate_data`. Thus pre-flight accepts them without a `dependencies` entry.
+3. Context dependencies are read from the namespaces on each input record. Thus the data comes from the same record.
 
-Preflight refuses an action that names one that is not upstream of it, such as an action
-that runs beside or after it or one on a parallel branch: that action's namespace is not
-sure to be on the records it reads. To read it, depend on an action downstream of it, or
-on the action itself as well — the **fan-in pattern**, where multiple upstream actions
-feed into one action:
+Pre-flight refuses an action that names a context dependency that is not upstream of it.
+Examples are an action that runs beside it or after it, and an action on a parallel branch.
+The namespace of that context dependency is not certain to be on the records that the action reads.
+To read the namespace, add a dependency on an action downstream of the context dependency.
+Or, also add a dependency on the context dependency itself. This is the **fan-in pattern**,
+where multiple upstream actions send data into one action:
 
 ```yaml
 - name: final_action
@@ -171,50 +176,56 @@ feed into one action:
       - action_C.*   # Fan-in dependency
 ```
 
-Every dependency is an input: the outputs of `action_A`, `action_B` and `action_C` for the same source record are merged into one record, and `final_action` runs once per merged record. The order of the list changes nothing.
+Each dependency is an input. For the same source record, the outputs of `action_A`, `action_B` and `action_C` are merged into one record. `final_action` runs one time for each merged record. The order of the list has no effect.
 
-How the branches' records pair:
+This table shows how the records of the branches pair:
 
 | Branches | What `final_action` runs on |
 |----------|-----------------------------|
-| Each returns one record per input | One merged record per source record |
-| One returns several records per input (a tool that splits a record), the others one | One merged record per split record, each with the other branches' record for its source |
-| One splits a record and another splits that branch's records again (it reads the first), the others one | One merged record per record of the second split, each with the first split's record it came from and the other branches' record for its source |
-| All read one earlier split (an action upstream of every branch returned several records per input) | One merged record per record of that split |
-| One splits a record and a `granularity: File` tool below it gathers every record of that split back into one | As if that branch had not split: the gathered record is the source's record |
-| Two or more each hold a split of the same source record of their own, or one splits a source beside branches that read an earlier split of it | Nothing: the action fails, naming the branches and the source record |
-| One holds a record a `granularity: File` tool returned with `source_index: None` (an aggregate, marked `aggregated_by`) that another branch does not read | Nothing: the action fails, naming the branches and the tool's action. Where every branch reads the aggregate, it pairs like any record |
-| One lacks a record because its `granularity: File` tool folded it into another record's row (a `source_index` list such as `[a, b]`; the row lists `b` under `folded_sources`) | One merged record for `b`, `unprocessed` with reason `consumed_into_another_record`; its tombstone names the row it went into as `metadata.consumed_into`. `a` merges with the folded row as usual |
-| One holds a tombstone for a source, for example a record its `granularity: File` tool returned no row for | One merged record for that source, `unprocessed`: the action below skips it |
+| Each branch returns one record for each input | One merged record for each source record |
+| One branch returns several records for each input (a tool that splits a record). The other branches return one record. | One merged record for each split record. Each merged record has the record of the other branches for its source. |
+| One branch splits a record. Another branch splits the records of that branch again (it reads the first branch). The other branches return one record. | One merged record for each record of the second split. Each merged record has the record of the first split that it came from. It also has the record of the other branches for its source. |
+| All branches read one earlier split (an action upstream of all branches returned several records for each input) | One merged record for each record of that split |
+| One branch splits a record, and a `granularity: File` tool below it gathers all records of that split back into one record | The result is the same as if that branch did not split. The gathered record is the record of the source. |
+| Two or more branches each hold their own split of the same source record. Or, one branch splits a source beside branches that read an earlier split of that source. | Nothing. The action fails and names the branches and the source record. |
+| One branch holds a record that a `granularity: File` tool returned with `source_index: None` (an aggregate, marked `aggregated_by`). Another branch does not read that aggregate. | Nothing. The action fails and names the branches and the action of the tool. If each branch reads the aggregate, the aggregate pairs like any record. |
+| One branch has no record, because its `granularity: File` tool folded the record into the row of another record (a `source_index` list such as `[a, b]`). The row lists `b` under `folded_sources`. | One merged record for `b`, `unprocessed` with reason `consumed_into_another_record`. Its tombstone names the row that it went into as `metadata.consumed_into`. `a` merges with the folded row as usual. |
+| One branch holds a tombstone for a source. For example, a record for which its `granularity: File` tool returned no row. | One merged record for that source, `unprocessed`. The action below skips that record. |
 
-A record of one split is not a record of another, so two splits of one source have no
-pairing that keeps every branch's fields: the action fails rather than run on records
-that hold one branch with the others' fields empty. It fails too when a branch splits a
-source and keeps one record of the split, for example behind a guard that filters the
-rest. To read two branches' records of each split, split the source once, in an action
-upstream of both, and have each branch read that action; otherwise let no more than one
-branch split it, or gather a branch's split back into one record per source.
+A record of one split is not a record of another split. Thus two splits of one source
+have no pairing that keeps the fields of each branch. The action fails. It does not run on
+records that hold one branch with empty fields for the other branches. The action also fails
+when a branch splits a source and keeps one record of the split. An example is a split behind
+a guard that filters the other records.
 
-A `granularity: File` tool gathers a split when one output names, in its `source_index`
-list, every record of its file split from one source and nothing else, and no other
-output names any of them. That output takes the source's identity (`source_guid`), as a
-record that was never split holds it, so it pairs like one. An output that gathers
-records of several sources, or only some records of a split, keeps the identity of the
-first record it names. See [Granularity](../execution/granularity.md#output-processing).
+To read the records of two branches for each split, split the source one time, in an action
+upstream of the two branches. Then make each branch read that action. If you do not need
+this, let a maximum of one branch split the source. Or, gather the split of a branch back
+into one record for each source.
+
+A `granularity: File` tool gathers a split when these two conditions are true:
+
+- One output names, in its `source_index` list, each record of its file that was split from one source, and nothing else.
+- No other output names any of these records.
+
+That output takes the identity of the source (`source_guid`), in the same way that a
+record that was never split holds it. Thus the output pairs like a record that was never
+split. An output that gathers records of several sources, or only some records of a split,
+keeps the identity of the first record that it names. See [Granularity](../execution/granularity.md#output-processing).
 
 ## Resolution Order
 
-1. **Observe filter** - Start with only the fields `observe` lists
-2. **Drop filter** - Remove any fields in `drop` list
-3. **Passthrough merge** - After LLM processing, merge passthrough fields into output
+1. **Observe filter** - Start with only the fields that `observe` lists.
+2. **Drop filter** - Remove the fields that are in the `drop` list.
+3. **Passthrough merge** - After the LLM processing, merge the passthrough fields into the output.
 
-Passthrough fields never enter the LLM context—they join the output after processing.
+Passthrough fields never go into the LLM context. They join the output after the processing.
 
 ## Best Practices
 
-1. **Use observe for focus**: When LLM needs only specific fields
-2. **Use drop for noise reduction**: Pair it with a wildcard `observe` when most fields are needed but some aren't
-3. **Use passthrough for data lineage**: Preserve data that downstream actions need
+1. **Use observe for focus**: Use it when the LLM needs only specific fields.
+2. **Use drop to reduce noise**: Pair it with a wildcard `observe`. Use it when the action needs most fields but not all of them.
+3. **Use passthrough for data lineage**: Use it to keep the data that downstream actions need.
 
 ### Combined Example
 
