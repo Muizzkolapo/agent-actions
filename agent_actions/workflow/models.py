@@ -32,6 +32,7 @@ class WorkflowRuntimeConfig:
     fresh: bool = False
     rerun: str | None = None
     verify_keys: bool = False
+    sends_requests: bool = True
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
     record_limit: int | None = None

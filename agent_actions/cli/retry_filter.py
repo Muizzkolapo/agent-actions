@@ -61,7 +61,9 @@ class RetryFilterCommand:
         manifest_file = _manifest_path(paths.io_dir / "store" / self.agent_name)
         manifest = _read_manifest(manifest_file)
 
-        workflow = load_workflow(self.agent_name, paths, project_root, read_only=True)
+        workflow = load_workflow(
+            self.agent_name, paths, project_root, sends_requests=False, read_only=True
+        )
         execution_order = list(workflow.execution_order)
         state_mgr = workflow.services.core.state_manager
 

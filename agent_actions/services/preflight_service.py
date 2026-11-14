@@ -112,12 +112,15 @@ class PreflightService:
         project_root: Path | None,
         workflow_config_path: str,
         verify_keys: bool = True,
+        *,
+        sends_requests: bool = True,
     ):
         self.agent_name = agent_name
         self.action_configs = action_configs
         self.project_root = project_root
         self.workflow_config_path = workflow_config_path
         self.verify_keys = verify_keys
+        self.sends_requests = sends_requests
         self.schema_service: WorkflowSchemaService | None = None
 
     def validate(self) -> None:
@@ -183,11 +186,16 @@ class PreflightService:
             workflow_config_path=self.workflow_config_path,
             project_root=self.project_root,
             verify_keys=self.verify_keys,
+            sends_requests=self.sends_requests,
         ).resolve_all()
         resolution_result.raise_if_invalid()
 
         self._warn_findings(
-            "resolution", [warning.message for warning in resolution_result.warnings]
+            "resolution",
+            [
+                f"{warning.message}\n     Hint: {warning.hint}" if warning.hint else warning.message
+                for warning in resolution_result.warnings
+            ],
         )
 
         # 6. Cross-check prompt refs against each producer's required set

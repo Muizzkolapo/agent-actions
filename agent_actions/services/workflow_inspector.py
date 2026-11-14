@@ -97,6 +97,7 @@ class WorkflowInspector:
             project_root=self.project_root,
             workflow_config_path=str(self._config_path),
             verify_keys=verify_keys,
+            sends_requests=False,
         )
         service.validate()
         self.schema_service = service.schema_service

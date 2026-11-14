@@ -185,6 +185,12 @@ WorkflowResolutionService.resolve_all()
   |      (agac-provider, ollama_local, tool, hitl, llamafile, declared endpoints)
   |    - resolves env var name with api_key_env_var() (llm/config/vendor.py)
   |    - supports custom $ENV_VAR and literal key syntax
+  |    - a missing key is an error when the caller sends requests
+  |      (sends_requests=True: run, retry); for a structural check
+  |      (sends_requests=False: inspect, schema, expect list) it is a warning
+  |      ending "; connection check skipped". An endpoint's unset url,
+  |      credential or header variable and a command auth not on PATH follow
+  |      the same rule; a set variable with a bad value is always an error
   |    - optional --verify-keys: probes vendor endpoints
   |    - AA_SKIP_ENV_VALIDATION=1 skips key checks ONLY (not seed/vendor checks)
   |
