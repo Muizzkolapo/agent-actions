@@ -50,7 +50,7 @@ def load_workflow(
         check_alternatives=True,
         project_root=project_root,
     )
-    ConfigRenderingService().render_and_load_config(
+    rendered_workflow = ConfigRenderingService().render_and_load_config(
         agent_name,
         full_path,
         paths.template_dir,
@@ -72,6 +72,7 @@ def load_workflow(
             project_root=project_root,
             record_limit=record_limit,
             file_limit=file_limit,
+            rendered_workflow=rendered_workflow,
         ),
         read_only=read_only,
     )
