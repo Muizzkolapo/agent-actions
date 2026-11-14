@@ -632,7 +632,7 @@ class TestAdditionalPropertiesUnderStrictMode:
 
         # Unchanged from main: this shape's fields are not extractable, so the
         # flag cannot take effect. Widening the shape test to fix that is a
-        # separate change — it crashes _expand_inline_schema.
+        # separate change — the shorthand compiler refuses a non-string type.
         still_strict = validate_output_against_schema(
             {"a": "x", "extra": 1}, schema, "a", strict_mode=True
         )

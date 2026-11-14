@@ -206,54 +206,6 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
 # =============================================================================
 
 
-def _expand_inline_schema(schema_dict: dict[str, str]) -> dict[str, Any]:
-    """
-    Expand inline schema dict format to unified schema format.
-
-    Converts shorthand: {"field_name": "string", "count": "number!"}
-    To unified format: {"name": "InlineSchema", "fields": [...]}
-
-    Args:
-        schema_dict: Simple dict with field_name: type mappings
-
-    Returns:
-        Unified schema format
-    """
-    fields = []
-    for field_name, field_type in schema_dict.items():
-        # Handle required marker
-        is_required = field_type.endswith("!")
-        if is_required:
-            field_type = field_type[:-1]
-
-        # Handle array types
-        if field_type.startswith("array[") and field_type.endswith("]"):
-            item_type = field_type[6:-1]
-            field_def = {
-                "id": field_name,
-                "type": "array",
-                "items": {"type": item_type},
-                "required": is_required,
-            }
-        elif field_type == "array":
-            field_def = {
-                "id": field_name,
-                "type": "array",
-                "items": {"type": "string"},
-                "required": is_required,
-            }
-        else:
-            field_def = {
-                "id": field_name,
-                "type": field_type,
-                "required": is_required,
-            }
-
-        fields.append(field_def)
-
-    return {"name": "InlineSchema", "fields": fields}
-
-
 def _is_inline_schema_dict(schema_value: Any) -> bool:
     """
     Check if a schema value is an inline schema dict (shorthand format).
@@ -357,7 +309,7 @@ def _compile_action_schemas(
     if schema_value and _is_inline_schema_dict(schema_value):
         for field_name in bare_array_fields(schema_value):
             logger.warning(bare_array_warning(f"Action '{action_name}'", field_name))
-        action["schema"] = _expand_inline_schema(schema_value)
+        action["schema"] = SchemaLoader.construct_schema_from_dict(schema_value)
         logger.debug("Expanded inline schema for action '%s'", action_name)
     elif schema_value and isinstance(schema_value, dict) and not is_compiled_schema(schema_value):
         logger.warning(
