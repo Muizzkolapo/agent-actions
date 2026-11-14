@@ -1,16 +1,16 @@
 ---
 title: batch Commands
-description: Manage batch processing operations
+description: Submit, monitor and retrieve batch processing jobs
 sidebar_position: 3
 ---
 
 # batch Commands
 
-When you need to process hundreds or thousands of records, running them one at a time is inefficient and expensive. Batch mode lets you submit all records at once for asynchronous processing—like sending a stack of forms to be processed overnight rather than waiting in line for each one.
+Batch mode submits all records at one time for asynchronous processing. Use batch mode when you have hundreds or thousands of records to process. To run these records one at a time is inefficient and expensive.
 
-## Submitting a Batch
+## Submit a Batch {/* #submitting-a-batch */}
 
-To submit a batch, use the standard `run` command with a workflow configured for batch mode:
+To submit a batch, use the standard `run` command with a workflow that has the batch mode configuration:
 
 ```yaml
 # In your workflow config
@@ -22,30 +22,28 @@ defaults:
 agac run -a my_workflow
 ```
 
-When `run_mode: batch` is set, Agent Actions submits the records asynchronously and pauses the workflow with `Workflow paused - batch job(s) submitted for: <actions>`. The batch ID appears in the `Batch <id> submitted: <n> requests to <provider>` line. Use the commands below to manage the batch lifecycle.
+When `run_mode: batch` is set, Agent Actions submits the records asynchronously. Then it pauses the workflow with `Workflow paused - batch job(s) submitted for: <actions>`. The batch ID is in the `Batch <id> submitted: <n> requests to <provider>` line. Use the commands below to manage the batch from submission to retrieval.
 
 ```bash
 agac batch <subcommand> [options]
 ```
 
-:::tip Run from Anywhere
-You can run batch commands from any subdirectory within your project.
+:::note[Run from Anywhere]
+You can run batch commands from any subdirectory in your project.
 :::
 
 ## Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `status` | Check batch job status |
-| `retrieve` | Retrieve completed batch results |
-
-Let's explore each command in detail.
+| `status` | Show the status of a batch job |
+| `retrieve` | Retrieve the results of a completed batch |
 
 ## batch status
 
-**How do you know when a batch job finishes?**
+This subcommand shows when a batch job is finished.
 
-After submitting a batch, you can poll its status to see if it's still processing, completed successfully, or failed:
+After you submit a batch, you can poll its status. The status shows if the batch is still processing, completed successfully or failed:
 
 ```bash
 agac batch status --batch-id <id>
@@ -54,9 +52,9 @@ agac batch status --batch-id <id>
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--batch-id` | **Required.** The ID of the batch job. Omitting this raises `UsageError: --batch-id is required.` Take the batch ID from the `Batch <id> submitted` line of the run. |
-| `-a, --agent` | Workflow name. Required in a project with more than one workflow. |
-| `--action` | Action name. Required when the workflow has more than one batch action and the batch ID does not identify one. |
+| `--batch-id` | **Required.** The ID of the batch job. If you omit this option, the command raises `UsageError: --batch-id is required.` Get the batch ID from the `Batch <id> submitted` line of the run. |
+| `-a, --agent` | The workflow name. Required in a project with more than one workflow. |
+| `--action` | The action name. Required when the workflow has more than one batch action and the batch ID does not identify one action. |
 
 **Example:**
 ```bash
@@ -64,11 +62,11 @@ $ agac batch status --batch-id batch_abc123
 Batch job status: completed
 ```
 
-> **Note:** `--batch-id` is required. There is no last-job fallback. You must provide the batch ID from the submission output.
+`--batch-id` is required. The command does not use the last job as a fallback. You must give the batch ID from the submission output.
 
 ## batch retrieve
 
-Once a batch completes, retrieve the results:
+When a batch is complete, retrieve the results:
 
 ```bash
 agac batch retrieve --batch-id <id>
@@ -77,20 +75,20 @@ agac batch retrieve --batch-id <id>
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--batch-id` | **Required.** The ID of the batch job to retrieve. Omitting this raises `UsageError: --batch-id is required.` |
-| `-a, --agent` | Workflow name. Required in a project with more than one workflow. |
-| `--action` | Action name. Required when the workflow has more than one batch action and the batch ID does not identify one. |
+| `--batch-id` | **Required.** The ID of the batch job to retrieve. If you omit this option, the command raises `UsageError: --batch-id is required.` |
+| `-a, --agent` | The workflow name. Required in a project with more than one workflow. |
+| `--action` | The action name. Required when the workflow has more than one batch action and the batch ID does not identify one action. |
 
 **Example:**
 ```bash
 agac batch retrieve --batch-id batch_abc123
 ```
 
-Results are written to `agent_workflow/<workflow>/agent_io/target/<action>/<batch-id>_results.jsonl`, and the command prints that path.
+The command writes the results to `agent_workflow/<workflow>/agent_io/target/<action>/<batch-id>_results.jsonl`. Then it prints that path.
 
-## Batch Agentic Workflow
+## Batch Workflow {/* #batch-agentic-workflow */}
 
-The typical batch processing flow follows this pattern: run (submits batch), poll status, and retrieve.
+The typical batch process has three parts: run (the run submits the batch), poll the status, and retrieve the results.
 
 ```mermaid
 flowchart LR
@@ -100,11 +98,13 @@ flowchart LR
     retrieve --> done[Done]
 ```
 
-:::warning Batch Limitations
-Batch mode works best for independent records that don't need to share state. If your agentic workflow requires cross-record coordination (like aggregating results from multiple records), process the batch results in a separate step after retrieval.
+:::note[Batch Limitations]
+Batch mode works best for independent records that do not have to share state.
 :::
+
+If your workflow requires coordination between records, process the batch results in a separate step after retrieval. An example of coordination between records is to aggregate the results from many records.
 
 ## See Also
 
-- [run Command](./run) - Execute agentic workflows synchronously
-- [Troubleshooting](./troubleshooting) - Debug batch issues
+- [run Command](./run): Run workflows synchronously
+- [Troubleshooting](./troubleshooting): Debug batch problems

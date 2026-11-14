@@ -1,14 +1,14 @@
 ---
 title: inspect Commands
-description: Workflow preflight and introspection
+description: Run the preflight checks of a workflow and show its structure
 sidebar_position: 6
 ---
 
 # inspect Commands
 
-`agac inspect` is the read-only introspection surface for a workflow. The
-default form runs preflight validation and lists the validated actions;
-two subcommands drill into a single action.
+`agac inspect` is the read-only command that shows the structure of a workflow. The
+default form runs the preflight validation and lists the validated actions.
+Two subcommands show the details of a single action.
 
 ```bash
 agac inspect -a <workflow>                          # default: validation + action list
@@ -16,22 +16,22 @@ agac inspect action  -a <workflow> ACTION [options]
 agac inspect context -a <workflow> ACTION [options]
 ```
 
-:::tip Run from Anywhere
-You can run inspect commands from any subdirectory within your project.
+:::note[Run from Anywhere]
+You can run inspect commands from any subdirectory in your project.
 :::
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-a`, `--agent` | Workflow name. Required; `agac inspect` without it exits 2 with `Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage.` |
-| `-u`, `--user-code` | Path to the user code directory. Also accepted by `inspect action` and `inspect context` |
+| `-a`, `--agent` | The workflow name. Required. Without it, `agac inspect` exits 2 with `Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage.` |
+| `-u`, `--user-code` | The path to the user code directory. `inspect action` and `inspect context` also accept this option |
 
-## Default behavior
+## Default Behavior {/* #default-behavior */}
 
-`agac inspect -a <workflow>` runs preflight validation and prints a
-validated action list — one ✓ per action, one `● validated` badge for
-the whole workflow. Exits 0 on success, non-zero on validation error.
+`agac inspect -a <workflow>` runs the preflight validation and prints a
+list of the validated actions. The list has one ✓ for each action, and one `● validated` badge for
+the whole workflow. The command exits 0 on success. It exits with a non-zero code on a validation error.
 
 ```bash
 $ agac inspect -a review_analyzer
@@ -45,21 +45,30 @@ review_analyzer  ● validated                              5 actions
   ✓  write_report
 ```
 
-Preflight covers action definitions, dependency cycles, `context_scope`
-references — including that every declared dependency is referenced by
-at least one `observe` or `passthrough` field, and that every action a
-`context_scope`, prompt or guard names is upstream of it through
-`dependencies` — template variables, schema structure, that every schema an action names
-by file exists and loads (for LLM and tool actions alike), guard syntax, and that every
-`action_name.field` a prompt or guard reads names an action in the workflow and a field its
-schema lists. If any static check fails you get
-a `PreFlightValidationError` naming the exact YAML field instead of
+The preflight validation checks these items:
+
+- Action definitions
+- Dependency cycles
+- `context_scope` references. This check includes two conditions:
+  - At least one `observe` or `passthrough` field refers to each declared dependency.
+  - Each action that a `context_scope`, a prompt or a guard names is upstream of it through
+    `dependencies`.
+- Template variables
+- Schema structure
+- Each schema that an action names
+  by file exists and loads. This check applies to LLM actions and tool actions.
+- Guard syntax
+- Each `action_name.field` that a prompt or a guard reads names an action in the workflow and a field that its
+  schema lists.
+
+If a static check fails, you get
+a `PreFlightValidationError` that names the exact YAML field. You do not get
 the list.
 
-A finding that does not stop the run is printed above the list as a
-warning, and the command still exits 0. `agac run` prints the same
-warnings before it starts. Each finding appears once, grouped by the
-check that found it:
+The command prints a finding that does not stop the run above the list, as a
+warning. The command still exits 0. `agac run` prints the same
+warnings before it starts. The command prints each finding one time, in a group with the other findings of the same
+check:
 
 ```text
 Pre-flight: static analysis — 1 warning(s)
@@ -67,19 +76,18 @@ Pre-flight: static analysis — 1 warning(s)
 context_scope.observe and referenced in the prompt template ...
 ```
 
-For structure, drill down with `inspect action <name>` (deps + prompt
-+ schema + who reads this action) or `inspect context <name>`
-(template variables that are in scope).
+To see the structure, use `inspect action <name>` or `inspect context <name>`.
+`inspect action <name>` shows the dependencies, the prompt, the schema and the actions that read this action.
+`inspect context <name>` shows the template variables that are in scope.
 
 ## Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `action`  | Detailed configuration for a single action |
-| `context` | Template-variable debug view for a single action |
+| `action`  | The detailed configuration of a single action |
+| `context` | A view of the template variables of a single action, for debugging |
 
-Each subcommand accepts its own `--json` flag for machine-readable
-output.
+Each subcommand accepts its own `--json` flag for output that a machine can read.
 
 ### inspect action
 
@@ -87,9 +95,15 @@ output.
 agac inspect action -a <workflow> <action_name> [--json]
 ```
 
-Configuration, dependencies, context scope, prompt template (with its
-placeholders unfilled), output schema, model and run settings, and
-downstream consumers for one action.
+This subcommand shows these items for one action:
+
+- The configuration
+- The dependencies
+- The context scope
+- The prompt template, with no values in its field references
+- The output schema
+- The model and run settings
+- The downstream actions that use the action
 
 ### inspect context
 
@@ -97,43 +111,41 @@ downstream consumers for one action.
 agac inspect context -a <workflow> <action_name> [--json]
 ```
 
-Available namespaces, applied context scope, and template variables the
-action's prompt would see.
+This subcommand shows the available namespaces, the applied context scope, and the template variables that the
+prompt of the action would see.
 
-:::tip Debugging Template Errors
-If you're getting "undefined variable" errors in your templates, use
-`inspect context` to see exactly what variables are available for that
+If you get "undefined variable" errors in your templates, use
+`inspect context`. It shows exactly which variables are available for that
 action.
-:::
 
-## Exit codes
+## Exit Codes {/* #exit-codes */}
 
 | Code | Meaning |
 |------|---------|
-| 0 | Inspection OK (validation passed, action list shown) |
-| 1 | Validation failed or other CLI error |
-| 2 | Bad flags or missing required option |
+| 0 | The inspection is OK (the validation passed, and the command showed the action list) |
+| 1 | The validation failed, or a different CLI error occurred |
+| 2 | Incorrect flags, or a missing required option |
 
-## Common patterns
+## Common Patterns {/* #common-patterns */}
 
-### Dependency debugging
+### Debug Dependencies {/* #dependency-debugging */}
 
 The default `agac inspect -a my_workflow` validates the workflow and lists
-its actions. For per-action drill-down with inputs, context, schema, and
-prompt template:
+its actions. To see the details of one action, with its inputs, context, schema and
+prompt template, use `inspect action`:
 
 ```bash
 agac inspect action -a my_workflow problematic_action
 ```
 
-### Validate before run (in CI)
+### Validate Before a Run (in CI) {/* #validate-before-run-in-ci */}
 
 ```bash
 agac inspect -a my_workflow || exit 1
 agac run     -a my_workflow
 ```
 
-### Template-variable debug
+### Debug Template Variables {/* #template-variable-debug */}
 
 ```bash
 agac inspect context -a my_workflow problematic_action
@@ -142,6 +154,6 @@ agac inspect context -a my_workflow problematic_action --json | jq '.namespaces'
 
 ## See Also
 
-- **[schema Command](./schema)** - Analyze field dependencies and data shapes
-- **[run Command](./run)** - Execute agentic workflows
-- **[Troubleshooting](./troubleshooting)** - Debug common issues
+- **[schema Command](./schema)**: Analyze field dependencies and the shapes of data
+- **[run Command](./run)**: Run workflows
+- **[Troubleshooting](./troubleshooting)**: Debug common problems

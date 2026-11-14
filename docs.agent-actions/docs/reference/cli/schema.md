@@ -1,31 +1,31 @@
 ---
 title: schema Command
-description: Analyze agentic workflow schemas and field dependencies
+description: Analyze the schemas and the field dependencies of a workflow
 sidebar_position: 6
 ---
 
 # schema Command
 
-The `schema` command analyzes your workflow configuration to show what fields each action expects and produces - without making any API calls.
+The `schema` command analyzes your workflow configuration. It shows the fields that each action expects and the fields that each action produces. It does not make API calls.
 
 ```bash
 agac schema -a <workflow-name> [options]
 ```
 
-This catches field reference errors upfront. For example, if you typed `extract_facts.fact` instead of `extract_facts.facts`, you'd discover this at runtime after processing hundreds of records. The schema command validates these references statically.
+This command finds field reference errors before a run. For example, if you typed `extract_facts.fact` in place of `extract_facts.facts`, you would find the error at runtime. You would find it after the workflow processed hundreds of records. The schema command validates these references statically.
 
-:::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
+:::note[Run from Anywhere]
+You can run this command from any subdirectory in your project.
 :::
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | Workflow name (required) |
-| `-u, --user-code DIRECTORY` | Path to user code directory containing tools |
-| `--json` | Output as JSON for programmatic use |
-| `-v, --verbose` | Show detailed data flow visualization |
+| `-a, --agent TEXT` | The workflow name (required) |
+| `-u, --user-code DIRECTORY` | The path to the user code directory that contains the tools |
+| `--json` | Write the output as JSON, for use by programs |
+| `-v, --verbose` | Show a detailed diagram of the data flow |
 
 ## Examples
 
@@ -47,14 +47,14 @@ agac schema -a my_workflow -u ./tools
 
 The output shows:
 
-- **Input**: Fields the action requires from upstream actions or source data
-- **Output**: Fields the action produces for downstream actions
-- **(none)**: No input fields required, or no output fields produced
-- **(schemaless)**: Output schema not defined (tool without a YAML `schema:` field)
-- **(dynamic)**: Schema determined at runtime
-- **(template-based)**: Input fields come from the prompt template
+- **Input**: The fields that the action requires from upstream actions or from the source data
+- **Output**: The fields that the action produces for downstream actions
+- **(none)**: The action requires no input fields, or produces no output fields
+- **(schemaless)**: The output schema is not defined (a tool without a YAML `schema:` field)
+- **(dynamic)**: The schema is set at runtime
+- **(template-based)**: The input fields come from the prompt template
 
-**Schema Sources by Action Type:**
+**Schema Sources for Each Action Type:**
 
 | Action Type | Input Schema Source | Output Schema Source |
 |-------------|---------------------|----------------------|
@@ -63,5 +63,5 @@ The output shows:
 
 ## See Also
 
-- [run Command](./run) - Execute agentic workflows
-- [Troubleshooting](./troubleshooting) - Debug workflow issues
+- [run Command](./run): Run workflows
+- [Troubleshooting](./troubleshooting): Debug workflow problems

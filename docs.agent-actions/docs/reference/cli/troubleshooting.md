@@ -1,37 +1,35 @@
 ---
 title: Troubleshooting
-description: Error messages, logging, and debugging tips
+description: Error messages, logging levels and debug methods
 sidebar_position: 7
 ---
 
 # Troubleshooting
 
-Agent Actions provides actionable error messages and multiple debugging options.
+Agent Actions gives error messages that tell you what to do. It also has many debug options.
 
 ## Logging Levels
 
 | Environment Variable | Level | Shows |
 |---------------------|-------|-------|
 | (default) | `INFO` | Progress and status updates |
-| `AGENT_ACTIONS_LOG_LEVEL=WARNING` | `WARNING` | Warnings and errors only |
-| `AGENT_ACTIONS_LOG_LEVEL=DEBUG` | `DEBUG` | Full exception chains, context, and tracebacks |
+| `AGENT_ACTIONS_LOG_LEVEL=WARNING` | `WARNING` | Only warnings and errors |
+| `AGENT_ACTIONS_LOG_LEVEL=DEBUG` | `DEBUG` | Full exception chains, context and tracebacks |
 
 ## Debug Mode
 
-Set the `AGENT_ACTIONS_LOG_LEVEL` environment variable to see full error context:
+To see the full context of an error, set the `AGENT_ACTIONS_LOG_LEVEL` environment variable:
 
 ```bash
 AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 ```
 
-Debug mode reveals:
-- Full exception chains showing where errors originated
+Debug mode shows:
+- Full exception chains that show where errors started
 - Context information (file paths, action names, operations)
 - Complete Python tracebacks
 
-:::tip
-Redirect debug output to a file for complex issues: `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow > debug.log 2>&1`
-:::
+For complex problems, send the debug output to a file: `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow > debug.log 2>&1`
 
 ## Environment Variables
 
@@ -51,16 +49,16 @@ Redirect debug output to a file for complex issues: `AGENT_ACTIONS_LOG_LEVEL=DEB
 | `0` | Success |
 | `1` | General error |
 | `2` | Usage error (invalid arguments) |
-| `130` | Interrupted by user (Ctrl+C) |
+| `130` | The user interrupted the command (Ctrl+C) |
 
-## Debugging Process
+## Debug Procedure {/* #debugging-process */}
 
-1. Read the console output at the default level (`INFO`) to see execution flow
-2. Use `AGENT_ACTIONS_LOG_LEVEL=DEBUG` to investigate specific errors
-3. Check exception chains for root causes
-4. Review context information (file paths, action names, operations)
+1. Read the console output at the default level (`INFO`) to see the execution flow.
+2. Use `AGENT_ACTIONS_LOG_LEVEL=DEBUG` to investigate specific errors.
+3. Examine the exception chains to find the root causes.
+4. Examine the context information (file paths, action names, operations).
 
 ## See Also
 
-- [run Command](./run) - Execute workflows
-- [schema Command](./schema) - Validate field references before execution
+- [run Command](./run): Run workflows
+- [schema Command](./schema): Validate field references before execution
