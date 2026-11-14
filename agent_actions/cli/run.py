@@ -15,6 +15,7 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
+from agent_actions.prompt.handler import PromptLoader
 from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
@@ -74,20 +75,23 @@ class RunCommand:
             return self._run_holding_the_lock(paths, project_root)
 
     def _run_holding_the_lock(self, paths: ProjectPaths, project_root: Path | None) -> str:
-        PromptValidator().validate(paths.prompt_dir, config={"workflow_name": self.agent_name})
-        workflow = load_workflow(
-            self.agent_name,
-            paths,
-            project_root,
-            sends_requests=True,
-            user_code_path=str(self.args.user_code) if self.args.user_code else None,
-            use_tools=self.args.use_tools,
-            fresh=self.args.fresh,
-            rerun=self.args.rerun,
-            verify_keys=self.args.verify_keys,
-            record_limit=self.args.record_limit,
-            file_limit=self.args.file_limit,
-        )
+        with PromptLoader.record_loads() as prompt_files:
+            try:
+                workflow = load_workflow(
+                    self.agent_name,
+                    paths,
+                    project_root,
+                    sends_requests=True,
+                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
+                    use_tools=self.args.use_tools,
+                    fresh=self.args.fresh,
+                    rerun=self.args.rerun,
+                    verify_keys=self.args.verify_keys,
+                    record_limit=self.args.record_limit,
+                    file_limit=self.args.file_limit,
+                )
+            finally:
+                PromptValidator().validate(prompt_files)
 
         tracker = RunTracker(project_root=project_root)
         run_id = tracker.start_workflow_run(
