@@ -20,7 +20,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 |--------|------|-------------|------------|
 | `scan_workflows()` | `agent_config/{workflow}.yml` | Reads | — |
 | `scan_readmes()` | `agent_config/{workflow}.yml` | Reads | — |
-| `scan_prompts()` | `prompt_store/{workflow}.md` | Reads | — |
+| `scan_prompts()` | `prompt_store/**/*.md`, `agent_workflow/*/prompt_store/**/*.md` | Reads | — |
 | `scan_schemas()` | `schema/{workflow}/{action}.yml` | Reads | — |
 | `scan_tool_functions()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
 | `scan_workflow_data()` | `agent_io/store/{workflow}.db` | Reads | — |
@@ -34,7 +34,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | `RunTracker.start_workflow_run()` | `artefact/runs.json` | Writes | — |
 | `serve_docs()` | `artefact/`, `docs_site/` | Reads | — |
 | `build_index()` | `agent_config/{workflow}.yml` | Reads | `actions` |
-| `build_index()` | `prompt_store/{workflow}.md` | Reads | — |
+| `build_index()` | `prompt_store/**/*.md`, `agent_workflow/*/prompt_store/**/*.md` | Reads | — |
 | `build_index()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
 | `build_index()` | `schema/{workflow}/{action}.yml` | Reads | — |
 | `find_project_root()` | `agent_actions.yml` | Reads | — |

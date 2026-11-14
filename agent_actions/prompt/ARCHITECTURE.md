@@ -62,7 +62,9 @@ PromptFormatter.get_raw_prompt(agent_config)
   +-- prompt starts with "$"?
   |     YES --> PromptLoader.load_prompt("summarize.main_prompt")
   |               1. Split on first dot: file="summarize", block="main_prompt"
-  |               2. Find prompt_store/summarize.md recursively
+  |               2. Find summarize.md in prompt_store/ and agent_workflow/*/prompt_store/,
+  |                  recursively; no match or more than one match is a ValueError
+  |                  that names the searched folders or every match
   |               3. Extract text between {prompt main_prompt} and {end_prompt}
   |               4. Validate: no duplicate blocks, all blocks closed
   |     NO  --> Use string as-is
@@ -432,7 +434,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 |------|------|
 | `service.py` | `PromptPreparationService` -- single source of truth for prompt preparation (both batch and online). Orchestrates all 7 pipeline steps. |
 | `formatter.py` | `PromptFormatter` -- resolves raw prompt from agent_config (inline or `$file.block` reference). |
-| `handler.py` | `PromptLoader` -- loads and validates prompts from `prompt_store/*.md` files. Extracts named blocks, validates uniqueness and closure. |
+| `handler.py` | `PromptLoader` -- loads and validates prompts from the `.md` files in `prompt_store/` and each `agent_workflow/*/prompt_store/`, recursively, and nowhere else. A file name in more than one of them is refused. Extracts named blocks, validates uniqueness and closure. |
 | `message_builder.py` | `MessageBuilder` -- assembles vendor-specific `LLMMessageEnvelope` from prompt + context. `PROVIDER_MESSAGE_CONFIGS` registry. |
 
 ### Context scope
