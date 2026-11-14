@@ -2,11 +2,8 @@
 
 import os
 
-# The openai, anthropic and groq SDKs build their pydantic response models on first use
-# unless this is false, and pydantic's rebuild is not thread-safe: records answered in
-# one concurrent window parse their first responses together, and one can then fail with
-# "BaseModel cannot be instantiated directly". Each SDK reads this once, as it is first
-# imported, so it is set here, before any module of this package can import one.
+# The SDKs otherwise build their pydantic models on first use, which is not thread-safe
+# across a record_concurrency window. Each reads this once, as it is first imported.
 os.environ.setdefault("DEFER_PYDANTIC_BUILD", "false")
 
 from agent_actions.__version__ import __version__  # noqa: E402
