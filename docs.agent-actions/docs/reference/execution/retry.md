@@ -5,19 +5,23 @@ sidebar_position: 6
 
 # Retry & Error Handling
 
-Retry handles transient errors (rate limits, network issues, server errors) with exponential backoff. An online action waits up to `base_delay` (1 second unless you set it) after the first failed attempt, up to twice that after the second, and so on, doubling up to `max_delay` (60 seconds unless you set it); each wait is a random time between zero and that limit.
+Retry sends a request again after a transient error, with exponential backoff. A transient error is a rate limit, a network problem or a server error. After each failed attempt, an online action waits for a random time between zero and a limit. After the first failed attempt, the limit is `base_delay` (1 second if you do not set it). After each subsequent failed attempt, the limit doubles, to a maximum of `max_delay` (60 seconds if you do not set it).
 
-When a rate-limit error carries the provider's `Retry-After` (read from OpenAI, Anthropic and Groq errors, and from a [declared endpoint](../configuration/endpoints.md)'s), the action waits exactly that long instead, as `retry-after-ms`, seconds or an HTTP date. A request for longer than `max_delay` waits `max_delay` and logs a warning with both numbers. The OpenAI, Anthropic and Groq SDKs retry twice on their own before the error reaches this retry, so a rate-limited request can be sent more times than `max_attempts`.
+A rate-limit error can carry a `Retry-After` value from the provider. Agent Actions reads this value from OpenAI, Anthropic and Groq errors, and from the errors of a [declared endpoint](../configuration/endpoints.md). If the error carries the value, the action waits for exactly that time, in place of the random wait. The value can be `retry-after-ms`, seconds or an HTTP date. If the value is longer than `max_delay`, the action waits for `max_delay`. The action also logs a warning that shows the two numbers.
 
-Retry is **off until a `retry:` block turns it on**, on the action or under `defaults:`, where
-it applies to every action that writes no block of its own. Inside a block, `enabled` is `true`,
-`max_attempts` is `3` and `on_exhausted` is `return_last` unless you set them, so
-`retry: {max_attempts: 3}` is enough. `enabled: false`, or `retry: false`, turns it off for one
-action under a `defaults:` block that turns it on.
+The OpenAI, Anthropic and Groq SDKs retry two times before the error gets to the retry of Agent Actions. Thus the number of sends of a rate-limited request can be more than `max_attempts`.
 
-Without retry, a transport error fails its record at the first attempt, and a record a batch
-provider leaves out of its results is failed with the reason `batch_not_returned`. Either way
-the record is `failed`, and [`agac retry`](../cli/retry) sends it again.
+Retry is **disabled until a `retry:` block enables it**. You can put the block on the action or
+under `defaults:`. A block under `defaults:` applies to each action that does not have its own
+block. Inside a block, these values apply if you do not set them: `enabled` is `true`,
+`max_attempts` is `3` and `on_exhausted` is `return_last`. Thus `retry: {max_attempts: 3}` is
+sufficient. If a `defaults:` block enables retry, set `enabled: false`, or `retry: false`, to
+disable retry for one action.
+
+If retry is disabled, a transport error fails its record at the first attempt. A record that a
+batch provider does not include in its results fails with the reason `batch_not_returned`. In
+the two cases, the status of the record is `failed`, and [`agac retry`](../cli/retry) sends the
+record again.
 
 ## Configuration
 
@@ -43,58 +47,59 @@ actions:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enabled` | bool | `true` | A `retry:` block turns retry on unless it sets `enabled: false`. Other fields below take effect only when `enabled` is `true`. |
-| `max_attempts` | int | `3` | Attempts per record in all, the first call or batch included (1-10). `1` never retries. |
-| `on_exhausted` | string | `return_last` | Behavior when retries exhausted |
-| `base_delay` | float | `1.0` | Seconds the backoff may wait after the first failed attempt; the limit doubles after each one (more than 0, at most 300). Online actions only. |
-| `max_delay` | float | `60.0` | The longest wait in seconds, a provider's `Retry-After` included (more than 0, at most 3600, and at least `base_delay`). Online actions only. |
+| `enabled` | bool | `true` | A `retry:` block enables retry, unless the block sets `enabled: false`. The other fields in this table have an effect only when `enabled` is `true`. |
+| `max_attempts` | int | `3` | The total number of attempts for each record, which includes the first call or the first batch (1-10). `1` does not retry. |
+| `on_exhausted` | string | `return_last` | The behavior when a record exhausted its retries |
+| `base_delay` | float | `1.0` | The number of seconds that the backoff may wait after the first failed attempt. The limit doubles after each failed attempt. The value is more than 0 and not more than 300. Online actions only. |
+| `max_delay` | float | `60.0` | The longest wait in seconds, which includes a `Retry-After` value from a provider. The value is more than 0, not more than 3600, and not less than `base_delay`. Online actions only. |
 
 ### Exhaustion Behavior
 
 | Value | Behavior |
 |-------|----------|
-| `return_last` | The record is marked `exhausted`, no response is kept, and the workflow continues |
-| `raise` | Raise exception, workflow fails |
+| `return_last` | Agent Actions marks the record `exhausted` and keeps no response. The workflow continues. |
+| `raise` | Agent Actions raises an exception, and the workflow fails. |
 
-A record that exhausted its retries carries the error its last attempt raised, ahead of the
-count, wherever it is reported: the run's line for the action, `agac status`, and
-`agac dispositions` (its record-level detail too). An action whose every record exhausted
-fails with that error rather than with the count alone:
+A record that exhausted its retries carries the error from its last attempt. Each report of
+the record shows this error before the count. These reports are the line for the action in
+the run output, `agac status`, and `agac dispositions` (which includes its record-level
+detail). If each record of an action exhausted its retries, the action fails with that error,
+not with the count only:
 
 ```text
 ✗ summarize  Action 'summarize': items.json: openai network error: Connection error. — retry
   exhausted after 2 attempts — Action 'summarize' produced 0 successful records — …
 ```
 
-The record's `_recovery.retry` holds it as `last_error`. An error with no message of its own
-is named by its type.
+The `_recovery.retry` field of the record holds the error as `last_error`. If an error has no
+message of its own, the report names the error by its type.
 
 ## Retryable Errors
 
 | Error Type | Examples | Retryable |
 |------------|----------|-----------|
 | Rate Limits | HTTP 429, quota exceeded | Yes |
-| Network Issues | Connection refused, reset or dropped mid-response, timeout (including a request that outlasts [`request_timeout`](../configuration/index.md#request-timeout)), DNS failure | Yes |
-| Server Errors | HTTP 500, 502, 503, 504 | Yes; which other statuses depends on the provider ([by provider](#provider-support)) |
-| Transient request rejection | A request the provider refuses with a message containing `could not parse the JSON body` or `we are currently processing your json schema` | Yes |
-| Invalid Request | Bad API key, malformed input | No |
-| Schema Violation | Invalid JSON output | No (uses `expect:` repair) |
+| Network Issues | A refused connection. A connection that resets or drops during the response. A timeout, which includes a request that takes longer than [`request_timeout`](../configuration/index.md#request-timeout). A DNS failure. | Yes |
+| Server Errors | HTTP 500, 502, 503, 504 | Yes. The other statuses that Agent Actions retries depend on the provider ([by provider](#provider-support)). |
+| Transient request rejection | A request that the provider refuses with a message that contains `could not parse the JSON body` or `we are currently processing your json schema` | Yes |
+| Invalid Request | A bad API key, malformed input | No |
+| Schema Violation | Invalid JSON output | No (the `expect:` repair loop handles it) |
 
-:::info
-For invalid LLM outputs, Agent Actions uses the [expectations](../validation/expectations.md) repair loop instead of retry.
+:::note
+For invalid LLM outputs, Agent Actions uses the [expectations](../validation/expectations.md) repair loop, not retry.
 :::
 
 ## Provider Support
 
-Provider-specific errors are normalized into unified `RateLimitError` and `NetworkError` types, and those two are retried. Connection failures are retried for every provider. Which HTTP statuses are retried depends on how the provider's SDK reports them:
+Agent Actions normalizes the errors of each provider into the unified types `RateLimitError` and `NetworkError`, and retries these two types. Agent Actions retries connection failures for all providers. The HTTP statuses that Agent Actions retries depend on how the SDK of the provider reports them:
 
 | Provider | Rate limit (429) | Server errors |
 |----------|------------------|---------------|
 | OpenAI, Groq | Retried | Any HTTP 5xx retried |
-| Anthropic | Retried | Any HTTP 5xx retried, 529 (overloaded) included |
+| Anthropic | Retried | Any HTTP 5xx retried, which includes 529 (overloaded) |
 | Gemini, Cohere, Ollama | Retried | HTTP 500, 502, 503, 504 retried |
 
-A status the table does not mark as retried is not retried. One exception: a [declared endpoint](../configuration/endpoints.md) with `auth.command` answers a 401 by running the command once more and retrying that call once, so an expired token is renewed; a second 401 fails the record.
+Agent Actions does not retry a status that the table does not mark as retried. There is one exception. If a [declared endpoint](../configuration/endpoints.md) with `auth.command` gets a 401, Agent Actions runs the command one more time. Then Agent Actions retries that call one time. Thus Agent Actions renews an expired token. A second 401 fails the record.
 
 ## Best Practices
 
@@ -114,5 +119,5 @@ retry:
 
 ## See Also
 
-- [Expectations](../validation/expectations.md) - Handling invalid LLM outputs
-- [Run Modes](./run-modes.md) - Batch vs online execution
+- [Expectations](../validation/expectations.md) - How to handle invalid LLM outputs
+- [Run Modes](./run-modes.md) - Batch execution and online execution
