@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Prompt Store
 
-The Prompt Store provides centralized management for reusable prompt templates. Prompts are written in Markdown files with Jinja2 templating support.
+The Prompt Store keeps reusable prompt templates in one central location. You write the prompts in Markdown files, with support for Jinja2 templating.
 
 ## Syntax
 
@@ -23,18 +23,18 @@ Return JSON matching the schema.
 
 ### Prompt Reference
 
-Reference prompts in YAML using the `$` syntax:
+Reference prompts in YAML with the `$` syntax:
 
 ```yaml
 - name: extract_facts
   prompt: $my_workflow.Extract_Facts
 ```
 
-Format: `$filename.Prompt_Name` (filename without `.md`). A prompt name must be unique within its file.
+Format: `$filename.Prompt_Name` (the filename without `.md`). A prompt name must be unique in its file.
 
 ## Directory Structure
 
-Prompts can be at project level (shared) or workflow level (domain-specific):
+Prompts can be at the project level (shared) or at the workflow level (domain-specific):
 
 ```
 project/
@@ -46,7 +46,7 @@ project/
             └── my_prompts.md
 ```
 
-Agent Actions searches recursively—use unique filenames across your project.
+Agent Actions searches recursively. Thus, use unique filenames across your project.
 
 ## Creating Prompts
 
@@ -107,7 +107,7 @@ actions:
 
 ## Inline Prompts
 
-For simple, one-off prompts, use inline YAML:
+For simple prompts that you use one time, use inline YAML:
 
 ```yaml
 - name: simple_validate
@@ -117,7 +117,7 @@ For simple, one-off prompts, use inline YAML:
     Return: {"valid": true/false, "reason": "..."}
 ```
 
-Use inline when prompt is specific to one action. Use prompt store when prompts are reused or complex.
+Use an inline prompt when the prompt is specific to one action. Use the prompt store when prompts are reused or complex.
 
 ## Template Variables
 
@@ -127,9 +127,9 @@ Use inline when prompt is specific to one action. Use prompt store when prompts 
 | `{{ seed.name.field }}` | Seed data files | `{{ seed.exam_syllabus.exam_name }}` |
 | `{{ action_name.field }}` | Upstream action output | `{{ extract_facts.facts }}` |
 
-A field is read by its name even when the name is also a dictionary method (`items`, `keys`, `values`, `get`): `{{ source.items }}` is the `items` field, and a record without that field fails like any missing field. Calling the method still works: `{{ source.get('description', '') }}`, `{% for key, value in source.items() %}`.
+Agent Actions reads a field by its name, even when the name is also a dictionary method (`items`, `keys`, `values`, `get`). For example, `{{ source.items }}` is the `items` field. A record without that field fails like any missing field. A call to the method still works: `{{ source.get('description', '') }}`, `{% for key, value in source.items() %}`.
 
-The same calls work on an upstream action, as in `{% for key, value in extract_facts.items() %}`. Pre-flight reads a call to `items()`, `keys()` or `values()` as a use of the whole action, not of a field named after the method. It checks the field named in `extract_facts.get('facts', '')` against the action's schema, the same way it checks `extract_facts.facts`, so a misspelt field is refused before the run either way.
+The same calls work on an upstream action, as in `{% for key, value in extract_facts.items() %}`. Pre-flight reads a call to `items()`, `keys()` or `values()` as a use of the whole action, not of a field named after the method. Pre-flight checks the field named in `extract_facts.get('facts', '')` against the schema of the action. This is the same check as for `extract_facts.facts`. Thus pre-flight refuses a misspelt field before the run, in both forms.
 
 ## Jinja2 Features
 
@@ -143,23 +143,25 @@ The same calls work on an upstream action, as in `{% for key, value in extract_f
 {{ source.tags | join(", ") }}          {# Join list as string #}
 ```
 
-:::tip tojson Filter
-The `| tojson` filter is essential when passing structured data (dicts, lists) into prompts. Without it, Python's string representation is used, which can confuse the LLM. Use it for seed data and complex fields:
+:::note[tojson Filter]
+The `| tojson` filter is essential when you pass structured data (dicts, lists) into prompts. Without the filter, the prompt gets the Python string representation, which can confuse the LLM.
+:::
+
+Use the `| tojson` filter for seed data and complex fields:
 
 ```markdown
 {{ seed.brand_voice | tojson }}
 {{ extract_context.key_terms | tojson }}
 ```
-:::
 
 ### Version Variables
 
-When using [versioned actions](../execution/versions), these variables are available in prompts:
+When you use [versioned actions](../execution/versions), these variables are available in prompts:
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `{{ i }}` | int | Current iteration number (from `range`) |
-| `{{ version.length }}` | int | Total number of iterations |
+| `{{ i }}` | int | The current iteration number (from `range`) |
+| `{{ version.length }}` | int | The total number of iterations |
 
 ```markdown
 You are evaluator {{ i }} of {{ version.length }}.
@@ -167,7 +169,7 @@ You are evaluator {{ i }} of {{ version.length }}.
 
 ### Load Other Prompts
 
-`{{ load_prompt("file.Prompt") }}` puts another store prompt in, as written, when the workflow loads; its own tags then render for each record like the rest of the prompt. A loaded prompt may load others in turn. Write each call as a tag of its own with the prompt's name as a quoted string: the load fails on any other form, and on prompts that load each other in a cycle, naming them.
+`{{ load_prompt("file.Prompt") }}` inserts another store prompt, as written, when the workflow loads. The tags of the inserted prompt then render for each record, like the rest of the prompt. A loaded prompt may load other prompts in turn. Write each call as a separate tag, with the name of the prompt as a quoted string. The load fails on any other form. The load also fails on prompts that load each other in a cycle, and names those prompts.
 
 ```markdown
 {prompt Main_Analysis}
@@ -178,7 +180,7 @@ You are evaluator {{ i }} of {{ version.length }}.
 {end_prompt}
 ```
 
-An action's inline `prompt:` in the workflow file can load a store prompt the same way, however many lines it has. The loaded text goes in as written, exactly as in a store prompt, whatever YAML style the `prompt:` uses (a `|` or `>` block, or a quoted value): its line breaks are kept and its lines are not read as YAML, so it needs no indentation of its own. A filter applied to it first, such as `{{ load_prompt("common.Standard_Header") | indent(6) }}`, makes it ordinary text that the YAML reads where the tag stands.
+The inline `prompt:` of an action in the workflow file can load a store prompt the same way, for any number of lines. The loaded text goes in as written, exactly as in a store prompt. This is true for each YAML style that the `prompt:` uses: a `|` or `>` block, or a quoted value. The line breaks of the loaded text are kept, and its lines are not read as YAML. Thus the loaded text needs no indentation of its own. If a filter is applied to it first, for example `{{ load_prompt("common.Standard_Header") | indent(6) }}`, it becomes ordinary text. The YAML reads that text at the location of the tag.
 
 ```yaml
 actions:
@@ -190,11 +192,11 @@ actions:
 
 ## Advanced Patterns (Production Cookbook)
 
-These patterns come from production agentic workflows and show what's possible with Jinja2 in prompts.
+These patterns come from production workflows. They show what is possible with Jinja2 in prompts.
 
 ### Arithmetic in Templates
 
-Use inline math to set dynamic constraints based on upstream tool output:
+Use inline math to set dynamic constraints from the output of an upstream tool:
 
 ```markdown
 {prompt Generate_Distractor}
@@ -210,7 +212,7 @@ Your distractor must be LONGER: Write {{ add_answer_text.correctAnswerWords + 2 
 
 ### Loop Index to Letter Conversion
 
-Convert numeric loop indices to letters (A, B, C, D) using chained filters:
+Convert numeric loop indices to letters (A, B, C, D) with chained filters:
 
 ```markdown
 {prompt Format_Options}
@@ -222,7 +224,7 @@ Convert numeric loop indices to letters (A, B, C, D) using chained filters:
 
 ### Dictionary Iteration with Filtering
 
-Iterate over a dictionary's key-value pairs and filter by key pattern:
+Iterate over the key-value pairs of a dictionary, and filter them by a key pattern:
 
 ```markdown
 {prompt Summarize_Alternatives}
@@ -236,7 +238,7 @@ Iterate over a dictionary's key-value pairs and filter by key pattern:
 
 ### Array of Objects Iteration
 
-Loop through structured arrays with nested field access:
+Iterate over structured arrays, with access to nested fields:
 
 ```markdown
 {prompt Analyze_References}
@@ -271,7 +273,7 @@ Extract facts relevant to the {{ seed.exam_syllabus.exam_name }} exam.
 
 ### Chaining Upstream References to Prevent Duplication
 
-When generating multiple alternatives, reference previous outputs to avoid repetition:
+When you generate more than one alternative, reference the previous outputs to prevent repetition:
 
 ```markdown
 {prompt Generate_Distractor_2}
@@ -294,7 +296,7 @@ Write a DIFFERENT distractor that covers an edge case.
 
 ### Ensemble Voting with Version Variables
 
-Create independent evaluators that don't see each other's work:
+Create independent evaluators that do not see the work of the other evaluators:
 
 ```markdown
 {prompt Validate_Answer}
@@ -317,13 +319,13 @@ Verify whether the claimed answer is correct based on the source material.
 
 ## Best Practices
 
-1. **Use descriptive names**: `{prompt Extract_Technical_Facts}` not `{prompt prompt1}`
+1. **Use descriptive names**: `{prompt Extract_Technical_Facts}`, not `{prompt prompt1}`
 2. **Structure complex prompts**: Use consistent section headers (CONTEXT, TASK, OUTPUT FORMAT)
 3. **Separate concerns**: Group related prompts in files (`extraction.md`, `validation.md`)
 
 ## Debugging Prompts
 
-Enable `prompt_debug` to see rendered prompts:
+To see the rendered prompts, enable `prompt_debug`:
 
 ```yaml
 - name: extract_facts

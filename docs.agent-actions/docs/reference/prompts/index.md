@@ -5,16 +5,16 @@ sidebar_position: 1
 
 # Prompt System
 
-The prompt system provides centralized management of reusable prompts as Markdown files with Jinja2 templating.
+The prompt system keeps reusable prompts in one central location, as Markdown files with Jinja2 templating.
 
 ## Core Concepts
 
 | Concept | Purpose |
 |---------|---------|
-| **Prompt Store** | Centralized Markdown files containing prompts |
-| **Prompt Tags** | `{prompt Name}...{end_prompt}` delimiters |
+| **Prompt Store** | Central Markdown files that contain prompts |
+| **Prompt Tags** | The `{prompt Name}...{end_prompt}` delimiters |
 | **Template Variables** | `{{ source.field }}`, `{{ seed.data }}` |
-| **Dynamic Dispatch** | Runtime prompt/schema selection via tools |
+| **Dynamic Dispatch** | Tools select the prompt or the schema at runtime |
 
 ## Learn More
 
