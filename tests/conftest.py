@@ -15,6 +15,12 @@ def pytest_configure():
         sys.path.insert(0, str(root))
 
 
+def pytest_report_header():
+    from tests._support.agac_cli import runner_header
+
+    return runner_header()
+
+
 @pytest.fixture(autouse=True)
 def _enable_log_propagation(request):
     """Ensure agent_actions loggers propagate to root so caplog captures them.
