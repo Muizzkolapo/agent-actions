@@ -35,14 +35,15 @@ class FileErrorFormatter(ErrorFormatter):
         if "not found" in message.lower():
             file_path = context.get("file_path", "unknown")
             agent = context.get("agent")
+            config_path = context.get("config_path")
 
-            if agent and file_path == "unknown":
+            if agent and config_path:
                 return UserError(
                     category="File Error",
                     title="Agent configuration not found",
                     details=f"Could not find configuration for agent '{agent}'",
                     fix=(
-                        f"1. Create agents/{agent}.yaml\n"
+                        f"1. Create {config_path}\n"
                         "     2. Or use an existing agent: "
                         "agac run --agent <existing-agent>"
                     ),
