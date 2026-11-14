@@ -12,6 +12,7 @@ from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import (
     ConfigurationError,
     DuplicateFunctionError,
+    FileLoadError,
     FunctionNotFoundError,
     UDFLoadError,
     enrich_exception_context,
@@ -55,7 +56,10 @@ class ValidateUDFsCommand:
         filename = f"{self.agent_name}.yml"
         config_path = paths.agent_config_dir / filename
         if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
+            raise FileLoadError(
+                f"Config file not found: {config_path}",
+                context={"config_path": str(config_path)},
+            )
         clear_registry()
         try:
             registry = discover_udfs(self.user_code)
