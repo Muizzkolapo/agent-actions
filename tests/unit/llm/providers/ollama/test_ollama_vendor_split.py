@@ -182,7 +182,7 @@ class TestOllamaLocalClient:
             assert call_kwargs.kwargs.get("host") == "http://env-ollama:11434"
 
     def test_base_url_defaults_to_no_host_kwarg(self):
-        """With no base_url in config and no OLLAMA_HOST env, Client() is called bare."""
+        """With no base_url in config and no OLLAMA_HOST env, Client() gets no host."""
         config = _make_agent_config()
         with (
             patch.dict("os.environ", {}, clear=False),
@@ -195,8 +195,7 @@ class TestOllamaLocalClient:
             try:
                 mock_cls.return_value = MagicMock()
                 _build_ollama_client(config, api_key=None, cloud=False)
-                # Called with no arguments
-                mock_cls.assert_called_once_with()
+                assert mock_cls.call_args.kwargs == {"timeout": 600.0}
             finally:
                 if env_backup is not None:
                     os.environ["OLLAMA_HOST"] = env_backup
@@ -606,6 +605,20 @@ class TestOllamaBatchClientVendorSplit:
         call_kwargs = mock_client_cls.call_args.kwargs
         assert "headers" in call_kwargs
         assert call_kwargs["headers"]["Authorization"] == "Bearer batch-key"
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"cloud": False, "vendor_slug": "ollama_local"},
+            {"cloud": True, "vendor_slug": "ollama_cloud", "api_key": "batch-key"},
+        ],
+        ids=["local", "cloud"],
+    )
+    @patch("agent_actions.llm.providers.ollama.batch_client.Client")
+    def test_batch_client_waits_600_seconds_per_request(self, mock_client_cls, kwargs):
+        OllamaBatchClient(**kwargs)
+
+        assert mock_client_cls.call_args.kwargs.get("timeout") == 600.0
 
     @patch("agent_actions.llm.providers.ollama.batch_client.Client")
     def test_local_client_no_bearer_header(self, mock_client_cls):

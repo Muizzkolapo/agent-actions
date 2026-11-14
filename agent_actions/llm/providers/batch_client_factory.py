@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import SecretStr
 
 from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
+from agent_actions.llm.providers.generation_params import request_timeout_seconds
 
 from .batch_base import BaseBatchClient
 
@@ -156,7 +157,11 @@ def _create_ollama_local(config: dict[str, Any]) -> BaseBatchClient:
     base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
     max_workers = config.get("batch_max_workers")
     return OllamaBatchClient(
-        base_url=base_url, vendor_slug="ollama_local", cloud=False, max_workers=max_workers
+        base_url=base_url,
+        vendor_slug="ollama_local",
+        cloud=False,
+        max_workers=max_workers,
+        timeout=request_timeout_seconds(config),
     )
 
 
@@ -175,6 +180,7 @@ def _create_ollama_cloud(config: dict[str, Any]) -> BaseBatchClient:
         vendor_slug="ollama_cloud",
         cloud=True,
         max_workers=max_workers,
+        timeout=request_timeout_seconds(config),
     )
 
 

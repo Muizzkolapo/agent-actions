@@ -29,7 +29,7 @@ orchestration, prompts, and processing to concrete implementations.
 | `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `get_tool_dirs` (tool dir resolution), `get_schema_path`. | `paths`, `configuration` |
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
-| `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
+| `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `LLMDefaults` (the 600 s request timeout an action gets when it sets none, except on a declared endpoint, which keeps its `timeout_seconds`; and the 5 s connect limit for the SDKs that take an `httpx.Timeout`), `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
 | `types.py` | Module | Typed dictionaries (`ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `HitlConfigDict`) and enums (`Granularity`, `RunMode`) for config structures. | `config`, `workflow`, `processing` |
 | `project_paths.py` | Module | `ProjectPathsFactory` and `ProjectPaths` for project directory resolution. Moved from `cli/`. | `paths`, `validation`, `output` |
 | `manager.py` | Module | `ConfigManager` for workflow config assembly: YAML loading, template rendering, schema validation, config merging, dependency inference, and execution order determination. | `configuration`, `workflow` |
@@ -81,7 +81,7 @@ Key Functions
 | `VersionConfig` | `agent_config/{workflow}.yml` | Validates | `actions[].versions` (applied by the render step) |
 | `WorkflowConfig` | `agent_config/{workflow}.yml` | Reads | `name`, `description`, `version`, `defaults`, `actions`, `tool_path`, `storage` (extras refused) |
 | `ActionConfig` | `agent_config/{workflow}.yml` | Validates | `name`, `intent`, `kind`, `impl`, `model_vendor`, `model_name`, `schema`, `guard`, `dependencies` |
-| `DefaultsConfig` | `agent_config/{workflow}.yml` | Validates | `model_vendor`, `model_name`, `granularity`, `run_mode`, `on_empty`, `data_source`, `request_timeout` (positive seconds, also on `ActionConfig`) |
+| `DefaultsConfig` | `agent_config/{workflow}.yml` | Validates | `model_vendor`, `model_name`, `granularity`, `run_mode`, `on_empty`, `data_source`, `request_timeout` (positive seconds, also on `ActionConfig`; unset or null, 600, except on a declared endpoint, which keeps its `timeout_seconds`) |
 | `EnvironmentConfig` | `.env` | Reads | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `AGENT_ACTIONS_ENV` |
 | `PathManager.get_project_root` | `agent_actions.yml` | Reads | — |
 | `PathManager.get_standard_path` | `agent_io/target/{action}/` | Reads | — |

@@ -122,7 +122,7 @@ class ActionConfigDict(TypedDict, total=False):
     # Generation parameters
     temperature: float
     max_tokens: int
-    request_timeout: float  # seconds per LLM request; unset keeps the SDK's own
+    request_timeout: float  # seconds per LLM request; unset means the default
     record_concurrency: int  # online LLM records in flight at once; unset is 1
 
     # Dependencies & flow

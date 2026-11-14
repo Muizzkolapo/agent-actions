@@ -24,8 +24,8 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import (
+    connect_limited_timeout_kwargs,
     extract_generation_params,
-    request_timeout_kwargs,
 )
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
@@ -74,6 +74,10 @@ class OpenAIClient(BaseClient):
         return {"base_url": agent_config.get("base_url")}
 
     @classmethod
+    def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        return connect_limited_timeout_kwargs(agent_config)
+
+    @classmethod
     def call_json(
         cls,
         api_key: str | None,
@@ -120,7 +124,7 @@ class OpenAIClient(BaseClient):
                 extra_params=("frequency_penalty", "presence_penalty"),
             ),
             # Per request, so it outranks a declared endpoint's client-wide timeout.
-            **request_timeout_kwargs(agent_config),
+            **cls._request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()
@@ -214,7 +218,7 @@ class OpenAIClient(BaseClient):
                 extra_params=("frequency_penalty", "presence_penalty"),
             ),
             # Per request, so it outranks a declared endpoint's client-wide timeout.
-            **request_timeout_kwargs(agent_config),
+            **cls._request_timeout_kwargs(agent_config),
         }
 
         start_time = time.perf_counter()

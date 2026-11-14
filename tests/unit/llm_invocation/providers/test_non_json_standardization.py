@@ -229,8 +229,9 @@ class TestGeminiCallNonJson:
 
         call_kwargs = mock_client.models.generate_content.call_args[1]
         assert call_kwargs["model"] == "test-model"
-        # Empty gen_params produces config=None (no JSON forcing)
-        assert call_kwargs.get("config") is None
+        assert call_kwargs["config"].response_mime_type is None
+        assert call_kwargs["config"].response_schema is None
+        assert call_kwargs["config"].http_options.timeout == 600_000
 
 
 # ---------------------------------------------------------------------------

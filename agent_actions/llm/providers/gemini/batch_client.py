@@ -4,6 +4,7 @@ Gemini Batch API client implementation.
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None  # type: ignore[assignment]
     types = None  # type: ignore[assignment]
+from agent_actions.config.defaults import LLMDefaults
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
@@ -66,7 +68,13 @@ class GeminiBatchClient(BaseBatchClient):
                     "vendor": "gemini",
                 },
             )
-        self.client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options={
+                "api_version": "v1alpha",
+                "timeout": math.ceil(LLMDefaults.REQUEST_TIMEOUT_SECONDS * 1000),
+            },
+        )
         # The SDK lets its transport's errors through unwrapped.
         self._transient_errors = (httpx.TransportError, genai_errors.ServerError)
 

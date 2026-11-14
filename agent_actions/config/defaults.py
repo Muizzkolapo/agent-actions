@@ -29,6 +29,13 @@ class OllamaCloudDefaults:
     BATCH_MAX_WORKERS: int = 1
 
 
+class LLMDefaults:
+    """Defaults for requests to an LLM provider."""
+
+    REQUEST_TIMEOUT_SECONDS: float = 600.0
+    CONNECT_TIMEOUT_SECONDS: float = 5.0
+
+
 class ApiDefaults:
     """Defaults for HTTP/API data-source fetching."""
 

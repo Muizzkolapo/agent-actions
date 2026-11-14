@@ -9,6 +9,10 @@ with vendor-specific key mapping and stop-sequence normalisation.
 from collections.abc import Sequence
 from typing import Any
 
+import httpx
+
+from agent_actions.config.defaults import LLMDefaults
+
 # Core generation parameters checked by all providers
 _CORE_PARAMS = ("temperature", "max_tokens", "top_p", "stop")
 
@@ -54,11 +58,29 @@ def extract_generation_params(
     return result
 
 
-def request_timeout_kwargs(agent_config: dict[str, Any]) -> dict[str, Any]:
-    """The action's ``request_timeout`` as an SDK's ``timeout`` kwarg, or nothing when unset.
+def request_timeout_seconds(agent_config: dict[str, Any]) -> float:
+    """The action's ``request_timeout``, or the default when it is unset or null.
 
-    Nothing, not ``None``: the openai, anthropic and groq SDKs read
-    ``timeout=None`` as no timeout at all rather than as their own default.
+    Never ``None``: every provider SDK reads that as no timeout at all, so one
+    stalled request would hold the run forever.
     """
     timeout = agent_config.get("request_timeout")
-    return {} if timeout is None else {"timeout": timeout}
+    return LLMDefaults.REQUEST_TIMEOUT_SECONDS if timeout is None else timeout
+
+
+def request_timeout_kwargs(agent_config: dict[str, Any]) -> dict[str, Any]:
+    """The action's request timeout as an SDK's ``timeout`` kwarg."""
+    return {"timeout": request_timeout_seconds(agent_config)}
+
+
+def connect_limited_timeout(seconds: float) -> httpx.Timeout:
+    """*seconds* for the request, with the short connect limit the openai-style SDKs keep.
+
+    A bare number would set the connect timeout to *seconds* as well.
+    """
+    return httpx.Timeout(seconds, connect=LLMDefaults.CONNECT_TIMEOUT_SECONDS)
+
+
+def connect_limited_timeout_kwargs(agent_config: dict[str, Any]) -> dict[str, Any]:
+    """The action's request timeout as the ``timeout`` kwarg of an SDK that takes httpx's."""
+    return {"timeout": connect_limited_timeout(request_timeout_seconds(agent_config))}

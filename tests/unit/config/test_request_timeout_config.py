@@ -53,6 +53,9 @@ class TestWhereItIsSet:
     def test_unset_everywhere_it_is_none(self):
         assert _agent()["request_timeout"] is None
 
+    def test_an_explicit_null_loads_as_unset(self):
+        assert _agent(action={"request_timeout": None})["request_timeout"] is None
+
     def test_an_action_sets_it(self):
         assert _agent(action={"request_timeout": 45})["request_timeout"] == 45
 
