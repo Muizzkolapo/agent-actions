@@ -23,7 +23,7 @@ class AmbiguousAgentName(ValidationError):
         super().__init__(
             f"Multiple workflows named '{agent_name}' found:\n  {bullets}\n"
             "Disambiguate by reorganizing so the base name is unique.",
-            context={"agent_name": agent_name, "candidates": candidates},
+            context={"agent": agent_name, "candidates": candidates},
         )
 
 
