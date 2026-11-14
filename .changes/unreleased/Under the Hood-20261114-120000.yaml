@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: The tests now start `agac` from a warm process that has the CLI loaded already. Each `run_agac` call forks that process, so a call no longer pays for an interpreter start and the CLI import. On the test machine, `agac --help` from a test fell from 0.87 s to 0.05 s, and `pytest -n 8 tests/integration` fell from 644 s to 236 s. A call that sets its own `PYTHON*`, `LANG` or `LC_*` variables, or passes `fresh_process=True`, still gets a fresh interpreter. Set `AGAC_TEST_RUNNER=fresh` to run every call in a fresh interpreter. The pytest header names the runner.
+time: 2026-11-14T12:00:00Z
