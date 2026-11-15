@@ -44,6 +44,15 @@ class ErrorFormatter(ABC):
         )
 
     @staticmethod
+    def _workflow_and_action(context: dict[str, Any]) -> dict[str, Any]:
+        """The workflow (``agent``) and the action (``action_name``) the context names."""
+        return {
+            key: context[key]
+            for key in ("agent", "action_name")
+            if context.get(key) is not None and str(context[key]).strip()
+        }
+
+    @staticmethod
     def _hint_or(context: dict[str, Any], fallback: str) -> str:
         """The remedy the error itself carries, else the formatter's catch-all *fallback*."""
         hint = context.get("hint")

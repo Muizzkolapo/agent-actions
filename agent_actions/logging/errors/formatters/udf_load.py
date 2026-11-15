@@ -48,10 +48,13 @@ class UDFLoadErrorFormatter(ErrorFormatter):
         search_path = context.get("search_path")
         requested_path = context.get("requested_path")
 
+        subject = self._workflow_and_action(context)
         if module == UDFLoadError.DISCOVERY_SENTINEL:
-            return self._format_discovery_failure(file, error, search_path, requested_path)
+            return self._format_discovery_failure(file, error, search_path, requested_path, subject)
 
-        return self._format_import_failure(module, file, error, exc, search_path, requested_path)
+        return self._format_import_failure(
+            module, file, error, exc, search_path, requested_path, subject
+        )
 
     def _format_discovery_failure(
         self,
@@ -59,8 +62,9 @@ class UDFLoadErrorFormatter(ErrorFormatter):
         error: str,
         search_path: str | None,
         requested_path: str | None,
+        subject: dict[str, Any],
     ) -> UserError:
-        ctx: dict[str, Any] = {}
+        ctx: dict[str, Any] = dict(subject)
         if path:
             ctx["file_path"] = path
         if search_path:
@@ -87,6 +91,7 @@ class UDFLoadErrorFormatter(ErrorFormatter):
         exc: Exception,
         search_path: str | None,
         requested_path: str | None,
+        subject: dict[str, Any],
     ) -> UserError:
         details = f"Python could not import the UDF module: {error}"
         missing = self._extract_missing_module(error, exc)
@@ -116,7 +121,7 @@ class UDFLoadErrorFormatter(ErrorFormatter):
             "validate-udfs and list-udfs; agac run skips it with a warning."
         )
 
-        ctx: dict[str, Any] = {}
+        ctx: dict[str, Any] = dict(subject)
         if file:
             ctx["file_path"] = file
         if search_path:

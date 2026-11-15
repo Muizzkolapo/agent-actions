@@ -44,7 +44,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["classify.question_type"],
             "available_variables": ["classify.question_category", "classify.difficulty_level"],
             "mode": "batch",
@@ -75,7 +75,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["classify.question_type"],
         }
 
@@ -101,7 +101,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": ["unknown_action.field"],
         }
 
@@ -128,7 +128,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": ["undefined_var"],
         }
 
@@ -153,7 +153,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": ["missing_action.field"],
         }
 
@@ -178,7 +178,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": ["classify.missing_field"],
         }
 
@@ -203,7 +203,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": ["ns.missing"],
         }
 
@@ -227,7 +227,7 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": [],
         }
 
@@ -250,14 +250,14 @@ class TestTemplateErrorFormatter:
         )
 
         context = {
-            "agent_name": "test_agent",
+            "action_name": "test_agent",
             "missing_variables": ["classify.field"],
         }
 
         result = formatter.format(exc, exc, str(exc), context)
 
         # Should still produce valid output
-        assert "Template rendering failed" in result.details
+        assert "The prompt template could not be rendered." in result.details
         assert "Reference: classify.field" in result.details
         assert "Namespace 'classify' exists: NO" in result.details
 
@@ -307,7 +307,7 @@ class TestStorageHints:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["classify.answer_text"],
             "available_variables": ["classify.question_type"],
             "mode": "batch",
@@ -336,7 +336,7 @@ class TestStorageHints:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["classify.nonexistent"],
             "available_variables": ["classify.question_type"],
             "mode": "batch",
@@ -369,7 +369,7 @@ class TestStorageHints:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["classify.answer_text"],
             "available_variables": ["classify.question_type"],
             "mode": "batch",
@@ -403,7 +403,7 @@ class TestStorageHints:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["classify.answer_text"],
             "available_variables": ["classify.answer_texts"],
             "mode": "batch",
@@ -443,7 +443,7 @@ class TestStorageHints:
         )
 
         context = {
-            "agent_name": "write_question",
+            "action_name": "write_question",
             "missing_variables": ["answer_text"],
             "available_variables": ["classify.question_type"],
             "mode": "batch",

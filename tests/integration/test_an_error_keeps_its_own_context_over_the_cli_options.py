@@ -107,5 +107,5 @@ def test_a_missing_tool_names_the_action_that_names_it_not_the_action_inspected(
 
     assert result.returncode == 1, output
     assert "Function 'no_such_tool_fn' not found" in output, output
-    assert "Action 'second' names it." in output, output
-    assert "Action 'pick' names it." not in output, output
+    assert "Action: second " in output, output
+    assert "Action: pick " not in output, output

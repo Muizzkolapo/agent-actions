@@ -646,6 +646,7 @@ class BatchSubmissionService:
             raise ConfigValidationError(
                 "model_vendor",
                 "Missing required field 'model_vendor' for batch processing.",
+                context={"action_name": action_name, "missing_fields": ["model_vendor"]},
             )
         provider_type = provider_type.lower()
         batch_id = "unknown"  # Initialize for error handling
