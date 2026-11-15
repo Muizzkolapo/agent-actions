@@ -80,7 +80,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: batch
 
 actions:
@@ -131,7 +131,7 @@ actions:
 
     # Execution
     run_mode: batch
-    granularity: Record
+    granularity: record
 
     # Conditional
     guard:

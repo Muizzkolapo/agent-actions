@@ -118,8 +118,8 @@ reason that no answer reached it. The reason tells you where to look. The reason
 
 - An upstream failure (`upstream_unprocessed`)
 - A guard skip (`guard_skip`)
-- A `granularity: File` tool did not include the record (`tool_missing_record`)
-- A `granularity: File` tool merged the record into the row of a different record (`consumed_into_another_record`)
+- A `granularity: file` tool did not include the record (`tool_missing_record`)
+- A `granularity: file` tool merged the record into the row of a different record (`consumed_into_another_record`)
 
 When no record is stuck, the command reports `No quarantined records found.`
 

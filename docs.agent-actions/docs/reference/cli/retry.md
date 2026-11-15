@@ -267,7 +267,7 @@ run succeeds, so the action fails.
 
 ### A FILE tool runs over the whole file
 
-A tool with `granularity: File` gets all records of a file at the same time. Thus each row
+A tool with `granularity: file` gets all records of a file at the same time. Thus each row
 that the tool writes can depend on all of these records. Examples are a roll-up of the file,
 a count or a rank across the file, and a dedupe. The unit of work of the tool is the file,
 not the record.

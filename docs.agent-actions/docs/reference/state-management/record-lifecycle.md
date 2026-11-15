@@ -99,7 +99,7 @@ cause (see `agent_actions/record/reasons.py`). Common values include:
   [expectations](../validation/expectations.md) verdict under `on_exhausted: return_last` or
   `repair: none`. The record is still a success, so it blocks no downstream action.
 - `consumed_into_output`
-- `consumed_into_another_record`: An `unprocessed` record at a fan-in. The `granularity: File`
+- `consumed_into_another_record`: An `unprocessed` record at a fan-in. The `granularity: file`
   tool of one branch folded this record into the row of another record.
 - `batch_not_returned`: A record that a batch provider omitted from its results, or that the
   action never sent. A `failed` row holds a record that the provider omitted, and no retry
@@ -145,14 +145,14 @@ One branch of a fan-in can fold a record into the row of another record. The tom
 fan-in for that record has these fields:
 
 - The reason `consumed_into_another_record`.
-- `upstream_action`, which names the `granularity: File` tool that folded the record.
+- `upstream_action`, which names the `granularity: file` tool that folded the record.
 - `upstream_reason: consumed_into_output`.
 - `consumed_into`, which is the `source_guid` of the row that received the record.
 
 This tombstone has no `upstream_state`, because the tool answered the record. The actions
 downstream of the fan-in skip the record as `upstream_unprocessed`, and they name the same
 cause. A version merge (`version_consumption`) leaves the same tombstone in one case. One
-version of a versioned `granularity: File` tool folded a record into the row of another record,
+version of a versioned `granularity: file` tool folded a record into the row of another record,
 and another version kept the record.
 
 ## Version Correlation
