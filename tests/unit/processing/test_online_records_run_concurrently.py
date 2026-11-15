@@ -282,3 +282,61 @@ def test_an_interrupt_keeps_the_answers_already_sent_and_sends_nothing_more(monk
 
     assert len(strategy.started) < 12
     assert sorted(backend.dispositions) == sorted(f"g{n}" for n in strategy.started)
+
+
+def test_an_interrupt_while_an_answer_is_checkpointed_still_keeps_that_answer():
+    """Ctrl-C lands in the main thread between any two bytecodes, a checkpoint write included."""
+
+    class _InterruptedOnce(_Backend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.interrupted = False
+
+        def save_checkpoint_records(self, *args: Any) -> None:
+            if not self.interrupted:
+                self.interrupted = True
+                raise KeyboardInterrupt
+            super().save_checkpoint_records(*args)
+
+    backend = _InterruptedOnce()
+
+    def answer(item: dict[str, Any]) -> ProcessingResult:
+        time.sleep(0.05)
+        return _ok(item)
+
+    strategy = _Stub(answer, concurrency=3)
+    with pytest.raises(KeyboardInterrupt):
+        strategy.invoke(_records(12), _context(backend))
+
+    assert backend.interrupted
+    assert len(strategy.started) < 12
+    assert sorted(backend.dispositions) == sorted(f"g{n}" for n in strategy.started)
+
+
+def test_an_interrupt_the_moment_a_record_is_submitted_still_keeps_its_answer(monkeypatch):
+    """The SIGINT handler runs at the first bytecode after submit returns, before the
+    caller stores anything: a record already handed to a worker must still be kept."""
+
+    class _InterruptedAfterSubmit(online_llm.ThreadPoolExecutor):
+        submitted = 0
+
+        def submit(self, *args: Any, **kwargs: Any) -> Any:
+            future = super().submit(*args, **kwargs)
+            type(self).submitted += 1
+            if type(self).submitted == 5:
+                raise KeyboardInterrupt
+            return future
+
+    monkeypatch.setattr(online_llm, "ThreadPoolExecutor", _InterruptedAfterSubmit)
+    backend = _Backend()
+
+    def answer(item: dict[str, Any]) -> ProcessingResult:
+        time.sleep(0.05)
+        return _ok(item)
+
+    strategy = _Stub(answer, concurrency=3)
+    with pytest.raises(KeyboardInterrupt):
+        strategy.invoke(_records(12), _context(backend))
+
+    assert 5 <= len(strategy.started) < 12
+    assert sorted(backend.dispositions) == sorted(f"g{n}" for n in strategy.started)
