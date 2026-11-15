@@ -80,10 +80,10 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         return self._format_invalid_configuration(message, context)
 
     def _format_invalid_configuration(self, message: str, context: dict[str, Any]) -> UserError:
-        agent = context.get("agent", "unknown")
+        agent = context.get("agent")
         return UserError(
             category="Configuration Error",
-            title=f"Invalid configuration in agent '{agent}'",
+            title=f"Invalid configuration in agent '{agent}'" if agent else "Invalid configuration",
             details=message,
             fix=self._hint_or(context, "Check your agent configuration file for errors"),
             context=context,
@@ -160,7 +160,6 @@ class ConfigurationErrorFormatter(ErrorFormatter):
     def _format_missing_env_var_error(self, _message: str, context: dict) -> UserError:
         """Format error for missing environment variable."""
         env_var = context.get("env_var", "UNKNOWN")
-        agent_name = context.get("agent", "unknown")
         config_value = context.get("config_value", f"${{{env_var}}}")
 
         details = f"Environment variable '{env_var}' is not set.\n\n"
@@ -180,5 +179,8 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Environment variable not set",
             details=details,
             fix="\n".join(fix_parts),
-            context={"agent": agent_name, "env_var": env_var},
+            context={
+                **{key: context[key] for key in ("agent", "action_name") if key in context},
+                "env_var": env_var,
+            },
         )

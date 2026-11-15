@@ -6,6 +6,7 @@ from typing import Any
 # Fields to display prominently with their labels
 _PRIORITY_FIELDS = [
     ("agent", "Agent"),
+    ("action_name", "Action"),
     ("file_path", "File"),
     ("field", "Field"),
     ("model", "Model"),
@@ -74,7 +75,7 @@ class UserError:
 
         # Display priority fields first
         for key, label in _PRIORITY_FIELDS:
-            if key in self.context:
+            if self.context.get(key) is not None:
                 lines.append(f"  {label}: {self.context[key]}")
 
         # Display missing/available references prominently

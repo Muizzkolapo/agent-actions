@@ -10,6 +10,9 @@ import click
 from agent_actions.errors.base import AgentActionsError
 from agent_actions.utils.project_root import ensure_in_project
 
+# An action the user typed is not the action an error is about.
+_NOT_ERROR_CONTEXT = frozenset({"action_name"})
+
 
 def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
     """Catch exceptions, format via format_user_error(), and re-raise as ClickException."""
@@ -30,7 +33,7 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                 context = {
                     "command": command_name,
                     **extra_context,
-                    **kwargs,
+                    **{k: v for k, v in kwargs.items() if k not in _NOT_ERROR_CONTEXT},
                 }
                 error_message = format_user_error(e, context)
                 raise click.ClickException(error_message) from None

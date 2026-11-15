@@ -157,3 +157,41 @@ class TestTheApiKeyFixLine:
 
         assert fix.count("api_key: ${YOUR_PROVIDER_API_KEY}") == 3
         assert "ANTHROPIC_API_KEY" not in fix
+
+
+class TestTheInvalidConfigurationTitle:
+    """The title names the agent only when the context has one."""
+
+    def _title(self, context):
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        exc = ConfigurationError("API key configuration is missing", context=context)
+        return ErrorTranslator().translate(exc).title
+
+    def test_it_names_the_agent_it_is_given(self):
+        assert self._title({"agent": "w"}) == "Invalid configuration in agent 'w'"
+
+    def test_without_an_agent_it_names_none(self):
+        assert self._title({"action_name": "a"}) == "Invalid configuration"
+
+
+class TestTheMissingEnvVarContext:
+    """The env var error keeps the agent and the action it was given, and invents neither."""
+
+    def _context(self, context):
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.logging.errors.translator import ErrorTranslator
+
+        exc = ConfigurationError("Environment variable 'K' is not set", context=context)
+        return ErrorTranslator().translate(exc).context
+
+    def test_it_keeps_the_agent_and_the_action(self):
+        context = self._context({"agent": "w", "action_name": "a", "env_var": "K"})
+
+        assert context == {"agent": "w", "action_name": "a", "env_var": "K"}
+
+    def test_without_an_agent_it_has_none(self):
+        context = self._context({"action_name": "a", "env_var": "K"})
+
+        assert context == {"action_name": "a", "env_var": "K"}
