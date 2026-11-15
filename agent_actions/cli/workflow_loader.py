@@ -34,10 +34,13 @@ def load_workflow(
 ) -> AgentWorkflow:
     """Render the workflow config and construct an AgentWorkflow from it.
 
+    A render error carries the workflow name, the config file's stem, as ``agent``.
+
     ``read_only`` skips the startup reset, which clears the state a read command reads.
     ``sends_requests=False`` makes an absent credential a warning instead of an error.
     """
     from agent_actions.config.project_paths import find_config_file
+    from agent_actions.errors.base import AgentActionsError, enrich_exception_context
     from agent_actions.prompt.renderer import ConfigRenderingService
     from agent_actions.workflow.coordinator import AgentWorkflow
     from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
@@ -50,13 +53,17 @@ def load_workflow(
         check_alternatives=True,
         project_root=project_root,
     )
-    rendered_workflow = ConfigRenderingService().render_and_load_config(
-        agent_name,
-        full_path,
-        paths.template_dir,
-        paths.rendered_workflows_dir,
-        project_root=project_root,
-    )
+    try:
+        rendered_workflow = ConfigRenderingService().render_and_load_config(
+            agent_name,
+            full_path,
+            paths.template_dir,
+            paths.rendered_workflows_dir,
+            project_root=project_root,
+        )
+    except AgentActionsError as e:
+        enrich_exception_context(e, agent=full_path.stem)
+        raise
     return AgentWorkflow(
         WorkflowRuntimeConfig(
             paths=WorkflowPaths(

@@ -136,6 +136,7 @@ Call-time execution order (top-down):
 - Passes through `click.ClickException` unchanged (already formatted)
 - Passes through unexpected `Exception` for the top-level catch in `CLI.execute()`
 - Checks `_already_displayed` flag to avoid double-printing errors
+- Passes the command's options as context; the formatter adds an option only for a key the error does not set, and never adds an option that is `None`
 
 ### `@requires_project`
 

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "An error names the workflow it carries, not the value given to `-a`. With `-a agent_workflow/w/agent_config/w.yml`, `agac run`, `inspect action`, `inspect context`, `schema`, `dispositions` and `retry` printed `Invalid configuration in agent 'agent_workflow/w/agent_config/w.yml'`, because the command's options replaced the error's own context. Now an option fills only a key the error does not set, so the output says `agent 'w'`. `agac records` no longer prints `Field: None` when `--field` is not given, and `agac inspect action` names the action that names a missing tool, not the action inspected. An error raised while `run`, `schema`, `dispositions` or `retry` renders the config now carries the workflow name."
+time: 2026-11-15T09:00:00Z
