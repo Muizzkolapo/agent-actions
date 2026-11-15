@@ -227,7 +227,7 @@ Guards examine namespaced fields. Use the HITL action name as the namespace pref
 **Common guard patterns:**
 
 ```yaml
-# Only process approved items (filter out rejected/timeout)
+# Only process approved items (filter out rejected)
 guard:
   condition: "review_action.hitl_status == 'approved'"
   on_false: filter
