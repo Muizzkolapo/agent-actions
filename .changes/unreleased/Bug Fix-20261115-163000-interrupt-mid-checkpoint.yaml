@@ -1,3 +1,3 @@
 kind: Bug Fix
-body: A run with record_concurrency above 1 that is stopped with Ctrl-C no longer sends a record again on resume when the interrupt came while that record's answer was being saved. The answer had already left the set of records in flight, so it was neither saved nor kept for the resume. It now stays in that set until it is saved, and the interrupted run saves it.
+body: A run with record_concurrency above 1 that is stopped with Ctrl-C no longer sends a record again on resume (#1769). An answer the interrupt caught while it was being saved, or a record the interrupt caught the moment it was handed to a worker, had already left (or not yet joined) the set of records in flight, so its answer was neither saved nor kept. A record now joins that set before it is submitted and leaves only once it is saved, and a record whose worker had not started when the interrupt came is never sent.
 time: 2026-11-15T16:30:00Z

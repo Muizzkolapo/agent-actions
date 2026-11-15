@@ -302,16 +302,20 @@ class OnlineLLMStrategy:
         next_idx = 0
         while next_idx < len(records) or in_flight:
             while next_idx < len(records) and len(in_flight) < limit:
+                # In the window before it is submitted: Ctrl-C can land the moment
+                # submit returns, and a record already sent must be found in flight.
+                future: Future[ProcessingResult] = Future()
+                in_flight[future] = next_idx
                 # Each record runs in a copy of this context, so its events and
                 # model call are logged against this action.
-                future = pool.submit(
-                    contextvars.copy_context().run,
-                    self._answer,
+                pool.submit(
+                    self._send,
+                    future,
+                    contextvars.copy_context(),
                     next_idx,
                     records[next_idx],
                     context,
                 )
-                in_flight[future] = next_idx
                 next_idx += 1
             done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
             for future in sorted(done, key=in_flight.__getitem__):
@@ -320,6 +324,26 @@ class OnlineLLMStrategy:
                 idx = in_flight[future]
                 results[idx] = self._settle(idx, records[idx], context, future.result, tally)
                 del in_flight[future]
+
+    def _send(
+        self,
+        future: Future[ProcessingResult],
+        run_context: contextvars.Context,
+        idx: int,
+        item: Any,
+        context: ProcessingContext,
+    ) -> None:
+        """Answer one record on a worker thread into *future*, unless it was cancelled first.
+
+        Marking the future running is the point after which the request may go out, so a
+        record is sent only while its future is in the window an interrupt keeps.
+        """
+        if not future.set_running_or_notify_cancel():
+            return
+        try:
+            future.set_result(run_context.run(self._answer, idx, item, context))
+        except BaseException as error:  # noqa: BLE001 - handed to the coordinator, as the pool did
+            future.set_exception(error)
 
     def _keep_answers_in_flight(
         self, in_flight: dict[Future[ProcessingResult], int], context: ProcessingContext
@@ -332,7 +356,8 @@ class OnlineLLMStrategy:
         and disposition.
         """
         for future in sorted(in_flight, key=in_flight.__getitem__):
-            if future.exception() is not None:
+            # One not yet started is never sent: cancelled here, its worker skips it.
+            if future.cancel() or future.exception() is not None:
                 continue
             result = future.result()
             if context.storage_backend and result.source_guid:
