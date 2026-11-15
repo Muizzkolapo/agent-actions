@@ -90,10 +90,8 @@ def invoke_judge(
     if not model_vendor:
         raise ValueError("agent_config missing required 'model_vendor' for judge LLM call")
 
-    # json_mode: False so the provider hands back the model's text rather than
-    # parsing it through the best-effort reader, which would scavenge a verdict
-    # out of prose before `_read_verdict` ever saw the reply.
-    # The judge prompt holds this record's output, so it gets no prompt-cache mark.
+    # json_mode False: `_read_verdict` reads the model's own text, not a best-effort parse.
+    # The prompt holds this record's output, so it gets no prompt-cache mark.
     effective_config = {**agent_config, "json_mode": False, REQUEST_VARIES_PER_RECORD_KEY: True}
     if model is not None:
         effective_config["model_name"] = model

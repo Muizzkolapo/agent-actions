@@ -34,15 +34,11 @@ call, a judge call, or a call with the schema its record chose."""
 def record_reads_in_prompt(agent_config: Mapping[str, Any]) -> tuple[str, ...]:
     """What the action's prompt template reads that can differ from one record to the next.
 
-    A name the template reads without binding it counts, unless it is ``version``,
-    ``workflow``, ``loop``, a version param, or a ``seed`` key with no ``select_by``.
-    While any seed key has ``select_by``, a ``seed`` read not through a constant key
-    naming a key without one counts too. A ``dispatch_task(...)`` call, the ``random``
-    filter and the ``lipsum`` global count. When nothing above counts, a read of ``seed``
-    while a seed file holds a ``dispatch_task(`` call, or cannot be read, counts, and so
-    does a read of a
-    version name while a version value holds one: the run resolves those calls on the
-    rendered prompt, per record.
+    An unbound name counts unless it is ``version``, ``workflow``, ``loop``, a version
+    param, or a constant ``seed`` key with no ``select_by``. A ``dispatch_task(...)``
+    call, ``random`` and ``lipsum`` count. A ``seed`` or version read also counts when
+    its file or value holds a ``dispatch_task(`` call (or a seed file cannot be read),
+    because the run resolves those calls on the rendered prompt, per record.
     """
     template = PromptFormatter.get_raw_prompt(agent_config)
     if not template:

@@ -41,19 +41,11 @@ def run_dynamic_agent(
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
-    ``dispatched`` is the record's already-resolved schema (``_choose_dispatched_schema``),
-    so a retry or repair call writes the schema the record was first given.
-    ``prompt_holds_feedback`` marks a repair call, whose prompt carries this record's
-    feedback.
-
-    `prefilter_by_guard` has already run on every path that reaches here, and the online
-    record path additionally runs `TaskPreparer.prepare`, the authoritative evaluation
-    (`online_llm.py:411`); batch never reaches this function. So it evaluates no guard.
-    ``was_executed`` is therefore always ``True`` here — callers keep it because
-    `ProcessingResult.executed` is set ``False`` by other producers.
-
-    ``context`` is the original data and ``llm_context`` the transformed data with
-    ``context_scope.drop`` applied; the latter is what the LLM sees when present.
+    ``dispatched`` is the record's resolved schema, so a retry or repair call writes the
+    schema the record was first given. ``prompt_holds_feedback`` marks a repair call.
+    Every path here has already evaluated the guard, so ``was_executed`` is always
+    ``True``; callers keep it because other producers set it ``False``. The LLM sees
+    ``llm_context`` (``context`` with ``context_scope.drop`` applied) when it is given.
     """
     from agent_actions.llm.realtime import builder as agent_builder
 
