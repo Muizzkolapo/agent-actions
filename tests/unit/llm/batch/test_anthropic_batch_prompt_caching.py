@@ -7,18 +7,24 @@ import typing
 from pathlib import Path
 from typing import Any
 
-import httpx
+import anthropic
 import pytest
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
+from tests._support.sdk_http import http_library
+
+# The HTTP library the installed anthropic SDK runs on: httpx, or httpx2 on 1.x.
+httpx = http_library(anthropic)
 
 PROMPT = "Summarise the page."
 CONTENT = {"page": "alpha"}
 USER_TEXT = json.dumps(CONTENT)
 MARK = {"type": "ephemeral"}
 ROW = {"target_id": "r1", "content": CONTENT, "prompt": PROMPT}
-PARAM_KEYS = set(typing.get_type_hints(MessageCreateParamsNonStreaming))
+# anthropic 1.x's params type dropped the sampling fields; a batch line still carries the
+# temperature agac sets, as it always has, and the API decides on it.
+PARAM_KEYS = set(typing.get_type_hints(MessageCreateParamsNonStreaming)) | {"temperature"}
 
 
 def _action(**settings: Any) -> dict[str, Any]:

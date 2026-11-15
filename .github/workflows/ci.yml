@@ -75,6 +75,34 @@ jobs:
       - name: Run tests
         run: uv run pytest
 
+  newest-sdks:
+    # uv.lock pins the SDKs the main job tests; a user's install takes the newest
+    # versions pyproject.toml allows, which can differ (anthropic 1.x and openai 3.x
+    # run on httpx2). This job runs the provider tests on those (#1781).
+    name: Provider Tests (newest SDKs)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    needs: check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Upgrade the vendor SDKs to the newest versions the pins allow
+        run: >-
+          uv sync --dev
+          --upgrade-package anthropic --upgrade-package openai --upgrade-package groq
+          --upgrade-package google-genai --upgrade-package cohere --upgrade-package ollama
+
+      - name: Show the SDK versions under test
+        run: uv pip list | grep -Ei '^(anthropic|openai|groq|google-genai|cohere|ollama|httpx2?) '
+
+      - name: Run provider tests
+        run: uv run pytest tests/unit/llm tests/unit/llm_invocation tests/unit/validation
+
   build:
     name: Build Package
     runs-on: ubuntu-24.04

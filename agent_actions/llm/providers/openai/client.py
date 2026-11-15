@@ -90,6 +90,11 @@ class OpenAIClient(BaseClient):
         return connect_limited_timeout_kwargs(agent_config, openai)
 
     @classmethod
+    def _request_headers(cls) -> dict[str, Any]:
+        """Headers each request sends beside the client's own; a declared endpoint sets some."""
+        return {}
+
+    @classmethod
     def call_json(
         cls,
         api_key: str | None,
@@ -139,6 +144,8 @@ class OpenAIClient(BaseClient):
             **cls._request_timeout_kwargs(agent_config),
         }
 
+        if request_headers := cls._request_headers():
+            completion_kwargs["extra_headers"] = request_headers
         cls.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
         start_time = time.perf_counter()
         try:
@@ -240,6 +247,8 @@ class OpenAIClient(BaseClient):
             **cls._request_timeout_kwargs(agent_config),
         }
 
+        if request_headers := cls._request_headers():
+            completion_kwargs["extra_headers"] = request_headers
         cls.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
         start_time = time.perf_counter()
         try:

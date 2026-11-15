@@ -147,15 +147,25 @@ class EndpointClient(OpenAIClient):
     def _client_options(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
         """The endpoint's url, headers and timeout; an inherited base_url plays no part."""
         endpoint = cls.ENDPOINT
+        # A workflow's Authorization in any spelling goes under the SDK's own key, so it
+        # replaces the SDK's header on every openai version rather than sitting beside it.
         headers: dict[str, Any] = {
-            name: _resolve_header(endpoint, name, value) for name, value in endpoint.headers.items()
+            (
+                AUTHORIZATION_HEADER if name.lower() == AUTHORIZATION_HEADER.lower() else name
+            ): _resolve_header(endpoint, name, value)
+            for name, value in endpoint.headers.items()
         }
         auth = endpoint.auth
         if auth is not None:
             # The SDK's own Authorization header (under exactly this key) gives way to
             # the declared one, so the prefix is honoured and no second copy is sent; a
             # header the user wrote as Authorization stays as written.
-            headers[auth.header] = f"{auth.prefix}{_secret(endpoint)}"
+            header = (
+                AUTHORIZATION_HEADER
+                if auth.header.lower() == AUTHORIZATION_HEADER.lower()
+                else auth.header
+            )
+            headers[header] = f"{auth.prefix}{_secret(endpoint)}"
             if AUTHORIZATION_HEADER not in headers:
                 headers[AUTHORIZATION_HEADER] = _OMIT
         return {
@@ -163,6 +173,23 @@ class EndpointClient(OpenAIClient):
             "default_headers": headers,
             "timeout": endpoint.timeout_seconds,
         }
+
+    @classmethod
+    def _request_headers(cls) -> dict[str, Any]:
+        """The SDK's Authorization omitted, where the credential travels in another header.
+
+        Sent with each request as well as on the client: openai 3.x looks for the omission
+        only among a request's own headers, and refuses a request it finds no
+        Authorization for.
+        """
+        endpoint = cls.ENDPOINT
+        if endpoint.auth is None:
+            return {}
+        # A header the workflow wrote as Authorization, in any spelling, is the one sent.
+        written = {name.lower() for name in (*endpoint.headers, endpoint.auth.header)}
+        if AUTHORIZATION_HEADER.lower() in written:
+            return {}
+        return {AUTHORIZATION_HEADER: _OMIT}
 
     @classmethod
     def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:

@@ -18,6 +18,7 @@ from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchCli
 from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
 from agent_actions.llm.providers.groq.batch_client import GroqBatchClient
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
+from tests._support.sdk_http import http_library
 
 _REQUEST = httpx.Request("GET", "https://provider.test/batches/batch-1")
 
@@ -104,9 +105,10 @@ def test_an_anthropic_server_that_cannot_answer_now_is_asked_again(status):
     """529 is Anthropic's "overloaded"; its SDK raises OverloadedError for it, which is not
     an InternalServerError."""
     client = AnthropicBatchClient(api_key="test")
-    transport = httpx.MockTransport(lambda _: httpx.Response(status, json={"error": "busy"}))
+    http = http_library(anthropic)
+    transport = http.MockTransport(lambda _: http.Response(status, json={"error": "busy"}))
     client.client = anthropic.Anthropic(
-        api_key="test", max_retries=0, http_client=httpx.Client(transport=transport)
+        api_key="test", max_retries=0, http_client=http.Client(transport=transport)
     )
 
     with pytest.raises(ConnectionError):

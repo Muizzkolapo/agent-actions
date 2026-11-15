@@ -11,7 +11,6 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 from ollama import ChatResponse, Message
 
@@ -60,7 +59,8 @@ class _Sent:
     def __init__(self, built: dict[str, Any], called: dict[str, Any]):
         self.built = built
         self.called = {
-            key: value.read if isinstance(value, httpx.Timeout) else value
+            # An httpx or httpx2 Timeout, whichever the SDK runs on, as its read.
+            key: value.read if hasattr(value, "connect") else value
             for key, value in called.items()
         }
 

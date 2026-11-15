@@ -8,11 +8,14 @@ from typing import Any
 from unittest.mock import patch
 
 import anthropic
-import httpx
 import pytest
 
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
 from agent_actions.llm.providers.anthropic.client import AnthropicClient
+from tests._support.sdk_http import http_library
+
+# The HTTP library the installed anthropic SDK runs on: httpx, or httpx2 on 1.x.
+httpx = http_library(anthropic)
 
 PROMPT = "Summarise the page."
 MARK = {"type": "ephemeral"}

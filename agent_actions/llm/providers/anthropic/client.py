@@ -23,6 +23,7 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     empty_response_error,
+    is_truncated,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -41,6 +42,7 @@ from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
+from agent_actions.utils.json_parsing import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -111,18 +113,18 @@ class AnthropicClient(BaseClient):
             "messages": messages,
             **params,
         }
+        # The tool is offered, not forced: forced, claude-haiku-5-5 returns a nested array as
+        # one JSON string, which no repair undoes. vendor_params.tool_choice can force it.
         if schema is not None:
             api_args["tools"] = schema
-            tool_choice = AnthropicClient._schema_tool_choice(schema, cfg)
-            if tool_choice is not None:
-                api_args["tool_choice"] = tool_choice
         if enable_prompt_caching:
             api_args["extra_headers"] = PROMPT_CACHING_BETA_HEADER
-        return AnthropicClient.VENDOR_PARAMS.apply(api_args, cfg)
+        spec = AnthropicClient.VENDOR_PARAMS
+        return spec.apply(spec.fit(api_args), cfg)
 
     @staticmethod
     def _schema_tool_choice(schema: Any, cfg: dict[str, Any]) -> dict[str, Any] | None:
-        """Force the one schema tool, so the model cannot answer in text instead.
+        """The forced choice of the one schema tool, which a batch line has always sent.
 
         Not while thinking is on: the API refuses a forced tool with thinking.
         """
@@ -224,6 +226,19 @@ class AnthropicClient(BaseClient):
 
         text = next((block.text for block in response.content if hasattr(block, "text")), "")
         stop_reason = getattr(response, "stop_reason", None)
+        # Offered the tool, a model can answer in text instead, often in a ```json fence.
+        # A finished answer is read like every other client's; a cut-off one could only be
+        # read by guessing its end.
+        if text and not is_truncated(stop_reason):
+            parsed = parse_llm_json(text)
+            if isinstance(parsed, dict):
+                parsed = [parsed]
+            if isinstance(parsed, list) and parsed and all(isinstance(r, dict) for r in parsed):
+                logger.debug(
+                    "Anthropic model=%s answered in text, not the tool; read it as JSON",
+                    model_name,
+                )
+                return parsed
         message = f"No tool_use block in response (stop_reason={stop_reason}): {text[:200]!r}"
         fire_event(
             LLMErrorEvent(

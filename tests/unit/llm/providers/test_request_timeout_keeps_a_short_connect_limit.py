@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import httpx
 import pytest
 
 from agent_actions.errors import ConfigValidationError
@@ -79,7 +78,7 @@ VENDORS = {"openai": _openai, "groq": _groq, "anthropic": _anthropic}
 def test_the_request_timeout_reads_long_and_connects_short(vendor, timeout, read, json_mode):
     sent = VENDORS[vendor](_config(timeout, json_mode))
 
-    assert isinstance(sent, httpx.Timeout)
+    assert type(sent).__name__ == "Timeout"  # httpx's or httpx2's, as the SDK takes
     assert (sent.read, sent.write, sent.pool, sent.connect) == (read, read, read, 5.0)
 
 
