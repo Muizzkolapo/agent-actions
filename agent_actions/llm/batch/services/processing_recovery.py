@@ -149,6 +149,7 @@ def process_recovery_batch(
             context_map=context_map,
             record_count=entry.record_count,
             file_name=file_name,
+            agent_config=agent_config,
         )
 
     accumulated = deserialize_results(state.accumulated_results)

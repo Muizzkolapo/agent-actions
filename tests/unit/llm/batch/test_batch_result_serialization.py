@@ -29,6 +29,7 @@ def _full_record() -> BatchResult:
             retry=RetryMetadata(attempts=2, failures=1, succeeded=False, reason="rate_limit")
         ),
         exhausted=True,
+        raw_text='{"answer": "kept"}',
     )
 
 
@@ -42,6 +43,10 @@ class TestEveryFieldSurvivesTheRoundTrip:
             f"{sorted(missing)} never reach the persisted state, so they are gone by the time a "
             "deferred round finishes"
         )
+
+    def test_the_raw_text_survives(self):
+        restored = deserialize_results(serialize_results([_full_record()]))[0]
+        assert restored.raw_text == '{"answer": "kept"}'
 
     def test_usage_survives(self):
         restored = deserialize_results(serialize_results([_full_record()]))[0]

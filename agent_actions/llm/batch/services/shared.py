@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
+from agent_actions.output.response.config_fields import get_default
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -21,13 +22,19 @@ def retrieve_and_reconcile(
     context_map: dict[str, Any] | None = None,
     record_count: int | None = None,
     file_name: str | None = None,
+    agent_config: dict[str, Any] | None = None,
 ) -> list[BatchResult]:
-    """Retrieve batch results from provider and log reconciliation."""
+    """Retrieve batch results from provider and log reconciliation.
+
+    A `json_mode: false` action gets each answer as text under its `output_field`
+    (*agent_config*), before the expectation loop checks it against the schema.
+    """
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,
     )
 
     batch_results = provider.retrieve_results(batch_id, output_directory)
+    keep_text_output(batch_results, agent_config)
 
     # Log reconciliation
     BatchResultReconciler.report_unparseable_lines(batch_results)
@@ -44,6 +51,28 @@ def retrieve_and_reconcile(
     )
 
     return batch_results
+
+
+def keep_text_output(batch_results: list[BatchResult], agent_config: dict[str, Any] | None) -> None:
+    """Put each answer of a `json_mode: false` action under its `output_field`, as text.
+
+    The batch clients parse every text answer as JSON, so a plain-text answer that is JSON
+    text arrives as an object and other text as a bare string. Online, `call_non_json` wraps
+    the text (`ResponseBuilder.wrap_non_json`); this is the batch counterpart. Without it the
+    expectation loop checks `{questions: ...}` or `"Q1: PASS"` against a `{raw: ...}` schema
+    and fails every repair round.
+    """
+    if not agent_config or agent_config.get("json_mode", get_default("json_mode")):
+        return
+    field = agent_config.get("output_field", get_default("output_field"))
+    for result in batch_results:
+        if not result.success or result.content is None:
+            continue
+        if result.raw_text is not None:
+            result.content = {field: result.raw_text}
+        elif isinstance(result.content, str):
+            result.content = {field: result.content}
+        # Structured content with no text (a client that returns objects) is left as it is.
 
 
 def recovery_preparator(

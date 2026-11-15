@@ -35,6 +35,8 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             d["recovery_metadata"] = r.recovery_metadata.to_dict()
         if r.exhausted:
             d["exhausted"] = True
+        if r.raw_text is not None:
+            d["raw_text"] = r.raw_text
         serialized.append(d)
     return serialized
 
@@ -81,6 +83,7 @@ def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
             metadata=d.get("metadata"),
             usage=d.get("usage"),
             exhausted=d.get("exhausted", False),
+            raw_text=d.get("raw_text"),
         )
         result.recovery_metadata = recovery
         results.append(result)

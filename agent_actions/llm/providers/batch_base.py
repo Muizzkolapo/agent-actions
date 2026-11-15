@@ -87,6 +87,9 @@ class BatchResult:
     # The expectation loop gave up on this record. Not a provider failure: it
     # reads as an exhausted record, as online's does.
     exhausted: bool = False
+    # The answer as the model wrote it, before any JSON parse. A `json_mode: false`
+    # action keeps this text under its `output_field` (see keep_text_output).
+    raw_text: str | None = None
 
 
 class BaseBatchClient(ABC):
@@ -274,6 +277,7 @@ class BaseBatchClient(ABC):
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
+        raw_text = content if isinstance(content, str) else self._extract_raw_text(raw_response)
 
         # Parse JSON content if it's a string
         if isinstance(content, str):
@@ -289,7 +293,12 @@ class BaseBatchClient(ABC):
             error=None,
             metadata=metadata,
             usage=usage,
+            raw_text=raw_text,
         )
+
+    def _extract_raw_text(self, raw_response: Any) -> str | None:
+        """The answer text, for a client whose content extraction already parsed it. None when there is none."""
+        return None
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, or the sentinel if it carries none."""
