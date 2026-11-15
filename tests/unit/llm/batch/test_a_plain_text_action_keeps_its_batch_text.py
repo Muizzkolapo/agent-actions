@@ -172,3 +172,208 @@ class TestAJsonActionIsUnchanged:
         )
 
         assert result.content is None and result.error == "overloaded"
+
+
+# ---------------------------------------------------------------------------
+# The schema check the repair loop runs, a recovery round, an earlier state, the CLI
+# ---------------------------------------------------------------------------
+
+VALIDATOR = {
+    "name": "validate",
+    "action_name": "validate",
+    "agent_type": "validate",
+    "json_mode": False,
+    "output_field": "verdicts",
+    "model_name": "test-model",
+    "prompt": "Check the question.",
+    "run_mode": "batch",
+    "schema": {"verdicts": "string"},
+    "expect": {"repair": "auto", "structural": "auto"},
+}
+
+
+class TestTheRepairLoopSchemaCheckPassesTheText:
+    def _passes(self, result: BatchResult) -> bool:
+        from agent_actions.llm.batch.services.repair_ops import build_repair_strategy
+
+        return build_repair_strategy(VALIDATOR).evaluate(result).passed
+
+    def test_the_unwrapped_answer_fails_the_check(self):
+        """The bug: what the loop checked before the fix."""
+        result = _client().parse_provider_response(_anthropic_line(PLAIN_TEXT))
+
+        assert not self._passes(result)
+
+    def test_the_answer_retrieval_wraps_passes_the_check(self):
+        (result,) = retrieve_and_reconcile(
+            _Provider(PLAIN_TEXT), "b1", None, agent_config=VALIDATOR
+        )
+
+        assert self._passes(result)
+
+
+class TestAToolAnswerHasNoText:
+    def test_a_tool_answer_has_no_text(self):
+        line = _anthropic_line("x")
+        line["result"]["message"]["content"] = [
+            {"type": "tool_use", "id": "t1", "name": "out", "input": {"verdicts": "Q1: PASS"}}
+        ]
+
+        result = _client().parse_provider_response(line)
+
+        assert result.content == {"verdicts": "Q1: PASS"} and result.raw_text is None
+
+
+class TestAStateAnEarlierVersionWrote:
+    """An earlier version persisted the parsed content and no text, and no `text_kept` marker."""
+
+    def _restore(self, **row):
+        from agent_actions.llm.batch.services.retry_serialization import deserialize_results
+
+        return deserialize_results([{"custom_id": "r1", "success": True, **row}])[0]
+
+    def test_parsed_json_text_gets_its_text_back(self):
+        result = self._restore(content={"questions": [{"stem": "Which flag?"}]})
+
+        assert json.loads(result.raw_text) == {"questions": [{"stem": "Which flag?"}]}
+
+    def test_plain_text_gets_its_text_back(self):
+        assert self._restore(content=PLAIN_TEXT).raw_text == PLAIN_TEXT
+
+    def test_a_state_this_version_wrote_keeps_no_text_it_did_not_have(self):
+        result = self._restore(content={"q": "kept"}, text_kept=True)
+
+        assert result.raw_text is None
+
+    def test_this_version_marks_every_result(self):
+        from agent_actions.llm.batch.services.retry_serialization import serialize_results
+
+        (row,) = serialize_results([BatchResult(custom_id="r1", content={"q": 1}, success=True)])
+
+        assert row["text_kept"] is True
+
+
+class TestARecoveryRoundWrapsWhatItCarries:
+    """`process_recovery_batch`: the retrieved round and the results carried from the state."""
+
+    def _run(self, accumulated_rows):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry, RecoveryType
+        from agent_actions.llm.batch.services import processing_recovery as pr
+
+        service = MagicMock()
+        service._resolve_action_name.side_effect = lambda name: name or "validate"
+        service._apply_workflow_session_id.side_effect = lambda config, entry: config
+        service._client_resolver.get_for_batch_id.return_value = _Provider(PLAIN_TEXT)
+        service._context_manager.load_batch_context_map.return_value = {}
+        entry = BatchJobEntry(
+            batch_id="b2",
+            status="completed",
+            timestamp="t",
+            provider="anthropic",
+            file_name="f.json_repair_1",
+            parent_file_name="f.json",
+            recovery_type=RecoveryType.REPAIR,
+            recovery_attempt=1,
+        )
+        seen = {}
+
+        def handler(context, identity, *, state, recovery_results, accumulated, context_map):
+            seen["recovery"], seen["accumulated"] = recovery_results, accumulated
+            return "done"
+
+        state = SimpleNamespace(accumulated_results=accumulated_rows)
+        with (
+            patch.object(pr.RecoveryStateManager, "load", return_value=state),
+            patch.object(pr, "handle_repair_recovery", handler),
+        ):
+            pr.process_recovery_batch(
+                service, "b2", "f.json_repair_1", entry, "/tmp/out", dict(VALIDATOR), MagicMock()
+            )
+        return seen
+
+    def test_the_retrieved_round_is_wrapped(self):
+        seen = self._run([])
+
+        assert [r.content for r in seen["recovery"]] == [{"verdicts": PLAIN_TEXT}]
+
+    def test_a_carried_result_from_an_earlier_state_is_wrapped(self):
+        seen = self._run(
+            [{"custom_id": "r0", "success": True, "content": "Q1: FAIL | difficulty 2"}]
+        )
+
+        assert [r.content for r in seen["accumulated"]] == [{"verdicts": "Q1: FAIL | difficulty 2"}]
+
+    def test_a_carried_result_this_version_wrapped_is_unchanged(self):
+        row = {
+            "custom_id": "r0",
+            "success": True,
+            "content": {"verdicts": "Q1: PASS"},
+            "raw_text": "Q1: PASS",
+            "text_kept": True,
+        }
+
+        seen = self._run([row])
+
+        assert [r.content for r in seen["accumulated"]] == [{"verdicts": "Q1: PASS"}]
+
+
+class TestBatchRetrieveWritesTheText:
+    def _service(self, provider):
+        from unittest.mock import MagicMock
+
+        from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
+
+        resolver = MagicMock()
+        resolver.get_for_batch_id.return_value = provider
+        manager = MagicMock()
+        manager.get_batch_job_by_id.return_value = None
+        return BatchRetrievalService(
+            client_resolver=resolver,
+            context_manager=MagicMock(),
+            registry_manager_factory=lambda name: manager,
+            action_name="validate",
+        )
+
+    def _written(self, path) -> Any:
+        row = json.loads(path.read_text().splitlines()[0])
+        return json.loads(row["response"]["body"]["choices"][0]["message"]["content"])
+
+    def test_the_action_config_wraps_the_written_text(self, tmp_path):
+        path = self._service(_Provider(PLAIN_TEXT)).retrieve_results(
+            "b1", str(tmp_path), agent_config=VALIDATOR
+        )
+
+        assert self._written(path) == {"verdicts": PLAIN_TEXT}
+
+    def test_the_cli_reads_the_action_config(self, monkeypatch):
+        from agent_actions.llm.batch import batch_cli
+
+        class _Inspector:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def load(self):
+                return {"validate": VALIDATOR}
+
+        monkeypatch.setattr(
+            "agent_actions.services.workflow_inspector.WorkflowInspector", _Inspector
+        )
+        monkeypatch.setattr(batch_cli, "resolve_project_root", lambda root: root)
+
+        assert batch_cli._action_config(None, "wf", "validate") is VALIDATOR
+
+    def test_the_cli_warns_and_goes_on_when_the_config_does_not_load(self, monkeypatch, capsys):
+        from agent_actions.llm.batch import batch_cli
+
+        class _Broken:
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("no config")
+
+        monkeypatch.setattr("agent_actions.services.workflow_inspector.WorkflowInspector", _Broken)
+        monkeypatch.setattr(batch_cli, "resolve_project_root", lambda root: root)
+
+        assert batch_cli._action_config(None, "wf", "validate") is None
+        assert "could not load the config of wf" in capsys.readouterr().err

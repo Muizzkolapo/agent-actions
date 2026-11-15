@@ -276,8 +276,7 @@ class BaseBatchClient(ABC):
             return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
 
         # Extract successful response data
-        content = self._extract_content_from_response(raw_response)
-        raw_text = self._extract_raw_text(raw_response, content)
+        content, raw_text = self._extract_content_and_text(raw_response)
 
         # Parse JSON content if it's a string
         if isinstance(content, str):
@@ -296,13 +295,14 @@ class BaseBatchClient(ABC):
             raw_text=raw_text,
         )
 
-    def _extract_raw_text(self, raw_response: Any, content: Any) -> str | None:
-        """The answer text the model wrote, or None when it wrote none.
+    def _extract_content_and_text(self, raw_response: Any) -> tuple[Any, str | None]:
+        """The answer content, and the text the model wrote (None when it wrote none).
 
-        *content* is what `_extract_content_from_response` returned, before the JSON parse.
-        A client whose extraction parses or reshapes the text overrides this.
+        The content is parsed as JSON afterwards when it is a string. A client whose
+        extraction parses or reshapes the text overrides this, so the text is read once.
         """
-        return content if isinstance(content, str) else None
+        content = self._extract_content_from_response(raw_response)
+        return content, content if isinstance(content, str) else None
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, or the sentinel if it carries none."""

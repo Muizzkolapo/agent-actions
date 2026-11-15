@@ -13,5 +13,5 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `batch_cli.py` | Module | CLI commands for batch processing operations. | llm.batch |
+| `batch_cli.py` | Module | CLI commands for batch processing operations. `batch retrieve` loads the action's config (`WorkflowInspector`) so a `json_mode: false` action's answers are written as text under its `output_field`; when the config does not load it warns and writes the provider's parsed content. | llm.batch, services |
 | `service.py` | Module | Shared batch utilities (registry manager factory). | llm.batch |
