@@ -18,7 +18,11 @@ logger = logging.getLogger(__name__)
 
 import openai
 from openai import OpenAI
-from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
@@ -34,6 +38,7 @@ from agent_actions.llm.providers.generation_params import (
     extract_generation_params,
     sdk_keyword_params,
 )
+from agent_actions.llm.providers.sdk_models import build_sdk_models
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -42,6 +47,8 @@ from agent_actions.logging.events import (
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
+
+build_sdk_models(ChatCompletion)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="openai",

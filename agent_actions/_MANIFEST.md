@@ -28,5 +28,5 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `__init__.py` | Module | Package entry point. Sets `DEFER_PYDANTIC_BUILD=false` (unless it is set already) before any provider SDK is imported, so the SDKs build their response models at import, not in several record threads at once. | - |
+| `__init__.py` | Module | Package entry point. Sets `DEFER_PYDANTIC_BUILD=false` (unless it is set already) before any provider SDK is imported, so the SDKs build their response models at import, not in several record threads at once. An SDK imported before `agent_actions` keeps the lazy build; the provider clients cover it with `llm/providers/sdk_models.py`. | - |
 | `__version__.py` | Module | Agent Actions version. | - |
