@@ -37,11 +37,14 @@ def run_dynamic_agent(
     source_content: Any | None = None,
     llm_context: Any | None = None,
     dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
+    prompt_holds_feedback: bool = False,
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
     ``dispatched`` is the record's already-resolved schema (``_choose_dispatched_schema``),
     so a retry or repair call writes the schema the record was first given.
+    ``prompt_holds_feedback`` marks a repair call, whose prompt carries this record's
+    feedback.
 
     `prefilter_by_guard` has already run on every path that reaches here, and the online
     record path additionally runs `TaskPreparer.prepare`, the authoritative evaluation
@@ -59,6 +62,10 @@ def run_dynamic_agent(
     record_config, dispatch_results, _ = dispatched or _choose_dispatched_schema(
         agent_config, llm_data, tools_path
     )
+    if prompt_holds_feedback:
+        from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
+
+        record_config = {**record_config, REQUEST_VARIES_PER_RECORD_KEY: True}
 
     response = agent_builder.create_dynamic_agent(
         record_config,
@@ -115,7 +122,10 @@ def _choose_dispatched_schema(
         captured,
         project_root=Path(project_root) if project_root else None,
     )
-    return {**agent_config, SCHEMA_KEY: schema}, captured, chosen
+    from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
+
+    record_config = {**agent_config, SCHEMA_KEY: schema, REQUEST_VARIES_PER_RECORD_KEY: True}
+    return record_config, captured, chosen
 
 
 def _is_tool_action(agent_config: dict[str, Any]) -> bool:

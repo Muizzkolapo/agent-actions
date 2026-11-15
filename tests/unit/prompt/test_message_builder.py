@@ -199,7 +199,7 @@ class TestMessageBuilderStructure:
     def test_batch_always_system_plus_user(self):
         env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
         assert len(env.messages) == 2
-        assert env.messages[0] == LLMMessage(role="system", content=PROMPT)
+        assert env.messages[0] == LLMMessage(role="system", content=PROMPT, static_len=len(PROMPT))
         assert env.messages[1] == LLMMessage(role="user", content=CONTEXT_STR)
 
 
@@ -356,7 +356,7 @@ class TestBatchBuilder:
         env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
         assert isinstance(env, LLMMessageEnvelope)
         assert len(env.messages) == 2
-        assert env.messages[0] == LLMMessage(role="system", content=PROMPT)
+        assert env.messages[0] == LLMMessage(role="system", content=PROMPT, static_len=len(PROMPT))
         assert env.messages[1] == LLMMessage(role="user", content=CONTEXT_STR)
 
     def test_batch_prompt_body_is_prompt(self):

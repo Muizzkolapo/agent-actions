@@ -272,6 +272,9 @@ class WorkflowStaticAnalyzer:
         for warning in self._check_json_mode_schema_mismatch():
             result.add_warning(warning)
 
+        for warning in self._check_prompt_caching_on_record_data():
+            result.add_warning(warning)
+
         return result
 
     def _build_graph(self) -> None:
@@ -1134,6 +1137,77 @@ class WorkflowStaticAnalyzer:
                 )
             )
 
+        return warnings
+
+    def _check_prompt_caching_on_record_data(self) -> list[StaticTypeWarning]:
+        """Warn, once per action, when an Anthropic action caches a prompt that differs per record.
+
+        A cache mark is placed only on a prompt that is the same text, after the same
+        tools, for every record; any other prompt is sent unmarked. The versions of one
+        action share its prompt and schema, so they warn once, under the action's name.
+        """
+        from agent_actions.errors import (
+            ConfigurationError,
+            PromptValidationError,
+            SchemaValidationError,
+        )
+        from agent_actions.prompt.cache_scope import record_reads_in_prompt, schema_dispatches
+
+        warnings: list[StaticTypeWarning] = []
+        warned: set[str] = set()
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict) or action.get("enable_prompt_caching") is not True:
+                continue
+            if action.get("model_vendor") != "anthropic":
+                continue
+            name = action.get("name", "<unnamed>")
+            if action.get("is_versioned_agent") and action.get("version_base_name"):
+                name = action["version_base_name"]
+            if name in warned:
+                continue
+            try:
+                reads = record_reads_in_prompt(action)
+                dispatches = schema_dispatches(action)
+            except (
+                ConfigurationError,
+                PromptValidationError,
+                SchemaValidationError,
+                TemplateSyntaxError,
+                OSError,
+                ValueError,
+            ) as exc:
+                # A prompt, schema or seed file that does not load or parse is reported by
+                # the checks that read it.
+                logger.debug("Cannot read the prompt or schema of action '%s': %s", name, exc)
+                continue
+            reasons = []
+            if reads:
+                reasons.append(f"its prompt reads record data ({', '.join(reads)})")
+            if dispatches:
+                reasons.append(
+                    f"its schema, sent as tools before the prompt, calls {', '.join(dispatches)}"
+                )
+            if not reasons:
+                continue
+            warned.add(name)
+            warnings.append(
+                StaticTypeWarning(
+                    message=(
+                        f"Action '{name}' has enable_prompt_caching on, but "
+                        f"{' and '.join(reasons)}. The request can differ per record, so "
+                        "the prompt is sent without a cache mark and is not cached."
+                    ),
+                    location=FieldLocation(agent_name=name, config_field="enable_prompt_caching"),
+                    referenced_agent=name,
+                    referenced_field="enable_prompt_caching",
+                    hint=(
+                        "To cache the prompt, move the record data out of the prompt text "
+                        "into context_scope.observe, and give the action a schema with no "
+                        "dispatch_task call. Observed fields are sent in the separate user "
+                        "content, after the prompt."
+                    ),
+                )
+            )
         return warnings
 
     def _check_guard_skipped_observe_refs(self) -> list[StaticTypeWarning]:

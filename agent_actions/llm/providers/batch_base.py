@@ -67,6 +67,7 @@ class BatchTask:
     user_content: str
     model_config: dict[str, Any]
     metadata: dict[str, Any] | None = None
+    cache_prompt: bool = False
 
 
 @dataclass
@@ -104,6 +105,7 @@ class BaseBatchClient(ABC):
         if not json_mode and agent_config.get("compiled_schema") is not None:
             warn_schema_without_json_mode(agent_config)
         schema = agent_config.get("compiled_schema") if json_mode else None
+        cache_prompt = self._caches_prompt(agent_config)
 
         for row in data:
             if "content" not in row:
@@ -124,6 +126,7 @@ class BaseBatchClient(ABC):
                     VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
                 },
                 metadata=row,
+                cache_prompt=cache_prompt,
             )
             task_schema = row_schema if row_schema is not None else schema
             provider_task = self.format_task_for_provider(
@@ -132,6 +135,10 @@ class BaseBatchClient(ABC):
             tasks.append(provider_task)
 
         return tasks
+
+    def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
+        """Whether this call's tasks mark their prompt for prompt caching."""
+        return False
 
     @abstractmethod
     def _get_default_model(self) -> str:

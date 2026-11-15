@@ -23,6 +23,11 @@ def schema_dispatch_function(value: Any) -> str | None:
     return match.group(1) if match else None
 
 
+def dispatch_calls_in(text: str) -> list[str]:
+    """The functions every ``dispatch_task(...)`` call in *text* names, in order."""
+    return _DISPATCH_CALL.findall(text)
+
+
 def _inject_functions_into_schema(
     schema: Any,
     tools_path: str | None,
