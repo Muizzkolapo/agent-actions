@@ -220,7 +220,7 @@ Writes events to a JSON file in NDJSON format (one JSON object on each line).
   "data": {
     "workflow_name": "support_resolution",
     "action_count": 5,
-    "execution_mode": "parallel"
+    "execution_mode": "async"
   }
 }
 ```
@@ -246,7 +246,7 @@ Collects data about the workflow run and writes a `run_results.json` artifact.
     "invocation_id": "run_support_resolution_8535dbc9",
     "workflow_name": "support_resolution",
     "action_count": 5,
-    "execution_mode": "parallel",
+    "execution_mode": "async",
     "started_at": "2026-01-15T19:40:16.000000+00:00",
     "completed_at": "2026-01-15T19:42:15.456000+00:00",
     "elapsed_time": 119.456,
