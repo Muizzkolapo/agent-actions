@@ -148,9 +148,9 @@ class TestTheRemovalRefusalForAnInheritedReader:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             f"'b2' {self.VIA_INCLUDE}, 'b3' {self.VIA_INCLUDE} still read it. "
-            "Remove the readers too, or override their 'context_scope' so that they do not read "
-            "it (a directive that the override sets, null included, replaces the inherited "
-            "one), or remove the read from the defaults named above."
+            "Remove the readers too, override them so that they do not read it, or remove the read "
+            "from the defaults named above. In an override, null takes away an inherited directive, "
+            "and a list is added to it."
         )
 
     def test_one_reader_inherits_the_read_and_one_has_its_own(self, tmp_path):
@@ -165,9 +165,9 @@ class TestTheRemovalRefusalForAnInheritedReader:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             f"'b2' {self.VIA_INCLUDE}, 'b3' still read it. "
-            "Remove the readers too, or override their 'context_scope' so that they do not read "
-            "it (a directive that the override sets, null included, replaces the inherited "
-            "one), or remove the read from the defaults named above."
+            "Remove the readers too, override them so that they do not read it, or remove the read "
+            "from the defaults named above. In an override, null takes away an inherited directive, "
+            "and a list is added to it."
         )
 
     def test_a_reader_with_its_own_read_keeps_the_plain_advice(self, tmp_path):

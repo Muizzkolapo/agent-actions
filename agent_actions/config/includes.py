@@ -450,9 +450,9 @@ def _removal_advice(levels: list[str]) -> str:
     if not any(levels):
         return "Remove the readers too, or override them so that they do not read it."
     return (
-        "Remove the readers too, or override their 'context_scope' so that they do not read "
-        "it (a directive that the override sets, null included, replaces the inherited one), "
-        "or remove the read from the defaults named above."
+        "Remove the readers too, override them so that they do not read it, or remove the read "
+        "from the defaults named above. In an override, null takes away an inherited directive, "
+        "and a list is added to it."
     )
 
 

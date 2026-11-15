@@ -85,9 +85,22 @@ class TestAnOverrideTakesAnInheritedReadAway:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             "'b2' (from 'context_scope' under 'defaults:' of include 'pair') still reads it. "
-            "Remove the readers too, or override their 'context_scope' so that they do not read "
-            "it (a directive that the override sets, null included, replaces the inherited one), "
-            "or remove the read from the defaults named above."
+            "Remove the readers too, override them so that they do not read it, or remove the read "
+            "from the defaults named above. In an override, null takes away an inherited directive, "
+            "and a list is added to it."
+        )
+
+    def test_a_directive_set_to_a_list_is_added_to_the_inherited_one(self, tmp_path):
+        override = {"b2": {**self.REROUTE, "context_scope": {"observe": ["a.text"], "drop": []}}}
+
+        message = _refusal(
+            tmp_path / "list",
+            [A, _include(remove=["b1"], override=override, defaults=self.DROP_B1)],
+        )
+
+        assert message.startswith(
+            f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
+            "'b2' (from 'context_scope' under 'defaults:' of include 'pair') still reads it."
         )
 
 
