@@ -65,7 +65,9 @@ not include the record in its results, and no retry will send the record again. 
 one of these two types:
 
 - A record of an action that has retry disabled.
-- A record whose retry batch was not sent. The cause is that the system could not render its prompt, or that the provider refused it.
+- A record whose retry batch the provider refused with a non-fatal error. The retry did not send the record, and nothing will send it again.
+
+A retry that preparation cannot build does not give this reason. That record is exhausted.
 
 The action completes with failures (`completed_with_failures`). The downstream actions skip the
 record, and [`agac retry`](../cli/retry) sends the record again. After the system collects the
