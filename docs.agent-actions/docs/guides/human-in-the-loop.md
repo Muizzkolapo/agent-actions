@@ -452,7 +452,7 @@ start, correct the cause. Then run the workflow again.
 
 ### Custom Ports
 
-To prevent conflicts, configure the port at the workflow level:
+To prevent conflicts, set `hitl.port` on each HITL action:
 
 ```yaml
 actions:
