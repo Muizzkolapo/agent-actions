@@ -235,7 +235,7 @@ class TestRunLogFileHandler:
         from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
 
         monkeypatch.setattr(
-            BatchRetrievalService, "retrieve_results", lambda self, batch_id, target_dir: "ok"
+            BatchRetrievalService, "retrieve_results", lambda self, batch_id, target_dir, **kw: "ok"
         )
 
         result = CliRunner().invoke(

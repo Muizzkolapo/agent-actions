@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -182,6 +183,30 @@ def _prepare_batch_context(
     )
 
 
+def _action_config(
+    project_root: Path | None, workflow_name: str, action_name: str
+) -> dict[str, Any] | None:
+    """The action's config as `agac run` sees it, or None (with a warning) when it cannot load.
+
+    `batch retrieve` needs it to give a `json_mode: false` action its answers as text under
+    its `output_field`. Without it the results are written as the provider's parsed content.
+    """
+    from agent_actions.services.workflow_inspector import WorkflowInspector
+
+    try:
+        configs = WorkflowInspector(
+            workflow_name, project_root=resolve_project_root(project_root)
+        ).load()
+    except Exception as e:  # the config may not load here; retrieval still writes the results
+        click.echo(
+            f"Warning: could not load the config of {workflow_name} ({e}); a json_mode: false "
+            "action's answers are written as the provider's parsed content.",
+            err=True,
+        )
+        return None
+    return configs.get(action_name)
+
+
 def _workflow_action_options(f):
     """Add -a/--agent and --action options to a batch subcommand."""
     f = click.option(
@@ -287,5 +312,6 @@ def retrieve(
     )
     target_dir = ctx.workflow_root / "agent_io" / "target" / ctx.action_name
     target_dir.mkdir(parents=True, exist_ok=True)
-    result = service.retrieve_results(args.batch_id, str(target_dir))
+    agent_config = _action_config(project_root, ctx.workflow_name, ctx.action_name)
+    result = service.retrieve_results(args.batch_id, str(target_dir), agent_config=agent_config)
     click.echo(result)

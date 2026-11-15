@@ -33,7 +33,7 @@ from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
 )
-from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
+from agent_actions.llm.batch.services.shared import keep_text_output, retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
@@ -149,9 +149,13 @@ def process_recovery_batch(
             context_map=context_map,
             record_count=entry.record_count,
             file_name=file_name,
+            agent_config=agent_config,
         )
 
     accumulated = deserialize_results(state.accumulated_results)
+    # A state an earlier version wrote holds plain-text answers unwrapped; wrap them as
+    # the results just retrieved are, so one output never mixes the two shapes.
+    keep_text_output(accumulated, agent_config)
 
     # One wrapper for all three: a halt parked inside any handler must not be
     # lost to an unrelated failure on the way to the finaliser.

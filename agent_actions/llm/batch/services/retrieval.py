@@ -4,7 +4,7 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError, ExternalServiceError
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -65,6 +65,7 @@ class BatchRetrievalService:
         batch_id: str,
         output_dir: str,
         file_path: str | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> Path:
         """Retrieve and save results from a completed batch job.
 
@@ -72,6 +73,8 @@ class BatchRetrievalService:
             batch_id: ID of the batch job to retrieve results for
             output_dir: Directory to save results to
             file_path: Optional original file path for naming output
+            agent_config: The action's config; a `json_mode: false` action gets its
+                answers as text under its `output_field`, as `agac run` does
 
         Returns:
             Path to the saved results file
@@ -102,6 +105,7 @@ class BatchRetrievalService:
                 context_map=context_map,
                 record_count=entry.record_count if entry else None,
                 file_name=file_name,
+                agent_config=agent_config,
             )
 
             output_path = Path(output_dir)

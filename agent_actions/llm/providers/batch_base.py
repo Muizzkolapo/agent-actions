@@ -87,6 +87,9 @@ class BatchResult:
     # The expectation loop gave up on this record. Not a provider failure: it
     # reads as an exhausted record, as online's does.
     exhausted: bool = False
+    # The answer as the model wrote it, before any JSON parse. A `json_mode: false`
+    # action keeps this text under its `output_field` (see keep_text_output).
+    raw_text: str | None = None
 
 
 class BaseBatchClient(ABC):
@@ -273,7 +276,7 @@ class BaseBatchClient(ABC):
             return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
 
         # Extract successful response data
-        content = self._extract_content_from_response(raw_response)
+        content, raw_text = self._extract_content_and_text(raw_response)
 
         # Parse JSON content if it's a string
         if isinstance(content, str):
@@ -289,7 +292,17 @@ class BaseBatchClient(ABC):
             error=None,
             metadata=metadata,
             usage=usage,
+            raw_text=raw_text,
         )
+
+    def _extract_content_and_text(self, raw_response: Any) -> tuple[Any, str | None]:
+        """The answer content, and the text the model wrote (None when it wrote none).
+
+        The content is parsed as JSON afterwards when it is a string. A client whose
+        extraction parses or reshapes the text overrides this, so the text is read once.
+        """
+        content = self._extract_content_from_response(raw_response)
+        return content, content if isinstance(content, str) else None
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, or the sentinel if it carries none."""

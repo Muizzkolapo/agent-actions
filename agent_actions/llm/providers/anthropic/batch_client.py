@@ -167,6 +167,27 @@ class AnthropicBatchClient(BaseBatchClient):
         content_list = self._get_attribute_or_key(message, "content", [])
         return self._parse_content_list(content_list)
 
+    def _extract_content_and_text(self, raw_response: Any) -> tuple[Any, str | None]:
+        """The content and the text block, in one pass over the content list.
+
+        A tool answer has no text. A text block is returned unparsed as both content and
+        text (the base parses the content). An answer with no text block (thinking only, as
+        when max_tokens ran out while thinking) gets the fallback content and no text: the
+        fallback stringifies the block, which is not text the model wrote.
+        """
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if not content_list or not isinstance(content_list, list):
+            return content_list, None
+        tool_use_content = self._extract_tool_use_content(content_list)
+        if tool_use_content is not None:
+            return tool_use_content, None
+        text_content = self._extract_text_content(content_list)
+        if text_content is not None:
+            return text_content, text_content
+        return self._fallback_content_extraction(content_list[0]), None
+
     def _parse_content_list(self, content_list: Any) -> Any:
         """
         Parse Anthropic content list, prioritizing tool use over text.
