@@ -69,6 +69,8 @@ WHERE id IN (
 );
 ```
 
+Every trace row of the action, failed attempts included:
+
 ```sql
 SELECT source_guid, json_extract(answered_under, '$.model_name') AS model
 FROM prompt_trace
