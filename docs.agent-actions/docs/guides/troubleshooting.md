@@ -280,7 +280,7 @@ This table gives the messages that occur most often for the `endpoints:` block o
 | `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion. Check the url, the model name and the log of the server. |
 | `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` if the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`. Or put such a server (vLLM, TGI, a LiteLLM proxy) in front of this server. A 400 can also mean a wrong model name or parameter. Read the text of the server. |
 | `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed. Run the command manually from the project root. Then correct `endpoints.<name>.auth`. The framework never shows the stderr of the command, because the stderr can hold the secret. |
-| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The framework gives the record the disposition `parse_error`. Check the model and the schema. |
+| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The record gets the disposition `failed` with the reason `parse_error`. Check the model and the schema. |
 
 ## Debugging with Prompt Traces
 
