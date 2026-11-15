@@ -42,21 +42,6 @@ action_name.field_path
 
 `action_name.field` reads the output of the action. The output is the fields that its schema lists, plus the `expect` verdict that its expectations attach. A field that the action only observes or passes through is not in its namespace. Thus pre-flight refuses a reference to that field in that namespace. Read such a field from the action that produced it, for example `source.url`.
 
-## Reserved Action Names
-
-An action name cannot be a reserved namespace. These names are not permitted:
-
-- `action`
-- `context_scope`
-- `prompt`
-- `schema`
-- `seed`
-- `source`
-- `version`
-- `workflow`
-
-`action`, `prompt` and `schema` are reserved words, not namespaces. No record carries them. Write `{{ extract_facts.count }}`, not `{{ action.extract_facts.count }}`. Pre-flight refuses a prompt, a guard or a `context_scope` entry that reads through one of these words. Pre-flight also names the correct spelling.
-
 ### Nested Field Access
 
 Use dot notation to get deeply nested fields:
@@ -74,6 +59,21 @@ Use dot notation to get deeply nested fields:
 prompt: |
   Items: {{ upstream_action.response.data.items }}
 ```
+
+## Reserved Action Names
+
+An action name cannot be a reserved namespace. These names are not permitted:
+
+- `action`
+- `context_scope`
+- `prompt`
+- `schema`
+- `seed`
+- `source`
+- `version`
+- `workflow`
+
+`action`, `prompt` and `schema` are reserved words, not namespaces. No record carries them. Write `{{ extract_facts.count }}`, not `{{ action.extract_facts.count }}`. Pre-flight refuses a prompt, a guard or a `context_scope` entry that reads through one of these words. Pre-flight also names the correct spelling.
 
 ## Special Sources
 
