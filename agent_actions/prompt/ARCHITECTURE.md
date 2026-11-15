@@ -348,12 +348,18 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |         cache_scope.prompt_is_shared holds (no name in the template
   |         that can differ per record, no dispatch_task in the prompt, in
   |         a value rendered into it, or in the schema, no random filter
-  |         or lipsum, not a repair call or a judge call); it fails closed
+  |         or lipsum, not a judge call, not a repair call whose prompt
+  |         does not begin with the rendered prompt); it fails closed
   |     --> One cache_control: {type: "ephemeral"} at the end of the prompt
   |         part (LLMMessage.static_len); none on the record content
-  |     --> Batch: the system prompt carries it; the record message is plain
+  |     --> A repair call passes shared_prompt_len, the rendered prompt's
+  |         length; its feedback follows the mark, unmarked, so the marked
+  |         block is the one the first call sent
+  |     --> Batch: the system prompt carries it; the record message is plain;
+  |         a repair round's feedback is a second, unmarked system block
   |     --> Online: the user message is sent as two text blocks, the
-  |         instruction (marked) then the record (unmarked); same text
+  |         opening tag and prompt (marked) then any feedback, the
+  |         closing tag and the record (unmarked); same text
   |
   7. Token overflow pre-flight
   |     --> chars/4 heuristic vs _MODEL_CONTEXT_LIMITS

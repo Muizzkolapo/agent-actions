@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_CONTEXT_LIMIT = 128_000
 
+_OPENING = "<|begin_of_user_instruction|>: "
+_GROQ_OPENING = "<|begin_of_user_instruction|>:"
+
 _MODEL_CONTEXT_LIMITS: dict[str, int] = {
     # OpenAI
     "gpt-4": 8_192,
@@ -293,9 +296,15 @@ class MessageBuilder:
         schema: dict[str, Any] | None = None,
         json_mode: bool = True,
         enable_prompt_caching: bool = False,
+        shared_prompt_len: int | None = None,
         model_name: str | None = None,
     ) -> LLMMessageEnvelope:
-        """Build a message envelope for a realtime (online) provider call."""
+        """Build a message envelope for a realtime (online) provider call.
+
+        ``shared_prompt_len`` is the length of the leading part of ``prompt_config`` every
+        record is sent; None means all of it. A cache mark sits at its end.
+        """
+        MessageBuilder._check_shared_len(shared_prompt_len, prompt_config)
         config = MessageBuilder._get_config(provider)
         style = config.json_prompt_style if json_mode else config.non_json_prompt_style
         role = config.json_role if json_mode else config.non_json_role
@@ -314,6 +323,7 @@ class MessageBuilder:
             schema_injection=schema_injection,
             rules=rules,
             blank_line_before_rules=config.blank_line_before_rules,
+            shared_prompt_len=shared_prompt_len,
         )
 
         # SchemaInjection.PROMPT: inject schema into the prompt text so it
@@ -338,6 +348,7 @@ class MessageBuilder:
             body,
             body_static_len,
             style=style,
+            shared_prompt_len=shared_prompt_len,
         )
 
         if enable_prompt_caching:
@@ -377,13 +388,16 @@ class MessageBuilder:
         *,
         schema: dict[str, Any] | None = None,
         enable_prompt_caching: bool = False,
+        shared_prompt_len: int | None = None,
     ) -> LLMMessageEnvelope:
         """Build a message envelope for a batch provider call.
 
         Most providers use system + user messages.  Anthropic uses a
         separate ``system`` param plus a single user message.  Gemini
-        combines prompt and content into one text string.
+        combines prompt and content into one text string. ``shared_prompt_len``
+        is as for ``build``.
         """
+        MessageBuilder._check_shared_len(shared_prompt_len, prompt)
         # Inject schema into prompt for providers using SchemaInjection.PROMPT
         # (e.g., ollama_cloud — no native structured output support).
         effective_prompt = prompt
@@ -401,15 +415,18 @@ class MessageBuilder:
         if provider == "gemini":
             # Gemini batch: single combined text
             combined = f"{effective_prompt}\n\n{user_content}"
-            messages = [
-                LLMMessage(role="user", content=combined, static_len=len(effective_prompt) + 2)
-            ]
+            static_len = (
+                len(effective_prompt) + 2 if shared_prompt_len is None else shared_prompt_len
+            )
+            messages = [LLMMessage(role="user", content=combined, static_len=static_len)]
         else:
             # Standard (including Anthropic): system + user messages.
             # Anthropic batch consumers split system out as a top-level param.
             messages = [
                 LLMMessage(
-                    role="system", content=effective_prompt, static_len=len(effective_prompt)
+                    role="system",
+                    content=effective_prompt,
+                    static_len=_shared_len(effective_prompt, shared_prompt_len),
                 ),
                 LLMMessage(role="user", content=user_content),
             ]
@@ -423,12 +440,20 @@ class MessageBuilder:
     # -- internals -----------------------------------------------------------
 
     @staticmethod
+    def _check_shared_len(shared_prompt_len: int | None, prompt: str) -> None:
+        if shared_prompt_len is not None and not 0 <= shared_prompt_len <= len(prompt):
+            raise ValueError(
+                f"shared_prompt_len {shared_prompt_len} is outside a prompt of length {len(prompt)}"
+            )
+
+    @staticmethod
     def _mark_for_caching(provider: str, messages: list[LLMMessage]) -> list[LLMMessage]:
         """Put one cache mark at the end of the prompt text; only Anthropic reads it.
 
         Record content is never marked. A caller asks for the mark only when the prompt
         is the same for every record: a mark on text that changes per record writes a
-        cache entry no other request reads.
+        cache entry no other request reads. No mark is placed where either text block it
+        splits into would be blank, a block the API refuses.
         """
         if provider != "anthropic":
             return messages
@@ -439,6 +464,10 @@ class MessageBuilder:
             if message.static_len < len(message.content):
                 break
         if last_shared is None:
+            return messages
+        message = messages[last_shared]
+        head, tail = message.content[: message.static_len], message.content[message.static_len :]
+        if not head.strip() or (tail and not tail.strip()):
             return messages
         marked = list(messages)
         marked[last_shared] = replace(messages[last_shared], cache_control={"type": "ephemeral"})
@@ -507,8 +536,9 @@ class MessageBuilder:
         schema_injection: SchemaInjection,
         rules: list[str],
         blank_line_before_rules: bool = True,
+        shared_prompt_len: int | None = None,
     ) -> tuple[str, int]:
-        """Assemble the prompt body and the length of its prompt text, before the record content.
+        """Assemble the prompt body and the length of its text up to the end of the shared prompt.
 
         TAGGED and TAGGED_GROQ outputs are wrapped with leading/trailing
         newlines to match the original ``dedent()`` output format.
@@ -531,7 +561,7 @@ class MessageBuilder:
             # Groq JSON — unique format: no space after first colon,
             # double colon before text, blank line between tags
             parts: list[str] = [
-                f"<|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>",
+                f"{_GROQ_OPENING}{prompt_config} :<|end_of_user_instruction|>",
                 "",  # blank line between tags
                 f"<|begin_of_text|>:: {context_str} :<|end_of_text|>",
             ]
@@ -539,11 +569,13 @@ class MessageBuilder:
                 parts.append("")
                 parts.extend(rules)
             joined = "\n".join(parts)
-            return f"\n{joined}\n", len(parts[0]) + 2
+            return f"\n{joined}\n", 1 + len(_GROQ_OPENING) + _shared_len(
+                prompt_config, shared_prompt_len
+            )
 
         # -- TAGGED style (default for most providers) -----------------------
         parts = [
-            f"<|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>",
+            f"{_OPENING}{prompt_config} :<|end_of_user_instruction|>",
             f"<|begin_of_text|>: {str(context_str)} :<|end_of_text|>",
         ]
 
@@ -566,10 +598,10 @@ class MessageBuilder:
                 parts.append("")  # blank line before rules (OpenAI, Gemini)
             parts.extend(rules)
 
-        # Wrap with \n...\n to match original dedent() output; the instruction line
-        # and the newlines around it come before the record's text.
+        # Wrap with \n...\n to match original dedent() output. The shared text ends with the
+        # prompt, before the closing tag: a repair call's feedback goes between the two.
         joined = "\n".join(parts)
-        return f"\n{joined}\n", len(parts[0]) + 2
+        return f"\n{joined}\n", 1 + len(_OPENING) + _shared_len(prompt_config, shared_prompt_len)
 
     @staticmethod
     def _build_field_schema_instruction(schema: dict[str, Any] | None) -> str:
@@ -594,12 +626,14 @@ class MessageBuilder:
         body_static_len: int,
         *,
         style: PromptStyle = PromptStyle.TAGGED,
+        shared_prompt_len: int | None = None,
     ) -> list[LLMMessage]:
         """Wrap the assembled body into the correct message role structure."""
+        prompt_static_len = _shared_len(prompt_config, shared_prompt_len)
         if role == MessageRole.SYSTEM_PLUS_USER:
             # Ollama: system=prompt, user=context
             return [
-                LLMMessage(role="system", content=prompt_config, static_len=len(prompt_config)),
+                LLMMessage(role="system", content=prompt_config, static_len=prompt_static_len),
                 LLMMessage(role="user", content=context_str),
             ]
 
@@ -611,10 +645,14 @@ class MessageBuilder:
             # so it keeps the single system message.
             if style == PromptStyle.TAGGED and context_str:
                 return [
-                    LLMMessage(role="system", content=prompt_config, static_len=len(prompt_config)),
+                    LLMMessage(role="system", content=prompt_config, static_len=prompt_static_len),
                     LLMMessage(role="user", content=context_str),
                 ]
             return [LLMMessage(role="system", content=body, static_len=body_static_len)]
 
         # SINGLE_USER (default)
         return [LLMMessage(role="user", content=body, static_len=body_static_len)]
+
+
+def _shared_len(prompt: str, shared_prompt_len: int | None) -> int:
+    return len(prompt) if shared_prompt_len is None else shared_prompt_len

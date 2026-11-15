@@ -39,7 +39,7 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
 )
 from agent_actions.output.response.response_builder import ResponseBuilder
-from agent_actions.prompt.cache_scope import prompt_is_shared
+from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY, prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.json_parsing import parse_llm_json
@@ -171,6 +171,7 @@ class AnthropicClient(BaseClient):
             schema=schema,
             json_mode=json_mode,
             enable_prompt_caching=enable_caching and prompt_is_shared(agent_config),
+            shared_prompt_len=agent_config.get(SHARED_PROMPT_LEN_KEY),
             model_name=model_name,
         )
         messages = envelope.to_dicts()

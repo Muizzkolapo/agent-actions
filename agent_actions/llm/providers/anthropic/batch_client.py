@@ -114,6 +114,7 @@ class AnthropicBatchClient(BaseBatchClient):
             batch_task.user_content,
             schema=schema,
             enable_prompt_caching=batch_task.cache_prompt,
+            shared_prompt_len=batch_task.shared_prompt_len,
         )
         # Anthropic batch: system is a top-level param, user content is the message
         params = {

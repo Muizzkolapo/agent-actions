@@ -30,7 +30,7 @@ from agent_actions.processing.task_preparer import (
     get_task_preparer,
     write_trace_row,
 )
-from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
+from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
@@ -77,9 +77,10 @@ def _append_feedback(
     """Append each record's validation feedback to the prompt it will be sent with.
 
     Called on the pre-provider rows, whose ``prompt`` becomes the provider's
-    system message. A record with no entry is left alone, but that is an
-    invariant violation worth seeing: feedback is built from the same failed set
-    these rows come from. Returns the rows whose prompt changed.
+    system message, and records how much of it every record shares. Blank feedback,
+    as ``repair: retry`` gives, leaves the prompt untouched. A record with no entry is
+    left alone too, but that is an invariant violation worth seeing: feedback is built
+    from the same failed set these rows come from. Returns the rows whose prompt changed.
     """
     changed: list[dict[str, Any]] = []
     for task in tasks:
@@ -92,7 +93,11 @@ def _append_feedback(
                 key,
             )
             continue
-        task["prompt"] = f"{task.get('prompt', '')}\n\n{feedback}"
+        if not feedback.strip():
+            continue
+        prompt = task.get("prompt", "")
+        task["prompt"] = f"{prompt}\n\n{feedback}"
+        task[SHARED_PROMPT_LEN_KEY] = len(prompt)
         changed.append(task)
     return changed
 
@@ -234,8 +239,6 @@ class BatchTaskPreparator:
         # Finalize tasks with provider
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
-        if feedback_by_id:
-            provider_config[REQUEST_VARIES_PER_RECORD_KEY] = True
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
 
         # Return immutable result

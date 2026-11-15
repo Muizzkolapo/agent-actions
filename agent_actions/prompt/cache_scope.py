@@ -28,7 +28,24 @@ _DISPATCH_START = re.compile(r"dispatch_task\s*\(")
 
 REQUEST_VARIES_PER_RECORD_KEY = "_request_varies_per_record"
 """Set on one call's config when its prompt is not the action's rendered prompt: a repair
-call, a judge call, or a call with the schema its record chose."""
+call whose prompt does not begin with it, a judge call, or a call with the schema its record
+chose."""
+
+SHARED_PROMPT_LEN_KEY = "_shared_prompt_len"
+"""Set on a repair call's config, and carried on a batch repair row: the length of the
+leading part of its prompt that is the action's rendered prompt. The record's feedback
+follows it, so a cache mark can sit only at its end."""
+
+
+def repair_call_scope(prompt: str, rendered_prompt: str) -> dict[str, Any]:
+    """The config keys that tell a repair call's client which part of *prompt* every record shares.
+
+    Only a prompt that begins with the rendered prompt shares that part; any other shares
+    nothing a cache mark can prove.
+    """
+    if rendered_prompt and prompt.startswith(rendered_prompt):
+        return {SHARED_PROMPT_LEN_KEY: len(rendered_prompt)}
+    return {REQUEST_VARIES_PER_RECORD_KEY: True}
 
 
 def record_reads_in_prompt(agent_config: Mapping[str, Any]) -> tuple[str, ...]:

@@ -37,12 +37,13 @@ def run_dynamic_agent(
     source_content: Any | None = None,
     llm_context: Any | None = None,
     dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
-    prompt_holds_feedback: bool = False,
+    rendered_prompt: str | None = None,
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
     ``dispatched`` is the record's resolved schema, so a retry or repair call writes the
-    schema the record was first given. ``prompt_holds_feedback`` marks a repair call.
+    schema the record was first given. ``rendered_prompt`` is the record's prepared prompt;
+    a call whose prompt differs from it is a repair call.
     Every path here has already evaluated the guard, so ``was_executed`` is always
     ``True``; callers keep it because other producers set it ``False``. The LLM sees
     ``llm_context`` (``context`` with ``context_scope.drop`` applied) when it is given.
@@ -54,10 +55,10 @@ def run_dynamic_agent(
     record_config, dispatch_results, _ = dispatched or _choose_dispatched_schema(
         agent_config, llm_data, tools_path
     )
-    if prompt_holds_feedback:
-        from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
+    if rendered_prompt is not None and formatted_prompt != rendered_prompt:
+        from agent_actions.prompt.cache_scope import repair_call_scope
 
-        record_config = {**record_config, REQUEST_VARIES_PER_RECORD_KEY: True}
+        record_config = {**record_config, **repair_call_scope(formatted_prompt, rendered_prompt)}
 
     response = agent_builder.create_dynamic_agent(
         record_config,

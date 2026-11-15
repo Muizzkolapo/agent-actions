@@ -16,6 +16,7 @@ from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
 from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
 from agent_actions.utils import deep_json
 
 if TYPE_CHECKING:
@@ -68,6 +69,8 @@ class BatchTask:
     model_config: dict[str, Any]
     metadata: dict[str, Any] | None = None
     cache_prompt: bool = False
+    shared_prompt_len: int | None = None
+    """The length of the leading part of ``prompt`` every record shares; None means all of it."""
 
 
 @dataclass
@@ -115,6 +118,7 @@ class BaseBatchClient(ABC):
                 )
             # A row of an action whose schema is chosen per record carries its own.
             row_schema = row.pop("compiled_schema", None)
+            shared_prompt_len = row.pop(SHARED_PROMPT_LEN_KEY, None)
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
@@ -127,6 +131,7 @@ class BaseBatchClient(ABC):
                 },
                 metadata=row,
                 cache_prompt=cache_prompt,
+                shared_prompt_len=shared_prompt_len,
             )
             task_schema = row_schema if row_schema is not None else schema
             provider_task = self.format_task_for_provider(
