@@ -573,7 +573,7 @@ class ConfigManager:
                 if not config_dict.get("model_vendor"):
                     raise ConfigurationError(
                         f"Action '{agent_type}' is missing required field 'model_vendor'",
-                        context={"action": agent_type, "field": "model_vendor"},
+                        context={"action_name": agent_type, "missing_fields": ["model_vendor"]},
                     )
 
             # Optional fields — default None → "" to satisfy downstream

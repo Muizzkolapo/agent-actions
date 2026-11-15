@@ -90,16 +90,21 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             docs_url=CONFIGURATION,
         )
 
-    def _format_missing_required_fields_error(self, _message: str, context: dict) -> UserError:
+    def _format_missing_required_fields_error(self, message: str, context: dict) -> UserError:
         """Format error for missing required configuration fields after hierarchy resolution."""
-        action_name = context.get("action_name", context.get("agent", "unknown"))
+        action_name = context.get("action_name")
         missing_fields = context.get("missing_fields", [])
         missing_display = context.get("missing_display", missing_fields)
 
         api_key_line = f"api_key: ${{{context.get('api_key_env_var') or 'YOUR_PROVIDER_API_KEY'}}}"
         fields_str = ", ".join([f"'{f}'" for f in missing_display])
-        details = f"Action '{action_name}' is missing required configuration: {fields_str}\n\n"
-        details += "These fields were not found at any level (project → workflow → action)."
+        if missing_display:
+            details = (
+                f"The action is missing required configuration: {fields_str}\n\n"
+                "These fields were not found at any level (project → workflow → action)."
+            )
+        else:
+            details = message
 
         fix_parts = [
             "Add the missing field(s) to one of these levels:\n",
@@ -136,7 +141,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 "",
                 "3. Action-level config:",
                 "   actions:",
-                "     - name: " + action_name,
+                f"     - name: {action_name or '<action name>'}",
             ]
         )
 
@@ -153,7 +158,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Missing required configuration fields",
             details=details,
             fix="\n".join(fix_parts),
-            context={"action": action_name, "missing_fields": missing_display},
+            context={**self._workflow_and_action(context), "missing_fields": missing_display},
             docs_url=MISSING_REQUIRED_FIELD,
         )
 
@@ -179,8 +184,5 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Environment variable not set",
             details=details,
             fix="\n".join(fix_parts),
-            context={
-                **{key: context[key] for key in ("agent", "action_name") if key in context},
-                "env_var": env_var,
-            },
+            context={**self._workflow_and_action(context), "env_var": env_var},
         )

@@ -60,12 +60,16 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
 
         fix = self._get_fix_suggestion(yaml_context["problem"])
 
+        ctx = self._workflow_and_action(context)
+        if yaml_context["file_path"]:
+            ctx["file_path"] = yaml_context["file_path"]
+
         return UserError(
             category="YAML Syntax Error",
             title=title,
             details="\n".join(details_parts),
             fix=fix,
-            context={"file_path": yaml_context["file_path"]} if yaml_context["file_path"] else None,
+            context=ctx or None,
             docs_url=TROUBLESHOOTING,
         )
 

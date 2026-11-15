@@ -75,8 +75,9 @@ class UserError:
 
         # Display priority fields first
         for key, label in _PRIORITY_FIELDS:
-            if self.context.get(key) is not None:
-                lines.append(f"  {label}: {self.context[key]}")
+            value = self.context.get(key)
+            if value is not None and str(value).strip():
+                lines.append(f"  {label}: {value}")
 
         # Display missing/available references prominently
         missing = self.context.get("missing_references")
@@ -108,10 +109,16 @@ class UserError:
         """Format error for CLI display."""
         lines = [f"{self.category}: {self.title}"]
 
-        if self.details:
-            lines.extend(["", f"  Problem: {self.details}"])
+        details = self.details.rstrip() if self.details else ""
+        if details:
+            lines.extend(["", f"  Problem: {details}"])
 
-        self._format_context(lines)
+        context_lines: list[str] = []
+        self._format_context(context_lines)
+        # A Problem of several lines would otherwise run into the context lines below it.
+        if "\n" in details and context_lines and context_lines[0]:
+            lines.append("")
+        lines.extend(context_lines)
 
         if self.fix:
             lines.extend(["", f"  Fix: {self.fix}"])
