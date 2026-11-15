@@ -54,7 +54,7 @@ The disposition `unprocessed` keeps the record open. Thus, when the guard lets t
 A terminal disposition would keep the tombstone permanently.
 
 The summary counts the guard skip rows under **Guard skipped**, and the other unprocessed rows under **Unprocessed**. Thus the columns still add up to **Total**.
-`--quarantined` continues to list guard skips with their reason.
+`--quarantined` does not separate guard skips. It lists them as `unprocessed` rows, and the Reason column shows `guard_skip`, `guard_prefilter_skip` or `guard_filter`.
 
 ### Total and Records Can Differ {/* #why-total-and-records-can-differ */}
 
