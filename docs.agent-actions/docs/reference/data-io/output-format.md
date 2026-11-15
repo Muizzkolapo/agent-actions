@@ -131,7 +131,7 @@ The `_state` field tells whether the LLM/tool of the action ran for the record:
 | `cascade_skipped` | **Unprocessed** — an upstream action failed or blocked the record. `metadata.reason` names the cause, for example `upstream_unprocessed`. | Original upstream content, preserved for lineage |
 | `failed`, `exhausted` | The action failed on the record, or its retries were exhausted | Original content, preserved for lineage |
 
-A skipped or unprocessed record is a tombstone. It carries `_tombstone: true` and `_tombstone_reason`.
+A guard-skipped, unprocessed, failed or exhausted record is a tombstone. It carries `_tombstone: true` and `_tombstone_reason`.
 
 ### System Fields
 
@@ -141,7 +141,7 @@ Records may carry system fields with an underscore prefix. These fields control 
 |-------|------|---------|
 | `_recovery` | `object` | Recovery metadata. It is present when a record went through [batch recovery](../execution/batch-recovery.md) (retry for missing records, repair for expectation failures, or both). It contains a `retry` sub-object, an `expectations` sub-object, or both, with attempt counts and status. |
 | `_state` | `string` | The lifecycle state of the record: `active`, `processed`, `guard_skipped`, `cascade_skipped`, `failed` or `exhausted` |
-| `_tombstone` | `true` | The record is a placeholder for a skipped, unprocessed or failed record |
+| `_tombstone` | `true` | A guard-skipped, unprocessed, failed or exhausted record is a tombstone. |
 
 These fields are excluded from content extraction. Users should not set them. See [Batch Recovery](../execution/batch-recovery.md) for the full `_recovery` structure.
 
