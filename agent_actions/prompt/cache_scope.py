@@ -35,7 +35,8 @@ def record_reads_in_prompt(agent_config: Mapping[str, Any]) -> tuple[str, ...]:
     """What the action's prompt template reads that can differ from one record to the next.
 
     An unbound name counts unless it is ``version``, ``workflow``, ``loop``, a version
-    param, or a constant ``seed`` key with no ``select_by``. A ``dispatch_task(...)``
+    param, or ``seed``; a ``seed`` read counts only while a seed key has ``select_by``
+    and the read is not through a constant key without one. A ``dispatch_task(...)``
     call, ``random`` and ``lipsum`` count. A ``seed`` or version read also counts when
     its file or value holds a ``dispatch_task(`` call (or a seed file cannot be read),
     because the run resolves those calls on the rendered prompt, per record.
