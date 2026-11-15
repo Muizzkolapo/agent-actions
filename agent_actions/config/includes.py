@@ -16,7 +16,7 @@ from pydantic import ValidationError
 
 from agent_actions.config.path_config import load_project_config, resolve_project_root
 from agent_actions.config.paths import PathType
-from agent_actions.config.schema import ActionConfig, version_variant_names
+from agent_actions.config.schema import ActionConfig, WorkflowConfig, version_variant_names
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.base import enrich_exception_context
 from agent_actions.output.response.expander_merge import (
@@ -24,7 +24,10 @@ from agent_actions.output.response.expander_merge import (
     collect_judge_context_refs,
     merge_expect,
 )
-from agent_actions.output.response.expander_validation import routing_kind
+from agent_actions.output.response.expander_validation import (
+    inherited_routing_kind,
+    resolved_granularity,
+)
 
 INCLUDE_KEYS = ("include", "inputs")
 BRANCH_KEYS = ("branch", "description", "inputs", "outputs", "actions")
@@ -145,8 +148,10 @@ def check_include_reads(
     of anything outside the branch and its declared inputs.
 
     An ``expect`` block inherited from the defaults counts, as the expander applies it.
+    A workflow that does not validate is not checked: the validation that runs after the
+    render refuses it with the same message it gives a workflow with no include.
     """
-    if not inclusions:
+    if not inclusions or not _validates(data):
         return
     workflow_file = inclusions[0].workflow_file
     try:
@@ -166,17 +171,18 @@ def _defaults(data: dict[str, Any], project_root: Path | None) -> dict[str, Any]
     }
 
 
-def _repair_view(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
-    """The kind and granularity the expander gives *action*, as far as repair depends on them.
+def _validates(data: Any) -> bool:
+    try:
+        WorkflowConfig.model_validate(data)
+    except ValidationError:
+        return False
+    return True
 
-    A tool never repairs whatever its granularity; an LLM action takes no FILE default; a
-    HITL action is FILE unless it says otherwise.
-    """
-    kind = routing_kind(
-        {key: action.get(key, defaults.get(key)) for key in ("kind", "model_vendor")}
-    )
-    granularity = action.get("granularity", "file") if kind == "hitl" else action.get("granularity")
-    return {"kind": kind, "granularity": granularity}
+
+def _repair_view(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    """The kind and granularity the expander gives *action*, which decide if it can repair."""
+    kind = inherited_routing_kind(action, defaults)
+    return {"kind": kind, "granularity": resolved_granularity(kind, action, defaults)[0]}
 
 
 def _check_reads(

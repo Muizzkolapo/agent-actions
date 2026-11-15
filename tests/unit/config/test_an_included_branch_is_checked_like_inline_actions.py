@@ -629,3 +629,45 @@ class TestABranchWithNoOutputsSaysNone:
             f"Include 'tail' in {WF}: input 'b2' is bound to 'b2', which branch 'pair' "
             "(branches/pair.yml) does not list under outputs. Outputs of 'pair': none."
         )
+
+
+NO_NAME = {k: v for k, v in C.items() if k != "name"}
+
+
+class TestAMalformedActionGetsTheRefusalItGetsWithoutAnInclude:
+    @pytest.mark.parametrize(
+        "malformed",
+        [NO_NAME, _with(C, dependencies=5)],
+        ids=["no-name", "dependencies-not-a-list"],
+    )
+    def test_the_load_refuses_it_as_it_refuses_the_inline_workflow(self, tmp_path, malformed):
+        with pytest.raises(ConfigurationError) as included:
+            _agents(tmp_path / "included", [A, INCLUDE, malformed])
+        with pytest.raises(ConfigurationError) as inline:
+            _agents(tmp_path / "inline", [A, B1, B2, malformed])
+
+        assert str(included.value) == "Workflow configuration is invalid"
+        assert str(included.value) == str(inline.value)
+        assert (
+            included.value.context["validation_errors"] == inline.value.context["validation_errors"]
+        )
+
+
+class TestTheWorkflowDefaultsWinOverTheProjectDefaults:
+    def test_the_workflow_expect_replaces_the_project_expect(self, tmp_path):
+        workflow = _project(tmp_path, [A, Z, INCLUDE])
+        (tmp_path / "agent_actions.yml").write_text(
+            "schema_path: schema\n"
+            + yaml.safe_dump({"default_agent_config": {"expect": _judged("z.text")}})
+        )
+        data = yaml.safe_load(workflow.read_text())
+        data["defaults"]["expect"] = _judged("a.text")
+        workflow.write_text(yaml.safe_dump(data, sort_keys=False))
+
+        rendered = yaml.safe_load(
+            render_pipeline_with_templates(
+                workflow, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+            )
+        )
+
+        assert _names(rendered) == ["a", "z", "b1", "b2"]

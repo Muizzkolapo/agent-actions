@@ -1,11 +1,18 @@
 """The docs fallback and the editor see an included branch as the load does."""
 
+import json
 from pathlib import Path
 
+import pytest
+
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+from agent_actions.tooling.docs.generator import generate_docs
 from agent_actions.tooling.docs.parser import WorkflowParser
 from agent_actions.tooling.lsp.diagnostics import collect_diagnostics
 from agent_actions.tooling.lsp.indexer import build_index
 from tests.unit.config.test_a_workflow_includes_a_branch_file import (
+    B1,
+    B2,
     INCLUDE,
     A,
     C,
@@ -115,3 +122,65 @@ class TestTheDocsFallbackMakesTheLoadChecks:
 
         assert parsed is not None
         assert list(parsed["actions"]) == ["a"]
+
+
+class TestTheDocsFallbackOnAMalformedWorkflow:
+    @pytest.mark.parametrize(
+        "malformed, listed",
+        [
+            ({k: v for k, v in C.items() if k != "name"}, ["a", "b1", "b2", "unnamed"]),
+            (_with(C, dependencies=5), ["a", "b1", "b2", "c"]),
+        ],
+        ids=["no-name", "dependencies-not-a-list"],
+    )
+    def test_it_lists_it_as_it_lists_the_inline_workflow(self, tmp_path, malformed, listed):
+        included = _docs(tmp_path / "included", [A, INCLUDE, malformed])
+        inline = _docs(tmp_path / "inline", [A, B1, B2, malformed])
+
+        assert included is not None and inline is not None
+        assert list(included["actions"]) == listed
+        assert list(inline["actions"]) == listed
+
+    def test_a_template_error_leaves_the_workflow_out(self, tmp_path, capsys):
+        workflow = _project(tmp_path, [A, INCLUDE])
+        workflow.write_text(
+            workflow.read_text().replace("intent: host first", "intent: '{{ broken'")
+        )
+
+        assert WorkflowParser.parse_workflow(str(workflow), tmp_path) is None
+        assert "is left out: the load refuses it - Error rendering YAML template" in (
+            capsys.readouterr().out
+        )
+
+
+def _catalog(root: Path, output: Path) -> dict:
+    (root / "agent_workflow" / "wf" / "agent_io" / "staging").mkdir(parents=True, exist_ok=True)
+    assert generate_docs(str(root), output) is True
+    return json.loads((output / "catalog.json").read_text())
+
+
+class TestTheDocsCommand:
+    def test_it_reads_branch_files_from_the_project_root_not_the_working_folder(
+        self, tmp_path, monkeypatch
+    ):
+        _project(tmp_path / "proj", [A, INCLUDE, C])
+        (tmp_path / "elsewhere").mkdir()
+        monkeypatch.chdir(tmp_path / "elsewhere")
+
+        catalog = _catalog(tmp_path / "proj", tmp_path / "out")
+
+        assert list(catalog["workflows"]["wf"]["actions"]) == ["a", "b1", "b2", "c"]
+
+    def test_it_takes_a_rendered_file_as_rendered(self, tmp_path, monkeypatch):
+        root = tmp_path / "proj"
+        workflow = _project(root, [A, INCLUDE, C])
+        rendered = root / "artefact" / "rendered_workflows" / "wf.yml"
+        rendered.parent.mkdir(parents=True)
+        rendered.write_text(
+            render_pipeline_with_templates(workflow, root / "templates", project_root=root)
+        )
+        monkeypatch.chdir(root)
+
+        catalog = _catalog(root, tmp_path / "out")
+
+        assert list(catalog["workflows"]["wf"]["actions"]) == ["a", "b1", "b2", "c"]

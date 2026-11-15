@@ -38,6 +38,38 @@ def routing_kind(agent: dict[str, Any]) -> str:
     return "llm"
 
 
+def inherited_routing_kind(action: dict[str, Any], defaults: dict[str, Any]) -> str:
+    """The ``routing_kind`` of *action* once it inherits ``kind`` and ``model_vendor``."""
+    return routing_kind(
+        {
+            key: action.get(key, defaults.get(key, get_default(key)))
+            for key in ("kind", "model_vendor")
+        }
+    )
+
+
+def resolved_granularity(
+    kind: str, action: dict[str, Any], defaults: dict[str, Any]
+) -> tuple[Any, bool]:
+    """The granularity an action of *kind* runs at, and whether a FILE default was set aside.
+
+    A HITL review sees the whole file, so it defaults to FILE. An LLM action runs per
+    record, so a FILE default, which is written for the workflow's tools, does not apply.
+    """
+    if kind == "hitl":
+        return action.get("granularity", "file"), False
+    if kind == "tool":
+        return action.get(
+            "granularity", defaults.get("granularity", get_default("granularity"))
+        ), False
+    if action.get("granularity") is not None:
+        return action["granularity"], False
+    inherited = defaults.get("granularity", get_default("granularity"))
+    if is_file_granularity(inherited):
+        return get_default("granularity"), True
+    return inherited, False
+
+
 def validate_granularity_for_kind(kind: str, granularity: Any, action_name: str) -> None:
     """Refuse a granularity an action sets that the runtime cannot run it at.
 

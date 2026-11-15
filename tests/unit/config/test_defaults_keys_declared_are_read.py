@@ -147,7 +147,7 @@ def test_the_scan_finds_the_reads_it_is_supposed_to_follow(reads):
     for key, _line, file in reads:
         files_by_key.setdefault(key, set()).add(file)
 
-    assert any(f.endswith("expander.py") for f in files_by_key.get("granularity", ())), (
+    assert any(f.endswith("expander_validation.py") for f in files_by_key.get("granularity", ())), (
         "the expander's own `defaults.get(...)` reads were not followed"
     )
     assert any(
