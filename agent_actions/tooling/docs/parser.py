@@ -246,7 +246,6 @@ class WorkflowParser:
             # "so that infer_dependencies sees concrete versioned refs, not base names".
             # Inferring from the raw block reported a scope the dependency graph did not agree
             # with -- an inherited observe named an upstream the graph then omitted.
-            # An included action gets its include's defaults over the workflow's, as at run time.
             inherited = action_defaults(action_data, defaults)
             merged_scope = _normalise_known_directives(
                 inherited_context_scope(action_data, inherited) or {},
