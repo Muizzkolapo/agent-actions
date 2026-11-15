@@ -180,7 +180,7 @@ Each record that recovery processes gets a `_recovery` field in its output. Cont
     },
     "expectations": {
       "attempts": 2,
-      "failed": []
+      "failed": ["_structural"]
     }
   }
 }
@@ -198,7 +198,7 @@ Each record that recovery processes gets a `_recovery` field in its output. Cont
 | `reason` | string | The reason for the retry. A batch record always carries `missing`. An online record carries the error class of its last failed attempt: `network_error`, `rate_limit`, `timeout` or `api_error` |
 | `timestamp` | string | The ISO 8601 timestamp of the recovery |
 
-**Expectations metadata** (`_recovery.expectations`, present when the repair loop exhausted):
+**Expectations metadata** (`_recovery.expectations`): A batch record always gets this block when the repair loop is exhausted. An online record gets it only when the last response cannot carry a verdict.
 
 | Field | Type | Description |
 |-------|------|-------------|
