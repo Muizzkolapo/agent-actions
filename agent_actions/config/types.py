@@ -148,6 +148,7 @@ class ActionConfigDict(TypedDict, total=False):
     is_versioned_agent: bool
     version_base_name: str
     _version_context: dict[str, Any]  # runtime-injected versioning metadata
+    _include: dict[str, Any]  # branch origin of an included action, set by the render step
     version_consumption_config: dict[str, Any]  # controls version iteration
 
     # Runtime-injected by coordinator (subscript-assigned)

@@ -30,6 +30,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | `generate_docs()` | `agent_actions.yml` | Reads | `tool_path` |
 | `CatalogGenerator.generate()` | `agent_config/{workflow}.yml` | Reads | `actions`, `defaults` |
 | `WorkflowParser.parse_workflow()` | `agent_config/{workflow}.yml` | Reads | `actions`, `dependencies`, `context_scope` |
+| `WorkflowParser.parse_workflow()` | `branches/{name}.yml` | Reads | `actions[].include` (a source file with an include entry or an `_include` key is loaded through the render step a run uses; a workflow that step refuses is left out with a warning) |
 | `RunTracker.record_run()` | `artefact/runs.json` | Writes | — |
 | `RunTracker.start_workflow_run()` | `artefact/runs.json` | Writes | — |
 | `serve_docs()` | `artefact/`, `docs_site/` | Reads | — |

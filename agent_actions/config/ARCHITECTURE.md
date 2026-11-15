@@ -54,6 +54,9 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  a workflow text already rendered by the caller is      │     │
 │  │  parsed as given, not rendered again                    │     │
 │  │  yaml.safe_load() → raw dicts                           │     │
+│  │  Expand each `- include:` entry into the actions of     │     │
+│  │  branches/<name>.yml (before prompts, versions,         │     │
+│  │  schemas); check the branch reads after schemas         │     │
 │  │  Resolve tool_path (workflow > default > project)       │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
 │                             │                                    │
@@ -218,12 +221,15 @@ PathType.TARGET            → {agent_name}/agent_io/target/{action_name}
 PathType.SCHEMA            → schema
 PathType.PROMPT_STORE      → prompt_store
 PathType.TEMPLATES         → templates
+PathType.BRANCHES          → branches
 PathType.RENDERED_WORKFLOWS → artefact/rendered_workflows
 PathType.BATCH             → batch
 PathType.SEED_DATA         → seed_data
 ```
 
 All relative to project root.
+
+`branches/` holds the branch files that a workflow includes with `- include: <name>`. Unlike `prompt_store/` and `schema/`, which are also searched in each `agent_workflow/<workflow>/` folder, it is read only at the project root: a branch exists to be shared by several workflows, and one folder gives one file per name.
 
 ---
 

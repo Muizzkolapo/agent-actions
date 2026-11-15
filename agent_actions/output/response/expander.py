@@ -39,8 +39,8 @@ from .expander_schema import (
     process_schema_config,
 )
 from .expander_validation import (
-    is_file_granularity,
-    routing_kind,
+    inherited_routing_kind,
+    resolved_granularity,
     validate_action_name,
     validate_endpoint_action,
     validate_granularity_for_kind,
@@ -186,10 +186,12 @@ class ActionExpander:
         """
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
+        if "_include" in action:
+            agent["_include"] = action["_include"]
 
         # Decided once here; every later reader, here and at run time, reads kind alone.
         # A tool or HITL action routes to its own client whatever vendor it inherits.
-        action_kind = routing_kind(agent)
+        action_kind = inherited_routing_kind(action, defaults)
         agent["kind"] = action_kind
         if action_kind in {"tool", "hitl"}:
             agent["model_vendor"] = action_kind
@@ -228,31 +230,16 @@ class ActionExpander:
         # skips when json_output_schema is already set, preserving the canonical HITL schema.
         compile_output_schema(agent, action)
 
-        # Process granularity
-        # HITL reviews should see the full dataset in one step, so default to FILE.
         action_name = action.get("name", "?")
-        if action_kind == "hitl":
-            granularity = action.get("granularity", "file")
+        granularity, file_default_set_aside = resolved_granularity(action_kind, action, defaults)
+        if action_kind != "tool":
             validate_granularity_for_kind(action_kind, granularity, action_name)
-        elif action_kind == "tool":
-            granularity = action.get(
-                "granularity", defaults.get("granularity", get_default("granularity"))
+        if file_default_set_aside:
+            logger.warning(
+                "Action '%s' is an LLM action, which runs per record: the "
+                "'granularity: file' it inherits from defaults is not applied.",
+                action_name,
             )
-        else:
-            granularity = action.get("granularity")
-            validate_granularity_for_kind(action_kind, granularity, action_name)
-            if granularity is None:
-                inherited = defaults.get("granularity", get_default("granularity"))
-                if is_file_granularity(inherited):
-                    # A FILE default is written for the workflow's tools.
-                    logger.warning(
-                        "Action '%s' is an LLM action, which runs per record: the "
-                        "'granularity: file' it inherits from defaults is not applied.",
-                        action_name,
-                    )
-                    granularity = get_default("granularity")
-                else:
-                    granularity = inherited
         if granularity:
             agent["granularity"] = (
                 granularity.capitalize() if isinstance(granularity, str) else granularity

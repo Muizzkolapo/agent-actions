@@ -10,6 +10,7 @@ from typing import Any
 import jinja2
 import yaml
 
+from agent_actions.config.includes import check_include_reads, expand_includes
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
@@ -662,6 +663,9 @@ def render_pipeline_with_templates(
             cause=e,
         ) from e
 
+    # Step 2a: Put the actions of each included branch file in place of its include entry
+    data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
+
     # Step 3: Resolve prompt references
     data = load.fill_loaded(data)
     data = load.fill_prompts(data)
@@ -683,5 +687,8 @@ def render_pipeline_with_templates(
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
         _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
+
+    # Step 6: Every name an action reads is final here, so the branch boundary is checked now
+    check_include_reads(data, inclusions, project_root=project_root)
 
     return yaml.dump(data, sort_keys=False)
