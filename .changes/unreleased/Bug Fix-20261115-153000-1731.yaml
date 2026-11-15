@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A batch repair round regenerates a failed record with the prompt the online loop uses for the same failure (#1731). It reads `structural:` for a schema failure, as online does, and renders a `repair: {prompt: ...}` template around the prompt instead of sending the original prompt with no feedback.'
+time: 2026-11-15T15:30:00Z

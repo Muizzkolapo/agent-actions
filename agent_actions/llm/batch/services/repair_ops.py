@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm.batch.processing.preparator import RepairFeedback
 from agent_actions.processing.types import ExpectationsMetadata, RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -218,7 +219,7 @@ def submit_repair_batch(
     from agent_actions.llm.batch.services.shared import recovery_preparator
 
     repair_records: list[dict[str, Any]] = []
-    feedback_by_id: dict[str, str] = {}
+    feedback_by_id: dict[str, RepairFeedback] = {}
     for failed in failed_results:
         custom_id = failed.custom_id
         if custom_id not in context_map:

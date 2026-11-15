@@ -8,6 +8,7 @@ implement the EvaluationStrategy protocol and are plugged in by callers.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from agent_actions.processing.types import (
@@ -28,7 +29,8 @@ class EvaluationStrategy(Protocol):
 
     def evaluate(self, result: BatchResult) -> EvaluationOutcome: ...
 
-    def build_feedback(self, result: BatchResult) -> str: ...
+    # Text appended to the prompt, or a function that builds the repair prompt from it.
+    def build_feedback(self, result: BatchResult) -> str | Callable[[str], str]: ...
 
     @property
     def name(self) -> str: ...

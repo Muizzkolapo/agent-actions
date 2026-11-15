@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from agent_actions.processing.types import EvaluationOutcome
@@ -95,13 +96,18 @@ class ExpectationStrategy:
             error=", ".join(outcome.id for outcome in verdict.failed),
         )
 
-    def build_feedback(self, result: BatchResult) -> str:
-        """What to append to the prompt this record was already sent.
+    def build_feedback(self, result: BatchResult) -> str | Callable[[str], str]:
+        """How this record's repair prompt differs from the prompt it was already sent.
 
-        ``repair: retry`` re-sends the original prompt untouched, so it has
-        nothing to append.
+        The mode is the one the online loop takes for the same failure
+        (``ExpectationService.mode_for``: ``structural:`` for a schema failure,
+        ``repair:`` otherwise). ``retry`` re-sends the prompt untouched: no text.
+        ``auto`` appends the failure list: its text. A ``{prompt: ...}`` template
+        is the whole repair prompt, filled with the prompt this round sends: a
+        function of that prompt.
         """
-        if self._service.repair != "auto":
+        service = self._service
+        if service.repair == "retry" and service.structural == "retry":
             return ""
         key = _verdict_key(result)
         verdict = self._verdicts.get(key) if key else None
@@ -112,9 +118,20 @@ class ExpectationStrategy:
             )
             return ""
 
-        from agent_actions.expectations.repair import compose_repair_feedback
+        from agent_actions.expectations.repair import (
+            compose_repair_feedback,
+            render_repair_template,
+        )
 
-        return compose_repair_feedback(result.content, verdict, self._service.hints)
+        mode = service.mode_for(verdict)
+        if isinstance(mode, dict):
+            template = mode["prompt"]
+            return lambda prompt: render_repair_template(
+                template, prompt, result.content, verdict, service.hints
+            )
+        if mode != "auto":
+            return ""
+        return compose_repair_feedback(result.content, verdict, service.hints)
 
     def write_verdicts(self, results: list[BatchResult]) -> None:
         """Put each record's verdict on the record, as the online path does.
