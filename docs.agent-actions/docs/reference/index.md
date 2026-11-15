@@ -53,7 +53,7 @@ Each action can have its own schema validation, context scope and guards. Becaus
 
 **Workflow**: A DAG (directed acyclic graph) of actions that you define in YAML. Actions declare dependencies, and the engine sets the execution order automatically.
 
-**Action**: One unit of work in a workflow. An action is an LLM call or a Python tool. Each action has inputs, a prompt or a function, and validated outputs.
+**Action**: One unit of work in a workflow. An action is an LLM call, a Python tool, or a human review (`hitl`). Each action has inputs, a prompt or a function, and validated outputs.
 
 **Field Reference**: A field reference gets an upstream output into a prompt, with syntax such as `{{ extract_facts.facts }}`. The field gets its value when the referenced action completes. Thus a field reference is similar to a formula in a spreadsheet that points to a cell.
 
