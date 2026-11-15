@@ -12,6 +12,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from agent_actions.config.includes import expand_workflow_includes
+from agent_actions.config.manager import ConfigManager
 from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY
@@ -651,6 +652,31 @@ class TestAMalformedActionGetsTheRefusalItGetsWithoutAnInclude:
         assert (
             included.value.context["validation_errors"] == inline.value.context["validation_errors"]
         )
+
+
+class TestAWorkflowWithTwoDefectsGetsTheRefusalItGetsWithoutAnInclude:
+    def test_a_bad_guard_and_a_wrong_workflow_name_give_the_inline_refusal(self, tmp_path):
+        def refusal(root: Path, actions) -> str:
+            workflow = _project(root, actions)
+            data = yaml.safe_load(workflow.read_text())
+            data["name"] = "other"
+            workflow.write_text(yaml.safe_dump(data, sort_keys=False))
+            with pytest.raises(ConfigurationError) as caught:
+                manager = ConfigManager(
+                    str(workflow), str(root / "agent_actions.yml"), project_root=root
+                )
+                manager.load_configs()
+                manager.validate_agent_name()
+                manager.get_user_agents()
+            return f"{type(caught.value).__name__}: {caught.value}"
+
+        bad_guard = _with(C, guard={"x": 1})
+
+        included = refusal(tmp_path / "included", [A, INCLUDE, bad_guard])
+        inline = refusal(tmp_path / "inline", [A, B1, B2, bad_guard])
+
+        assert included == inline
+        assert "guard" not in included
 
 
 class TestTheWorkflowDefaultsWinOverTheProjectDefaults:

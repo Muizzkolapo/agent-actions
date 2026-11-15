@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from agent_actions.config.path_config import load_project_config, resolve_project_root
 from agent_actions.config.paths import PathType
 from agent_actions.config.schema import ActionConfig, WorkflowConfig, version_variant_names
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.errors.base import enrich_exception_context
 from agent_actions.output.response.expander_merge import (
     adapt_inherited_expect,
@@ -174,7 +174,7 @@ def _defaults(data: dict[str, Any], project_root: Path | None) -> dict[str, Any]
 def _validates(data: Any) -> bool:
     try:
         WorkflowConfig.model_validate(data)
-    except ValidationError:
+    except (ValidationError, ConfigValidationError):
         return False
     return True
 
