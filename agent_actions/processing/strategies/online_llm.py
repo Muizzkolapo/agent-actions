@@ -315,8 +315,11 @@ class OnlineLLMStrategy:
                 next_idx += 1
             done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
             for future in sorted(done, key=in_flight.__getitem__):
-                idx = in_flight.pop(future)
+                # Out of the window only once settled: Ctrl-C can land mid-checkpoint,
+                # and the answer must still be found in flight and kept.
+                idx = in_flight[future]
                 results[idx] = self._settle(idx, records[idx], context, future.result, tally)
+                del in_flight[future]
 
     def _keep_answers_in_flight(
         self, in_flight: dict[Future[ProcessingResult], int], context: ProcessingContext
@@ -324,7 +327,9 @@ class OnlineLLMStrategy:
         """On an interrupt, wait for the records already sent and checkpoint their answers.
 
         Nothing more is sent. An answer already paid for is kept, so the resumed run
-        does not send that record again; one that raised is left for the resume.
+        does not send that record again; one that raised is left for the resume. An
+        answer the interrupt caught mid-checkpoint is written again, over the same row
+        and disposition.
         """
         for future in sorted(in_flight, key=in_flight.__getitem__):
             if future.exception() is not None:
