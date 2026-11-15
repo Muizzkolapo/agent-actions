@@ -853,7 +853,8 @@ class TestAnthropicStopForwarding:
 
         call_kwargs = mock_client.messages.create.call_args[1]
         assert call_kwargs["stop_sequences"] == ["END"]
-        assert call_kwargs["top_p"] == 0.9
+        # anthropic 1.x's create takes no top_p; it then travels in extra_body.
+        assert {**call_kwargs.get("extra_body", {}), **call_kwargs}["top_p"] == 0.9
 
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")

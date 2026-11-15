@@ -71,6 +71,20 @@ class VendorParamSpec:
                 )
         return problems
 
+    def fit(self, request: dict[str, Any]) -> dict[str, Any]:
+        """*request* with each key the installed SDK's request does not take moved to ``extra_body``.
+
+        A setting agac builds, such as ``temperature`` on anthropic 1.x (whose ``create``
+        dropped it), still reaches the API, which accepts or refuses it, rather than the
+        SDK raising before anything is sent.
+        """
+        if self.accepted is None:
+            return request
+        unknown = {key: request.pop(key) for key in list(request) if key not in self.accepted}
+        if unknown:
+            request["extra_body"] = {**unknown, **(request.get("extra_body") or {})}
+        return request
+
     def apply(self, request: dict[str, Any], agent_config: Mapping[str, Any]) -> dict[str, Any]:
         """*request* with the action's ``vendor_params`` joined in."""
         return self._join(request, agent_config.get(VENDOR_PARAMS_KEY) or {})

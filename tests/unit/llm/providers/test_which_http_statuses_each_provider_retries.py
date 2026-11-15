@@ -8,6 +8,8 @@ docs.agent-actions/docs/reference/execution/retry.md with it.
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import ModuleType
+from typing import Any
 
 import anthropic
 import cohere
@@ -28,31 +30,34 @@ from agent_actions.llm.providers.ollama.client import _ERROR_MAPPING_LOCAL as OL
 from agent_actions.llm.providers.ollama.client import _OLLAMA_ERRORS
 from agent_actions.llm.providers.openai.client import _ERROR_MAPPING as OPENAI
 from agent_actions.processing.recovery.retry import is_retriable_error
+from tests._support.sdk_http import http_library
 
 MESSAGES = [{"role": "user", "content": "hi"}]
 
 
-def _answering(status: int) -> httpx.MockTransport:
+def _answering(status: int, http: ModuleType = httpx) -> Any:
     body = {"error": {"message": "boom", "code": status, "status": "X"}, "message": "boom"}
-    return httpx.MockTransport(lambda _: httpx.Response(status, json=body))
+    return http.MockTransport(lambda _: http.Response(status, json=body))
 
 
-def _http(status: int) -> httpx.Client:
-    return httpx.Client(transport=_answering(status))
+def _http(status: int, sdk: ModuleType | None = None) -> Any:
+    """A client on *sdk*'s own HTTP library (httpx2 for anthropic 1.x and openai 3.x)."""
+    http = http_library(sdk) if sdk is not None else httpx
+    return http.Client(transport=_answering(status, http))
 
 
 def _openai(status: int) -> None:
-    client = openai.OpenAI(api_key="k", max_retries=0, http_client=_http(status))
+    client = openai.OpenAI(api_key="k", max_retries=0, http_client=_http(status, openai))
     client.chat.completions.create(model="m", messages=MESSAGES)
 
 
 def _anthropic(status: int) -> None:
-    client = anthropic.Anthropic(api_key="k", max_retries=0, http_client=_http(status))
+    client = anthropic.Anthropic(api_key="k", max_retries=0, http_client=_http(status, anthropic))
     client.messages.create(model="m", max_tokens=5, messages=MESSAGES)
 
 
 def _groq(status: int) -> None:
-    client = groq.Groq(api_key="k", max_retries=0, http_client=_http(status))
+    client = groq.Groq(api_key="k", max_retries=0, http_client=_http(status, groq))
     client.chat.completions.create(model="m", messages=MESSAGES)
 
 

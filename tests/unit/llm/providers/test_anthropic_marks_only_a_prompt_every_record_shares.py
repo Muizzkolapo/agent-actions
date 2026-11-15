@@ -9,7 +9,6 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import anthropic
-import httpx
 import pytest
 
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
@@ -18,6 +17,10 @@ from agent_actions.processing.invocation.online import OnlineStrategy
 from agent_actions.processing.prepared_task import PreparedTask
 from agent_actions.prompt.service import PromptPreparationService
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import analyze_workflow
+from tests._support.sdk_http import http_library
+
+# The HTTP library the installed anthropic SDK runs on: httpx, or httpx2 on 1.x.
+httpx = http_library(anthropic)
 
 MODEL = "claude-sonnet-4-6"
 MARK = {"type": "ephemeral"}

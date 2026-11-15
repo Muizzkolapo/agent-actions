@@ -201,6 +201,7 @@ The rules:
 - **Blocks merge key by key.** An action's `vendor_params` merge over the `vendor_params` in `defaults:`. Those merge over the `vendor_params` in the `default_agent_config:` of the project. A key at a lower level replaces the same key above it. The other keys above it stay.
 - **Some dicts merge too.** Ollama `options` merge into the options that agac sets, so `num_ctx` keeps the `num_predict` that comes from `max_tokens`. `extra_headers`, `extra_query` and `extra_body` merge the same way.
 - **A newer parameter goes in `extra_body`.** If the installed SDK does not know a parameter yet, put it under `extra_body` (Anthropic, OpenAI, Groq). The SDK sends `extra_body` as part of the request body.
+- **The installed SDK decides the keys.** The valid keys are the ones the installed SDK's request takes. Anthropic SDK 1.0 and later take no `temperature`, `top_p` or `top_k`. agac then sends the `temperature` and `top_p` that you set in `extra_body`, and the API accepts or refuses them.
 - **Batch requests carry the same keys.** In a batch file, `extra_body` joins the request body. `extra_headers` and `extra_query` do not apply. Gemini batch requests put `safety_settings`, `system_instruction`, `tool_config`, `cached_content` and `labels` beside `generation_config`, and every other key in it.
 - **An agac-provider action ignores the block.** It accepts any key, so a workflow that you switch to the mock provider keeps its `vendor_params`. Tool and hitl actions send no request, and they ignore an inherited block.
 - **An edit counts as a config change.** `vendor_params` is a generation setting, like `temperature`. An edit makes the next run answer the action again.
@@ -218,7 +219,7 @@ One example for each vendor:
 | `llamafile` and other OpenAI-compatible servers | `vendor_params: {seed: 7}` |
 
 :::note[Anthropic: the schema tool, and long answers]
-In JSON mode, an Anthropic request forces the schema tool (`tool_choice: {type: tool, name: <schema>}`), so the model cannot answer in text. When `vendor_params.thinking` is on, the request does not force the tool, because the API refuses a forced tool with thinking. `vendor_params.tool_choice` replaces the default. A request with a `max_tokens` above 21,333 streams, because the SDK refuses a request that it expects to take longer than 10 minutes.
+In JSON mode, an online Anthropic request offers the schema tool but does not force it. When the tool is forced, some models (for example `claude-haiku-5-5`) return a nested array as one JSON string, and the repair loop cannot fix that. The model can sometimes answer in text instead of the tool, often in a ```` ```json ```` block. agac reads JSON from a finished text answer, as it does for the other vendors. Text that is not JSON fails the schema check, and `expect: {repair: auto}` regenerates it. To force the tool, set `vendor_params: {tool_choice: {type: tool, name: <schema>}}`. Batch requests force the schema tool, except when `vendor_params.thinking` is on, because the API refuses a forced tool with thinking. `vendor_params.tool_choice` replaces that default too. A request with a `max_tokens` above 21,333 streams, because the SDK refuses a request that it expects to take longer than 10 minutes.
 :::
 
 :::note[An answer that the output budget cuts off]
