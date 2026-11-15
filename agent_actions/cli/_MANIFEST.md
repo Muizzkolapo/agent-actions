@@ -17,7 +17,7 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. | `cli`, `shared` |
+| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. | `cli`, `shared` |
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `compile.py` | Module | Render command for the Agent Actions CLI. | `cli`, `errors`, `prompt_generation`, `validation` |

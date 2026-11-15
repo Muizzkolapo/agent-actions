@@ -265,7 +265,7 @@ class ConfigRenderingService:
             raise ConfigValidationError(
                 config_key=config_key,
                 reason=f"Invalid {config_key.replace('_', ' ')}",
-                context={"action_name": entry.get("name", "unknown"), "agent_name": agent_name},
+                context={"action_name": entry.get("name"), "agent_name": agent_name},
                 cause=e,
             ) from e
 

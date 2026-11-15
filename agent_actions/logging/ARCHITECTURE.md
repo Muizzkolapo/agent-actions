@@ -345,7 +345,7 @@ UserError.format_for_cli() -> str
      |
      +-- "Category: Title"
      +-- "  Problem: ..."
-     +-- "  Agent: ... / File: ... / Field: ..."   (priority context)
+     +-- "  Agent: ... / Action: ... / File: ... / Field: ..."   (priority context)
      +-- "  Fix: ..."
      +-- "  Learn more: ..."
 ```
