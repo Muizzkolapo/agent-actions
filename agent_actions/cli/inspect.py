@@ -12,9 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+from rich.markup import escape
 
 from agent_actions.cli.cli_decorators import _format_project_root_display, handles_user_errors
-from agent_actions.cli.inspect_base import render_title_row
+from agent_actions.cli.inspect_base import branch_of, render_title_row
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
 
@@ -45,8 +46,17 @@ class InspectCommand(BaseInspectCommand):
         )
         self.console.print()
 
+        width = max((len(name) for name in order), default=0)
         for name in order:
-            self.console.print(f"  [green]✓[/green]  {name}", highlight=False)
+            branch = branch_of(inspector.action_configs.get(name, {}))
+            if branch is None:
+                self.console.print(f"  [green]✓[/green]  {name}", highlight=False)
+            else:
+                self.console.print(
+                    f"  [green]✓[/green]  {name.ljust(width)}  "
+                    f"[dim]from branch {escape(branch['name'])}[/dim]",
+                    highlight=False,
+                )
 
 
 @click.group(name="inspect", invoke_without_command=True)

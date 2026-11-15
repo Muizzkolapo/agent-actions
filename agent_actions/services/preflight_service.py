@@ -6,9 +6,11 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.schema import branch_origins
 from agent_actions.errors import (
     AgentActionsError,
     ConfigValidationError,
@@ -34,7 +36,7 @@ from agent_actions.validation.dag_schema_fit_validator import (
 )
 from agent_actions.validation.dep_observe_validator import (
     find_missing_observe_deps,
-    find_reads_not_upstream,
+    reads_not_upstream,
 )
 from agent_actions.validation.expectations_validator import (
     EXPECTATIONS_REMEDY,
@@ -47,7 +49,7 @@ from agent_actions.validation.preflight.resolution_service import (
 from agent_actions.validation.prompt_required_field_validator import (
     find_unguarded_required_refs,
 )
-from agent_actions.validation.static_analyzer.errors import StaticTypeWarning
+from agent_actions.validation.static_analyzer.errors import StaticTypeIssue, StaticTypeWarning
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     apply_guard_nullable_schema_fixes,
 )
@@ -100,6 +102,27 @@ def static_warning_lines(warnings: list[StaticTypeWarning]) -> list[str]:
     return list(dict.fromkeys(lines))
 
 
+def _issue_actions(issues: Iterable[StaticTypeIssue]) -> list[str]:
+    """The action each issue is about and the action it refers to."""
+    return [
+        name for issue in issues for name in (issue.location.agent_name, issue.referenced_agent)
+    ]
+
+
+def _per_action(
+    check: Callable[[dict[str, dict]], list[str]], inputs: dict[str, dict]
+) -> tuple[list[str], list[str]]:
+    """The findings of *check* run on each action alone, and the actions that have one."""
+    findings: list[str] = []
+    actions: list[str] = []
+    for name, info in inputs.items():
+        found = check({name: info})
+        findings.extend(found)
+        if found:
+            actions.append(name)
+    return findings, actions
+
+
 class PreflightService:
     """Validate a workflow config without executing it.
 
@@ -131,7 +154,35 @@ class PreflightService:
             self._run_checks()
         except AgentActionsError as e:
             enrich_exception_context(e, agent=self.agent_name)
+            if "origin" not in e.context:
+                self._attach_origin(e, [e.context.get("action_name")])
             raise
+
+    def _origin_of(self, actions: Iterable[Any]) -> str:
+        """Where each included action among *actions* comes from; empty when none is included.
+
+        An action is found by its name, or by the version base name its config holds.
+        """
+        wanted = {name for name in actions if isinstance(name, str)}
+        origins: dict[str, dict[str, Any]] = {}
+        for name, config in self.action_configs.items():
+            origin = config.get("_include")
+            if not isinstance(origin, dict):
+                continue
+            for key in (config.get("version_base_name"), name):
+                if isinstance(key, str) and key in wanted:
+                    origins.setdefault(key, origin)
+        return branch_origins(origins)
+
+    def _attach_origin(self, error: AgentActionsError, actions: Iterable[Any]) -> None:
+        origin = self._origin_of(actions)
+        if origin:
+            enrich_exception_context(error, origin=origin)
+
+    def _refusal(self, message: str, hint: str, actions: Iterable[Any]) -> PreFlightValidationError:
+        error = PreFlightValidationError(message, hint=hint)
+        self._attach_origin(error, actions)
+        return error
 
     def _run_checks(self) -> None:
         # 0. Every tool and UDF guard named was loaded. A missing one would fail only when
@@ -148,12 +199,17 @@ class PreflightService:
         )
         schema_result = self.schema_service.validate()
         if schema_result.errors:
-            raise PreFlightValidationError(
+            raise self._refusal(
                 schema_result.format_report(),
                 hint="Fix the static type errors above before running the workflow.",
+                actions=_issue_actions([*schema_result.errors, *schema_result.warnings]),
             )
         # With an error they were in the report above; without one, nothing printed them.
-        self._warn_findings("static analysis", static_warning_lines(schema_result.warnings))
+        self._warn_findings(
+            "static analysis",
+            static_warning_lines(schema_result.warnings),
+            actions=_issue_actions(schema_result.warnings),
+        )
 
         # 2. Guard-nullable schema fixes (mutates action_configs)
         guard_fixes = apply_guard_nullable_schema_fixes(self.action_configs)
@@ -181,13 +237,14 @@ class PreflightService:
                 "or drop the unused dependency.",
             )
         # A name not upstream of its reader is not sure to be on the records it reads.
-        unreachable = find_reads_not_upstream(self.action_configs)
+        unreachable = reads_not_upstream(self.action_configs)
         if unreachable:
-            raise PreFlightValidationError(
-                "\n".join(unreachable),
+            raise self._refusal(
+                "\n".join(text for text, _ in unreachable),
                 hint="An action reads only the actions upstream of it through its dependencies: "
                 "add each one it names to its dependencies, or depend on an action downstream "
                 "of it.",
+                actions=[name for _, names in unreachable for name in names],
             )
 
         # 5. Resolution checks (API keys, seed files, vendor batch)
@@ -198,7 +255,13 @@ class PreflightService:
             verify_keys=self.verify_keys,
             sends_requests=self.sends_requests,
         ).resolve_all()
-        resolution_result.raise_if_invalid()
+        try:
+            resolution_result.raise_if_invalid()
+        except PreFlightValidationError as e:
+            self._attach_origin(
+                e, _issue_actions([*resolution_result.errors, *resolution_result.warnings])
+            )
+            raise
 
         self._warn_findings(
             "resolution",
@@ -206,6 +269,7 @@ class PreflightService:
                 f"{warning.message}\n     Hint: {warning.hint}" if warning.hint else warning.message
                 for warning in resolution_result.warnings
             ],
+            actions=_issue_actions(resolution_result.warnings),
         )
 
         # 6. Cross-check prompt refs against each producer's required set
@@ -324,10 +388,10 @@ class PreflightService:
 
     def _warn_tool_passthrough_risks(self) -> None:
         """Warn when a kind:tool UDF passes upstream dicts through a strict schema."""
-        self._warn_findings(
-            "tool-passthrough",
-            find_passthrough_schema_risks(self._collect_tool_passthrough_inputs()),
+        findings, actions = _per_action(
+            find_passthrough_schema_risks, self._collect_tool_passthrough_inputs()
         )
+        self._warn_findings("tool-passthrough", findings, actions=actions)
 
     def _collect_tool_required_field_inputs(self) -> dict[str, dict[str, Any]]:
         """UDF source + compiled required list per kind:tool action.
@@ -452,11 +516,14 @@ class PreflightService:
 
     def _check_tool_conditional_required_field_risks(self) -> None:
         """Refuse preflight when a kind:tool UDF only conditionally emits a required schema field."""
-        findings = find_conditional_required_field_risks(self._collect_tool_required_field_inputs())
+        findings, actions = _per_action(
+            find_conditional_required_field_risks, self._collect_tool_required_field_inputs()
+        )
         if findings:
-            raise PreFlightValidationError(
+            raise self._refusal(
                 "\n".join(findings),
                 hint="Make the field optional in the schema, or set it on every path in the tool.",
+                actions=actions,
             )
 
     def _warn_dag_schema_compatibility_gaps(self) -> None:
@@ -480,6 +547,7 @@ class PreflightService:
                 f"across {len(gaps)} action(s)"
             ),
             remedy=DAG_FIT_REMEDY,
+            actions=list(gaps),
         )
 
     def _collect_synthesized_output_fields(self) -> dict[str, set[str] | None]:
@@ -515,32 +583,29 @@ class PreflightService:
             project_root=self.project_root,
         )
         if defects:
-            raise PreFlightValidationError(
+            raise self._refusal(
                 "\n".join(f"{action}: {msg}" for action, msgs in defects.items() for msg in msgs),
                 hint=EXPECTATIONS_REMEDY,
+                actions=list(defects),
             )
 
-    @staticmethod
     def _warn_findings(
+        self,
         label: str,
         findings: list[str],
         header: str | None = None,
         remedy: str | None = None,
+        actions: Iterable[str] = (),
     ) -> None:
-        """Emit one grouped warning for a check's findings instead of one per finding.
-
-        Renders a tree so a run's warning wall reads as a few scannable blocks:
-
-            Pre-flight: dag-fit — 5 required field(s) ... across 2 action(s)
-              ├─ flatten: category, key, steps
-              ├─ assemble: id, items
-              └─ Fix: mark the field optional in the consumer schema, ...
-        """
+        """Log a check's findings as one tree, then ``Fix:``, then ``Origin:`` for *actions*."""
         if not findings:
             return
         items = list(findings)
         if remedy:
             items.append(f"Fix: {remedy}")
+        origin = self._origin_of(actions)
+        if origin:
+            items.append(f"Origin: {origin}")
         body = "\n".join(
             f"  {'└─' if i == len(items) - 1 else '├─'} {item}" for i, item in enumerate(items)
         )

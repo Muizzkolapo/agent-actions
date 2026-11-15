@@ -55,6 +55,14 @@ def render_title_row(
         console.print(line)
 
 
+def branch_of(action_config: dict[str, Any]) -> dict[str, str] | None:
+    """The branch name and branch file an included action comes from; None for a host action."""
+    origin = action_config.get("_include")
+    if not isinstance(origin, dict):
+        return None
+    return {"name": origin["branch"], "file": origin["branch_file"]}
+
+
 def collapse_version_groups(actions: list[str], action_configs: dict) -> list[str]:
     """`foo_1, foo_2, foo_3` → `foo (×3)`, but ONLY when the runtime flagged
     the actions as version expansions (`is_versioned_agent`). Without that
