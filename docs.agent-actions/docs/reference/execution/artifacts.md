@@ -444,7 +444,7 @@ This file holds only ERROR-level events. It is a filtered subset of `events.json
 ```
 
 :::warning[CAUTION]
-`LLMJSONParseErrorEvent` (code L005) is now WARN level. It no longer appears in `errors.json`. A parse error that the repair loop recovers from is not a true error. Consumers that monitor parse failures must use `events.json`, filtered by code `L005`.
+`LLMJSONParseErrorEvent` (code L005) is WARN level, so it is not in `errors.json`. A parse error that the repair loop recovers from is not a true error. To monitor parse failures, filter `events.json` by code `L005`.
 :::
 
 To debug, examine `errors.json` first for a quick overview. Then examine `events.json` for the full trace near the failure timestamp.
