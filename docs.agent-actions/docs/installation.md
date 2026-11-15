@@ -41,7 +41,7 @@ agac --version
 
 The output is similar to this:
 ```
-Agent Actions CLI v2.0.0
+Agent Actions CLI v3.0.0
 ```
 
 ## Provider Configuration
