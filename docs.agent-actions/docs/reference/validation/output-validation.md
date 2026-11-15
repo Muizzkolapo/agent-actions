@@ -36,13 +36,14 @@ Guards run last. A guard is on a downstream action. The guard reads the output o
 
 ## Layer 1: JSON Validation
 
-Layer 1 makes sure that the LLM returns valid JSON. If parsing fails and an `expect:` block has a repair policy, the LLM generates the response again:
+Layer 1 makes sure that the LLM returns valid JSON. If parsing fails and an `expect:` block has a `repair` policy other than `none`, the LLM generates the response again. The `structural:` key sets how the framework generates it again. The default is `retry`. The `repair:` key sets the mode only for rule failures.
 
 ```yaml
 - name: extract_data
   schema: my_schema
   expect:
     repair: auto
+    structural: auto
     max_iterations: 3
     on_exhausted: return_last
 ```
