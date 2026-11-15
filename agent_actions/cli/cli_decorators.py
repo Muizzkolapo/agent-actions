@@ -54,13 +54,22 @@ def requires_project(func):
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        project_root = ensure_in_project()
-        display = _format_project_root_display(project_root)
-        if display != ".":
-            click.echo(f"📁 Project root: {display}", err=True)
-        return func(*args, project_root=project_root, **kwargs)
+        return func(*args, project_root=enter_project(), **kwargs)
 
     return wrapper
+
+
+def enter_project() -> Path:
+    """The project root, or exit as ``requires_project`` does; the banner as it prints it.
+
+    For a group callback, which Click runs before a subcommand's ``--help``: called
+    there only when the group itself runs.
+    """
+    project_root = ensure_in_project()
+    display = _format_project_root_display(project_root)
+    if display != ".":
+        click.echo(f"📁 Project root: {display}", err=True)
+    return project_root
 
 
 def _format_project_root_display(project_root: Path) -> str:

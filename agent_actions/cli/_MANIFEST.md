@@ -20,6 +20,7 @@
 | `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. | `cli`, `shared` |
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
+| `enter_project` | Function | The project check and banner `requires_project` applies, as a call: a group callback that Click runs before a subcommand's `--help` (`docs`) calls it only when the group itself runs. | - |
 | `compile.py` | Module | Render command for the Agent Actions CLI. | `cli`, `errors`, `prompt_generation`, `validation` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
@@ -28,7 +29,7 @@
 | `DispositionsCommand` | Class | Implementation of the dispositions command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the dispositions command. | - |
 | `dispositions` | Function | Inspect record-level processing dispositions per action. | - |
-| `docs.py` | Module | Documentation commands for agent-actions CLI. | `cli`, `docs` |
+| `docs.py` | Module | Documentation commands for agent-actions CLI. The `docs` group checks for a project (`enter_project`) only when it runs with no subcommand, so `agac docs test --help` works outside a project; `docs test` checks for itself. | `cli`, `docs` |
 | `docs` | Function | Generate and serve workflow documentation. | - |
 | `generate` | Function | Generate documentation data files. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
 | `serve` | Function | Start HTTP server to view documentation. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
