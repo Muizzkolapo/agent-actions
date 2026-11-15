@@ -122,7 +122,14 @@ def _guard_namespaces(cfg: dict[str, Any], parser: WhereClauseParser) -> list[st
 
 
 def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[str]:
-    """Return one finding per action an action names that is not upstream of it.
+    """Return one finding per action an action names that is not upstream of it."""
+    return [text for text, _ in reads_not_upstream(action_configs)]
+
+
+def reads_not_upstream(
+    action_configs: dict[str, dict[str, Any]],
+) -> list[tuple[str, tuple[str, ...]]]:
+    """Each finding of ``find_reads_not_upstream``, with the reader and the action it names.
 
     A name in the context scope or prompt is what the run order counts
     (``infer_dependencies``); a guard reads its names off the same record. A
@@ -131,7 +138,7 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
     it names fails and runs again. A version merge whose every branch is missing is
     reported by its base, the name ``dependencies`` takes.
     """
-    findings: list[str] = []
+    findings: list[tuple[str, tuple[str, ...]]] = []
     workflow_actions = list(action_configs)
     operational = {name for name, cfg in action_configs.items() if cfg.get("is_operational", True)}
     upstream = upstream_through_dependencies(action_configs)
@@ -155,9 +162,12 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
             # At the first stage too: the record holds the staged row, not this action's output.
             if read == name:
                 findings.append(
-                    f"{name}: its guard names '{name}', its own action. A guard runs before "
-                    f"the action, on the record the action is about to read, so it reads only "
-                    f"what is upstream of it through its dependencies."
+                    (
+                        f"{name}: its guard names '{name}', its own action. A guard runs before "
+                        f"the action, on the record the action is about to read, so it reads "
+                        f"only what is upstream of it through its dependencies.",
+                        (name,),
+                    )
                 )
         missing = {
             read: place
@@ -172,10 +182,13 @@ def find_reads_not_upstream(action_configs: dict[str, dict[str, Any]]) -> list[s
                 missing[base] = place
         for read, place in missing.items():
             findings.append(
-                f"{name}: names '{read}' in its {place}, but '{read}' is "
-                f"not upstream of it through its dependencies, so '{read}' is not sure to "
-                f"be on the records it reads, and '{name}' is not run again when '{read}' "
-                f"fails and runs again. Add '{read}' to its dependencies, or depend on an "
-                f"action downstream of '{read}'."
+                (
+                    f"{name}: names '{read}' in its {place}, but '{read}' is "
+                    f"not upstream of it through its dependencies, so '{read}' is not sure to "
+                    f"be on the records it reads, and '{name}' is not run again when '{read}' "
+                    f"fails and runs again. Add '{read}' to its dependencies, or depend on an "
+                    f"action downstream of '{read}'.",
+                    (name, read),
+                )
             )
     return findings
