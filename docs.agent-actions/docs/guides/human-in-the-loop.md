@@ -421,7 +421,7 @@ NetworkError: Could not find available port near 3001
 Attempted ports: [3001, 3002, 3003, 3004, 3005]
 ```
 
-**Fix**: Stop the servers that you do not use, or configure a different port range.
+**Fix**: Stop the servers that you do not use, or set `hitl.port` to a different start port. HITL tries that port and the next 4.
 
 ### Timeout Handling
 
