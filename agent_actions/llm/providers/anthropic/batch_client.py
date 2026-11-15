@@ -167,8 +167,13 @@ class AnthropicBatchClient(BaseBatchClient):
         content_list = self._get_attribute_or_key(message, "content", [])
         return self._parse_content_list(content_list)
 
-    def _extract_raw_text(self, raw_response: Any) -> str | None:
-        """The text block of an answer that called no tool (`_parse_content_list` parses it as JSON)."""
+    def _extract_raw_text(self, raw_response: Any, content: Any) -> str | None:
+        """The text block of an answer that called no tool, or None.
+
+        `_parse_content_list` parses the text as JSON, and for an answer with no text block
+        (thinking only, as when max_tokens ran out while thinking) falls back to a string of
+        the block, which is not text the model wrote.
+        """
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])

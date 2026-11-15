@@ -93,6 +93,45 @@ class TestAPlainTextActionGetsTheTextUnderItsOutputField:
         assert result.content == {"raw_response": PLAIN_TEXT}
 
 
+class TestAnAnswerWithNoTextIsNotWrapped:
+    def test_a_thinking_only_answer_has_no_text(self):
+        line = _anthropic_line("x")
+        line["result"]["message"]["content"] = [
+            {"type": "thinking", "thinking": "...", "signature": "s"}
+        ]
+        line["result"]["message"]["stop_reason"] = "max_tokens"
+
+        result = _client().parse_provider_response(line)
+
+        assert result.raw_text is None
+
+    def test_a_thinking_only_answer_still_fails_the_schema_shape(self):
+        line = _anthropic_line("x")
+        line["result"]["message"]["content"] = [
+            {"type": "thinking", "thinking": "...", "signature": "s"}
+        ]
+
+        class _ThinkingOnly:
+            def retrieve_results(self, batch_id, output_directory):
+                return [_client().parse_provider_response(line)]
+
+        (result,) = retrieve_and_reconcile(
+            _ThinkingOnly(), "b1", None, agent_config={"json_mode": False, "output_field": "raw"}
+        )
+
+        assert not (isinstance(result.content, dict) and "raw" in result.content)
+
+    def test_the_text_null_is_kept_as_text(self):
+        (result,) = retrieve_and_reconcile(
+            _Provider("null"),
+            "b1",
+            None,
+            agent_config={"json_mode": False, "output_field": "verdicts"},
+        )
+
+        assert result.content == {"verdicts": "null"}
+
+
 class TestStructuredContentWithNoTextIsUnchanged:
     def test_an_object_with_no_text_stays_an_object(self):
         given = BatchResult(custom_id="r1", content={"q": "kept"}, success=True)

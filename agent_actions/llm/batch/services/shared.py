@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -62,17 +63,18 @@ def keep_text_output(batch_results: list[BatchResult], agent_config: dict[str, A
     expectation loop checks `{questions: ...}` or `"Q1: PASS"` against a `{raw: ...}` schema
     and fails every repair round.
     """
-    if not agent_config or agent_config.get("json_mode", get_default("json_mode")):
+    if not agent_config:
         return
-    field = agent_config.get("output_field", get_default("output_field"))
+    if agent_config.get("json_mode", get_default("json_mode")):
+        # Only a plain-text action reads the text; do not persist it again between rounds.
+        for result in batch_results:
+            result.raw_text = None
+        return
     for result in batch_results:
-        if not result.success or result.content is None:
-            continue
-        if result.raw_text is not None:
-            result.content = {field: result.raw_text}
-        elif isinstance(result.content, str):
-            result.content = {field: result.content}
-        # Structured content with no text (a client that returns objects) is left as it is.
+        # Only text the model wrote is wrapped. An answer with no text (thinking only) or
+        # structured content with no text is left as it is, so the schema check still sees it.
+        if result.success and result.raw_text is not None:
+            result.content = ResponseBuilder.wrap_non_json(result.raw_text, agent_config)[0]
 
 
 def recovery_preparator(
