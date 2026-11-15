@@ -62,7 +62,7 @@ The examples on this page omit the lines that are not the subject of the example
 | `record_concurrency` | integer | The number of records of an online LLM action that are sent at the same time (1-32). If unset, the value is 1. Tool, hitl and batch actions ignore this field. See [Record concurrency](./index.md#record-concurrency) |
 | `request_timeout` | number | The number of seconds that one LLM request may take (greater than 0). If a request takes longer, that attempt fails and `retry` retries it. If unset, each provider SDK keeps its own timeout. See [Request timeout](./index.md#request-timeout) |
 | `record_limit` | integer | The maximum number of records in each file (default: unlimited). `AGAC_RECORD_LIMIT` caps this value from the environment |
-| `file_limit` | integer | The maximum number of files that each action walks (default: unlimited). `AGAC_FILE_LIMIT` limits this value from the environment. This limit does not restrict [`agac retry`](../cli/retry). That command walks the files that hold the records it named, and does not stop at N |
+| `file_limit` | integer | The maximum number of files that each action walks (default: unlimited). `AGAC_FILE_LIMIT` limits this value from the environment. This limit does not restrict [`agac retry`](../cli/retry). That command walks the files that hold the records it named, and does not stop after `file_limit` files |
 | `enable_prompt_caching` | boolean | Enables Anthropic prompt caching, to reduce the costs of repeated prompts (default: `false`) |
 
 The table lists the common keys. A `defaults:` block accepts each key that [Unrecognized Default Key](#unrecognized-default-key) lists. These keys include `api_key`, `base_url`, `retry`, `expect`, `data_source`, `chunk_config` and `prompt_debug`.
