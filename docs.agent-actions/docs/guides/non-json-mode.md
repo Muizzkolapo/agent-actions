@@ -33,18 +33,27 @@ defaults:
 
 actions:
   - name: classify_topic
+    intent: "Classify the topic"
     output_field: topic              # LLM response → stored as "topic"
     prompt: $my_workflow.Classify
+    context_scope:
+      observe: [source.page_content]
 
   - name: assess_sentiment
+    intent: "Assess the sentiment"
     dependencies: [classify_topic]
     output_field: sentiment          # LLM response → stored as "sentiment"
     prompt: $my_workflow.Sentiment
+    context_scope:
+      observe: [source.page_content, classify_topic.topic]
 
   - name: write_summary
+    intent: "Write the summary"
     dependencies: [classify_topic, assess_sentiment]
     output_field: summary            # LLM response → stored as "summary"
     prompt: $my_workflow.Summary
+    context_scope:
+      observe: [classify_topic.topic, assess_sentiment.sentiment]
 ```
 
 After all three actions, the record contains `{topic, sentiment, summary}`. This structured output is assembled from plain text responses.
@@ -78,12 +87,19 @@ defaults:
 
 actions:
   - name: classify_issue
+    intent: "Classify the issue"
     output_field: issue_type
     prompt: $workflow.Classify        # Simple classification → local model is fine
+    context_scope:
+      observe: [source.body]
 
   - name: draft_response
+    intent: "Draft a response"
+    dependencies: [classify_issue]
     output_field: suggested_response
     prompt: $workflow.Draft_Response
+    context_scope:
+      observe: [classify_issue.issue_type]
     model_vendor: openai              # Override: customer-facing text needs quality
     model_name: gpt-4o-mini
     api_key: OPENAI_API_KEY
@@ -95,8 +111,11 @@ Guards evaluate upstream field values in the same way in JSON mode and in non-JS
 
 ```yaml
   - name: draft_response
+    intent: "Draft a response"
     dependencies: [classify_issue]
     output_field: suggested_response
+    context_scope:
+      observe: [classify_issue.issue_type]
     guard:
       condition: 'classify_issue.issue_type != "question"'  # Skip for questions → save tokens
       on_false: "skip"
@@ -108,6 +127,7 @@ Progressive context narrowing applies in the same way. Downstream actions can ob
 
 ```yaml
   - name: draft_response
+    intent: "Draft a response"
     dependencies: [classify_issue, summarize_issue]
     context_scope:
       observe:
