@@ -19,6 +19,7 @@ from typing import Any, ClassVar
 
 import groq
 from groq import Groq
+from groq.types.chat import ChatCompletion
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
@@ -37,6 +38,7 @@ from agent_actions.llm.providers.generation_params import (
     sdk_keyword_params,
 )
 from agent_actions.llm.providers.mixins import JSONResponseMixin
+from agent_actions.llm.providers.sdk_models import build_sdk_models
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -48,6 +50,7 @@ from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
+build_sdk_models(ChatCompletion)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="groq",

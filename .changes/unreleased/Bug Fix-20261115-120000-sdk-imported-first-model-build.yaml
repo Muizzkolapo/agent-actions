@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: A program that imports openai, anthropic or groq before agent_actions no longer fails a record of an online action with record_concurrency above 1 with "Pydantic models should inherit from BaseModel, BaseModel cannot be instantiated directly". Each SDK reads DEFER_PYDANTIC_BUILD once, when it is imported, so setting it in agent_actions came too late for such a program, and the SDK built its response models while several records parsed their first answers at once. The OpenAI, Anthropic and Groq clients now build the models a response reaches when they are imported, on one thread.
+time: 2026-11-15T12:00:00Z

@@ -14,6 +14,8 @@ import uuid
 from typing import Any, ClassVar
 
 import anthropic
+from anthropic.lib import streaming
+from anthropic.types import Message, RawMessageStreamEvent
 
 from agent_actions.llm.providers.anthropic import (
     PROMPT_CACHING_BETA_HEADER,
@@ -33,6 +35,7 @@ from agent_actions.llm.providers.generation_params import (
     extract_generation_params,
     sdk_keyword_params,
 )
+from agent_actions.llm.providers.sdk_models import build_sdk_models
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -45,6 +48,14 @@ from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.json_parsing import parse_llm_json
 
 logger = logging.getLogger(__name__)
+
+# A newer SDK's stream helper builds a ParsedMessage, an older one a Message.
+build_sdk_models(
+    Message,
+    RawMessageStreamEvent,
+    streaming.MessageStreamEvent,
+    getattr(streaming, "ParsedMessageStreamEvent", None),
+)
 
 # The SDK refuses a non-streamed request it expects to run past 10 minutes: at 128,000
 # output tokens an hour, that is any max_tokens above 21,333.
