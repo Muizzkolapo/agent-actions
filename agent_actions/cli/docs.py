@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import enter_project, handles_user_errors, requires_project
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.tooling.docs.generator import generate_docs
 from agent_actions.tooling.docs.server import serve_docs
@@ -20,9 +20,8 @@ from agent_actions.tooling.docs.server import serve_docs
 )
 @click.option("--port", "-p", default=8000, help="Port to run server on (default: 8000)")
 @handles_user_errors("docs")
-@requires_project
 @click.pass_context
-def docs(ctx, output: str, port: int, project_root: Path | None = None):
+def docs(ctx, output: str, port: int):
     """Build and serve workflow documentation.
 
     Generates catalog.json and runs.json, then starts the docs server.
@@ -33,9 +32,12 @@ def docs(ctx, output: str, port: int, project_root: Path | None = None):
         agac docs --port 3000
         agac docs --output ./custom-artefact
     """
+    # Click runs this callback before a subcommand's --help, so the project check waits
+    # until the group itself runs; each subcommand checks for itself.
     if ctx.invoked_subcommand is not None:
         return
 
+    project_root = enter_project()
     project_path = resolve_project_root(project_root)
 
     output_dir = Path(output)

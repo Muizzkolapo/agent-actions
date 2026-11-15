@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import enter_project, handles_user_errors, requires_project
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.prompt.handler import PromptLoader
 
@@ -33,7 +33,8 @@ class TestBannerNotOnStdout:
 
         import inspect as inspect_mod
 
-        source = inspect_mod.getsource(requires_project)
+        # requires_project prints its banner through enter_project.
+        source = inspect_mod.getsource(enter_project)
         assert 'click.echo(f"' in source and "err=True" in source, (
             "Banner click.echo must use err=True"
         )

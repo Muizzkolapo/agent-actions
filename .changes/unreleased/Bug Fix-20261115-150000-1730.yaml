@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: '`agac docs test --help` shows its help outside a project, like every other command, instead of stopping with `ProjectNotFoundError`. The `docs` group checks for a project only when it runs with no subcommand.'
+time: 2026-11-15T15:00:00Z
