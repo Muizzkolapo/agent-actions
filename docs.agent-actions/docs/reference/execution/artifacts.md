@@ -474,7 +474,7 @@ The SQLite database stores structured workflow data:
 | `failed` | Processing failed |
 | `unprocessed` | The record has no answer. An upstream failure cascaded, or a guard with `on_false: skip` skipped the record. The next run gives the record to the guard again |
 
-The `failed` and `exhausted` dispositions also store an `input_snapshot` column. This column holds the input record, serialized as JSON, at the time of the failure. The framework stores an input over 10 KB as a truncation marker that holds its first 8,192 characters. Thus you can debug after the failure, even after the framework removed the batch recovery files. Other disposition types do not write this column.
+The `failed` and `exhausted` dispositions also store an `input_snapshot` column. This column holds the input record, serialized as JSON, at the time of the failure. The framework stores an input snapshot over 10,240 characters as `{"__truncated__": true, "partial": "<first 8,192 characters>"}`. Thus you can debug after the failure, even after the framework removed the batch recovery files. Other disposition types do not write this column.
 
 ### Querying the Database
 
