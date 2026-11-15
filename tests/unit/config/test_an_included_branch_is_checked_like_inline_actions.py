@@ -319,10 +319,10 @@ TWIN_INCLUDE = {"include": "twin", "inputs": {"a": "a"}}
     "bad, good, expected",
     [
         (
-            ([A, {**INCLUDE, "override": {}}], None),
+            ([A, {**INCLUDE, "as": "left"}], None),
             ([A, INCLUDE], None),
-            f"Include 'pair' in {WF}: key 'override' is not supported yet. "
-            "Include keys: include, inputs.",
+            f"Include 'pair' in {WF}: key 'as' is not supported yet. "
+            "Include keys: include, inputs, defaults, override, remove.",
         ),
         (
             ([A, INCLUDE, TWIN_INCLUDE], {"pair": _pair(), "twin": TWIN}),

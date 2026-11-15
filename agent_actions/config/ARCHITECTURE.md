@@ -55,8 +55,9 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  parsed as given, not rendered again                    │     │
 │  │  yaml.safe_load() → raw dicts                           │     │
 │  │  Expand each `- include:` entry into the actions of     │     │
-│  │  branches/<name>.yml (before prompts, versions,         │     │
-│  │  schemas); check the branch reads after schemas         │     │
+│  │  branches/<name>.yml, with the entry's override and     │     │
+│  │  remove applied (before prompts, versions, schemas);    │     │
+│  │  check the branch reads after schemas                   │     │
 │  │  Resolve tool_path (workflow > default > project)       │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
 │                             │                                    │
@@ -73,6 +74,8 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  WorkflowConfig.model_validate() ← Pydantic stage 1    │     │
 │  │  model_dump(exclude_unset=True) per action              │     │
 │  │  Merge: project_defaults ← workflow_defaults            │     │
+│  │  An included action: instance defaults (its             │     │
+│  │  _include) over those, by layered_defaults              │     │
 │  │  ActionExpander.expand_actions_to_agents()              │     │
 │  │    → chunks etc.; versions already expanded at Step 1   │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
@@ -230,6 +233,8 @@ PathType.SEED_DATA         → seed_data
 All relative to project root.
 
 `branches/` holds the branch files that a workflow includes with `- include: <name>`. Unlike `prompt_store/` and `schema/`, which are also searched in each `agent_workflow/<workflow>/` folder, it is read only at the project root: a branch exists to be shared by several workflows, and one folder gives one file per name.
+
+An include entry changes its copy of the branch in three ways. `override:` replaces whole keys of a branch action (`null` removes a key), and `remove:` leaves branch actions out; both are applied before the render's later steps, so the branch read checks see the final actions. `defaults:` is not copied onto the actions: it rides on each action's `_include`, and the expander lays it over the workflow defaults with `layered_defaults`, so every per-kind rule that reads "the action does not set this key" still holds. Precedence, lowest first: project `default_agent_config`, workflow `defaults:`, instance `defaults:`, the branch action, `override:`.
 
 ---
 
