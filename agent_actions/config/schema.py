@@ -670,6 +670,9 @@ class ActionConfig(_RetryValidators):
     version_context: dict[str, Any] | None = Field(
         default=None, alias="_version_context", description="Version context injected by renderer"
     )
+    include_context: dict[str, Any] | None = Field(
+        default=None, alias="_include", description="Branch origin injected by renderer"
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -936,12 +939,30 @@ class WorkflowConfig(BaseModel):
                     idx = cycle.index(dep)
                     cycle = cycle[idx:]
                     cycle.append(dep)
-                    raise ValueError(f"Circular dependency detected: {' -> '.join(cycle)}")
+                    raise ValueError(
+                        f"Circular dependency detected: {' -> '.join(cycle)}"
+                        f"{self._branch_origins(cycle[:-1])}"
+                    )
                 elif color[dep] == WHITE:
                     color[dep] = GRAY
                     stack.append((dep, iter(dep_graph.get(dep, []))))
 
         return self
+
+    def _branch_origins(self, names: list[str]) -> str:
+        """A sentence per branch naming which of *names* it defines; empty for none."""
+        by_branch: dict[tuple[str, str], list[str]] = {}
+        for name in dict.fromkeys(names):
+            action = self.get_action(name)
+            origin = action.include_context if action else None
+            if origin:
+                by_branch.setdefault((origin["branch"], origin["branch_file"]), []).append(name)
+        sentences = [
+            f"{', '.join(repr(n) for n in members)} "
+            f"{'comes' if len(members) == 1 else 'come'} from branch '{branch}' ({file})."
+            for (branch, file), members in by_branch.items()
+        ]
+        return ". " + " ".join(sentences) if sentences else ""
 
     def get_action(self, name: str) -> ActionConfig | None:
         """Get an action by name."""

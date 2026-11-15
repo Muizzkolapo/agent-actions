@@ -186,6 +186,8 @@ class ActionExpander:
         """
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
+        if "_include" in action:
+            agent["_include"] = action["_include"]
 
         # Decided once here; every later reader, here and at run time, reads kind alone.
         # A tool or HITL action routes to its own client whatever vendor it inherits.

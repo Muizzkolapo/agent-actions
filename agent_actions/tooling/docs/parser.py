@@ -1,16 +1,22 @@
 """Workflow YAML parser for documentation generation."""
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import click
 import yaml
 
+from agent_actions.config.includes import has_include, has_written_origin
+from agent_actions.config.path_config import resolve_project_root
+from agent_actions.config.paths import PathType
 from agent_actions.config.schema import version_variant_names
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import ConfigurationError
+from agent_actions.errors.base import AgentActionsError
 from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
 from agent_actions.output.response.expander_merge import deep_merge_context_scope
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 logger = logging.getLogger(__name__)
@@ -116,8 +122,15 @@ class WorkflowParser:
     """Parse and extract information from agent workflow YAML files."""
 
     @staticmethod
-    def parse_workflow(yaml_path: str) -> dict[str, Any] | None:
-        """Parse a workflow YAML file and extract all relevant information."""
+    def parse_workflow(
+        yaml_path: str, project_root: Path | None = None, *, rendered: bool = False
+    ) -> dict[str, Any] | None:
+        """Parse a workflow YAML file and extract all relevant information.
+
+        A source file (*rendered* false) with an include entry or an ``_include`` key is
+        loaded through the render step a run uses, with every check it makes; a file that
+        step refuses is reported and left out.
+        """
         try:
             with open(yaml_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
@@ -147,6 +160,21 @@ class WorkflowParser:
                 f"{type(data).__name__}, expected a mapping"
             )
             return None
+
+        if not rendered and (has_include(data) or has_written_origin(data)):
+            root = resolve_project_root(project_root)
+            try:
+                data = yaml.safe_load(
+                    render_pipeline_with_templates(
+                        yaml_path, root / PathType.TEMPLATES.value, project_root=root
+                    )
+                )
+            except AgentActionsError as e:
+                logger.warning("Workflow %s is left out: the load refuses it: %s", yaml_path, e)
+                click.echo(
+                    f"  Warning: Workflow file {yaml_path} is left out: the load refuses it - {e}"
+                )
+                return None
 
         # Extract workflow defaults
         defaults = data.get("defaults", {})

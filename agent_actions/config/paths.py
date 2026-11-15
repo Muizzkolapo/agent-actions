@@ -23,6 +23,7 @@ class PathType(Enum):
     SCHEMA = "schema"
     PROMPT_STORE = "prompt_store"
     TEMPLATES = "templates"
+    BRANCHES = "branches"
     RENDERED_WORKFLOWS = "rendered_workflows"
     BATCH = "batch"
     SEED_DATA = "seed_data"
@@ -61,6 +62,7 @@ class PathManager:
         PathType.SCHEMA: "schema",
         PathType.PROMPT_STORE: "prompt_store",
         PathType.TEMPLATES: "templates",
+        PathType.BRANCHES: "branches",
         PathType.RENDERED_WORKFLOWS: "artefact/rendered_workflows",
         PathType.BATCH: "batch",
         PathType.SEED_DATA: "seed_data",

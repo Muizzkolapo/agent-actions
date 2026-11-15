@@ -406,7 +406,9 @@ class CatalogGenerator:
         for workflow_name, paths in self.workflows_data.items():
             # Use rendered workflow if available, otherwise use original
             yaml_path = paths["rendered"] or paths["original"]
-            workflow = self.parser.parse_workflow(yaml_path)
+            workflow = self.parser.parse_workflow(
+                yaml_path, self.project_path, rendered=bool(paths["rendered"])
+            )
 
             # Skip if workflow parsing failed
             if workflow is None:
