@@ -16,7 +16,7 @@ Each record has a `_state` field. A finite state machine controls the value of t
 | `active` | Processable | The record is ready for the next action. |
 | `processed` | Resettable | The framework resets the state to `active` at the next action boundary. |
 | `guard_skipped` | Resettable | The framework resets the state to `active` at the next action boundary. |
-| `cascade_skipped` | Terminal | The record stops. An upstream dependency failed. |
+| `cascade_skipped` | Terminal | The record stops. The action did not answer the record, and the cause is not a guard. `metadata.reason` gives the cause. |
 | `failed` | Terminal | The record had an unrecoverable error. |
 | `exhausted` | Terminal | The record used all the repair iterations. |
 
@@ -101,8 +101,9 @@ cause (see `agent_actions/record/reasons.py`). Common values include:
 - `consumed_into_output`
 - `consumed_into_another_record`: An `unprocessed` record at a fan-in. The `granularity: File`
   tool of one branch folded this record into the row of another record.
-- `batch_not_returned`: A `failed` record that a batch provider omitted from its results. No
-  retry sends this record again.
+- `batch_not_returned`: A record that a batch provider omitted from its results, or that the
+  action never sent. A `failed` row holds a record that the provider omitted, and no retry
+  sends this record again. An `unprocessed` row holds a record that the action never sent.
 
 Query the `disposition` column for the outcome category. Query the `reason` column for the
 specific cause.
