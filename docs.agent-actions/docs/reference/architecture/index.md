@@ -122,6 +122,9 @@ flowchart TB
     DAG --> LEVELS --> PARALLEL
     PARALLEL --> CONTEXT --> TEMPLATE
     TEMPLATE --> REFS --> ONLINE
+    REFS --> BATCHM
+    BATCHM --> PROVIDERS
+    BATCH -->|"status / retrieve"| BATCHM
     ONLINE --> PROVIDERS --> RETRY
     RETRY -.->|"NetworkError / RateLimitError"| PROVIDERS
     RETRY --> SCHEMA --> REPAIR
