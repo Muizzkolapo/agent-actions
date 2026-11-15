@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -26,7 +25,6 @@ MODEL = "claude-sonnet-4-6"
 MARK = {"type": "ephemeral"}
 TEMPLATED = "Summarise the page {{ source.page_content }}."
 STATIC = "Summarise the page."
-FEEDBACK = "Your previous output failed: the summary is empty."
 PAGES = ("alpha-page", "beta-page")
 PICK_SCHEMA = 'def pick_schema(context_json):\n    return "topic_answer"\n'
 _BATCH_CREATED = {
@@ -118,23 +116,7 @@ def _sdk(sent: list[dict[str, Any]]) -> anthropic.Anthropic:
     )
 
 
-class _RepairOnce:
-    """Stands in for the expectation loop: generates, then regenerates with feedback."""
-
-    def execute(self, generate, prompt, **_):
-        generate(prompt)
-        response, executed = generate(f"{prompt}\n\n{FEEDBACK}")
-        return SimpleNamespace(
-            response=response,
-            executed=executed,
-            suite_results=None,
-            exhausted=False,
-            iterations=2,
-            suite_result=None,
-        )
-
-
-def _online(config: dict[str, Any], *, repair: bool = False) -> list[dict[str, Any]]:
+def _online(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Render each page's prompt and send it online; return each request body."""
     sent: list[dict[str, Any]] = []
     for page in PAGES:
@@ -150,7 +132,7 @@ def _online(config: dict[str, Any], *, repair: bool = False) -> list[dict[str, A
             formatted_prompt=prepared.formatted_prompt,
             llm_context=prepared.llm_context,
         )
-        strategy = OnlineStrategy(expectation_service=_RepairOnce() if repair else None)
+        strategy = OnlineStrategy()
         with patch(
             "agent_actions.llm.providers.client_base.get_or_create_client",
             lambda *_a, **_k: _sdk(sent),
@@ -159,9 +141,7 @@ def _online(config: dict[str, Any], *, repair: bool = False) -> list[dict[str, A
     return sent
 
 
-def _batch(
-    tmp_path: Path, config: dict[str, Any], feedback: dict[str, str] | None = None
-) -> list[dict[str, Any]]:
+def _batch(tmp_path: Path, config: dict[str, Any]) -> list[dict[str, Any]]:
     """Prepare every page as one batch round and submit it; return each request's params."""
     sent: list[dict[str, Any]] = []
     client = AnthropicBatchClient(api_key="sk-ant-test", enable_prompt_caching=True)
@@ -177,8 +157,7 @@ def _batch(
         data=data,
         provider=client,
         output_directory=str(tmp_path),
-        attempt=1 if feedback else 0,
-        feedback_by_id=feedback,
+        attempt=0,
     )
     client.submit_batch(prepared.tasks, "pages", str(tmp_path))
     (body,) = sent
@@ -227,13 +206,6 @@ class TestOnline:
         assert marked[0] == marked[1]
         assert STATIC in marked[0][0]
 
-    def test_a_repair_call_carries_no_mark_on_its_feedback(self):
-        first, repair, *_ = _online(_config(STATIC), repair=True)
-
-        assert FEEDBACK in _all_text(repair["messages"])
-        assert len(_marked_texts(first)) == 1
-        assert _marked_texts(repair) == []
-
     def test_a_schema_each_record_chooses_places_no_mark(self, tmp_path):
         bodies = _online(_config(STATIC, **_dispatch_project(tmp_path)))
 
@@ -252,12 +224,6 @@ class TestBatch:
         params = _batch(tmp_path, _config(STATIC))
 
         assert [_marked_texts(p) for p in params] == [[STATIC], [STATIC]]
-
-    def test_a_repair_round_carries_no_mark_on_its_feedback(self, tmp_path):
-        params = _batch(tmp_path, _config(STATIC), feedback={page: FEEDBACK for page in PAGES})
-
-        assert [p["system"] for p in params] == [f"{STATIC}\n\n{FEEDBACK}"] * 2
-        assert [_marked_texts(p) for p in params] == [[], []]
 
     def test_a_schema_each_record_chooses_places_no_mark(self, tmp_path):
         params = _batch(tmp_path, _config(STATIC, **_dispatch_project(tmp_path)))

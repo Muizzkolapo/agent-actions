@@ -31,7 +31,8 @@ TOOLS = [
         },
     }
 ]
-INSTRUCTION = f"\n<|begin_of_user_instruction|>: {PROMPT} :<|end_of_user_instruction|>\n"
+SHARED = f"\n<|begin_of_user_instruction|>: {PROMPT}"
+CLOSE = " :<|end_of_user_instruction|>\n"
 
 _BATCH_CREATED = {
     "id": "msgbatch_1",
@@ -152,8 +153,8 @@ class TestOnline:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": INSTRUCTION, "cache_control": MARK},
-                    {"type": "text", "text": _record_text("alpha")},
+                    {"type": "text", "text": SHARED, "cache_control": MARK},
+                    {"type": "text", "text": CLOSE + _record_text("alpha")},
                 ],
             }
         ]
@@ -169,7 +170,7 @@ class TestOnline:
         on = _online(True, "alpha", json_mode=json_mode)["messages"][0]["content"]
         off = _online(False, "alpha", json_mode=json_mode)["messages"][0]["content"]
 
-        assert off == INSTRUCTION + _record_text("alpha")
+        assert off == SHARED + CLOSE + _record_text("alpha")
         assert _texts(on) == off
 
     def test_caching_on_sends_one_mark_and_caching_off_sends_none(self, json_mode):
