@@ -101,10 +101,30 @@ class TestAnAnswerWrittenAsText:
         assert _answer('[{"a": 1}, {"a": 2}]') == [{"a": 1}, {"a": 2}]
 
     def test_prose_stays_a_parse_error_for_repair(self):
-        (result,) = _answer("I cannot help with that.")
+        with patch("agent_actions.llm.providers.anthropic.client.fire_event") as fire:
+            (result,) = _answer("I cannot help with that.")
 
         assert result["raw_response"] == "I cannot help with that."
         assert "No tool_use block in response (stop_reason=end_turn)" in result["_parse_error"]
+        (event,) = [
+            call.args[0] for call in fire.call_args_list if hasattr(call.args[0], "error_type")
+        ]
+        assert event.error_type == "EmptyResponse"
+
+    def test_a_json_answer_read_from_text_fires_no_error_event(self):
+        with patch("agent_actions.llm.providers.anthropic.client.fire_event") as fire:
+            _answer('```json\n{"a": 1}\n```')
+
+        assert not [c for c in fire.call_args_list if getattr(c.args[0], "error_type", None)]
+
+    def test_a_tool_answer_is_returned_as_before(self):
+        with patch("anthropic.Anthropic") as sdk:
+            sdk.return_value.messages.create.return_value = MagicMock(
+                content=[SimpleNamespace(input={"a": 1})], stop_reason="tool_use"
+            )
+            result = AnthropicClient.call_json("k", {"model_name": "m"}, "p", {"t": "x"}, SCHEMA)
+
+        assert result == [{"a": 1}]
 
     def test_a_cut_off_answer_is_not_guessed_at(self):
         (result,) = _answer('```json\n{"concepts": [{"concept": "ti', stop_reason="max_tokens")

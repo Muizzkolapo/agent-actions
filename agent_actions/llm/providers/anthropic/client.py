@@ -232,8 +232,12 @@ class AnthropicClient(BaseClient):
         if text and not is_truncated(stop_reason):
             parsed = parse_llm_json(text)
             if isinstance(parsed, dict):
-                return [parsed]
+                parsed = [parsed]
             if isinstance(parsed, list) and parsed and all(isinstance(r, dict) for r in parsed):
+                logger.debug(
+                    "Anthropic model=%s answered in text, not the tool; read it as JSON",
+                    model_name,
+                )
                 return parsed
         message = f"No tool_use block in response (stop_reason={stop_reason}): {text[:200]!r}"
         fire_event(
