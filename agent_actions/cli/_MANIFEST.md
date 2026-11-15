@@ -51,11 +51,11 @@
 | `InitCommand` | Class | Implementation of the init command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
 | `init` | Function | Initialize a new Agent Actions project. | - |
-| `inspect.py` | Module | Inspect command group for the Agent Actions CLI. | `cli` |
+| `inspect.py` | Module | Inspect command group for the Agent Actions CLI. The workflow view counts actions, not include entries, and marks each included action `from branch <name>`; a host action prints as before. | `cli` |
 | `inspect` | Function | Inspect workflow structure and data flow (command group). | - |
-| `inspect_base.py` | Module | Shared base class for all inspect subcommands. | `cli`, `orchestration`, `validation` |
+| `inspect_base.py` | Module | Shared base class for all inspect subcommands. `branch_of` reads the branch name and branch file of an included action from its `_include` origin; None for a host action. | `cli`, `orchestration`, `validation` |
 | `BaseInspectCommand` | Class | Base class for inspect commands with common functionality. | - |
-| `inspect_action.py` | Module | Action and context inspect subcommands. | `cli`, `orchestration`, `prompt_generation` |
+| `inspect_action.py` | Module | Action and context inspect subcommands. For an included action, `inspect action` shows a `Branch` row and `inspect context` a `Branch:` line with the branch and the branch file, and `--json` adds `branch: {name, file}`; a host action shows neither. | `cli`, `orchestration`, `prompt_generation` |
 | `ActionCommand` | Class | Show detailed information about a single action. | - |
 | `action` | Function | Show details for a specific action. | - |
 | `ContextCommand` | Class | Show context debug information for a specific action. | - |

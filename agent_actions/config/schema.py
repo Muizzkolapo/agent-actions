@@ -288,6 +288,21 @@ def version_variant_names(action_name: str, version_config: Any) -> list[str]:
     return [f"{action_name}_{value}" for value in values]
 
 
+def branch_origins(origins: dict[str, dict[str, Any]]) -> str:
+    """A sentence per branch naming the actions of *origins* it defines; empty for none.
+
+    *origins* maps an action name to its ``_include`` metadata.
+    """
+    by_branch: dict[tuple[str, str], list[str]] = {}
+    for name, origin in origins.items():
+        by_branch.setdefault((origin["branch"], origin["branch_file"]), []).append(name)
+    return " ".join(
+        f"{', '.join(repr(n) for n in members)} "
+        f"{'comes' if len(members) == 1 else 'come'} from branch '{branch}' ({file})."
+        for (branch, file), members in by_branch.items()
+    )
+
+
 def validate_version_block(version_config: Any, action_name: str) -> VersionConfig:
     """Validate a `versions:` block and return it, for the expansion to read.
 
@@ -951,18 +966,13 @@ class WorkflowConfig(BaseModel):
 
     def _branch_origins(self, names: list[str]) -> str:
         """A sentence per branch naming which of *names* it defines; empty for none."""
-        by_branch: dict[tuple[str, str], list[str]] = {}
+        origins: dict[str, dict[str, Any]] = {}
         for name in dict.fromkeys(names):
             action = self.get_action(name)
-            origin = action.include_context if action else None
-            if origin:
-                by_branch.setdefault((origin["branch"], origin["branch_file"]), []).append(name)
-        sentences = [
-            f"{', '.join(repr(n) for n in members)} "
-            f"{'comes' if len(members) == 1 else 'come'} from branch '{branch}' ({file})."
-            for (branch, file), members in by_branch.items()
-        ]
-        return ". " + " ".join(sentences) if sentences else ""
+            if action and action.include_context:
+                origins[name] = action.include_context
+        sentences = branch_origins(origins)
+        return f". {sentences}" if sentences else ""
 
     def get_action(self, name: str) -> ActionConfig | None:
         """Get an action by name."""
@@ -989,4 +999,5 @@ __all__ = [
     "StorageConfig",
     "DefaultsConfig",
     "WorkflowConfig",
+    "branch_origins",
 ]

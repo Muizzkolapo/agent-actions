@@ -13,7 +13,7 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
-from .inspect_base import BaseInspectCommand
+from .inspect_base import BaseInspectCommand, branch_of
 from .workflow_loader import validate_action_exists
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,10 @@ def _escape_markup(text: str) -> str:
     from rich.markup import escape
 
     return escape(text)
+
+
+def _describe_branch(branch: dict[str, str]) -> str:
+    return f"{_escape_markup(branch['name'])}  [dim]({_escape_markup(branch['file'])})[/dim]"
 
 
 class ActionCommand(BaseInspectCommand):
@@ -69,6 +73,9 @@ class ActionCommand(BaseInspectCommand):
                 action_schema=self._get_action_schema(self.action_name),
             ),
         }
+        branch = branch_of(action_config)
+        if branch is not None:
+            output["branch"] = branch
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(
@@ -114,7 +121,11 @@ class ActionCommand(BaseInspectCommand):
         )
         self.console.print()
 
-        fields: list[tuple[str, object]] = [
+        fields: list[tuple[str, object]] = []
+        branch = branch_of(action_config)
+        if branch is not None:
+            fields.append(("Branch", _describe_branch(branch)))
+        fields += [
             ("Kind", kind),
             ("Model", model),
             ("Granularity", granularity),
@@ -454,9 +465,11 @@ class ContextCommand(BaseInspectCommand):
         if seed_keys and "seed" not in namespaces:
             namespaces["seed"] = seed_keys
 
+        branch = branch_of(action_config)
         return {
             "action_name": self.target_action_name,
             "workflow": self.agent_name,
+            **({"branch": branch} if branch is not None else {}),
             "namespaces": namespaces,
             "context_scope": {
                 "observe": context_scope.get("observe", []),
@@ -589,6 +602,13 @@ class ContextCommand(BaseInspectCommand):
             right_meta=self.agent_name,
         )
         self.console.print()
+
+        branch = context_data.get("branch")
+        if branch is not None:
+            self.console.print(
+                f"  [bold]Branch:[/bold]  {_describe_branch(branch)}\n",
+                highlight=False,
+            )
 
         # Group by namespace so a long observe list reads as `foo: a, b, c, …`
         # rather than many single-field lines.

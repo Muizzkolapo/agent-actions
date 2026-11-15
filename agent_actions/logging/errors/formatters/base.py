@@ -45,10 +45,11 @@ class ErrorFormatter(ABC):
 
     @staticmethod
     def _workflow_and_action(context: dict[str, Any]) -> dict[str, Any]:
-        """The workflow (``agent``) and the action (``action_name``) the context names."""
+        """The workflow (``agent``), the action (``action_name``) and the branch an action
+        comes from (``origin``) that the context names."""
         return {
             key: context[key]
-            for key in ("agent", "action_name")
+            for key in ("agent", "action_name", "origin")
             if context.get(key) is not None and str(context[key]).strip()
         }
 

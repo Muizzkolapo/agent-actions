@@ -7,6 +7,7 @@ from typing import Any
 _PRIORITY_FIELDS = [
     ("agent", "Agent"),
     ("action_name", "Action"),
+    ("origin", "Origin"),
     ("file_path", "File"),
     ("field", "Field"),
     ("model", "Model"),

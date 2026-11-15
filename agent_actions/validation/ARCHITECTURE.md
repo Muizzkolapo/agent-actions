@@ -144,7 +144,10 @@ the full report, warnings included. Without an error it prints the warnings itse
 `Pre-flight: static analysis` block with each distinct finding once, so `agac run` and
 `agac inspect` show them; before 1536 they printed only beside an error. Every refusal it raises
 carries the workflow name as `agent`, so each command that runs pre-flight names the workflow
-in the refusal's title.
+in the refusal's title. When a refusal or a warning group names an included action, by its name
+or its version base name, the refusal carries an `origin` that the CLI prints as `Origin:`, and
+the warning group ends with an `Origin:` line: each names the branch and the branch file of
+those actions. A workflow with no include prints as before.
 
 ### DataFlowGraph
 

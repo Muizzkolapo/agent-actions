@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: '`agac inspect` shows where an included action comes from: the workflow view marks it `from branch <name>`, and `agac inspect action` and `agac inspect context` show its branch and branch file, also under `branch` in `--json`. The action count stays the count of actions; an include entry is not counted. A preflight refusal or warning that names an included action adds an `Origin:` line with the branch and the branch file, on `agac run` and on `agac inspect`. `agac inspect` shows nothing new for a host action, and a workflow with no include prints as before.'
+time: 2026-11-15T17:00:00Z

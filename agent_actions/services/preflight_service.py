@@ -6,9 +6,11 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.schema import branch_origins
 from agent_actions.errors import (
     AgentActionsError,
     ConfigValidationError,
@@ -59,6 +61,8 @@ from agent_actions.validation.udf_required_field_validator import (
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
+
+_NAME = re.compile(r"[A-Za-z0-9_]+")
 
 
 def _token(value: Any) -> str:
@@ -131,7 +135,26 @@ class PreflightService:
             self._run_checks()
         except AgentActionsError as e:
             enrich_exception_context(e, agent=self.agent_name)
+            origin = self._origin_of(str(e), str(e.context.get("action_name") or ""))
+            if origin:
+                enrich_exception_context(e, origin=origin)
             raise
+
+    def _origin_of(self, *texts: str) -> str:
+        """Where each included action that *texts* name comes from; empty when they name none.
+
+        A version is found under its own name and under its base name.
+        """
+        named = {token for text in texts for token in _NAME.findall(text)}
+        origins: dict[str, dict[str, Any]] = {}
+        for name, config in self.action_configs.items():
+            origin = config.get("_include")
+            if not isinstance(origin, dict):
+                continue
+            for key in (config.get("version_base_name"), name):
+                if isinstance(key, str) and key in named:
+                    origins.setdefault(key, origin)
+        return branch_origins(origins)
 
     def _run_checks(self) -> None:
         # 0. Every tool and UDF guard named was loaded. A missing one would fail only when
@@ -520,14 +543,16 @@ class PreflightService:
                 hint=EXPECTATIONS_REMEDY,
             )
 
-    @staticmethod
     def _warn_findings(
+        self,
         label: str,
         findings: list[str],
         header: str | None = None,
         remedy: str | None = None,
     ) -> None:
         """Emit one grouped warning for a check's findings instead of one per finding.
+
+        When the findings name an included action, an ``Origin:`` line names its branch.
 
         Renders a tree so a run's warning wall reads as a few scannable blocks:
 
@@ -539,6 +564,9 @@ class PreflightService:
         if not findings:
             return
         items = list(findings)
+        origin = self._origin_of(*findings)
+        if origin:
+            items.append(f"Origin: {origin}")
         if remedy:
             items.append(f"Fix: {remedy}")
         body = "\n".join(
