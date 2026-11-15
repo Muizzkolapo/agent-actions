@@ -491,15 +491,15 @@ or stop the file under review.
 - ✅ The server binds to `127.0.0.1` (localhost only, no network exposure).
 - ✅ HTML escaping prevents XSS.
 - ✅ CSP headers with a nonce for each request. `Cache-Control: no-store` on every response.
-- ⚠️ Not suitable for remote or multi-user reviews (use webhooks instead).
+- ⚠️ Not suitable for remote or multi-user reviews. Agent Actions has no remote review mechanism.
 
 > **The trust boundary is loopback.** Any process that runs as your user on the
 > same machine can reach `http://localhost:{port}/`. The HITL UI is a
 > single-user local tool. If you run it on a shared multi-user host, it is not
 > private. On that host, any other user with shell access can read the record
 > under review. That user can also
-> approve or reject the record. In that case, use a different review mechanism
-> (webhooks, ticketing).
+> approve or reject the record. Agent Actions has no
+> remote review mechanism, so do not use HITL on that host.
 
 ### Testing HITL Actions
 
