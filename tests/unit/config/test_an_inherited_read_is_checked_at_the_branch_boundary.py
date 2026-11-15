@@ -202,8 +202,9 @@ class TestAnInheritedReadOfARemovedAction:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             "'b2' (from 'context_scope' under 'defaults:' of include 'pair') still reads it. "
-            "Remove the read from the defaults named above: an override cannot take away a read "
-            "that an action inherits."
+            "Remove the readers too, or override their 'context_scope' so that they do not read "
+            "it (a directive that the override sets, null included, replaces the inherited "
+            "one), or remove the read from the defaults named above."
         )
         rendered = _render(tmp_path / "good", [A, _include(remove=["b1"], override=self.REROUTED)])
         assert _names(rendered) == ["a", "b2"]

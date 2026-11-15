@@ -15,7 +15,7 @@ import copy
 import logging
 from typing import Any
 
-from agent_actions.config.schema import DefaultsConfig, validate_version_block
+from agent_actions.config.schema import DefaultsConfig, dump_defaults, validate_version_block
 from agent_actions.llm.config.vendor import canonical_vendor
 
 from .config_fields import get_default, inherit_simple_fields
@@ -311,16 +311,13 @@ class ActionExpander:
         return agent
 
     @staticmethod
-    def _defaults_for(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    def defaults_for(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
         """*defaults* with the instance defaults of an included action over them."""
         origin = action.get("_include")
         instance = origin.get("defaults") if isinstance(origin, dict) else None
         if not instance:
             return defaults
-        validated = DefaultsConfig.model_validate(instance).model_dump(
-            mode="python", exclude_unset=True, by_alias=True
-        )
-        return layered_defaults(defaults, validated)
+        return layered_defaults(defaults, dump_defaults(DefaultsConfig.model_validate(instance)))
 
     @staticmethod
     def expand_actions_to_agents(action_config: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -346,7 +343,7 @@ class ActionExpander:
         agents: list[dict[str, Any]] = []
         for action in actions:
             validate_action_name(action.get("name"))
-            action_defaults = ActionExpander._defaults_for(action, defaults)
+            action_defaults = ActionExpander.defaults_for(action, defaults)
 
             # Check if this action was already expanded by render step
             # Pre-expanded actions have _version_context set

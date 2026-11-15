@@ -20,11 +20,12 @@ from agent_actions.config.schema import (
     ActionConfig,
     DefaultsConfig,
     WorkflowConfig,
+    dump_defaults,
     version_variant_names,
 )
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.errors.base import enrich_exception_context
-from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY
+from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
 from agent_actions.output.response.expander_merge import (
     adapt_inherited_expect,
     collect_judge_context_refs,
@@ -186,55 +187,97 @@ def check_include_reads(
     """Refuse a host read of a branch action that is not an output, a branch read of
     anything outside the branch and its declared inputs, and a read of a removed action.
 
-    What an action inherits from the defaults counts, as the expander applies it. A
-    malformed workflow is not checked: the validation that runs after the render refuses
-    it with the message it gives a workflow with no include. A read of a removed action
-    leaves a dangling name, which fails that validation too, so the removal check runs
-    first: when the workflow defaults validate, on each action that validates alone.
+    What an action inherits from the defaults counts, computed by the steps the load
+    takes. Defaults the load would refuse leave the workflow unchecked, and so does a
+    malformed workflow: the validation after the render refuses it with the message it
+    gives a workflow with no include. A read of a removed action leaves a dangling name,
+    which fails that validation too, so the removal check runs first, on each action that
+    validates alone.
     """
     if not inclusions:
         return
     workflow_file = inclusions[0].workflow_file
     try:
-        removals = any(inclusion.removed for inclusion in inclusions)
-        if removals and _validates(data.get("defaults") or {}, DefaultsConfig):
-            _refuse_removed_reads(data, inclusions, _defaults(data, project_root))
+        levels = _Levels.load(data, project_root)
+        if levels is None:
+            return
+        if any(inclusion.removed for inclusion in inclusions):
+            _refuse_removed_reads(data, inclusions, levels)
         if _validates(data):
-            _check_reads(data, inclusions, _defaults(data, project_root))
+            _check_reads(data, inclusions, levels)
     except ConfigurationError as e:
         enrich_exception_context(e, file_path=workflow_file)
         raise
 
 
-def _defaults(data: dict[str, Any], project_root: Path | None) -> dict[str, Any]:
-    """The defaults each action gets: the workflow's keys over the project's, key by key.
+@dataclass(frozen=True)
+class _Levels:
+    """The defaults an action inherits, computed by the functions the load calls."""
 
-    Of ``context_scope`` only the read directives are kept, so a malformed scope is left to
-    the validation that refuses it.
+    defaults: dict[str, Any]
+    agent: dict[str, Any]
+    workflow_scope: Any
+
+    @classmethod
+    def load(cls, data: dict[str, Any], project_root: Path | None) -> _Levels | None:
+        """The levels of *data*; None when the load refuses its defaults or the project's."""
+        from agent_actions.config.manager import (
+            merge_workflow_defaults,
+            project_action_defaults,
+            project_agent_config,
+        )
+
+        project_config = load_project_config(resolve_project_root(project_root))
+        written = data.get("defaults")
+        try:
+            workflow = dump_defaults(DefaultsConfig.model_validate(written or {}))
+            defaults = merge_workflow_defaults(project_action_defaults(project_config), workflow)
+            agent = project_agent_config(project_config)
+        except (ValidationError, ConfigValidationError, ConfigurationError):
+            return None
+        scope = written.get("context_scope") if isinstance(written, dict) else None
+        return cls(defaults=defaults, agent=agent, workflow_scope=scope)
+
+    def of(self, action: dict[str, Any]) -> dict[str, Any]:
+        """The defaults the expander gives *action*."""
+        from agent_actions.output.response.expander import ActionExpander
+
+        if not _mapping_or_none(self.defaults.get("context_scope")):
+            return {key: value for key, value in self.defaults.items() if key != "context_scope"}
+        return ActionExpander.defaults_for(action, self.defaults)
+
+    def scope(self, action: dict[str, Any]) -> dict[str, list[Any]]:
+        """The read directives of the ``context_scope`` the run gives *action*.
+
+        Empty when a level is malformed: the load refuses it with its own message.
+        """
+        from agent_actions.config.manager import merge_over_agent_defaults
+
+        inherited = inherited_context_scope(action, self.of(action))
+        agent = merge_over_agent_defaults(
+            self.agent, {} if inherited is None else {"context_scope": inherited}
+        )
+        return _normalised_reads(agent.get("context_scope")) or {}
+
+
+def _mapping_or_none(value: Any) -> bool:
+    return value is None or isinstance(value, dict)
+
+
+def _normalised_reads(scope: Any) -> dict[str, list[Any]] | None:
+    """The directives of *scope* that read an action, once normalised as the run does.
+
+    Version base names are kept, which the boundary checks know. None when the
+    normaliser refuses *scope*; a ``seed`` reads nothing.
     """
-    project = load_project_config(resolve_project_root(project_root)).get("default_agent_config")
-    workflow = data.get("defaults")
-    merged = {
-        **(project if isinstance(project, dict) else {}),
-        **(workflow if isinstance(workflow, dict) else {}),
-    }
-    if "context_scope" in merged:
-        merged["context_scope"] = _read_directives(merged["context_scope"])
-    return merged
-
-
-def _read_directives(scope: Any) -> dict[str, list[Any]]:
-    """The directives of *scope* that read an action, in the shape each accepts.
-
-    A name that is not a directive, a ``seed``, and a value of the wrong type read nothing
-    here: the validation of ``context_scope`` refuses them with its own message.
-    """
-    if not isinstance(scope, dict):
-        return {}
+    try:
+        normalised = normalize_context_scope(scope, {})
+    except ConfigurationError:
+        return None
     return {
         directive: refs
-        for directive, refs in scope.items()
-        if DIRECTIVE_REGISTRY.get(directive, {}).get("type") == "list" and isinstance(refs, list)
+        for directive, refs in normalised.items()
+        if DIRECTIVE_REGISTRY[directive]["type"] == "list"
     }
 
 
@@ -259,9 +302,7 @@ def _repair_view(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, 
     return {"kind": kind, "granularity": resolved_granularity(kind, action, defaults)[0]}
 
 
-def _check_reads(
-    data: dict[str, Any], inclusions: Sequence[Inclusion], defaults: dict[str, Any]
-) -> None:
+def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: _Levels) -> None:
     workflow_file = inclusions[0].workflow_file
     # Imported here: a large import that only a workflow with an include needs.
     from agent_actions.validation.static_analyzer.reference_extractor import ReferenceExtractor
@@ -289,7 +330,9 @@ def _check_reads(
         origin = action.get(_ORIGIN_KEY)
         reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
         reader_local = origin["local_name"] if isinstance(origin, dict) else action["name"]
-        for name in _reads(action, extractor, workflow_file, action_defaults(action, defaults)):
+        for name in _reads(
+            action, extractor, workflow_file, levels.of(action), levels.scope(action)
+        ):
             if name not in known:
                 continue
             source = owner.get(name)
@@ -298,14 +341,14 @@ def _check_reads(
                 if source is reader or name in inputs or base_of.get(name) in inputs:
                     continue
                 where = _branch_where(reader.branch.name, workflow_file, f"'{reader_local}'")
-                via = _scope_origin(action, name, extractor, workflow_file, defaults, data)
+                via = _scope_origin(action, name, extractor, workflow_file, levels)
                 raise ConfigurationError(
                     f"{where}: reads '{name}'{via}, which is not a branch action or a declared "
                     "input. Declare it under 'inputs:'.",
                     context=_context(reader, action_name=reader_local),
                 )
             if source is not None and local[name] not in source.outputs:
-                via = _scope_origin(action, name, extractor, workflow_file, defaults, data)
+                via = _scope_origin(action, name, extractor, workflow_file, levels)
                 raise ConfigurationError(
                     f"Action '{action['name']}' in {workflow_file} reads '{name}'{via}, which "
                     f"{source.branch.label} does not list under outputs. "
@@ -319,27 +362,23 @@ def _scope_origin(
     name: str,
     extractor: Any,
     workflow_file: str,
-    defaults: dict[str, Any],
-    data: dict[str, Any],
+    levels: _Levels,
 ) -> str:
     """Which defaults level gives *action* its read of *name* through ``context_scope``.
 
-    Empty when the action's own config reads it. Each level's ``context_scope`` reaches
-    the action by the same merge the expander makes.
+    Empty when the action's own config reads it; else the most specific level whose
+    ``context_scope`` reads it.
     """
-    effective = action_defaults(action, defaults)
-    own = {key: value for key, value in effective.items() if key != "context_scope"}
-    if name in _reads(action, extractor, workflow_file, own):
+    own = _normalised_reads(action.get("context_scope")) or {}
+    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
         return ""
     found = action.get(_ORIGIN_KEY)
     origin: dict[str, Any] = found if isinstance(found, dict) else {}
     instance = origin.get("defaults")
-    workflow = data.get("defaults")
-    if isinstance(instance, dict) and name in _scope_reads(
-        instance.get("context_scope"), extractor
-    ):
+    instance_scope = instance.get("context_scope") if isinstance(instance, dict) else None
+    if name in _scope_reads(instance_scope, extractor):
         level = f"'defaults:' of include '{origin['instance']}'"
-    elif isinstance(workflow, dict) and "context_scope" in workflow:
+    elif name in _scope_reads(levels.workflow_scope, extractor):
         level = "the workflow's 'defaults:'"
     else:
         level = "'default_agent_config:' in agent_actions.yml"
@@ -347,12 +386,12 @@ def _scope_origin(
 
 
 def _scope_reads(scope: Any, extractor: Any) -> set[str]:
-    requirements = extractor.extract_from_agent({"context_scope": _read_directives(scope)})
-    return {req.source_agent for req in requirements}
+    reads = _normalised_reads(scope) or {}
+    return {req.source_agent for req in extractor.extract_from_agent({"context_scope": reads})}
 
 
 def _refuse_removed_reads(
-    data: dict[str, Any], inclusions: Sequence[Inclusion], defaults: dict[str, Any]
+    data: dict[str, Any], inclusions: Sequence[Inclusion], levels: _Levels
 ) -> None:
     """Refuse a read of an action that an include removes, naming every reader in its branch."""
     workflow_file = inclusions[0].workflow_file
@@ -374,11 +413,13 @@ def _refuse_removed_reads(
             continue
         origin = action.get(_ORIGIN_KEY)
         reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
-        for name in _reads(action, extractor, workflow_file, action_defaults(action, defaults)):
+        for name in _reads(
+            action, extractor, workflow_file, levels.of(action), levels.scope(action)
+        ):
             if name not in removed:
                 continue
             source, local = removed[name]
-            via = _scope_origin(action, name, extractor, workflow_file, defaults, data)
+            via = _scope_origin(action, name, extractor, workflow_file, levels)
             if reader is source:
                 readers.setdefault((source.instance, local), {}).setdefault(action["name"], via)
                 continue
@@ -406,18 +447,12 @@ def _refuse_removed_reads(
 
 def _removal_advice(levels: list[str]) -> str:
     """What to do about the readers of a removed action, by where each read comes from."""
-    own = "Remove the readers too, or override them so that they do not read it."
     if not any(levels):
-        return own
-    inherited = (
-        "remove the read from the defaults named above: an override cannot take away a read "
-        "that an action inherits."
-    )
-    if all(levels):
-        return inherited[0].upper() + inherited[1:]
+        return "Remove the readers too, or override them so that they do not read it."
     return (
-        "Remove the readers that name no defaults too, or override them so that they do not "
-        f"read it, and {inherited}"
+        "Remove the readers too, or override their 'context_scope' so that they do not read "
+        "it (a directive that the override sets, null included, replaces the inherited one), "
+        "or remove the read from the defaults named above."
     )
 
 
@@ -828,17 +863,20 @@ def _refuse_bad_bindings(
 
 
 def _reads(
-    action: dict[str, Any], extractor: Any, workflow_file: str, defaults: dict[str, Any]
+    action: dict[str, Any],
+    extractor: Any,
+    workflow_file: str,
+    defaults: dict[str, Any],
+    scope: dict[str, list[Any]],
 ) -> list[str]:
-    """Every name *action* reads once it inherits from *defaults*, in the order its config states them."""
+    """Every name *action* reads, in the order its config states them.
+
+    *scope* stands for its ``context_scope``, and *defaults* give its ``expect`` block.
+    """
     names: list[str] = []
     dependencies = action.get("dependencies") or []
     names.extend([dependencies] if isinstance(dependencies, str) else dependencies)
-    scope = inherited_context_scope(
-        {"context_scope": _read_directives(action.get("context_scope"))},
-        {"context_scope": _read_directives(defaults.get("context_scope"))},
-    )
-    view = {**action, "context_scope": scope or {}}
+    view = {**action, "context_scope": scope}
     try:
         requirements = extractor.extract_from_agent(view)
     except TemplateSyntaxError as e:

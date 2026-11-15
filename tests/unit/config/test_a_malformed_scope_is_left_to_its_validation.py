@@ -147,9 +147,10 @@ class TestTheRemovalRefusalForAnInheritedReader:
 
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
-            f"'b2' {self.VIA_INCLUDE}, 'b3' {self.VIA_INCLUDE} still read it. Remove the read "
-            "from the defaults named above: an override cannot take away a read that an action "
-            "inherits."
+            f"'b2' {self.VIA_INCLUDE}, 'b3' {self.VIA_INCLUDE} still read it. "
+            "Remove the readers too, or override their 'context_scope' so that they do not read "
+            "it (a directive that the override sets, null included, replaces the inherited "
+            "one), or remove the read from the defaults named above."
         )
 
     def test_one_reader_inherits_the_read_and_one_has_its_own(self, tmp_path):
@@ -163,10 +164,10 @@ class TestTheRemovalRefusalForAnInheritedReader:
 
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
-            f"'b2' {self.VIA_INCLUDE}, 'b3' still read it. Remove the readers that name no "
-            "defaults too, or override them so that they do not read it, and remove the read "
-            "from the defaults named above: an override cannot take away a read that an action "
-            "inherits."
+            f"'b2' {self.VIA_INCLUDE}, 'b3' still read it. "
+            "Remove the readers too, or override their 'context_scope' so that they do not read "
+            "it (a directive that the override sets, null included, replaces the inherited "
+            "one), or remove the read from the defaults named above."
         )
 
     def test_a_reader_with_its_own_read_keeps_the_plain_advice(self, tmp_path):
@@ -177,3 +178,19 @@ class TestTheRemovalRefusalForAnInheritedReader:
             "'b2' still reads it. Remove the readers too, or override them so that they do not "
             "read it."
         )
+
+
+def test_project_defaults_the_load_refuses_leave_the_include_unchecked(tmp_path):
+    bad = {"expect": {"max_iterations": 99}}
+    reads_z = _with(B2, dependencies=["b1", "z"], context_scope={"observe": ["z.text"]})
+    caught = []
+    for folder, actions, branches in (
+        ("included", [A, Z, INCLUDE], {"pair": _pair([B1, reads_z])}),
+        ("inline", [A, Z, B1, reads_z], None),
+    ):
+        with pytest.raises(Exception) as error:
+            _loaded(tmp_path / folder, actions, branches, project_defaults=bad)
+        caught.append((type(error.value).__name__, str(error.value)))
+
+    assert caught[0] == caught[1]
+    assert caught[0][1].startswith("default_agent_config.expect: ")
