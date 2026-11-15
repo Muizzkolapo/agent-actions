@@ -483,9 +483,13 @@ records, and does not ask for them again. A plain `retry` does this when the hal
 earliest failure.
 
 A retry clears the written-down answers only for the records whose failures it clears. A
-record that keeps its `success` keeps its answer. Thus a record that was answered after a
-`--rerun` replaced the stored file is answered again, as a plain run answers it. The retry
-does not carry that record from the stored file that the rerun made stale.
+record that keeps its `success` keeps its answer. The retry never carries such a record from the
+stored file that a `--rerun` made stale. The two run modes differ:
+
+1. Online: the retry finishes the record from its checkpoint row. It does not send the record
+   again. It sends the record again only when the record has several checkpoint rows, or when
+   an earlier version made its checkpoint.
+2. Batch: the retry sends the record again.
 
 ```bash
 agac retry -a my_workflow --from extract_facts
