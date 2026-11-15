@@ -27,7 +27,7 @@ from .expander_action_types import (
 from .expander_merge import (
     adapt_inherited_expect,
     collect_judge_context_refs,
-    deep_merge_context_scope,
+    inherited_context_scope,
     initialize_optional_fields,
     layered_defaults,
     merge_directive_value,
@@ -246,14 +246,10 @@ class ActionExpander:
                 granularity.capitalize() if isinstance(granularity, str) else granularity
             )
 
-        # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
         # Deep merge: action directives merge with defaults (not replace)
-        context_scope_defaults = defaults.get("context_scope")
-        context_scope_action = action.get("context_scope")
-        if context_scope_defaults or context_scope_action:
-            agent["context_scope"] = deep_merge_context_scope(
-                context_scope_defaults, context_scope_action
-            )
+        context_scope = inherited_context_scope(action, defaults)
+        if context_scope is not None:
+            agent["context_scope"] = context_scope
 
         # Initialize dependencies from action if present, else empty list.
         # Run them through the version template_replacer so per-iteration

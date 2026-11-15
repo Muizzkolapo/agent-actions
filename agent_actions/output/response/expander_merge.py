@@ -41,6 +41,17 @@ def deep_merge_context_scope(
     return merged
 
 
+def inherited_context_scope(
+    action: dict[str, Any], defaults: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The ``context_scope`` *action* gets: its own directives merged over the defaults'."""
+    defaults_scope = defaults.get("context_scope")
+    action_scope = action.get("context_scope")
+    if not defaults_scope and not action_scope:
+        return None
+    return deep_merge_context_scope(defaults_scope, action_scope)
+
+
 # The settings the chunker reads out of chunk_config, which are also writable as
 # keys of their own on an action or in defaults.
 CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_method")
