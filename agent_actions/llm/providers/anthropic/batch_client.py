@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
+from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
 
@@ -86,6 +87,9 @@ class AnthropicBatchClient(BaseBatchClient):
                 cause=e,
             ) from e
 
+    def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
+        return self.enable_prompt_caching and prompt_is_shared(agent_config)
+
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -109,7 +113,7 @@ class AnthropicBatchClient(BaseBatchClient):
             batch_task.prompt,
             batch_task.user_content,
             schema=schema,
-            enable_prompt_caching=self.enable_prompt_caching,
+            enable_prompt_caching=batch_task.cache_prompt,
         )
         # Anthropic batch: system is a top-level param, user content is the message
         params = {

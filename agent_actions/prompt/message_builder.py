@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from textwrap import dedent
 from typing import Any
@@ -136,6 +136,17 @@ class LLMMessage:
     role: str
     content: str
     cache_control: dict[str, str] | None = None
+    static_len: int = 0
+    """Length of the leading prompt text, before any record content; a cache mark sits
+    at its end."""
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.static_len <= len(self.content):
+            raise ValueError(
+                f"static_len {self.static_len} is outside a content of length {len(self.content)}"
+            )
+        if self.cache_control is not None and self.static_len == 0:
+            raise ValueError("A cache mark needs prompt text before it; static_len is 0")
 
 
 @dataclass
@@ -160,13 +171,16 @@ class LLMMessageEnvelope:
         for m in msgs:
             d: dict[str, Any] = {"role": m.role, "content": m.content}
             if m.cache_control is not None:
-                d["content"] = [
+                blocks: list[dict[str, Any]] = [
                     {
                         "type": "text",
-                        "text": m.content,
+                        "text": m.content[: m.static_len],
                         "cache_control": m.cache_control,
                     }
                 ]
+                if m.static_len < len(m.content):
+                    blocks.append({"type": "text", "text": m.content[m.static_len :]})
+                d["content"] = blocks
             result.append(d)
         return result
 
@@ -292,7 +306,7 @@ class MessageBuilder:
 
         schema_injection = config.schema_injection if json_mode else SchemaInjection.NONE
 
-        body = MessageBuilder._assemble_body(
+        body, body_static_len = MessageBuilder._assemble_body(
             style=style,
             prompt_config=prompt_config,
             context_str=context_str,
@@ -322,6 +336,7 @@ class MessageBuilder:
             effective_prompt,
             context_str,
             body,
+            body_static_len,
             style=style,
         )
 
@@ -386,12 +401,16 @@ class MessageBuilder:
         if provider == "gemini":
             # Gemini batch: single combined text
             combined = f"{effective_prompt}\n\n{user_content}"
-            messages = [LLMMessage(role="user", content=combined)]
+            messages = [
+                LLMMessage(role="user", content=combined, static_len=len(effective_prompt) + 2)
+            ]
         else:
             # Standard (including Anthropic): system + user messages.
             # Anthropic batch consumers split system out as a top-level param.
             messages = [
-                LLMMessage(role="system", content=effective_prompt),
+                LLMMessage(
+                    role="system", content=effective_prompt, static_len=len(effective_prompt)
+                ),
                 LLMMessage(role="user", content=user_content),
             ]
         if enable_prompt_caching:
@@ -405,13 +424,25 @@ class MessageBuilder:
 
     @staticmethod
     def _mark_for_caching(provider: str, messages: list[LLMMessage]) -> list[LLMMessage]:
-        """Mark each message as a prompt-cache breakpoint; only Anthropic reads the mark."""
+        """Put one cache mark at the end of the prompt text; only Anthropic reads it.
+
+        Record content is never marked. A caller asks for the mark only when the prompt
+        is the same for every record: a mark on text that changes per record writes a
+        cache entry no other request reads.
+        """
         if provider != "anthropic":
             return messages
-        return [
-            LLMMessage(role=m.role, content=m.content, cache_control={"type": "ephemeral"})
-            for m in messages
-        ]
+        last_shared: int | None = None
+        for index, message in enumerate(messages):
+            if message.static_len:
+                last_shared = index
+            if message.static_len < len(message.content):
+                break
+        if last_shared is None:
+            return messages
+        marked = list(messages)
+        marked[last_shared] = replace(messages[last_shared], cache_control={"type": "ephemeral"})
+        return marked
 
     @staticmethod
     def _get_config(provider: str) -> ProviderMessageConfig:
@@ -476,15 +507,15 @@ class MessageBuilder:
         schema_injection: SchemaInjection,
         rules: list[str],
         blank_line_before_rules: bool = True,
-    ) -> str:
-        """Assemble the prompt body text from parts.
+    ) -> tuple[str, int]:
+        """Assemble the prompt body and the length of its prompt text, before the record content.
 
         TAGGED and TAGGED_GROQ outputs are wrapped with leading/trailing
         newlines to match the original ``dedent()`` output format.
         """
         if style == PromptStyle.RAW:
             # Ollama: no body assembly — roles handle it
-            return ""
+            return "", 0
 
         if style == PromptStyle.PLAIN_TEXT:
             # Groq non-json — strip() matches original dedent().strip()
@@ -494,7 +525,7 @@ class MessageBuilder:
 
                 Please provide a direct response without any JSON formatting.
                 Begin your response here:""").strip()
-            return body
+            return body, 0
 
         if style == PromptStyle.TAGGED_GROQ:
             # Groq JSON — unique format: no space after first colon,
@@ -508,7 +539,7 @@ class MessageBuilder:
                 parts.append("")
                 parts.extend(rules)
             joined = "\n".join(parts)
-            return f"\n{joined}\n"
+            return f"\n{joined}\n", len(parts[0]) + 2
 
         # -- TAGGED style (default for most providers) -----------------------
         parts = [
@@ -535,9 +566,10 @@ class MessageBuilder:
                 parts.append("")  # blank line before rules (OpenAI, Gemini)
             parts.extend(rules)
 
-        # Wrap with \n...\n to match original dedent() output
+        # Wrap with \n...\n to match original dedent() output; the instruction line
+        # and the newlines around it come before the record's text.
         joined = "\n".join(parts)
-        return f"\n{joined}\n"
+        return f"\n{joined}\n", len(parts[0]) + 2
 
     @staticmethod
     def _build_field_schema_instruction(schema: dict[str, Any] | None) -> str:
@@ -559,6 +591,7 @@ class MessageBuilder:
         prompt_config: str,
         context_str: str,
         body: str,
+        body_static_len: int,
         *,
         style: PromptStyle = PromptStyle.TAGGED,
     ) -> list[LLMMessage]:
@@ -566,7 +599,7 @@ class MessageBuilder:
         if role == MessageRole.SYSTEM_PLUS_USER:
             # Ollama: system=prompt, user=context
             return [
-                LLMMessage(role="system", content=prompt_config),
+                LLMMessage(role="system", content=prompt_config, static_len=len(prompt_config)),
                 LLMMessage(role="user", content=context_str),
             ]
 
@@ -578,10 +611,10 @@ class MessageBuilder:
             # so it keeps the single system message.
             if style == PromptStyle.TAGGED and context_str:
                 return [
-                    LLMMessage(role="system", content=prompt_config),
+                    LLMMessage(role="system", content=prompt_config, static_len=len(prompt_config)),
                     LLMMessage(role="user", content=context_str),
                 ]
-            return [LLMMessage(role="system", content=body)]
+            return [LLMMessage(role="system", content=body, static_len=body_static_len)]
 
         # SINGLE_USER (default)
-        return [LLMMessage(role="user", content=body)]
+        return [LLMMessage(role="user", content=body, static_len=body_static_len)]

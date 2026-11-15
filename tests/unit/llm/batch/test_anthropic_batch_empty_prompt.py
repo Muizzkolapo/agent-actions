@@ -38,9 +38,7 @@ def test_an_empty_prompt_sends_no_system_prompt(caching):
 
     assert "system" not in params
     (message,) = params["messages"]
-    text = json.dumps(CONTENT)
-    expected = [{"type": "text", "text": text, "cache_control": MARK}] if caching else text
-    assert message["content"] == expected
+    assert message["content"] == json.dumps(CONTENT)
 
 
 def test_a_prompt_with_caching_on_is_sent_as_a_marked_system_prompt():

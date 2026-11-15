@@ -30,6 +30,7 @@ from agent_actions.processing.task_preparer import (
     get_task_preparer,
     write_trace_row,
 )
+from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
@@ -233,6 +234,8 @@ class BatchTaskPreparator:
         # Finalize tasks with provider
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
+        if feedback_by_id:
+            provider_config[REQUEST_VARIES_PER_RECORD_KEY] = True
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
 
         # Return immutable result

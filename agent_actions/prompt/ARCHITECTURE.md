@@ -344,7 +344,16 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |       (TAGGED + context --> splits into system + user for injection safety)
   |
   6. Anthropic prompt caching (build_for_batch applies the same rule)
-  |     --> Adds cache_control: {type: "ephemeral"} to messages
+  |     --> Only when the caller asks: the Anthropic clients ask when
+  |         cache_scope.prompt_is_shared holds (no name in the template
+  |         that can differ per record, no dispatch_task in the prompt, in
+  |         a value rendered into it, or in the schema, no random filter
+  |         or lipsum, not a repair call or a judge call); it fails closed
+  |     --> One cache_control: {type: "ephemeral"} at the end of the prompt
+  |         part (LLMMessage.static_len); none on the record content
+  |     --> Batch: the system prompt carries it; the record message is plain
+  |     --> Online: the user message is sent as two text blocks, the
+  |         instruction (marked) then the record (unmarked); same text
   |
   7. Token overflow pre-flight
   |     --> chars/4 heuristic vs _MODEL_CONTEXT_LIMITS

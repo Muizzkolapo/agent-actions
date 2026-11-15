@@ -65,16 +65,11 @@ def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @ROUTES
 class TestEachRouteMarksTheRequestForCaching:
-    def test_caching_on_marks_the_system_prompt_and_the_message(self, route):
+    def test_caching_on_marks_the_system_prompt_and_not_the_record(self, route):
         params = _params(route(BatchClientResolver(), _action(enable_prompt_caching=True)))
 
         assert params["system"] == [{"type": "text", "text": PROMPT, "cache_control": MARK}]
-        assert params["messages"] == [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": USER_TEXT, "cache_control": MARK}],
-            }
-        ]
+        assert params["messages"] == [{"role": "user", "content": USER_TEXT}]
 
     def test_caching_on_sends_only_fields_a_batch_request_takes(self, route):
         params = _params(route(BatchClientResolver(), _action(enable_prompt_caching=True)))
