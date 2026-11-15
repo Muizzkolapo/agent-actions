@@ -58,6 +58,12 @@ class FakeEndpoint:
         self.peak_in_flight = 0
         self._in_flight = 0
         self._count_lock = threading.Lock()
+        # When set, the first requests are held until this many are in flight at once (or
+        # `gather_timeout` passes), so a test of concurrency does not depend on how fast
+        # a loaded machine delivers them; the later ones are not held.
+        self.gather = 0
+        self.gather_timeout = 10.0
+        self._gathered = threading.Condition(self._count_lock)
         # A credential the server no longer takes: every request carrying it gets a 401.
         self.refuse_authorization: str | None = None
         self._refusal_barrier: threading.Barrier | None = None
@@ -151,9 +157,14 @@ def _handler_for(endpoint: FakeEndpoint) -> type[BaseHTTPRequestHandler]:
                 "body": body,
             }
             endpoint.requests.append(request)
-            with endpoint._count_lock:
+            with endpoint._gathered:
                 endpoint._in_flight += 1
                 endpoint.peak_in_flight = max(endpoint.peak_in_flight, endpoint._in_flight)
+                endpoint._gathered.notify_all()
+                endpoint._gathered.wait_for(
+                    lambda: endpoint.peak_in_flight >= endpoint.gather,
+                    timeout=endpoint.gather_timeout,
+                )
             try:
                 if endpoint.delay:
                     time.sleep(endpoint.delay)

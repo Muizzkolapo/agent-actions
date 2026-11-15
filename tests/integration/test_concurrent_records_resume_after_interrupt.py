@@ -110,6 +110,9 @@ def _start(root: Path, env: dict[str, str]) -> subprocess.Popen[str]:
 def test_an_interrupted_concurrent_run_resumes_each_record_once(tmp_path):
     with FakeEndpoint() as lab:
         lab.delay = 0.4
+        # The first window waits until all of it is in flight: on a loaded machine the
+        # first request could otherwise be answered before the last one arrives.
+        lab.gather = WINDOW
         env = {"LAB_URL": lab.base_url}
         root = _project(tmp_path)
 
