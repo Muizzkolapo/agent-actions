@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Batch Recovery
 
-Batch recovery automatically handles two problems of a batch API, in a process with two phases. In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
+Batch recovery handles two problems of a batch API, in a process with two phases, when you turn it on. Phase 1 needs a `retry:` block. Phase 2 needs an `expect:` block with a `repair` policy other than `none`. In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
 
 ## The Two Phases
 
