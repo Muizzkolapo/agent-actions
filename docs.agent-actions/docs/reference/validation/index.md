@@ -54,13 +54,13 @@ actions:
 
 ### Vendor Compatibility
 
-The supported features are different for each vendor:
+The supported features are different for each vendor. This table lists some of the vendors. For all vendors, see [Vendor Support](../configuration/index.md#vendor-support):
 
 | Vendor | JSON Mode | Batch | Tools | Vision |
 |--------|-----------|-------|-------|--------|
 | OpenAI | ✅ | ✅ (not with `base_url`) | ✅ | ✅ |
 | Anthropic | ✅ | ✅ | ✅ | ✅ |
-| Google | ✅ | ✅ | ✅ | ✅ |
+| Gemini | ✅ | ✅ | ✅ | ✅ |
 | Groq | ✅ | ✅ | ✅ | ❌ |
 | Ollama | ✅ | ✅ | ✅ | ✅ |
 

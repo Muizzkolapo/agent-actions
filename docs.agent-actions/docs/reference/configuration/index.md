@@ -155,7 +155,7 @@ actions:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `model_vendor` | string | Provider: openai, anthropic, google, groq, cohere, ollama_local, ollama_cloud, llamafile, agac-provider |
+| `model_vendor` | string | Provider: openai, anthropic, gemini, groq, cohere, ollama_local, ollama_cloud, llamafile, agac-provider |
 | `model_name` | string | The model identifier (for example, gpt-4o-mini) |
 | `api_key` | string | The name of the environment variable for the API key. Not necessary for `agac-provider`, `ollama_local`, `llamafile` or a declared endpoint. An action on one of them expands and inspects with no `api_key` at any level |
 | `base_url` | string | The server URL for `openai`, `llamafile`, `ollama_local` and `ollama_cloud`. For `openai`, it can be any server that speaks the OpenAI chat API, for example `http://localhost:8080/v1`. Preflight refuses it on `anthropic`, `gemini`, `groq` and `cohere` actions |
@@ -260,11 +260,13 @@ Tool actions support `Record` and `File` granularity. With File granularity, the
 
 ## Vendor Support
 
+The vendor name for Gemini is `gemini`. The name `google` is an alias for it.
+
 | Vendor | `model_vendor` | Batch API | Example Models |
 |--------|----------------|-----------|----------------|
 | OpenAI | `openai` | ✅ | gpt-4o, gpt-4o-mini |
 | Anthropic | `anthropic` | ✅ | claude-sonnet-4-20250514 |
-| Google | `google` | ✅ | gemini-2.0-flash |
+| Gemini | `gemini` | ✅ | gemini-2.0-flash |
 | Groq | `groq` | ✅ | llama-3.3-70b-versatile |
 | Cohere | `cohere` | ❌ | command-r-plus |
 | Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
