@@ -186,11 +186,11 @@ This table shows how the records of the branches pair:
 | One branch returns several records for each input (a tool that splits a record). The other branches return one record. | One merged record for each split record. Each merged record has the record of the other branches for its source. |
 | One branch splits a record. Another branch splits the records of that branch again (it reads the first branch). The other branches return one record. | One merged record for each record of the second split. Each merged record has the record of the first split that it came from. It also has the record of the other branches for its source. |
 | All branches read one earlier split (an action upstream of all branches returned several records for each input) | One merged record for each record of that split |
-| One branch splits a record, and a `granularity: File` tool below it gathers all records of that split back into one record | The result is the same as if that branch did not split. The gathered record is the record of the source. |
+| One branch splits a record, and a `granularity: file` tool below it gathers all records of that split back into one record | The result is the same as if that branch did not split. The gathered record is the record of the source. |
 | Two or more branches each hold their own split of the same source record. Or, one branch splits a source beside branches that read an earlier split of that source. | Nothing. The action fails and names the branches and the source record. |
-| One branch holds a record that a `granularity: File` tool returned with `source_index: None` (an aggregate, marked `aggregated_by`). Another branch does not read that aggregate. | Nothing. The action fails and names the branches and the action of the tool. If each branch reads the aggregate, the aggregate pairs like any record. |
-| One branch has no record, because its `granularity: File` tool folded the record into the row of another record (a `source_index` list such as `[a, b]`). The row lists `b` under `folded_sources`. | One merged record for `b`, `unprocessed` with reason `consumed_into_another_record`. Its tombstone names the row that it went into as `metadata.consumed_into`. `a` merges with the folded row as usual. |
-| One branch holds a tombstone for a source. For example, a record for which its `granularity: File` tool returned no row. | One merged record for that source, `unprocessed`. The action below skips that record. |
+| One branch holds a record that a `granularity: file` tool returned with `source_index: None` (an aggregate, marked `aggregated_by`). Another branch does not read that aggregate. | Nothing. The action fails and names the branches and the action of the tool. If each branch reads the aggregate, the aggregate pairs like any record. |
+| One branch has no record, because its `granularity: file` tool folded the record into the row of another record (a `source_index` list such as `[a, b]`). The row lists `b` under `folded_sources`. | One merged record for `b`, `unprocessed` with reason `consumed_into_another_record`. Its tombstone names the row that it went into as `metadata.consumed_into`. `a` merges with the folded row as usual. |
+| One branch holds a tombstone for a source. For example, a record for which its `granularity: file` tool returned no row. | One merged record for that source, `unprocessed`. The action below skips that record. |
 
 A record of one split is not a record of another split. Thus two splits of one source
 have no pairing that keeps the fields of each branch. The action fails. It does not run on
@@ -203,7 +203,7 @@ upstream of the two branches. Then make each branch read that action. If you do 
 this, let a maximum of one branch split the source. Or, gather the split of a branch back
 into one record for each source.
 
-A `granularity: File` tool gathers a split when these two conditions are true:
+A `granularity: file` tool gathers a split when these two conditions are true:
 
 - One output names, in its `source_index` list, each record of its file that was split from one source, and nothing else.
 - No other output names any of these records.

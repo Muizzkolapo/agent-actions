@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Batch Recovery
 
-Batch recovery automatically handles two problems of a batch API, in a process with two phases. In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
+Batch recovery handles two problems of a batch API, in a process with two phases, when you turn it on. Phase 1 needs a `retry:` block. Phase 2 needs an `expect:` block with a `repair` policy other than `none`. In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
 
 ## The Two Phases
 
@@ -65,7 +65,9 @@ not include the record in its results, and no retry will send the record again. 
 one of these two types:
 
 - A record of an action that has retry disabled.
-- A record whose retry batch was not sent. The cause is that the system could not render its prompt, or that the provider refused it.
+- A record whose retry batch the provider refused with a non-fatal error. The retry did not send the record, and nothing will send it again.
+
+A retry that preparation cannot build does not give this reason. That record is exhausted.
 
 The action completes with failures (`completed_with_failures`). The downstream actions skip the
 record, and [`agac retry`](../cli/retry) sends the record again. After the system collects the
@@ -180,7 +182,7 @@ Each record that recovery processes gets a `_recovery` field in its output. Cont
     },
     "expectations": {
       "attempts": 2,
-      "failed": []
+      "failed": ["_structural"]
     }
   }
 }
@@ -198,7 +200,7 @@ Each record that recovery processes gets a `_recovery` field in its output. Cont
 | `reason` | string | The reason for the retry. A batch record always carries `missing`. An online record carries the error class of its last failed attempt: `network_error`, `rate_limit`, `timeout` or `api_error` |
 | `timestamp` | string | The ISO 8601 timestamp of the recovery |
 
-**Expectations metadata** (`_recovery.expectations`, present when the repair loop exhausted):
+**Expectations metadata** (`_recovery.expectations`): A batch record always gets this block when the repair loop is exhausted. An online record gets it only when the last response cannot carry a verdict.
 
 | Field | Type | Description |
 |-------|------|-------------|

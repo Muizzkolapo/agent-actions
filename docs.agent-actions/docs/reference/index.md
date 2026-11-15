@@ -53,13 +53,13 @@ Each action can have its own schema validation, context scope and guards. Becaus
 
 **Workflow**: A DAG (directed acyclic graph) of actions that you define in YAML. Actions declare dependencies, and the engine sets the execution order automatically.
 
-**Action**: One unit of work in a workflow. An action is an LLM call or a Python tool. Each action has inputs, a prompt or a function, and validated outputs.
+**Action**: One unit of work in a workflow. An action is an LLM call, a Python tool, or a human review (`hitl`). Each action has inputs, a prompt or a function, and validated outputs.
 
 **Field Reference**: A field reference gets an upstream output into a prompt, with syntax such as `{{ extract_facts.facts }}`. The field gets its value when the referenced action completes. Thus a field reference is similar to a formula in a spreadsheet that points to a cell.
 
 **Context Scope**: Controls what data flows between actions, with `observe`, `drop` and `passthrough`.
 
-**Guard**: Conditional execution. A guard skips or filters actions based on data conditions. A guard is a quality checkpoint. If the input does not meet the standards, the guard skips the action entirely.
+**Guard**: Conditional execution. A guard tests each record against a data condition. When the condition is false, `skip` keeps the record unchanged for the next actions, `filter` removes it, and `warn` runs the action and logs a warning.
 
 **Schema**: JSON Schema validation for outputs. An `expect:` repair policy regenerates responses that are not valid. Schema validation finds structural errors, but it cannot verify semantic correctness. A response might match your schema but still contain incorrect information.
 
@@ -96,7 +96,7 @@ actions:
       on_false: skip
 ```
 
-If `extract_facts` returns an empty list, the guard on `validate_facts` checks the condition and skips the action entirely. Agent Actions makes no API call. Thus the guard prevents unnecessary work and saves tokens.
+If `extract_facts` returns an empty list, the guard on `validate_facts` checks the condition and skips the action for that record. Agent Actions makes no API call for that record. Thus the guard prevents unnecessary work and saves tokens.
 
 ## Supported Providers
 

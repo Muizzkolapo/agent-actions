@@ -65,7 +65,7 @@ In a batch run, each repair round writes the prompt that the round sent. The las
 | Message | Cause |
 |---------|-------|
 | `No store for workflow '<name>' at <path>` | The workflow did not run. Thus it has no store. |
-| `No prompt traces for action '<action>' in <path>` | The action wrote no traces. The action is a tool action that runs over a whole file (`granularity: File`), or it did not run, or `--fresh` cleared its traces. |
+| `No prompt traces for action '<action>' in <path>` | The action wrote no traces. The action is a tool action that runs over a whole file (`granularity: file`), or it did not run, or `--fresh` cleared its traces. |
 | `No prompt traces for action '<action>' record '<record>' in <path>` | `--record` named a record for which the action has no trace. |
 
 For the contents of a trace and when it is cleared, see [Prompt Traces](../data-io/prompt-traces.md).

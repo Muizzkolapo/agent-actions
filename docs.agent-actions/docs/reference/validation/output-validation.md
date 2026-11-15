@@ -17,7 +17,7 @@ An LLM output goes through three validation layers. The diagram shows the proble
 flowchart TD
     A[LLM Response] --> B{Layer 1+2: JSON & Schema Valid?}
     B -->|No| G{Repair policy set?}
-    G -->|Yes| E[Regenerate with Error Feedback]
+    G -->|Yes| E[Regenerate: original prompt by default, error feedback with structural auto]
     G -->|No| H[Action Fails]
     E --> A
     B -->|Yes| I{Layer 3: Downstream Guard Passes?}
@@ -30,19 +30,20 @@ Guards run last. A guard is on a downstream action. The guard reads the output o
 
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
-| **1. JSON** | Make sure that the structure is valid | Generate the output again with error feedback |
+| **1. JSON** | Make sure that the structure is valid | Generate the output again. The default sends the original prompt and no feedback. `structural: auto` sends the error feedback |
 | **2. Schema** | Validate the types and the fields | Schema constraints and `expect:` repair |
 | **3. Guard** | Validate the meaning | Condition expressions |
 
 ## Layer 1: JSON Validation
 
-Layer 1 makes sure that the LLM returns valid JSON. If parsing fails and an `expect:` block has a repair policy, the LLM generates the response again:
+Layer 1 makes sure that the LLM returns valid JSON. If parsing fails and an `expect:` block has a `repair` policy other than `none`, the LLM generates the response again. The `structural:` key sets how the framework generates it again. The default is `retry`. The `repair:` key sets the mode only for rule failures.
 
 ```yaml
 - name: extract_data
   schema: my_schema
   expect:
     repair: auto
+    structural: auto
     max_iterations: 3
     on_exhausted: return_last
 ```

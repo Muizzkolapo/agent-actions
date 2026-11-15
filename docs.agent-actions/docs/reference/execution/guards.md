@@ -295,12 +295,12 @@ The framework keeps these records in the output, so that you can trace their lin
 
 ## Error Handling
 
-The framework puts guard evaluation errors into three categories. It handles each category differently:
+The framework puts guard evaluation errors into three categories: semantic, data and timeout. It handles each category differently. A missing field is a data error with special handling, so the table lists it on its own row:
 
 | Category | Example | `passthrough_on_error` respected? | Behavior |
 |----------|---------|-----------------------------------|----------|
-| **Semantic** | Unquoted string (`status == approved`) | No — always uses `on_false` | The condition is broken. The framework caches the result after the first occurrence. |
-| **Missing field** | `upstream_action.field` is not in this record | No — the condition is not met, so `on_false` applies | The framework logs a `G002` event. |
+| **Semantic** | A registered function raises `ValueError` for a value in the record | No — always uses `on_false` | The condition is broken. Preflight already refuses an unquoted string (`status == approved`) before the run, so this error is a backstop. The framework caches the result after the first occurrence. |
+| **Missing field** (a data error) | `upstream_action.field` is not in this record | No — the condition is not met, so `on_false` applies | The framework logs a `G002` event. |
 | **Data** | Any other error that occurs while the guard examines this record | Yes | A failure that applies only to this record |
 | **Timeout** | The evaluation took more time than the time limit | Yes | A transient failure |
 

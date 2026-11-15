@@ -338,7 +338,7 @@ actions:
     dependencies: [analyze_clause]
     kind: tool
     impl: aggregate_clause_analyses
-    granularity: File
+    granularity: file
     intent: "Combine clause analyses into unified risk report"
     schema:
       risk_report: object
@@ -347,7 +347,7 @@ actions:
         - analyze_clause.*
 ```
 
-The aggregate action sets `granularity: File`. Thus one call receives every analyzed clause of the input file. A tool action without this setting runs one time for each record.
+The aggregate action sets `granularity: file`. Thus one call receives every analyzed clause of the input file. A tool action without this setting runs one time for each record.
 
 **Advantages:**
 - It can process inputs of any size.
@@ -1012,7 +1012,7 @@ flowchart LR
   dependencies: [extract_qa]
   versions:
     param: voter_id
-    range: [1, 2, 3]
+    range: [1, 3]
   prompt: $my_workflow.Vote_Quality
   schema: quality_vote
 ```

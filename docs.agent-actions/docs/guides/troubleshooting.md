@@ -280,7 +280,7 @@ This table gives the messages that occur most often for the `endpoints:` block o
 | `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion. Check the url, the model name and the log of the server. |
 | `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` if the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`. Or put such a server (vLLM, TGI, a LiteLLM proxy) in front of this server. A 400 can also mean a wrong model name or parameter. Read the text of the server. |
 | `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed. Run the command manually from the project root. Then correct `endpoints.<name>.auth`. The framework never shows the stderr of the command, because the stderr can hold the secret. |
-| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The framework gives the record the disposition `parse_error`. Check the model and the schema. |
+| `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The record gets the disposition `failed` with the reason `parse_error`. Check the model and the schema. |
 
 ## Debugging with Prompt Traces
 
@@ -587,7 +587,7 @@ dependencies: [extract, enrich, validate]
 # Execution count: one per source record that reaches the action (order of the list changes nothing)
 ```
 
-To aggregate several records into one record, give the consuming action `granularity: File`.
+To aggregate several records into one record, give the consuming action `granularity: file`.
 Examples of aggregation are a roll-up, a deduplication and a count across the file. A
 `kind: tool` action at File granularity receives all the records of a file in one call. Thus
 the action can group the records by any field, and return as many records as the grouping
@@ -628,8 +628,8 @@ produces. `examples/map_reduce_fanin_check` shows the shape.
    - If a guard skipped a record, the record arrives with the fields of that branch set to null.
    - A branch that returns several records for each input runs one time for each record. Each record is paired with the record of the other branches for its source.
    - If two branches both split one source, the action fails. This occurs even when a guard downstream of one of the branches keeps a single record of its split.
-   - The `granularity: File` tool of one branch can fold a record into the row of another record. The action does not run that record. The record is `unprocessed`, with the reason `consumed_into_another_record`.
+   - The `granularity: file` tool of one branch can fold a record into the row of another record. The action does not run that record. The record is `unprocessed`, with the reason `consumed_into_another_record`.
 
    [Context Scope](../reference/context/context-scope.md) lists the shapes.
 3. For parallel branches, the merged outputs set the execution count.
-4. For `granularity: File`, the action runs one time for each input file, for any record count of the file.
+4. For `granularity: file`, the action runs one time for each input file, for any record count of the file.

@@ -981,7 +981,7 @@ handler is registered, and where it writes. The file is always `events.json` at 
 All other `logging.file.*` project keys configure nothing. The
 `AGENT_ACTIONS_NO_LOG_FILE`, `AGENT_ACTIONS_LOG_FILE`, `AGENT_ACTIONS_LOG_DIR`, `AGENT_ACTIONS_FILE_LOG_LEVEL`
 and `AGENT_ACTIONS_LOG_FORMAT` env vars also configure nothing. If one of these is set, the CLI reports
-it on stderr at boot and ignores it (see the File Handler section of the architecture doc).
+it on stderr at boot and ignores it.
 
 ---
 

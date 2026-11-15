@@ -297,11 +297,13 @@ first file that fails to import.
 
 ## Best Practices
 
-### Handle Missing Fields
+### Read Fields by Action Name
+
+Read an upstream field by the name of its action. A missing key raises `KeyError`, and the record fails with `Error executing UDF '<name>': KeyError: ...`.
 
 ```python
 @udf_tool()
-def safe_function(data: dict, **kwargs) -> dict:
+def read_score(data: dict, **kwargs) -> dict:
     score = data["upstream_action"]["score"]
     return {'result': score}
 ```

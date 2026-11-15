@@ -82,7 +82,7 @@ npm install
 npm run compile
 
 # Package the extension
-npx vsce package
+npx @vscode/vsce package
 
 # Install to VS Code
 code --install-extension agent-actions-0.2.0.vsix

@@ -111,7 +111,7 @@ Define reusable action groups with Jinja2 macros. You can combine these macros i
 - name: convert_html_json_to_thinkific
   kind: tool
   impl: convert_html_json_to_thinkific
-  granularity: File
+  granularity: file
   intent: "Convert HTML JSON format to Thinkific-compatible structure"
   dependencies: [add_asterisk_to_correct_answer]
   schema: thinkific_quiz
