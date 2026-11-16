@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "A Cohere JSON-mode call now sends its schema as `response_format.json_schema`, the field Cohere reads; it went as `schema`, which Cohere does not read, so the output was not held to the schema. A Cohere reply whose content starts with a thinking item is now read from its first text item; before, reading the thinking item's missing text raised an unwrapped `AttributeError`. A reply with no text item is an empty response, as one with no content is, and one cut off at `MAX_TOKENS` is retried as truncated."
+time: 2026-11-16T10:20:00Z
