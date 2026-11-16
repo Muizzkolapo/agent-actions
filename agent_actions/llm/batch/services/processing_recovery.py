@@ -196,7 +196,9 @@ def handle_retry_recovery(
         record_failure_counts=state.record_failure_counts,
         missing_ids=set(state.missing_ids),
     )
-    still_missing = BatchResultReconciler.resendable_ids(still_missing, context_map)
+    still_missing = BatchResultReconciler.resendable_ids(
+        BatchResultReconciler.retriable_ids(still_missing, merged), context_map
+    )
 
     submission_impossible = False
     left = retries_left(state.retry_attempt, state.retry_max_attempts)
@@ -243,6 +245,9 @@ def handle_retry_recovery(
         exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
             still_missing, updated_counts
         )
+        # The repair finaliser rebuilds exhaustion from missing_ids: a record failed for
+        # good this round is failed, not exhausted.
+        state.missing_ids = list(still_missing)
     elif still_missing:
         # A transient submission failure with attempts left. These records are not
         # exhausted, and the id set must be cleared as well as the stamp withheld:

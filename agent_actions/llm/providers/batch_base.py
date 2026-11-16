@@ -88,6 +88,9 @@ class BatchResult:
     content: Any
     success: bool
     error: str | None = None
+    # The HTTP status the provider answered this record's request with, when its line
+    # says; what a retry reads to resend only what online would retry.
+    error_status: int | None = None
     metadata: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
     recovery_metadata: RecoveryMetadata | None = None  # From agent_actions.core.types
@@ -302,7 +305,13 @@ class BaseBatchClient(ABC):
 
         error = self._extract_error_from_response(raw_response)
         if error:
-            return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
+            return BatchResult(
+                custom_id=custom_id,
+                content=None,
+                success=False,
+                error=error,
+                error_status=self._extract_error_status(raw_response),
+            )
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
@@ -332,6 +341,10 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Extract error message from response, or None if no error."""
+
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status a failed line's request was answered with; None when it does not say."""
+        return None
 
     @abstractmethod
     def _extract_content_from_response(self, raw_response: Any) -> Any:

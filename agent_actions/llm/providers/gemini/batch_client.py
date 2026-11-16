@@ -162,6 +162,14 @@ class GeminiBatchClient(BaseBatchClient):
             return "No content in response"
         return None
 
+    def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
+        """The error's code; 200 for an answer with no candidate or no text, such as a blocked prompt."""
+        error = raw_response.get("error")
+        if error is None:
+            return 200
+        code = error.get("code") if isinstance(error, dict) else None
+        return code if isinstance(code, int) else None
+
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""
         response_data = raw_response.get("response", {})
