@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import os
 import textwrap
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -541,6 +542,24 @@ def _load_prompt(prompt_name: str, project_root: Path | None = None) -> LoadedPr
     return LoadedPrompt(PromptLoader.load_prompt_expanded(prompt_name, project_root=project_root))
 
 
+_UNSET = object()
+
+
+def _env(name: str, default: Any = _UNSET, *, yaml_path: str | Path) -> Any:
+    """The variable *name* of the process environment, which holds the project's .env."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    if default is not _UNSET:
+        return default
+    raise TemplateRenderingError(
+        f"Error rendering YAML template from '{yaml_path}': env('{name}') reads '{name}', "
+        f"which the environment does not hold, and gives no default. Set {name} in the "
+        f"environment or in the project's .env, or give a default: env('{name}', '...')",
+        context={"yaml_path": str(yaml_path), "variable": name},
+    )
+
+
 def _load_yaml_content(yaml_path, project_root: Path | None = None):
     """
     Load YAML content from file, resolving prompt references if needed.
@@ -619,6 +638,7 @@ def render_pipeline_with_templates(
     load = LoadRender(Path(templates_folder), yaml_content)
     env = load.env
     env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
+    env.globals["env"] = functools.partial(_env, yaml_path=yaml_path)
     env.filters["dedent"] = textwrap.dedent
     _load_template_globals(load, str(templates_folder))
 
