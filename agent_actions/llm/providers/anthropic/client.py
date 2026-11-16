@@ -11,7 +11,8 @@ consistent retry handling across all providers.
 import logging
 import time
 import uuid
-from typing import Any, ClassVar
+from collections.abc import Mapping
+from typing import Any, ClassVar, TypeGuard
 
 import anthropic
 from anthropic.lib import streaming
@@ -57,6 +58,9 @@ build_sdk_models(
     getattr(streaming, "ParsedMessageStreamEvent", None),
 )
 
+# The API requires max_tokens; agac sends this when the action sets none.
+_DEFAULT_MAX_TOKENS = 4096
+
 # The SDK refuses a non-streamed request it expects to run past 10 minutes: at 128,000
 # output tokens an hour, that is any max_tokens above 21,333.
 _NONSTREAMING_MAX_TOKENS = 21_333
@@ -82,6 +86,13 @@ def _model_nonstreaming_limit(model: str) -> int | None:
     except ImportError:
         return None
     return MODEL_NONSTREAMING_TOKENS.get(model)
+
+
+def _sends_interleaved_thinking(vendor_params: Mapping[str, Any]) -> bool:
+    """Whether the request carries the beta that lets a thinking budget exceed max_tokens."""
+    headers = vendor_params.get("extra_headers")
+    beta = headers.get("anthropic-beta") if isinstance(headers, dict) else None
+    return isinstance(beta, str) and "interleaved-thinking" in beta
 
 
 class AnthropicClient(BaseClient):
@@ -116,8 +127,7 @@ class AnthropicClient(BaseClient):
             key_map={"stop": "stop_sequences"},
             stop_as_list=True,
         )
-        # max_tokens is always required for Anthropic; default 4096
-        params.setdefault("max_tokens", 4096)
+        params.setdefault("max_tokens", _DEFAULT_MAX_TOKENS)
 
         api_args: dict[str, Any] = {
             "model": model_name,
@@ -134,18 +144,55 @@ class AnthropicClient(BaseClient):
         return spec.apply(spec.fit(api_args), cfg)
 
     @staticmethod
-    def _schema_tool_choice(schema: Any, cfg: dict[str, Any]) -> dict[str, Any] | None:
-        """The forced choice of the one schema tool, which a batch line has always sent.
+    def vendor_params_conflicts(agent_config: Mapping[str, Any]) -> list[str]:
+        """What the API refuses beside the action's ``vendor_params.thinking``, one line each.
 
-        Not while thinking is on: the API refuses a forced tool with thinking.
+        With thinking on, Anthropic takes temperature 1 only, top_p of 0.95 or more, no
+        top_k and no forced tool; an enabled thinking's ``budget_tokens`` must be below
+        ``max_tokens``, unless the interleaved-thinking beta lets it run past.
         """
-        if not isinstance(schema, list) or len(schema) != 1 or not isinstance(schema[0], dict):
-            return None
-        name = schema[0].get("name")
-        thinking = (cfg.get(VENDOR_PARAMS_KEY) or {}).get("thinking")
-        if not name or (isinstance(thinking, dict) and thinking.get("type") != "disabled"):
-            return None
-        return {"type": "tool", "name": name}
+        vendor_params = agent_config.get(VENDOR_PARAMS_KEY) or {}
+        thinking = vendor_params.get("thinking")
+        if not isinstance(thinking, dict) or thinking.get("type") in (None, "disabled"):
+            return []
+
+        extra_body = vendor_params.get("extra_body")
+        sources = (vendor_params, extra_body if isinstance(extra_body, dict) else {}, agent_config)
+
+        def sent(key: str) -> Any:
+            return next((src[key] for src in sources if src.get(key) is not None), None)
+
+        def number(value: Any) -> TypeGuard[int | float]:
+            return isinstance(value, int | float) and not isinstance(value, bool)
+
+        problems: list[str] = []
+        temperature, top_p, top_k = sent("temperature"), sent("top_p"), sent("top_k")
+        if number(temperature) and temperature != 1:
+            problems.append(f"with thinking on, temperature must be 1 or unset, not {temperature}")
+        if number(top_p) and top_p < 0.95:
+            problems.append(f"with thinking on, top_p must be 0.95 or more, or unset, not {top_p}")
+        if top_k is not None:
+            problems.append(f"with thinking on, top_k must be unset, not {top_k}")
+        tool_choice = sent("tool_choice")
+        forced = tool_choice.get("type") if isinstance(tool_choice, dict) else None
+        if forced in ("any", "tool"):
+            problems.append(
+                f"with thinking on, tool_choice cannot force a tool (type {forced!r}); "
+                "use auto or none"
+            )
+
+        budget = thinking.get("budget_tokens")
+        max_tokens = sent("max_tokens")
+        limit = max_tokens if number(max_tokens) else _DEFAULT_MAX_TOKENS
+        if (
+            thinking.get("type") == "enabled"
+            and number(budget)
+            and budget >= limit
+            and not _sends_interleaved_thinking(vendor_params)
+        ):
+            named = limit if number(max_tokens) else f"{limit}, the default"
+            problems.append(f"thinking.budget_tokens ({budget}) must be below max_tokens ({named})")
+        return problems
 
     @staticmethod
     def _needs_streaming(api_args: dict[str, Any]) -> bool:

@@ -14,6 +14,7 @@ import typing
 from unittest.mock import MagicMock, patch
 
 import pytest
+from anthropic.types import Usage
 
 from agent_actions.output.response.schema import compile_unified_schema
 
@@ -78,8 +79,7 @@ def _make_anthropic_mocks(text, input_tokens=10, output_tokens=20):
     text_block.text = text
     mock_response = MagicMock()
     mock_response.content = [text_block]
-    mock_response.usage.input_tokens = input_tokens
-    mock_response.usage.output_tokens = output_tokens
+    mock_response.usage = Usage(input_tokens=input_tokens, output_tokens=output_tokens)
     mock_response.stop_reason = "end_turn"
     return mock_response
 
@@ -382,8 +382,7 @@ class TestAnthropicCallNonJson:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 0
+        mock_response.usage = Usage(input_tokens=10, output_tokens=0)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -423,8 +422,7 @@ class TestAnthropicCallJsonNormalization:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
+        mock_response.usage = Usage(input_tokens=10, output_tokens=20)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -447,8 +445,7 @@ class TestAnthropicCallJsonNormalization:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
+        mock_response.usage = Usage(input_tokens=10, output_tokens=20)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()

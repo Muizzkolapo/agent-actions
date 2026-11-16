@@ -276,7 +276,7 @@ class BaseBatchClient(ABC):
         content = self._extract_content_from_response(raw_response)
 
         # Parse JSON content if it's a string
-        if isinstance(content, str):
+        if isinstance(content, str) and not self._answer_was_cut_off(raw_response):
             content = self._parse_json_content(content)
 
         metadata = self._extract_metadata_from_response(raw_response)
@@ -394,6 +394,14 @@ class BaseBatchClient(ABC):
             target[key] = value
         elif default is not None:
             target[key] = default
+
+    def _answer_was_cut_off(self, _raw_response: Any) -> bool:
+        """Whether the output limit stopped the answer; its text is then kept unparsed.
+
+        Parsing would guess the end of a half-written JSON. In JSON mode the unparsed
+        text becomes a parse error, as online refuses to read a cut-off answer.
+        """
+        return False
 
     def _parse_json_content(self, content_str: str) -> Any:
         """Parse JSON string from an LLM response.

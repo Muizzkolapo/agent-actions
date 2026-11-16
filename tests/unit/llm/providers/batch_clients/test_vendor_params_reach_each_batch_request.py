@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
+from agent_actions.llm.providers.anthropic.client import AnthropicClient
 from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
 from agent_actions.llm.providers.groq.batch_client import GroqBatchClient
 from agent_actions.llm.providers.ollama.batch_client import OllamaBatchClient
@@ -66,10 +67,23 @@ class TestAnthropicBatch:
 
         assert (params["thinking"], params["top_k"]) == ({"type": "disabled"}, 5)
 
-    def test_the_schema_tool_is_forced(self):
+    def test_the_schema_tool_is_offered_and_not_forced(self):
         params = _line(self._client(), None, TOOL)["params"]
 
-        assert params["tool_choice"] == {"type": "tool", "name": "quiz"}
+        assert "tool_choice" not in params
+
+    def test_the_tool_is_the_one_an_online_request_sends(self):
+        schema = [
+            {
+                "name": "QuizSchema",
+                "description": "A quiz",
+                "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+            }
+        ]
+
+        params = _line(self._client(), None, schema)["params"]
+
+        assert params["tools"] == AnthropicClient._build_api_args("m", [], schema)["tools"]
 
     def test_thinking_leaves_the_tool_choice_to_the_model(self):
         params = _line(
