@@ -128,6 +128,11 @@ class GeminiBatchClient(BaseBatchClient):
             generation_config["temperature"] = batch_task.model_config["temperature"]
         if "max_tokens" in batch_task.model_config:
             generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
+        generation_config.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
         request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
         if generation_config:
             request["generation_config"] = generation_config

@@ -127,6 +127,11 @@ class AnthropicBatchClient(BaseBatchClient):
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
         )
+        params.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         vendor_params = batch_task.model_config.get("vendor_params") or {}
