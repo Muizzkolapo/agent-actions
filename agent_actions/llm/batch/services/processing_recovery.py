@@ -38,6 +38,7 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
+from agent_actions.processing.run_counts import add_tokens
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -366,6 +367,8 @@ def finalize_batch_output(
     if service._storage_backend and output_path.exists():
         _remove_batch_placeholder(output_path)
 
+    report_batch_usage(batch_results)
+
     elapsed_time = time.time() - context.start_time
     total_count = len(batch_results)
     successful_count = sum(1 for r in batch_results if BatchResultReconciler.is_answered(r))
@@ -389,6 +392,24 @@ def finalize_batch_output(
     # cleanup below then removes that entry.
     context.manager.mark_collected(identity.file_name)
     return str(output_file)
+
+
+def report_batch_usage(batch_results: list[BatchResult]) -> None:
+    """Report the tokens the results used, summed, as an online call reports its own.
+
+    Keyed as ``ResponseBuilder.record_usage_and_event`` keys them; a vendor's usage reads
+    ``prompt_tokens``/``completion_tokens`` or ``input_tokens``/``output_tokens``.
+    """
+    prompt = completion = total = 0
+    for result in batch_results:
+        usage = result.usage if isinstance(result.usage, dict) else {}
+        used_in = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+        used_out = usage.get("completion_tokens") or usage.get("output_tokens") or 0
+        prompt += used_in
+        completion += used_out
+        total += usage.get("total_tokens") or used_in + used_out
+    if prompt > 0 or completion > 0:
+        add_tokens({"input_tokens": prompt, "output_tokens": completion, "total_tokens": total})
 
 
 def cleanup_recovery(

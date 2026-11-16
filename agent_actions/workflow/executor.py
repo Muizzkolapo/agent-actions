@@ -26,7 +26,7 @@ from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.llm.providers.usage_tracker import get_last_usage
+from agent_actions.llm.providers.usage_tracker import clear_usage, get_last_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
@@ -1336,7 +1336,7 @@ class ActionExecutor:
             execution_time=duration,
             **self._completion_metadata(params.action_name, params.action_config),
         )
-        tokens = get_last_usage()
+        tokens = counts.tokens or get_last_usage()
         self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
 
         return ActionExecutionResult(
@@ -2360,6 +2360,7 @@ class ActionExecutor:
                 status=final_status,
                 metrics=ExecutionMetrics(
                     duration=wall_clock,
+                    tokens=counts.tokens,
                     record_count=record_count,
                     guard_skipped=guard_skipped,
                     checks_failed=checks_failed,
@@ -2458,6 +2459,8 @@ class ActionExecutor:
         An error here ends the run, since the store is not answering (see
         ``_record_store_failure``).
         """
+        # What a call before this action used must not be reported as this action's.
+        clear_usage()
         try:
             self._start_work(params)
         except Exception as error:

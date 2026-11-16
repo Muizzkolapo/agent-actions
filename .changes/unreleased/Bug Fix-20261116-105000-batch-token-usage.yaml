@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A batch action reports the tokens its results used, summed over the results it writes, on its completion (`ActionCompleteEvent`, and so `run_results.json`), keyed as an online action''s `input_tokens`, `output_tokens` and `total_tokens`. Batch kept each result''s usage on the result and never reported it, so a batch action showed no tokens. An action no longer reports the usage of a call made before it: an action that made no call, such as a tool action after an online one, reported the earlier call''s tokens as its own.'
+time: 2026-11-16T10:50:00Z
