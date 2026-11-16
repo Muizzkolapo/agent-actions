@@ -34,7 +34,7 @@ The load uses exactly the names that are bound at that point:
 
 - the names that the file binds with `{% set %}`, `{% for %}`, `{% import %}` or the parameters of a macro
 - the macros and variables of `templates/`
-- `load_prompt`
+- `load_prompt` and `env`
 - the globals of Jinja, for example `range`
 
 The load then applies these rules:
@@ -201,7 +201,7 @@ diff agent_workflow/my_workflow/agent_config/my_workflow.yml \
 
 ### Built-in Variables
 
-The load supplies no variables of its own. It supplies only `load_prompt`, the macros and variables of `templates/`, and the globals of Jinja (`range`, `dict`, `namespace`, …). Each other name that a tag uses comes from the file itself.
+The load supplies no variables of its own. It supplies only `load_prompt`, `env` (see [Environment Variables](#environment-variables)), the macros and variables of `templates/`, and the globals of Jinja (`range`, `dict`, `namespace`, …). Each other name that a tag uses comes from the file itself.
 
 ### Custom Variables
 
@@ -216,6 +216,32 @@ defaults:
   model_name: {{ model }}
   api_key: {{ api_key }}
 ```
+
+### Environment Variables
+
+`env(name, default)` returns the value of an environment variable when the workflow file loads. Use it to change a setting per environment without a second copy of the workflow:
+
+```yaml
+defaults:
+  run_mode: {{ env('AGAC_RUN_MODE', 'online') }}
+  model_vendor: anthropic
+  model_name: {{ env('AGAC_MODEL', 'claude-haiku-5-5') }}
+```
+
+```bash
+AGAC_RUN_MODE=batch agac run -a my_workflow
+```
+
+- The value comes from the environment of the `agac` command. The project's `.env` is read into it first, and a variable that the shell already sets keeps the shell's value.
+- If the variable is not set, `env` returns the default. A variable set to an empty string counts as set.
+- If the variable is not set and there is no default, the load fails and names the variable and the workflow file: `env('AGAC_MODEL') reads 'AGAC_MODEL', which the environment does not hold, and gives no default`.
+- `env` works in the workflow file and in `templates/` files. It does not exist in the per-record render of a prompt: a prompt that renders for each record can use `env` only in its own `{{ }}` tag, outside its `{% %}` blocks, where it renders at load.
+- The value is written into the rendered workflow. A changed value is therefore the same as an edit of that value in the file: a different `model_name` is named as a model edit, and a different prompt as a config edit, on the next run.
+- `api_key` is unchanged: it names the variable that holds the key (`api_key: ANTHROPIC_API_KEY`), and the key is read when the action runs. Do not pass a key through `env`.
+
+:::warning
+Do not use `env` to put a secret into the workflow. The value is written into `artefact/rendered_workflows/`, and a value in a prompt or another field that reaches the model is sent to the vendor and can appear in outputs and prompt traces.
+:::
 
 ## Conditional Actions
 
