@@ -150,8 +150,8 @@ class BaseBatchClient(ABC):
     def _get_default_model(self) -> str:
         """Return provider's default model name."""
 
-    def _get_default_temperature(self) -> float:
-        """Return provider's default temperature (0.1)."""
+    def _get_default_temperature(self) -> float | None:
+        """Return provider's default temperature (0.1); None sends none."""
         return 0.1
 
     @abstractmethod
