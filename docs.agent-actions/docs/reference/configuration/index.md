@@ -223,7 +223,7 @@ In JSON mode, an online Anthropic request offers the schema tool but does not fo
 :::
 
 :::note[An answer that the output budget cuts off]
-A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In an Anthropic batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
+A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In an Anthropic batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. An Anthropic answer that the limit cuts off partway through its text is never completed by guessing the rest: online and in batch, the record fails with a parse error in JSON mode. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
 :::
 
 ### Execution Fields

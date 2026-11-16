@@ -71,3 +71,33 @@ class TestAnAnswerWithNoTextOrTool:
         result = _client().parse_provider_response(_result([]))
 
         assert (result.success, result.content) == (True, [])
+
+
+class TestACutOffTextAnswer:
+    """Online refuses to read text the output limit cut off; batch keeps it unparsed.
+
+    In JSON mode the batch strategy then wraps the text as a parse error for repair.
+    """
+
+    def test_cut_off_json_is_not_completed_by_repair(self):
+        text = '```json\n{"concepts": [{"concept": "ti'
+
+        result = _client().parse_provider_response(
+            _result([{"type": "text", "text": text}], "max_tokens")
+        )
+
+        assert (result.success, result.content) == (True, text)
+
+    def test_a_finished_text_answer_is_still_read(self):
+        text = '```json\n{"concepts": [{"concept": "tides"}]}\n```'
+
+        result = _client().parse_provider_response(_result([{"type": "text", "text": text}]))
+
+        assert result.content == {"concepts": [{"concept": "tides"}]}
+
+    def test_a_tool_answer_is_returned_as_online_returns_it(self):
+        tool = {"type": "tool_use", "id": "t1", "name": "quiz", "input": {"a": 1}}
+
+        result = _client().parse_provider_response(_result([tool], "max_tokens"))
+
+        assert result.content == {"a": 1}

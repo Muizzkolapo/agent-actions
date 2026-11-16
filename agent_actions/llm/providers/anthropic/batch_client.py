@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
-from agent_actions.llm.providers.error_wrapper import empty_response_error
+from agent_actions.llm.providers.error_wrapper import empty_response_error, is_truncated
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -183,9 +183,16 @@ class AnthropicBatchClient(BaseBatchClient):
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
-        return self._parse_content_list(content_list)
+        return self._parse_content_list(
+            content_list, parse_text=not self._answer_was_cut_off(raw_response)
+        )
 
-    def _parse_content_list(self, content_list: Any) -> Any:
+    def _answer_was_cut_off(self, raw_response: Any) -> bool:
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        return is_truncated(self._get_attribute_or_key(message, "stop_reason"))
+
+    def _parse_content_list(self, content_list: Any, *, parse_text: bool = True) -> Any:
         """
         Parse Anthropic content list, prioritizing tool use over text.
 
@@ -207,6 +214,8 @@ class AnthropicBatchClient(BaseBatchClient):
         text_content = self._extract_text_content(content_list)
         if text_content is not None:
             logger.debug("Got text response: %s...", text_content[:100])
+            if not parse_text:
+                return text_content
             parsed = self._parse_json_content(text_content)
             if isinstance(parsed, dict):
                 logger.debug("Successfully parsed text as JSON")
