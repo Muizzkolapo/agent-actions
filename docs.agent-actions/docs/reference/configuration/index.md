@@ -197,6 +197,7 @@ The rules:
 - **The keys are the SDK's own.** A key is a keyword argument of the request that the SDK sends. For Gemini, a key is a field of `GenerateContentConfig`. For Ollama, a key is an argument of `chat()`. The value goes to the vendor unchanged.
 - **Preflight checks each key.** `agac inspect` and `agac run` refuse a key that the request does not take. The error names the action, the key and the valid keys. An unknown key never passes silently.
 - **agac sets some keys itself.** Preflight refuses `model`, `messages`, `tools`, `system`, `stream` and `timeout` on every vendor. It also refuses `stream_options` on OpenAI, `request_options` on Cohere and `http_options` on Gemini. Set the timeout with [`request_timeout`](#request-timeout).
+- **Preflight checks Anthropic thinking.** With `vendor_params.thinking` on (`enabled` or `adaptive`), the Anthropic API takes `temperature` 1 only, `top_p` of 0.95 or more, no `top_k` and no forced `tool_choice`. Preflight refuses an action that sets one of these otherwise, in its own settings or in `vendor_params`. With `type: enabled`, `budget_tokens` must be below `max_tokens`, which is 4096 when the action sets none; preflight refuses a larger budget unless `extra_headers` sends the interleaved-thinking beta.
 - **A vendor parameter wins.** A key that agac also sets, for example `temperature` or the default `tool_choice`, takes the value from `vendor_params`.
 - **Blocks merge key by key.** An action's `vendor_params` merge over the `vendor_params` in `defaults:`. Those merge over the `vendor_params` in the `default_agent_config:` of the project. A key at a lower level replaces the same key above it. The other keys above it stay.
 - **Some dicts merge too.** Ollama `options` merge into the options that agac sets, so `num_ctx` keeps the `num_predict` that comes from `max_tokens`. `extra_headers`, `extra_query` and `extra_body` merge the same way.
@@ -210,7 +211,7 @@ One example for each vendor:
 
 | Vendor | Example |
 |--------|---------|
-| `anthropic` | `vendor_params: {thinking: {type: enabled, budget_tokens: 4096}, top_k: 40}` |
+| `anthropic` | `vendor_params: {thinking: {type: enabled, budget_tokens: 2048}, service_tier: auto}` |
 | `openai` | `vendor_params: {reasoning_effort: low, seed: 7}` |
 | `groq` | `vendor_params: {reasoning_effort: default, reasoning_format: parsed}` |
 | `gemini` | `vendor_params: {thinking_config: {thinking_budget: 0}, top_k: 40}` |

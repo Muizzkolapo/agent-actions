@@ -88,3 +88,83 @@ def test_each_bad_key_is_named():
 @pytest.mark.parametrize("vendor", ["tool", "hitl"])
 def test_an_action_that_sends_no_request_may_inherit_the_block(vendor):
     assert _errors(vendor, {"thinking": {"type": "disabled"}}) == []
+
+
+def _anthropic_errors(vendor_params: dict, **settings) -> list[str]:
+    config = {"model_vendor": "anthropic", "model_name": "m", "vendor_params": vendor_params}
+    config.update({"temperature": None, "top_p": None, "max_tokens": None, **settings})
+    result = WorkflowResolutionService(action_configs={"write_quiz": config}).resolve_all()
+    return [e.message for e in result.errors if e.location.config_field == "vendor_params"]
+
+
+THINKING = {"thinking": {"type": "enabled", "budget_tokens": 2048}}
+
+
+class TestAnthropicThinkingConflicts:
+    """With thinking on, the API takes temperature 1, top_p >= 0.95, no top_k, no forced tool."""
+
+    def test_thinking_with_the_defaults_passes(self):
+        assert _anthropic_errors(THINKING) == []
+
+    def test_a_temperature_other_than_1_is_refused(self):
+        (message,) = _anthropic_errors(THINKING, temperature=0.2)
+
+        assert message == (
+            "Action 'write_quiz': vendor_params for 'anthropic': with thinking on, "
+            "temperature must be 1 or unset, not 0.2."
+        )
+
+    def test_temperature_1_passes(self):
+        assert _anthropic_errors(THINKING, temperature=1.0) == []
+
+    def test_a_temperature_in_extra_body_is_read_too(self):
+        (message,) = _anthropic_errors({**THINKING, "extra_body": {"temperature": 0}})
+
+        assert "temperature must be 1 or unset, not 0" in message
+
+    def test_a_low_top_p_is_refused_and_095_passes(self):
+        (message,) = _anthropic_errors(THINKING, top_p=0.9)
+
+        assert "top_p must be 0.95 or more, or unset, not 0.9" in message
+        assert _anthropic_errors(THINKING, top_p=0.95) == []
+
+    def test_top_k_is_refused(self):
+        (message,) = _anthropic_errors({**THINKING, "top_k": 40})
+
+        assert "top_k must be unset, not 40" in message
+
+    def test_a_forced_tool_is_refused(self):
+        (message,) = _anthropic_errors({**THINKING, "tool_choice": {"type": "tool", "name": "q"}})
+
+        assert "tool_choice cannot force a tool (type 'tool')" in message
+
+    def test_a_budget_at_the_default_max_tokens_is_refused(self):
+        (message,) = _anthropic_errors({"thinking": {"type": "enabled", "budget_tokens": 4096}})
+
+        assert message.endswith(
+            "thinking.budget_tokens (4096) must be below max_tokens (4096, the default)."
+        )
+
+    def test_a_budget_below_the_actions_max_tokens_passes(self):
+        thinking = {"thinking": {"type": "enabled", "budget_tokens": 8000}}
+
+        assert _anthropic_errors(thinking, max_tokens=16000) == []
+        assert _anthropic_errors(thinking, max_tokens=8000) != []
+
+    def test_the_interleaved_thinking_beta_lets_the_budget_run_past(self):
+        params = {
+            "thinking": {"type": "enabled", "budget_tokens": 8000},
+            "extra_headers": {"anthropic-beta": "interleaved-thinking-2025-05-14"},
+        }
+
+        assert _anthropic_errors(params) == []
+
+    def test_disabled_thinking_checks_nothing(self):
+        params = {"thinking": {"type": "disabled"}, "top_k": 40}
+
+        assert _anthropic_errors(params, temperature=0.2) == []
+
+    def test_adaptive_thinking_checks_sampling_but_has_no_budget(self):
+        (message,) = _anthropic_errors({"thinking": {"type": "adaptive"}}, temperature=0.5)
+
+        assert "temperature must be 1 or unset" in message
