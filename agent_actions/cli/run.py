@@ -253,11 +253,11 @@ class RunCommand:
 @click.option(
     "--rerun",
     metavar="ACTION",
-    default=None,
+    multiple=True,
     help=(
         "Answer every record of ACTION and of every action that reads it again, under "
-        "the config as it is now. Other actions keep their answers. A config edit alone "
-        "re-runs nothing"
+        "the config as it is now. Give it more than once to rerun several actions in one "
+        "run. Other actions keep their answers. A config edit alone re-runs nothing"
     ),
 )
 @click.option(
@@ -277,7 +277,7 @@ def run(
     record_limit: int | None = None,
     file_limit: int | None = None,
     fresh: bool = False,
-    rerun: str | None = None,
+    rerun: tuple[str, ...] = (),
     verify_keys: bool = False,
     project_root: Path | None = None,
 ) -> None:
@@ -289,6 +289,7 @@ def run(
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
         agac run -a my_agent --rerun classify
+        agac run -a my_agent --rerun classify --rerun summarize
         agac run -a my_agent --record-limit 2 --file-limit 1
     """
     args = RunCommandArgs(

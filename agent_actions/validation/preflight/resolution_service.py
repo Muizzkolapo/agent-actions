@@ -185,6 +185,16 @@ def _nested_key_exists(data: Any, path: str) -> bool:
     return True
 
 
+_VENDOR_PARAMS_KEY_HINT = (
+    "vendor_params takes the keyword arguments of the vendor SDK's request; a parameter "
+    "newer than the installed SDK goes under extra_body where the SDK has it."
+)
+_VENDOR_PARAMS_CONFLICT_HINT = (
+    "The vendor's API refuses these settings together: change one, or turn the "
+    "vendor_params setting off."
+)
+
+
 class WorkflowResolutionService:
     """Performs unified pre-flight resolution checks."""
 
@@ -834,7 +844,11 @@ class WorkflowResolutionService:
     # ── Vendor request parameters ──────────────────────────────────────
 
     def _check_vendor_params(self) -> list[StaticTypeError]:
-        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets."""
+        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets.
+
+        Also refuse settings the vendor's API refuses beside a ``vendor_params`` value, as
+        the client's ``vendor_params_conflicts`` names them (Anthropic's thinking).
+        """
         from agent_actions.errors import DependencyError
         from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
         from agent_actions.llm.realtime.services.invocation import _resolve_client
@@ -846,13 +860,22 @@ class WorkflowResolutionService:
             if not vendor_params or not vendor:
                 continue
             try:
-                spec = getattr(_resolve_client(vendor), "VENDOR_PARAMS", None)
+                client = _resolve_client(vendor)
             except DependencyError:
                 continue  # A missing SDK is reported on its own.
+            spec = getattr(client, "VENDOR_PARAMS", None)
             # A tool or hitl action sends no request; it may inherit the block from defaults.
             if spec is None:
                 continue
-            for problem in spec.defects(vendor_params):
+            problems = [
+                (problem, _VENDOR_PARAMS_KEY_HINT) for problem in spec.defects(vendor_params)
+            ]
+            conflicts = getattr(client, "vendor_params_conflicts", None)
+            if conflicts is not None:
+                problems += [
+                    (problem, _VENDOR_PARAMS_CONFLICT_HINT) for problem in conflicts(config)
+                ]
+            for problem, hint in problems:
                 errors.append(
                     StaticTypeError(
                         message=f"Action '{action_name}': vendor_params for '{vendor}': {problem}.",
@@ -863,11 +886,7 @@ class WorkflowResolutionService:
                         ),
                         referenced_agent=action_name,
                         referenced_field=VENDOR_PARAMS_KEY,
-                        hint=(
-                            "vendor_params takes the keyword arguments of the vendor SDK's "
-                            "request; a parameter newer than the installed SDK goes under "
-                            "extra_body where the SDK has it."
-                        ),
+                        hint=hint,
                     )
                 )
         return errors

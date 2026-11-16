@@ -99,8 +99,8 @@ class RunCommandArgs(BaseModel):
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
-    rerun: str | None = Field(
-        None, description="Answer every record of this action and what reads it again"
+    rerun: tuple[str, ...] = Field(
+        (), description="Answer every record of these actions and what reads them again"
     )
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"

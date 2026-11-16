@@ -162,7 +162,11 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     return f"\nRendered output saved to: {failed_render_path}"
 
 
-def _resolve_prompt_fields(item, project_root: Path | None = None):
+def _resolve_prompt_fields(
+    item,
+    project_root: Path | None = None,
+    fill: Callable[[str, str], str] | None = None,
+):
     """
     Recursively resolve prompt fields starting with '$'.
 
@@ -172,6 +176,7 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
     Args:
         item: Dictionary, list, or other value to process
         project_root: Optional project root for prompt file search
+        fill: Renders what a resolved prompt reads of the load, given it and its name
     """
     if isinstance(item, dict):
         for key, value in item.items():
@@ -184,7 +189,8 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                         resolved = PromptLoader.load_prompt_expanded(
                             prompt_key, project_root=project_root
                         )
-                        item[key] = resolved + (" " + extra if extra else "")
+                        resolved += " " + extra if extra else ""
+                        item[key] = fill(resolved, prompt_key) if fill else resolved
                     except ValueError as e:
                         raise ConfigurationError(
                             f"Failed to resolve prompt reference '{value}'",
@@ -196,10 +202,10 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                             cause=e,
                         ) from e
             elif isinstance(value, dict | list):
-                _resolve_prompt_fields(value, project_root=project_root)
+                _resolve_prompt_fields(value, project_root=project_root, fill=fill)
     elif isinstance(item, list):
         for sub_item in item:
-            _resolve_prompt_fields(sub_item, project_root=project_root)
+            _resolve_prompt_fields(sub_item, project_root=project_root, fill=fill)
 
 
 # =============================================================================
@@ -620,7 +626,9 @@ def render_pipeline_with_templates(
     env = load.env
     env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
     env.filters["dedent"] = textwrap.dedent
+    own_names = set(env.globals)
     _load_template_globals(load, str(templates_folder))
+    folder_names = frozenset(set(env.globals) - own_names)
 
     # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
     # and a value that reads a version variable, are left for the stage that has them.
@@ -669,7 +677,12 @@ def render_pipeline_with_templates(
     # Step 3: Resolve prompt references
     data = load.fill_loaded(data)
     data = load.fill_prompts(data)
-    _resolve_prompt_fields(data, project_root=project_root)
+    # A store prompt reads templates/ as a prompt written here does: the record has none.
+    _resolve_prompt_fields(
+        data,
+        project_root=project_root,
+        fill=lambda text, name: load.fill_store_prompt(text, f"store prompt {name}", folder_names),
+    )
 
     # Step 4: Expand versioned actions
     if data:

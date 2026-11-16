@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Preflight now refuses an Anthropic action whose settings the API refuses beside `vendor_params.thinking` (`enabled` or `adaptive`), instead of every request failing at the API: a `temperature` other than 1, a `top_p` below 0.95, any `top_k`, or a forced `tool_choice`, read from the action or from `vendor_params` and its `extra_body`. With `type: enabled`, it also refuses a `budget_tokens` that is not below `max_tokens`, which is 4096 when the action sets none, unless `extra_headers` sends the interleaved-thinking beta."
+time: 2026-11-16T14:00:00Z

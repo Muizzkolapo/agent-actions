@@ -30,7 +30,7 @@ class WorkflowRuntimeConfig:
     paths: WorkflowPaths
     use_tools: bool
     fresh: bool = False
-    rerun: str | None = None
+    rerun: tuple[str, ...] = ()
     verify_keys: bool = False
     sends_requests: bool = True
     manager: Any = None  # ConfigManager instance

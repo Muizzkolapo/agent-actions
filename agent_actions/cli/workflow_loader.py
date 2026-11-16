@@ -6,7 +6,7 @@ paths, avoiding duplicate config loading / rendering across commands.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +26,7 @@ def load_workflow(
     user_code_path: str | None = None,
     use_tools: bool = False,
     fresh: bool = False,
-    rerun: str | None = None,
+    rerun: Sequence[str] = (),
     verify_keys: bool = False,
     read_only: bool = False,
     record_limit: int | None = None,
@@ -73,7 +73,7 @@ def load_workflow(
             ),
             use_tools=use_tools,
             fresh=fresh,
-            rerun=rerun,
+            rerun=tuple(rerun),
             verify_keys=verify_keys,
             sends_requests=sends_requests,
             project_root=project_root,
