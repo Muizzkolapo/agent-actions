@@ -425,8 +425,8 @@ Agent Actions sends `minimum`, `maximum`, `minLength` and `maxLength` to the pro
 | `groq` | `response_format` `json_schema`, not strict | Sent as guidance |
 | `anthropic` | Tool `input_schema` | Sent as guidance |
 | `ollama_local`, `llamafile` | JSON schema turned into a grammar by llama.cpp | `minLength`/`maxLength` and integer `minimum`/`maximum` are enforced. `minimum`/`maximum` on a `number` are ignored |
-| `gemini` | Written into the prompt text in an online run. `response_schema` in a batch | Sent as guidance |
-| `cohere` | `response_format` `json_object` with the schema. Only the field names are in the prompt | [Cohere's structured-output docs](https://docs.cohere.com/docs/structured-outputs) list these keys as unsupported |
+| `gemini` | Written into the prompt text, online and in a batch, with `response_mime_type` `application/json` | Sent as guidance |
+| `cohere` | `response_format` `json_object` with the schema in `json_schema`. Only the field names are in the prompt | [Cohere's structured-output docs](https://docs.cohere.com/docs/structured-outputs) list these keys as unsupported |
 | `ollama_cloud` | Written into the prompt text | Sent as guidance |
 | `agac-provider` (mock) | Read by the mock | Generated values stay inside `minimum`/`maximum` and `minLength`/`maxLength`. These bounds win over the field-name rules of the mock. For example, a field named `email` with `minLength: 40` gets text, not an address. Inside the `items` of an array or the `properties` of an object, the mock keeps `format`. There, a known `format` wins over a length bound |
 
