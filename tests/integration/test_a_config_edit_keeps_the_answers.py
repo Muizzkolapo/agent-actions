@@ -647,3 +647,34 @@ def test_an_edit_to_an_action_nothing_reads_names_no_reader(completed):
         "to answer every record under the edit"
     ) in result.printed
     assert "What reads it" not in result.printed
+
+
+def test_rerun_given_more_than_once_answers_each_action_and_its_readers_again(completed):
+    _edit(completed, SCOPE, WIDER_SCOPE)
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    temperature: 0.9\n")
+
+    reruns = ["--rerun", "recap", "--rerun", "bystander", "--rerun", "summary"]
+    result = _agac(completed, "run", "-a", WORKFLOW, *reruns)
+
+    assert result.returncode == 0, result.printed
+    assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS, "bystander": ITEMS}
+    assert _recap_saw(completed) == SAW_THE_TEXT
+    result = _agac(completed, "run", "-a", WORKFLOW)
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_rerun_of_an_action_and_one_reading_it_answers_each_once(completed):
+    result = _agac(completed, "run", "-a", WORKFLOW, "--rerun", "merge_direct", "--rerun", "recap")
+
+    assert result.returncode == 0, result.printed
+    assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS}
+
+
+def test_rerun_names_every_name_the_workflow_does_not_have(completed):
+    reruns = ["--rerun", "recap", "--rerun", "nope", "--rerun", "nada"]
+    result = _agac(completed, "run", "-a", WORKFLOW, *reruns)
+
+    assert result.returncode != 0
+    assert f"--rerun: 'nope', 'nada' are not actions of {WORKFLOW}" in result.printed
+    assert _ran(completed) == {}

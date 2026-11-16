@@ -70,7 +70,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
-| `run.py` | Module | Run command for the Agent Actions CLI. It holds the workflow's run lock (`storage.run_lock.hold_run_lock`) from right after the project paths are built to the end of the command, before `load_workflow` (which `--fresh` clears the store in) and the prompt check after it, so a second run is refused before it loads, clears or submits anything. `--record-limit` and `--file-limit` bound every action for the run — records per input file and input files per action — carried on the runtime config and stamped onto each action config so the per-action limit resolver reads them. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `storage`, `validation` |
+| `run.py` | Module | Run command for the Agent Actions CLI. It holds the workflow's run lock (`storage.run_lock.hold_run_lock`) from right after the project paths are built to the end of the command, before `load_workflow` (which `--fresh` clears the store in) and the prompt check after it, so a second run is refused before it loads, clears or submits anything. `--record-limit` and `--file-limit` bound every action for the run — records per input file and input files per action — carried on the runtime config and stamped onto each action config so the per-action limit resolver reads them. `--rerun` may be given more than once; every action it names, and each action reading one, is answered again in the one run. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `storage`, `validation` |
 | `RunCommand` | Class | Implementation of the run command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the run command. | - |
@@ -125,7 +125,7 @@
 | `RunCommand.execute()` | `agent_io/target/events.json` | Writes | — |
 | `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
 | `RunCommand.execute()` | `.agac/batch_state/` | Deletes | `--fresh` |
-| `RunCommand.execute()` | `agent_io/store/{workflow_name}.db` | Writes | `--rerun` (clears the named action's and its readers' dispositions, checkpoints, traces and batch state) |
+| `RunCommand.execute()` | `agent_io/store/{workflow_name}.db` | Writes | `--rerun` (clears the named actions' and their readers' dispositions, checkpoints, traces and batch state; repeatable) |
 | `RunCommand.execute()` | `tools/{workflow}/*.py` | Reads | `user_code` |
 | `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
 | `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |

@@ -54,7 +54,7 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--record-limit N` | Limit each action to N records **per input file**, whatever the workflow configuration sets. This is the same unit that `record_limit` uses. The flag applies to actions that set no limit of their own. It takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, and names this flag and the counts. The reason is that a truncated run otherwise looks complete |
 | `--file-limit N` | Stop each action after N input files, whatever the workflow configuration sets. This is the same unit that `file_limit` uses. The flag counts the files that the action processed successfully. Thus a file that fails does not use the budget, and the action attempts each file in a directory of unreadable files. The flag applies to actions that set no limit of their own. It takes precedence over `AGAC_FILE_LIMIT`. An action whose walk through its input files actually stops says so, and names this flag. The reason is that a shortened run otherwise looks complete. This flag never limits `agac retry` |
 | `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
-| `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have the name, the run stops before it starts |
+| `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Give the flag more than one time to run more than one action again in the same run (`--rerun classify --rerun summarize`). Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have a name, the run stops before it starts, and names each name that it does not have |
 | `--verify-keys` | Verify the API keys before execution. The command probes each vendor one time for each endpoint. For an `openai` action with `base_url`, the probe uses `models.list()` at that URL. For an action without `base_url`, the probe uses the OpenAI endpoint. If a server does not answer, the command logs a warning and the run continues. A local server may serve `/v1/models` without a check of the key (llamafile 0.10.6 does this). Thus a passing probe there shows that the server is reachable, not that the key is correct. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) that the workflow uses also gets one structured-output request. For that request, three conditions are errors. They are a refused credential, a server that cannot be reached, and a reply that does not match the schema of the probe |
 
 ## Run a Smaller Version of a Project {/* #running-a-project-smaller-than-it-is */}
@@ -188,6 +188,13 @@ action again, and each action that reads its output. Each other action keeps its
 
 ```bash
 agac run -a my_agent --rerun classify
+```
+
+If more than one action was edited, give `--rerun` one time for each action. The run answers each named
+action and each action that reads one of them again. An action that reads more than one of them runs one time:
+
+```bash
+agac run -a my_agent --rerun classify --rerun summarize
 ```
 
 An action that may hold answers from more than one configuration continues to report this, even after you change the
