@@ -129,7 +129,7 @@ class TestAnthropicThinkingConflicts:
         assert _anthropic_errors(THINKING, top_p=0.95) == []
 
     def test_top_k_is_refused(self):
-        (message,) = _anthropic_errors({**THINKING, "top_k": 40})
+        (message,) = _anthropic_errors({**THINKING, "extra_body": {"top_k": 40}})
 
         assert "top_k must be unset, not 40" in message
 
@@ -160,7 +160,7 @@ class TestAnthropicThinkingConflicts:
         assert _anthropic_errors(params) == []
 
     def test_disabled_thinking_checks_nothing(self):
-        params = {"thinking": {"type": "disabled"}, "top_k": 40}
+        params = {"thinking": {"type": "disabled"}, "extra_body": {"top_k": 40}}
 
         assert _anthropic_errors(params, temperature=0.2) == []
 
