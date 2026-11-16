@@ -114,7 +114,8 @@ class GeminiBatchClient(BaseBatchClient):
                 }],
                 "generation_config": {
                     "temperature": 0.1,
-                    "max_tokens": 1000
+                    "max_output_tokens": 1000,
+                    "response_mime_type": "application/json"
                 }
             }
         }
@@ -123,17 +124,17 @@ class GeminiBatchClient(BaseBatchClient):
             "gemini", batch_task.prompt, batch_task.user_content, schema=schema
         )
         combined_text = envelope.messages[0].content
-        generation_config = {}
-        if "temperature" in batch_task.model_config:
+        generation_config: dict[str, Any] = {}
+        if batch_task.model_config.get("temperature") is not None:
             generation_config["temperature"] = batch_task.model_config["temperature"]
-        if "max_tokens" in batch_task.model_config:
-            generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
+        if batch_task.model_config.get("max_tokens") is not None:
+            generation_config["max_output_tokens"] = batch_task.model_config["max_tokens"]
+        # As online: JSON output, with the schema given in the prompt text.
+        if schema or batch_task.model_config.get("json_mode"):
+            generation_config["response_mime_type"] = "application/json"
         request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
         if generation_config:
             request["generation_config"] = generation_config
-        if schema:
-            request["response_schema"] = schema
-            request["response_mime_type"] = "application/json"
         _join_vendor_params(request, batch_task.model_config.get("vendor_params"))
         return {"key": batch_task.custom_id, "request": request}
 

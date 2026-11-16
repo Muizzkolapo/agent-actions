@@ -136,17 +136,13 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         assert isinstance(result["request"]["contents"], list), "contents should be list"
         assert "parts" in result["request"]["contents"][0], "Gemini requires 'parts'"
 
-    def test_gemini_format_task_with_schema_uses_response_schema(self, provider, sample_batch_task):
-        """
-        Gemini-specific: Verify schema is added as response_schema.
-
-        Gemini has native schema support with response_schema field.
-        """
+    def test_gemini_format_task_with_schema_asks_for_json(self, provider, sample_batch_task):
+        """Gemini-specific: a schema asks for JSON in the generation config, as online does."""
         schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
         result = provider.format_task_for_provider(sample_batch_task, schema=schema)
-        assert "response_schema" in result["request"], "Gemini should use response_schema"
-        assert "response_mime_type" in result["request"], "Gemini should set response_mime_type"
-        assert result["request"]["response_mime_type"] == "application/json"
+        generation_config = result["request"]["generation_config"]
+        assert generation_config["response_mime_type"] == "application/json"
+        assert "response_schema" not in result["request"]
 
     def test_format_task_basic(self, provider, sample_batch_task):
         """Override: Gemini uses 'key' not 'custom_id'."""

@@ -413,8 +413,15 @@ class MessageBuilder:
             )
 
         if provider == "gemini":
-            # Gemini batch: single combined text
+            # Gemini batch: single combined text, with the schema text online gives it
             combined = f"{effective_prompt}\n\n{user_content}"
+            if config is not None and schema is not None:
+                schema_block = MessageBuilder._inline_schema_text(config.schema_injection, schema)
+                if schema_block is not None:
+                    tail = [schema_block]
+                    if config.json_rules:
+                        tail.extend(["", *config.json_rules])
+                    combined = "\n".join([combined, *tail])
             static_len = (
                 len(effective_prompt) + 2 if shared_prompt_len is None else shared_prompt_len
             )
@@ -579,18 +586,9 @@ class MessageBuilder:
             f"<|begin_of_text|>: {str(context_str)} :<|end_of_text|>",
         ]
 
-        # Schema injection (only in json mode) — strip metadata keys to
-        # prevent schema-echo (model returning the definition as content)
-        if schema_injection == SchemaInjection.INLINE_FULL and schema is not None:
-            clean = MessageBuilder._strip_schema_metadata(schema)
-            parts.append(f"<|begin_of_output_schema|> : {clean} : <|end_of_output_schema|>")
-        elif schema_injection == SchemaInjection.INLINE_FULL_LIST and schema is not None:
-            clean = MessageBuilder._strip_schema_metadata(schema)
-            parts.append(
-                f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
-            )
-        elif schema_injection == SchemaInjection.INLINE_FIELDS:
-            parts.append(MessageBuilder._build_field_schema_instruction(schema))
+        schema_text = MessageBuilder._inline_schema_text(schema_injection, schema)
+        if schema_text is not None:
+            parts.append(schema_text)
 
         # Rules
         if rules:
@@ -602,6 +600,24 @@ class MessageBuilder:
         # prompt, before the closing tag: a repair call's feedback goes between the two.
         joined = "\n".join(parts)
         return f"\n{joined}\n", 1 + len(_OPENING) + _shared_len(prompt_config, shared_prompt_len)
+
+    @staticmethod
+    def _inline_schema_text(
+        schema_injection: SchemaInjection, schema: dict[str, Any] | None
+    ) -> str | None:
+        """The schema block an inline-injecting provider's prompt carries, if any.
+
+        Metadata keys are stripped so the model does not echo the definition back.
+        """
+        if schema_injection == SchemaInjection.INLINE_FULL and schema is not None:
+            clean = MessageBuilder._strip_schema_metadata(schema)
+            return f"<|begin_of_output_schema|> : {clean} : <|end_of_output_schema|>"
+        if schema_injection == SchemaInjection.INLINE_FULL_LIST and schema is not None:
+            clean = MessageBuilder._strip_schema_metadata(schema)
+            return f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
+        if schema_injection == SchemaInjection.INLINE_FIELDS:
+            return MessageBuilder._build_field_schema_instruction(schema)
+        return None
 
     @staticmethod
     def _build_field_schema_instruction(schema: dict[str, Any] | None) -> str:
