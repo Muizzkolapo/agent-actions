@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
+from agent_actions.llm.providers.error_wrapper import empty_response_error
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -144,7 +145,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
         result_type = self._get_attribute_or_key(result, "type")
         if result_type == "succeeded":
-            return None
+            return self._no_answer_error(result)
         if result_type == "errored":
             error_info = self._get_attribute_or_key(result, "error", {})
             return str(error_info) if error_info else "Batch processing errored"
@@ -153,6 +154,29 @@ class AnthropicBatchClient(BaseBatchClient):
         if result_type == "canceled":
             return "Batch result was canceled"
         return f"Unknown result type: {result_type}"
+
+    def _no_answer_error(self, result: Any) -> str | None:
+        """The error for a message whose blocks hold no text or tool answer, as online raises.
+
+        A thinking block alone (max_tokens spent while thinking) is not the answer. An
+        empty content list is left to the action's ``on_empty``.
+        """
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if not isinstance(content_list, list) or not content_list:
+            return None
+        if self._extract_tool_use_content(content_list) is not None:
+            return None
+        if self._extract_text_content(content_list) is not None:
+            return None
+        error = empty_response_error(
+            "Anthropic",
+            self._get_attribute_or_key(message, "stop_reason"),
+            model_name=self._get_attribute_or_key(message, "model") or "",
+            vendor="anthropic",
+            operation="messages.batches",
+        )
+        return str(error)
 
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         """Extract content from Anthropic response."""
