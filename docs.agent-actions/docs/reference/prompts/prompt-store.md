@@ -167,6 +167,17 @@ When you use [versioned actions](../execution/versions), these variables are ava
 You are evaluator {{ i }} of {{ version.length }}.
 ```
 
+### Macros and Variables of templates/
+
+A store prompt can read the macros and variables of the project `templates/` folder, as a prompt in the workflow file can. A `{{ }}` tag that reads only these names renders when the workflow loads. The other tags render for each record:
+
+```markdown
+{{ voice('calm') }}
+Describe {{ source.title }} in a {{ tone }} voice.
+```
+
+A macro of `templates/` cannot get a value that a record supplies, for example `{{ voice(source.tone) }}`. The load fails and names the store prompt. Define that macro in the prompt itself instead. See [What Renders When](../configuration/templates#what-renders-when).
+
 ### Load Other Prompts
 
 `{{ load_prompt("file.Prompt") }}` inserts another store prompt, as written, when the workflow loads. The tags of the inserted prompt then render for each record, like the rest of the prompt. A loaded prompt may load other prompts in turn. Write each call as a separate tag, with the name of the prompt as a quoted string. The load fails on any other form. The load also fails on prompts that load each other in a cycle, and names those prompts.
