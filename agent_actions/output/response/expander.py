@@ -15,7 +15,7 @@ import copy
 import logging
 from typing import Any
 
-from agent_actions.config.schema import validate_version_block
+from agent_actions.config.schema import DefaultsConfig, dump_defaults, validate_version_block
 from agent_actions.llm.config.vendor import canonical_vendor
 
 from .config_fields import get_default, inherit_simple_fields
@@ -27,8 +27,9 @@ from .expander_action_types import (
 from .expander_merge import (
     adapt_inherited_expect,
     collect_judge_context_refs,
-    deep_merge_context_scope,
+    inherited_context_scope,
     initialize_optional_fields,
+    layered_defaults,
     merge_directive_value,
     merge_expect,
     merge_vendor_params,
@@ -245,14 +246,10 @@ class ActionExpander:
                 granularity.capitalize() if isinstance(granularity, str) else granularity
             )
 
-        # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
         # Deep merge: action directives merge with defaults (not replace)
-        context_scope_defaults = defaults.get("context_scope")
-        context_scope_action = action.get("context_scope")
-        if context_scope_defaults or context_scope_action:
-            agent["context_scope"] = deep_merge_context_scope(
-                context_scope_defaults, context_scope_action
-            )
+        context_scope = inherited_context_scope(action, defaults)
+        if context_scope is not None:
+            agent["context_scope"] = context_scope
 
         # Initialize dependencies from action if present, else empty list.
         # Run them through the version template_replacer so per-iteration
@@ -314,6 +311,15 @@ class ActionExpander:
         return agent
 
     @staticmethod
+    def defaults_for(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+        """*defaults* with the instance defaults of an included action over them."""
+        origin = action.get("_include")
+        instance = origin.get("defaults") if isinstance(origin, dict) else None
+        if not instance:
+            return defaults
+        return layered_defaults(defaults, dump_defaults(DefaultsConfig.model_validate(instance)))
+
+    @staticmethod
     def expand_actions_to_agents(action_config: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         """
         Convert action-based configuration to agent-based configuration with loop expansion.
@@ -337,6 +343,7 @@ class ActionExpander:
         agents: list[dict[str, Any]] = []
         for action in actions:
             validate_action_name(action.get("name"))
+            action_defaults = ActionExpander.defaults_for(action, defaults)
 
             # Check if this action was already expanded by render step
             # Pre-expanded actions have _version_context set
@@ -346,7 +353,7 @@ class ActionExpander:
             if version_config and not is_pre_expanded:
                 # Expand versioned action into multiple agents (legacy path)
                 version_agents = ActionExpander._expand_versioned_action(
-                    action, version_config, defaults
+                    action, version_config, action_defaults
                 )
                 agents.extend(version_agents)
             else:
@@ -363,7 +370,7 @@ class ActionExpander:
                     agent["_version_context"] = version_ctx
 
                 created_agent = ActionExpander._create_agent_from_action(
-                    action, defaults, agent, lambda x: x
+                    action, action_defaults, agent, lambda x: x
                 )
                 agents.append(created_agent)
 

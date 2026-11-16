@@ -822,6 +822,13 @@ class DefaultsConfig(_RetryValidators):
     )
 
 
+def dump_defaults(defaults: DefaultsConfig | None) -> dict[str, Any]:
+    """The keys a ``defaults:`` block sets, as the expander reads them."""
+    if defaults is None:
+        return {}
+    return defaults.model_dump(mode="python", exclude_unset=True, by_alias=True)
+
+
 class StorageConfig(BaseModel):
     """Storage maintenance knobs, read off the workflow's own top-level `storage:`."""
 
@@ -1000,4 +1007,5 @@ __all__ = [
     "DefaultsConfig",
     "WorkflowConfig",
     "branch_origins",
+    "dump_defaults",
 ]

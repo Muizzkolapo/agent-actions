@@ -7,7 +7,7 @@ from typing import Any
 import click
 import yaml
 
-from agent_actions.config.includes import has_include, has_written_origin
+from agent_actions.config.includes import action_defaults, has_include, has_written_origin
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathType
 from agent_actions.config.schema import version_variant_names
@@ -15,7 +15,7 @@ from agent_actions.config.schema_field import field_is_required, top_level_requi
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.base import AgentActionsError
 from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
-from agent_actions.output.response.expander_merge import deep_merge_context_scope
+from agent_actions.output.response.expander_merge import inherited_context_scope
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
@@ -246,10 +246,9 @@ class WorkflowParser:
             # "so that infer_dependencies sees concrete versioned refs, not base names".
             # Inferring from the raw block reported a scope the dependency graph did not agree
             # with -- an inherited observe named an upstream the graph then omitted.
+            inherited = action_defaults(action_data, defaults)
             merged_scope = _normalise_known_directives(
-                deep_merge_context_scope(
-                    defaults.get("context_scope"), action_data.get("context_scope")
-                ),
+                inherited_context_scope(action_data, inherited) or {},
                 version_base_map,
             )
             inference_input = (
@@ -287,8 +286,10 @@ class WorkflowParser:
             else:
                 # Default to LLM action
                 action["type"] = DEFAULT_ACTION_KIND
-                action["provider"] = action_data.get("model_vendor") or defaults.get("model_vendor")
-                action["model"] = action_data.get("model_name") or defaults.get("model_name")
+                action["provider"] = action_data.get("model_vendor") or inherited.get(
+                    "model_vendor"
+                )
+                action["model"] = action_data.get("model_name") or inherited.get("model_name")
 
             # Extract schema (for field-level lineage)
             if "schema" in action_data:

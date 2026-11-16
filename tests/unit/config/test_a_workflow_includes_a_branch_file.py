@@ -288,17 +288,11 @@ class TestTheIncludeEntryIsRefused:
     def test_an_unknown_include_key_lists_the_include_keys(self, tmp_path, key, expected):
         message = _refusal(tmp_path / "bad", [A, {**INCLUDE, key: {"a": "a"}}])
 
-        assert message == f"Include 'pair' in {WF}: {expected} Include keys: include, inputs."
-        assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
-
-    @pytest.mark.parametrize("key", ["as", "defaults", "override", "remove"])
-    def test_a_key_of_a_later_include_feature_is_refused_as_not_supported_yet(self, tmp_path, key):
-        message = _refusal(tmp_path, [A, {**INCLUDE, key: {}}])
-
         assert message == (
-            f"Include 'pair' in {WF}: key '{key}' is not supported yet. "
-            "Include keys: include, inputs."
+            f"Include 'pair' in {WF}: {expected} "
+            "Include keys: include, inputs, defaults, override, remove."
         )
+        assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
 
     def test_an_unbound_input_is_refused(self, tmp_path):
         message = _refusal(tmp_path / "bad", [A, {"include": "pair"}])

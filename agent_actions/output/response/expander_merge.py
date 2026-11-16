@@ -41,6 +41,17 @@ def deep_merge_context_scope(
     return merged
 
 
+def inherited_context_scope(
+    action: dict[str, Any], defaults: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The ``context_scope`` *action* gets: its own directives merged over the defaults'."""
+    defaults_scope = defaults.get("context_scope")
+    action_scope = action.get("context_scope")
+    if not defaults_scope and not action_scope:
+        return None
+    return deep_merge_context_scope(defaults_scope, action_scope)
+
+
 # The settings the chunker reads out of chunk_config, which are also writable as
 # keys of their own on an action or in defaults.
 CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_method")
@@ -206,6 +217,36 @@ def merge_expect(defaults: Any, action: Any) -> dict[str, Any] | None:
     # An empty dict is the bare block — "read my own schema" — so it survives
     # the merge as a block rather than collapsing to no block at all.
     return {**copy.deepcopy(base or {}), **copy.deepcopy(override or {})}
+
+
+def layered_defaults(outer: dict[str, Any], inner: dict[str, Any]) -> dict[str, Any]:
+    """*inner*'s defaults over *outer*'s, each key merged as an action merges over defaults.
+
+    ``context_scope``, ``expect`` and ``vendor_params`` merge key by key, and the chunk
+    settings name by name, so an inner value wins whichever spelling either level uses.
+    Every other key is replaced.
+    """
+    merged = {**outer, **inner}
+    if outer.get("context_scope") or inner.get("context_scope"):
+        merged["context_scope"] = deep_merge_context_scope(
+            outer.get("context_scope"), inner.get("context_scope")
+        )
+    for key, merge in (("expect", merge_expect), ("vendor_params", merge_vendor_params)):
+        value = merge(outer.get(key), inner.get(key))
+        if value is not None:
+            merged[key] = value
+    if inner.get("chunk_config") or any(inner.get(name) is not None for name in CHUNK_SETTINGS):
+        chunk: dict[str, Any] = {}
+        for level in (outer, inner):
+            for layer in (
+                {name: level.get(name) for name in CHUNK_SETTINGS},
+                level.get("chunk_config") or {},
+            ):
+                chunk.update(
+                    {name: layer[name] for name in CHUNK_SETTINGS if layer.get(name) is not None}
+                )
+        merged["chunk_config"] = chunk
+    return merged
 
 
 def merge_vendor_params(base: Any, override: Any) -> dict[str, Any] | None:

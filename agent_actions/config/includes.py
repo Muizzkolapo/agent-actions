@@ -12,16 +12,25 @@ from typing import Any
 
 import yaml
 from jinja2 import TemplateSyntaxError
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from agent_actions.config.path_config import load_project_config, resolve_project_root
 from agent_actions.config.paths import PathType
-from agent_actions.config.schema import ActionConfig, WorkflowConfig, version_variant_names
+from agent_actions.config.schema import (
+    ActionConfig,
+    DefaultsConfig,
+    WorkflowConfig,
+    dump_defaults,
+    version_variant_names,
+)
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.errors.base import enrich_exception_context
+from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
 from agent_actions.output.response.expander_merge import (
     adapt_inherited_expect,
     collect_judge_context_refs,
+    inherited_context_scope,
+    layered_defaults,
     merge_expect,
 )
 from agent_actions.output.response.expander_validation import (
@@ -29,14 +38,26 @@ from agent_actions.output.response.expander_validation import (
     resolved_granularity,
 )
 
-INCLUDE_KEYS = ("include", "inputs")
+INCLUDE_KEYS = ("include", "inputs", "defaults", "override", "remove")
 BRANCH_KEYS = ("branch", "description", "inputs", "outputs", "actions")
-_NOT_YET_INCLUDE_KEYS = frozenset({"as", "defaults", "override", "remove"})
+_NOT_YET_INCLUDE_KEYS = frozenset({"as"})
+_WORKFLOW_ONLY_DEFAULTS = ("data_source",)
 _REQUIRED_BRANCH_KEYS = ("branch", "description", "actions")
 _JINJA_MARKERS = ("{{", "{%", "{#")
 _NAME_CHARS = re.compile(r"[A-Za-z0-9_]+\Z")
 _NAME_RULE = "Use letters, digits and single underscores, starting with a letter."
 _ORIGIN_KEY = "_include"
+_OVERRIDE_KEYS = tuple(
+    sorted(
+        (
+            {field.alias or name for name, field in ActionConfig.model_fields.items()}
+            - {"name", _ORIGIN_KEY, "_version_context"}
+        )
+        | {"schema_name"}
+    )
+)
+# One key spelt two ways: the render step reads ``schema_name`` over ``schema``.
+_SCHEMA_SPELLINGS = ("schema", "schema_name")
 
 
 @dataclass(frozen=True)
@@ -56,12 +77,31 @@ class Branch:
 
 @dataclass(frozen=True)
 class Inclusion:
-    """One include entry of a workflow, bound to its branch."""
+    """One include entry of a workflow, bound to its branch.
+
+    *actions* are the branch actions after the entry's override and removal.
+    """
 
     branch: Branch
     instance: str
     bindings: Mapping[str, str]
     workflow_file: str
+    actions: tuple[dict[str, Any], ...]
+    removed: tuple[str, ...] = ()
+    defaults: Mapping[str, Any] | None = None
+
+    @property
+    def outputs(self) -> tuple[str, ...]:
+        return tuple(name for name in self.branch.outputs if name not in self.removed)
+
+    def removed_names(self) -> dict[str, str]:
+        """Each name a reference to a removed action can use, mapped to that action."""
+        names: dict[str, str] = {}
+        for action in self.branch.actions:
+            if action["name"] in self.removed:
+                for name in _final_and_base_names(action):
+                    names[name] = action["name"]
+        return names
 
 
 def branch_file(name: str) -> str:
@@ -135,7 +175,7 @@ def expand_workflow_includes(
     for entry in actions:
         if _is_include(entry):
             inclusion = next(pending)
-            expanded.extend(_with_origin(action, inclusion) for action in inclusion.branch.actions)
+            expanded.extend(_with_origin(action, inclusion) for action in inclusion.actions)
         else:
             expanded.append(entry)
     return {**data, "actions": expanded}, inclusions
@@ -144,39 +184,116 @@ def expand_workflow_includes(
 def check_include_reads(
     data: Any, inclusions: Sequence[Inclusion], project_root: Path | None = None
 ) -> None:
-    """Refuse a host read of a branch action that is not an output, and a branch read
-    of anything outside the branch and its declared inputs.
+    """Refuse a host read of a branch action that is not an output, a branch read of
+    anything outside the branch and its declared inputs, and a read of a removed action.
 
-    An ``expect`` block inherited from the defaults counts, as the expander applies it.
-    A workflow that does not validate is not checked: the validation that runs after the
-    render refuses it with the same message it gives a workflow with no include.
+    What an action inherits from the defaults counts, computed by the steps the load
+    takes. Defaults the load would refuse leave the workflow unchecked, and so does a
+    malformed workflow: the validation after the render refuses it with the message it
+    gives a workflow with no include. A read of a removed action leaves a dangling name,
+    which fails that validation too, so the removal check runs first, on each action that
+    validates alone.
     """
-    if not inclusions or not _validates(data):
+    if not inclusions:
         return
     workflow_file = inclusions[0].workflow_file
     try:
-        _check_reads(data, inclusions, _defaults(data, project_root))
+        levels = _Levels.load(data, project_root)
+        if levels is None:
+            return
+        if any(inclusion.removed for inclusion in inclusions):
+            _refuse_removed_reads(data, inclusions, levels)
+        if _validates(data):
+            _check_reads(data, inclusions, levels)
     except ConfigurationError as e:
         enrich_exception_context(e, file_path=workflow_file)
         raise
 
 
-def _defaults(data: dict[str, Any], project_root: Path | None) -> dict[str, Any]:
-    """The defaults each action gets: the workflow's keys over the project's, key by key."""
-    project = load_project_config(resolve_project_root(project_root)).get("default_agent_config")
-    workflow = data.get("defaults")
+@dataclass(frozen=True)
+class _Levels:
+    """The defaults an action inherits, computed by the functions the load calls."""
+
+    defaults: dict[str, Any]
+    agent: dict[str, Any]
+    workflow_scope: Any
+
+    @classmethod
+    def load(cls, data: dict[str, Any], project_root: Path | None) -> _Levels | None:
+        """The levels of *data*; None when the load refuses its defaults or the project's."""
+        from agent_actions.config.manager import (
+            merge_workflow_defaults,
+            project_action_defaults,
+            project_agent_config,
+        )
+
+        project_config = load_project_config(resolve_project_root(project_root))
+        written = data.get("defaults")
+        try:
+            workflow = dump_defaults(DefaultsConfig.model_validate(written or {}))
+            defaults = merge_workflow_defaults(project_action_defaults(project_config), workflow)
+            agent = project_agent_config(project_config)
+        except (ValidationError, ConfigValidationError, ConfigurationError):
+            return None
+        scope = written.get("context_scope") if isinstance(written, dict) else None
+        return cls(defaults=defaults, agent=agent, workflow_scope=scope)
+
+    def of(self, action: dict[str, Any]) -> dict[str, Any]:
+        """The defaults the expander gives *action*."""
+        from agent_actions.output.response.expander import ActionExpander
+
+        if not _mapping_or_none(self.defaults.get("context_scope")):
+            return {key: value for key, value in self.defaults.items() if key != "context_scope"}
+        return ActionExpander.defaults_for(action, self.defaults)
+
+    def scope(self, action: dict[str, Any]) -> dict[str, list[Any]]:
+        """The read directives of the ``context_scope`` the run gives *action*.
+
+        Empty when a level is malformed: the load refuses it with its own message.
+        """
+        from agent_actions.config.manager import merge_over_agent_defaults
+
+        inherited = inherited_context_scope(action, self.of(action))
+        agent = merge_over_agent_defaults(
+            self.agent, {} if inherited is None else {"context_scope": inherited}
+        )
+        return _normalised_reads(agent.get("context_scope")) or {}
+
+
+def _mapping_or_none(value: Any) -> bool:
+    return value is None or isinstance(value, dict)
+
+
+def _normalised_reads(scope: Any) -> dict[str, list[Any]] | None:
+    """The directives of *scope* that read an action, once normalised as the run does.
+
+    Version base names are kept, which the boundary checks know. None when the
+    normaliser refuses *scope*; a ``seed`` reads nothing.
+    """
+    try:
+        normalised = normalize_context_scope(scope, {})
+    except ConfigurationError:
+        return None
     return {
-        **(project if isinstance(project, dict) else {}),
-        **(workflow if isinstance(workflow, dict) else {}),
+        directive: refs
+        for directive, refs in normalised.items()
+        if DIRECTIVE_REGISTRY[directive]["type"] == "list"
     }
 
 
-def _validates(data: Any) -> bool:
+def _validates(data: Any, model: type[BaseModel] = WorkflowConfig) -> bool:
     try:
-        WorkflowConfig.model_validate(data)
+        model.model_validate(data)
     except (ValidationError, ConfigValidationError):
         return False
     return True
+
+
+def action_defaults(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    """The defaults the expander gives *action*: its instance defaults over *defaults*."""
+    origin = action.get(_ORIGIN_KEY)
+    instance = origin.get("defaults") if isinstance(origin, dict) else None
+    return layered_defaults(defaults, instance) if instance else defaults
 
 
 def _repair_view(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
@@ -185,9 +302,7 @@ def _repair_view(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, 
     return {"kind": kind, "granularity": resolved_granularity(kind, action, defaults)[0]}
 
 
-def _check_reads(
-    data: dict[str, Any], inclusions: Sequence[Inclusion], defaults: dict[str, Any]
-) -> None:
+def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: _Levels) -> None:
     workflow_file = inclusions[0].workflow_file
     # Imported here: a large import that only a workflow with an include needs.
     from agent_actions.validation.static_analyzer.reference_extractor import ReferenceExtractor
@@ -215,7 +330,9 @@ def _check_reads(
         origin = action.get(_ORIGIN_KEY)
         reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
         reader_local = origin["local_name"] if isinstance(origin, dict) else action["name"]
-        for name in _reads(action, extractor, workflow_file, defaults):
+        for name in _reads(
+            action, extractor, workflow_file, levels.of(action), levels.scope(action)
+        ):
             if name not in known:
                 continue
             source = owner.get(name)
@@ -224,18 +341,119 @@ def _check_reads(
                 if source is reader or name in inputs or base_of.get(name) in inputs:
                     continue
                 where = _branch_where(reader.branch.name, workflow_file, f"'{reader_local}'")
+                via = _scope_origin(action, name, extractor, workflow_file, levels)
                 raise ConfigurationError(
-                    f"{where}: reads '{name}', which is not a branch action or a declared "
+                    f"{where}: reads '{name}'{via}, which is not a branch action or a declared "
                     "input. Declare it under 'inputs:'.",
                     context=_context(reader, action_name=reader_local),
                 )
-            if source is not None and local[name] not in source.branch.outputs:
+            if source is not None and local[name] not in source.outputs:
+                via = _scope_origin(action, name, extractor, workflow_file, levels)
                 raise ConfigurationError(
-                    f"Action '{action['name']}' in {workflow_file} reads '{name}', which "
+                    f"Action '{action['name']}' in {workflow_file} reads '{name}'{via}, which "
                     f"{source.branch.label} does not list under outputs. "
-                    f"Outputs of '{source.branch.name}': {_listed(source.branch.outputs)}.",
+                    f"Outputs of '{source.branch.name}': {_listed(source.outputs)}.",
                     context=_context(source, action_name=action["name"]),
                 )
+
+
+def _scope_origin(
+    action: dict[str, Any],
+    name: str,
+    extractor: Any,
+    workflow_file: str,
+    levels: _Levels,
+) -> str:
+    """Which defaults level gives *action* its read of *name* through ``context_scope``.
+
+    Empty when the action's own config reads it; else the most specific level whose
+    ``context_scope`` reads it.
+    """
+    own = _normalised_reads(action.get("context_scope")) or {}
+    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
+        return ""
+    found = action.get(_ORIGIN_KEY)
+    origin: dict[str, Any] = found if isinstance(found, dict) else {}
+    instance = origin.get("defaults")
+    instance_scope = instance.get("context_scope") if isinstance(instance, dict) else None
+    if name in _scope_reads(instance_scope, extractor):
+        level = f"'defaults:' of include '{origin['instance']}'"
+    elif name in _scope_reads(levels.workflow_scope, extractor):
+        level = "the workflow's 'defaults:'"
+    else:
+        level = "'default_agent_config:' in agent_actions.yml"
+    return f" (from 'context_scope' under {level})"
+
+
+def _scope_reads(scope: Any, extractor: Any) -> set[str]:
+    reads = _normalised_reads(scope) or {}
+    return {req.source_agent for req in extractor.extract_from_agent({"context_scope": reads})}
+
+
+def _refuse_removed_reads(
+    data: dict[str, Any], inclusions: Sequence[Inclusion], levels: _Levels
+) -> None:
+    """Refuse a read of an action that an include removes, naming every reader in its branch."""
+    workflow_file = inclusions[0].workflow_file
+    from agent_actions.validation.static_analyzer.reference_extractor import ReferenceExtractor
+
+    actions = [action for action in data["actions"] if isinstance(action, dict)]
+    known = {name for action in actions for name in _final_and_base_names(action)}
+    removed = {
+        name: (inclusion, local)
+        for inclusion in inclusions
+        for name, local in inclusion.removed_names().items()
+        if name not in known
+    }
+    by_instance = {inclusion.instance: inclusion for inclusion in inclusions}
+    readers: dict[tuple[str, str], dict[str, str]] = {}
+    extractor = ReferenceExtractor()
+    for action in actions:
+        if not _validates(action, ActionConfig):
+            continue
+        origin = action.get(_ORIGIN_KEY)
+        reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
+        for name in _reads(
+            action, extractor, workflow_file, levels.of(action), levels.scope(action)
+        ):
+            if name not in removed:
+                continue
+            source, local = removed[name]
+            via = _scope_origin(action, name, extractor, workflow_file, levels)
+            if reader is source:
+                readers.setdefault((source.instance, local), {}).setdefault(action["name"], via)
+                continue
+            raise ConfigurationError(
+                f"Action '{action['name']}' in {workflow_file} reads '{name}'{via}, which include "
+                f"'{source.instance}' leaves out under 'remove:'. Outputs that include "
+                f"'{source.instance}' keeps from {source.branch.label}: "
+                f"{_listed(source.outputs)}.",
+                context=_context(source, action_name=action["name"]),
+            )
+    for inclusion in inclusions:
+        for local in inclusion.removed:
+            found = readers.get((inclusion.instance, local), {})
+            if not found:
+                continue
+            verb = "reads" if len(found) == 1 else "read"
+            named = ", ".join(f"'{reader}'{via}" for reader, via in found.items())
+            raise ConfigurationError(
+                f"Include '{inclusion.instance}' in {workflow_file}: remove names '{local}' of "
+                f"{inclusion.branch.label}, but {named} still {verb} it. "
+                f"{_removal_advice(list(found.values()))}",
+                context=_context(inclusion, action_name=local),
+            )
+
+
+def _removal_advice(levels: list[str]) -> str:
+    """What to do about the readers of a removed action, by where each read comes from."""
+    if not any(levels):
+        return "Remove the readers too, or override them so that they do not read it."
+    return (
+        "Remove the readers too, override them so that they do not read it, or remove the read "
+        "from the defaults named above. In an override, null takes away an inherited directive, "
+        "and a list is added to it."
+    )
 
 
 def parse_branch(name: str, source: Any, workflow_file: str) -> Branch:
@@ -332,14 +550,8 @@ def _checked_action(branch: str, workflow_file: str, index: int, action: Any) ->
     try:
         name = ActionConfig.model_validate(_with_named_schema(action)).name
     except ValidationError as e:
-        problems = "; ".join(
-            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
-            if error["loc"]
-            else error["msg"]
-            for error in e.errors()
-        )
         # The reason is in the message, and the CLI prints the innermost error.
-        raise ConfigurationError(f"{where}: {problems}", context=context) from None
+        raise ConfigurationError(f"{where}: {_problems(e)}", context=context) from None
     reason = _name_problem(name)
     if reason:
         named = _branch_where(branch, workflow_file, f"'{name}'")
@@ -361,6 +573,15 @@ def _checked_action(branch: str, workflow_file: str, index: int, action: Any) ->
                 context=context,
             )
     return name
+
+
+def _problems(error: ValidationError) -> str:
+    return "; ".join(
+        f"{'.'.join(str(part) for part in item['loc'])}: {item['msg']}"
+        if item["loc"]
+        else item["msg"]
+        for item in error.errors()
+    )
 
 
 def _with_named_schema(action: dict[str, Any]) -> dict[str, Any]:
@@ -414,14 +635,123 @@ def _inclusion(
         )
     if name not in parsed:
         parsed[name] = parse_branch(name, branches[name], workflow_file)
+    branch = parsed[name]
     bindings = entry.get("inputs") or {}
     if not isinstance(bindings, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in bindings.items()
     ):
         raise ConfigurationError(f"{where}: 'inputs' must map each branch input to an action name.")
-    return Inclusion(
-        branch=parsed[name], instance=name, bindings=dict(bindings), workflow_file=workflow_file
+    override = _override(entry.get("override"), branch, where)
+    removed = _removal(entry.get("remove"), branch, where)
+    for action_name in override:
+        if action_name in removed:
+            raise ConfigurationError(
+                f"{where}: '{action_name}' of {branch.label} is named under both 'override' "
+                "and 'remove'. Override it or remove it.",
+                context={"branch_file": branch.file, "action_name": action_name},
+            )
+    actions = tuple(
+        _overridden(action, override[action["name"]], branch, where)
+        if action["name"] in override
+        else action
+        for action in branch.actions
+        if action["name"] not in removed
     )
+    return Inclusion(
+        branch=branch,
+        instance=name,
+        bindings=dict(bindings),
+        workflow_file=workflow_file,
+        actions=actions,
+        removed=removed,
+        defaults=_instance_defaults(entry.get("defaults"), where),
+    )
+
+
+def _override(override: Any, branch: Branch, where: str) -> dict[str, dict[str, Any]]:
+    if override is None:
+        return {}
+    if not isinstance(override, dict) or not all(
+        isinstance(key, str) and isinstance(value, dict) for key, value in override.items()
+    ):
+        raise ConfigurationError(
+            f"{where}: 'override' must map each branch action to a mapping of action keys."
+        )
+    for action_name in override:
+        _refuse_unknown_action(action_name, "override", branch, where)
+    return override
+
+
+def _removal(removed: Any, branch: Branch, where: str) -> tuple[str, ...]:
+    if removed is None:
+        return ()
+    if not isinstance(removed, list) or not all(isinstance(item, str) for item in removed):
+        raise ConfigurationError(f"{where}: 'remove' must be a list of branch action names.")
+    for action_name in removed:
+        _refuse_unknown_action(action_name, "remove", branch, where)
+    return tuple(dict.fromkeys(removed))
+
+
+def _refuse_unknown_action(action_name: str, key: str, branch: Branch, where: str) -> None:
+    names = [action["name"] for action in branch.actions]
+    if action_name not in names:
+        raise ConfigurationError(
+            f"{where}: {key} names '{action_name}', which {branch.label} does not define."
+            f"{_near_miss(action_name, names)} Branch actions: {_listed(names)}.",
+            context={"branch_file": branch.file, "action_name": action_name},
+        )
+
+
+def _overridden(
+    action: dict[str, Any], keys: dict[str, Any], branch: Branch, where: str
+) -> dict[str, Any]:
+    """*action* with each key of *keys* replaced, and each key given ``null`` removed."""
+    local = action["name"]
+    where = f"{where}, override of '{local}' in {branch.label}"
+    context = {"branch_file": branch.file, "action_name": local}
+    for key in keys:
+        if key == "name":
+            raise ConfigurationError(
+                f"{where}: key 'name' cannot be overridden. An included action keeps the name "
+                "its branch gives it.",
+                context=context,
+            )
+        if key not in _OVERRIDE_KEYS:
+            raise ConfigurationError(
+                f"{where}: key '{key}' is not an action field.{_near_miss(str(key), _OVERRIDE_KEYS)}",
+                context=context,
+            )
+    merged = dict(action)
+    for key, value in keys.items():
+        if key in _SCHEMA_SPELLINGS:
+            for spelling in _SCHEMA_SPELLINGS:
+                merged.pop(spelling, None)
+        if value is None:
+            merged.pop(key, None)
+        else:
+            merged[key] = copy.deepcopy(value)
+    try:
+        ActionConfig.model_validate(_with_named_schema(merged))
+    except ValidationError as e:
+        raise ConfigurationError(f"{where}: {_problems(e)}", context=context) from None
+    return merged
+
+
+def _instance_defaults(defaults: Any, where: str) -> dict[str, Any] | None:
+    """The include's ``defaults:`` block, refused as a workflow ``defaults:`` block is."""
+    if defaults is None:
+        return None
+    try:
+        DefaultsConfig.model_validate(defaults)
+    except ValidationError as e:
+        raise ConfigurationError(f"{where}: defaults: {_problems(e)}") from None
+    for key in _WORKFLOW_ONLY_DEFAULTS:
+        if key in defaults:
+            raise ConfigurationError(
+                f"{where}: defaults: '{key}' is a setting of the workflow. Set it under the "
+                "workflow's own 'defaults:'."
+            )
+    return copy.deepcopy(defaults) or None
 
 
 def _refuse_repeated_instances(
@@ -456,7 +786,7 @@ def _refuse_name_collisions(
         for name in _ordered_names(action):
             origin.setdefault(name, host_label)
     for inclusion in inclusions:
-        for action in inclusion.branch.actions:
+        for action in inclusion.actions:
             for name in _ordered_names(action):
                 if name in origin:
                     raise ConfigurationError(
@@ -475,10 +805,13 @@ def _refuse_bad_bindings(
 ) -> None:
     host_names = {name for action in hosts for name in _final_and_base_names(action)}
     owner: dict[str, tuple[Inclusion, str]] = {}
+    remover: dict[str, Inclusion] = {}
     for inclusion in inclusions:
-        for action in inclusion.branch.actions:
+        for action in inclusion.actions:
             for name in _final_and_base_names(action):
                 owner[name] = (inclusion, action["name"])
+        for name in inclusion.removed_names():
+            remover[name] = inclusion
 
     for inclusion in inclusions:
         branch = inclusion.branch
@@ -507,6 +840,12 @@ def _refuse_bad_bindings(
             target = inclusion.bindings[key]
             if target in host_names:
                 continue
+            if target not in owner and target in remover:
+                raise ConfigurationError(
+                    f"{where}: input '{key}' is bound to '{target}', which include "
+                    f"'{remover[target].instance}' leaves out under 'remove:'.",
+                    context=_context(inclusion),
+                )
             if target not in owner:
                 raise ConfigurationError(
                     f"{where}: input '{key}' is bound to '{target}', which is not an action of "
@@ -514,24 +853,32 @@ def _refuse_bad_bindings(
                     context=_context(inclusion),
                 )
             source, local_name = owner[target]
-            if local_name not in source.branch.outputs:
+            if local_name not in source.outputs:
                 raise ConfigurationError(
                     f"{where}: input '{key}' is bound to '{target}', which "
                     f"{source.branch.label} does not list under outputs. Outputs of "
-                    f"'{source.branch.name}': {_listed(source.branch.outputs)}.",
+                    f"'{source.branch.name}': {_listed(source.outputs)}.",
                     context=_context(inclusion),
                 )
 
 
 def _reads(
-    action: dict[str, Any], extractor: Any, workflow_file: str, defaults: dict[str, Any]
+    action: dict[str, Any],
+    extractor: Any,
+    workflow_file: str,
+    defaults: dict[str, Any],
+    scope: dict[str, list[Any]],
 ) -> list[str]:
-    """Every name *action* reads, in the order its config states them."""
+    """Every name *action* reads, in the order its config states them.
+
+    *scope* stands for its ``context_scope``, and *defaults* give its ``expect`` block.
+    """
     names: list[str] = []
     dependencies = action.get("dependencies") or []
     names.extend([dependencies] if isinstance(dependencies, str) else dependencies)
+    view = {**action, "context_scope": scope}
     try:
-        requirements = extractor.extract_from_agent(action)
+        requirements = extractor.extract_from_agent(view)
     except TemplateSyntaxError as e:
         origin = action.get(_ORIGIN_KEY)
         where = (
@@ -588,15 +935,15 @@ def _final_and_base_names(action: Any) -> set[str]:
 
 
 def _with_origin(action: dict[str, Any], inclusion: Inclusion) -> dict[str, Any]:
-    return {
-        **copy.deepcopy(action),
-        "_include": {
-            "branch": inclusion.branch.name,
-            "instance": inclusion.instance,
-            "local_name": action["name"],
-            "branch_file": inclusion.branch.file,
-        },
+    origin: dict[str, Any] = {
+        "branch": inclusion.branch.name,
+        "instance": inclusion.instance,
+        "local_name": action["name"],
+        "branch_file": inclusion.branch.file,
     }
+    if inclusion.defaults:
+        origin["defaults"] = copy.deepcopy(dict(inclusion.defaults))
+    return {**copy.deepcopy(action), _ORIGIN_KEY: origin}
 
 
 def _is_include(entry: Any) -> bool:
@@ -693,6 +1040,7 @@ __all__ = [
     "INCLUDE_KEYS",
     "Branch",
     "Inclusion",
+    "action_defaults",
     "branch_file",
     "check_include_reads",
     "expand_includes",
