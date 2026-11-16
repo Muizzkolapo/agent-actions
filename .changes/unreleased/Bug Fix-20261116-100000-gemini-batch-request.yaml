@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "A Gemini batch request now applies its settings as an online call does. `max_tokens` is sent as `max_output_tokens`, the field Gemini reads, so the limit takes effect; before it went as `max_tokens` (a null when unset), which Gemini does not read. JSON mode sets `response_mime_type: application/json` inside the generation config, also when the action has no schema, and the prompt carries the same schema text and rules the online prompt does. Before, the mime type and an OpenAI-style schema wrapper sat at the request level, where Gemini does not read them, and the batch prompt held no schema."
+time: 2026-11-16T10:00:00Z

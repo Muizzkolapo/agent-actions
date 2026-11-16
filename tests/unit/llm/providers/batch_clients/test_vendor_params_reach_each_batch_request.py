@@ -28,8 +28,10 @@ def _bare(cls: type, **attrs: Any) -> Any:
     return client
 
 
-def _line(client: Any, vendor_params: dict | None, schema: Any = None) -> dict[str, Any]:
-    config: dict[str, Any] = {"model_name": "m", "json_mode": schema is not None}
+def _line(
+    client: Any, vendor_params: dict | None, schema: Any = None, **extra: Any
+) -> dict[str, Any]:
+    config: dict[str, Any] = {"model_name": "m", "json_mode": schema is not None, **extra}
     if schema is not None:
         config["compiled_schema"] = schema
     if vendor_params is not None:
@@ -122,11 +124,11 @@ class TestOllamaBatch:
             "message": {"role": "assistant", "content": "ok"},
             "done": True,
         }
-        task = _line(client, {"think": False, "options": {"num_ctx": 8192}})
+        task = _line(client, {"think": False, "options": {"num_ctx": 8192}}, temperature=0.4)
 
         client._process_single_task(task, 0, 1)
 
         sent = client.client.chat.call_args.kwargs
         assert sent["think"] is False
         assert sent["options"]["num_ctx"] == 8192
-        assert "temperature" in sent["options"]
+        assert sent["options"]["temperature"] == 0.4

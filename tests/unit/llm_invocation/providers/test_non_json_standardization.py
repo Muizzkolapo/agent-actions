@@ -260,11 +260,10 @@ class TestGroqCallNonJson:
 
     @patch("agent_actions.llm.providers.groq.client.fire_event")
     @patch("agent_actions.llm.providers.groq.client.Groq")
-    def test_none_temperature_and_max_tokens_use_defaults(self, mock_groq_cls, mock_fire):
-        """When config has temperature=None / max_tokens=None, fall back to defaults.
+    def test_none_temperature_and_max_tokens_are_not_sent(self, mock_groq_cls, mock_fire):
+        """When config has temperature=None / max_tokens=None, neither is sent.
 
-        Groq does not inject a temperature default (parity with other providers).
-        Only max_tokens has a default (required by the Groq API).
+        Groq injects no default for either, as its JSON mode and batch do not.
         """
         from agent_actions.llm.providers.groq.client import GroqClient
 
@@ -279,7 +278,7 @@ class TestGroqCallNonJson:
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert "temperature" not in call_kwargs
-        assert call_kwargs["max_tokens"] == 1000
+        assert "max_tokens" not in call_kwargs
 
 
 # ---------------------------------------------------------------------------
