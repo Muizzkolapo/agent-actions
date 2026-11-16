@@ -75,7 +75,13 @@ def test_preflight_says_nothing_about_batch_for_tool_or_hitl_actions():
             _tool("inherited_split"),
             _hitl("review", run_mode="batch"),
             _hitl("inherited_review"),
-            {"name": "define", "intent": "i", "kind": "llm", "prompt": "Define it."},
+            {
+                "name": "define",
+                "intent": "i",
+                "kind": "llm",
+                "prompt": "Define it.",
+                "json_mode": False,
+            },
         ]
     )
 
