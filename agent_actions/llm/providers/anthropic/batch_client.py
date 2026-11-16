@@ -178,21 +178,25 @@ class AnthropicBatchClient(BaseBatchClient):
         )
         return str(error)
 
-    def _extract_content_from_response(self, raw_response: Any) -> Any:
-        """Extract content from Anthropic response."""
-        result = self._get_attribute_or_key(raw_response, "result")
-        message = self._get_attribute_or_key(result, "message", {})
-        content_list = self._get_attribute_or_key(message, "content", [])
-        return self._parse_content_list(
-            content_list, parse_text=not self._answer_was_cut_off(raw_response)
-        )
-
     def _answer_was_cut_off(self, raw_response: Any) -> bool:
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         return is_truncated(self._get_attribute_or_key(message, "stop_reason"))
 
-    def _parse_content_list(self, content_list: Any, *, parse_text: bool = True) -> Any:
+    def _extract_content_from_response(self, raw_response: Any) -> Any:
+        """Extract content from Anthropic response."""
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        # Cut-off text stays as written; a tool answer is read as online reads it.
+        cut_off = self._answer_was_cut_off(raw_response) and isinstance(content_list, list)
+        if cut_off and self._extract_tool_use_content(content_list) is None:
+            text = self._extract_text_content(content_list)
+            if text is not None:
+                return text
+        return self._parse_content_list(content_list)
+
+    def _parse_content_list(self, content_list: Any) -> Any:
         """
         Parse Anthropic content list, prioritizing tool use over text.
 
@@ -214,8 +218,6 @@ class AnthropicBatchClient(BaseBatchClient):
         text_content = self._extract_text_content(content_list)
         if text_content is not None:
             logger.debug("Got text response: %s...", text_content[:100])
-            if not parse_text:
-                return text_content
             parsed = self._parse_json_content(text_content)
             if isinstance(parsed, dict):
                 logger.debug("Successfully parsed text as JSON")
