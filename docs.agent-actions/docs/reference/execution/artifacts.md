@@ -114,7 +114,11 @@ is asked also has a digest: `generation_hash` over the generation settings that 
 (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty` and `vendor_params`).
 `generation_hash` is empty for a tool or hitl action, because such an action sends no generation settings. The code that the action runs also has a digest:
 `udf_source_hash`. It covers the files that its tool (`impl`) and its UDF guard were loaded from, as
-they were when the run loaded them. The model and these four digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change
+they were when the run loaded them. `output_settings_hash` covers the settings that decide what an answer is and how
+it is stored: `granularity`, `on_empty` and the `expect:` block, and for an LLM action `json_mode`, `output_field` and
+the run mode that the action runs in. `endpoint_hash` covers where an LLM action sends its requests: its `base_url`, or the
+`url` of the declared endpoint that its `model_vendor` names. It is empty for a tool or hitl action. The model and these
+digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change
 all stored digests at the same time. They also could not name each completed action as edited after an upgrade.
 
 A change to one of these items counts as an edit to a completed action:
@@ -125,12 +129,19 @@ A change to one of these items counts as an edit to a completed action:
 - Its dependencies
 - Its generation settings
 - The code of its tool or of its UDF guard
+- Its output settings
+- Its provider endpoint
+
+A change to `request_timeout`, `retry`, `api_key` or `enable_prompt_caching` is not an edit, because it does not
+change what a request asks.
 
 An answer is the output that an action gives for a record. An edit re-runs nothing. The action keeps its
 answers, and each action that reads it also keeps its answers. Each run names the edit, for example
 `recap was edited since it completed (context scope): its answers stand, and only records
 it has not answered use the edit. Run again with --rerun recap to answer every record under
 the edit`, until `agac run --rerun recap` answers the action and its readers under the new config.
+The warning also names each action that reads the output of `recap`, directly or through other actions, because
+the input of that action is the output from before the edit.
 See [When you edit the workflow](../cli/run#when-you-edit-the-workflow).
 
 If you reorder or repeat the entries of an `observe`, `passthrough` or `drop` list, that change is not
@@ -170,10 +181,11 @@ not change that stamp until the action completes again.
 
 When an action starts work, it also records the config that the work is answered under.
 This is `answered_under`, which holds the same `config_hash`, `model_name`, `model_vendor`,
-`context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash`. A run can stop partway
+`context_scope_hash`, `dependencies_hash`, `generation_hash`, `udf_source_hash`, `output_settings_hash` and
+`endpoint_hash`. A run can stop partway
 through an action because it is killed, interrupted or stopped by an error. That run leaves the records that it
 finished, and the next run keeps them. Between the two runs, the prompt, schema, guard, model, context scope,
-dependencies, generation settings or tool or guard code can be edited. These are the same edits as for a completed action, above.
+dependencies, generation settings, tool or guard code, output settings or provider endpoint can be edited. These are the same edits as for a completed action, above.
 After such an edit, the next run names the edit and answers only the remaining records under it.
 
 If the action kept any
