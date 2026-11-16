@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "The prompt tokens counted for an online Anthropic call now include the tokens read from and written to the prompt cache. Anthropic reports those apart from `input_tokens`, which counts only the prompt after the last cache breakpoint, so with `enable_prompt_caching` the prompt and total token counts were too low."
+time: 2026-11-16T13:00:00Z

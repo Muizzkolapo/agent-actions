@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "An Anthropic batch request in JSON mode now sends the schema tool as the online request does: offered, not forced. Forced, a nested array-of-objects field could come back as one JSON string that no repair undoes. The batch line also sends the compiled tool unchanged, where it used to rebuild it: it dropped the top-level `additionalProperties`, lowercased the tool name and renamed `schema` in it to `_response`, rewrote the description, and swapped a schema with no properties for a single `response` string. `vendor_params.tool_choice` still forces the tool where a workflow wants that."
+time: 2026-11-16T10:00:00Z
