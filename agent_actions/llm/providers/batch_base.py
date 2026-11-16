@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
-from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+from agent_actions.llm.providers.generation_params import (
+    VENDOR_PARAMS_KEY,
+    extract_generation_params,
+)
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
 from agent_actions.utils import deep_json
@@ -30,6 +33,10 @@ logger = logging.getLogger(__name__)
 UNIDENTIFIED_RECORD = "__agac_unidentified__"
 
 _KNOWN_STATUSES = frozenset(status.value for status in BatchStatus)
+
+# The generation settings past temperature and max_tokens, by their canonical names.
+_SAMPLING_PARAMS = ("top_p", "stop")
+_PENALTY_PARAMS = ("frequency_penalty", "presence_penalty")
 
 
 def retry(
@@ -81,6 +88,9 @@ class BatchResult:
     content: Any
     success: bool
     error: str | None = None
+    # The HTTP status the provider answered this record's request with, when its line
+    # says; what a retry reads to resend only what online would retry.
+    error_status: int | None = None
     metadata: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
     recovery_metadata: RecoveryMetadata | None = None  # From agent_actions.core.types
@@ -128,6 +138,11 @@ class BaseBatchClient(ABC):
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),
                     "max_tokens": agent_config.get("max_tokens"),
                     VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
+                    **{
+                        key: agent_config[key]
+                        for key in (*_SAMPLING_PARAMS, *_PENALTY_PARAMS)
+                        if agent_config.get(key) is not None
+                    },
                 },
                 metadata=row,
                 cache_prompt=cache_prompt,
@@ -140,6 +155,26 @@ class BaseBatchClient(ABC):
             tasks.append(provider_task)
 
         return tasks
+
+    @staticmethod
+    def _sampling_params(
+        model_config: dict[str, Any],
+        *,
+        key_map: dict[str, str] | None = None,
+        stop_as_list: bool = False,
+        penalties: bool = False,
+    ) -> dict[str, Any]:
+        """The task's top_p and stop (and penalties) under the names the vendor's online client sends.
+
+        Takes that client's ``extract_generation_params`` arguments; unset settings are left out.
+        """
+        names = (*_SAMPLING_PARAMS, *(_PENALTY_PARAMS if penalties else ()))
+        return extract_generation_params(
+            {key: model_config.get(key) for key in names},
+            key_map=key_map,
+            stop_as_list=stop_as_list,
+            extra_params=_PENALTY_PARAMS if penalties else (),
+        )
 
     def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
         """Whether this call's tasks mark their prompt for prompt caching."""
@@ -270,7 +305,13 @@ class BaseBatchClient(ABC):
 
         error = self._extract_error_from_response(raw_response)
         if error:
-            return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
+            return BatchResult(
+                custom_id=custom_id,
+                content=None,
+                success=False,
+                error=error,
+                error_status=self._extract_error_status(raw_response),
+            )
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
@@ -300,6 +341,10 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Extract error message from response, or None if no error."""
+
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status a failed line's request was answered with; None when it does not say."""
+        return None
 
     @abstractmethod
     def _extract_content_from_response(self, raw_response: Any) -> Any:

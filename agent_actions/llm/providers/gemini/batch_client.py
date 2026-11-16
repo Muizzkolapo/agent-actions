@@ -128,6 +128,11 @@ class GeminiBatchClient(BaseBatchClient):
             generation_config["temperature"] = batch_task.model_config["temperature"]
         if "max_tokens" in batch_task.model_config:
             generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
+        generation_config.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
         request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
         if generation_config:
             request["generation_config"] = generation_config
@@ -156,6 +161,14 @@ class GeminiBatchClient(BaseBatchClient):
         if not parts or not parts[0].get("text"):
             return "No content in response"
         return None
+
+    def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
+        """The error's code; 200 for an answer with no candidate or no text, such as a blocked prompt."""
+        error = raw_response.get("error")
+        if error is None:
+            return 200
+        code = error.get("code") if isinstance(error, dict) else None
+        return code if isinstance(code, int) else None
 
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""

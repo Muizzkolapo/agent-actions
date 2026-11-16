@@ -483,21 +483,16 @@ def test_a_retry_answered_with_no_content_is_not_a_recovery():
     )
 
 
-class TestTheNoContentCaseExhaustsLikeAnErroredOne:
-    def test_it_spends_every_attempt_before_terminating(self):
+class TestTheNoContentCaseIsNotResent:
+    def test_it_fails_at_once_as_online_fails_an_empty_answer(self):
+        """A refusal or a safety block comes back the same each round; online never retries it."""
         h = _Harness(recovery_results=[_no_content(ERR_ID)])
         h.run_pass()
         h.mark_recovery("batch_retry_1", BatchStatus.COMPLETED)
         h.run_pass()
-        h.mark_recovery("batch_retry_2", BatchStatus.COMPLETED)
-        h.run_pass()
 
-        assert h.submitted == ["batch_retry_1", "batch_retry_2"], (
-            "the run stopped retrying before max_attempts was spent"
-        )
-        exhausted = h.finalized[-1]["exhausted_recovery"]
-        assert exhausted is not None and ERR_ID in exhausted
-        assert exhausted[ERR_ID].retry.succeeded is False
+        assert h.submitted == ["batch_retry_1"], "a no-content answer was sent again"
+        assert not (h.finalized[-1]["exhausted_recovery"] or {}).get(ERR_ID)
 
 
 @pytest.mark.parametrize("content", [{"topic": "m"}, {}, "", 0, []])
@@ -629,8 +624,6 @@ def test_the_completion_event_does_not_report_an_unanswered_record_as_completed(
     with patch("agent_actions.llm.batch.services.processing_recovery.fire_event") as fire:
         h.run_pass()
         h.mark_recovery("batch_retry_1", BatchStatus.COMPLETED)
-        h.run_pass()
-        h.mark_recovery("batch_retry_2", BatchStatus.COMPLETED)
         h.run_pass()
 
     completions = [
