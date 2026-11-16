@@ -130,15 +130,9 @@ class AnthropicBatchClient(BaseBatchClient):
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         vendor_params = batch_task.model_config.get("vendor_params") or {}
+        # The compiled schema is the tool, offered and not forced, as online sends it.
         if schema:
-            tools = self._create_json_tool_from_schema(schema)
-            if tools:
-                params["tools"] = tools
-                tool_choice = AnthropicClient._schema_tool_choice(
-                    tools, {"vendor_params": vendor_params}
-                )
-                if tool_choice is not None:
-                    params["tool_choice"] = tool_choice
+            params["tools"] = schema
         AnthropicClient.VENDOR_PARAMS.apply_to_body(params, vendor_params)
         return {"custom_id": batch_task.custom_id, "params": params}
 
@@ -371,53 +365,6 @@ class AnthropicBatchClient(BaseBatchClient):
             else:
                 lines.append(json.dumps(entry))
         return ("\n".join(lines) + "\n").encode("utf-8")
-
-    def _create_json_tool_from_schema(self, schema: dict[str, Any]) -> list[dict[str, Any]]:
-        """
-        Create an Anthropic tool definition from a JSON schema to force structured output.
-
-        Args:
-            schema: JSON schema dictionary or list of schema objects from BatchService
-
-        Returns:
-            List containing tool definition for structured JSON response
-        """
-        actual_schema = None
-        tool_name = "json_response"
-        schema_description = "Provide a structured JSON response"
-        if isinstance(schema, list) and len(schema) > 0:  # type: ignore[unreachable]
-            schema_obj = schema[0]  # type: ignore[unreachable]
-            if isinstance(schema_obj, dict):
-                actual_schema = schema_obj.get("input_schema", {})
-                tool_name = (
-                    schema_obj.get("name", "json_response").lower().replace("schema", "_response")
-                )
-                schema_description = schema_obj.get("description", schema_description)
-        elif isinstance(schema, dict) and ("properties" in schema or "type" in schema):
-            actual_schema = schema
-            schema_description = schema.get("description", schema_description)
-        else:
-            return []
-        if not actual_schema:
-            return []
-        properties = actual_schema.get("properties", {})
-        required = actual_schema.get("required", [])
-        if not properties:
-            tool_schema = {
-                "type": "object",
-                "properties": {
-                    "response": {"type": "string", "description": "The response content"}
-                },
-                "required": ["response"],
-            }
-        else:
-            tool_schema = {"type": "object", "properties": properties, "required": required}
-        tool_definition = {
-            "name": tool_name,
-            "description": f"Provide structured JSON output: {schema_description}",
-            "input_schema": tool_schema,
-        }
-        return [tool_definition]
 
     def _validate_provider_specific_config(
         self, agent_config: dict[str, Any]

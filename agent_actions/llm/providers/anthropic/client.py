@@ -29,7 +29,6 @@ from agent_actions.llm.providers.error_wrapper import (
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
-    VENDOR_PARAMS_KEY,
     VendorParamSpec,
     connect_limited_timeout_kwargs,
     extract_generation_params,
@@ -132,20 +131,6 @@ class AnthropicClient(BaseClient):
             api_args["extra_headers"] = PROMPT_CACHING_BETA_HEADER
         spec = AnthropicClient.VENDOR_PARAMS
         return spec.apply(spec.fit(api_args), cfg)
-
-    @staticmethod
-    def _schema_tool_choice(schema: Any, cfg: dict[str, Any]) -> dict[str, Any] | None:
-        """The forced choice of the one schema tool, which a batch line has always sent.
-
-        Not while thinking is on: the API refuses a forced tool with thinking.
-        """
-        if not isinstance(schema, list) or len(schema) != 1 or not isinstance(schema[0], dict):
-            return None
-        name = schema[0].get("name")
-        thinking = (cfg.get(VENDOR_PARAMS_KEY) or {}).get("thinking")
-        if not name or (isinstance(thinking, dict) and thinking.get("type") != "disabled"):
-            return None
-        return {"type": "tool", "name": name}
 
     @staticmethod
     def _needs_streaming(api_args: dict[str, Any]) -> bool:
