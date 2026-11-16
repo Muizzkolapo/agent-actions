@@ -90,6 +90,41 @@ def test_an_action_that_sends_no_request_may_inherit_the_block(vendor):
     assert _errors(vendor, {"thinking": {"type": "disabled"}}) == []
 
 
+def _batch_errors(vendor: str, vendor_params: dict, **config) -> list:
+    configs = {
+        "write_quiz": {
+            "model_vendor": vendor,
+            "model_name": "m",
+            "run_mode": "batch",
+            "vendor_params": vendor_params,
+            **config,
+        }
+    }
+    result = WorkflowResolutionService(action_configs=configs).resolve_all()
+    return [e for e in result.errors if e.location.config_field == "vendor_params"]
+
+
+@pytest.mark.parametrize("vendor", ["openai", "anthropic", "groq"])
+@pytest.mark.parametrize("key", ["extra_headers", "extra_query"])
+def test_a_batch_action_refuses_what_a_batch_line_cannot_carry(vendor, key):
+    """A batch line is the request's JSON body: the header or query would be dropped."""
+    (error,) = _batch_errors(vendor, {key: {"x-tenant": "a"}})
+
+    assert error.message == (
+        f"Action 'write_quiz': vendor_params '{key}' cannot be sent in run_mode: batch."
+    )
+    assert "run_mode: online" in error.hint
+
+
+@pytest.mark.parametrize("key", ["extra_headers", "extra_query"])
+def test_an_online_action_still_sends_them(key):
+    assert _errors("openai", {key: {"x-tenant": "a"}}) == []
+
+
+def test_a_batch_action_keeps_extra_body():
+    assert _batch_errors("openai", {"extra_body": {"service_tier": "flex"}}) == []
+
+
 def _anthropic_errors(vendor_params: dict, **settings) -> list[str]:
     config = {"model_vendor": "anthropic", "model_name": "m", "vendor_params": vendor_params}
     config.update({"temperature": None, "top_p": None, "max_tokens": None, **settings})

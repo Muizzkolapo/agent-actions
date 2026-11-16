@@ -23,6 +23,7 @@ def _full_record() -> BatchResult:
         content={"answer": "kept"},
         success=False,
         error="rate limited",
+        error_status=429,
         metadata={"model": "test-model"},
         usage={"input_tokens": 11, "output_tokens": 22},
         recovery_metadata=RecoveryMetadata(

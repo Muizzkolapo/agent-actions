@@ -118,6 +118,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         max_tokens = batch_task.model_config.get("max_tokens")
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
+        body.update(self._sampling_params(batch_task.model_config, stop_as_list=True))
 
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
@@ -201,6 +202,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             max_tokens = body.get("max_tokens")
             if max_tokens is not None:
                 options["num_predict"] = max_tokens
+            options.update({key: body[key] for key in ("top_p", "stop") if key in body})
 
             # Handle JSON mode with structured outputs.
             # Cloud: format param not supported (ollama/ollama#12362).

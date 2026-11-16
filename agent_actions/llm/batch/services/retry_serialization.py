@@ -27,6 +27,8 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             # error=None and reports a generic "Batch processing failed" instead
             # of what the provider actually said.
             d["error"] = r.error
+        if r.error_status is not None:
+            d["error_status"] = r.error_status
         if r.metadata:
             d["metadata"] = r.metadata
         if r.usage:
@@ -78,6 +80,7 @@ def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
             content=d["content"],
             success=d["success"],
             error=d.get("error"),
+            error_status=d.get("error_status"),
             metadata=d.get("metadata"),
             usage=d.get("usage"),
             exhausted=d.get("exhausted", False),

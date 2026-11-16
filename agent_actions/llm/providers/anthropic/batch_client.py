@@ -18,6 +18,21 @@ from ..batch_base import BaseBatchClient, BatchTask
 logger = logging.getLogger(__name__)
 
 
+# The HTTP status of each error type the Anthropic API names in an error response.
+_ERROR_TYPE_STATUS = {
+    "invalid_request_error": 400,
+    "authentication_error": 401,
+    "billing_error": 402,
+    "permission_error": 403,
+    "not_found_error": 404,
+    "request_too_large": 413,
+    "rate_limit_error": 429,
+    "api_error": 500,
+    "timeout_error": 504,
+    "overloaded_error": 529,
+}
+
+
 class AnthropicBatchClient(BaseBatchClient):
     """
     Anthropic Message Batches API implementation of the BaseBatchClient interface.
@@ -128,6 +143,11 @@ class AnthropicBatchClient(BaseBatchClient):
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
         )
+        params.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         vendor_params = batch_task.model_config.get("vendor_params") or {}
@@ -154,6 +174,14 @@ class AnthropicBatchClient(BaseBatchClient):
         if result_type == "canceled":
             return "Batch result was canceled"
         return f"Unknown result type: {result_type}"
+
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status of an errored result's error type; None for an expired or canceled one."""
+        result = self._get_attribute_or_key(raw_response, "result")
+        error = self._get_attribute_or_key(result, "error")
+        # An errored result holds the API's error response: {type: error, error: {type, message}}.
+        inner = self._get_attribute_or_key(error, "error") or error
+        return _ERROR_TYPE_STATUS.get(self._get_attribute_or_key(inner, "type"))
 
     def _no_answer_error(self, result: Any) -> str | None:
         """The error for a message whose blocks hold no text or tool answer, as online raises.
