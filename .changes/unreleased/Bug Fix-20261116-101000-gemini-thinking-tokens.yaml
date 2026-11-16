@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "Gemini's thinking tokens now count as output tokens, online and in batch. The output count read only `candidates_token_count`, which leaves them out, while the total includes them, so a thinking model's output was undercounted and the two counts did not add up to the total."
+time: 2026-11-16T10:10:00Z

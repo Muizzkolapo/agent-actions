@@ -184,10 +184,16 @@ class GeminiBatchClient(BaseBatchClient):
         """Extract usage from Gemini response."""
         response_data = raw_response.get("response", {})
         usage_metadata = response_data.get("usageMetadata", {})
+        candidates = usage_metadata.get("candidatesTokenCount")
+        thoughts = usage_metadata.get("thoughtsTokenCount")
+        # Thinking tokens are output: the total counts them, the candidates count does not.
+        completion = (
+            None if candidates is None and thoughts is None else (candidates or 0) + (thoughts or 0)
+        )
         return {
             "total_tokens": usage_metadata.get("totalTokenCount"),
             "prompt_tokens": usage_metadata.get("promptTokenCount"),
-            "completion_tokens": usage_metadata.get("candidatesTokenCount"),
+            "completion_tokens": completion,
         }
 
     def _get_default_model(self) -> str:
