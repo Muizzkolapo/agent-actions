@@ -1,10 +1,10 @@
 """A config edit keeps the answers an action already holds.
 
-After an edit to an action's model, prompt, schema, guard, context scope or dependencies,
-the answers stand, so a model swapped partway through a long run loses nothing: records
-not yet answered are answered under the edit, a warning names what changed, each prompt
-trace row records the config it was answered under, and ``--rerun <action>`` answers the
-action and its readers again. `bystander` reads nothing the edits touch; each tool logs a
+After an edit to an action's model, prompt, schema, guard, context scope, dependencies, output
+settings or endpoint, the answers stand, so a model swapped partway through a long run loses
+nothing: records not yet answered are answered under the edit, a warning names what changed
+and every action reading the edited one, each prompt trace row records the config it was
+answered under, and ``--rerun <action>`` answers the action and its readers again. `bystander` reads nothing the edits touch; each tool logs a
 line per record to `calls.log`, so a test sees which actions ran.
 """
 
@@ -530,3 +530,120 @@ def test_a_store_stamped_before_code_digests_names_no_edit(completed):
 
     assert result.returncode == 0, result.printed
     assert "was edited since" not in result.printed
+
+
+SUMMARY_SCHEMA = "    schema: { said: string }\n"
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        pytest.param("run_mode: batch", id="run-mode"),
+        pytest.param("json_mode: false", id="json-mode"),
+        pytest.param("on_empty: skip", id="on-empty"),
+        pytest.param("expect: { max_iterations: 2 }", id="expect"),
+        pytest.param("base_url: http://localhost:9/v1", id="base-url"),
+    ],
+)
+def test_an_output_setting_on_the_action_is_named_as_an_edit(completed, setting):
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    {setting}\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    label = "provider endpoint" if setting.startswith("base_url") else "output settings"
+    assert f"summary was edited since it completed ({label})" in result.printed
+    assert "--rerun summary" in result.printed
+    assert _statuses(completed)["summary"]["status"] == "completed"
+
+
+def test_an_edit_to_a_plain_text_actions_output_field_is_named(project):
+    _edit(project, SUMMARY_INTENT, f"{SUMMARY_INTENT}    json_mode: false\n")
+    assert _agac(project, "run", "-a", WORKFLOW, "--fresh").returncode == 0
+    _edit(project, SUMMARY_INTENT, f"{SUMMARY_INTENT}    output_field: said\n")
+
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "summary was edited since it completed (output settings)" in result.printed
+
+
+def test_an_edit_to_a_tools_granularity_is_named(completed):
+    _edit(
+        completed,
+        '    intent: "Reads nothing the edits touch"\n',
+        '    intent: "Reads nothing the edits touch"\n    granularity: file\n',
+    )
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert _ran(completed) == {}
+    assert "bystander was edited since it completed (output settings)" in result.printed
+
+
+@pytest.mark.parametrize(
+    "setting",
+    [
+        pytest.param("request_timeout: 30", id="request-timeout"),
+        pytest.param("retry: { max_attempts: 5 }", id="retry"),
+        pytest.param("api_key: OTHER_API_KEY", id="api-key"),
+        pytest.param("enable_prompt_caching: true", id="prompt-caching"),
+    ],
+)
+def test_a_setting_that_changes_how_a_request_travels_is_not_an_edit(completed, setting):
+    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    {setting}\n")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_a_store_stamped_before_output_settings_names_no_edit(completed):
+    path = _workflow(completed) / "agent_io" / ".agent_status.json"
+    statuses = json.loads(path.read_text())
+    for details in statuses.values():
+        for stamp in (details, details.get("answered_under") or {}):
+            stamp.pop("output_settings_hash", None)
+            stamp.pop("endpoint_hash", None)
+    path.write_text(json.dumps(statuses))
+    _edit(
+        completed,
+        SUMMARY_INTENT,
+        f"{SUMMARY_INTENT}    json_mode: false\n    base_url: http://localhost:9/v1\n",
+    )
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert "was edited since" not in result.printed
+
+
+def test_an_edit_names_every_action_that_reads_the_output_it_left_standing(completed):
+    _edit(completed, "observe: [vote_direct.*]", "observe: [vote_direct.*, stage_items.text]")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert _ran(completed) == {}
+    assert (
+        "merge_direct was edited since it completed (context scope): its answers stand, and "
+        "only records it has not answered use the edit. What reads it was answered from its "
+        "output before the edit: recap, after_recap. Run again with --rerun merge_direct to "
+        "answer every record under the edit, there and at what reads it"
+    ) in result.printed
+
+
+def test_an_edit_to_an_action_nothing_reads_names_no_reader(completed):
+    _edit(completed, "observe: [recap.*, stage_items.item_id]", "observe: [recap.*]")
+
+    result = _agac(completed, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, result.printed
+    assert (
+        "after_recap was edited since it completed (context scope): its answers stand, and "
+        "only records it has not answered use the edit. Run again with --rerun after_recap "
+        "to answer every record under the edit"
+    ) in result.printed
+    assert "What reads it" not in result.printed

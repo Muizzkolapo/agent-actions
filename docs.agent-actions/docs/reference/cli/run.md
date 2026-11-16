@@ -132,6 +132,12 @@ If you edit an action in the configuration, the edit does not run anything again
   (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty`, `vendor_params`,
   in the action, in `defaults` or in `default_agent_config`)
 - The code of a tool or a UDF guard: the full file that defines it, but not the modules that the file imports
+- The output settings: `granularity`, `on_empty`, the `expect:` block, and for an LLM action `json_mode`,
+  `output_field` and `run_mode` (online or batch)
+- The provider endpoint of an LLM action: `base_url`, or the `url` of the declared endpoint that its `model_vendor` names
+
+A change to `request_timeout`, `retry`, `api_key` or `enable_prompt_caching` is not an edit. These settings
+change how a request gets to the provider, not what the request asks.
 
 The records that the action already answered keep their
 answers. The actions that read these records also keep their answers. The action answers the records that it did not answer yet
@@ -143,6 +149,16 @@ Each run that finds an edited action reports the edit, and names what changed:
 ```
 classify was edited since it completed (model): its answers stand, and only records it has
 not answered use the edit. Run again with --rerun classify to answer every record under the edit
+```
+
+The warning also names each action that reads the output of the edited action, directly or through
+other actions. The input of these actions is the output from before the edit:
+
+```
+classify was edited since it completed (output settings): its answers stand, and only records
+it has not answered use the edit. What reads it was answered from its output before the edit:
+summarize, report. Run again with --rerun classify to answer every record under the edit, there
+and at what reads it
 ```
 
 An action can stop before it is complete: it was killed, interrupted or stopped by an error. Such an action keeps the
