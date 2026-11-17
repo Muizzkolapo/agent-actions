@@ -100,6 +100,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         # Add optional parameters
         self._add_optional_param(body, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(body, "max_tokens", batch_task.model_config.get("max_tokens"))
+        body.update(self._sampling_params(batch_task.model_config, penalties=True))
 
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}

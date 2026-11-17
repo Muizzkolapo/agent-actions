@@ -239,6 +239,19 @@ def wrap_vendor_error(
     return e
 
 
+def error_for_status(status_code: int, message: str) -> VendorAPIError | NetworkError:
+    """The error online raises for an answer with *status_code*, for a caller that has no exception.
+
+    429 is a rate limit and any 5xx a network error, as the type-based mappings classify
+    them (the SDKs' ``InternalServerError`` is every 5xx); any other status is an API error.
+    """
+    if status_code == 429:
+        return RateLimitError(message)
+    if status_code >= 500:
+        return NetworkError(message)
+    return VendorAPIError(message)
+
+
 # Each vendor's word for "the output budget ran out" (Gemini and Cohere write it in capitals).
 _TRUNCATED_STOP_REASONS = frozenset({"max_tokens", "length"})
 

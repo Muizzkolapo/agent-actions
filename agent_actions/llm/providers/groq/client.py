@@ -164,12 +164,10 @@ class GroqClient(BaseClient, JSONResponseMixin):
         client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
-        params = extract_generation_params(agent_config)
-        params.setdefault("max_tokens", 1000)
         completion_kwargs = {
             "messages": envelope.to_dicts(),
             "model": model_name,
-            **params,
+            **extract_generation_params(agent_config),
             **connect_limited_timeout_kwargs(agent_config, groq),
         }
 

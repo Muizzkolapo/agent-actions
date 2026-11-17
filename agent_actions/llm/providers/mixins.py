@@ -149,12 +149,21 @@ class OpenAICompatibleResponseMixin:
         response_data = raw_response.get("response", {})
         status_code = response_data.get("status_code")
         if status_code and status_code != 200:
-            return f"HTTP {status_code}"
+            body = response_data.get("body")
+            error = body.get("error") if isinstance(body, dict) else None
+            message = error.get("message") if isinstance(error, dict) else None
+            return f"HTTP {status_code}: {message}" if message else f"HTTP {status_code}"
         choices = (response_data.get("body") or {}).get("choices") or [{}]
         refusal = (choices[0].get("message") or {}).get("refusal")
         if refusal:
             return refusal_text(refusal)
         return None
+
+    def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
+        """The status of the line's response; None for a line that failed before any request."""
+        response_data = raw_response.get("response")
+        status_code = response_data.get("status_code") if isinstance(response_data, dict) else None
+        return status_code if isinstance(status_code, int) and status_code != 200 else None
 
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from OpenAI-compatible response."""

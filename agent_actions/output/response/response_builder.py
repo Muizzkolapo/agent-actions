@@ -41,7 +41,7 @@ class UsageShape(Enum):
 
     GEMINI = "gemini"
     """``response.usage_metadata.prompt_token_count`` / ``.candidates_token_count``
-    / ``.total_token_count``."""
+    plus ``.thoughts_token_count`` / ``.total_token_count``."""
 
     COHERE = "cohere"
     """``response.usage.tokens.input_tokens`` / ``.output_tokens`` (total computed)."""
@@ -216,11 +216,20 @@ class ResponseBuilder:
 
     @staticmethod
     def _extract_anthropic(response: Any) -> UsageResult:
-        """Anthropic: ``response.usage.input_tokens`` / ``.output_tokens``."""
+        """Anthropic: ``response.usage.input_tokens`` / ``.output_tokens``.
+
+        ``input_tokens`` counts only the prompt after the last cache breakpoint; the
+        tokens read from and written to the cache are the rest of the prompt.
+        """
         if response is None or not response.usage:
             return UsageResult()
-        input_tokens = response.usage.input_tokens or 0
-        output_tokens = response.usage.output_tokens or 0
+        usage = response.usage
+        input_tokens = (
+            (usage.input_tokens or 0)
+            + (getattr(usage, "cache_read_input_tokens", None) or 0)
+            + (getattr(usage, "cache_creation_input_tokens", None) or 0)
+        )
+        output_tokens = usage.output_tokens or 0
         return UsageResult(
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
@@ -229,13 +238,18 @@ class ResponseBuilder:
 
     @staticmethod
     def _extract_gemini(response: Any) -> UsageResult:
-        """Gemini: ``response.usage_metadata.prompt_token_count`` etc."""
+        """Gemini: ``response.usage_metadata.prompt_token_count`` etc.
+
+        Thinking tokens are output: Gemini's total counts them, its candidates count does not.
+        """
         if not hasattr(response, "usage_metadata") or not response.usage_metadata:
             return UsageResult()
+        usage = response.usage_metadata
+        thoughts = getattr(usage, "thoughts_token_count", None) or 0
         return UsageResult(
-            prompt_tokens=response.usage_metadata.prompt_token_count or 0,
-            completion_tokens=response.usage_metadata.candidates_token_count or 0,
-            total_tokens=response.usage_metadata.total_token_count or 0,
+            prompt_tokens=usage.prompt_token_count or 0,
+            completion_tokens=(usage.candidates_token_count or 0) + thoughts,
+            total_tokens=usage.total_token_count or 0,
         )
 
     @staticmethod

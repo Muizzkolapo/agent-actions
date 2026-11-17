@@ -721,7 +721,11 @@ class BatchProcessingService:
 
         if retry_enabled:
             missing_ids = BatchResultReconciler.resendable_ids(
-                BatchResultReconciler.find_missing_ids(context_map, batch_results), context_map
+                BatchResultReconciler.retriable_ids(
+                    BatchResultReconciler.find_missing_ids(context_map, batch_results),
+                    batch_results,
+                ),
+                context_map,
             )
 
             if missing_ids:

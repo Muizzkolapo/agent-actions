@@ -32,6 +32,7 @@ from agent_actions.llm.config.vendor import (
     api_key_env_var,
     canonical_vendor,
     openai_model_reasons,
+    runs_in_batch,
     vendor_needs_api_key,
 )
 from agent_actions.llm.providers.client_base import api_key_env_name
@@ -49,6 +50,10 @@ from agent_actions.validation.static_analyzer.errors import (
 logger = logging.getLogger(__name__)
 
 _VENDORS_WITHOUT_ENDPOINT = NON_LLM_VENDORS
+
+# vendor_params keys an online request sends that a batch line has nowhere to put
+# (VendorParamSpec.apply_to_body drops them).
+_BATCH_UNSENT_VENDOR_PARAMS = ("extra_headers", "extra_query")
 
 
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -186,6 +191,16 @@ def _nested_key_exists(data: Any, path: str) -> bool:
     return True
 
 
+_VENDOR_PARAMS_KEY_HINT = (
+    "vendor_params takes the keyword arguments of the vendor SDK's request; a parameter "
+    "newer than the installed SDK goes under extra_body where the SDK has it."
+)
+_VENDOR_PARAMS_CONFLICT_HINT = (
+    "The vendor's API refuses these settings together: change one, or turn the "
+    "vendor_params setting off."
+)
+
+
 class WorkflowResolutionService:
     """Performs unified pre-flight resolution checks."""
 
@@ -245,7 +260,11 @@ class WorkflowResolutionService:
         for warning in seed_warnings:
             result.add_warning(warning)
 
-        for error in self._check_vendor_run_mode_compatibility():
+        run_mode_errors = self._check_vendor_run_mode_compatibility()
+        for error in run_mode_errors:
+            result.add_error(error)
+        no_batch = {error.referenced_agent for error in run_mode_errors}
+        for error in self._check_batch_json_mode_schema(skip=no_batch):
             result.add_error(error)
         for warning in self._check_runtime_json_object():
             result.add_warning(warning)
@@ -849,7 +868,11 @@ class WorkflowResolutionService:
     # ── Vendor request parameters ──────────────────────────────────────
 
     def _check_vendor_params(self) -> list[StaticTypeError]:
-        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets."""
+        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets.
+
+        Also refuse settings the vendor's API refuses beside a ``vendor_params`` value, as
+        the client's ``vendor_params_conflicts`` names them (Anthropic's thinking).
+        """
         from agent_actions.errors import DependencyError
         from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
         from agent_actions.llm.realtime.services.invocation import _resolve_client
@@ -861,13 +884,22 @@ class WorkflowResolutionService:
             if not vendor_params or not vendor:
                 continue
             try:
-                spec = getattr(_resolve_client(vendor), "VENDOR_PARAMS", None)
+                client = _resolve_client(vendor)
             except DependencyError:
                 continue  # A missing SDK is reported on its own.
+            spec = getattr(client, "VENDOR_PARAMS", None)
             # A tool or hitl action sends no request; it may inherit the block from defaults.
             if spec is None:
                 continue
-            for problem in spec.defects(vendor_params):
+            problems = [
+                (problem, _VENDOR_PARAMS_KEY_HINT) for problem in spec.defects(vendor_params)
+            ]
+            conflicts = getattr(client, "vendor_params_conflicts", None)
+            if conflicts is not None:
+                problems += [
+                    (problem, _VENDOR_PARAMS_CONFLICT_HINT) for problem in conflicts(config)
+                ]
+            for problem, hint in problems:
                 errors.append(
                     StaticTypeError(
                         message=f"Action '{action_name}': vendor_params for '{vendor}': {problem}.",
@@ -878,13 +910,11 @@ class WorkflowResolutionService:
                         ),
                         referenced_agent=action_name,
                         referenced_field=VENDOR_PARAMS_KEY,
-                        hint=(
-                            "vendor_params takes the keyword arguments of the vendor SDK's "
-                            "request; a parameter newer than the installed SDK goes under "
-                            "extra_body where the SDK has it."
-                        ),
+                        hint=hint,
                     )
                 )
+            if runs_in_batch(config):
+                errors.extend(self._unsent_in_batch(action_name, vendor_params, spec.allowed()))
         return errors
 
     # ── OpenAI reasoning models ────────────────────────────────────────
@@ -926,6 +956,38 @@ class WorkflowResolutionService:
                 )
             )
         return errors
+
+    @staticmethod
+    def _unsent_in_batch(
+        action_name: str, vendor_params: dict[str, Any], allowed: list[str] | None
+    ) -> list[StaticTypeError]:
+        """Refuse each vendor_params key a batch line cannot carry, on a batch action.
+
+        A key the vendor does not take at all is refused by ``defects`` already.
+        """
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+
+        return [
+            StaticTypeError(
+                message=(
+                    f"Action '{action_name}': vendor_params '{key}' cannot be sent in "
+                    "run_mode: batch."
+                ),
+                location=FieldLocation(
+                    agent_name=action_name,
+                    config_field=VENDOR_PARAMS_KEY,
+                    raw_reference=f"run_mode=batch, {VENDOR_PARAMS_KEY}.{key}",
+                ),
+                referenced_agent=action_name,
+                referenced_field=VENDOR_PARAMS_KEY,
+                hint=(
+                    "A batch request line is a JSON body with no headers or query string "
+                    f"of its own. Set run_mode: online, or remove '{key}'."
+                ),
+            )
+            for key in _BATCH_UNSENT_VENDOR_PARAMS
+            if key in vendor_params and (allowed is None or key in allowed)
+        ]
 
     # ── Vendor run-mode compatibility ──────────────────────────────────
 
@@ -989,6 +1051,37 @@ class WorkflowResolutionService:
                     )
                 )
 
+        return errors
+
+    def _check_batch_json_mode_schema(self, skip: set[str]) -> list[StaticTypeError]:
+        """Refuse a batch action in JSON mode with no schema, which batch submission refuses.
+
+        An action in *skip* cannot run in batch at all, which is refused on its own.
+        """
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            if action_name in skip or not runs_in_batch(config):
+                continue
+            if not config.get("json_mode", True):
+                continue
+            if config.get(SCHEMA_KEY) or config.get("schema_name"):
+                continue
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{action_name}': Schema is required for batch processing "
+                        "when json_mode is enabled."
+                    ),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="schema",
+                        raw_reference="run_mode=batch, json_mode=true",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="schema",
+                    hint="Either provide a schema or set json_mode: false",
+                )
+            )
         return errors
 
     def _check_runtime_json_object(self) -> list[StaticTypeWarning]:

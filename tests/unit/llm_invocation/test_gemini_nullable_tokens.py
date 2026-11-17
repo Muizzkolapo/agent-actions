@@ -46,6 +46,7 @@ class TestGeminiNullableTokens:
         mock_response.text = text
         mock_response.usage_metadata.prompt_token_count = None
         mock_response.usage_metadata.candidates_token_count = None
+        mock_response.usage_metadata.thoughts_token_count = None
         mock_response.usage_metadata.total_token_count = None
 
         with (
@@ -77,6 +78,7 @@ class TestGeminiNullableTokens:
         mock_response.text = '{"result": "ok"}'
         mock_response.usage_metadata.prompt_token_count = 100
         mock_response.usage_metadata.candidates_token_count = 50
+        mock_response.usage_metadata.thoughts_token_count = None
         mock_response.usage_metadata.total_token_count = 150
 
         with (

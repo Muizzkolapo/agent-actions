@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A batch action sends its `top_p`, `stop`, `frequency_penalty` and `presence_penalty` as the online client of its vendor does: OpenAI and Groq lines carry all four, Anthropic lines and the Gemini `generation_config` carry `top_p` and `stop_sequences`, and Ollama sends `top_p` and `stop` in `options`. Batch built each task from the model, temperature, max_tokens and vendor_params alone, so a batch action ran with the vendor defaults for the rest. A setting the action leaves unset is not sent.'
+time: 2026-11-16T10:10:00Z

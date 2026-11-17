@@ -135,6 +135,29 @@ class TestExtractUsage:
     def test_reads_each_provider_shape(self, resp, provider, expected):
         assert ResponseBuilder.extract_usage(resp, provider) == expected
 
+    def test_anthropic_prompt_tokens_include_the_cached_prompt(self):
+        from anthropic.types import Usage
+
+        usage = Usage(
+            input_tokens=12,
+            output_tokens=20,
+            cache_read_input_tokens=3000,
+            cache_creation_input_tokens=500,
+        )
+
+        result = ResponseBuilder.extract_usage(SimpleNamespace(usage=usage), "anthropic")
+
+        assert result == UsageResult(3512, 20, 3532)
+
+    def test_anthropic_cache_fields_left_unset_count_nothing(self):
+        from anthropic.types import Usage
+
+        usage = Usage(input_tokens=12, output_tokens=20)
+
+        result = ResponseBuilder.extract_usage(SimpleNamespace(usage=usage), "anthropic")
+
+        assert result == UsageResult(12, 20, 32)
+
 
 # ---------------------------------------------------------------------------
 # Tests — extract_usage edge cases (missing/None usage)

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
+from agent_actions.llm.providers.error_wrapper import empty_response_error, is_truncated
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -15,6 +16,21 @@ from agent_actions.utils.atomic_write import atomic_json_write
 from ..batch_base import BaseBatchClient, BatchTask
 
 logger = logging.getLogger(__name__)
+
+
+# The HTTP status of each error type the Anthropic API names in an error response.
+_ERROR_TYPE_STATUS = {
+    "invalid_request_error": 400,
+    "authentication_error": 401,
+    "billing_error": 402,
+    "permission_error": 403,
+    "not_found_error": 404,
+    "request_too_large": 413,
+    "rate_limit_error": 429,
+    "api_error": 500,
+    "timeout_error": 504,
+    "overloaded_error": 529,
+}
 
 
 class AnthropicBatchClient(BaseBatchClient):
@@ -127,18 +143,17 @@ class AnthropicBatchClient(BaseBatchClient):
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
         )
+        params.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         vendor_params = batch_task.model_config.get("vendor_params") or {}
+        # The compiled schema is the tool, offered and not forced, as online sends it.
         if schema:
-            tools = self._create_json_tool_from_schema(schema)
-            if tools:
-                params["tools"] = tools
-                tool_choice = AnthropicClient._schema_tool_choice(
-                    tools, {"vendor_params": vendor_params}
-                )
-                if tool_choice is not None:
-                    params["tool_choice"] = tool_choice
+            params["tools"] = schema
         AnthropicClient.VENDOR_PARAMS.apply_to_body(params, vendor_params)
         return {"custom_id": batch_task.custom_id, "params": params}
 
@@ -150,7 +165,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
         result_type = self._get_attribute_or_key(result, "type")
         if result_type == "succeeded":
-            return None
+            return self._no_answer_error(result)
         if result_type == "errored":
             error_info = self._get_attribute_or_key(result, "error", {})
             return str(error_info) if error_info else "Batch processing errored"
@@ -160,11 +175,53 @@ class AnthropicBatchClient(BaseBatchClient):
             return "Batch result was canceled"
         return f"Unknown result type: {result_type}"
 
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status of an errored result's error type; None for an expired or canceled one."""
+        result = self._get_attribute_or_key(raw_response, "result")
+        error = self._get_attribute_or_key(result, "error")
+        # An errored result holds the API's error response: {type: error, error: {type, message}}.
+        inner = self._get_attribute_or_key(error, "error") or error
+        return _ERROR_TYPE_STATUS.get(self._get_attribute_or_key(inner, "type"))
+
+    def _no_answer_error(self, result: Any) -> str | None:
+        """The error for a message whose blocks hold no text or tool answer, as online raises.
+
+        A thinking block alone (max_tokens spent while thinking) is not the answer. An
+        empty content list is left to the action's ``on_empty``.
+        """
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if not isinstance(content_list, list) or not content_list:
+            return None
+        if self._extract_tool_use_content(content_list) is not None:
+            return None
+        if self._extract_text_content(content_list) is not None:
+            return None
+        error = empty_response_error(
+            "Anthropic",
+            self._get_attribute_or_key(message, "stop_reason"),
+            model_name=self._get_attribute_or_key(message, "model") or "",
+            vendor="anthropic",
+            operation="messages.batches",
+        )
+        return str(error)
+
+    def _answer_was_cut_off(self, raw_response: Any) -> bool:
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        return is_truncated(self._get_attribute_or_key(message, "stop_reason"))
+
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         """Extract content from Anthropic response."""
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
+        # Cut-off text stays as written; a tool answer is read as online reads it.
+        cut_off = self._answer_was_cut_off(raw_response) and isinstance(content_list, list)
+        if cut_off and self._extract_tool_use_content(content_list) is None:
+            text = self._extract_text_content(content_list)
+            if text is not None:
+                return text
         return self._parse_content_list(content_list)
 
     def _parse_content_list(self, content_list: Any) -> Any:
@@ -371,53 +428,6 @@ class AnthropicBatchClient(BaseBatchClient):
             else:
                 lines.append(json.dumps(entry))
         return ("\n".join(lines) + "\n").encode("utf-8")
-
-    def _create_json_tool_from_schema(self, schema: dict[str, Any]) -> list[dict[str, Any]]:
-        """
-        Create an Anthropic tool definition from a JSON schema to force structured output.
-
-        Args:
-            schema: JSON schema dictionary or list of schema objects from BatchService
-
-        Returns:
-            List containing tool definition for structured JSON response
-        """
-        actual_schema = None
-        tool_name = "json_response"
-        schema_description = "Provide a structured JSON response"
-        if isinstance(schema, list) and len(schema) > 0:  # type: ignore[unreachable]
-            schema_obj = schema[0]  # type: ignore[unreachable]
-            if isinstance(schema_obj, dict):
-                actual_schema = schema_obj.get("input_schema", {})
-                tool_name = (
-                    schema_obj.get("name", "json_response").lower().replace("schema", "_response")
-                )
-                schema_description = schema_obj.get("description", schema_description)
-        elif isinstance(schema, dict) and ("properties" in schema or "type" in schema):
-            actual_schema = schema
-            schema_description = schema.get("description", schema_description)
-        else:
-            return []
-        if not actual_schema:
-            return []
-        properties = actual_schema.get("properties", {})
-        required = actual_schema.get("required", [])
-        if not properties:
-            tool_schema = {
-                "type": "object",
-                "properties": {
-                    "response": {"type": "string", "description": "The response content"}
-                },
-                "required": ["response"],
-            }
-        else:
-            tool_schema = {"type": "object", "properties": properties, "required": required}
-        tool_definition = {
-            "name": tool_name,
-            "description": f"Provide structured JSON output: {schema_description}",
-            "input_schema": tool_schema,
-        }
-        return [tool_definition]
 
     def _validate_provider_specific_config(
         self, agent_config: dict[str, Any]

@@ -197,6 +197,7 @@ The rules:
 - **The keys are the SDK's own.** A key is a keyword argument of the request that the SDK sends. For Gemini, a key is a field of `GenerateContentConfig`. For Ollama, a key is an argument of `chat()`. The value goes to the vendor unchanged.
 - **Preflight checks each key.** `agac inspect` and `agac run` refuse a key that the request does not take. The error names the action, the key and the valid keys. An unknown key never passes silently.
 - **agac sets some keys itself.** Preflight refuses `model`, `messages`, `tools`, `system`, `stream` and `timeout` on every vendor. It also refuses `stream_options` on OpenAI, `request_options` on Cohere and `http_options` on Gemini. Set the timeout with [`request_timeout`](#request-timeout).
+- **Preflight checks Anthropic thinking.** With `vendor_params.thinking` on (`enabled` or `adaptive`), the Anthropic API takes `temperature` 1 only, `top_p` of 0.95 or more, no `top_k` and no forced `tool_choice`. Preflight refuses an action that sets one of these otherwise, in its own settings or in `vendor_params`. With `type: enabled`, `budget_tokens` must be below `max_tokens`, which is 4096 when the action sets none; preflight refuses a larger budget unless `extra_headers` sends the interleaved-thinking beta.
 - **A vendor parameter wins.** A key that agac also sets, for example `temperature` or the default `tool_choice`, takes the value from `vendor_params`.
 - **Blocks merge key by key.** An action's `vendor_params` merge over the `vendor_params` in `defaults:`. Those merge over the `vendor_params` in the `default_agent_config:` of the project. A key at a lower level replaces the same key above it. The other keys above it stay.
 - **Some dicts merge too.** Ollama `options` merge into the options that agac sets, so `num_ctx` keeps the `num_predict` that comes from `max_tokens`. `extra_headers`, `extra_query` and `extra_body` merge the same way.
@@ -210,7 +211,7 @@ One example for each vendor:
 
 | Vendor | Example |
 |--------|---------|
-| `anthropic` | `vendor_params: {thinking: {type: enabled, budget_tokens: 4096}, top_k: 40}` |
+| `anthropic` | `vendor_params: {thinking: {type: enabled, budget_tokens: 2048}, service_tier: auto}` |
 | `openai` | `vendor_params: {reasoning_effort: low, seed: 7}` |
 | `groq` | `vendor_params: {reasoning_effort: default, reasoning_format: parsed}` |
 | `gemini` | `vendor_params: {thinking_config: {thinking_budget: 0}, top_k: 40}` |
@@ -219,11 +220,11 @@ One example for each vendor:
 | `llamafile` and other OpenAI-compatible servers | `vendor_params: {seed: 7}` |
 
 :::note[Anthropic: the schema tool, and long answers]
-In JSON mode, an online Anthropic request offers the schema tool but does not force it. When the tool is forced, some models (for example `claude-haiku-5-5`) return a nested array as one JSON string, and the repair loop cannot fix that. The model can sometimes answer in text instead of the tool, often in a ```` ```json ```` block. agac reads JSON from a finished text answer, as it does for the other vendors. Text that is not JSON fails the schema check, and `expect: {repair: auto}` regenerates it. To force the tool, set `vendor_params: {tool_choice: {type: tool, name: <schema>}}`. Batch requests force the schema tool, except when `vendor_params.thinking` is on, because the API refuses a forced tool with thinking. `vendor_params.tool_choice` replaces that default too. A request with a `max_tokens` above 21,333 streams, because the SDK refuses a request that it expects to take longer than 10 minutes.
+In JSON mode, an online Anthropic request offers the schema tool but does not force it. When the tool is forced, some models (for example `claude-haiku-5-5`) return a nested array as one JSON string, and the repair loop cannot fix that. The model can sometimes answer in text instead of the tool, often in a ```` ```json ```` block. agac reads JSON from a finished text answer, as it does for the other vendors. Text that is not JSON fails the schema check, and `expect: {repair: auto}` regenerates it. To force the tool, set `vendor_params: {tool_choice: {type: tool, name: <schema>}}`. A batch request sends the same tool in the same way: offered, not forced, unless `vendor_params.tool_choice` forces it. A request with a `max_tokens` above 21,333 streams, because the SDK refuses a request that it expects to take longer than 10 minutes.
 :::
 
 :::note[An answer that the output budget cuts off]
-A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
+A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In an Anthropic batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. An Anthropic answer that the limit cuts off partway through its text is never completed by guessing the rest: online and in batch, the record fails with a parse error in JSON mode. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
 :::
 
 An OpenAI model that declines to answer returns its reason instead of an answer. The error quotes the reason, for example `The model refused to answer: I can't help with that.`, online and in batch. In JSON mode, the record fails with a parse error, and the run log holds the reason.

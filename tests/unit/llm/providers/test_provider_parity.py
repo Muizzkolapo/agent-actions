@@ -1,6 +1,6 @@
 """Tests for provider parity fixes (P2-3).
 
-Issue 2: Groq should not inject temperature=0.7 default.
+Issue 2: Groq should not inject a temperature or max_tokens default.
 Issue 3: Anthropic max_tokens default should be 4096 (not 1024).
 """
 
@@ -40,7 +40,7 @@ def _call_groq_non_json(agent_config=None):
 
 
 class TestGroqTemperatureDefault:
-    """Groq must not inject a temperature default — only max_tokens."""
+    """Groq must not inject a temperature or max_tokens default."""
 
     @patch("agent_actions.llm.providers.groq.client.Groq")
     @patch("agent_actions.llm.providers.groq.client.MessageBuilder")
@@ -62,13 +62,22 @@ class TestGroqTemperatureDefault:
 
     @patch("agent_actions.llm.providers.groq.client.Groq")
     @patch("agent_actions.llm.providers.groq.client.MessageBuilder")
-    def test_max_tokens_default_preserved(self, mock_mb, mock_groq_cls):
-        """max_tokens=1000 default must remain — required by Groq API."""
+    def test_no_max_tokens_injected_when_absent(self, mock_mb, mock_groq_cls):
+        """As JSON mode and batch: an unset limit is left to Groq, not cut at a hidden 1000."""
         mock_client = _setup_groq_mocks(mock_mb, mock_groq_cls)
         _call_groq_non_json()
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert call_kwargs["max_tokens"] == 1000
+        assert "max_tokens" not in call_kwargs
+
+    @patch("agent_actions.llm.providers.groq.client.Groq")
+    @patch("agent_actions.llm.providers.groq.client.MessageBuilder")
+    def test_user_max_tokens_preserved(self, mock_mb, mock_groq_cls):
+        mock_client = _setup_groq_mocks(mock_mb, mock_groq_cls)
+        _call_groq_non_json({"model_name": "llama3-8b-8192", "max_tokens": 4000})
+
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert call_kwargs["max_tokens"] == 4000
 
 
 class TestAnthropicMaxTokensDefault:

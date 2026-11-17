@@ -34,7 +34,7 @@ The load uses exactly the names that are bound at that point:
 
 - the names that the file binds with `{% set %}`, `{% for %}`, `{% import %}` or the parameters of a macro
 - the macros and variables of `templates/`
-- `load_prompt`
+- `load_prompt` and `env`
 - the globals of Jinja, for example `range`
 
 The load then applies these rules:
@@ -43,6 +43,8 @@ The load then applies these rules:
 - A prompt can read a name that a record or a version supplies (`source`, `seed`, an action of the workflow, `version`, `i`, `idx` or a version `param`). Such a prompt is kept whole and renders for each record, exactly as the same prompt in the prompt store does. This includes its own `{% if %}`, `is defined`, captures, macros and `{% raw %}` blocks. An action named by a tag, such as `name: {{ n }}` in a loop or a macro, counts after the file is parsed. If no action has the name, the load fails as for any undefined name. The prompt can have its own `{{ }}` tags outside its `{% %}` blocks that read only load-time names. Those tags render into the prompt at load. For example, with `{% for n in [1, 2] %}`, `Stage {{ n }} of {{ source.text }}` becomes `Stage 2 of {{ source.text }}`. Other tags of the prompt can read load-time data, for example a list that a `{% for %}` walks or a flag that an `{% if %}` tests. That data is set at the top of the prompt (`{% set fields = ["title", "body"] +%}`).
 - In both cases, the `{{ load_prompt("...") }}` tag of a prompt inserts the loaded prompt as written, after the file is parsed. Thus a loaded prompt of several lines keeps its line breaks in any YAML style, and needs no indentation. If a filter processes the tag first (`| indent(6)`), the result is pasted into the YAML text like any other output.
 - Other values of a versioned action (`model_vendor`, `model_name`, `intent`, …) can read a version variable. Such a value renders one time for each version, as if the variables of the version were set when the file loads. On an action without `versions:`, such a value fails the load, unless the variable is guarded with `is defined` or `default(...)`.
+
+A prompt from the prompt store (`prompt: $file.Prompt`) follows the same rules. Its tags that read only the macros and variables of `templates/` render at load, and a macro that it uses beside a per-record name fails the load and names the store prompt. The text that a `{{ load_prompt("...") }}` tag inserts into a prompt of the workflow file goes in as written, so a name of `templates/` in that text does not render at load. To use such a name there, refer to the store prompt with `prompt: $file.Prompt` instead.
 
 Only data reaches the per-record render. A prompt that renders for each record has limits. It can use a macro, `load_prompt` or an imported template only in its own `{{ }}` tag, outside its `{% %}` blocks. Such a prompt cannot `{% include %}` anything. If it breaks these rules, the load fails and names the prompt. Define the macro inside the prompt instead.
 
@@ -199,7 +201,7 @@ diff agent_workflow/my_workflow/agent_config/my_workflow.yml \
 
 ### Built-in Variables
 
-The load supplies no variables of its own. It supplies only `load_prompt`, the macros and variables of `templates/`, and the globals of Jinja (`range`, `dict`, `namespace`, …). Each other name that a tag uses comes from the file itself.
+The load supplies no variables of its own. It supplies only `load_prompt`, `env` (see [Environment Variables](#environment-variables)), the macros and variables of `templates/`, and the globals of Jinja (`range`, `dict`, `namespace`, …). Each other name that a tag uses comes from the file itself.
 
 ### Custom Variables
 
@@ -214,6 +216,32 @@ defaults:
   model_name: {{ model }}
   api_key: {{ api_key }}
 ```
+
+### Environment Variables
+
+`env(name, default)` returns the value of an environment variable when the workflow file loads. Use it to change a setting per environment without a second copy of the workflow:
+
+```yaml
+defaults:
+  run_mode: {{ env('AGAC_RUN_MODE', 'online') }}
+  model_vendor: anthropic
+  model_name: {{ env('AGAC_MODEL', 'claude-haiku-5-5') }}
+```
+
+```bash
+AGAC_RUN_MODE=batch agac run -a my_workflow
+```
+
+- The value comes from the environment of the `agac` command. The project's `.env` is read into it first, and a variable that the shell already sets keeps the shell's value.
+- If the variable is not set, `env` returns the default. A variable set to an empty string counts as set.
+- If the variable is not set and there is no default, the load fails and names the variable and the workflow file: `env('AGAC_MODEL') reads 'AGAC_MODEL', which the environment does not hold, and gives no default`.
+- `env` works in the workflow file and in `templates/` files. It does not exist in the per-record render of a prompt: a prompt that renders for each record can use `env` only in its own `{{ }}` tag, outside its `{% %}` blocks, where it renders at load.
+- The value is written into the rendered workflow. A changed value is therefore the same as an edit of that value in the file: a different `model_name` is named as a model edit, and a different prompt as a config edit, on the next run.
+- `api_key` is unchanged: it names the variable that holds the key (`api_key: ANTHROPIC_API_KEY`), and the key is read when the action runs. Do not pass a key through `env`.
+
+:::warning
+Do not use `env` to put a secret into the workflow. The value is written into `artefact/rendered_workflows/`, and a value in a prompt or another field that reaches the model is sent to the vendor and can appear in outputs and prompt traces.
+:::
 
 ## Conditional Actions
 
