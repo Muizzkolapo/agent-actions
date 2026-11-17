@@ -258,6 +258,11 @@ def is_truncated(reason: Any) -> bool:
     return name is not None and name.lower() in _TRUNCATED_STOP_REASONS
 
 
+def refusal_text(refusal: str) -> str:
+    """The error for an answer the model declined to give, quoting its reason."""
+    return f"The model refused to answer: {refusal}"
+
+
 def empty_response_error(
     vendor_label: str, stop_reason: Any, *, model_name: str, vendor: str, operation: str
 ) -> VendorAPIError:

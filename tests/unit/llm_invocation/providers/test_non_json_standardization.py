@@ -56,6 +56,7 @@ def _make_openai_style_mocks(text, prompt_tokens=10, completion_tokens=5, total_
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = text
+    mock_response.choices[0].message.refusal = None
     mock_response.usage.prompt_tokens = prompt_tokens
     mock_response.usage.completion_tokens = completion_tokens
     mock_response.usage.total_tokens = total_tokens
@@ -760,7 +761,7 @@ class TestOpenAITopPStopForwarding:
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert call_kwargs["temperature"] == 0.3
-        assert call_kwargs["max_tokens"] == 500
+        assert call_kwargs["max_completion_tokens"] == 500
         assert call_kwargs["top_p"] == 0.95
         assert call_kwargs["stop"] == ["\\n"]
         assert call_kwargs["frequency_penalty"] == 0.5

@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import VendorAPIError
+from agent_actions.llm.providers.error_wrapper import refusal_text
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 
@@ -149,6 +150,10 @@ class OpenAICompatibleResponseMixin:
         status_code = response_data.get("status_code")
         if status_code and status_code != 200:
             return f"HTTP {status_code}"
+        choices = (response_data.get("body") or {}).get("choices") or [{}]
+        refusal = (choices[0].get("message") or {}).get("refusal")
+        if refusal:
+            return refusal_text(refusal)
         return None
 
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:

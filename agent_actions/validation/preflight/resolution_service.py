@@ -31,6 +31,7 @@ from agent_actions.llm.config.vendor import (
     ONLINE_ONLY_VENDORS,
     api_key_env_var,
     canonical_vendor,
+    openai_model_reasons,
     vendor_needs_api_key,
 )
 from agent_actions.llm.providers.client_base import api_key_env_name
@@ -221,6 +222,8 @@ class WorkflowResolutionService:
             result.add_warning(warning)
         for error in self._check_vendor_params():
             result.add_error(error)
+        for error in self._check_reasoning_model_temperature():
+            result.add_error(error)
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
             errors, warnings, targets = self._check_api_keys()
@@ -286,14 +289,26 @@ class WorkflowResolutionService:
 
     def _verify_endpoints(self, result: StaticValidationResult) -> None:
         """Send the structured-output probe to each endpoint the workflow uses."""
-        from agent_actions.llm.providers.openai.endpoint_probe import probe_endpoint
+        from agent_actions.llm.providers.openai.endpoint_probe import (
+            PROBE_MAX_TOKENS,
+            probe_endpoint,
+        )
 
         hints = {
             "refused": "Check the credential in endpoints.{name}.auth.",
             "not_honoured": (
                 "Use a server that honours response_format json_schema, or put one "
-                "(vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean "
-                "a wrong model name or parameter: read the server's text in the message."
+                "(vLLM, TGI, a LiteLLM proxy) in front of this one."
+            ),
+            "rejected": (
+                "The server refused the request for another reason than response_format: "
+                "read its text in the message. The probe sends the model name, the messages, "
+                "response_format and max_tokens."
+            ),
+            "no_answer": (
+                "The model returned no text: read the reason in the message. A reasoning "
+                f"model can spend the probe's limit of {PROBE_MAX_TOKENS} output tokens "
+                "before it answers."
             ),
             "answered": (
                 "The server answered, but not with a completion: check endpoints.{name}.url, "
@@ -870,6 +885,46 @@ class WorkflowResolutionService:
                         ),
                     )
                 )
+        return errors
+
+    # ── OpenAI reasoning models ────────────────────────────────────────
+
+    def _check_reasoning_model_temperature(self) -> list[StaticTypeError]:
+        """Refuse a temperature other than 1 on an OpenAI model that reasons.
+
+        OpenAI refuses it on every record; dropping it would change what the author asked
+        for without a word. A server at a ``base_url`` is not OpenAI and is not checked.
+        """
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            vendor = (config.get("model_vendor") or "").lower()
+            temperature = config.get("temperature")
+            model_name = config.get("model_name")
+            if vendor != "openai" or config.get("base_url") or not isinstance(model_name, str):
+                continue
+            if temperature is None or temperature == 1:
+                continue
+            effort = (config.get(VENDOR_PARAMS_KEY) or {}).get("reasoning_effort")
+            if not openai_model_reasons(model_name, effort):
+                continue
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{action_name}': model '{model_name}' is a reasoning model "
+                        f"and takes only the default temperature (1), not {temperature}."
+                    ),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="temperature",
+                        raw_reference=f"temperature={temperature}, model_name={model_name}",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="temperature",
+                    hint="Set temperature: 1 on this action, or use a model that does not reason.",
+                )
+            )
         return errors
 
     # ── Vendor run-mode compatibility ──────────────────────────────────
