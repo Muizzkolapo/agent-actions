@@ -167,7 +167,7 @@ actions:
 
 :::note[Vendor-Specific Parameter Mapping]
 Agent Actions automatically maps the generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) to the API keys of each vendor:
-- **OpenAI / Groq**: The parameters go to the API unchanged. OpenAI and Groq also support `frequency_penalty` and `presence_penalty`.
+- **OpenAI / Groq**: The parameters go to the API unchanged. OpenAI and Groq also support `frequency_penalty` and `presence_penalty`. OpenAI gets `max_tokens` as `max_completion_tokens`, online and in batch, because OpenAI refuses `max_tokens` on its reasoning models (the o-series and gpt-5). An `openai` action with `base_url`, a `llamafile` action and a declared endpoint still send `max_tokens`. An OpenAI reasoning model takes only the default temperature, so preflight refuses a `temperature` other than 1 on it: `Action '<a>': model 'o3-mini' is a reasoning model and takes only the default temperature (1), not 0.2.` gpt-5.1 and later reason only when `vendor_params.reasoning_effort` is set to a value other than `none`, so preflight refuses their temperature only then.
 - **Anthropic**: `stop` → `stop_sequences` (a string value is wrapped in a list)
 - **Gemini**: `max_tokens` → `max_output_tokens`, `stop` → `stop_sequences`
 - **Cohere**: `top_p` → `p`, `stop` → `stop_sequences`
@@ -226,6 +226,8 @@ In JSON mode, an online Anthropic request offers the schema tool but does not fo
 :::note[An answer that the output budget cuts off]
 A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In an Anthropic batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. An Anthropic answer that the limit cuts off partway through its text is never completed by guessing the rest: online and in batch, the record fails with a parse error in JSON mode. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
 :::
+
+An OpenAI model that declines to answer returns its reason instead of an answer. The error quotes the reason, for example `The model refused to answer: I can't help with that.`, online and in batch. In JSON mode, the record fails with a parse error, and the run log holds the reason.
 
 ### Execution Fields
 

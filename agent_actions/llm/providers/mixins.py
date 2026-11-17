@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import VendorAPIError
+from agent_actions.llm.providers.error_wrapper import refusal_text
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 
@@ -152,6 +153,10 @@ class OpenAICompatibleResponseMixin:
             error = body.get("error") if isinstance(body, dict) else None
             message = error.get("message") if isinstance(error, dict) else None
             return f"HTTP {status_code}: {message}" if message else f"HTTP {status_code}"
+        choices = (response_data.get("body") or {}).get("choices") or [{}]
+        refusal = (choices[0].get("message") or {}).get("refusal")
+        if refusal:
+            return refusal_text(refusal)
         return None
 
     def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:

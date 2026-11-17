@@ -30,7 +30,9 @@ NOT_HONOURED = (
     "agac supports only endpoints with OpenAI structured output"
 )
 
-Kind = Literal["ok", "refused", "not_honoured", "answered", "unreachable", "config"]
+Kind = Literal[
+    "ok", "refused", "not_honoured", "rejected", "no_answer", "answered", "unreachable", "config"
+]
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,13 @@ def probe_endpoint(name: str, model_name: str) -> EndpointProbeResult:
 
     if len(records) == 1 and records[0] in ({"ok": True}, {"ok": False}):
         return EndpointProbeResult(name, "ok")
+    if len(records) == 1 and isinstance(records[0], dict) and records[0].get("raw_response") == "":
+        # No text at all says nothing about the schema: a refusal, or the limit spent first.
+        return EndpointProbeResult(
+            name,
+            "no_answer",
+            f"endpoint '{name}' gave no answer to the probe: {records[0].get('_parse_error')}",
+        )
     return EndpointProbeResult(name, "not_honoured", f"endpoint '{name}' {NOT_HONOURED}")
 
 
@@ -73,9 +82,14 @@ def _judge_error(name: str, exc: Exception) -> EndpointProbeResult:
             name, "refused", f"endpoint '{name}' refused the credential (HTTP {status})"
         )
     if status in (400, 422):
-        # The usual way a server declines response_format: it rejects the request.
+        # A server that declines response_format rejects the request and names it; any
+        # other rejection (a parameter, the model name) is the server's to explain.
+        if _names_structured_output(exc.__cause__):
+            return EndpointProbeResult(
+                name, "not_honoured", f"endpoint '{name}' {NOT_HONOURED} (HTTP {status}: {exc})"
+            )
         return EndpointProbeResult(
-            name, "not_honoured", f"endpoint '{name}' {NOT_HONOURED} (HTTP {status}: {exc})"
+            name, "rejected", f"endpoint '{name}' rejected the probe request (HTTP {status}: {exc})"
         )
     if status is not None:
         return EndpointProbeResult(
@@ -84,3 +98,15 @@ def _judge_error(name: str, exc: Exception) -> EndpointProbeResult:
     return EndpointProbeResult(
         name, "unreachable", f"endpoint '{name}' could not be reached: {exc}"
     )
+
+
+def _names_structured_output(cause: BaseException | None) -> bool:
+    # The server's own message and param, not the whole body, which can echo the request.
+    body = getattr(cause, "body", None)
+    error = body.get("error", body) if isinstance(body, dict) else None
+    if isinstance(error, dict):
+        text = f"{error.get('message')} {error.get('param')}"
+    else:
+        text = str(cause)
+    lowered = text.lower()
+    return "response_format" in lowered or "json_schema" in lowered

@@ -49,6 +49,7 @@ def _openai_style(path: str, client: Any, finish_reason: str) -> Any:
     with patch(path) as sdk:
         choice = MagicMock(finish_reason=finish_reason)
         choice.message.content = None
+        choice.message.refusal = None
         sdk.return_value.chat.completions.create.return_value = MagicMock(choices=[choice])
         return client.call_non_json("k", CONFIG, "p", {"t": "x"})
 

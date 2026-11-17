@@ -192,6 +192,10 @@ class EndpointClient(OpenAIClient):
         return {AUTHORIZATION_HEADER: _OMIT}
 
     @classmethod
+    def _max_tokens_key(cls, agent_config: dict[str, Any]) -> str:
+        return "max_tokens"
+
+    @classmethod
     def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
         """Only an action's own ``request_timeout``; unset, the endpoint's timeout governs."""
         timeout = agent_config.get("request_timeout")

@@ -24,10 +24,12 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 
+from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     empty_response_error,
+    refusal_text,
     stop_reason_name,
     wrap_vendor_error,
 )
@@ -102,6 +104,24 @@ class OpenAIClient(BaseClient):
         return {}
 
     @classmethod
+    def _max_tokens_key(cls, agent_config: dict[str, Any]) -> str:
+        """The name the server reads the output limit under.
+
+        OpenAI refuses ``max_tokens`` on its reasoning models and takes
+        ``max_completion_tokens`` on every model; another server at a ``base_url`` may
+        know only ``max_tokens``.
+        """
+        return "max_tokens" if agent_config.get("base_url") else "max_completion_tokens"
+
+    @classmethod
+    def _generation_params(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        return extract_generation_params(
+            agent_config,
+            key_map={"max_tokens": cls._max_tokens_key(agent_config)},
+            extra_params=("frequency_penalty", "presence_penalty"),
+        )
+
+    @classmethod
     def call_json(
         cls,
         api_key: str | None,
@@ -143,10 +163,7 @@ class OpenAIClient(BaseClient):
                 if schema
                 else {"type": "json_object"}
             ),
-            **extract_generation_params(
-                agent_config,
-                extra_params=("frequency_penalty", "presence_penalty"),
-            ),
+            **cls._generation_params(agent_config),
             # Per request, so it outranks a declared endpoint's client-wide timeout.
             **cls._request_timeout_kwargs(agent_config),
         }
@@ -168,6 +185,20 @@ class OpenAIClient(BaseClient):
         response_message = response.choices[0].message
         response_content: str | None = response_message.content
         if response_content is None:
+            if response_message.refusal:
+                reason = refusal_text(response_message.refusal)
+                fire_event(
+                    LLMErrorEvent(
+                        provider=cls.VENDOR,
+                        model=model_name,
+                        error_type="Refusal",
+                        error_message=reason,
+                        request_id=request_id,
+                    )
+                )
+                # The disposition keeps only the code parse_error; the run log carries the why.
+                logger.warning("%s (model=%s)", reason, model_name)
+                return [{"raw_response": "", "_parse_error": reason}]
             fire_event(
                 LLMErrorEvent(
                     provider=cls.VENDOR,
@@ -246,10 +277,7 @@ class OpenAIClient(BaseClient):
         completion_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": messages,
-            **extract_generation_params(
-                agent_config,
-                extra_params=("frequency_penalty", "presence_penalty"),
-            ),
+            **cls._generation_params(agent_config),
             # Per request, so it outranks a declared endpoint's client-wide timeout.
             **cls._request_timeout_kwargs(agent_config),
         }
@@ -271,12 +299,23 @@ class OpenAIClient(BaseClient):
         response_message = response.choices[0].message
         content: str | None = response_message.content
         if content is None:
-            error = empty_response_error(
-                "OpenAI",
-                response.choices[0].finish_reason,
-                model_name=model_name,
-                vendor=cls.VENDOR,
-                operation="chat.completions.create",
+            error = (
+                VendorAPIError(
+                    refusal_text(response_message.refusal),
+                    context={
+                        "model_name": model_name,
+                        "vendor": cls.VENDOR,
+                        "api_operation": "chat.completions.create",
+                    },
+                )
+                if response_message.refusal
+                else empty_response_error(
+                    "OpenAI",
+                    response.choices[0].finish_reason,
+                    model_name=model_name,
+                    vendor=cls.VENDOR,
+                    operation="chat.completions.create",
+                )
             )
             fire_event(
                 LLMErrorEvent(
