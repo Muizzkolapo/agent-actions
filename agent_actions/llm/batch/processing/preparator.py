@@ -21,6 +21,7 @@ from agent_actions.llm.batch.core.batch_models import (
     BatchTaskPreparationStats,
     PreparedBatchTasks,
 )
+from agent_actions.llm.providers.batch_base import UNSENT_ERROR_KEY
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import quarantine_reason
@@ -30,7 +31,7 @@ from agent_actions.processing.task_preparer import (
     get_task_preparer,
     write_trace_row,
 )
-from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
+from agent_actions.prompt.cache_scope import repair_call_scope
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
@@ -80,14 +81,13 @@ def _append_feedback(
 ) -> list[dict[str, Any]]:
     """Append each record's validation feedback to the prompt it will be sent with.
 
-    Called on the pre-provider rows, whose ``prompt`` becomes the provider's
-    system message, and records how much of it every record shares. Blank feedback,
-    as ``repair: retry`` gives, leaves the prompt untouched. A function (a
-    ``repair: {prompt: ...}`` template) builds the whole prompt from the one this
-    round sends; the shared length is recorded only when its result still starts
-    with that prompt. A record with no entry is left alone too, but that is an
-    invariant violation worth seeing: feedback is built from the same failed set
-    these rows come from. Returns the rows whose prompt changed.
+    Called on the pre-provider rows, and records on each what an online repair call's
+    config says of its prompt (``repair_call_scope``): how much of it every record
+    shares, or that none is. Blank feedback, as ``repair: retry`` gives, leaves the
+    prompt untouched. A function (a ``repair: {prompt: ...}`` template) builds the
+    whole prompt from the one this round sends. A record with no entry is left alone
+    too, but that is an invariant violation worth seeing: feedback is built from the
+    same failed set these rows come from. Returns the rows whose prompt changed.
     """
     changed: list[dict[str, Any]] = []
     for task in tasks:
@@ -103,14 +103,11 @@ def _append_feedback(
         prompt = task.get("prompt", "")
         if callable(feedback):
             task["prompt"] = feedback(prompt)
-            if prompt and task["prompt"].startswith(prompt):
-                task[SHARED_PROMPT_LEN_KEY] = len(prompt)
-            changed.append(task)
+        elif feedback.strip():
+            task["prompt"] = f"{prompt}\n\n{feedback}"
+        else:
             continue
-        if not feedback.strip():
-            continue
-        task["prompt"] = f"{prompt}\n\n{feedback}"
-        task[SHARED_PROMPT_LEN_KEY] = len(prompt)
+        task.update(repair_call_scope(task["prompt"], prompt))
         changed.append(task)
     return changed
 
@@ -253,6 +250,21 @@ class BatchTaskPreparator:
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
+        for task in tasks_builder:
+            error = task.pop(UNSENT_ERROR_KEY, None)
+            if error is None:
+                continue
+            # A prompt too large for the model: online fails that record's call alone.
+            logger.warning("Record %s was not sent: %s", task["target_id"], error)
+            stats.included_items -= 1
+            stats.error_items += 1
+            self._mark_prep_failed(
+                context_map_builder[task["target_id"]],
+                context_map_builder,
+                prep_context.agent_name,
+                error,
+                storage_backend=self.storage_backend,
+            )
 
         # Return immutable result
         return PreparedBatchTasks(

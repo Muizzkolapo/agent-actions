@@ -109,7 +109,7 @@ class GeminiBatchClient(BaseBatchClient):
             "request": {
                 "contents": [{
                     "parts": [{
-                        "text": "system prompt + user content"
+                        "text": "the prompt text online sends"
                     }]
                 }],
                 "generation_config": {
@@ -120,10 +120,15 @@ class GeminiBatchClient(BaseBatchClient):
             }
         }
         """
-        envelope = MessageBuilder.build_for_batch(
-            "gemini", batch_task.prompt, batch_task.user_content, schema=schema
+        # The text online sends: in JSON mode it carries the schema and its rule.
+        json_mode = batch_task.json_mode(schema)
+        envelope = MessageBuilder.build(
+            "gemini",
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            json_mode=json_mode,
         )
-        combined_text = envelope.messages[0].content
         generation_config: dict[str, Any] = {}
         if batch_task.model_config.get("temperature") is not None:
             generation_config["temperature"] = batch_task.model_config["temperature"]
@@ -135,9 +140,9 @@ class GeminiBatchClient(BaseBatchClient):
             )
         )
         # As online: JSON output, with the schema given in the prompt text.
-        if schema or batch_task.model_config.get("json_mode"):
+        if json_mode:
             generation_config["response_mime_type"] = "application/json"
-        request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
+        request: dict[str, Any] = {"contents": [{"parts": [{"text": envelope.prompt_body}]}]}
         if generation_config:
             request["generation_config"] = generation_config
         _join_vendor_params(request, batch_task.model_config.get("vendor_params"))

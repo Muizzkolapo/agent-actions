@@ -1,4 +1,4 @@
-"""An Anthropic batch request with an empty prompt sends no system prompt, with caching on or off."""
+"""An Anthropic batch request sends its prompt in the user message, as online does, never as a system prompt."""
 
 from __future__ import annotations
 
@@ -32,18 +32,32 @@ def _params(caching: bool, prompt: str) -> dict[str, Any]:
     return task["params"]
 
 
+def _text(content: str | list[dict[str, Any]]) -> str:
+    return content if isinstance(content, str) else "".join(block["text"] for block in content)
+
+
 @pytest.mark.parametrize("caching", [True, False], ids=["caching-on", "caching-off"])
 def test_an_empty_prompt_sends_no_system_prompt(caching):
     params = _params(caching, prompt="")
 
     assert "system" not in params
     (message,) = params["messages"]
-    assert message["content"] == json.dumps(CONTENT)
+    assert _text(message["content"]) == (
+        "\n<|begin_of_user_instruction|>:  :<|end_of_user_instruction|>\n"
+        f"<|begin_of_text|>: {json.dumps(CONTENT)} :<|end_of_text|>\n"
+    )
 
 
-def test_a_prompt_with_caching_on_is_sent_as_a_marked_system_prompt():
+def test_a_prompt_with_caching_on_is_marked_in_the_user_message():
     params = _params(True, prompt="Summarise the page.")
 
-    assert params["system"] == [
-        {"type": "text", "text": "Summarise the page.", "cache_control": MARK}
-    ]
+    assert "system" not in params
+    (message,) = params["messages"]
+    marked, record = message["content"]
+    assert marked == {
+        "type": "text",
+        "text": "\n<|begin_of_user_instruction|>: Summarise the page.",
+        "cache_control": MARK,
+    }
+    assert "cache_control" not in record
+    assert json.dumps(CONTENT) in record["text"]

@@ -114,7 +114,7 @@ class TestTheOnlineRequest:
 
 
 class TestTheBatchRequest:
-    def test_a_task_carries_a_deep_record_and_an_ordinary_one_unchanged(self):
+    def test_a_task_carries_a_deep_record_and_an_ordinary_one_as_online_encodes_them(self):
         client = OpenAIBatchClient(api_key="sk-not-used")
         ordinary = {"source": {"page": "é", "n": [1, 2]}}
         tasks = client.prepare_tasks(
@@ -124,10 +124,11 @@ class TestTheBatchRequest:
             ],
             {"model_name": "gpt-4o-mini", "json_mode": False},
         )
-        users = [
+        deep, plain = (
             next(m["content"] for m in t["body"]["messages"] if m["role"] == "user") for t in tasks
-        ]
-        assert users == ['{"source": {"deep": ' + _deep_text(True) + "}}", json.dumps(ordinary)]
+        )
+        assert f'<|begin_of_text|>: {{"source": {{"deep": {_deep_text(False)}}}}} :<|end' in deep
+        assert f"<|begin_of_text|>: {json.dumps(ordinary, ensure_ascii=False)} :<|end" in plain
 
 
 class TestThePromptTemplate:

@@ -124,21 +124,19 @@ class AnthropicBatchClient(BaseBatchClient):
             }
         }
         """
-        envelope = MessageBuilder.build_for_batch(
+        model_name = batch_task.model_config.get("model_name", self._get_default_model())
+        # The messages online sends: one user message, no system prompt.
+        envelope = MessageBuilder.build(
             "anthropic",
             batch_task.prompt,
             batch_task.user_content,
             schema=schema,
+            json_mode=schema is not None,
             enable_prompt_caching=batch_task.cache_prompt,
             shared_prompt_len=batch_task.shared_prompt_len,
+            model_name=model_name,
         )
-        # Anthropic batch: system is a top-level param, user content is the message
-        params = {
-            "model": batch_task.model_config.get("model_name", self._get_default_model()),
-            "messages": envelope.to_dicts(role="user"),
-        }
-        if any(m.content for m in envelope.messages if m.role == "system"):
-            params["system"] = envelope.to_dicts(role="system")[0]["content"]
+        params = {"model": model_name, "messages": envelope.to_dicts()}
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
