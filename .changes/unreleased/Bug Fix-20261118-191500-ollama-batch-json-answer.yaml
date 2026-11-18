@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An Ollama batch action in JSON mode reads a reply that is not an object as online reads it: a list holding anything but objects is stored whole, as one record under `response`, and a bare number or `true` fails its record as a parse error. Batch stored one `{value: ...}` record per list item, and stored the number as a record. For every vendor, a batch reply that is one JSON string keeps its quotes in the failed record''s `raw_response`, as online.'
+time: 2026-11-18T19:15:00Z
