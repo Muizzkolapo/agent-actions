@@ -28,9 +28,11 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
+    cut_off_parse_error,
+    empty_parse_error,
     empty_response_error,
+    is_truncated,
     refusal_text,
-    stop_reason_name,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -212,13 +214,17 @@ class OpenAIClient(BaseClient):
                 "Empty response content from OpenAI API, model=%s",
                 model_name,
             )
-            finish_reason = stop_reason_name(response.choices[0].finish_reason)
             return [
                 {
                     "raw_response": "",
-                    "_parse_error": f"Empty response from API (stop_reason={finish_reason})",
+                    "_parse_error": empty_parse_error(response.choices[0].finish_reason),
                 }
             ]
+        finish_reason = response.choices[0].finish_reason
+        if is_truncated(finish_reason):
+            parse_error = cut_off_parse_error(finish_reason)
+            logger.warning("%s (model=%s)", parse_error, model_name)
+            return [{"raw_response": response_content, "_parse_error": parse_error}]
         from agent_actions.utils.json_parsing import parse_llm_json
 
         response_data = parse_llm_json(response_content)
@@ -298,7 +304,7 @@ class OpenAIClient(BaseClient):
 
         response_message = response.choices[0].message
         content: str | None = response_message.content
-        if content is None:
+        if content is None or (not content and is_truncated(response.choices[0].finish_reason)):
             error = (
                 VendorAPIError(
                     refusal_text(response_message.refusal),

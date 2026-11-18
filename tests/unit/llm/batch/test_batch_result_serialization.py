@@ -18,7 +18,8 @@ from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
 # Read only in the pass that retrieved the result: a judge batch's reply text is
 # tallied there, and persisting every record's text would double the stored state.
-NOT_PERSISTED = {"text"}
+# parse_error is settled into the content at retrieval, before anything is persisted.
+NOT_PERSISTED = {"text", "parse_error"}
 
 
 def _full_record() -> BatchResult:

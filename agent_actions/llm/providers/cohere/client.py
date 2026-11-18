@@ -21,7 +21,9 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     VendorErrorMapping,
+    cut_off_parse_error,
     empty_response_error,
+    is_truncated,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -167,6 +169,11 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 vendor="cohere",
                 operation="chat",
             )
+        finish_reason = getattr(response, "finish_reason", None)
+        if is_truncated(finish_reason):
+            parse_error = cut_off_parse_error(finish_reason)
+            logger.warning("%s (model=%s)", parse_error, model_name)
+            return [{"raw_response": answer, "_parse_error": parse_error}]
         result = CohereClient.parse_json_response(
             response_content=answer,
             vendor_name="Cohere",

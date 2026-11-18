@@ -204,37 +204,67 @@ class ResponseBuilder:
     # -- per-shape extractors ------------------------------------------------
 
     @staticmethod
-    def _extract_openai_compat(response: Any) -> UsageResult:
-        """OpenAI / Groq: ``response.usage.prompt_tokens`` etc."""
-        if response is None or not response.usage:
+    def batch_usage(usage: Any) -> UsageResult:
+        """A batch line's usage, read as the vendor's online call reads its response's.
+
+        A line holds the vendor's usage as a dict: Anthropic's is keyed ``input_tokens``,
+        every other batch client's ``prompt_tokens``.
+        """
+        if not isinstance(usage, dict):
             return UsageResult()
+        if "input_tokens" in usage or "output_tokens" in usage:
+            return ResponseBuilder._anthropic_usage(usage)
+        return ResponseBuilder._openai_compat_usage(usage)
+
+    @staticmethod
+    def _field(usage: Any, name: str) -> Any:
+        return usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
+
+    @staticmethod
+    def _openai_compat_usage(usage: Any) -> UsageResult:
+        """Counts from an OpenAI-shaped usage, an SDK object or a batch line's dict."""
+        field = ResponseBuilder._field
+        prompt_tokens = field(usage, "prompt_tokens") or 0
+        completion_tokens = field(usage, "completion_tokens") or 0
         return UsageResult(
-            prompt_tokens=response.usage.prompt_tokens or 0,
-            completion_tokens=response.usage.completion_tokens or 0,
-            total_tokens=response.usage.total_tokens or 0,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=field(usage, "total_tokens") or prompt_tokens + completion_tokens,
         )
 
     @staticmethod
-    def _extract_anthropic(response: Any) -> UsageResult:
-        """Anthropic: ``response.usage.input_tokens`` / ``.output_tokens``.
+    def _anthropic_usage(usage: Any) -> UsageResult:
+        """Counts from Anthropic's usage, an SDK object or a batch line's dict.
 
         ``input_tokens`` counts only the prompt after the last cache breakpoint; the
         tokens read from and written to the cache are the rest of the prompt.
         """
-        if response is None or not response.usage:
-            return UsageResult()
-        usage = response.usage
+        field = ResponseBuilder._field
         input_tokens = (
-            (usage.input_tokens or 0)
-            + (getattr(usage, "cache_read_input_tokens", None) or 0)
-            + (getattr(usage, "cache_creation_input_tokens", None) or 0)
+            (field(usage, "input_tokens") or 0)
+            + (field(usage, "cache_read_input_tokens") or 0)
+            + (field(usage, "cache_creation_input_tokens") or 0)
         )
-        output_tokens = usage.output_tokens or 0
+        output_tokens = field(usage, "output_tokens") or 0
         return UsageResult(
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
         )
+
+    @staticmethod
+    def _extract_openai_compat(response: Any) -> UsageResult:
+        """OpenAI / Groq: ``response.usage.prompt_tokens`` etc."""
+        if response is None or not response.usage:
+            return UsageResult()
+        return ResponseBuilder._openai_compat_usage(response.usage)
+
+    @staticmethod
+    def _extract_anthropic(response: Any) -> UsageResult:
+        """Anthropic: ``response.usage.input_tokens`` / ``.output_tokens`` and the cached tokens."""
+        if response is None or not response.usage:
+            return UsageResult()
+        return ResponseBuilder._anthropic_usage(response.usage)
 
     @staticmethod
     def _extract_gemini(response: Any) -> UsageResult:

@@ -75,20 +75,24 @@ def test_the_row_is_marked_a_tombstone_with_the_error_as_its_reason():
     assert row["metadata"]["agent_type"] == "tombstone"
 
 
-def test_the_providers_own_metadata_rides_on_the_row():
+def test_the_providers_stop_reason_rides_on_the_row():
+    """Of the provider's metadata, whose keys differ by vendor, the row keeps why it stopped."""
     result = _failed(
         BatchResult(
             custom_id="t-1",
             content=None,
             success=False,
             error="boom",
-            metadata={"model": "m-1", "reason": "must not replace the tombstone's"},
+            metadata={
+                "model": "m-1",
+                "stop_reason": "max_tokens",
+                "reason": "must not replace the tombstone's",
+            },
         )
     )
 
     metadata = result.data[0]["metadata"]
-    assert metadata["model"] == "m-1"
-    assert metadata["reason"] == "boom"
+    assert metadata == {"finish_reason": "max_tokens", "reason": "boom", "agent_type": "tombstone"}
 
 
 def test_the_recovery_metadata_rides_on_the_row():

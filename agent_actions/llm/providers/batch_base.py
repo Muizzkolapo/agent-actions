@@ -15,6 +15,7 @@ from agent_actions.config.path_config import resolve_project_root
 from agent_actions.errors import PromptTooLargeError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
+from agent_actions.llm.providers.error_wrapper import NoAnswer, cut_off_parse_error
 from agent_actions.llm.providers.generation_params import (
     VENDOR_PARAMS_KEY,
     extract_generation_params,
@@ -107,6 +108,10 @@ class BatchResult:
     exhausted: bool = False
     # The answer as the model wrote it, before any JSON parse; None when it was not text.
     text: str | None = None
+    # What a JSON-mode read of this line is, where the line cannot be read as an answer:
+    # it holds none (content is None), or the output limit cut it off. In text mode a
+    # line with no answer fails with ``error``, or with none goes to ``on_empty``.
+    parse_error: str | None = None
 
 
 def raise_unsent(rows: list[dict[str, Any]]) -> None:
@@ -338,16 +343,34 @@ class BaseBatchClient(ABC):
                 error_status=self._extract_error_status(raw_response),
             )
 
+        metadata = self._extract_metadata_from_response(raw_response)
+        usage = self._extract_usage_from_response(raw_response)
+
+        no_answer = self._no_answer(raw_response)
+        if no_answer is not None:
+            return BatchResult(
+                custom_id=custom_id,
+                content=None,
+                success=True,
+                error=str(no_answer.error) if no_answer.error is not None else None,
+                metadata=metadata,
+                usage=usage,
+                parse_error=no_answer.parse_error,
+            )
+
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
         text = content if isinstance(content, str) else self._answer_text(raw_response)
 
         # Parse JSON content if it's a string
-        if isinstance(content, str) and not self._answer_was_cut_off(raw_response):
-            content = self._parse_json_content(content)
-
-        metadata = self._extract_metadata_from_response(raw_response)
-        usage = self._extract_usage_from_response(raw_response)
+        parse_error = None
+        if isinstance(content, str):
+            if self._answer_was_cut_off(raw_response):
+                reasons = metadata or {}
+                stop_reason = reasons.get("finish_reason") or reasons.get("stop_reason")
+                parse_error = self._cut_off_parse_error(stop_reason, content)
+            else:
+                content = self._parse_json_content(content)
 
         return BatchResult(
             custom_id=custom_id,
@@ -357,7 +380,16 @@ class BaseBatchClient(ABC):
             metadata=metadata,
             usage=usage,
             text=text,
+            parse_error=parse_error,
         )
+
+    def _no_answer(self, _raw_response: Any) -> NoAnswer | None:
+        """How online ends a line the provider answered with no answer in it; None when it has one."""
+        return None
+
+    def _cut_off_parse_error(self, stop_reason: Any, _text: str) -> str:
+        """The parse error online's JSON-mode call stores for an answer cut off at *stop_reason*."""
+        return cut_off_parse_error(stop_reason)
 
     def _answer_text(self, raw_response: Any) -> str | None:
         """The answer's text, for a provider whose content extraction already parsed it."""
