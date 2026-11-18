@@ -114,7 +114,8 @@ class AgacBatchClient(BaseBatchClient):
             "custom_id": batch_task.custom_id,
             "prompt": batch_task.prompt,
             "user_content": batch_task.user_content,
-            "model_config": batch_task.model_config,
+            # Only what the action sets, as a provider's request line holds it.
+            "model_config": {k: v for k, v in batch_task.model_config.items() if v is not None},
             "schema": schema,
         }
 

@@ -101,23 +101,6 @@ def _repair_mode_defects(
 ) -> list[str]:
     """Defects for the repair-loop keys against the action's execution shape."""
     messages: list[str] = []
-    if runs_in_batch(action):
-        # Batch validates from the stored result and has no llm_context, so a
-        # judged rule with context: refs would fail every record on a missing
-        # context source rather than on its own rule.
-        for entry in entries:
-            if (
-                isinstance(entry, dict)
-                and entry.get("type") == "llm_judge"
-                and isinstance(entry.get("params"), dict)
-                and entry["params"].get("context")
-            ):
-                label = entry.get("id") or entry.get("type")
-                messages.append(
-                    f"{label}: context: refs are not available under batch run_mode — "
-                    "the judge would fail every record on a missing context source; "
-                    "drop context: or run the action online"
-                )
     if expect.get("judge_mode") == "batch" and not runs_in_batch(action):
         messages.append(
             "judge_mode: batch needs run_mode: batch — an online action sends no batch "

@@ -64,6 +64,27 @@ class PassthroughTransformer:
             DefaultStructureStrategy(),  # Catch-all
         ]
 
+    def action_outputs(
+        self,
+        data: list,
+        context_data: dict,
+        source_guid: str,
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
+        """Each item of *data* as the flat output its action stores, one per item.
+
+        The first strategy that takes the data reads it. Online and the batch result
+        writer both read an answer through here, so they store the same fields.
+        """
+        already_structured = self._is_already_structured(data)
+        for strategy in self.strategies:
+            if strategy.can_handle(data, passthrough_fields, agent_config, already_structured):
+                return strategy.transform(
+                    data, context_data, source_guid, agent_config, passthrough_fields
+                )
+        return []
+
     def transform_with_passthrough(
         self,
         data: list,
@@ -102,18 +123,9 @@ class PassthroughTransformer:
         if not isinstance(data, list):
             data = [data] if data is not None else []  # type: ignore[unreachable]
 
-        already_structured = self._is_already_structured(data)
-
-        action_outputs = None
-        for strategy in self.strategies:
-            if strategy.can_handle(data, passthrough_fields, agent_config, already_structured):
-                action_outputs = strategy.transform(
-                    data, context_data, source_guid, agent_config, passthrough_fields
-                )
-                break
-
-        if action_outputs is None:
-            action_outputs = []
+        action_outputs = self.action_outputs(
+            data, context_data, source_guid, agent_config, passthrough_fields
+        )
 
         # Build records via RecordEnvelope — wraps under namespace, preserves upstream
         # content and carries tracking fields.

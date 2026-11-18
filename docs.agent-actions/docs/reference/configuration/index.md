@@ -240,6 +240,7 @@ An OpenAI model that declines to answer returns its reason instead of an answer.
 | `on_empty` | string | The result of an empty answer. `warn` (default) fails the record, and the run continues. `error` fails the action. `skip` passes the record through as a tombstone |
 | `retry` | object | The retry configuration for transport-layer failures |
 | `record_concurrency` | integer | The number of records of an online LLM action that are sent at the same time (1-32, default 1: one at a time). You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Record concurrency](#record-concurrency) |
+| `batch_max_workers` | integer | The number of records that an Ollama action in `run_mode: batch` sends at the same time (1-32, default 1). No other action reads it. You can also set it in `defaults:`. See [Ollama batch](../execution/run-modes.md#ollama-batch) |
 | `request_timeout` | number | The number of seconds that one LLM request may take, greater than 0. If a request has no answer after that time, that attempt fails as a network error. [`retry`](../execution/retry.md) retries it like any other network error. When no attempts remain, the record fails and the run names the timeout. If unset (the default), each provider SDK keeps its own timeout. You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Request timeout](#request-timeout) |
 
 ### Request timeout
@@ -264,7 +265,7 @@ actions:
 
 - The OpenAI, Groq and Anthropic SDKs retry a timed-out request two times on their own before they report it. Thus, with those vendors, one attempt can last up to three times `request_timeout`, plus their short backoff.
 - On a [declared endpoint](./endpoints.md), the `request_timeout` of an action has priority over the `timeout_seconds` of the endpoint. If the action value is unset, `timeout_seconds` applies.
-- The value applies to online requests only. In `run_mode: batch`, the provider runs the batch on its side, and `request_timeout` does not apply. This includes the in-process batch for `ollama_local` and `ollama_cloud`.
+- The value applies to online requests only. In `run_mode: batch`, the provider runs the batch on its side, and `request_timeout` does not apply. The in-process batch for `ollama_local` and `ollama_cloud` is the exception: each of its requests waits `request_timeout`, or 600 seconds if the value is unset. See [Ollama batch](../execution/run-modes.md#ollama-batch).
 
 ### Record concurrency
 
@@ -279,6 +280,7 @@ defaults:
 
 - The maximum number of requests in flight is `--concurrency-limit` (actions at the same time) times `record_concurrency`, times `votes` for an `llm_judge` that sets it. Choose the value to suit the rate limit of your provider. If one record gets a 429, only that record retries, and the other records continue to send.
 - The load refuses it on a tool or hitl action, and on an action that runs in `run_mode: batch`. If one of those actions inherits it from `defaults:`, the action ignores it.
+- An Ollama action in `run_mode: batch` sends its records from the Agent Actions process, and does not read `record_concurrency` either. Its setting is `batch_max_workers`. See [Ollama batch](../execution/run-modes.md#ollama-batch).
 - It does not change any answer. Thus a change to it keeps the answers that an action holds.
 - Above 1, the token usage that the run records for the action is not the usage of that action. It is empty, or it is the usage of the previous action. Also, a `judge_budget` can be spent two times on one value, when two records judge that value at the same moment.
 

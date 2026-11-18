@@ -63,10 +63,6 @@ from agent_actions.workflow.schema_service import WorkflowSchemaService
 logger = logging.getLogger(__name__)
 
 
-def _token(value: Any) -> str:
-    return str(getattr(value, "value", value) or "").lower()
-
-
 def _dispatch_lookup_problem(call: str, tools_path: str | None) -> str | None:
     """Why the run could not call this schema dispatch function, or None when it can.
 
@@ -444,7 +440,7 @@ class PreflightService:
         The function is looked up as the run looks it up, not in the UDF registry. The
         action declares every schema it can choose in ``schema_options``, so pre-flight
         knows each shape. A ``dispatch_task`` inside a schema's fields has no such list,
-        and a batch run keeps no ``add_dispatch`` results: both are refused.
+        so it is refused.
         """
         problems: list[str] = []
         for action, config in self.action_configs.items():
@@ -478,13 +474,6 @@ class PreflightService:
             if problem:
                 problems.append(
                     f"Action '{action}' dispatches its schema to '{function}', {problem}"
-                )
-            run_mode = config.get("run_mode")
-            if config.get("add_dispatch") and _token(run_mode) == "batch":
-                problems.append(
-                    f"Action '{action}' sets add_dispatch with a schema chosen by "
-                    "dispatch_task, and a batch run keeps no dispatch results. Set "
-                    "'run_mode: online' on this action, or remove add_dispatch."
                 )
         if problems:
             raise PreFlightValidationError(

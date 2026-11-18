@@ -20,6 +20,7 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.helpers import (
@@ -58,7 +59,10 @@ from agent_actions.utils.content import (
 from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
-from agent_actions.utils.transformation.passthrough import merge_passthrough_namespaces
+from agent_actions.utils.transformation.passthrough import (
+    PassthroughTransformer,
+    merge_passthrough_namespaces,
+)
 from agent_actions.utils.transformation.strategies.base import ensure_dict_output
 
 logger = logging.getLogger(__name__)
@@ -69,11 +73,38 @@ logger = logging.getLogger(__name__)
 _UNSET = object()
 
 
-def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list[Any]:
+def dispatch_results(agent_config: dict[str, Any] | None, row: Any) -> dict[str, Any]:
+    """What online's ``add_dispatch`` puts on each item of this record's answer.
+
+    The schema the record's dispatch chose, under the function's name. Empty when the
+    action keeps none, or the context-map *row* has no recorded choice.
+    """
+    if not agent_config or not agent_config.get("add_dispatch") or not isinstance(row, dict):
+        return {}
+    function = schema_dispatch_function(agent_config.get(SCHEMA_KEY))
+    chosen = BatchContextMetadata.get_output_schema(row)
+    return {function: chosen} if function and chosen else {}
+
+
+def with_dispatch_results(content: Any, results: dict[str, Any]) -> Any:
+    """*content* with *results* on each object it holds, as ``run_dynamic_agent`` merges them."""
+    if not results:
+        return content
+    if isinstance(content, dict):
+        return {**content, **results}
+    if isinstance(content, list):
+        return [{**item, **results} if isinstance(item, dict) else item for item in content]
+    return content
+
+
+def validated_items(
+    content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
+) -> list[Any]:
     """What the writer runs a ``repair: none`` suite over, for one answered result.
 
     Mirrors ``_process_successful_result`` up to its validation, so a judge batch
-    can be sent for these values before the writer reads them.
+    can be sent for these values before the writer reads them. *dispatch* is the
+    record's ``dispatch_results``.
     """
     if isinstance(content, str):
         content = (
@@ -81,6 +112,7 @@ def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list
             if json_mode
             else {output_field: content}
         )
+    content = with_dispatch_results(content, dispatch or {})
     if _is_schema_echo(content):
         content = _make_schema_echo_error(content)
     if _is_empty_output(content):
@@ -456,6 +488,11 @@ class BatchResultStrategy:
             else:
                 generated_obj = {ctx.output_field: generated_obj}
 
+        # Already on an answer read from the provider; a text answer is an object only now.
+        generated_obj = with_dispatch_results(
+            generated_obj, dispatch_results(ctx.agent_config, ctx.context_map.get(custom_id))
+        )
+
         # Schema-echo guard: replace with _parse_error so the repair loop can regenerate
         if _is_schema_echo(generated_obj):
             logger.warning(
@@ -509,17 +546,34 @@ class BatchResultStrategy:
 
         expectation_service = self._expectation_service(ctx)
 
-        structured_items = []
+        # What online takes from the record's task: the context a judged rule's refs read.
+        judge_context = BatchContextMetadata.get_judge_context(ctx.context_map.get(custom_id))
+        answers = []
         for item in generated_list:
-            item_dict = ensure_dict_output(item)
             if expectation_service is not None:
                 from agent_actions.expectations.service import attach_verdict
 
                 # The answer as given: online validates it before wrapping, and a non-object
                 # item gets no verdict.
-                verdict = expectation_service.validate(item)
+                verdict = expectation_service.validate(item, judge_context)
                 if verdict is not None:
-                    item_dict = attach_verdict(item_dict, verdict)
+                    item = attach_verdict(item, verdict)
+            answers.append(item)
+
+        # Read by online's own strategies, handed what online hands them: the record at
+        # the first stage, its content below it.
+        row_content = original_row.get("content")
+        outputs = PassthroughTransformer().action_outputs(
+            answers,
+            original_row if is_first_stage or row_content is None else row_content,
+            original_source_guid or "",
+            ctx.agent_config,
+            stored_passthrough,
+        )
+
+        structured_items = []
+        for output in outputs:
+            item_dict = ensure_dict_output(output)
             if is_tool_version_merge:
                 content = merge_version_content(existing_content, item_dict, action_name)
                 record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
