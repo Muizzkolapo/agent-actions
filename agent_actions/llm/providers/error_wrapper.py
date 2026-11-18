@@ -276,6 +276,34 @@ def refusal_text(refusal: str) -> str:
     return f"The model refused to answer: {refusal}"
 
 
+def empty_parse_error(stop_reason: Any) -> str:
+    """The parse error for a JSON-mode response that holds no text, naming why the model stopped."""
+    return f"Empty response from API (stop_reason={stop_reason_name(stop_reason)})"
+
+
+def cut_off_parse_error(stop_reason: Any) -> str:
+    """The parse error for a JSON answer the output limit stopped.
+
+    Reading it would mean guessing its end, so it is never repaired into an object.
+    """
+    return (
+        f"The answer was cut off at the output limit (stop_reason={stop_reason_name(stop_reason)})"
+        "; raise max_tokens"
+    )
+
+
+@dataclass(frozen=True)
+class NoAnswer:
+    """A response that holds no answer, as each mode of a client ends it.
+
+    ``parse_error`` is the ``_parse_error`` a JSON-mode call stores. ``error`` is what a
+    text-mode call raises; None hands the empty answer to the action's ``on_empty``.
+    """
+
+    parse_error: str
+    error: VendorAPIError | None = None
+
+
 def empty_response_error(
     vendor_label: str, stop_reason: Any, *, model_name: str, vendor: str, operation: str
 ) -> VendorAPIError:

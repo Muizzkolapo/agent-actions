@@ -29,7 +29,7 @@ flowchart TD
     I -->|No| L
 ```
 
-**Phase 1 (Retry)** recovers the records that the provider did not answer. The provider dropped some of these records completely (network errors, timeouts, silent failures). The provider returned the other records with an error for each record and no content. Phase 1 submits the same request again, with no change.
+**Phase 1 (Retry)** recovers the records that the provider did not answer. The provider dropped some of these records completely (network errors, timeouts, silent failures). The provider returned the other records with an error for each record and no content. Phase 1 submits the same request again, with no change, for each failure that an online call retries. See [The records that Phase 1 sends again](#the-records-that-phase-1-sends-again).
 
 **Phase 2 (Repair)** repairs the records that the LLM answered with output that fails the `expect:` suite of the action (schema violations, failed rules). Before Phase 2 submits a record again, Phase 2 changes the prompt to include the failure feedback.
 
@@ -48,6 +48,25 @@ After the system gets the batch results, it compares the expected record IDs wit
    - The next run collects that batch and merges the results. Each result replaces any earlier answer for the same record.
    - Update the set of missing records.
 5. If records are still missing after all attempts, mark these records with exhaustion metadata.
+
+### The records that Phase 1 sends again
+
+Phase 1 sends a record again only if an online call retries the same failure:
+
+- A rate limit (HTTP 429), a server error (HTTP 5xx) or a transient HTTP 400.
+- A request that got no answer, for example a connection error or an expired request. Its result
+  line gives no HTTP status.
+- In text mode (`json_mode: false`), an answer that the output limit cut off before its first
+  character.
+
+Each other failure fails its record immediately, with the message of the provider. Examples are
+an HTTP 400 or 404, such as an Ollama model that is not pulled, and an answer that holds no
+content: a refusal, a prompt that Gemini blocked, or a message with only a thinking block.
+
+In JSON mode, an answer with no content is not a failed request. It is the same parse-error
+record that an online call stores: `{"raw_response": "", "_parse_error": "<the reason>"}`. Phase 1
+does not send it again. The record fails with the reason `parse_error`, or
+[Phase 2](#phase-2-validate-and-repair) regenerates it.
 
 If the system cannot build a retry at all, the loop stops immediately for those records. The loop also stops in this way when no attempts remain. The cause is that preparation admits no task for the records: a guard rejects each of the records when the system evaluates the guard again. The records are exhausted under `on_exhausted`, and the system stores the file.
 
@@ -161,8 +180,15 @@ A repair round is a full provider batch. Thus a repair round defers, and does no
 The system does not submit a round that has nothing to send. If a guard rejects each failing record when the guard is evaluated again, no empty batch goes to the provider. The system abandons those records under `on_exhausted`, as it does when no rounds remain. If the guard rejects some of the failing records, the round goes to the provider with the other records. The system abandons the records that it did not send in the same way, in that pass. The system does not count these records as sent. Thus, when the round comes back without these records, the system does not interpret their absence as records that the provider dropped.
 
 The system reconstructs a record that the provider never returns as a failure. The system does
-not let the record become a silent passthrough. A record with no content at all failed at the
-provider, not at its expectations. Thus that record keeps its own error.
+not let the record become a silent passthrough. A record whose request failed (an HTTP error,
+an expired request) failed at the provider, not at its expectations. Thus that record keeps its
+own error, and Phase 2 does not regenerate it.
+
+In JSON mode, an answer that the provider returned with no content, or that the output limit
+cut off, is a parse-error record, as it is online. Phase 2 regenerates this record when the
+suite rejects it, which the schema gate does for an action with a schema. The `structural:`
+mode sets the prompt of the regeneration, as it does online. In text mode, a refused or cut-off
+answer fails its record before any expectation runs, as it does online.
 
 ## Recovery Metadata
 

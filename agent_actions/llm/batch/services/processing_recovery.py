@@ -147,14 +147,17 @@ def process_recovery_batch(
         )
         recovery_results: list[BatchResult] = []
     else:
+        is_judge = entry.recovery_type == RecoveryType.JUDGE
         recovery_results = retrieve_and_reconcile(
             provider,
             batch_id,
             output_directory,
-            # A judge batch answers judge requests, not the records of the map.
-            context_map=None if entry.recovery_type == RecoveryType.JUDGE else context_map,
+            # A judge batch answers judge requests, not the records of the map, and its
+            # replies are read by the judge's own rules, not the action's mode.
+            context_map=None if is_judge else context_map,
             record_count=entry.record_count,
             file_name=file_name,
+            agent_config=None if is_judge else agent_config or {},
         )
 
     accumulated = deserialize_results(state.accumulated_results)

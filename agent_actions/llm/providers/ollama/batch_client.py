@@ -72,6 +72,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     ``ollama_local`` and ``ollama_cloud`` from a single class.
     """
 
+    _vendor_label = "Ollama"
+
     def __init__(
         self,
         base_url: str | None = None,
