@@ -8,7 +8,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.expectations.loader import (
@@ -26,6 +26,9 @@ from agent_actions.expectations.repair import (
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY, VERDICT_KEY
+
+if TYPE_CHECKING:
+    from agent_actions.llm.side_calls import SideCallExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +169,6 @@ class ExpectationService:
         # Set by the factory when the suite judges; the deferred batch path
         # reads what is left so the budget bounds the run, not one round.
         self._judge_budget: Any = None
-        self._cached_judge: Any = None
 
     def execute(
         self,
@@ -268,11 +270,6 @@ class ExpectationService:
         than each round.
         """
         return self._judge_budget.remaining if self._judge_budget is not None else None
-
-    @property
-    def pending_judgements(self) -> dict[str, Any]:
-        """The judge calls a collecting service held back, by verdict key."""
-        return self._cached_judge.pending if self._cached_judge is not None else {}
 
     @property
     def max_iterations(self) -> int:
@@ -511,7 +508,7 @@ def create_expectation_service_from_config(
     project_root: Path | None = None,
     judge_budget_remaining: int | None = None,
     judge_verdicts: dict[str, Any] | None = None,
-    collect_judgements: bool = False,
+    side_calls: SideCallExecutor | None = None,
 ) -> ExpectationService | None:
     """Build a service from an action's ``expect:`` block, or None if absent.
 
@@ -519,9 +516,8 @@ def create_expectation_service_from_config(
     construction. A deferred batch rebuilds the service each pass, so the caller
     carries the balance rather than letting every round start from full.
 
-    ``judge_verdicts`` seeds the judge cache with what a judge batch returned;
-    ``collect_judgements`` holds each judge call back for a batch instead of
-    sending it (see ``ExpectationService.pending_judgements``).
+    ``judge_verdicts`` seeds the judge cache with what a judge batch returned.
+    ``side_calls`` runs each judge call; none given, it is made online.
     """
     if expect_config is None:
         return None
@@ -599,19 +595,12 @@ def create_expectation_service_from_config(
 
     judge_dispatch: JudgeDispatch | None = None
     if any(expectation.type == "llm_judge" for expectation in suite.expectations):
-        from agent_actions.expectations.judge import CachedJudge, JudgeBudget
+        from agent_actions.expectations.judge import CachedJudge, JudgeBudget, call_failed
 
         cached_judge = CachedJudge(
-            config, action_name=action_name, verdicts=judge_verdicts, collect=collect_judgements
+            config, action_name=action_name, verdicts=judge_verdicts, calls=side_calls
         )
-        # judge_budget bounds the whole run, not one construction of the
-        # service. A deferred batch rebuilds the service on each pass, so the
-        # caller carries what is left and hands it back here.
-        budget = JudgeBudget(
-            judge_budget_remaining
-            if judge_budget_remaining is not None
-            else expect_config.get("judge_budget")
-        )
+        budget = JudgeBudget(JudgeBudget.at_start(expect_config, judge_budget_remaining))
 
         def judge_dispatch(
             expectation: Expectation, value: Any, context: dict[str, Any] | None
@@ -630,7 +619,7 @@ def create_expectation_service_from_config(
                     expectation.resolved_id,
                     exc_info=True,
                 )
-                return False, f"judge call failed: {exc}", False
+                return False, call_failed(exc), False
             return passed, detail, False
 
     service = ExpectationService(
@@ -644,7 +633,6 @@ def create_expectation_service_from_config(
     )
     if judge_dispatch is not None:
         service._judge_budget = budget
-        service._cached_judge = cached_judge
     return service
 
 

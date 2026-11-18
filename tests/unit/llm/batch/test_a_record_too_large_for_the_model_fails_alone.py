@@ -12,9 +12,10 @@ from agent_actions.errors import PromptTooLargeError
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.llm.batch.services.judge_ops import JudgeCollection, submit_judge_batch
+from agent_actions.llm.batch.services.side_batch import submit_side_batch
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 from agent_actions.llm.realtime.builder import create_dynamic_agent
+from agent_actions.llm.side_calls import SideCall
 from agent_actions.processing.invocation.batch import BatchStrategy
 from agent_actions.processing.prepared_task import PreparedTask
 from agent_actions.record.state import RecordState
@@ -89,12 +90,13 @@ def test_a_judge_request_too_large_for_the_model_is_raised_not_dropped(tmp_path)
     client = OpenAIBatchClient(api_key="k")
     client.submit_batch = MagicMock(return_value=("b1", "submitted"))
     # A judge call is a text call, measured against the default window of 128,000 tokens.
-    request = SimpleNamespace(prompt="x" * 600_000, model=None, votes=1)
+    call = SideCall(kind="judge", key="key", prompt="x" * 600_000)
 
     with pytest.raises(PromptTooLargeError, match="exceeds model context window"):
-        submit_judge_batch(
+        submit_side_batch(
             client,
-            JudgeCollection({"key": request}, None),
+            call.kind,
+            {call.key: call},
             CONFIG,
             file_name="f",
             attempt=1,

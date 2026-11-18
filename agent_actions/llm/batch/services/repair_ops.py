@@ -383,8 +383,8 @@ def carry_forward(
     state.on_exhausted = prior.on_exhausted
     state.accumulated_results = list(prior.accumulated_results)
     state.failure_type_counts = dict(prior.failure_type_counts)
-    state.judge_attempt = prior.judge_attempt
-    state.judge_verdicts = dict(prior.judge_verdicts)
+    state.side_attempts = dict(prior.side_attempts)
+    state.side_results = {kind: dict(results) for kind, results in prior.side_results.items()}
     return state
 
 

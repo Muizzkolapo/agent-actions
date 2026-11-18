@@ -85,16 +85,16 @@ logger = logging.getLogger(__name__)
 
 
 def _is_dead_retry(entry: BatchJobEntry) -> bool:
-    """A retry or judge recovery the provider terminally failed.
+    """A retry or side batch the provider terminally failed.
 
     It holds the live recovery state, and the failure path continues it: for a
     retry, the spent attempt is counted and the next one submitted, or exhaustion
-    applies; for a judge batch, each judgement it held fails, as an online judge
-    call that raises does. Repair recoveries are excluded — their in-flight
+    applies; for a side batch, each call it held fails, as an online side call
+    that raises does. Repair recoveries are excluded — their in-flight
     records' last responses are not recoverable from state, so their dead batches
     keep the processed-from-scratch path.
     """
-    return entry.recovery_type in (RecoveryType.RETRY, RecoveryType.JUDGE) and entry.status in (
+    return entry.recovery_type in (RecoveryType.RETRY, RecoveryType.SIDE) and entry.status in (
         BatchStatus.FAILED,
         BatchStatus.CANCELLED,
     )

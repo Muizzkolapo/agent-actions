@@ -3,8 +3,8 @@
 State machine:
     Initial batch → retry (if missing_ids) → repair (if expect:) → finalize
 
-A step that would call an `llm_judge` first sends those calls as a judge batch
-and resumes once it returns.
+A step that would make side calls (an `llm_judge` is one kind) first sends them
+as a side batch and resumes once it returns.
 
 Entry points:
     process_recovery_batch() — dispatches on recovery_type
@@ -19,7 +19,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from agent_actions.expectations.judge import BATCH_JUDGE_KEY
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
 from agent_actions.llm.batch.core.batch_models import BatchIdentity, BatchJobEntry, RecoveryContext
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
@@ -72,7 +71,7 @@ def process_recovery_batch(
     action_name: str | None = None,
     workflow_metadata: dict[str, Any] | None = None,
 ) -> str | None:
-    """Process a recovery batch (retry, repair, or judge).
+    """Process a recovery batch (retry, repair, or side).
 
     Returns output file path if complete, None if more recovery is needed.
     """
@@ -148,17 +147,17 @@ def process_recovery_batch(
         )
         recovery_results: list[BatchResult] = []
     else:
-        answers_judges = entry.recovery_type == RecoveryType.JUDGE
+        answers_side_calls = entry.recovery_type == RecoveryType.SIDE
         recovery_results = retrieve_and_reconcile(
             provider,
             batch_id,
             output_directory,
-            # A judge batch answers judge requests, not the records of the map, and its
-            # replies are read by the judge's own rules, not the action's mode.
-            context_map=None if answers_judges else context_map,
+            # A side batch answers side calls, not the records of the map, and its
+            # replies are read by their requester's own rules, not the action's mode.
+            context_map=None if answers_side_calls else context_map,
             record_count=entry.record_count,
             file_name=file_name,
-            agent_config=None if answers_judges else agent_config or {},
+            agent_config=None if answers_side_calls else agent_config or {},
         )
 
     accumulated = deserialize_results(state.accumulated_results)
@@ -168,7 +167,7 @@ def process_recovery_batch(
     handlers = {
         RecoveryType.RETRY: handle_retry_recovery,
         RecoveryType.REPAIR: handle_repair_recovery,
-        RecoveryType.JUDGE: handle_judge_recovery,
+        RecoveryType.SIDE: handle_side_recovery,
     }
     handler = handlers.get(entry.recovery_type) if entry.recovery_type else None
     if handler is not None:
@@ -493,7 +492,7 @@ def _repair_round_in_flight(
                 "[%s] %s round %s ended at the provider without results (%s); "
                 "its records are back in play",
                 identity.file_name,
-                str(recovery_type).capitalize(),
+                str(entry.recovery_name).capitalize(),
                 entry.recovery_attempt,
                 entry.batch_id,
             )
@@ -547,6 +546,7 @@ def check_and_submit_repair(
     original batch arrives with the results it produced before any repair round,
     so anything the loop has since rewritten is folded in over them.
     """
+    from agent_actions.llm.batch.services.judge_ops import judge_verdicts, with_judge_results
     from agent_actions.llm.batch.services.repair_ops import (
         build_repair_strategy,
         carry_forward,
@@ -573,43 +573,35 @@ def check_and_submit_repair(
         )
 
     # The original batch's entry is never retired, so a resume can arrive here
-    # while the judge batch this step waits on is still out. That batch owns the
-    # step: sending another pays for every judgement twice.
+    # while the side batch this step waits on is still out. That batch owns the
+    # step: sending another pays for every call twice.
     if (
         recovery_state is not None
-        and recovery_state.judge_requests
-        and _repair_round_in_flight(context, identity, RecoveryType.JUDGE)
+        and recovery_state.side_requests
+        and _repair_round_in_flight(context, identity, RecoveryType.SIDE)
     ):
+        kind = recovery_state.side_kind or ""
         logger.info(
-            "[%s] Judge batch %d is still out; deferring to it",
+            "[%s] %s batch %d is still out; deferring to it",
             identity.file_name,
-            recovery_state.judge_attempt,
+            kind.capitalize(),
+            recovery_state.side_attempts.get(kind, 0),
         )
         return False
 
-    verdicts = recovery_state.judge_verdicts if recovery_state else {}
     strategy = build_repair_strategy(
         context.agent_config,
         recovery_state.repair_judge_budget_remaining if recovery_state else None,
-        verdicts,
+        judge_verdicts(recovery_state),
         context_map,
     )
     if strategy is None:
-        # Observe mode validates in the result writer, so the verdicts go with the config.
-        if _send_judge_batch(
+        if _send_side_batch(
             context, identity, recovery_state, batch_results, "evaluate", context_map
         ):
             return False
-        if verdicts:
-            context.agent_config = {
-                **context.agent_config,
-                BATCH_JUDGE_KEY: {
-                    "verdicts": verdicts,
-                    "budget_remaining": recovery_state.repair_judge_budget_remaining
-                    if recovery_state
-                    else None,
-                },
-            }
+        # Observe mode validates in the result writer, so the verdicts go with the config.
+        context.agent_config = with_judge_results(context.agent_config, recovery_state)
         return True
 
     # The original batch's registry entry is never retired, so a resume
@@ -624,7 +616,7 @@ def check_and_submit_repair(
             )
         )
 
-    if _send_judge_batch(context, identity, recovery_state, batch_results, "evaluate", context_map):
+    if _send_side_batch(context, identity, recovery_state, batch_results, "evaluate", context_map):
         return False
 
     loop = EvaluationLoop(strategy)
@@ -738,6 +730,7 @@ def handle_repair_recovery(
     context_map: dict[str, Any],
 ) -> str | None:
     """Continue the repair loop when a repair batch comes back."""
+    from agent_actions.llm.batch.services.judge_ops import judge_verdicts
     from agent_actions.llm.batch.services.repair_ops import (
         apply_exhaustion_policy,
         build_repair_strategy,
@@ -750,7 +743,7 @@ def handle_repair_recovery(
     strategy = build_repair_strategy(
         context.agent_config,
         state.repair_judge_budget_remaining,
-        state.judge_verdicts,
+        judge_verdicts(state),
         context_map,
     )
 
@@ -764,7 +757,7 @@ def handle_repair_recovery(
             context_map=context_map,
         )
 
-    if _send_judge_batch(context, identity, state, recovery_results, "repair", context_map):
+    if _send_side_batch(context, identity, state, recovery_results, "repair", context_map):
         raise_pending_exhaustion(context)
         return None
 
@@ -887,7 +880,7 @@ def handle_repair_recovery(
     )
 
 
-def _send_judge_batch(
+def _send_side_batch(
     context: RecoveryContext,
     identity: BatchIdentity,
     state: RecoveryState | None,
@@ -895,79 +888,85 @@ def _send_judge_batch(
     resumes: str,
     context_map: dict[str, Any],
 ) -> bool:
-    """Send the judge calls the step reading *results* would make, as a judge batch.
+    """Send the side calls the step reading *results* would make, as a side batch.
 
-    True when one went out and the step must defer: *results* are saved with the
-    state, and `handle_judge_recovery` runs the step named by *resumes* again
-    once the batch returns, with every judgement a cache hit.
+    Each registered requester is asked in turn, and the first with calls to make
+    has them sent; another kind's go out when the step runs again. True when a
+    batch went out and the step must defer: *results* are saved with the state,
+    and `handle_side_recovery` runs the step named by *resumes* again once the
+    batch returns, with those calls answered.
     """
-    from agent_actions.llm.batch.services.judge_ops import (
-        collect_judgements,
-        judges_in_batch,
-        submit_judge_batch,
+    from agent_actions.llm.batch.services.side_batch import (
+        SideStep,
+        side_requesters,
+        submit_side_batch,
     )
 
-    if not judges_in_batch(context.agent_config):
-        return False
-    collection = collect_judgements(
+    step = SideStep(
         context.agent_config,
         results,
-        verdicts=state.judge_verdicts if state else {},
-        budget_remaining=state.repair_judge_budget_remaining if state else None,
-        context_map=context_map,
+        state if state is not None else RecoveryState(),
+        context_map,
     )
-    if not collection.pending:
-        return False
-    # Registering a judge batch retires the file's live round; one still regenerating
-    # these records is left to finish, and this step judges as it always did.
-    if (
-        resumes == "evaluate"
-        and state is not None
-        and state.repair_submitted_ids
-        and _repair_round_in_flight(context, identity)
-    ):
-        return False
+    for requester in side_requesters():
+        calls = requester.collect(step)
+        if not calls:
+            continue
+        # Registering a side batch retires the file's live round; one still regenerating
+        # these records is left to finish, and this step makes its calls as it always did.
+        if (
+            resumes == "evaluate"
+            and state is not None
+            and state.repair_submitted_ids
+            and _repair_round_in_flight(context, identity)
+        ):
+            return False
 
-    if state is None:
-        state = RecoveryState()
-    attempt = state.judge_attempt + 1
-    submission = submit_judge_batch(
-        context.provider,
-        collection,
-        context.agent_config,
-        file_name=identity.file_name,
-        attempt=attempt,
-        output_directory=context.output_directory,
-    )
-    register_recovery_batch(
-        context.manager,
-        (submission.batch_id, len(submission.requests)),
-        identity.file_name,
-        identity.entry.provider,
-        RecoveryType.JUDGE,
-        attempt,
-    )
-    state.judge_attempt = attempt
-    state.judge_requests = submission.requests
-    state.judge_results = serialize_results(results)
-    state.judge_resumes = resumes
-    state.repair_judge_budget_remaining = submission.budget_remaining
-    RecoveryStateManager.save(
-        context.service._storage_backend,
-        context.service._resolve_action_name(context.action_name),
-        identity.file_name,
-        state,
-    )
-    logger.info(
-        "[%s] Judge batch %d submitted for %d record(s); deferring",
-        identity.file_name,
-        attempt,
-        len(results),
-    )
-    return True
+        kind = requester.kind
+        state = step.state
+        attempt = state.side_attempts.get(kind, 0) + 1
+        submission = submit_side_batch(
+            context.provider,
+            kind,
+            calls,
+            context.agent_config,
+            file_name=identity.file_name,
+            attempt=attempt,
+            output_directory=context.output_directory,
+        )
+        register_recovery_batch(
+            context.manager,
+            (submission.batch_id, len(submission.requests)),
+            identity.file_name,
+            identity.entry.provider,
+            RecoveryType.SIDE,
+            attempt,
+            side_kind=kind,
+        )
+        state.side_attempts[kind] = attempt
+        state.side_kind = kind
+        state.side_requests = submission.requests
+        state.side_waiting = serialize_results(results)
+        state.side_resumes = resumes
+        requester.sent(step, submission.sent)
+        RecoveryStateManager.save(
+            context.service._storage_backend,
+            context.service._resolve_action_name(context.action_name),
+            identity.file_name,
+            state,
+        )
+        logger.info(
+            "[%s] %s batch %d submitted for %d record(s); deferring",
+            identity.file_name,
+            kind.capitalize(),
+            attempt,
+            len(results),
+        )
+        return True
+    return False
 
 
-def handle_judge_recovery(
+def handle_side_recovery(
     context: RecoveryContext,
     identity: BatchIdentity,
     state: RecoveryState,
@@ -975,16 +974,21 @@ def handle_judge_recovery(
     accumulated: list[BatchResult],
     context_map: dict[str, Any],
 ) -> str | None:
-    """Read a returned judge batch into the verdicts, then run the step that waited on it."""
-    from agent_actions.llm.batch.services.judge_ops import tally_judge_results
+    """Hand a returned side batch's replies to its requester, then run the step that waited on it."""
+    from agent_actions.llm.batch.services.side_batch import read_side_batch, side_requester
 
-    state.judge_verdicts.update(tally_judge_results(recovery_results, state.judge_requests))
+    kind = state.side_kind or ""
+    requester = side_requester(kind)
+    settled = state.side_results.setdefault(kind, {})
+    for key, replies in read_side_batch(recovery_results, state.side_requests, kind).items():
+        settled[key] = requester.settle(key, replies)
     report_batch_usage(recovery_results)
-    waiting = deserialize_results(state.judge_results)
-    resumes = state.judge_resumes
-    state.judge_requests = {}
-    state.judge_results = []
-    state.judge_resumes = None
+    waiting = deserialize_results(state.side_waiting)
+    resumes = state.side_resumes
+    state.side_kind = None
+    state.side_requests = {}
+    state.side_waiting = []
+    state.side_resumes = None
 
     if resumes == "repair":
         return handle_repair_recovery(
@@ -1071,8 +1075,11 @@ def register_recovery_batch(
     provider: str,
     recovery_type: RecoveryType,
     attempt: int,
+    side_kind: str | None = None,
 ) -> None:
     """Register a new recovery batch entry, replacing the attempt it supersedes.
+
+    A side batch is filed under its *side_kind*: ``<file>_<kind>_<attempt>``.
 
     One recovery state per parent means one live recovery batch per parent. Left
     in place, a spent attempt is still COMPLETED, so the next run re-processes it
@@ -1083,7 +1090,7 @@ def register_recovery_batch(
         batch_id, record_count = submission
     else:
         batch_id, record_count = submission.batch_id, submission.record_count
-    recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
+    recovery_file_name = f"{parent_file_name}_{side_kind or recovery_type}_{attempt}"
     recovery_entry = BatchJobEntry(
         batch_id=batch_id,
         status=BatchStatus.SUBMITTED,
@@ -1094,6 +1101,7 @@ def register_recovery_batch(
         parent_file_name=parent_file_name,
         recovery_type=recovery_type,
         recovery_attempt=attempt,
+        side_kind=side_kind,
     )
     # A retried attempt number lands on the key its predecessor holds, and saving
     # over it is the fourth way an entry stops naming a batch.

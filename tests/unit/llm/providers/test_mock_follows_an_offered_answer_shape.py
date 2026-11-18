@@ -14,9 +14,10 @@ import sys
 
 import pytest
 
-from agent_actions.expectations.judge import build_judge_prompt, invoke_judge
+from agent_actions.expectations.judge import build_judge_prompt
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.output.response.response_builder import ResponseBuilder
+from tests.unit.expectations.judging import invoke_judge
 
 CONFIG = {"json_mode": False, "name": "a"}
 

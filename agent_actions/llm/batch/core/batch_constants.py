@@ -53,8 +53,9 @@ class RecoveryType(str, Enum):
 
     RETRY = "retry"
     REPAIR = "repair"
-    # The llm_judge calls of a returned batch, sent as a batch of their own.
-    JUDGE = "judge"
+    # The side calls of a step over a returned batch, sent as a batch of their own;
+    # the registry entry names their kind (``side_kind``).
+    SIDE = "side"
 
     def __str__(self) -> str:
         return self.value
