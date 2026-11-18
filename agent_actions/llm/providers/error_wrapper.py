@@ -281,6 +281,11 @@ def empty_parse_error(stop_reason: Any) -> str:
     return f"Empty response from API (stop_reason={stop_reason_name(stop_reason)})"
 
 
+def unparsed_json_record(text: str) -> dict[str, str]:
+    """What JSON mode stores for an answer no parse could read, online or in a batch."""
+    return {"raw_response": text, "_parse_error": "Failed to parse JSON from LLM response"}
+
+
 def cut_off_parse_error(stop_reason: Any) -> str:
     """The parse error for a JSON answer the output limit stopped.
 

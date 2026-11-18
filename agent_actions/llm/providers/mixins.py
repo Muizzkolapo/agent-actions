@@ -9,7 +9,12 @@ import logging
 from typing import Any
 
 from agent_actions.errors import VendorAPIError
-from agent_actions.llm.providers.error_wrapper import NoAnswer, chat_no_answer, is_truncated
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    chat_no_answer,
+    is_truncated,
+    unparsed_json_record,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 
@@ -87,12 +92,7 @@ class JSONResponseMixin:
                 error="Failed to parse JSON after all strategies",
             )
         )
-        return [
-            {
-                "raw_response": response_content,
-                "_parse_error": "Failed to parse JSON from LLM response",
-            }
-        ]
+        return [unparsed_json_record(response_content)]
 
 
 class GenericErrorHandlerMixin:

@@ -17,7 +17,7 @@ from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.llm.providers.error_wrapper import stop_reason_name
+from agent_actions.llm.providers.error_wrapper import stop_reason_name, unparsed_json_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.output.response.config_fields import get_default
@@ -122,11 +122,7 @@ def written_answer(
     """Read one answered result's *content* as the writer does; *dispatch* is its ``dispatch_results``."""
     unparsed = isinstance(content, str) and json_mode
     if isinstance(content, str):
-        content = (
-            {"raw_response": content, "_parse_error": "Failed to parse JSON from LLM response"}
-            if json_mode
-            else {output_field: content}
-        )
+        content = unparsed_json_record(content) if json_mode else {output_field: content}
     # Already on an answer read from the provider; a text answer is an object only now.
     content = with_dispatch_results(content, dispatch or {})
     schema_echo = _is_schema_echo(content)

@@ -28,6 +28,7 @@ from agent_actions.llm.providers.error_wrapper import (
     cut_off_parse_error,
     empty_response_error,
     is_truncated,
+    unparsed_json_record,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -225,12 +226,7 @@ def _call_ollama_json(
         fire_event(
             LLMJSONParseErrorEvent(provider=vendor_slug, model=model, error="Failed to parse JSON")
         )
-        return [
-            {
-                "raw_response": content or "",
-                "_parse_error": "Failed to parse JSON from LLM response",
-            }
-        ]
+        return [unparsed_json_record(content or "")]
     if isinstance(content, dict):
         return [content]
     return [{"response": content}]

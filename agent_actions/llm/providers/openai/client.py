@@ -31,6 +31,7 @@ from agent_actions.llm.providers.error_wrapper import (
     chat_no_answer,
     cut_off_parse_error,
     is_truncated,
+    unparsed_json_record,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -250,12 +251,7 @@ class OpenAIClient(BaseClient):
                     request_id=request_id,
                 )
             )
-            return [
-                {
-                    "raw_response": response_content,
-                    "_parse_error": "Failed to parse JSON from LLM response",
-                }
-            ]
+            return [unparsed_json_record(response_content)]
         response_list: list[dict[str, Any]] = (
             response_data if isinstance(response_data, list) else [response_data]
         )
