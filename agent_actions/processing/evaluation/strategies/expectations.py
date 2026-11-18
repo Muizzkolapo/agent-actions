@@ -73,7 +73,9 @@ class ExpectationStrategy:
         return self._verdicts.get(custom_id)
 
     def evaluate(self, result: BatchResult) -> EvaluationOutcome:
-        if not result.success:
+        # No content is no answer to judge: the request failed, or a text-mode answer was
+        # refused or cut off, which online raises before any expectation runs.
+        if not result.success or result.content is None:
             return EvaluationOutcome(passed=False, failure_type="api_error", error=result.error)
 
         # check_schema mirrors the online repair loop: a response that is not

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
-from agent_actions.llm.providers.error_wrapper import empty_response_error, is_truncated
+from agent_actions.llm.providers.error_wrapper import NoAnswer, is_truncated
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -163,7 +163,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
         result_type = self._get_attribute_or_key(result, "type")
         if result_type == "succeeded":
-            return self._no_answer_error(result)
+            return None
         if result_type == "errored":
             error_info = self._get_attribute_or_key(result, "error", {})
             return str(error_info) if error_info else "Batch processing errored"
@@ -181,28 +181,35 @@ class AnthropicBatchClient(BaseBatchClient):
         inner = self._get_attribute_or_key(error, "error") or error
         return _ERROR_TYPE_STATUS.get(self._get_attribute_or_key(inner, "type"))
 
-    def _no_answer_error(self, result: Any) -> str | None:
-        """The error for a message whose blocks hold no text or tool answer, as online raises.
+    def _no_answer(self, raw_response: Any) -> NoAnswer | None:
+        """A message whose blocks hold no tool answer and no text, as the online client ends it.
 
-        A thinking block alone (max_tokens spent while thinking) is not the answer. An
-        empty content list is left to the action's ``on_empty``.
+        A thinking block alone (max_tokens spent while thinking) is not the answer.
         """
+        result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
-        if not isinstance(content_list, list) or not content_list:
+        if not isinstance(content_list, list):
             return None
         if self._extract_tool_use_content(content_list) is not None:
             return None
-        if self._extract_text_content(content_list) is not None:
+        if self._extract_text_content(content_list):
             return None
-        error = empty_response_error(
-            "Anthropic",
+        from agent_actions.llm.providers.anthropic.client import no_answer
+
+        return no_answer(
             self._get_attribute_or_key(message, "stop_reason"),
+            only_text=all(
+                self._get_attribute_or_key(block, "type") == "text" for block in content_list
+            ),
             model_name=self._get_attribute_or_key(message, "model") or "",
-            vendor="anthropic",
             operation="messages.batches",
         )
-        return str(error)
+
+    def _cut_off_parse_error(self, stop_reason: Any, text: str) -> str:
+        from agent_actions.llm.providers.anthropic.client import no_tool_answer_message
+
+        return no_tool_answer_message(stop_reason, text)
 
     def _answer_was_cut_off(self, raw_response: Any) -> bool:
         result = self._get_attribute_or_key(raw_response, "result")

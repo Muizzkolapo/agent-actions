@@ -323,22 +323,19 @@ class MetadataEnricher(Enricher):
     """Add LLM response metadata."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Add metadata from LLM response or pre-extracted metadata dict."""
+        """Add the model and provider, and what the path knows of the response itself."""
         if not result.executed:
             return result
 
         from agent_actions.utils.field_management import FieldManager
+        from agent_actions.utils.metadata import MetadataExtractor
 
-        if result.pre_extracted_metadata is not None:
-            metadata_dict = result.pre_extracted_metadata
-        else:
-            from agent_actions.utils.metadata import MetadataExtractor
-
-            metadata = MetadataExtractor.extract_from_response(
-                response=result.raw_response,
-                agent_config=cast(dict[str, Any], context.agent_config),
-            )
-            metadata_dict = metadata.to_dict()
+        # From the action's config, never from the answer: a schema field named ``id``
+        # or ``model`` is the record's data, not the response's metadata.
+        metadata = MetadataExtractor.extract_from_response(
+            response=None, agent_config=cast(dict[str, Any], context.agent_config)
+        )
+        metadata_dict = {**metadata.to_dict(), **(result.pre_extracted_metadata or {})}
         if result.output_schema:
             # The writer's schema, stored with the record it wrote.
             metadata_dict = {**metadata_dict, "output_schema": result.output_schema}
