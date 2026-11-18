@@ -16,6 +16,7 @@ from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.llm.providers.error_wrapper import stop_reason_name
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.output.response.config_fields import get_default
@@ -61,6 +62,15 @@ logger = logging.getLogger(__name__)
 # Sentinel: None is a real answer here (the action has no expect: block), so
 # "not yet built" needs its own value.
 _UNSET = object()
+
+
+def _response_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """What a row keeps of a provider's own metadata: why the model stopped.
+
+    The rest differs by vendor; the model and provider are written from the config, as online.
+    """
+    reason = (metadata or {}).get("finish_reason") or (metadata or {}).get("stop_reason")
+    return {"finish_reason": stop_reason_name(reason)} if reason else {}
 
 
 def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list[Any]:
@@ -498,7 +508,7 @@ class BatchResultStrategy:
         processing_result = BatchContextAdapter.to_processing_result(
             data=structured_items,
             source_guid=original_source_guid,
-            pre_extracted_metadata=batch_result.metadata,
+            pre_extracted_metadata=_response_metadata(batch_result.metadata),
             recovery_metadata=batch_result.recovery_metadata,
             output_schema=BatchContextMetadata.get_output_schema(
                 ctx.context_map.get(custom_id, {})
@@ -591,7 +601,7 @@ class BatchResultStrategy:
             action_name, original_input, error_message, source_guid=source_guid
         )
         failed_row["error"] = error_message
-        failed_row["metadata"] = {**(metadata or {}), **failed_row["metadata"]}
+        failed_row["metadata"] = {**_response_metadata(metadata), **failed_row["metadata"]}
 
         if raw_content is not None:
             failed_row["raw_content"] = raw_content
