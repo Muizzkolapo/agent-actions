@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A batch request now carries a `temperature` only when the action sets one, as an online call does. The batch base client held a fallback of 0.1 for a config with no `temperature` key; a workflow''s config always carries the key, so the fallback could reach a request only through a caller that built its own config, and it is removed. The mock provider''s batch task no longer records an unset setting as `null`.'
+time: 2026-11-18T19:00:00Z

@@ -137,10 +137,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _get_default_model(self) -> str:
         return "llama2"
 
-    def _get_default_temperature(self) -> float | None:
-        # As online: an unset temperature is left to the model.
-        return None
-
     def _prepare_batch_input_file(
         self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
