@@ -21,13 +21,29 @@ def retrieve_and_reconcile(
     context_map: dict[str, Any] | None = None,
     record_count: int | None = None,
     file_name: str | None = None,
+    agent_config: dict[str, Any] | None = None,
 ) -> list[BatchResult]:
-    """Retrieve batch results from provider and log reconciliation."""
+    """Retrieve batch results from provider and log reconciliation.
+
+    With *agent_config*, an ``add_dispatch`` action's answers come back holding the
+    schema each record's dispatch chose, as an online call returns them: every later
+    step (a rule, a repair prompt, the stored record) reads the answer online reads.
+    """
+    from agent_actions.llm.batch.processing.batch_result_strategy import (
+        dispatch_results,
+        with_dispatch_results,
+    )
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,
     )
 
     batch_results = provider.retrieve_results(batch_id, output_directory)
+    for result in batch_results:
+        if BatchResultReconciler.is_answered(result):
+            row = (context_map or {}).get(str(result.custom_id))
+            result.content = with_dispatch_results(
+                result.content, dispatch_results(agent_config, row)
+            )
 
     # Log reconciliation
     BatchResultReconciler.report_unparseable_lines(batch_results)

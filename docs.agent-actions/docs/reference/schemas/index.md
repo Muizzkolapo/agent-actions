@@ -247,7 +247,9 @@ Before any action runs, `agac inspect` and `agac run` do these checks:
 3. Find the function in the same way as the run. The function is in `select_question_schema.py` under the tool path of the project. The file defines a function of the same name.
 4. Refuse a `dispatch_task()` call inside the fields of a fixed schema. If the schema is chosen for each record, the full schema must be chosen.
 
-The value must be exactly one `dispatch_task()` call. The call works under `run_mode: online` and `run_mode: batch`. In batch mode, Agent Actions sends each record with its own schema. A batch run keeps no `add_dispatch` results. Thus, under `run_mode: batch`, `agac inspect` refuses `add_dispatch: true` on such an action.
+The value must be exactly one `dispatch_task()` call. The call works under `run_mode: online` and `run_mode: batch`. In batch mode, Agent Actions sends each record with its own schema.
+
+Set `add_dispatch: true` on the action to keep the choice in the output. Each object of the answer then holds the chosen schema name under the name of the function, for example `select_question_schema: mc_question_schema`. The field is added before the rules of an `expect:` block run, so a rule or a `row_condition` can read it. This applies to online runs and batch runs.
 
 ### The Function
 

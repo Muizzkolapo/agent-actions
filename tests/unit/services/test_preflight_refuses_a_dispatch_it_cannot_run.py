@@ -81,15 +81,10 @@ def test_a_tool_file_that_fails_to_import_is_named_as_such(tmp_path):
     assert "no tool file defines it" not in str(refused.value)
 
 
-def test_add_dispatch_with_a_dispatched_schema_in_batch_is_refused(tmp_path):
-    with pytest.raises(PreFlightValidationError) as refused:
-        _check(tmp_path, "pick_schema", run_mode="batch", add_dispatch=True)
-
-    assert "sets add_dispatch with a schema chosen by dispatch_task" in str(refused.value)
-
-
-def test_add_dispatch_with_a_dispatched_schema_online_passes(tmp_path):
-    _check(tmp_path, "pick_schema", add_dispatch=True)
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_add_dispatch_with_a_dispatched_schema_passes_in_either_run_mode(tmp_path, run_mode):
+    """A batch run puts the chosen schema on each answer as online does."""
+    _check(tmp_path, "pick_schema", run_mode=run_mode, add_dispatch=True)
 
 
 @pytest.mark.parametrize("options", [None, []], ids=["absent", "empty"])
