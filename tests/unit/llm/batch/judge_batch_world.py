@@ -174,7 +174,9 @@ class Run:
         """The pass over the main batch; True when it would write the file."""
         from agent_actions.llm.batch.core.batch_models import RecoveryContext
 
-        self.context_map.update(_context_map(*[r.custom_id for r in results]))
+        # A test that prepared its records for real has already put their rows here.
+        for custom_id, row in _context_map(*[r.custom_id for r in results]).items():
+            self.context_map.setdefault(custom_id, row)
         context = RecoveryContext(
             service=self._service(),
             manager=self.registry,

@@ -92,11 +92,14 @@ def with_dispatch_results(content: Any, results: dict[str, Any]) -> Any:
     return content
 
 
-def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list[Any]:
+def validated_items(
+    content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
+) -> list[Any]:
     """What the writer runs a ``repair: none`` suite over, for one answered result.
 
     Mirrors ``_process_successful_result`` up to its validation, so a judge batch
-    can be sent for these values before the writer reads them.
+    can be sent for these values before the writer reads them. *dispatch* is the
+    record's ``dispatch_results``.
     """
     if isinstance(content, str):
         content = (
@@ -104,6 +107,7 @@ def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list
             if json_mode
             else {output_field: content}
         )
+    content = with_dispatch_results(content, dispatch or {})
     if _is_schema_echo(content):
         content = _make_schema_echo_error(content)
     if _is_empty_output(content):
@@ -494,6 +498,8 @@ class BatchResultStrategy:
 
         expectation_service = self._expectation_service(ctx)
 
+        # What online takes from the record's task: the context a judged rule's refs read.
+        judge_context = BatchContextMetadata.get_judge_context(ctx.context_map.get(custom_id))
         answers = []
         for item in generated_list:
             if expectation_service is not None:
@@ -501,7 +507,7 @@ class BatchResultStrategy:
 
                 # The answer as given: online validates it before wrapping, and a non-object
                 # item gets no verdict.
-                verdict = expectation_service.validate(item)
+                verdict = expectation_service.validate(item, judge_context)
                 if verdict is not None:
                     item = attach_verdict(item, verdict)
             answers.append(item)

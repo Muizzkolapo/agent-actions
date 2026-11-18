@@ -23,6 +23,7 @@ ACCEPTED = [
     "field_scoped_rules",
     "inline_rules",
     "judge_votes_and_budget",
+    "judged_context_under_batch",
     "pair_and_pattern_rules",
     "record_expression",
     "repair_auto",
@@ -34,7 +35,6 @@ ACCEPTED = [
 
 REFUSED = {
     "array_member_rule": "a selector reaches top-level fields only",
-    "judged_context_under_batch": "not available under batch run_mode",
     "many_mistakes": "field 'no_such_field' is not produced by this action",
     "old_flat_shape": "unknown severity 'fail'",
     "repair_auto_at_file_granularity": "use repair: none or record granularity",

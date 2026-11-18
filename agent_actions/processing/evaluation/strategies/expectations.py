@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Mapping
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.processing.types import EvaluationOutcome
 
@@ -36,10 +36,18 @@ class ExpectationStrategy:
     Each verdict is kept against its record so the result assembler can attach
     it without re-running the suite; a second run would spend the judge budget
     again on content it has already judged.
+
+    ``llm_contexts`` holds, by record id, what the online loop takes from the record's
+    task: the LLM context a judged rule's ``context:`` refs resolve against.
     """
 
-    def __init__(self, service: ExpectationService) -> None:
+    def __init__(
+        self,
+        service: ExpectationService,
+        llm_contexts: Mapping[str, dict[str, Any]] | None = None,
+    ) -> None:
         self._service = service
+        self._llm_contexts = llm_contexts or {}
         self._verdicts: dict[str, SuiteResult] = {}
         self._record_verdicts: dict[str, list[SuiteResult]] = {}
 
@@ -71,11 +79,13 @@ class ExpectationStrategy:
         # check_schema mirrors the online repair loop: a response that is not
         # record-shaped, or a record the schema rejects, becomes a structural
         # failure the regeneration can act on rather than an unjudged pass.
-        verdict, per_record = self._service.verdict_for_response(result.content, check_schema=True)
+        key = _verdict_key(result)
+        verdict, per_record = self._service.verdict_for_response(
+            result.content, self._llm_contexts.get(key) if key else None, check_schema=True
+        )
         if verdict is None:
             return EvaluationOutcome(passed=False, failure_type="expectation_fail")
 
-        key = _verdict_key(result)
         if key is not None:
             self._verdicts[key] = verdict
             self._record_verdicts[key] = per_record

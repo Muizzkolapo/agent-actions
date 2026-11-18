@@ -592,10 +592,13 @@ def check_and_submit_repair(
         context.agent_config,
         recovery_state.repair_judge_budget_remaining if recovery_state else None,
         verdicts,
+        context_map,
     )
     if strategy is None:
         # Observe mode validates in the result writer, so the verdicts go with the config.
-        if _send_judge_batch(context, identity, recovery_state, batch_results, "evaluate"):
+        if _send_judge_batch(
+            context, identity, recovery_state, batch_results, "evaluate", context_map
+        ):
             return False
         if verdicts:
             context.agent_config = {
@@ -621,7 +624,7 @@ def check_and_submit_repair(
             )
         )
 
-    if _send_judge_batch(context, identity, recovery_state, batch_results, "evaluate"):
+    if _send_judge_batch(context, identity, recovery_state, batch_results, "evaluate", context_map):
         return False
 
     loop = EvaluationLoop(strategy)
@@ -745,7 +748,10 @@ def handle_repair_recovery(
     from agent_actions.processing.evaluation import EvaluationLoop
 
     strategy = build_repair_strategy(
-        context.agent_config, state.repair_judge_budget_remaining, state.judge_verdicts
+        context.agent_config,
+        state.repair_judge_budget_remaining,
+        state.judge_verdicts,
+        context_map,
     )
 
     if strategy is None:
@@ -758,7 +764,7 @@ def handle_repair_recovery(
             context_map=context_map,
         )
 
-    if _send_judge_batch(context, identity, state, recovery_results, "repair"):
+    if _send_judge_batch(context, identity, state, recovery_results, "repair", context_map):
         raise_pending_exhaustion(context)
         return None
 
@@ -887,6 +893,7 @@ def _send_judge_batch(
     state: RecoveryState | None,
     results: list[BatchResult],
     resumes: str,
+    context_map: dict[str, Any],
 ) -> bool:
     """Send the judge calls the step reading *results* would make, as a judge batch.
 
@@ -907,6 +914,7 @@ def _send_judge_batch(
         results,
         verdicts=state.judge_verdicts if state else {},
         budget_remaining=state.repair_judge_budget_remaining if state else None,
+        context_map=context_map,
     )
     if not collection.pending:
         return False

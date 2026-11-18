@@ -1,7 +1,7 @@
 """Batch task preparation from raw data using shared TaskPreparer logic."""
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -15,6 +15,8 @@ from agent_actions.errors import (
     is_action_fatal,
     mark_action_fatal,
 )
+from agent_actions.expectations.fields import narrow_context
+from agent_actions.expectations.service import judged_context_refs
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
@@ -180,6 +182,7 @@ class BatchTaskPreparator:
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
         dispatched = schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is not None
+        judge_refs = judged_context_refs(agent_config)
 
         context_map_builder: dict[str, Any] = {}
         tasks_builder: list[dict[str, Any]] = []
@@ -210,6 +213,7 @@ class BatchTaskPreparator:
                         if dispatched
                         else None
                     ),
+                    judge_refs=judge_refs,
                 )
 
                 if result:
@@ -296,13 +300,15 @@ class BatchTaskPreparator:
         stats: BatchTaskPreparationStats,
         attempt: int = 0,
         row_schema: Callable[[Any, str | None], tuple[dict[str, Any] | None, str]] | None = None,
+        judge_refs: Sequence[str] = (),
     ) -> dict[str, Any] | None:
         """Process a single data item using TaskPreparer.
 
         Return prepared task if item should be included, None otherwise.
         Update context_map_builder and stats as side effects. ``row_schema`` compiles
         the schema of an action whose schema is chosen per record, from the record's
-        context; the task then carries it.
+        context; the task then carries it. ``judge_refs`` are the ``context:`` refs of
+        the action's judged rules; the values they read are kept on the context-map row.
         """
         # 1. Generate target_id if missing
         custom_id = row.get("target_id")
@@ -369,6 +375,13 @@ class BatchTaskPreparator:
             recorded = BatchContextMetadata.get_output_schema(row)
             task["compiled_schema"], chosen = row_schema(prepared.llm_context, recorded)
             BatchContextMetadata.set_output_schema(context_map_builder[custom_id], chosen)
+
+        # The verdict passes run once the answers are back, when this context is gone.
+        # Only what the judged rules read of it is kept: the map is stored with the batch.
+        if judge_refs:
+            BatchContextMetadata.set_judge_context(
+                context_map_builder[custom_id], narrow_context(prepared.llm_context, judge_refs)
+            )
 
         # 8. Mark INCLUDED only now — prepare() succeeded and guard passed
         BatchContextMetadata.set_filter_status(

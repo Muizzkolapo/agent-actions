@@ -70,8 +70,8 @@ The example above uses observe mode. Observe mode runs the checks, attaches the 
 :::note[Every form of `expect:`, run through the real preflight]
 `tests/integration/fixtures/expectation_authors` contains seventeen small projects. Each project shows one way to write this block:
 
-- Twelve projects are accepted. They include inline rules, a named `suite:`, rules on a schema field, `llm_judge` with `votes:`, a `row_condition`, a custom check and more.
-- Five projects are refused. They cover an unreachable nested selector, a judged `context:` under batch, a flat-shape argument, `severity: fail` and `repair` at file granularity.
+- Thirteen projects are accepted. They include inline rules, a named `suite:`, rules on a schema field, `llm_judge` with `votes:`, a judged `context:` under batch, a `row_condition`, a custom check and more.
+- Four projects are refused. They cover an unreachable nested selector, a flat-shape argument, `severity: fail` and `repair` at file granularity.
 
 `tests/integration/test_expectation_authors.py` sends each project through `WorkflowInspector`. This is the same preflight that `agac inspect` runs. The test pins the exact refusal phrase for each refused form. These tests are the fastest way to see if Agent Actions accepts a shape, and what the framework says when it refuses the shape.
 :::
@@ -251,7 +251,7 @@ At load time, Agent Actions automatically adds each reference in `context:` to t
 
 ### Caching and budget
 
-- **Cache:** The key of a judge call is `(expectation, resolved value)`. Two records (or two rules) can produce byte-identical content for the same rule. Then Agent Actions gets the second result from the cache, and does not make another real LLM call.
+- **Cache:** The key of a judge call is `(expectation, resolved value)`. Two records (or two rules) can produce byte-identical content for the same rule. Then Agent Actions gets the second result from the cache, and does not make another real LLM call. The `context:` of the rule is not part of the key. If two records hold the same value but different grounding context, the judge reads the context of the first record only, and the second record gets that verdict. This is the same online and in batch.
 - **Budget:** `judge_budget` on the `expect:` block sets the maximum number of real judge calls for all the records that the action processes in one run. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
 - **Failure isolation:** If the LLM call of the judge has an error (network, authentication, rate limit), only that outcome fails. The outcome has the error in its `detail`. The error does not stop the processing of the record.
 
@@ -260,6 +260,7 @@ At load time, Agent Actions automatically adds each reference in `context:` to t
 On a `run_mode: batch` action, the judge calls go out as a batch too. When a batch of the action returns, Agent Actions does not call the judge for each record. It sends all the judge calls of the batch as one batch of their own, named `<file>_judge_<n>`, and the run asks to be run again, as it does for a repair round. When that batch returns, Agent Actions reads the verdicts and continues: it attaches each verdict, or sends a repair round for the records that failed. The records that a repair round returns are judged by the next judge batch.
 
 - **Same verdicts.** Each vote is one request. Agent Actions reads each reply as it reads an online reply, and takes the majority in the same way: a tie fails closed. A request that fails at the provider fails the judge call, as an online call that has an error does. A judge batch that the provider fails or cancels fails each judge call that it held.
+- **Same grounding context.** A rule with `context:` references sends the judge the same grounding text as an online run. When Agent Actions prepares a record for the batch, it keeps the values that the judged rules of the action reference. It reads them back for each judge batch, also after a repair round and in a later run. A reference that the action does not observe fails the rule, as it does online.
 - **Same cache and budget.** A value that several records hold is judged one time. A judge batch counts one unit of `judge_budget` for each value, whatever its `votes`, and the budget applies to all the judge batches of the run together.
 - **Resume.** A run that stops while a judge batch is out reads that batch on the next run. Agent Actions never sends a judge batch again.
 - **One model for each batch.** A rule with its own `model` is judged in a batch of its own, after the batch of the other rules.
@@ -643,7 +644,6 @@ Use the tiers in this order of preference:
 ## Current limitations
 
 - **Repair runs in the two modes, but each mode counts iterations differently.** Online, each record loops independently. One record can take three generations while another record passes the first time. Batch loops the full set. Each round submits again the records that still fail. Thus `max_iterations` sets the maximum number of *batches*, not the number of tries that one record gets. A record that fails in round one and passes in round two had two generations in the two modes. The difference is that a batch round waits for its slowest record.
-- **A judged `context:` reference works online only.** Batch validates from the stored result and has no `llm_context`. Thus preflight refuses a judged rule with `context:` references. Without this refusal, each record would fail because the context source is missing.
 - **Repair works at record granularity only.** One file-granularity call produces the full file. Thus one failed record would make the model generate all the records again. Preflight refuses `repair` on a `granularity: file` action. Observe mode works there. Agent Actions validates and annotates each record of a response independently. This is the same as for an action whose LLM returns a JSON array.
 - **Tool actions cannot repair.** A deterministic tool gives the same output when it runs again. Thus preflight refuses `repair` on a `kind: tool` action. Observe mode works at record granularity.
 - **A tool or HITL action at file granularity never runs its rules.** A strategy that does not evaluate expectations processes these actions. Preflight does not refuse the combination. Thus an `expect:` block on such an action does nothing, and no message tells you. `kind: hitl` is always file granularity, so this is true of each HITL action. [`agac expect list`](../cli/expect.md#rules-that-will-not-run) marks such an action. It does not show that the rules run.
