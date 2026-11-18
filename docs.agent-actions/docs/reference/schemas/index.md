@@ -647,8 +647,10 @@ To print the data that Agent Actions sends to the model, use `prompt_debug`:
 ```yaml
 - name: my_action
   schema: my_schema
-  prompt_debug: true  # Online runs print the prompt, context preview and schema sent to the model
+  prompt_debug: true  # Prints the prompt, context preview and schema sent to the model
 ```
+
+An online action prints them for each call. A batch action prints them for each record when Agent Actions prepares the batch.
 
 ## Schema Discovery
 

@@ -246,6 +246,9 @@ class BatchTaskPreparator:
                     attempt=attempt,
                 )
 
+        if agent_config.get("prompt_debug"):
+            self._debug_print_prompts(agent_config, tasks_builder, schema)
+
         # Finalize tasks with provider
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
@@ -273,6 +276,21 @@ class BatchTaskPreparator:
             stats=stats,
             config=agent_config,
         )
+
+    @staticmethod
+    def _debug_print_prompts(
+        agent_config: dict[str, Any], tasks: list[dict[str, Any]], schema: dict[str, Any] | None
+    ) -> None:
+        """Print each task's prompt, context and schema, as an online call prints its own."""
+        from agent_actions.llm.realtime.services import ContextService, PromptService
+
+        for task in tasks:
+            PromptService.debug_print_prompt(
+                agent_config,
+                task["prompt"],
+                str(ContextService.prepare_context_data(task["content"], is_tool=False)),
+                task.get("compiled_schema", schema),
+            )
 
     def turned_away(
         self,
