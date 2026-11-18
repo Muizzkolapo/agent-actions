@@ -81,6 +81,8 @@ A batch action reads each answer as the same action reads the answer online:
   contains JSON is also stored as text.
 - With `json_mode: true` and no schema, the action runs. The request asks the provider for JSON
   output, as the online request does.
+- If an answer does not match the schema of the action, the action stores the answer and the run
+  log shows a `Schema validation warning` line. To enforce the schema, add an `expect:` block.
 
 ### When the provider refuses a batch
 

@@ -5,7 +5,8 @@ that can flow through the shared enrich/collect pipeline.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -21,7 +22,11 @@ from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputE
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.helpers import _empty_warn_reason, _is_empty_output
+from agent_actions.processing.helpers import (
+    _empty_warn_reason,
+    _is_empty_output,
+    warn_on_schema_mismatch,
+)
 from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
@@ -44,6 +49,7 @@ from agent_actions.record.reasons import (
     GUARD_SKIP,
     PREP_FAILED,
 )
+from agent_actions.utils.constants import SCHEMA_KEY
 from agent_actions.utils.content import (
     get_existing_content,
     is_version_merge,
@@ -82,6 +88,28 @@ def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list
     return list(DataTransformer.ensure_list(content))
 
 
+def _dispatched_schema(agent_config: dict[str, Any], name: str) -> dict[str, Any] | None:
+    """The schema a dispatch chose at submission, in the form online checks an answer against."""
+    from agent_actions.errors.processing import SchemaDispatchError
+    from agent_actions.output.response.context_data import load_chosen_schema
+    from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+    from agent_actions.output.response.loader import SchemaLoader
+    from agent_actions.utils.schema_utils import is_compiled_schema
+
+    project_root = agent_config.get("_project_root")
+    function = schema_dispatch_function(agent_config.get(SCHEMA_KEY))
+    try:
+        loaded = load_chosen_schema(
+            str(function), name, Path(project_root) if project_root else None
+        )
+    except SchemaDispatchError as e:
+        logger.debug("Schema '%s' could not be loaded to check an answer against: %s", name, e)
+        return None
+    if is_compiled_schema(loaded):
+        return loaded
+    return SchemaLoader.construct_schema_from_dict(loaded)  # type: ignore[no-any-return]
+
+
 @dataclass
 class BatchProcessingContext:
     """Internal context for batch result parsing."""
@@ -105,6 +133,10 @@ class BatchProcessingContext:
     # The action's expectation service, built lazily on first use. None is a
     # real answer (no expect: block), so _UNSET marks "not yet built".
     expectation_service: Any = _UNSET
+
+    # Each schema a dispatch chose for a record of this batch, by name; None for one
+    # that no longer loads.
+    dispatched_schemas: dict[str, dict[str, Any] | None] = field(default_factory=dict)
 
 
 class BatchResultStrategy:
@@ -383,6 +415,22 @@ class BatchResultStrategy:
             )
         return ctx.expectation_service
 
+    @staticmethod
+    def _warn_on_schema_mismatch(
+        ctx: BatchProcessingContext, custom_id: str, answer: list[Any]
+    ) -> None:
+        """Warn of an answer that does not match the action's schema, as each online call does.
+
+        A record whose schema a dispatch chose is checked against that schema.
+        """
+        agent_config = ctx.agent_config or {}
+        chosen = BatchContextMetadata.get_output_schema(ctx.context_map.get(custom_id, {}))
+        if chosen is not None:
+            if chosen not in ctx.dispatched_schemas:
+                ctx.dispatched_schemas[chosen] = _dispatched_schema(agent_config, chosen)
+            agent_config = {**agent_config, SCHEMA_KEY: ctx.dispatched_schemas[chosen]}
+        warn_on_schema_mismatch(answer, agent_config, agent_config.get("action_name", "unknown"))
+
     def _process_successful_result(
         self,
         ctx: BatchProcessingContext,
@@ -422,6 +470,7 @@ class BatchResultStrategy:
             return self._empty_answer(ctx, batch_result, custom_id, generated_obj)
 
         generated_list = DataTransformer.ensure_list(generated_obj)
+        self._warn_on_schema_mismatch(ctx, custom_id, generated_list)
 
         original_row = ctx.reconciler.get_record_by_id(custom_id)
         original_source_guid = ctx.reconciler.get_source_guid(custom_id)
