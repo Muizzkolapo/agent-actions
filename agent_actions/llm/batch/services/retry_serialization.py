@@ -9,6 +9,9 @@ from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
     """Serialize BatchResult objects for JSON persistence.
 
+    ``text`` is left out: only a judge batch's tally reads it, in the pass that
+    retrieved it, and a record's text would otherwise be stored beside its content.
+
     Args:
         results: Batch results to serialize
 

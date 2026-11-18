@@ -280,7 +280,15 @@ class BatchLifecycleManager:
         ):
             attempt, max_attempts, failure = where.attempt, where.max_attempts, where.failure
             sample = sorted(ids)[:10]
-            if where.recovery_type == RecoveryType.REPAIR:
+            if where.recovery_type == RecoveryType.JUDGE:
+                logger.info(
+                    "[%s] %d record(s) wait on judge batch %d: %s",
+                    agent_name,
+                    len(ids),
+                    attempt,
+                    sample,
+                )
+            elif where.recovery_type == RecoveryType.REPAIR:
                 logger.info(
                     "[%s] %d record(s) wait on repair round %d of %d: %s",
                     agent_name,

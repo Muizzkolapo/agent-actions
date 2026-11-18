@@ -468,9 +468,9 @@ class TestTheLoadedStateIsTrustedWhole:
 
         original = repair_ops.build_repair_strategy
 
-        def spy(agent_config, judge_budget_remaining=None):
+        def spy(agent_config, judge_budget_remaining=None, *rest):
             seen["budget"] = judge_budget_remaining
-            return original(agent_config, judge_budget_remaining)
+            return original(agent_config, judge_budget_remaining, *rest)
 
         passing = BatchResult(custom_id="r1", content=PASSING, success=True)
         with (

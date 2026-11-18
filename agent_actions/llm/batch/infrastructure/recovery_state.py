@@ -74,6 +74,17 @@ class RecoveryState:
     # Per-record failure type counts accumulated across recovery rounds.
     failure_type_counts: dict[str, dict[str, int]] = field(default_factory=dict)
 
+    # Judge rounds: llm_judge calls sent as a batch of their own.
+    judge_attempt: int = 0
+    # Each request of the judge batch out now, to the verdict key it votes on.
+    judge_requests: dict[str, str] = field(default_factory=dict)
+    # Every verdict the judge batches returned, by verdict key: [passed, detail].
+    judge_verdicts: dict[str, list[Any]] = field(default_factory=dict)
+    # The results waiting on the judge batch, and the step that reads them: "evaluate"
+    # (check_and_submit_repair) or "repair" (handle_repair_recovery).
+    judge_results: list[dict[str, Any]] = field(default_factory=list)
+    judge_resumes: str | None = None
+
     def to_dict(self) -> dict[str, Any]:
         """Every declared field, so adding one cannot silently stop persisting it.
 
@@ -176,7 +187,10 @@ def records_awaiting_recovery(
             continue
 
         failures: dict[str, str] = {}
-        if recovery_type == RecoveryType.RETRY:
+        if recovery_type == RecoveryType.JUDGE:
+            held = [str(r.get("custom_id")) for r in state.judge_results if isinstance(r, dict)]
+            attempt, max_attempts = state.judge_attempt, state.judge_attempt
+        elif recovery_type == RecoveryType.RETRY:
             held = state.missing_ids
             attempt, max_attempts = state.retry_attempt + 1, state.retry_max_attempts
             failures = {

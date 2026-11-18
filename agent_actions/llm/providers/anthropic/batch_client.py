@@ -224,6 +224,17 @@ class AnthropicBatchClient(BaseBatchClient):
                 return text
         return self._parse_content_list(content_list)
 
+    def _answer_text(self, raw_response: Any) -> str | None:
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if (
+            not isinstance(content_list, list)
+            or self._extract_tool_use_content(content_list) is not None
+        ):
+            return None
+        return self._extract_text_content(content_list)
+
     def _parse_content_list(self, content_list: Any) -> Any:
         """
         Parse Anthropic content list, prioritizing tool use over text.

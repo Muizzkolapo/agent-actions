@@ -27,6 +27,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# A task row's text sent as the user message verbatim, in place of its serialised content.
+RAW_USER_CONTENT_KEY = "_raw_user_content"
+
 # What a provider stamps on a result carrying no correlation id. It is not an
 # identity: two of them are two records, so nothing may deduplicate on it.
 # Namespaced so a real target_id cannot collide with it and inherit that rule.
@@ -97,6 +100,8 @@ class BatchResult:
     # The expectation loop gave up on this record. Not a provider failure: it
     # reads as an exhausted record, as online's does.
     exhausted: bool = False
+    # The answer as the model wrote it, before any JSON parse; None when it was not text.
+    text: str | None = None
 
 
 class BaseBatchClient(ABC):
@@ -121,7 +126,9 @@ class BaseBatchClient(ABC):
         cache_prompt = self._caches_prompt(agent_config)
 
         for row in data:
-            if "content" not in row:
+            # A judge request is a prompt alone, sent as written: it has no record content.
+            user_content = row.pop(RAW_USER_CONTENT_KEY, None)
+            if user_content is None and "content" not in row:
                 raise ValueError(
                     f"Record {row.get('target_id', row.get('id', '?'))} missing 'content' key. "
                     "Every record must have namespaced content in the additive model."
@@ -132,7 +139,9 @@ class BaseBatchClient(ABC):
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=deep_json.dumps(row["content"]),
+                user_content=(
+                    user_content if user_content is not None else deep_json.dumps(row["content"])
+                ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),
@@ -316,6 +325,7 @@ class BaseBatchClient(ABC):
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
+        text = content if isinstance(content, str) else self._answer_text(raw_response)
 
         # Parse JSON content if it's a string
         if isinstance(content, str) and not self._answer_was_cut_off(raw_response):
@@ -331,7 +341,12 @@ class BaseBatchClient(ABC):
             error=None,
             metadata=metadata,
             usage=usage,
+            text=text,
         )
+
+    def _answer_text(self, raw_response: Any) -> str | None:
+        """The answer's text, for a provider whose content extraction already parsed it."""
+        return None
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, or the sentinel if it carries none."""
