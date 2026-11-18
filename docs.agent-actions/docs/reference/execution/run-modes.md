@@ -79,6 +79,8 @@ A batch action reads each answer as the same action reads the answer online:
 
 - With `json_mode: false`, the action stores the reply as text in its `output_field`. A reply that
   contains JSON is also stored as text.
+- With `json_mode: true` and no schema, the action runs. The request asks the provider for JSON
+  output, as the online request does.
 
 ### When the provider refuses a batch
 

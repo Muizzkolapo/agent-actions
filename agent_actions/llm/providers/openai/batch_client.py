@@ -81,6 +81,8 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         body.update(self._sampling_params(batch_task.model_config, penalties=True))
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        elif batch_task.model_config.get("json_mode"):
+            body["response_format"] = {"type": "json_object"}
         from agent_actions.llm.providers.openai.client import OpenAIClient
 
         OpenAIClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))
