@@ -1,3 +1,0 @@
-kind: Enhancement or New Feature
-body: '`add_dispatch: true` now works on a `run_mode: batch` action whose schema is `dispatch_task(...)`; preflight no longer refuses it. Each object of a record''s answer holds the schema its dispatch chose, under the function''s name, as an online answer does. It is put on the answer when the batch is read, so the rules of an `expect:` block, a repair prompt and the stored record all read the answer an online run reads; a text answer (`json_mode: false`) gets it where it is stored.'
-time: 2026-11-18T19:20:00Z
