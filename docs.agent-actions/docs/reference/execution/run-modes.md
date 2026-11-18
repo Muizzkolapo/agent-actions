@@ -73,6 +73,13 @@ defaults:
 | Groq | Yes | Varies |
 | Ollama | Yes (local) | N/A |
 
+### How a batch reads an answer
+
+A batch action reads each answer as the same action reads the answer online:
+
+- With `json_mode: false`, the action stores the reply as text in its `output_field`. A reply that
+  contains JSON is also stored as text.
+
 ### When the provider refuses a batch
 
 Agent Actions sends each input file as a separate batch. The provider can refuse a batch (a
