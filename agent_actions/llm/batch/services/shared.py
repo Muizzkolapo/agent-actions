@@ -29,8 +29,14 @@ def retrieve_and_reconcile(
 
     Given the *agent_config* of an action in text mode, each reply becomes the record an
     online call returns for it, its text under the output field: a provider parses every
-    reply as JSON, not knowing the action's mode.
+    reply as JSON, not knowing the action's mode. An ``add_dispatch`` action's answers
+    then hold the schema each record's dispatch chose, as online returns them, so every
+    later step (a rule, a repair prompt, the stored record) reads the answer online reads.
     """
+    from agent_actions.llm.batch.processing.batch_result_strategy import (
+        dispatch_results,
+        with_dispatch_results,
+    )
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,
     )
@@ -40,6 +46,12 @@ def retrieve_and_reconcile(
         for result in batch_results:
             if result.text is not None:
                 (result.content,) = ResponseBuilder.wrap_non_json(result.text, agent_config)
+    for result in batch_results:
+        if BatchResultReconciler.is_answered(result):
+            row = (context_map or {}).get(str(result.custom_id))
+            result.content = with_dispatch_results(
+                result.content, dispatch_results(agent_config, row)
+            )
 
     # Log reconciliation
     BatchResultReconciler.report_unparseable_lines(batch_results)

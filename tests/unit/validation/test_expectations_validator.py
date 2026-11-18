@@ -671,17 +671,15 @@ JUDGE_WITH_CONTEXT = [
 ]
 
 
-def test_a_judged_context_ref_on_a_batch_action_is_a_defect():
-    # Batch has no llm_context to resolve the ref against, so every record
-    # would fail on "no context source was provided" and a downstream guard
-    # would drop the whole action's output.
+def test_a_judged_context_ref_is_allowed_in_batch():
+    # A batch run keeps the values the refs read when it prepares each record.
     defects = find_expectation_defects(
         action_config(
             run_mode="batch", expect={"repair": "none", "expectations": JUDGE_WITH_CONTEXT}
         ),
         {"a": {"options"}, "research": {"findings"}},
     )
-    assert any("context" in m and "batch" in m for m in defects["a"])
+    assert defects == {}
 
 
 def test_a_judged_rule_without_context_is_allowed_in_batch():

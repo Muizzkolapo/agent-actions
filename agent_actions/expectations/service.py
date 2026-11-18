@@ -646,3 +646,24 @@ def create_expectation_service_from_config(
         service._judge_budget = budget
         service._cached_judge = cached_judge
     return service
+
+
+def judged_context_refs(agent_config: dict[str, Any]) -> list[str]:
+    """Each ``context:`` ref the action's ``llm_judge`` rules declare, once, in order.
+
+    Read from the suite the run resolves, wherever its rules are declared.
+    """
+    service = create_expectation_service_from_config(
+        agent_config.get("expect"),
+        action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
+        agent_config=agent_config,
+    )
+    if service is None:
+        return []
+    refs = [
+        ref
+        for expectation in service.suite.expectations
+        if expectation.type == "llm_judge"
+        for ref in expectation.params.get("context") or []
+    ]
+    return list(dict.fromkeys(refs))

@@ -23,9 +23,6 @@ class RecordingProvider(BaseBatchClient):
     def _get_default_model(self) -> str:
         return "test-model"
 
-    def _get_default_temperature(self) -> float:
-        return 0.0
-
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
