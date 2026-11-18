@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "The prompt tokens counted for an Anthropic batch now include the tokens read from and written to the prompt cache, as an online call's count does. Batch summed `input_tokens` alone, which counts only the prompt after the last cache breakpoint, so with `enable_prompt_caching` a batch reported far fewer prompt and total tokens than the same records run online. Batch and online now read a response's usage with the same code for each vendor."
+time: 2026-11-18T19:06:00Z
