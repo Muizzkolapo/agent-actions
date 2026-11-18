@@ -25,7 +25,7 @@ from agent_actions.utils.json_safety import ensure_json_safe
 # ---------------------------------------------------------------------------
 
 PROMPT = "Analyse the sentiment of the following text."
-CONTEXT_STR = "I love this product!"  # no braces to avoid StringProcessor escaping
+CONTEXT_STR = "I love this product!"
 SCHEMA_DICT = {"properties": {"sentiment": {"type": "string"}}, "type": "object"}
 
 
@@ -196,11 +196,8 @@ class TestMessageBuilderStructure:
         env = MessageBuilder.build(provider, PROMPT, CONTEXT_STR, json_mode=json_mode)
         assert [m.role for m in env.messages] == roles
 
-    def test_batch_always_system_plus_user(self):
-        env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
-        assert len(env.messages) == 2
-        assert env.messages[0] == LLMMessage(role="system", content=PROMPT, static_len=len(PROMPT))
-        assert env.messages[1] == LLMMessage(role="user", content=CONTEXT_STR)
+    def test_there_is_one_builder_for_online_and_batch(self):
+        assert not hasattr(MessageBuilder, "build_for_batch")
 
 
 # ---------------------------------------------------------------------------
@@ -350,28 +347,34 @@ class TestNonJsonSkipsSchema:
 
 
 class TestBatchBuilder:
-    """Verify batch message envelope construction."""
+    """The envelope a batch client sends is the one ``build`` gives the online client."""
+
+    OPENING = "\n<|begin_of_user_instruction|>: "
+    TAGGED = (
+        f"{OPENING}{PROMPT} :<|end_of_user_instruction|>\n"
+        f"<|begin_of_text|>: {CONTEXT_STR} :<|end_of_text|>\n"
+    )
 
     def test_batch_envelope_structure(self):
-        env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
+        env = MessageBuilder.build("anthropic", PROMPT, CONTEXT_STR, json_mode=False)
         assert isinstance(env, LLMMessageEnvelope)
-        assert len(env.messages) == 2
-        assert env.messages[0] == LLMMessage(role="system", content=PROMPT, static_len=len(PROMPT))
-        assert env.messages[1] == LLMMessage(role="user", content=CONTEXT_STR)
+        assert env.messages == [
+            LLMMessage(role="user", content=self.TAGGED, static_len=len(self.OPENING) + len(PROMPT))
+        ]
 
-    def test_batch_prompt_body_is_prompt(self):
-        env = MessageBuilder.build_for_batch("openai", PROMPT, CONTEXT_STR)
-        assert env.prompt_body == PROMPT
+    def test_batch_prompt_body_is_the_tagged_body(self):
+        env = MessageBuilder.build("openai", PROMPT, CONTEXT_STR, json_mode=False)
+        assert env.prompt_body == self.TAGGED
 
-    def test_batch_gemini_single_combined_message(self):
-        env = MessageBuilder.build_for_batch("gemini", PROMPT, CONTEXT_STR)
+    def test_batch_gemini_single_tagged_message(self):
+        env = MessageBuilder.build("gemini", PROMPT, CONTEXT_STR, json_mode=False)
         assert len(env.messages) == 1
         assert env.messages[0].role == "user"
-        assert env.messages[0].content == f"{PROMPT}\n\n{CONTEXT_STR}"
+        assert env.messages[0].content == self.TAGGED
 
     def test_batch_gemini_prompt_body(self):
-        env = MessageBuilder.build_for_batch("gemini", PROMPT, CONTEXT_STR)
-        assert env.prompt_body == PROMPT
+        env = MessageBuilder.build("gemini", PROMPT, CONTEXT_STR, json_mode=False)
+        assert env.prompt_body == self.TAGGED
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +393,7 @@ class TestToDicts:
         assert dicts[1] == {"role": "user", "content": CONTEXT_STR}
 
     def test_to_dicts_filter_by_role(self):
-        env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
+        env = MessageBuilder.build("ollama_local", PROMPT, CONTEXT_STR)
         user_dicts = env.to_dicts(role="user")
         assert len(user_dicts) == 1
         assert user_dicts[0]["role"] == "user"
@@ -464,12 +467,11 @@ class TestEdgeCases:
         assert "'age'" in content
 
     def test_batch_empty_prompt_anthropic_style(self):
-        """Anthropic batch should omit system message content for empty prompts."""
-        env = MessageBuilder.build_for_batch("anthropic", "", CONTEXT_STR)
-        system_dicts = env.to_dicts(role="system")
-        # The envelope has a system message with empty content;
-        # the Anthropic batch client checks truthiness before setting params["system"]
-        assert system_dicts[0]["content"] == ""
+        """An empty prompt still goes in the one user message; there is no system prompt."""
+        env = MessageBuilder.build("anthropic", "", CONTEXT_STR, json_mode=False)
+        assert env.to_dicts(role="system") == []
+        (message,) = env.to_dicts()
+        assert message["content"].startswith("\n<|begin_of_user_instruction|>:  :<|end_of")
 
 
 # ---------------------------------------------------------------------------
@@ -602,13 +604,20 @@ class TestContextSerialisationJsonSafety:
         parsed = json.loads(content)
         assert parsed["data"] == "binary"
 
-    def test_openai_dict_context_with_nan_produces_valid_string(self):
+    def test_openai_dict_context_with_nan_produces_valid_json(self):
         ctx = {"score": float("nan"), "text": "hello"}
         env = MessageBuilder.build("openai", PROMPT, ctx, json_mode=True)
         # After split: context is in user message (messages[1])
-        content = env.messages[1].content
-        assert "None" in content  # NaN replaced with None before str()
-        assert isinstance(content, str)
+        assert json.loads(env.messages[1].content) == {"score": None, "text": "hello"}
+
+    @pytest.mark.parametrize("provider", ["anthropic", "openai", "gemini", "groq", "cohere"])
+    @pytest.mark.parametrize("json_mode", [True, False])
+    def test_a_json_string_context_is_sent_as_written(self, provider, json_mode):
+        ctx = '{"doc": {"title": "Café", "n": [1, {"x": 2}]}}'
+        env = MessageBuilder.build(provider, PROMPT, ctx, json_mode=json_mode)
+        sent = env.prompt_body + "".join(m.content for m in env.messages)
+        assert ctx in sent
+        assert "{{" not in sent
 
     def test_openai_dict_context_with_set_produces_valid_string(self):
         ctx = {"tags": {"a", "b"}, "text": "hello"}
@@ -713,20 +722,19 @@ class TestStripSchemaMetadata:
 
 class TestSharedPromptLength:
     @pytest.mark.parametrize("length", [-1, len(PROMPT) + 1])
-    def test_a_length_outside_the_prompt_is_refused_online_and_in_batch(self, length):
+    def test_a_length_outside_the_prompt_is_refused(self, length):
         with pytest.raises(ValueError, match=f"shared_prompt_len {length} is outside"):
             MessageBuilder.build("anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=length)
-        with pytest.raises(ValueError, match=f"shared_prompt_len {length} is outside"):
-            MessageBuilder.build_for_batch(
-                "anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=length
-            )
 
     def test_a_length_inside_the_prompt_builds(self):
-        env = MessageBuilder.build_for_batch(
+        env = MessageBuilder.build(
             "anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=5, enable_prompt_caching=True
         )
 
-        assert env.to_dicts(role="system")[0]["content"] == [
-            {"type": "text", "text": PROMPT[:5], "cache_control": {"type": "ephemeral"}},
-            {"type": "text", "text": PROMPT[5:]},
-        ]
+        marked, rest = env.to_dicts()[0]["content"]
+        assert marked == {
+            "type": "text",
+            "text": "\n<|begin_of_user_instruction|>: " + PROMPT[:5],
+            "cache_control": {"type": "ephemeral"},
+        }
+        assert rest["text"].startswith(PROMPT[5:] + " :<|end_of_user_instruction|>")

@@ -113,7 +113,7 @@ class JudgingProvider(RecordingProvider):
         if not custom_id.startswith("j_"):
             assert self.repair is not None, "a repair round went out with nothing to answer it"
             return BatchResult(custom_id=custom_id, content=self.repair(custom_id), success=True)
-        prompt = task["body"]["messages"][-1]["content"]
+        prompt = task["body"]["messages"][0]["content"]
         text = self.reply(prompt, int(custom_id.rsplit("_", 1)[1]))
         if text is ERRORED:
             line = {"custom_id": custom_id, "error": {"message": "rate limited"}}

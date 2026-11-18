@@ -20,7 +20,7 @@ from agent_actions.expectations.judge import (
     tally_votes,
     verdict_from_reply,
 )
-from agent_actions.llm.providers.batch_base import RAW_USER_CONTENT_KEY
+from agent_actions.llm.providers.batch_base import raise_unsent
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -146,12 +146,14 @@ def submit_judge_batch(
         for vote in range(request.votes):
             request_id = _request_id(key, vote)
             requests[request_id] = key
-            rows.append({"target_id": request_id, "prompt": "", RAW_USER_CONTENT_KEY: prompt})
+            # As the online judge call: the prompt, with no record content beside it.
+            rows.append({"target_id": request_id, "prompt": prompt, "content": ""})
 
     config = judge_request_config(agent_config, model)
     config.pop("compiled_schema", None)
     batch_name = f"{file_name}_judge_{attempt}"
     tasks = provider.prepare_tasks(rows, config)
+    raise_unsent(rows)
     batch_id, _status = provider.submit_batch(
         tasks=tasks, batch_name=batch_name, output_directory=output_directory
     )

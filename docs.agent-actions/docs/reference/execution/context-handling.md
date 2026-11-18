@@ -99,6 +99,14 @@ actions:
 
 The same configuration works identically in the two modes.
 
+## The Request to the Model
+
+The two modes also send the same request. For the same prompt, record, schema and `json_mode`, a batch request holds the messages that the online request holds. The prompt, the record and the schema instructions are in the same places.
+
+The record goes to the model as JSON, as it is written. Text that is not ASCII is not escaped. A `NaN` or an infinite number becomes `null`.
+
+A prompt that is too large for the context window of the model fails its record in the two modes. In batch mode, Agent Actions does not send that record. It sends the other records of the batch.
+
 ## Best Practices
 
 1. **Always put a namespace on the fields in a template** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never use a bare `{{ field }}`.

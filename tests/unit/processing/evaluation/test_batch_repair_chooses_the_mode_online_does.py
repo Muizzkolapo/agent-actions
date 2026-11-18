@@ -113,7 +113,13 @@ def test_a_template_that_starts_with_the_prompt_keeps_its_cache_prefix():
     wrapping.evaluate(result)
     _append_feedback([wraps], {"r1": wrapping.build_feedback(result)})
 
-    from agent_actions.llm.batch.processing.preparator import SHARED_PROMPT_LEN_KEY
+    from agent_actions.prompt.cache_scope import (
+        REQUEST_VARIES_PER_RECORD_KEY,
+        SHARED_PROMPT_LEN_KEY,
+    )
 
     assert starts[SHARED_PROMPT_LEN_KEY] == len(PROMPT)
     assert SHARED_PROMPT_LEN_KEY not in wraps
+    # As an online repair call's config: a prompt that shares no leading part gets no mark.
+    assert wraps[REQUEST_VARIES_PER_RECORD_KEY] is True
+    assert REQUEST_VARIES_PER_RECORD_KEY not in starts

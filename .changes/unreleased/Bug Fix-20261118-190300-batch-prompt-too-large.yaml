@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A batch record whose prompt is estimated too large for the model''s context window now fails alone before the batch is sent, with the error an online run raises for it, and the other records go out. Batch did not run that check, so the record was sent for the provider to refuse. A batched `llm_judge` request that large stops the judge batch before anything is sent.'
+time: 2026-11-18T19:03:00Z

@@ -217,13 +217,28 @@ class TestBatch:
     def test_a_prompt_that_reads_the_record_carries_no_mark(self, tmp_path):
         params = _batch(tmp_path, _config(TEMPLATED))
 
-        assert [p["system"] for p in params] == [f"Summarise the page {page}." for page in PAGES]
+        assert ["system" in p for p in params] == [False, False]
+        assert [
+            p["messages"][0]["content"].startswith(
+                f"\n<|begin_of_user_instruction|>: Summarise the page {page}. :<|end_of"
+            )
+            for p, page in zip(params, PAGES, strict=True)
+        ] == [True, True]
         assert [_marked_texts(p) for p in params] == [[], []]
 
     def test_a_static_prompt_keeps_one_mark_the_same_for_both_records(self, tmp_path):
         params = _batch(tmp_path, _config(STATIC))
 
-        assert [_marked_texts(p) for p in params] == [[STATIC], [STATIC]]
+        marked = f"\n<|begin_of_user_instruction|>: {STATIC}"
+        assert [_marked_texts(p) for p in params] == [[marked], [marked]]
+
+    @pytest.mark.parametrize("prompt", [TEMPLATED, STATIC], ids=["templated", "static"])
+    def test_each_request_carries_the_messages_online_sends(self, tmp_path, prompt):
+        config = _config(prompt)
+
+        assert [p["messages"] for p in _batch(tmp_path, config)] == [
+            body["messages"] for body in _online(config)
+        ]
 
     def test_a_schema_each_record_chooses_places_no_mark(self, tmp_path):
         params = _batch(tmp_path, _config(STATIC, **_dispatch_project(tmp_path)))
