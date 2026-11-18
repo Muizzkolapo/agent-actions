@@ -52,7 +52,10 @@ from agent_actions.utils.content import (
 from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
-from agent_actions.utils.transformation.passthrough import merge_passthrough_namespaces
+from agent_actions.utils.transformation.passthrough import (
+    PassthroughTransformer,
+    merge_passthrough_namespaces,
+)
 from agent_actions.utils.transformation.strategies.base import ensure_dict_output
 
 logger = logging.getLogger(__name__)
@@ -460,9 +463,8 @@ class BatchResultStrategy:
 
         expectation_service = self._expectation_service(ctx)
 
-        structured_items = []
+        answers = []
         for item in generated_list:
-            item_dict = ensure_dict_output(item)
             if expectation_service is not None:
                 from agent_actions.expectations.service import attach_verdict
 
@@ -470,7 +472,23 @@ class BatchResultStrategy:
                 # item gets no verdict.
                 verdict = expectation_service.validate(item)
                 if verdict is not None:
-                    item_dict = attach_verdict(item_dict, verdict)
+                    item = attach_verdict(item, verdict)
+            answers.append(item)
+
+        # Read by online's own strategies, handed what online hands them: the record at
+        # the first stage, its content below it.
+        row_content = original_row.get("content")
+        outputs = PassthroughTransformer().action_outputs(
+            answers,
+            original_row if is_first_stage or row_content is None else row_content,
+            original_source_guid or "",
+            ctx.agent_config,
+            stored_passthrough,
+        )
+
+        structured_items = []
+        for output in outputs:
+            item_dict = ensure_dict_output(output)
             if is_tool_version_merge:
                 content = merge_version_content(existing_content, item_dict, action_name)
                 record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
