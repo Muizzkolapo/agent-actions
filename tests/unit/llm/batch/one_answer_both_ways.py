@@ -194,7 +194,7 @@ def _bare(cls: type, **attrs: Any) -> Any:
 def batch_client(vendor: str) -> Any:
     if vendor == "ollama_local":
         return OllamaBatchClient(base_url="http://localhost:11434")
-    if vendor == "agac":
+    if vendor == "agac-provider":
         return AgacBatchClient()
     if vendor == "anthropic":
         return _bare(AnthropicBatchClient, enable_prompt_caching=False)

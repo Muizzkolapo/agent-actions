@@ -55,7 +55,7 @@ def test_the_reply_is_stored_as_online_stores_it(vendor, text, tmp_path):
     assert batch(vendor, text, config, tmp_path) == online(vendor, text, config)
 
 
-@pytest.mark.parametrize("vendor", (*VENDORS, "agac"))
+@pytest.mark.parametrize("vendor", (*VENDORS, "agac-provider"))
 def test_the_reply_is_one_record_holding_the_text(vendor, tmp_path):
     text = ANSWERS["prose-with-a-list"]
 
@@ -81,7 +81,7 @@ def test_a_json_action_still_reads_json_out_of_its_reply(tmp_path):
 
 def _retrieved(text: str, config: dict[str, Any], tmp_path) -> BatchResult:
     """The result a collect pass holds for a reply, before any repair round reads it."""
-    provider = batch_client("agac")
+    provider = batch_client("agac-provider")
     line = {"custom_id": "r1", "response": {"body": {"choices": [{"message": {"content": text}}]}}}
     provider.retrieve_results = lambda batch_id, output_directory=None: [
         provider.parse_provider_response(line)
