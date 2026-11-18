@@ -108,8 +108,8 @@ class TestTheOnlineRequest:
         text = ContextService.prepare_context_data({"source": {"deep": _deep()}}, False)
         assert text == '{"source": {"deep": ' + _deep_text(False) + "}}"
 
-    def test_an_ollama_message_serialises_a_deep_context(self):
-        text = MessageBuilder._serialise_context({"deep": _deep()}, "ollama_local")
+    def test_a_message_serialises_a_deep_context(self):
+        text = MessageBuilder._serialise_context({"deep": _deep()})
         assert text == '{"deep": ' + _deep_text(False) + "}"
 
 

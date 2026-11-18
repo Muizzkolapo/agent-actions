@@ -25,7 +25,7 @@ from agent_actions.utils.json_safety import ensure_json_safe
 # ---------------------------------------------------------------------------
 
 PROMPT = "Analyse the sentiment of the following text."
-CONTEXT_STR = "I love this product!"  # no braces to avoid StringProcessor escaping
+CONTEXT_STR = "I love this product!"
 SCHEMA_DICT = {"properties": {"sentiment": {"type": "string"}}, "type": "object"}
 
 
@@ -602,13 +602,20 @@ class TestContextSerialisationJsonSafety:
         parsed = json.loads(content)
         assert parsed["data"] == "binary"
 
-    def test_openai_dict_context_with_nan_produces_valid_string(self):
+    def test_openai_dict_context_with_nan_produces_valid_json(self):
         ctx = {"score": float("nan"), "text": "hello"}
         env = MessageBuilder.build("openai", PROMPT, ctx, json_mode=True)
         # After split: context is in user message (messages[1])
-        content = env.messages[1].content
-        assert "None" in content  # NaN replaced with None before str()
-        assert isinstance(content, str)
+        assert json.loads(env.messages[1].content) == {"score": None, "text": "hello"}
+
+    @pytest.mark.parametrize("provider", ["anthropic", "openai", "gemini", "groq", "cohere"])
+    @pytest.mark.parametrize("json_mode", [True, False])
+    def test_a_json_string_context_is_sent_as_written(self, provider, json_mode):
+        ctx = '{"doc": {"title": "Café", "n": [1, {"x": 2}]}}'
+        env = MessageBuilder.build(provider, PROMPT, ctx, json_mode=json_mode)
+        sent = env.prompt_body + "".join(m.content for m in env.messages)
+        assert ctx in sent
+        assert "{{" not in sent
 
     def test_openai_dict_context_with_set_produces_valid_string(self):
         ctx = {"tags": {"a", "b"}, "text": "hello"}

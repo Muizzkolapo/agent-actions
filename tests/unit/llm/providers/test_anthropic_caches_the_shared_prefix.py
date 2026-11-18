@@ -49,7 +49,7 @@ _BATCH_CREATED = {
 
 
 def _record_text(page: str) -> str:
-    return f"<|begin_of_text|>: {{'page': '{page}'}} :<|end_of_text|>\n"
+    return f'<|begin_of_text|>: {{"page": "{page}"}} :<|end_of_text|>\n'
 
 
 def _marks(value: Any) -> list[Any]:

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An online request now sends the record as the JSON it is. Every brace of the record was doubled in the prompt of every vendor but Ollama (`{{"doc": {{"title": "x"}}}}`), a leftover of `.format()` templating that nothing undid, so the model read text that is not JSON and the request carried the extra braces as tokens. The prompt of every online OpenAI, Anthropic, Gemini, Groq and Cohere action changes with this, so its answers can change and a prompt cache starts again.'
+time: 2026-11-18T19:00:00Z

@@ -20,9 +20,6 @@ from textwrap import dedent
 from typing import Any
 
 from agent_actions.errors import PromptTooLargeError
-from agent_actions.input.preprocessing.transformation.string_transformer import (
-    StringProcessor,
-)
 from agent_actions.utils import deep_json
 from agent_actions.utils.json_safety import ensure_json_safe
 
@@ -310,7 +307,7 @@ class MessageBuilder:
         role = config.json_role if json_mode else config.non_json_role
         rules_tuple = config.json_rules if json_mode else config.non_json_rules
 
-        context_str = MessageBuilder._serialise_context(context_data, provider)
+        context_str = MessageBuilder._serialise_context(context_data)
         rules = list(rules_tuple)
 
         schema_injection = config.schema_injection if json_mode else SchemaInjection.NONE
@@ -491,19 +488,11 @@ class MessageBuilder:
         return config
 
     @staticmethod
-    def _serialise_context(
-        context_data: str | dict[str, Any],
-        provider: str,
-    ) -> str:
-        """Convert context_data to a string for prompt embedding."""
-        if provider in {"ollama_local", "ollama_cloud"}:
-            if isinstance(context_data, str):
-                return context_data
-            return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
-
-        if isinstance(context_data, dict):
-            return str(ensure_json_safe(context_data))
-        return str(StringProcessor.process_as_string(context_data))
+    def _serialise_context(context_data: str | dict[str, Any]) -> str:
+        """The context as the prompt embeds it: a string as written, a dict as JSON."""
+        if isinstance(context_data, str):
+            return context_data
+        return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
 
     _SCHEMA_META_KEYS = frozenset({"name", "title", "description"})
 

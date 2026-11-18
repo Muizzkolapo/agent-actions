@@ -319,8 +319,8 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |         json_role, non_json_role, schema_injection, json_rules, ...)
   |
   2. Serialise context to string
-  |     --> dict -> str(ensure_json_safe(data))  (most providers)
-  |     --> dict -> deep_json.dumps(data)        (ollama; any depth)
+  |     --> str  -> as written (the JSON ContextService encoded)
+  |     --> dict -> deep_json.dumps(ensure_json_safe(data), ensure_ascii=False)
   |
   3. Assemble body (based on PromptStyle)
   |     TAGGED      --> <|begin_of_user_instruction|>: {prompt} :<|end|>
