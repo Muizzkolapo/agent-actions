@@ -141,6 +141,22 @@ def _extract_ollama_schema(schema: dict[str, Any] | None) -> dict[str, Any] | No
     return inner
 
 
+def read_json_reply(content: str) -> dict[str, Any] | list[dict[str, Any]] | None:
+    """A JSON-mode reply's text as its record or records, online or in a batch.
+
+    A list holding a non-object is one record, under ``response``. None when the text
+    is neither an object nor a list, which JSON mode takes as a parse error.
+    """
+    from agent_actions.utils.json_parsing import parse_llm_json
+
+    result = parse_llm_json(content)
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, list):
+        return result if all(isinstance(r, dict) for r in result) else {"response": result}
+    return None
+
+
 def _call_ollama_json(
     api_key: str | None,
     agent_config: dict[str, Any],
@@ -202,13 +218,9 @@ def _call_ollama_json(
         logger.warning("%s (model=%s)", parse_error, model)
         return [{"raw_response": content, "_parse_error": parse_error}]
     if isinstance(content, str):
-        from agent_actions.utils.json_parsing import parse_llm_json
-
-        result = parse_llm_json(content)
-        if isinstance(result, dict):
-            return [result]
-        if isinstance(result, list):
-            return result if all(isinstance(r, dict) for r in result) else [{"response": result}]
+        result = read_json_reply(content)
+        if result is not None:
+            return result if isinstance(result, list) else [result]
         # All parse strategies failed
         fire_event(
             LLMJSONParseErrorEvent(provider=vendor_slug, model=model, error="Failed to parse JSON")

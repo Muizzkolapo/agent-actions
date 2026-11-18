@@ -26,6 +26,20 @@ def get_parse_error_marker(response: Any) -> str | None:
     return None
 
 
+def with_dispatch_results(content: Any, results: dict[str, Any]) -> Any:
+    """*content* with an ``add_dispatch`` action's *results* on each object it holds.
+
+    An answer is a list of items online and may be one object in a batch.
+    """
+    if not results:
+        return content
+    if isinstance(content, dict):
+        return {**content, **results}
+    if isinstance(content, list):
+        return [{**item, **results} if isinstance(item, dict) else item for item in content]
+    return content
+
+
 def run_dynamic_agent(
     agent_config: dict[str, Any],
     agent_name: str,
@@ -68,10 +82,7 @@ def run_dynamic_agent(
         tool_args=tool_args,
         source_content=source_content,
     )
-    if dispatch_results:
-        response = [
-            {**item, **dispatch_results} if isinstance(item, dict) else item for item in response
-        ]
+    response = with_dispatch_results(response, dispatch_results)
 
     response = _validate_llm_output_schema(response, record_config, agent_name)
 

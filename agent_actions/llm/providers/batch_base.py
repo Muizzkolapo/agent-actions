@@ -112,6 +112,9 @@ class BatchResult:
     # it holds none (content is None), or the output limit cut it off. In text mode a
     # line with no answer fails with ``error``, or with none goes to ``on_empty``.
     parse_error: str | None = None
+    # Whether online's retry policy retries what this record ended with, where the client
+    # knows the error online raises for it; None is decided from ``error_status``.
+    retriable: bool | None = None
 
 
 def raise_unsent(rows: list[dict[str, Any]]) -> None:
@@ -341,6 +344,7 @@ class BaseBatchClient(ABC):
                 success=False,
                 error=error,
                 error_status=self._extract_error_status(raw_response),
+                retriable=self._extract_retriable(raw_response),
             )
 
         metadata = self._extract_metadata_from_response(raw_response)
@@ -356,6 +360,7 @@ class BaseBatchClient(ABC):
                 metadata=metadata,
                 usage=usage,
                 parse_error=no_answer.parse_error,
+                retriable=no_answer.retried,
             )
 
         # Extract successful response data
@@ -407,6 +412,10 @@ class BaseBatchClient(ABC):
 
     def _extract_error_status(self, raw_response: Any) -> int | None:
         """The HTTP status a failed line's request was answered with; None when it does not say."""
+        return None
+
+    def _extract_retriable(self, raw_response: Any) -> bool | None:
+        """Whether online retries a failed line's failure; None when its status decides."""
         return None
 
     @abstractmethod

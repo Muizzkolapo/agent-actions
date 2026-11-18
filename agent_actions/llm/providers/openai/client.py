@@ -24,15 +24,13 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 
-from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
     VendorErrorMapping,
+    chat_no_answer,
     cut_off_parse_error,
-    empty_parse_error,
-    empty_response_error,
     is_truncated,
-    refusal_text,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -124,6 +122,17 @@ class OpenAIClient(BaseClient):
         )
 
     @classmethod
+    def _no_answer(cls, message: Any, finish_reason: Any, model_name: str) -> NoAnswer | None:
+        return chat_no_answer(
+            message.content,
+            finish_reason,
+            message.refusal,
+            vendor_label="OpenAI",
+            model_name=model_name,
+            vendor=cls.VENDOR,
+        )
+
+    @classmethod
     def call_json(
         cls,
         api_key: str | None,
@@ -186,41 +195,39 @@ class OpenAIClient(BaseClient):
 
         response_message = response.choices[0].message
         response_content: str | None = response_message.content
-        if response_content is None:
-            if response_message.refusal:
-                reason = refusal_text(response_message.refusal)
+        finish_reason = response.choices[0].finish_reason
+        ended = cls._no_answer(response_message, finish_reason, model_name)
+        if ended is not None:
+            if response_content is not None:
+                logger.warning("%s (model=%s)", ended.parse_error, model_name)
+            elif response_message.refusal:
                 fire_event(
                     LLMErrorEvent(
                         provider=cls.VENDOR,
                         model=model_name,
                         error_type="Refusal",
-                        error_message=reason,
+                        error_message=ended.parse_error,
                         request_id=request_id,
                     )
                 )
                 # The disposition keeps only the code parse_error; the run log carries the why.
-                logger.warning("%s (model=%s)", reason, model_name)
-                return [{"raw_response": "", "_parse_error": reason}]
-            fire_event(
-                LLMErrorEvent(
-                    provider=cls.VENDOR,
-                    model=model_name,
-                    error_type="EmptyResponse",
-                    error_message="Empty response content from OpenAI API",
-                    request_id=request_id,
+                logger.warning("%s (model=%s)", ended.parse_error, model_name)
+            else:
+                fire_event(
+                    LLMErrorEvent(
+                        provider=cls.VENDOR,
+                        model=model_name,
+                        error_type="EmptyResponse",
+                        error_message="Empty response content from OpenAI API",
+                        request_id=request_id,
+                    )
                 )
-            )
-            logger.debug(
-                "Empty response content from OpenAI API, model=%s",
-                model_name,
-            )
-            return [
-                {
-                    "raw_response": "",
-                    "_parse_error": empty_parse_error(response.choices[0].finish_reason),
-                }
-            ]
-        finish_reason = response.choices[0].finish_reason
+                logger.debug(
+                    "Empty response content from OpenAI API, model=%s",
+                    model_name,
+                )
+            return [{"raw_response": "", "_parse_error": ended.parse_error}]
+        assert response_content is not None  # no content is no answer, ended above
         if is_truncated(finish_reason):
             parse_error = cut_off_parse_error(finish_reason)
             logger.warning("%s (model=%s)", parse_error, model_name)
@@ -304,25 +311,9 @@ class OpenAIClient(BaseClient):
 
         response_message = response.choices[0].message
         content: str | None = response_message.content
-        if content is None or (not content and is_truncated(response.choices[0].finish_reason)):
-            error = (
-                VendorAPIError(
-                    refusal_text(response_message.refusal),
-                    context={
-                        "model_name": model_name,
-                        "vendor": cls.VENDOR,
-                        "api_operation": "chat.completions.create",
-                    },
-                )
-                if response_message.refusal
-                else empty_response_error(
-                    "OpenAI",
-                    response.choices[0].finish_reason,
-                    model_name=model_name,
-                    vendor=cls.VENDOR,
-                    operation="chat.completions.create",
-                )
-            )
+        ended = cls._no_answer(response_message, response.choices[0].finish_reason, model_name)
+        if ended is not None and ended.error is not None:
+            error = ended.error
             fire_event(
                 LLMErrorEvent(
                     provider=cls.VENDOR,
@@ -333,4 +324,5 @@ class OpenAIClient(BaseClient):
                 )
             )
             raise error
+        assert content is not None  # no content is no answer, raised above
         return ResponseBuilder.wrap_non_json(content, agent_config)

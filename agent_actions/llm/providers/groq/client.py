@@ -25,10 +25,10 @@ from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
     VendorErrorMapping,
+    chat_no_answer,
     cut_off_parse_error,
-    empty_parse_error,
-    empty_response_error,
     is_truncated,
     wrap_vendor_error,
 )
@@ -65,6 +65,13 @@ _ERROR_MAPPING = VendorErrorMapping(
     base_api_error_type=groq.APIError,
     supports_retry_after=True,
 )
+
+
+def _no_answer(content: Any, finish_reason: Any, model_name: str) -> NoAnswer | None:
+    # Groq's message carries no refusal.
+    return chat_no_answer(
+        content, finish_reason, None, vendor_label="Groq", model_name=model_name, vendor="groq"
+    )
 
 
 class GroqClient(BaseClient, JSONResponseMixin):
@@ -155,8 +162,11 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         response_temp = llm.choices[0].message.content
         finish_reason = llm.choices[0].finish_reason
-        if response_temp is None:
-            return [{"raw_response": "", "_parse_error": empty_parse_error(finish_reason)}]
+        ended = _no_answer(response_temp, finish_reason, model_name)
+        if ended is not None:
+            if response_temp is not None:
+                logger.warning("%s (model=%s)", ended.parse_error, model_name)
+            return [{"raw_response": "", "_parse_error": ended.parse_error}]
         if is_truncated(finish_reason):
             parse_error = cut_off_parse_error(finish_reason)
             logger.warning("%s (model=%s)", parse_error, model_name)
@@ -207,17 +217,13 @@ class GroqClient(BaseClient, JSONResponseMixin):
         ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)
 
         choice = response.choices[0] if getattr(response, "choices", None) else None
-        if choice is not None and (
-            choice.message.content is None
-            or (not choice.message.content and is_truncated(choice.finish_reason))
-        ):
-            raise empty_response_error(
-                "Groq",
-                choice.finish_reason,
-                model_name=model_name,
-                vendor="groq",
-                operation="chat.completions.create",
-            )
+        ended = (
+            _no_answer(choice.message.content, choice.finish_reason, model_name)
+            if choice is not None
+            else None
+        )
+        if ended is not None and ended.error is not None:
+            raise ended.error
         try:
             response_content = response.choices[0].message.content
             return ResponseBuilder.wrap_non_json(response_content, agent_config)

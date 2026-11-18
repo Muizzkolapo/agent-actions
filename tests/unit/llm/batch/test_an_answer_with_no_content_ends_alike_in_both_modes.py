@@ -48,6 +48,14 @@ NO_CONTENT: dict[str, tuple[str, dict[str, Any]]] = {
     "openai content filter": ("openai", chat_completion(None, "content_filter")),
     "openai cut off before any content": ("openai", chat_completion(None, "length")),
     "openai cut off at an empty string": ("openai", chat_completion("", "length")),
+    "openai refusal cut off before any content": (
+        "openai",
+        chat_completion(None, "length", refusal=REFUSAL),
+    ),
+    "openai refusal cut off at an empty string": (
+        "openai",
+        chat_completion("", "length", refusal=REFUSAL),
+    ),
     "groq no content": ("groq", chat_completion(None)),
     "groq cut off before any content": ("groq", chat_completion(None, "length")),
     "groq cut off at an empty string": ("groq", chat_completion("", "length")),
