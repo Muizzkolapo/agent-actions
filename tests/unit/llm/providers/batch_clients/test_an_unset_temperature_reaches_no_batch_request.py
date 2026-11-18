@@ -34,7 +34,7 @@ CLIENTS = {
     "anthropic": lambda: _bare(AnthropicBatchClient, enable_prompt_caching=False),
     "gemini": lambda: _bare(GeminiBatchClient),
     "ollama": lambda: OllamaBatchClient(base_url="http://localhost:11434"),
-    "agac": lambda: _bare(AgacBatchClient),
+    "agac-provider": lambda: _bare(AgacBatchClient),
 }
 
 
