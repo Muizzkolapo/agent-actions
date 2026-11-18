@@ -7,7 +7,8 @@ and produces a provider-agnostic ``LLMMessageEnvelope`` that the provider
 converts to its SDK-specific format in the last mile.
 
 Architecture invariant: all prompt-to-message assembly MUST go through
-``MessageBuilder.build()`` so that formatting changes are made in one place.
+``MessageBuilder.build()``, online and in batch, so that a batch line asks the
+model what the online request asks and formatting changes are made in one place.
 """
 
 from __future__ import annotations
@@ -20,9 +21,6 @@ from textwrap import dedent
 from typing import Any
 
 from agent_actions.errors import PromptTooLargeError
-from agent_actions.input.preprocessing.transformation.string_transformer import (
-    StringProcessor,
-)
 from agent_actions.utils import deep_json
 from agent_actions.utils.json_safety import ensure_json_safe
 
@@ -158,9 +156,9 @@ class LLMMessageEnvelope:
 
     messages: list[LLMMessage]
     prompt_body: str = ""
-    """The assembled prompt text *before* role wrapping.  Gemini online uses
-    this directly; all other providers use ``messages``.  Empty for Ollama
-    (RAW style)."""
+    """The assembled prompt text *before* role wrapping.  Gemini sends this
+    as its one text part; all other providers use ``messages``.  Empty for
+    Ollama (RAW style)."""
     rules: list[str] = field(default_factory=list)
 
     def to_dicts(self, *, role: str | None = None) -> list[dict[str, Any]]:
@@ -299,7 +297,7 @@ class MessageBuilder:
         shared_prompt_len: int | None = None,
         model_name: str | None = None,
     ) -> LLMMessageEnvelope:
-        """Build a message envelope for a realtime (online) provider call.
+        """Build the message envelope of one provider request, online or a batch line.
 
         ``shared_prompt_len`` is the length of the leading part of ``prompt_config`` every
         record is sent; None means all of it. A cache mark sits at its end.
@@ -310,7 +308,7 @@ class MessageBuilder:
         role = config.json_role if json_mode else config.non_json_role
         rules_tuple = config.json_rules if json_mode else config.non_json_rules
 
-        context_str = MessageBuilder._serialise_context(context_data, provider)
+        context_str = MessageBuilder._serialise_context(context_data)
         rules = list(rules_tuple)
 
         schema_injection = config.schema_injection if json_mode else SchemaInjection.NONE
@@ -380,70 +378,6 @@ class MessageBuilder:
             rules=rules,
         )
 
-    @staticmethod
-    def build_for_batch(
-        provider: str,
-        prompt: str,
-        user_content: str,
-        *,
-        schema: dict[str, Any] | None = None,
-        enable_prompt_caching: bool = False,
-        shared_prompt_len: int | None = None,
-    ) -> LLMMessageEnvelope:
-        """Build a message envelope for a batch provider call.
-
-        Most providers use system + user messages.  Anthropic uses a
-        separate ``system`` param plus a single user message.  Gemini
-        combines prompt and content into one text string. ``shared_prompt_len``
-        is as for ``build``.
-        """
-        MessageBuilder._check_shared_len(shared_prompt_len, prompt)
-        # Inject schema into prompt for providers using SchemaInjection.PROMPT
-        # (e.g., ollama_cloud — no native structured output support).
-        effective_prompt = prompt
-        config = PROVIDER_MESSAGE_CONFIGS.get(provider)
-        if config and config.schema_injection == SchemaInjection.PROMPT and schema is not None:
-            clean_schema = MessageBuilder._strip_schema_metadata(schema)
-            schema_text = json.dumps(clean_schema, indent=2, ensure_ascii=False)
-            effective_prompt = (
-                f"{prompt}\n\n"
-                f"You MUST respond with valid JSON matching this schema:\n"
-                f"{schema_text}\n\n"
-                f"Return ONLY the JSON object, no extra text."
-            )
-
-        if provider == "gemini":
-            # Gemini batch: single combined text, with the schema text online gives it
-            combined = f"{effective_prompt}\n\n{user_content}"
-            if config is not None and schema is not None:
-                schema_block = MessageBuilder._inline_schema_text(config.schema_injection, schema)
-                if schema_block is not None:
-                    tail = [schema_block]
-                    if config.json_rules:
-                        tail.extend(["", *config.json_rules])
-                    combined = "\n".join([combined, *tail])
-            static_len = (
-                len(effective_prompt) + 2 if shared_prompt_len is None else shared_prompt_len
-            )
-            messages = [LLMMessage(role="user", content=combined, static_len=static_len)]
-        else:
-            # Standard (including Anthropic): system + user messages.
-            # Anthropic batch consumers split system out as a top-level param.
-            messages = [
-                LLMMessage(
-                    role="system",
-                    content=effective_prompt,
-                    static_len=_shared_len(effective_prompt, shared_prompt_len),
-                ),
-                LLMMessage(role="user", content=user_content),
-            ]
-        if enable_prompt_caching:
-            messages = MessageBuilder._mark_for_caching(provider, messages)
-        return LLMMessageEnvelope(
-            messages=messages,
-            prompt_body=prompt,
-        )
-
     # -- internals -----------------------------------------------------------
 
     @staticmethod
@@ -491,19 +425,11 @@ class MessageBuilder:
         return config
 
     @staticmethod
-    def _serialise_context(
-        context_data: str | dict[str, Any],
-        provider: str,
-    ) -> str:
-        """Convert context_data to a string for prompt embedding."""
-        if provider in {"ollama_local", "ollama_cloud"}:
-            if isinstance(context_data, str):
-                return context_data
-            return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
-
-        if isinstance(context_data, dict):
-            return str(ensure_json_safe(context_data))
-        return str(StringProcessor.process_as_string(context_data))
+    def _serialise_context(context_data: str | dict[str, Any]) -> str:
+        """The context as the prompt embeds it: a string as written, a dict as JSON."""
+        if isinstance(context_data, str):
+            return context_data
+        return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
 
     _SCHEMA_META_KEYS = frozenset({"name", "title", "description"})
 

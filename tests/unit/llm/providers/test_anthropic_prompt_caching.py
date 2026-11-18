@@ -356,38 +356,54 @@ class TestCallApiCachingIntegration:
 
 
 class TestBatchClientNoRegression:
-    """The batch envelope is marked for caching only when asked, by the online rule."""
+    """A batch line is marked for caching only when asked, by the online rule."""
 
-    def test_batch_caching_marks_the_system_prompt_and_not_the_record(self):
-        envelope = MessageBuilder.build_for_batch(
-            "anthropic", PROMPT, CONTEXT, enable_prompt_caching=True
+    @staticmethod
+    def _params(*, cache_prompt: bool = False) -> dict[str, Any]:
+        from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
+        from agent_actions.llm.providers.batch_base import BatchTask
+
+        task = BatchTask(
+            custom_id="r1",
+            prompt=PROMPT,
+            user_content=CONTEXT,
+            model_config={"model_name": "claude-sonnet-4-20250514"},
+            cache_prompt=cache_prompt,
         )
-        assert [msg.cache_control for msg in envelope.messages] == [CACHE_CONTROL_MARKER, None]
+        return AnthropicBatchClient(api_key="sk-ant-test").format_task_for_provider(task)["params"]
+
+    def test_batch_caching_marks_the_prompt_and_not_the_record(self):
+        (message,) = self._params(cache_prompt=True)["messages"]
+        marked, record = message["content"]
+        assert marked == {
+            "type": "text",
+            "text": f"\n<|begin_of_user_instruction|>: {PROMPT}",
+            "cache_control": CACHE_CONTROL_MARKER,
+        }
+        assert "cache_control" not in record
+        assert CONTEXT in record["text"]
 
     def test_batch_caching_marks_nothing_for_another_provider(self):
         for provider in ("openai", "gemini"):
-            envelope = MessageBuilder.build_for_batch(
-                provider, PROMPT, CONTEXT, enable_prompt_caching=True
+            envelope = MessageBuilder.build(
+                provider, PROMPT, CONTEXT, json_mode=False, enable_prompt_caching=True
             )
             assert all(msg.cache_control is None for msg in envelope.messages), provider
 
-    def test_batch_build_for_batch_no_cache_control(self):
-        """Caching off by default: no message is marked."""
-        envelope = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT)
-        for msg in envelope.messages:
-            assert msg.cache_control is None
+    def test_batch_line_has_no_cache_control_by_default(self):
+        """Caching off by default: the message goes as plain text."""
+        (message,) = self._params()["messages"]
+        assert isinstance(message["content"], str)
 
-    def test_batch_to_dicts_returns_plain_format(self):
-        """Batch envelope.to_dicts() returns simple string content."""
-        envelope = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT)
-        dicts = envelope.to_dicts()
-        for d in dicts:
-            assert isinstance(d["content"], str)
+    def test_batch_line_carries_the_messages_the_online_builder_gives(self):
+        for cache_prompt in (True, False):
+            envelope = MessageBuilder.build(
+                "anthropic", PROMPT, CONTEXT, json_mode=False, enable_prompt_caching=cache_prompt
+            )
+            assert self._params(cache_prompt=cache_prompt)["messages"] == envelope.to_dicts()
 
-    def test_batch_system_extraction_still_works(self):
-        """Batch client pattern: to_dicts(role='system')[0]['content'] is a string."""
-        envelope = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT)
-        system_dicts = envelope.to_dicts(role="system")
-        assert len(system_dicts) == 1
-        assert isinstance(system_dicts[0]["content"], str)
-        assert system_dicts[0]["content"] == PROMPT
+    def test_batch_line_carries_no_system_prompt(self):
+        """The prompt is in the user message, as online sends it."""
+        params = self._params()
+        assert "system" not in params
+        assert PROMPT in params["messages"][0]["content"]

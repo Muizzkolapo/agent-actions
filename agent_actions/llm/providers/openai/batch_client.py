@@ -64,8 +64,15 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
-        envelope = MessageBuilder.build_for_batch(
-            "openai", batch_task.prompt, batch_task.user_content, schema=schema
+        # The messages online sends; it measures only a JSON-mode prompt against the model.
+        json_mode = batch_task.json_mode(schema)
+        envelope = MessageBuilder.build(
+            "openai",
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            json_mode=json_mode,
+            model_name=model_name if json_mode else None,
         )
         body = {
             "model": model_name,
