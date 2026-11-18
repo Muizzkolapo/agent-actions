@@ -56,6 +56,14 @@ def action_config(**settings: Any) -> dict[str, Any]:
     }
 
 
+def without_the_reason(stored: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The stored records, a parse error's wording aside."""
+    return [
+        {**record, "_parse_error": True} if "_parse_error" in record else record
+        for record in stored
+    ]
+
+
 def _call(client: Any, config: dict[str, Any], schema: dict[str, Any] | None) -> list[Any]:
     key = None if client is OllamaLocalClient else "k"
     if config.get("json_mode", True):

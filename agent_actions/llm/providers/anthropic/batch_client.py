@@ -235,6 +235,16 @@ class AnthropicBatchClient(BaseBatchClient):
             return None
         return self._extract_text_content(content_list)
 
+    def _parse_json_content(self, content_str: str) -> Any:
+        """Read a text answer as online reads it: an object or a list of objects.
+
+        Any other text stays text, which JSON mode takes as a parse error.
+        """
+        from agent_actions.llm.providers.anthropic.client import json_answer_in
+
+        answer = json_answer_in(content_str)
+        return content_str if answer is None else answer
+
     def _parse_content_list(self, content_list: Any) -> Any:
         """
         Parse Anthropic content list, prioritizing tool use over text.
