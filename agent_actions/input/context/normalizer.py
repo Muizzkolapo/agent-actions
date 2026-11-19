@@ -17,6 +17,12 @@ DIRECTIVE_REGISTRY = {
     "seed": {"type": "dict", "expand_versions": False},
 }
 
+# Not a directive a workflow writes: split_optional_observe keeps each optional observe
+# reference here, with the value a record lacking the field is given.
+OPTIONAL_DIRECTIVE = "optional"
+_OPTIONAL_MARK = "?"
+_OPTIONAL_ENTRY_KEYS = ("field", "optional", "default")
+
 # Namespaces users write in prompt references when they mean the 'seed' namespace.
 SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path", "static_data"})
 
@@ -33,9 +39,17 @@ def normalize_context_scope(
     if not context_scope or not isinstance(context_scope, dict):
         return {}
 
-    expanded_scope = {}
+    expanded_scope: dict[str, Any] = {}
 
-    for directive_name, directive_value in context_scope.items():
+    for directive_name, directive_value in split_optional_observe(context_scope).items():
+        if directive_name == OPTIONAL_DIRECTIVE:
+            # Keyed by reference, so a version base name expands as it does in observe.
+            expanded_scope[directive_name] = {
+                expanded_ref: default
+                for ref, default in directive_value.items()
+                for expanded_ref in _expand_list_directive([ref], version_base_map)
+            }
+            continue
         if directive_name not in DIRECTIVE_REGISTRY:
             raise ConfigurationError(
                 f"context_scope.{directive_name} is not a valid directive. "
@@ -59,6 +73,124 @@ def normalize_context_scope(
             expanded_scope[directive_name] = directive_value
 
     return expanded_scope
+
+
+def split_optional_observe(context_scope: Any) -> Any:
+    """*context_scope* with every observe entry a plain reference.
+
+    An optional entry (``a.b?``, or ``{field: a.b, optional: true, default: x}``) leaves
+    ``a.b`` in ``observe`` and ``a.b: x`` under ``optional``, the one place its being
+    optional is read from. Returns *context_scope* itself when it is already so, or is
+    no mapping at all.
+    """
+    if not isinstance(context_scope, dict):
+        return context_scope
+    for directive in ("passthrough", "drop"):
+        entries = context_scope.get(directive)
+        for entry in entries if isinstance(entries, list) else []:
+            if _is_optional_form(entry):
+                raise ConfigurationError(
+                    f"context_scope.{directive} entry {_shown(entry)} is written as optional, "
+                    "which only an observe entry can be. Write the plain reference "
+                    "('action.field').",
+                    context={"directive": directive, "entry": _shown(entry)},
+                )
+
+    stated = context_scope.get(OPTIONAL_DIRECTIVE)
+    if stated is not None and not isinstance(stated, dict):
+        raise ConfigurationError(
+            "context_scope.optional is not written by hand. Mark the observe entry instead: "
+            "'action.field?' or {field: action.field, optional: true}.",
+            context={"directive": OPTIONAL_DIRECTIVE},
+        )
+    entries = context_scope.get("observe")
+    if not isinstance(entries, list) or all(
+        isinstance(entry, str) and _OPTIONAL_MARK not in entry for entry in entries
+    ):
+        return context_scope
+
+    references: list[Any] = []
+    optional: dict[str, Any] = dict(stated or {})
+    for entry in entries:
+        if not isinstance(entry, str | dict):
+            references.append(entry)
+            continue
+        reference, is_optional, default = _read_observe_entry(entry)
+        if is_optional and (default is not None or reference not in optional):
+            optional[reference] = default
+        if reference not in references:
+            references.append(reference)
+
+    split = {**context_scope, "observe": references}
+    if optional:
+        split[OPTIONAL_DIRECTIVE] = optional
+    return split
+
+
+def observe_entry_reference(entry: Any) -> str | None:
+    """The plain reference an observe entry names, or None; refuses nothing."""
+    if isinstance(entry, dict):
+        entry = entry.get("field")
+    if not isinstance(entry, str):
+        return None
+    return entry.strip().removesuffix(_OPTIONAL_MARK)
+
+
+def _is_optional_form(entry: Any) -> bool:
+    if isinstance(entry, dict):
+        return any(key in entry for key in _OPTIONAL_ENTRY_KEYS)
+    return isinstance(entry, str) and entry.strip().endswith(_OPTIONAL_MARK)
+
+
+def _shown(entry: Any) -> str:
+    return f"'{entry}'" if isinstance(entry, str) else str(entry)
+
+
+def _read_observe_entry(entry: str | dict[str, Any]) -> tuple[str, bool, Any]:
+    """(plain reference, whether it is optional, value when missing) of one observe entry."""
+
+    def refuse(problem: str) -> ConfigurationError:
+        return ConfigurationError(
+            f"context_scope.observe entry {_shown(entry)}: {problem}",
+            context={"directive": "observe", "entry": _shown(entry)},
+        )
+
+    written: Any = entry
+    stated: bool | None = None
+    default: Any = None
+    if isinstance(entry, dict):
+        unknown = sorted(str(key) for key in entry if key not in _OPTIONAL_ENTRY_KEYS)
+        if unknown:
+            raise refuse(
+                f"unknown key {', '.join(unknown)}. An observe entry is a reference "
+                f"('action.field') or a mapping of {', '.join(_OPTIONAL_ENTRY_KEYS)}."
+            )
+        written = entry.get("field")
+        if not isinstance(written, str) or not written.strip():
+            raise refuse("'field' must name the reference, as in {field: action.field}.")
+        stated = entry.get("optional")
+        if stated is not None and not isinstance(stated, bool):
+            raise refuse("'optional' must be true or false.")
+        default = entry.get("default")
+
+    reference = written.strip()
+    marked = reference.endswith(_OPTIONAL_MARK)
+    if marked:
+        reference = reference[: -len(_OPTIONAL_MARK)]
+    if _OPTIONAL_MARK in reference:
+        raise refuse(
+            "'?' marks the whole entry optional and goes once, at the end of the "
+            "reference ('action.field?')."
+        )
+    if stated is False and (marked or (isinstance(entry, dict) and "default" in entry)):
+        raise refuse("'optional: false' contradicts the '?' or the 'default' beside it.")
+    is_optional = marked or bool(stated) or (isinstance(entry, dict) and "default" in entry)
+    if is_optional and reference.endswith(".*"):
+        raise refuse(
+            "a wildcard cannot be optional. It already resolves to whichever fields the "
+            "record has; remove the optional form."
+        )
+    return reference, is_optional, default
 
 
 def _expand_list_directive(

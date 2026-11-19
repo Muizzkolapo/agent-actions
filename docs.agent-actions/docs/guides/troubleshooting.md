@@ -56,6 +56,8 @@ If none of the declared fields exist in the upstream output, the framework logs 
 | Empty object | The LLM returned `{}`. | Use the same fix. The framework rejects an empty object when the schema declares fields. |
 | Existing poison | Bad data from a previous run is already in `target_data`. | Run the upstream action again with a repair policy. Or clean the SQLite row manually. |
 
+If the upstream action does not return the field for each record by design, observe the field as optional (`generate_optimal_code.explanation?`). The record then gets null, or a default that you state, and does not fail. See [Optional Fields](../reference/context/context-scope.md#optional-fields).
+
 **Behavior:** If one record has incomplete namespace data, the framework logs a WARNING (`Record <source_guid> prep failed (context incomplete)`). The framework stores that record as failed, and continues with the remaining records in the file. One bad record does not fail a full file of valid records.
 
 ### AgentActionsError

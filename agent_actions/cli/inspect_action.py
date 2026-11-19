@@ -13,7 +13,7 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
-from .inspect_base import BaseInspectCommand, branch_of
+from .inspect_base import BaseInspectCommand, branch_of, observe_as_written
 from .workflow_loader import validate_action_exists
 
 logger = logging.getLogger(__name__)
@@ -472,7 +472,7 @@ class ContextCommand(BaseInspectCommand):
             **({"branch": branch} if branch is not None else {}),
             "namespaces": namespaces,
             "context_scope": {
-                "observe": context_scope.get("observe", []),
+                "observe": observe_as_written(context_scope),
                 "passthrough": context_scope.get("passthrough", []),
                 "drop": context_scope.get("drop", []),
             },

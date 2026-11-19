@@ -51,6 +51,67 @@ The `observe` directive selects the upstream namespaces and fields that the acti
       - source.content  # Can include source data
 ```
 
+An entry that names a field (`action.field`) is explicit. If a record has the namespace of the action but not the field, the record fails with `RecordContextError`. The other records continue. There is one exception: if the namespace has none of the fields that the action names from it, the framework treats the namespace as null for that record. See [Troubleshooting](../../guides/troubleshooting.md#recordcontexterror-record-namespace). A wildcard entry (`action.*`) reads the fields that the record has, and does not fail.
+
+### Optional Fields
+
+Mark an `observe` entry as optional when a record may not have the field. Examples are a field of an action that a guard can skip (`on_false: skip`), and a field that an action returns only for some records.
+
+There are two forms. They mean the same:
+
+```yaml
+context_scope:
+  observe:
+    - write_spec.spec_text
+    - review.rejected_text?          # Suffix form
+    - field: review.reasons          # Mapping form
+      optional: true
+      default: []
+```
+
+| Key of the mapping form | Description |
+|-------------------------|-------------|
+| `field` | The reference, `action.field`. Required. |
+| `optional` | `true` marks the field as optional. A `default` without `optional` also marks it. |
+| `default` | The value that the field gets when the record does not have it. Without `default`, the value is null. |
+
+An optional field never fails the record. It gets its default (or null) in each of these cases:
+
+- The record has the namespace of the action, but not the field.
+- The field is null on the record.
+- The namespace is null, because a guard skipped the action for this record or the action wrote no output for it.
+
+This table shows what each reader gets. The behavior is the same in the online mode and in the batch mode.
+
+| Reader | What it gets for an optional field that the record does not have |
+|--------|------------------------------------------------------------------|
+| The LLM context | The field with its default, or `null` |
+| The prompt template | `{{ review.rejected_text }}` prints the default. A null prints as an empty string, as a null value of a field does. |
+| A tool at record granularity | `data["review"]["rejected_text"]` holds the default, or `None` |
+| A tool at file granularity | The item holds the key `rejected_text` with the default, or `None` |
+
+A namespace that is null stays null. Thus `{% if review %}` is still false for a record that the guard skipped. The prompt can read the optional fields of that namespace. A read of any other field of it still fails the record.
+
+Optional says that a record may not have the field. It does not say that the name may be wrong:
+
+- Pre-flight still refuses an optional entry that names an action that is not in the workflow, or a field that the schema of the action does not list.
+- The same field without the mark still fails a record that does not have it.
+- Pre-flight does not give the warning `'<action>.<field>' may be null at runtime` for an optional field. It still gives the warning for a field without the mark.
+
+These rules apply to the syntax:
+
+- The `?` goes one time, at the end of the entry. An entry such as `review?.text` is refused when the workflow loads.
+- A wildcard cannot be optional. `review.*?` is refused when the workflow loads, because a wildcard already reads only the fields that the record has.
+- Only `observe` has optional entries. A `passthrough` or `drop` entry that is written as optional is refused when the workflow loads.
+- An entry that ends in `?` reads the field without the `?`. To read a field whose name really ends in `?`, use a wildcard.
+- In an inline list or mapping (`[ ]` or `{ }`), YAML does not accept a bare `?`. Put the entry in quotes, or write the list with one entry on each line:
+
+  ```yaml
+  context_scope: { observe: [write_spec.spec_text, "review.rejected_text?"] }
+  ```
+
+An optional entry in `defaults` applies to each action that inherits it. If one level writes `review.text` and another level writes `review.text?`, the action observes the field one time, as optional.
+
 ## Drop Directive
 
 The `drop` directive removes fields that `observe` selected from the context. Usually `observe` selects these fields with a wildcard, for example `source.*`. `drop` adds nothing. An action with only `drop` has no `source` namespace in its context, and a prompt that reads `source` fails.

@@ -19,4 +19,4 @@ configuration errors with consistent context for CLI output.
 | `model.py` | Module | Formats model-specific error details (token usage, rate limits). Its message-word match does not claim a `PreFlightValidationError`. | `llm.providers`, `logging` |
 | `template.py` | Module | Formats template rendering issues with namespace diagnostics, fuzzy field suggestions, and actionable hints. Keeps the `agent` (the workflow) and `action_name` (the action whose template failed) it was given; the title names the agent only when the context has one. | `prompt_generation`, `logging` |
 | `udf_load.py` | Module | Formats UDF discovery import failures with module, file, and dependency install hint. Keeps the `agent` and `action_name` it was given. | `utils.udf_management`, `logging` |
-| `yaml.py` | Module | Formats YAML parsing errors with line/column details. Keeps the `agent` and `action_name` it was given. | `yaml`, `logging` |
+| `yaml.py` | Module | Formats YAML parsing errors with line/column details. Keeps the `agent` and `action_name` it was given. Names the fix for a bare `?` inside an inline list or mapping: quote the optional observe entry. | `yaml`, `logging` |
