@@ -5,8 +5,10 @@ exhausted, quarantined, etc.) to help diagnose workflow issues and
 identify records that need retry.
 """
 
+import json
 import logging
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -28,6 +30,12 @@ from agent_actions.record.reasons import (
 )
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     FAILURE_DISPOSITIONS,
@@ -41,15 +49,94 @@ QUARANTINED_DISPOSITIONS = FAILURE_DISPOSITIONS | {DISPOSITION_UNPROCESSED}
 
 # Wide enough that measuring a table at it never shrinks a column.
 
+# The summary's count columns in order: the key --json prints each as, its header, its style.
+TABLE_COUNTS = {
+    "success": ("Success", "green"),
+    "failed_checks": ("Failed checks", "yellow"),
+    "failed": ("Failed", "red"),
+    "exhausted": ("Exhausted", "red"),
+    "guard_skipped": ("Guard skipped", "yellow"),
+    "unprocessed": ("Unprocessed", "yellow"),
+    "passthrough": ("Passthrough", "dim"),
+    "filtered": ("Filtered", "dim"),
+}
+# Every count --json prints: the table's, then the dispositions it has no column for.
+COUNT_KEYS = (*TABLE_COUNTS, DISPOSITION_SKIPPED, DISPOSITION_DEFERRED)
+
+
+def _counts(rows: list[dict]) -> dict[str, int]:
+    """An action's record rows under every key of ``COUNT_KEYS``; they add up to the rows."""
+    held: dict[str, int] = {}
+    for row in rows:
+        disposition = row.get("disposition", "unknown")
+        held[disposition] = held.get(disposition, 0) + 1
+    guard_skipped = sum(
+        1
+        for row in rows
+        if row.get("disposition") == DISPOSITION_UNPROCESSED
+        and row.get("reason") in GUARD_SKIP_REASONS
+    )
+    failed_checks = sum(
+        1
+        for row in rows
+        if row.get("disposition") == DISPOSITION_SUCCESS
+        and row.get("reason") == EXPECTATIONS_FAILED
+    )
+    return {
+        "success": held.get(DISPOSITION_SUCCESS, 0) - failed_checks,
+        "failed_checks": failed_checks,
+        "failed": held.get(DISPOSITION_FAILED, 0),
+        "exhausted": held.get(DISPOSITION_EXHAUSTED, 0),
+        "guard_skipped": guard_skipped,
+        "unprocessed": held.get(DISPOSITION_UNPROCESSED, 0) - guard_skipped,
+        "passthrough": held.get(DISPOSITION_PASSTHROUGH, 0),
+        "filtered": held.get(DISPOSITION_FILTERED, 0),
+        "skipped": held.get(DISPOSITION_SKIPPED, 0),
+        "deferred": held.get(DISPOSITION_DEFERRED, 0),
+    }
+
+
+def dispositions_report(backend, workflow: str, actions: list[str]) -> dict[str, Any]:
+    """What ``agac dispositions --json`` prints: every count of each of *actions*.
+
+    Scripts read this shape, so its keys stay as they are and every count is there,
+    0 where the action holds none. ``records`` is None when the store cannot count
+    them. An action's own row (``__node__``) is not a record: it is in ``action_level``.
+    """
+    stored = DispositionsCommand._records_stored(backend)
+    entries = []
+    for action in actions:
+        rows = backend.get_disposition(action, snapshots=False)
+        records = [row for row in rows if row.get("record_id") != NODE_LEVEL_RECORD_ID]
+        entries.append(
+            {
+                "name": action,
+                "counts": _counts(records),
+                "total": len(records),
+                "records": None if stored is None else stored.get(action, 0),
+                "action_level": [
+                    {
+                        "state": row.get("disposition", "unknown"),
+                        "halted": row.get("detail") == HALTED_ON_EXHAUSTED,
+                        "reason": row.get("reason"),
+                    }
+                    for row in rows
+                    if row.get("record_id") == NODE_LEVEL_RECORD_ID
+                ],
+            }
+        )
+    return {"workflow": workflow, "actions": entries}
+
 
 class DispositionsCommand:
     """Display per-action disposition breakdown for a workflow."""
 
-    def __init__(self, agent: str, action: str | None, quarantined: bool):
+    def __init__(self, agent: str, action: str | None, quarantined: bool, as_json: bool = False):
         self.agent_name = Path(agent).stem
         self.agent = agent
         self.action_filter = action
         self.quarantined_only = quarantined
+        self.as_json = as_json
         self.console = Console()
 
     def execute(self, project_root: Path | None = None) -> None:
@@ -77,7 +164,10 @@ class DispositionsCommand:
         else:
             actions = execution_order
 
-        if self.quarantined_only:
+        if self.as_json:
+            report = dispositions_report(backend, self.agent_name, actions)
+            click.echo(json.dumps(report, indent=2, ensure_ascii=False))
+        elif self.quarantined_only:
             self._show_quarantined(backend, actions)
         else:
             self._show_summary(backend, actions)
@@ -86,56 +176,19 @@ class DispositionsCommand:
         """Show per-action disposition counts beside the records produced."""
         table = Table(title=f"Dispositions: {self.agent_name}")
         table.add_column("Action", style="cyan")
-        table.add_column("Success", justify="right", style="green")
-        table.add_column("Failed checks", justify="right", style="yellow")
-        table.add_column("Failed", justify="right", style="red")
-        table.add_column("Exhausted", justify="right", style="red")
-        table.add_column("Guard skipped", justify="right", style="yellow")
-        table.add_column("Unprocessed", justify="right", style="yellow")
-        table.add_column("Passthrough", justify="right", style="dim")
-        table.add_column("Filtered", justify="right", style="dim")
+        for header, style in TABLE_COUNTS.values():
+            table.add_column(header, justify="right", style=style)
         table.add_column("Total", justify="right", style="bold")
         table.add_column("Records", justify="right", style="bold")
 
-        stored = self._records_stored(backend)
-
-        for action in actions:
-            rows = backend.get_disposition(action, snapshots=False)
-            rows = [r for r in rows if r.get("record_id") != NODE_LEVEL_RECORD_ID]
-
-            counts: dict[str, int] = {}
-            for row in rows:
-                disp = row.get("disposition", "unknown")
-                counts[disp] = counts.get(disp, 0) + 1
-            guard_skipped = sum(
-                1
-                for row in rows
-                if row.get("disposition") == DISPOSITION_UNPROCESSED
-                and row.get("reason") in GUARD_SKIP_REASONS
-            )
-            failed_checks = sum(
-                1
-                for row in rows
-                if row.get("disposition") == DISPOSITION_SUCCESS
-                and row.get("reason") == EXPECTATIONS_FAILED
-            )
-
-            total = sum(counts.values())
-            if total == 0:
+        for entry in dispositions_report(backend, self.agent_name, actions)["actions"]:
+            if entry["total"] == 0:
                 continue
-
             table.add_row(
-                action,
-                str(counts.get("success", 0) - failed_checks),
-                str(failed_checks),
-                str(counts.get("failed", 0)),
-                str(counts.get("exhausted", 0)),
-                str(guard_skipped),
-                str(counts.get("unprocessed", 0) - guard_skipped),
-                str(counts.get("passthrough", 0)),
-                str(counts.get("filtered", 0)),
-                str(total),
-                "?" if stored is None else str(stored.get(action, 0)),
+                entry["name"],
+                *(str(entry["counts"][key]) for key in TABLE_COUNTS),
+                str(entry["total"]),
+                "?" if entry["records"] is None else str(entry["records"]),
             )
 
         action_level = self._action_level_rows(backend, actions)
@@ -261,14 +314,23 @@ class DispositionsCommand:
     default=False,
     help="Show only failed/exhausted/unprocessed records with details.",
 )
+@click.option(
+    "--json", "as_json", is_flag=True, help="Print the count of each disposition per action as JSON"
+)
 @handles_user_errors("dispositions")
 @requires_project
 def dispositions(
     agent: str,
     action: str | None,
     quarantined: bool,
+    as_json: bool,
     project_root: Path | None = None,
 ) -> None:
     """Inspect record-level processing dispositions per action."""
-    command = DispositionsCommand(agent, action, quarantined)
+    if as_json and quarantined:
+        raise click.UsageError(
+            "--json prints the counts, so it takes no --quarantined. "
+            "'agac records --snapshots' prints the failed and exhausted records as JSON."
+        )
+    command = DispositionsCommand(agent, action, quarantined, as_json)
     command.execute(project_root=project_root)

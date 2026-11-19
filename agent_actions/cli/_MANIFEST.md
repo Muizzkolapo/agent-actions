@@ -27,7 +27,8 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
 | `compile` | Function | Alias for render — compile workflow configuration. | - |
-| `dispositions.py` | Module | Inspect record-level processing dispositions per action. `--quarantined` lists failed, exhausted and unprocessed records (`QUARANTINED_DISPOSITIONS`), the last with the reason no answer reached them. The summary splits unprocessed rows into `Guard skipped` (reason in `record.reasons.GUARD_SKIP_REASONS`, the same set the collector counts for the run line) and `Unprocessed` (the rest); the columns still add up to `Total`. The summary, `--quarantined` and action-level tables are printed at their full width (`renderers.whole_table.print_whole`), wider than a narrow terminal if they have to be, so no count, record ID or action name is cut short. `Failed checks` counts `success` rows with reason `expectations_failed`, taken out of `Success`. | `cli`, `storage`, `validation` |
+| `dispositions.py` | Module | Inspect record-level processing dispositions per action. `--quarantined` lists failed, exhausted and unprocessed records (`QUARANTINED_DISPOSITIONS`), the last with the reason no answer reached them. The summary splits unprocessed rows into `Guard skipped` (reason in `record.reasons.GUARD_SKIP_REASONS`, the same set the collector counts for the run line) and `Unprocessed` (the rest); the columns still add up to `Total`. The summary, `--quarantined` and action-level tables are printed at their full width (`renderers.whole_table.print_whole`), wider than a narrow terminal if they have to be, so no count, record ID or action name is cut short. `Failed checks` counts `success` rows with reason `expectations_failed`, taken out of `Success`. `--json` prints `dispositions_report` and nothing else on stdout; the summary table is drawn from the same report, so the two cannot disagree. `--json` refuses `--quarantined`. | `cli`, `storage`, `validation` |
+| `dispositions_report` | Function | `(backend, workflow, actions) -> dict`: for each action its `name`, `counts` (every key of `COUNT_KEYS`, 0 where none: the table's columns in snake_case, then `skipped` and `deferred`), `total`, `records` (None when the store cannot count them) and `action_level` (its `__node__` rows as `state`, `halted`, `reason`). The shape scripts read: keys are added, never renamed or removed. | - |
 | `DispositionsCommand` | Class | Implementation of the dispositions command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the dispositions command. | - |
 | `dispositions` | Function | Inspect record-level processing dispositions per action. | - |
@@ -96,7 +97,8 @@
 | `skills` | Function | Manage AI coding assistant skills (Claude Code / OpenAI Codex). | - |
 | `install` | Function | Install bundled skills to your project. | - |
 | `list_skills` | Function | List available bundled skills. | - |
-| `status.py` | Module | Status command for the Agent Actions CLI. Shows each action's status from `.agent_status.json`, and an Error column (the first line of `error_message`, cut to 200 characters) when a failed action holds one. | `cli`, `validation` |
+| `status.py` | Module | Status command for the Agent Actions CLI. Shows each action's status from `.agent_status.json`, and an Error column (the first line of `error_message`, cut to 200 characters) when a failed action holds one. `--json` prints `status_report` and nothing else on stdout; the table is drawn from the same report. It reads the status file alone, not the workflow config. | `cli`, `validation`, `orchestration` |
+| `status_report` | Function | `(agent, project_root) -> dict`: `workflow`, `run_status` and, for each action the status file holds, `name`, `status` and `error` (a failed action's whole `error_message`). `run_status` is what `retry._classify_outcome` gives those statuses (`SUCCESS`, `FAILED`, `PAUSED`), so it is the status `run` and `retry` end with; None when no status is stored. The shape scripts read: keys are added, never renamed or removed. | - |
 | `StatusCommand` | Class | Implementation of the status command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the status command. | - |
 | `status` | Function | Display the status of an agent workflow. | - |
@@ -132,7 +134,7 @@
 | `InitCommand.execute()` | `agent_actions.yml` | Writes | `project_name` |
 | `SchemaCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `SchemaCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema_name` |
-| `StatusCommand.execute()` | `agent_io/.agent_status.json` | Reads | — |
+| `status_report()` | `agent_io/.agent_status.json` | Reads | — |
 | `RetryCommand.execute()` | `agent_io/store/{workflow}/_retry_repair_notes.json` | Reads, Deletes | — |
 | `RetryFilterCommand.execute()` | `agent_io/store/` | Reads, Writes (dispositions, target tombstones and checkpoint rows of the filtered records) | `--filter` |
 | `RetryFilterCommand.execute()` | `agent_io/store/{workflow}/_retry_manifest.json` | Reads, Writes | `--filter` |
@@ -150,7 +152,7 @@
 | Package | Direction | Why |
 |---------|-----------|-----|
 | `config` | outbound | Reads project paths, config files, and project root resolution |
-| `workflow` | outbound | Invokes AgentWorkflow for run, inspect, and schema commands |
+| `workflow` | outbound | Invokes AgentWorkflow for run, inspect, and schema commands; `status` classifies stored statuses with the status sets of `managers.state` |
 | `logging` | outbound | Initializes LoggerFactory and fires structured events |
 | `validation` | outbound | Validates command arguments and project structure |
 | `prompt` | outbound | Renders Jinja2 templates and validates prompt files |

@@ -229,11 +229,50 @@ agac status -w <workflow-name> [options]
 | Option | Description |
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `--json` | Print the status of each action and the status of the run as one JSON document |
 
 **Example:**
 ```bash
 agac status -w my_workflow
 ```
+
+**JSON output:**
+
+`--json` prints one JSON document on stdout, and nothing else. Warnings go to stderr.
+
+```bash
+agac status -w my_workflow --json
+```
+
+```json
+{
+  "workflow": "my_workflow",
+  "run_status": "FAILED",
+  "actions": [
+    { "name": "extract", "status": "completed", "error": null },
+    { "name": "summarize", "status": "failed", "error": "the error that stopped the action" }
+  ]
+}
+```
+
+The shape is stable. A later release can add a key, but it does not rename or remove one.
+
+| Key | Value |
+|-----|-------|
+| `workflow` | The workflow name |
+| `run_status` | The status that [`agac run`](./run) gives to a run with these action statuses: `SUCCESS`, `FAILED` or `PAUSED`. It is `null` when no action status is stored, because the workflow did not run. Then the command also prints a message on stderr |
+| `actions` | One object for each action in `agent_io/.agent_status.json`, in the order of the file |
+| `actions[].name` | The action name. The table shows it in the **Agent Name** column |
+| `actions[].status` | The **Status** column: `pending`, `running`, `batch_submitted`, `checking_batch`, `completed`, `completed_with_failures`, `failed`, `skipped` or `interrupted`. It is `null` where the table shows `N/A` |
+| `actions[].error` | The full error message of a failed action, or `null`. The **Error** column of the table shows only its first line |
+
+`run_status` has these values:
+
+- `SUCCESS`: Each action completed. An action that completed with failed records (`completed_with_failures`) is also a completed action. To count the failed records, use [`agac dispositions --json`](./dispositions#json-output).
+- `FAILED`: Each action ended, and one or more actions failed.
+- `PAUSED`: One or more actions did not end. The run is in progress, or it waits for a batch, or it stopped early.
+
+The command reads only the status file. It does not read the workflow configuration. Thus an action that you removed from the configuration stays in the output until `agac run --fresh` clears the file.
 
 :::note[Run from Anywhere]
 You can run this command from any subdirectory in your project.

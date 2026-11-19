@@ -26,6 +26,7 @@ class StatusCommandArgs(BaseModel):
     agent: str = Field(
         ..., min_length=1, description="Agent configuration file name without path or extension"
     )
+    as_json: bool = Field(False, description="Print each action's status and the run's as JSON.")
 
 
 class InitCommandArgs(BaseModel):
