@@ -215,8 +215,9 @@ def _index_included_outputs(
 ) -> None:
     """Index the outputs of each branch the workflow includes as actions of the workflow.
 
-    The load puts a branch's actions into the workflow under their own names, and the
-    workflow may read only the ones the branch lists under `outputs`.
+    The load puts a branch's actions into the workflow under their own names, or under
+    `<as>__<name>` for an include with `as:`, and the workflow may read only the ones the
+    branch lists under `outputs`.
     """
     known = index.file_actions.setdefault(yaml_file, {})
     workflow_name = index.file_to_workflow.get(yaml_file)
@@ -235,11 +236,15 @@ def _index_included_outputs(
         if not isinstance(outputs, list) or not isinstance(branch_actions, list):
             continue
         lines = content.split("\n")
+        prefix = entry.get("as") if isinstance(entry.get("as"), str) else None
         for action_data in branch_actions:
-            name = action_data.get("name") if isinstance(action_data, dict) else None
-            if not isinstance(name, str) or name not in outputs or name in known:
+            local = action_data.get("name") if isinstance(action_data, dict) else None
+            if not isinstance(local, str) or local not in outputs:
                 continue
-            meta = ActionMetadata(name=name, location=_name_location(branch_path, lines, name))
+            name = f"{prefix}__{local}" if prefix else local
+            if name in known:
+                continue
+            meta = ActionMetadata(name=name, location=_name_location(branch_path, lines, local))
             _populate_versions_summary(meta, action_data)
             _populate_from_parsed(meta, action_data, default_output_field)
             known[name] = meta

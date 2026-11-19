@@ -6,7 +6,7 @@ import copy
 import difflib
 import re
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -37,10 +37,10 @@ from agent_actions.output.response.expander_validation import (
     inherited_routing_kind,
     resolved_granularity,
 )
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
-INCLUDE_KEYS = ("include", "inputs", "defaults", "override", "remove")
+INCLUDE_KEYS = ("include", "as", "inputs", "defaults", "override", "remove")
 BRANCH_KEYS = ("branch", "description", "inputs", "outputs", "actions")
-_NOT_YET_INCLUDE_KEYS = frozenset({"as"})
 _WORKFLOW_ONLY_DEFAULTS = ("data_source",)
 _REQUIRED_BRANCH_KEYS = ("branch", "description", "actions")
 _JINJA_MARKERS = ("{{", "{%", "{#")
@@ -79,7 +79,9 @@ class Branch:
 class Inclusion:
     """One include entry of a workflow, bound to its branch.
 
-    *actions* are the branch actions after the entry's override and removal.
+    *actions* are the branch actions after the entry's override and removal, under their
+    final names. Under ``as:``, *prefix* is the instance name and *names* maps each short
+    name the branch may use (its actions, their versions, its inputs) to its final name.
     """
 
     branch: Branch
@@ -89,10 +91,24 @@ class Inclusion:
     actions: tuple[dict[str, Any], ...]
     removed: tuple[str, ...] = ()
     defaults: Mapping[str, Any] | None = None
+    prefix: str | None = None
+    names: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def outputs(self) -> tuple[str, ...]:
         return tuple(name for name in self.branch.outputs if name not in self.removed)
+
+    @property
+    def label(self) -> str:
+        """How a refusal names this include entry."""
+        named = f" as '{self.prefix}'" if self.prefix else ""
+        return f"Include '{self.branch.name}'{named} in {self.workflow_file}"
+
+    def final(self, local: str) -> str:
+        return f"{self.prefix}__{local}" if self.prefix else local
+
+    def local(self, final: str) -> str:
+        return final[len(self.prefix) + 2 :] if self.prefix else final
 
     def removed_names(self) -> dict[str, str]:
         """Each name a reference to a removed action can use, mapped to that action."""
@@ -100,7 +116,7 @@ class Inclusion:
         for action in self.branch.actions:
             if action["name"] in self.removed:
                 for name in _final_and_base_names(action):
-                    names[name] = action["name"]
+                    names[self.final(name)] = action["name"]
         return names
 
 
@@ -109,9 +125,12 @@ def branch_file(name: str) -> str:
     return f"{PathType.BRANCHES.value}/{name}.yml"
 
 
-def _branch_where(name: str, workflow_file: str, action: str | None = None) -> str:
+def _branch_where(
+    name: str, workflow_file: str, action: str | None = None, prefix: str | None = None
+) -> str:
     """How a refusal about branch file *name* begins; *action* is quoted or a position."""
-    where = f"Branch '{name}' ({branch_file(name)}), included in {workflow_file}"
+    named = f" as '{prefix}'" if prefix else ""
+    where = f"Branch '{name}' ({branch_file(name)}), included in {workflow_file}{named}"
     return where if action is None else f"{where}, action {action}"
 
 
@@ -168,7 +187,10 @@ def expand_workflow_includes(
     _refuse_repeated_instances(inclusions, workflow, workflow_file)
     hosts = [entry for entry in actions if not _is_include(entry)]
     _refuse_name_collisions(hosts, inclusions, workflow, workflow_file)
+    _refuse_short_name_clashes(hosts, inclusions, workflow)
     _refuse_bad_bindings(hosts, inclusions, workflow, workflow_file)
+    variants = _version_suffixes([*hosts, *(a for i in inclusions for a in i.actions)])
+    inclusions = [_bound(inclusion, variants) for inclusion in inclusions]
 
     expanded: list[Any] = []
     pending = iter(inclusions)
@@ -203,6 +225,7 @@ def check_include_reads(
             return
         if any(inclusion.removed for inclusion in inclusions):
             _refuse_removed_reads(data, inclusions, levels)
+        _refuse_unknown_dependencies(data, inclusions)
         if _validates(data):
             _check_reads(data, inclusions, levels)
     except ConfigurationError as e:
@@ -330,17 +353,28 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
         origin = action.get(_ORIGIN_KEY)
         reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
         reader_local = origin["local_name"] if isinstance(origin, dict) else action["name"]
+        prefixed = reader is not None and reader.prefix is not None
         for name in _reads(
-            action, extractor, workflow_file, levels.of(action), levels.scope(action)
+            action,
+            extractor,
+            workflow_file,
+            levels.of(action),
+            levels.scope(action),
+            braces=not prefixed,
         ):
             if name not in known:
+                if reader is not None and prefixed and name not in SPECIAL_NAMESPACES:
+                    via = _scope_origin(action, name, extractor, workflow_file, levels)
+                    _refuse_unknown_short_name(action, name, reader, via)
                 continue
             source = owner.get(name)
             if reader is not None:
-                inputs = reader.branch.inputs
+                inputs = set(reader.bindings.values())
                 if source is reader or name in inputs or base_of.get(name) in inputs:
                     continue
-                where = _branch_where(reader.branch.name, workflow_file, f"'{reader_local}'")
+                where = _branch_where(
+                    reader.branch.name, workflow_file, f"'{reader_local}'", reader.prefix
+                )
                 via = _scope_origin(action, name, extractor, workflow_file, levels)
                 raise ConfigurationError(
                     f"{where}: reads '{name}'{via}, which is not a branch action or a declared "
@@ -355,6 +389,41 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                     f"Outputs of '{source.branch.name}': {_listed(source.outputs)}.",
                     context=_context(source, action_name=action["name"]),
                 )
+
+
+def _refuse_unknown_dependencies(data: dict[str, Any], inclusions: Sequence[Inclusion]) -> None:
+    """Refuse a dependency, inside an ``as:`` include, on a name nothing in the include gives.
+
+    Checked before the workflow validates, which would refuse it without naming the branch.
+    """
+    by_instance = {inclusion.instance: inclusion for inclusion in inclusions}
+    actions = [action for action in data["actions"] if isinstance(action, dict)]
+    known = {name for action in actions for name in _final_and_base_names(action)}
+    for action in actions:
+        origin = action.get(_ORIGIN_KEY)
+        reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
+        if reader is None or reader.prefix is None:
+            continue
+        dependencies = action.get("dependencies") or []
+        for name in [dependencies] if isinstance(dependencies, str) else dependencies:
+            if isinstance(name, str) and name not in known:
+                _refuse_unknown_short_name(action, name, reader, "")
+
+
+def _refuse_unknown_short_name(
+    action: dict[str, Any], name: str, reader: Inclusion, via: str
+) -> None:
+    """Refuse a read, inside an ``as:`` include, of a name nothing in the include gives."""
+    local = action[_ORIGIN_KEY]["local_name"]
+    where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
+    actions = [branch_action["name"] for branch_action in reader.actions]
+    raise ConfigurationError(
+        f"{where}: reads '{name}'{via}, which the branch does not define and no input of "
+        f"include '{reader.instance}' binds. Branch actions: "
+        f"{_listed([reader.local(final) for final in actions])}. "
+        f"Inputs: {_listed(reader.branch.inputs)}.",
+        context=_context(reader, action_name=local),
+    )
 
 
 def _scope_origin(
@@ -620,13 +689,13 @@ def _inclusion(
     for key in entry:
         if key in INCLUDE_KEYS:
             continue
-        accepted = f"Include keys: {', '.join(INCLUDE_KEYS)}."
-        if key in _NOT_YET_INCLUDE_KEYS:
-            raise ConfigurationError(f"{where}: key '{key}' is not supported yet. {accepted}")
         raise ConfigurationError(
             f"{where}: key '{key}' is not an include key."
-            f"{_near_miss(str(key), INCLUDE_KEYS)} {accepted}"
+            f"{_near_miss(str(key), INCLUDE_KEYS)} Include keys: {', '.join(INCLUDE_KEYS)}."
         )
+    prefix = _prefix(entry, where)
+    if prefix is not None:
+        where = f"Include '{name}' as '{prefix}' in {workflow_file}"
     if name not in branches:
         found = ", ".join(available) if available else "none"
         raise ConfigurationError(
@@ -657,15 +726,38 @@ def _inclusion(
         for action in branch.actions
         if action["name"] not in removed
     )
+    names: dict[str, str] = {}
+    if prefix is not None:
+        names = {
+            local: f"{prefix}__{local}"
+            for action in branch.actions
+            for local in _ordered_names(action)
+        }
+        actions = tuple({**action, "name": names[action["name"]]} for action in actions)
     return Inclusion(
         branch=branch,
-        instance=name,
+        instance=prefix or name,
         bindings=dict(bindings),
         workflow_file=workflow_file,
         actions=actions,
         removed=removed,
         defaults=_instance_defaults(entry.get("defaults"), where),
+        prefix=prefix,
+        names=names,
     )
+
+
+def _prefix(entry: dict[str, Any], where: str) -> str | None:
+    """The instance name an ``as:`` key gives, which prefixes each branch action."""
+    if "as" not in entry:
+        return None
+    prefix = entry["as"]
+    if not isinstance(prefix, str) or not prefix:
+        raise ConfigurationError(f"{where}: 'as' must name the instance, got {prefix!r}.")
+    reason = _name_problem(prefix)
+    if reason:
+        raise ConfigurationError(f"{where}: 'as: {prefix}': the name {reason} {_NAME_RULE}")
+    return prefix
 
 
 def _override(override: Any, branch: Branch, where: str) -> dict[str, dict[str, Any]]:
@@ -757,16 +849,48 @@ def _instance_defaults(defaults: Any, where: str) -> dict[str, Any] | None:
 def _refuse_repeated_instances(
     inclusions: Sequence[Inclusion], workflow: str, workflow_file: str
 ) -> None:
-    seen: set[str] = set()
+    seen: dict[str, Inclusion] = {}
     for inclusion in inclusions:
-        if inclusion.instance in seen:
-            raise ConfigurationError(
-                f"Workflow '{workflow}' ({workflow_file}) includes "
-                f"{inclusion.branch.label} twice with the instance name "
-                f"'{inclusion.instance}'. Include the branch once; 'as:' is not supported yet.",
-                context=_context(inclusion),
-            )
-        seen.add(inclusion.instance)
+        first = seen.setdefault(inclusion.instance, inclusion)
+        if first is inclusion:
+            continue
+        if first.branch is inclusion.branch:
+            twice = f"includes {inclusion.branch.label} twice"
+        else:
+            twice = f"includes {first.branch.label} and {inclusion.branch.label}"
+        raise ConfigurationError(
+            f"Workflow '{workflow}' ({workflow_file}) {twice} with the instance name "
+            f"'{inclusion.instance}'. Give each include its own instance name with 'as:'.",
+            context=_context(inclusion),
+        )
+
+
+def _refuse_short_name_clashes(
+    hosts: Sequence[Any], inclusions: Sequence[Inclusion], workflow: str
+) -> None:
+    """Refuse a short name of an ``as:`` include that is also the name of a workflow action.
+
+    Inside the include the short name means the include's own action or input, so the
+    workflow action of that name could not be told apart from it. An input bound to the
+    action of its own name is the exception.
+    """
+    taken = {name for action in hosts for name in _final_and_base_names(action)}
+    for inclusion in inclusions:
+        if inclusion.prefix is None:
+            taken.update(name for action in inclusion.actions for name in _ordered_names(action))
+    for inclusion in inclusions:
+        if inclusion.prefix is None:
+            continue
+        for local in [*inclusion.names, *inclusion.branch.inputs]:
+            meaning = inclusion.names.get(local) or inclusion.bindings.get(local)
+            if local in taken and meaning is not None and meaning != local:
+                raise ConfigurationError(
+                    f"{inclusion.label}: the short name '{local}' of {inclusion.branch.label} "
+                    f"is also an action of workflow '{workflow}'. Inside the include it means "
+                    f"'{meaning}', so the branch could not tell the two apart. Rename one of "
+                    "them.",
+                    context=_context(inclusion, action_name=local),
+                )
 
 
 def _refuse_name_collisions(
@@ -809,13 +933,13 @@ def _refuse_bad_bindings(
     for inclusion in inclusions:
         for action in inclusion.actions:
             for name in _final_and_base_names(action):
-                owner[name] = (inclusion, action["name"])
+                owner[name] = (inclusion, inclusion.local(action["name"]))
         for name in inclusion.removed_names():
             remover[name] = inclusion
 
     for inclusion in inclusions:
         branch = inclusion.branch
-        where = f"Include '{branch.name}' in {workflow_file}"
+        where = inclusion.label
         for key, target in inclusion.bindings.items():
             if key not in branch.inputs:
                 declared = _listed(branch.inputs)
@@ -824,7 +948,7 @@ def _refuse_bad_bindings(
                     f"declare. Branch inputs: {declared}.",
                     context=_context(inclusion),
                 )
-            if target != key:
+            if target != key and inclusion.prefix is None:
                 raise ConfigurationError(
                     f"{where}: input '{key}' is bound to '{target}'. A branch reads an input "
                     f"by its own name, so '{key}' must be bound to an action named '{key}'.",
@@ -868,10 +992,13 @@ def _reads(
     workflow_file: str,
     defaults: dict[str, Any],
     scope: dict[str, list[Any]],
+    braces: bool = True,
 ) -> list[str]:
     """Every name *action* reads, in the order its config states them.
 
     *scope* stands for its ``context_scope``, and *defaults* give its ``expect`` block.
+    Without *braces*, single-brace prompt text (``{name.field}``), which renders as
+    written, reads nothing.
     """
     names: list[str] = []
     dependencies = action.get("dependencies") or []
@@ -882,7 +1009,12 @@ def _reads(
     except TemplateSyntaxError as e:
         origin = action.get(_ORIGIN_KEY)
         where = (
-            _branch_where(origin["branch"], workflow_file, f"'{origin['local_name']}'")
+            _branch_where(
+                origin["branch"],
+                workflow_file,
+                f"'{origin['local_name']}'",
+                origin["instance"] if "names" in origin else None,
+            )
             if isinstance(origin, dict)
             else f"Action '{action.get('name')}' in {workflow_file}"
         )
@@ -891,7 +1023,11 @@ def _reads(
             f"{(e.message or '').rstrip('.')}.",
             context={"action_name": action.get("name")},
         ) from None
-    names.extend(requirement.source_agent for requirement in requirements)
+    names.extend(
+        requirement.source_agent
+        for requirement in requirements
+        if braces or not _single_brace(requirement.raw_reference)
+    )
     consumption = action.get("version_consumption")
     if isinstance(consumption, dict) and isinstance(consumption.get("source"), str):
         names.append(consumption["source"])
@@ -904,6 +1040,10 @@ def _reads(
             if isinstance(ref, str):
                 names.append(ref.split(".", 1)[0])
     return list(dict.fromkeys(name for name in names if isinstance(name, str)))
+
+
+def _single_brace(reference: str) -> bool:
+    return reference.startswith("{") and not reference.startswith("{{")
 
 
 def _final_names(action: Any) -> list[str]:
@@ -938,12 +1078,130 @@ def _with_origin(action: dict[str, Any], inclusion: Inclusion) -> dict[str, Any]
     origin: dict[str, Any] = {
         "branch": inclusion.branch.name,
         "instance": inclusion.instance,
-        "local_name": action["name"],
+        "local_name": inclusion.local(action["name"]),
         "branch_file": inclusion.branch.file,
     }
     if inclusion.defaults:
         origin["defaults"] = copy.deepcopy(dict(inclusion.defaults))
+    if inclusion.prefix is not None:
+        origin["names"] = dict(inclusion.names)
     return {**copy.deepcopy(action), _ORIGIN_KEY: origin}
+
+
+def _version_suffixes(actions: Sequence[Any]) -> dict[str, list[str]]:
+    """The version suffixes of each versioned action, by its name: ``vote`` → ``1``, ``2``."""
+    suffixes: dict[str, list[str]] = {}
+    for action in actions:
+        base = action.get("name") if isinstance(action, dict) else None
+        if isinstance(base, str) and action.get("versions"):
+            suffixes[base] = [name[len(base) + 1 :] for name in _final_names(action)]
+    return suffixes
+
+
+def _bound(inclusion: Inclusion, suffixes: Mapping[str, list[str]]) -> Inclusion:
+    """*inclusion* with its inputs added to its names, and every reference in its actions
+    and its defaults renamed by them; an include without ``as:`` is returned unchanged."""
+    if inclusion.prefix is None:
+        return inclusion
+    names = dict(inclusion.names)
+    for key, target in inclusion.bindings.items():
+        names.setdefault(key, target)
+        for suffix in suffixes.get(target, ()):
+            names.setdefault(f"{key}_{suffix}", f"{target}_{suffix}")
+    defaults = inclusion.defaults
+    if defaults:
+        defaults = _renamed_refs(dict(defaults), names)
+    return replace(
+        inclusion,
+        names=names,
+        actions=tuple(_renamed_refs(action, names) for action in inclusion.actions),
+        defaults=defaults,
+    )
+
+
+def _renamed_refs(config: dict[str, Any], names: Mapping[str, str]) -> dict[str, Any]:
+    """*config*, an action or a defaults block, with each action it names renamed by *names*.
+
+    Its dependencies, its ``context_scope`` lists, its guard clause, the source of its
+    ``version_consumption`` and the ``context`` of its inline ``llm_judge`` rules.
+    """
+    renamed = copy.deepcopy(config)
+    dependencies = renamed.get("dependencies")
+    if isinstance(dependencies, str):
+        renamed["dependencies"] = names.get(dependencies, dependencies)
+    elif isinstance(dependencies, list):
+        renamed["dependencies"] = [_renamed_root(item, names) for item in dependencies]
+    scope = renamed.get("context_scope")
+    if isinstance(scope, dict):
+        for directive, refs in scope.items():
+            if DIRECTIVE_REGISTRY.get(directive, {}).get("type") == "list" and isinstance(
+                refs, list
+            ):
+                scope[directive] = [_renamed_root(ref, names) for ref in refs]
+    guard = renamed.get("guard")
+    if isinstance(guard, str):
+        renamed["guard"] = renamed_clause(guard, names)
+    elif isinstance(guard, dict) and isinstance(guard.get("condition"), str):
+        guard["condition"] = renamed_clause(guard["condition"], names)
+    consumption = renamed.get("version_consumption")
+    if isinstance(consumption, dict) and isinstance(consumption.get("source"), str):
+        consumption["source"] = names.get(consumption["source"], consumption["source"])
+    expect = renamed.get("expect")
+    if isinstance(expect, dict) and isinstance(expect.get("expectations"), list):
+        rename_judge_contexts(expect["expectations"], names)
+    return renamed
+
+
+def rename_judge_contexts(rules: list[Any], names: Mapping[str, str]) -> None:
+    """Rename, in place, the actions the ``context`` of each ``llm_judge`` rule names."""
+    for rule in rules:
+        params = rule.get("params") if isinstance(rule, dict) else None
+        if not isinstance(params, dict) or rule.get("type") != "llm_judge":
+            continue
+        if isinstance(params.get("context"), list):
+            params["context"] = [_renamed_root(ref, names) for ref in params["context"]]
+
+
+def _renamed_root(ref: Any, names: Mapping[str, str]) -> Any:
+    """*ref* (``action``, ``action.field`` or ``action.*``) with its action renamed.
+
+    A trailing ``?`` on a bare name is kept and left out of the lookup.
+    """
+    if not isinstance(ref, str):
+        return ref
+    root, dot, rest = ref.partition(".")
+    key = root if dot else root.rstrip("?")
+    if key not in names:
+        return ref
+    return names[key] + root[len(key) :] + dot + rest
+
+
+# A clause token: a quoted string, a number, a dotted field path, or a word.
+_CLAUSE_TOKEN = re.compile(
+    r"""(?P<string>"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?)"""
+    r"|(?P<number>[0-9][A-Za-z0-9_.]*)"
+    r"|(?P<path>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)"
+    r"|[A-Za-z_][A-Za-z0-9_]*"
+)
+
+
+def renamed_clause(clause: str, names: Mapping[str, str]) -> str:
+    """*clause*, a guard condition, with the action at the root of each field path renamed.
+
+    The text is kept as written: quoted strings, numbers, keywords and spacing are not
+    touched. A UDF guard names no action.
+    """
+    if clause.strip().lower().startswith("udf:"):
+        return clause
+
+    def rename(match: re.Match[str]) -> str:
+        path = match.group("path")
+        if path is None:
+            return match.group(0)
+        root, _, rest = path.partition(".")
+        return f"{names.get(root, root)}.{rest}"
+
+    return _CLAUSE_TOKEN.sub(rename, clause)
 
 
 def _is_include(entry: Any) -> bool:

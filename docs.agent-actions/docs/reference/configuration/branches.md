@@ -1,0 +1,187 @@
+---
+title: Branches
+sidebar_position: 5
+---
+
+# Branches {/* #branches */}
+
+A branch file holds a group of actions that you write one time and include in a workflow. The entry `- include: <name>` in the `actions:` list of a workflow puts the actions of `branches/<name>.yml` in the place of the entry. After the load, an included action is an ordinary action of the workflow.
+
+Use a branch when more than one workflow runs the same steps, or when one workflow runs the same steps more than one time. To include one branch more than one time, give each include its own instance name with `as:` (see [One Branch, Several Instances](#as)).
+
+## The Branch File {/* #branch-file */}
+
+The load reads a branch file only from the `branches/` folder at the project root.
+
+```yaml
+# branches/question_round.yml
+branch: question_round
+description: Write one question, then review it
+inputs:
+  spec: The specification of the question
+outputs: [review]
+actions:
+  - name: write
+    intent: Write the question
+    prompt: $question_round.Write
+    schema: question
+    dependencies: [spec]
+    context_scope:
+      observe: [spec.text]
+  - name: review
+    intent: Review the question
+    prompt: $question_round.Review
+    schema: review
+    dependencies: [write]
+    context_scope:
+      observe: [write.question]
+```
+
+| Key | Required | What it holds |
+|-----|----------|---------------|
+| `branch` | Yes | The name of the branch. It must be equal to the file name without `.yml`. |
+| `description` | Yes | Text that tells what the branch does. |
+| `inputs` | No | A map from each input name to a description. An input is an action outside the branch that the branch reads. |
+| `outputs` | No | The branch actions that the workflow can read. |
+| `actions` | Yes | The actions of the branch, in the same form as in a workflow. |
+
+The load refuses a branch file that breaks one of these rules:
+
+- An action name uses only letters, digits and single underscores, and starts with a letter. It does not contain `__` and does not end with `_`.
+- A prompt names a prompt store block (`prompt: $file.Block`). A branch file holds no inline prompt.
+- A branch file is plain YAML. It holds no Jinja tag, because the load does not render it.
+- A branch file does not include another branch.
+- An input name is not also the name of a branch action.
+
+## The Include Entry {/* #include-entry */}
+
+```yaml
+actions:
+  - name: draft_spec
+    intent: Write the specification
+    prompt: $quiz.Draft_Spec
+    schema: spec
+  - include: question_round
+    inputs: {spec: draft_spec}
+```
+
+| Key | What it does |
+|-----|--------------|
+| `include` | Names the branch file. |
+| `as` | Gives the include its own instance name. The load then puts `<as>__` before the name of each branch action. |
+| `inputs` | Binds each input of the branch to an action of the workflow. Each input must be bound. |
+| `defaults` | Sets defaults for the actions of this include only, over the `defaults:` of the workflow. `data_source` is not permitted. |
+| `override` | Maps a branch action to action keys. Each key replaces the value of the branch. `null` removes the key. |
+| `remove` | Lists branch actions that this include leaves out. |
+
+Without `as:`, an input must be bound to an action of the same name, because the branch reads the input by its own name.
+
+## What an Action Can Read {/* #reads */}
+
+The load checks each read after it expands the includes:
+
+- An action of the workflow reads only the `outputs` of a branch.
+- A branch action reads only the actions of its own include, the actions that its inputs bind, and the framework namespaces (`source`, `seed`, `version`, `workflow`).
+
+A dependency, a `context_scope` entry, a guard clause, a prompt, the source of `version_consumption` and the `context` of an `llm_judge` rule are reads. A read that the action inherits from `defaults:` is also a read.
+
+## One Branch, Several Instances {/* #as */}
+
+With `as:`, you can include one branch more than one time. Each include is an instance of the branch. The load gives each action of the instance the name `<as>__<name>`. Inside the branch, the actions keep their short names.
+
+```yaml
+actions:
+  - name: draft_spec
+    intent: Write the specification
+    prompt: $quiz.Draft_Spec
+    schema: spec
+  - include: question_round
+    as: c
+    inputs: {spec: draft_spec}
+  - include: question_round
+    as: c2
+    inputs: {spec: draft_spec}
+  - name: publish
+    intent: Publish the two reviews
+    prompt: $quiz.Publish
+    schema: published
+    dependencies: [c__review, c2__review]
+    context_scope:
+      observe: [c__review.verdict, c2__review.verdict]
+```
+
+The load expands this workflow to the actions `draft_spec`, `c__write`, `c__review`, `c2__write`, `c2__review` and `publish`.
+
+### Short names inside the branch {/* #short-names */}
+
+Inside an instance, each short name means the action of the same instance, or the action that an input binds:
+
+| Short name | In instance `c` | In instance `c2` |
+|------------|-----------------|------------------|
+| `write` | `c__write` | `c2__write` |
+| `review` | `c__review` | `c2__review` |
+| `spec` | `draft_spec` | `draft_spec` |
+
+The load renames the short names in these keys of each action of the instance:
+
+- `dependencies`
+- the `observe`, `passthrough` and `drop` lists of `context_scope`
+- the guard clause (`guard:`, or `condition:` under `guard:`). Only the action at the start of a field path changes. Text in quotes, numbers, keywords and spaces stay as written. A UDF guard is not changed.
+- `version_consumption.source`
+- the `context` list of each `llm_judge` rule in the `expect:` block of the action
+- the same keys in the `defaults:` and the `override:` of the include entry
+
+A version of a branch action keeps its suffix: `vote_1` becomes `c2__vote_1`. An entry with a `?` at the end keeps the `?`.
+
+The prompts of the branch do not change, and they cannot read a branch action or an input by its short name. The load refuses such a read, because no action has that name.
+
+The workflow reads the outputs of an instance by their final names, for example `c2__review`. The store, the logs and `agac inspect` also use the final names.
+
+### Inputs bind any action {/* #as-inputs */}
+
+Under `as:`, an input can be bound to an action of any name. Two instances can read different actions, and one instance can read an output of another instance. In this example, round 2 reads the review of round 1:
+
+```yaml
+# branches/question_round.yml (inputs)
+inputs:
+  spec: The specification of the question
+  previous: The review of the round before
+```
+
+```yaml
+  - include: question_round
+    as: c
+    inputs: {spec: draft_spec, previous: draft_spec}
+  - include: question_round
+    as: c2
+    inputs: {spec: draft_spec, previous: c__review}
+```
+
+An input bound to an action of another instance must name an output of that branch.
+
+### What the load refuses {/* #as-refusals */}
+
+| Problem | Example message |
+|---------|-----------------|
+| The instance name breaks the rule for action names. | `Include 'question_round' in agent_config/quiz.yml: 'as: c_': the name ends with '_'. Use letters, digits and single underscores, starting with a letter.` |
+| Two includes have the same instance name. An include without `as:` has the branch name as its instance name. | `Workflow 'quiz' (agent_config/quiz.yml) includes branch 'question_round' (branches/question_round.yml) twice with the instance name 'c'. Give each include its own instance name with 'as:'.` |
+| A branch action reads a short name that the branch does not define and that no input binds. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c2', action 'review': reads 'draft', which the branch does not define and no input of include 'c2' binds. Branch actions: write, review. Inputs: spec.` |
+| A short name of the branch is also the name of an action of the workflow. An input bound to the action of its own name is permitted. | `Include 'question_round' as 'c2' in agent_config/quiz.yml: the short name 'write' of branch 'question_round' (branches/question_round.yml) is also an action of workflow 'quiz'. Inside the include it means 'c2__write', so the branch could not tell the two apart. Rename one of them.` |
+
+`agac inspect` loads the workflow in the same way, so it reports the same refusals.
+
+### The name map {/* #name-map */}
+
+The load writes the map of each instance into the `_include` key of each of its actions, under `names`. The rendered workflow in `artefact/rendered_workflows/` shows it:
+
+```yaml
+# The _include key of the action c2__review
+_include:
+  branch: question_round
+  instance: c2
+  local_name: review
+  branch_file: branches/question_round.yml
+  names: {write: c2__write, review: c2__review, spec: draft_spec, previous: c__review}
+```
+
+`_include` does not change the config hash of the action.
