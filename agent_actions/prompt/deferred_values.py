@@ -43,6 +43,7 @@ from jinja2.runtime import Context, LoopContext, Macro
 from jinja2.utils import Namespace, missing
 
 from agent_actions.errors import TemplateRenderingError
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS, KeptCachePointExtension
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
@@ -205,12 +206,13 @@ class LoadRender:
 
         # Jinja leaves an environment's globals out of a template's undeclared names, so
         # names are read with one that has none, and the load's filters and tests.
-        self._names_env = Environment()
+        self._names_env = Environment(extensions=PROMPT_EXTENSIONS)
         self._names_env.globals.clear()
+        # A cache point stays a tag: it marks a place in the text a record renders.
         self.env = DictKeyFirstEnvironment(
             loader=_Loader(str(templates_folder), self),
             undefined=_undefined_class(self),
-            extensions=[_LeaveExtension],
+            extensions=[_LeaveExtension, KeptCachePointExtension],
         )
         self.env.template_class = _ImportingTemplate
         self.env.context_class = _FolderContext

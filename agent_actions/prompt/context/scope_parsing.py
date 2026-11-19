@@ -4,6 +4,7 @@ import logging
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
@@ -158,7 +159,7 @@ def extract_action_names_from_template(template: str | None) -> set:
     _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
     try:
-        env = Environment()
+        env = Environment(extensions=PROMPT_EXTENSIONS)
         ast = env.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError as e:
         logger.warning(

@@ -192,6 +192,7 @@ class OnlineStrategy(InvocationStrategy):
             llm_context=task.llm_context,
             dispatched=dispatched,
             rendered_prompt=task.formatted_prompt,
+            cache_points=task.cache_points,
         )
 
     def _track_retry_metadata(

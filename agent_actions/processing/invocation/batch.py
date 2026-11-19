@@ -11,6 +11,7 @@ from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
+from agent_actions.prompt.cache_scope import CACHE_POINTS_KEY
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
@@ -106,14 +107,7 @@ class BatchStrategy(InvocationStrategy):
                 context_map=snapshot,
             )
 
-        batch_tasks = []
-        for task in self._queued:
-            batch_task = {
-                "target_id": task.target_id,
-                "content": task.llm_context,
-                "prompt": task.formatted_prompt,
-            }
-            batch_tasks.append(batch_task)
+        batch_tasks = self.get_prepared_tasks()
 
         task_count = len(batch_tasks)
         context_snapshot = self._context_map.copy()
@@ -162,6 +156,7 @@ class BatchStrategy(InvocationStrategy):
                 "target_id": task.target_id,
                 "content": task.llm_context,
                 "prompt": task.formatted_prompt,
+                **({CACHE_POINTS_KEY: task.cache_points} if task.cache_points else {}),
             }
             for task in self._queued
         ]

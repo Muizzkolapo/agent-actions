@@ -21,7 +21,12 @@ from agent_actions.llm.providers.generation_params import (
     extract_generation_params,
 )
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY, SHARED_PROMPT_LEN_KEY
+from agent_actions.prompt.cache_scope import (
+    CACHE_POINTS_KEY,
+    REQUEST_VARIES_PER_RECORD_KEY,
+    SHARED_PROMPT_LEN_KEY,
+    cache_points_of,
+)
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
@@ -83,6 +88,8 @@ class BatchTask:
     cache_prompt: bool = False
     shared_prompt_len: int | None = None
     """The length of the leading part of ``prompt`` every record shares; None means all of it."""
+    cache_points: tuple[int, ...] = ()
+    """The length of ``prompt`` before each cache point its request marks."""
 
     def json_mode(self, schema: dict[str, Any] | None) -> bool:
         """Whether the task's online twin is a JSON-mode call: it has a schema or asks for JSON."""
@@ -146,6 +153,7 @@ class BaseBatchClient(ABC):
             warn_schema_without_json_mode(agent_config)
         schema = agent_config.get("compiled_schema") if json_mode else None
         cache_prompt = self._caches_prompt(agent_config)
+        marks_cache_points = self.marks_cache_points()
 
         for row in data:
             if "content" not in row:
@@ -156,6 +164,8 @@ class BaseBatchClient(ABC):
             # A row of an action whose schema is chosen per record carries its own.
             row_schema = row.pop("compiled_schema", None)
             shared_prompt_len = row.pop(SHARED_PROMPT_LEN_KEY, None)
+            cache_points = cache_points_of(row) if marks_cache_points else ()
+            row.pop(CACHE_POINTS_KEY, None)
             varies_per_record = row.pop(REQUEST_VARIES_PER_RECORD_KEY, False)
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
@@ -180,6 +190,7 @@ class BaseBatchClient(ABC):
                 metadata=row,
                 cache_prompt=cache_prompt and not varies_per_record,
                 shared_prompt_len=shared_prompt_len,
+                cache_points=cache_points,
             )
             task_schema = row_schema if row_schema is not None else schema
             try:
@@ -215,6 +226,10 @@ class BaseBatchClient(ABC):
 
     def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
         """Whether this call's tasks mark their prompt for prompt caching."""
+        return False
+
+    def marks_cache_points(self) -> bool:
+        """Whether this client's requests mark the cache points a prompt template holds."""
         return False
 
     @abstractmethod
