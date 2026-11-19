@@ -134,7 +134,8 @@ def extract_action_names_from_template(template: str | None) -> set:
     Extract unique action names referenced in a Jinja2 template.
 
     Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. Logs a warning and
+    by {% for %}, {% set %}, and {% macro %} constructs. A name a top-level
+    {% set a = b %} binds to the bare name b reads b. Logs a warning and
     returns empty set on Jinja2 syntax errors (syntax errors are caught at
     render time; this function is a best-effort dependency extractor).
 
@@ -155,6 +156,8 @@ def extract_action_names_from_template(template: str | None) -> set:
     from jinja2 import Environment, nodes
     from jinja2.exceptions import TemplateSyntaxError
 
+    from agent_actions.prompt.aliases import prompt_aliases
+
     _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
     try:
@@ -171,6 +174,7 @@ def extract_action_names_from_template(template: str | None) -> set:
         raise
 
     referenced_actions: set[str] = set()
+    aliases = prompt_aliases(ast)
 
     def _walk(node: nodes.Node, local_vars: set[str]) -> None:
         # {% for %} and {% macro %} create child scopes — copy the set
@@ -198,8 +202,12 @@ def extract_action_names_from_template(template: str | None) -> set:
         # {% set %} introduces a name at the current scope level — mutate in place
         # so subsequent siblings (processed by the parent's loop) see it
         if isinstance(node, nodes.Assign):
-            if isinstance(node.target, nodes.Name):
-                local_vars.add(node.target.name)
+            target, value = node.target, node.node
+            if isinstance(target, nodes.Name) and isinstance(value, nodes.Name):
+                if aliases.get(target.name) == value.name:
+                    return
+            if isinstance(target, nodes.Name):
+                local_vars.add(target.name)
             for child in node.iter_child_nodes():
                 _walk(child, local_vars)
             return
@@ -210,6 +218,8 @@ def extract_action_names_from_template(template: str | None) -> set:
                 current = current.node
             if isinstance(current, nodes.Name):
                 root = current.name
+                if root not in local_vars:
+                    root = aliases.get(root, root)
                 if (
                     root not in local_vars
                     and root not in SPECIAL_NAMESPACES

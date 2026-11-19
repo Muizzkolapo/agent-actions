@@ -133,9 +133,53 @@ The load renames the short names in these keys of each action of the instance:
 
 A version of a branch action keeps its suffix: `vote_1` becomes `c2__vote_1`. An entry with a `?` at the end keeps the `?`.
 
-The prompts of the branch do not change, and they cannot read a branch action or an input by its short name. The load refuses such a read, because no action has that name.
+The prompts, the tools and the schema files of the branch also use the short names (see [Short names at run time](#short-names-at-run-time)).
 
 The workflow reads the outputs of an instance by their final names, for example `c2__review`. The store, the logs and `agac inspect` also use the final names.
+
+### Short names at run time {/* #short-names-at-run-time */}
+
+One prompt, one tool function and one schema file serve all instances.
+
+**Prompts.** The load puts an alias header before the prompt of each action of an instance. The header has one `{% set %}` tag for each short name that the prompt reads, and the prompt text stays as written. For this prompt store block:
+
+```markdown
+{prompt Review}
+Review {{ write.question }} against {{ spec.text }}.
+{end_prompt}
+```
+
+the prompt of `c2__review` in the rendered workflow is:
+
+```jinja
+{% set write = c2__write %}{% set spec = draft_spec %}Review {{ write.question }} against {{ spec.text }}.
+```
+
+The header outputs nothing and is on the first line of the prompt, so the rendered text and the line numbers in an error do not change. A short name is also visible inside a macro that the prompt defines. Text in single braces, for example `{item.name}`, does not render, so it reads nothing. The checks of `agac inspect` and `agac run` read a short name as the action that it means. For example, if the prompt of `c2__review` reads `write.question` and the action does not observe `write`, the error says: `template references namespace 'c2__write' which is not declared in context_scope.observe or passthrough`.
+
+**Tools.** A tool action of an instance gets its record under the short names. In instance `c2`, `data["write"]` holds the output of `c2__write`, and `data["spec"]` holds the output of `draft_spec`. The final names of these actions are not keys of `data`. Other keys, for example `source`, do not change. A tool at `granularity: file` gets its records with the final names.
+
+```python
+@udf_tool
+def check_question(data, *args):
+    question = data["write"]["question"]
+    ...
+```
+
+**Schema files.** The `context` list of each `llm_judge` rule in the schema file of an action, on a field or in the `expectations:` block of the file, uses the short names. Each instance gets its own copy of the compiled schema, with the final names. A rule in a named `suite:` is not renamed.
+
+```yaml
+# schema/review.yml
+name: review
+fields:
+  - id: verdict
+    type: string
+    expectations:
+      - type: llm_judge
+        params: {rubric: "The verdict fits the question", context: [write.question]}
+```
+
+`agac inspect` marks each action of an instance `from branch question_round as c2`. `agac inspect action` shows a `Names` row with the map of the instance, for example `write → c2__write, review → c2__review, spec → draft_spec`, and `--json` adds `instance` and `names` under `branch`.
 
 ### Inputs bind any action {/* #as-inputs */}
 

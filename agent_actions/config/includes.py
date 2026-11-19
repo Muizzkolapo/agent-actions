@@ -37,6 +37,7 @@ from agent_actions.output.response.expander_validation import (
     inherited_routing_kind,
     resolved_granularity,
 )
+from agent_actions.prompt.aliases import with_alias_header
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 INCLUDE_KEYS = ("include", "as", "inputs", "defaults", "override", "remove")
@@ -201,6 +202,48 @@ def expand_workflow_includes(
         else:
             expanded.append(entry)
     return {**data, "actions": expanded}, inclusions
+
+
+def instance_names(action: Any) -> dict[str, str]:
+    """The short names of the ``as:`` include *action* comes from, mapped to final names."""
+    origin = action.get(_ORIGIN_KEY) if isinstance(action, dict) else None
+    names = origin.get("names") if isinstance(origin, dict) else None
+    return dict(names) if isinstance(names, dict) else {}
+
+
+def alias_prompts(data: Any) -> None:
+    """Put before the prompt of each action of an ``as:`` include the alias header of the
+    short names it reads, so one prompt text serves every instance."""
+    for action in _included_actions(data):
+        names = instance_names(action)
+        if names and isinstance(action.get("prompt"), str):
+            action["prompt"] = with_alias_header(action["prompt"], names)
+
+
+def rename_schema_judge_contexts(data: Any) -> None:
+    """Rename the short names in the ``llm_judge`` contexts of the compiled schema of each
+    action of an ``as:`` include, on its fields and in its own ``expectations:`` block."""
+    for action in _included_actions(data):
+        names = instance_names(action)
+        if not names or not isinstance(action.get("schema"), dict):
+            continue
+        # One schema file can serve several instances, each with its own names.
+        schema = copy.deepcopy(action["schema"])
+        fields = schema.get("fields")
+        for owner in [schema, *(fields if isinstance(fields, list) else [])]:
+            rules = owner.get("expectations") if isinstance(owner, dict) else None
+            if isinstance(rules, list):
+                rename_judge_contexts(rules, names)
+        action["schema"] = schema
+
+
+def _included_actions(data: Any) -> list[dict[str, Any]]:
+    actions = data.get("actions") if isinstance(data, dict) else None
+    return [
+        action
+        for action in (actions if isinstance(actions, list) else [])
+        if isinstance(action, dict) and _ORIGIN_KEY in action
+    ]
 
 
 def check_include_reads(
@@ -1299,11 +1342,16 @@ __all__ = [
     "Branch",
     "Inclusion",
     "action_defaults",
+    "alias_prompts",
     "branch_file",
     "check_include_reads",
     "expand_includes",
     "expand_workflow_includes",
     "has_include",
     "has_written_origin",
+    "instance_names",
     "parse_branch",
+    "rename_judge_contexts",
+    "rename_schema_judge_contexts",
+    "renamed_clause",
 ]

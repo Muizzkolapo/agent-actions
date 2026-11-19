@@ -10,6 +10,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.includes import instance_names
 from agent_actions.config.schema import branch_origins
 from agent_actions.errors import (
     AgentActionsError,
@@ -300,6 +301,8 @@ class PreflightService:
         action_names = set(self.action_configs) | {
             c["version_base_name"] for c in configs if c.get("version_base_name")
         }
+        # A tool of an `as:` include reads its siblings by their short names.
+        action_names |= {short for c in configs for short in instance_names(c)}
         impl_refs = {
             c["model_name"]
             for c in configs

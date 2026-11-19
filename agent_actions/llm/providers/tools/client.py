@@ -73,6 +73,34 @@ class ToolClient:
         return data  # type: ignore[unreachable]
 
     @staticmethod
+    def _with_short_names(data: Any, agent_config: dict[str, Any]) -> Any:
+        """A record's *data* keyed by the short names of the ``as:`` include the action is in.
+
+        ``data["write"]`` then holds the output of the same instance's ``write``. A key
+        with no short name is kept; a list of records (FILE granularity) is left as it is.
+        """
+        origin = agent_config.get("_include")
+        names = origin.get("names") if isinstance(origin, dict) else None
+        if not names:
+            return data
+        if isinstance(data, str):
+            try:
+                parsed = json.loads(data)
+            except (json.JSONDecodeError, TypeError):
+                return data
+            if not isinstance(parsed, dict):
+                return data
+            return json.dumps(ToolClient._with_short_names(parsed, agent_config))
+        if not isinstance(data, dict):
+            return data
+        renamed_finals = set(names.values())
+        renamed = {key: value for key, value in data.items() if key not in renamed_finals}
+        for short, final in names.items():
+            if final in data:
+                renamed[short] = data[final]
+        return renamed
+
+    @staticmethod
     def invoke(
         agent_config: dict[str, Any],
         context_data: str | dict,
@@ -96,7 +124,9 @@ class ToolClient:
             )
 
         # Strip internal metadata fields before passing to UDF
-        clean_context = ToolClient._strip_internal_fields(context_data)
+        clean_context = ToolClient._with_short_names(
+            ToolClient._strip_internal_fields(context_data), agent_config
+        )
 
         udf_kwargs = tool_args if tool_args is not None else {}
         response = execute_user_defined_function(

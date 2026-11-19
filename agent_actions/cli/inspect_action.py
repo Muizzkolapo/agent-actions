@@ -28,8 +28,17 @@ def _escape_markup(text: str) -> str:
     return escape(text)
 
 
-def _describe_branch(branch: dict[str, str]) -> str:
-    return f"{_escape_markup(branch['name'])}  [dim]({_escape_markup(branch['file'])})[/dim]"
+def _describe_branch(branch: dict[str, Any]) -> str:
+    named = f" as {_escape_markup(branch['instance'])}" if "instance" in branch else ""
+    return f"{_escape_markup(branch['name'])}{named}  [dim]({_escape_markup(branch['file'])})[/dim]"
+
+
+def _describe_names(branch: dict[str, Any]) -> str:
+    """The short names of an ``as:`` include, each with the action it means."""
+    return ", ".join(
+        f"{_escape_markup(short)} → {_escape_markup(final)}"
+        for short, final in branch["names"].items()
+    )
 
 
 class ActionCommand(BaseInspectCommand):
@@ -125,6 +134,8 @@ class ActionCommand(BaseInspectCommand):
         branch = branch_of(action_config)
         if branch is not None:
             fields.append(("Branch", _describe_branch(branch)))
+            if "names" in branch:
+                fields.append(("Names", _describe_names(branch)))
         fields += [
             ("Kind", kind),
             ("Model", model),

@@ -113,6 +113,8 @@ are never the `impl:` values. For example, an action has `- name: compile_input`
 `impl: m_compile_input`. Read `data["compile_input"]`. `data.get("m_compile_input")` finds
 nothing and returns its default with no message.
 
+A tool action of a branch included with `as:` is the exception. Its keys are the short names of the branch: in instance `c2`, `data["write"]` holds the output of `c2__write`. See [Short names at run time](../configuration/branches.md#short-names-at-run-time).
+
 A tool or guard UDF can read a literal key that is not the name of an action. Before it runs
 anything, `agac run` writes a warning for each such key. `agac validate-udfs` does the same:
 

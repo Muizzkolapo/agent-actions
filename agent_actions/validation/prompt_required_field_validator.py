@@ -8,6 +8,7 @@ from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
+from agent_actions.prompt.aliases import prompt_aliases
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
@@ -113,7 +114,9 @@ def _unguarded_refs(template: str) -> set[tuple[str, str]]:
         return set()
     found: set[tuple[str, str]] = set()
     _walk(ast, frozenset(), frozenset(), found)
-    return found
+    # A short name the alias header binds reads the action it names.
+    aliases = prompt_aliases(ast)
+    return {(aliases.get(root, root), field) for root, field in found}
 
 
 def _optional_field_names(schema: dict) -> set[str]:
