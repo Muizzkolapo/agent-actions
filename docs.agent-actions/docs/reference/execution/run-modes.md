@@ -76,9 +76,13 @@ defaults:
 ### When the provider refuses a batch
 
 Agent Actions sends each input file as a separate batch. The provider can refuse a batch (a
-quota, a network error, a request that the provider rejects). If the provider refuses a batch,
+network error, a request that the provider rejects). If the provider refuses a batch,
 the run fails the action after the run walks all files. The run fails the action even when the
 provider took the batches of the other files of the action.
+
+There is one exception. If the provider refuses a batch because the quota or the credit of the account is used up,
+the run stops at that file with exit code `5`, and fails nothing (see [quota stop](../cli/run.md#quota-stop)).
+After you add credits, the next run sends that file and the files after it.
 
 Run the workflow again. The next run sends again the records of the refused file that have no
 answer yet. The run keeps the records that the action already answered, in that file or in any

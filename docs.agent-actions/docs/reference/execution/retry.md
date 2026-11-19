@@ -78,7 +78,8 @@ message of its own, the report names the error by its type.
 
 | Error Type | Examples | Retryable |
 |------------|----------|-----------|
-| Rate Limits | HTTP 429, quota exceeded | Yes |
+| Rate Limits | HTTP 429 | Yes |
+| Quota or billing stop | HTTP 402. HTTP 429 or 403 in the words of the provider for a quota that is used up, for example `insufficient_quota` | No. The run stops with exit code `5` and fails no record ([quota stop](../cli/run.md#quota-stop)) |
 | Network Issues | A refused connection. A connection that resets or drops during the response. A timeout, which includes a request that takes longer than [`request_timeout`](../configuration/index.md#request-timeout). A DNS failure. | Yes |
 | Server Errors | HTTP 500, 502, 503, 504 | Yes. The other statuses that Agent Actions retries depend on the provider ([by provider](#provider-support)). |
 | Transient request rejection | A request that the provider refuses with a message that contains `could not parse the JSON body` or `we are currently processing your json schema` | Yes |
@@ -92,13 +93,15 @@ For invalid LLM outputs, Agent Actions uses the [expectations](../validation/exp
 
 ## Provider Support
 
-Agent Actions normalizes the errors of each provider into the unified types `RateLimitError` and `NetworkError`, and retries these two types. Agent Actions retries connection failures for all providers. The HTTP statuses that Agent Actions retries depend on how the SDK of the provider reports them:
+Agent Actions normalizes the errors of each provider into the unified types `RateLimitError` and `NetworkError`, and retries these two types. An answer that the quota of the account is used up is a `QuotaExceededError`. Agent Actions never retries this error. Agent Actions retries connection failures for all providers. The HTTP statuses that Agent Actions retries depend on how the SDK of the provider reports them:
 
 | Provider | Rate limit (429) | Server errors |
 |----------|------------------|---------------|
 | OpenAI, Groq | Retried | Any HTTP 5xx retried |
 | Anthropic | Retried | Any HTTP 5xx retried, which includes 529 (overloaded) |
 | Gemini, Cohere, Ollama | Retried | HTTP 500, 502, 503, 504 retried |
+
+An HTTP 429 that is a [quota or billing stop](../cli/run.md#quota-stop) is not a rate limit, and Agent Actions does not retry it.
 
 Agent Actions does not retry a status that the table does not mark as retried. There is one exception. If a [declared endpoint](../configuration/endpoints.md) with `auth.command` gets a 401, Agent Actions runs the command one more time. Then Agent Actions retries that call one time. Thus Agent Actions renews an expired token. A second 401 fails the record.
 

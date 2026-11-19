@@ -19,6 +19,10 @@ The exit code of a retry has the same meaning as the exit code of a run (see [Ex
 a failed or exhausted record remains at some action, and `4` when the retry submitted a batch. The code is `0` when
 there is nothing to retry, and for `--dry-run` and `--filter`.
 
+The code is `5` when a provider answers that its [quota is used up](./run.md#quota-stop). The retry stops as
+[an interrupted retry](#when-a-retry-is-interrupted) stops. After you add credits, run the retry again. The retry
+resumes from where it stopped.
+
 ## Options
 
 | Option | Description |

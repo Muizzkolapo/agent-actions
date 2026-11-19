@@ -19,6 +19,7 @@ import httpx
 
 from agent_actions.errors import (
     NetworkError,
+    QuotaExceededError,
     RateLimitError,
     ResponseTruncatedError,
     VendorAPIError,
@@ -41,6 +42,68 @@ TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
     httpx.TimeoutException,
     httpx.RemoteProtocolError,
 )
+
+
+# What a vendor's answer says when the account's quota, credit or balance is used up,
+# which no wait clears, where the status alone (429 or 403) does not say it. Lower case.
+QUOTA_PHRASES: dict[str, tuple[str, ...]] = {
+    "openai": ("insufficient_quota",),
+    "anthropic": ("billing_error",),
+    "ollama_cloud": ("usage limit", "usage credits"),
+}
+
+_PAYMENT_REQUIRED = 402
+_QUOTA_PHRASE_STATUSES = (429, 403)
+
+
+def _status_code(e: BaseException) -> int | None:
+    """The HTTP status an SDK error carries, wherever the SDK keeps it."""
+    for holder, name in (
+        (e, "status_code"),
+        (e, "code"),
+        (getattr(e, "response", None), "status_code"),
+    ):
+        status = getattr(holder, name, None)
+        if isinstance(status, int) and not isinstance(status, bool):
+            return status
+    return None
+
+
+def _says_quota_is_used_up(status_code: int | None, text: str, vendor: str) -> bool:
+    if status_code == _PAYMENT_REQUIRED:
+        return True
+    if status_code not in _QUOTA_PHRASE_STATUSES:
+        return False
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in QUOTA_PHRASES.get(vendor, ()))
+
+
+def _quota_error(
+    text: str, vendor: str, model_name: str, cause: BaseException
+) -> QuotaExceededError:
+    return QuotaExceededError(
+        f"{vendor} quota or billing stop: {text}",
+        context={"vendor": vendor, "model": model_name, "provider_message": text},
+        cause=cause if isinstance(cause, Exception) else None,
+    )
+
+
+def find_quota_error(e: BaseException, vendor: str) -> QuotaExceededError | None:
+    """The quota or billing stop *e* is or was raised from, or None.
+
+    Searches the cause chain: a batch client raises its own error with the SDK's as the cause.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = e
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, QuotaExceededError):
+            return current
+        text = _redact_sensitive_data(str(current))
+        if _says_quota_is_used_up(_status_code(current), text, vendor):
+            return _quota_error(text, vendor, "", current)
+        current = current.__cause__
+    return None
 
 
 def _extract_retry_after(e: Exception) -> float | None:
@@ -116,8 +179,9 @@ def wrap_vendor_error(
 ) -> Exception:
     """Wrap a vendor SDK exception into a unified agent-actions error type.
 
-    Fires appropriate LLM events (RateLimitEvent / LLMErrorEvent) and returns
-    one of RateLimitError, NetworkError, or VendorAPIError.
+    Fires appropriate LLM events (RateLimitEvent / LLMErrorEvent; none for a quota
+    stop) and returns one of QuotaExceededError, RateLimitError, NetworkError, or
+    VendorAPIError.
 
     Args:
         e: The vendor SDK exception.
@@ -126,14 +190,20 @@ def wrap_vendor_error(
         request_id: Request correlation ID.
 
     Returns:
-        A unified exception (RateLimitError, NetworkError, or VendorAPIError),
-        or the original exception if it doesn't match any known category.
+        A unified exception (QuotaExceededError, RateLimitError, NetworkError, or
+        VendorAPIError), or the original exception if it doesn't match any known category.
     """
     vendor = mapping.vendor_name
     context: dict[str, object] = {"vendor": vendor, "model": model_name}
     # A server body can echo the request headers; masked by value and key shape only,
     # since the key-name rules would mangle the server's own text ("api_key: expected").
     text = _redact_sensitive_data(str(e))
+
+    # --- Quota or billing stop, before the rate limit a 429 would otherwise read as ---
+    # No event: the run it stops reports it once, where an event for each request in
+    # flight would print the provider's answer once per record.
+    if _says_quota_is_used_up(_status_code(e), text, vendor):
+        return _quota_error(text, vendor, model_name, e)
 
     # --- Type-based rate-limit detection ---
     if mapping.rate_limit_types and isinstance(e, mapping.rate_limit_types):
@@ -164,13 +234,8 @@ def wrap_vendor_error(
 
     # --- Status-code-based classification (Cohere, Ollama HTTP) ---
     if mapping.status_code_error_types and isinstance(e, mapping.status_code_error_types):
-        status_code = getattr(e, "status_code", None)
-        # google-genai uses .code instead of .status_code
-        if status_code is None:
-            status_code = getattr(e, "code", None)
-        # Some SDKs put status_code on e.response
-        if status_code is None and hasattr(e, "response"):
-            status_code = getattr(e.response, "status_code", None)
+        # google-genai keeps it as .code, some SDKs on e.response
+        status_code = _status_code(e)
 
         if status_code == 429:
             context["retry_after"] = None
@@ -242,9 +307,12 @@ def wrap_vendor_error(
 def error_for_status(status_code: int, message: str) -> VendorAPIError | NetworkError:
     """The error online raises for an answer with *status_code*, for a caller that has no exception.
 
-    429 is a rate limit and any 5xx a network error, as the type-based mappings classify
-    them (the SDKs' ``InternalServerError`` is every 5xx); any other status is an API error.
+    402 is a quota or billing stop, 429 a rate limit and any 5xx a network error, as the
+    type-based mappings classify them (the SDKs' ``InternalServerError`` is every 5xx);
+    any other status is an API error.
     """
+    if status_code == _PAYMENT_REQUIRED:
+        return QuotaExceededError(message, context={"provider_message": message})
     if status_code == 429:
         return RateLimitError(message)
     if status_code >= 500:

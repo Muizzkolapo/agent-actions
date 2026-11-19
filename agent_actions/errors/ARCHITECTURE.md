@@ -25,6 +25,7 @@ Exception
     │   ├── VendorAPIError
     │   │   ├── AnthropicError
     │   │   ├── RateLimitError                 (retryable)
+    │   │   ├── QuotaExceededError             (never retried; a run stops on it)
     │   │   └── PromptTooLargeError
     │   └── NetworkError                       (retryable)
     │
@@ -85,6 +86,7 @@ _TRANSIENT_API_ERROR_PATTERNS = (
 |-------|-----------|-----|
 | `NetworkError` | Yes | Transient connection/timeout failures |
 | `RateLimitError` | Yes | HTTP 429 with optional retry-after header |
+| `QuotaExceededError` | No | The account's quota, credit or balance is used up (HTTP 402, or a 429/403 in the provider's words for it): no wait clears it. The client call raises `ProviderQuotaStop` (a `BaseException`) in its place, which ends the run as an interrupt does |
 | `VendorAPIError` (transient pattern match) | Yes | Known intermittent provider bugs |
 | `VendorAPIError` (all other) | No | Provider rejected the request (bad input, content filter, etc.) |
 | `AnthropicError` | No | Subclass of VendorAPIError, not in RETRIABLE_ERRORS tuple |
@@ -119,6 +121,10 @@ SDK exception (openai.RateLimitError, httpx.TimeoutException, etc.)
      │
      ▼
 wrap_vendor_error()
+     │
+     ├── Quota or billing stop (every vendor, read first)
+     │     ├── 402                               → QuotaExceededError, no event
+     │     └── 429/403 + a QUOTA_PHRASES phrase  → QuotaExceededError, no event
      │
      ├── Type-based match (OpenAI, Anthropic, Groq)
      │     ├── rate_limit_types     → RateLimitError + fire RateLimitEvent

@@ -25,9 +25,11 @@ from agent_actions.cli.exit_codes import (
     RunOutcome,
     actions_with_record_failures,
     classify_outcome,
+    report_quota_stop,
 )
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
+from agent_actions.errors import ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.storage.run_lock import hold_run_lock
@@ -84,10 +86,14 @@ class RunCommand:
         )
         # Before anything loads, clears or submits: `--fresh` clears the store inside
         # load_workflow, so a later lock would wipe a run in progress before refusing.
-        with hold_run_lock(paths.io_dir, self.agent_name):
-            outcome = self._run_holding_the_lock(paths, project_root)
-            if self.args.wait:
-                outcome = self._wait_for_batches(outcome, paths, project_root)
+        try:
+            with hold_run_lock(paths.io_dir, self.agent_name):
+                outcome = self._run_holding_the_lock(paths, project_root)
+                if self.args.wait:
+                    outcome = self._wait_for_batches(outcome, paths, project_root)
+        except ProviderQuotaStop as stop:
+            report_quota_stop(stop)
+            outcome = RunOutcome.QUOTA_STOP
 
         if EXIT_CODES[outcome] != EXIT_SUCCESS:
             raise SystemExit(EXIT_CODES[outcome])
@@ -174,6 +180,10 @@ class RunCommand:
             self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
             self._report(outcome, workflow)
 
+        except ProviderQuotaStop as stop:
+            outcome = RunOutcome.QUOTA_STOP
+            error_message = str(stop)
+            raise
         except Exception:
             outcome = RunOutcome.FAILED
             error_message = traceback.format_exc()
@@ -357,7 +367,7 @@ def run(
 
     \b
     Exit codes: 0 success, 1 failed, 3 finished with failed or exhausted
-    records, 4 paused for a batch.
+    records, 4 paused for a batch, 5 stopped by a provider's quota or billing.
 
     \b
     Examples:
