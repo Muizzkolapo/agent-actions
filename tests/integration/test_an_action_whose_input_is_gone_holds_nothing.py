@@ -63,7 +63,7 @@ def test_preview_no_longer_serves_the_reader_rows(chained):  # noqa: F811
     _add_guard_to(chained, ACTION, RESET_ONLY)
     _run()
 
-    result = CliRunner().invoke(cli, ["preview", "-w", WORKFLOW, "-a", SECOND])
+    result = CliRunner().invoke(cli, ["preview", "-w", WORKFLOW, "-A", SECOND])
 
     assert f"No data found for action '{SECOND}'" in result.output, result.output
 

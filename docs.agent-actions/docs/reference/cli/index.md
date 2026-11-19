@@ -53,6 +53,25 @@ agac --help
 agac run --help
 ```
 
+## The Workflow and the Action
+
+Each command that reads a workflow takes its name as `-w` or `--workflow`. `-a` and `--agent` name the same option:
+
+```bash
+agac run -w my_workflow
+agac dispositions -w my_workflow
+agac run -a my_workflow          # the same as -w
+```
+
+Each command that reads one action takes its name as `-A` or `--action`:
+
+```bash
+agac traces -w my_workflow -A classify_issue
+agac dispositions -w my_workflow -A classify_issue
+```
+
+[`traces`](./traces), [`records`](./records) and [`preview`](./preview) are the exception for `-a`. In these three commands, `-a` named the action, and it still does. The command prints a warning on stderr that tells you to type `-A` or `--action`. In a later release, `-a` will name the workflow in these commands too. `--agent` names the workflow in them now.
+
 ## Working Directory
 
 You do not have to be in the root directory of your project to run commands.

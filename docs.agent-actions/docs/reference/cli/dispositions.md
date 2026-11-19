@@ -9,15 +9,15 @@ sidebar_position: 8
 The `dispositions` command shows, for each action, what occurred to each record that a workflow processed. The command reads the `record_disposition` table in the durable store. Use it to see quickly where records succeeded, failed or left the stream. Use it before you use [`retry`](./retry).
 
 ```bash
-agac dispositions -a <workflow-name> [options]
+agac dispositions -w <workflow-name> [options]
 ```
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The name of the agent configuration file, with no path or extension (required) |
-| `--action TEXT` | Show the dispositions for only the specified action |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
+| `-A, --action TEXT` | Show the dispositions for only the specified action |
 | `--quarantined` | Show only the failed, exhausted and unprocessed records, with details |
 
 ## Output
@@ -96,13 +96,13 @@ To resume a halted action, use `agac retry`. To start it again from the beginnin
 ### Full Workflow Overview
 
 ```bash
-agac dispositions -a my_workflow
+agac dispositions -w my_workflow
 ```
 
 ### One Action Only
 
 ```bash
-agac dispositions -a my_workflow --action extract_facts
+agac dispositions -w my_workflow --action extract_facts
 ```
 
 ### Inspect Stuck Records
@@ -110,7 +110,7 @@ agac dispositions -a my_workflow --action extract_facts
 `--quarantined` lists each failed, exhausted or unprocessed record. For each record, it gives the action, the record ID, the disposition and the reason. Use this list to decide what to [`retry`](./retry):
 
 ```bash
-agac dispositions -a my_workflow --quarantined
+agac dispositions -w my_workflow --quarantined
 ```
 
 `retry` operates on the failed and exhausted records. The list gives each unprocessed record with the

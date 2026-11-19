@@ -503,11 +503,11 @@ SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
 SELECT action_name, disposition, COUNT(*) FROM record_disposition GROUP BY action_name, disposition;
 ```
 
-The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -a extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
+The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -A extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
 
 ```bash
 agac preview -w my_workflow
-agac preview -w my_workflow -a extract_data -f json
+agac preview -w my_workflow -A extract_data -f json
 agac preview -w my_workflow --stats
 ```
 
@@ -598,7 +598,7 @@ for k, v in counts.most_common():
 "
 
 # Preview action output via CLI
-agac preview -w my_workflow -a extract_data
+agac preview -w my_workflow -A extract_data
 
 # Check workflow status
 agac status -a my_workflow

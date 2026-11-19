@@ -13,7 +13,11 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.cli.renderers.whole_table import print_whole
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -244,13 +248,9 @@ class DispositionsCommand:
 
 
 @click.command()
+@workflow_option()
 @click.option(
-    "-a",
-    "--agent",
-    required=True,
-    help="Agent configuration file name without path or extension",
-)
-@click.option(
+    "-A",
     "--action",
     default=None,
     help="Show dispositions for a specific action only.",

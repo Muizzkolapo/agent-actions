@@ -207,13 +207,13 @@ The `data` column is compressed in the store. Thus you read the records themselv
 ### Dump every record for one action
 
 ```bash
-agac records -w <workflow> -a extract_facts
+agac records -w <workflow> -A extract_facts
 ```
 
 ### Extract one field across all records for an action
 
 ```bash
-agac records -w <workflow> -a extract_facts --field content.headline
+agac records -w <workflow> -A extract_facts --field content.headline
 ```
 
 ### Locate the records for one source record {/* #locate-the-rows-for-one-source-record */}

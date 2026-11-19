@@ -144,7 +144,7 @@ The command removes these items:
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The workflow name (required) |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
 | `-f, --force` | Skip the interactive confirmation |
 | `--target` | Also remove `agent_io/target/`, your generated output |
 | `--all` | Remove all directories, which include target, staging and the durable store. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
@@ -222,17 +222,17 @@ Show the execution status of a specified workflow. The status shows which action
 An action can fail as a whole, with the error in its status (`error_message` in `agent_io/.agent_status.json`). For such an action, an **Error** column shows the first line of that error next to the action. The command cuts the line to 200 characters. The column shows only when a failed action has an error message. This command does not list the failures of single records. For those, see [`agac dispositions`](./dispositions) or [`agac retry --dry-run`](./retry).
 
 ```bash
-agac status -a <workflow-name> [options]
+agac status -w <workflow-name> [options]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The workflow name (required) |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
 
 **Example:**
 ```bash
-agac status -a my_workflow
+agac status -w my_workflow
 ```
 
 :::note[Run from Anywhere]

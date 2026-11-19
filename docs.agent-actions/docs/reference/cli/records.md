@@ -18,12 +18,12 @@ The store keeps these payloads compressed. Thus `sqlite3` shows `target_data.dat
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The name of the workflow configuration file (required) |
-| `-a, --action TEXT` | Only the records of this action. If you omit it, the command uses each action that has stored records. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `--agent` names the same option |
+| `-A, --action TEXT` | Only the records of this action. If you omit it, the command uses each action that has stored records. `-a` still names the action in this command, and prints a warning on stderr: it is deprecated here, because it names the workflow in the other commands. |
 | `--source-guid TEXT` | Only the records of this source record, in each action that holds one |
-| `--file TEXT` | Only the records of this stored file (its `relative_path`). Without `-a`, the command uses each action that stores the file. With `--snapshots`, the command uses only the records that failed in the file. |
+| `--file TEXT` | Only the records of this stored file (its `relative_path`). Without `-A`, the command uses each action that stores the file. With `--snapshots`, the command uses only the records that failed in the file. |
 | `--field TEXT` | Print one value for each record, not the full record. The value is a dotted path into the record, for example `content.extract_facts.headline`. The keys of the stored `content` are the action names. If the record does not have the path, the command prints `null`. |
-| `--snapshots` | Print the input with which each failed or exhausted record was processed, not the stored records. `-a`, `--source-guid` and `--file` make the output smaller. |
+| `--snapshots` | Print the input with which each failed or exhausted record was processed, not the stored records. `-A`, `--source-guid` and `--file` make the output smaller. |
 
 The command prints each record as the store keeps it. It adds `_action` (the action that stored the record) and `_file` (the file that the record is stored under). `--field` can name each of these two fields.
 
@@ -31,10 +31,10 @@ The command prints each record as the store keeps it. It adds `_action` (the act
 
 ```bash
 # Every record an action stored
-agac records -w my_workflow -a extract_facts
+agac records -w my_workflow -A extract_facts
 
 # One field of each
-agac records -w my_workflow -a extract_facts --field content.extract_facts.headline
+agac records -w my_workflow -A extract_facts --field content.extract_facts.headline
 
 # One source record, in every action that holds it
 agac records -w my_workflow --source-guid <source_guid>
@@ -44,7 +44,7 @@ agac records -w my_workflow --source-guid <source_guid> --field _action
 
 # The input each failed or exhausted record was processed with
 agac records -w my_workflow --snapshots
-agac records -w my_workflow -a extract_facts --snapshots
+agac records -w my_workflow -A extract_facts --snapshots
 ```
 
 The command prints a snapshot in this format:

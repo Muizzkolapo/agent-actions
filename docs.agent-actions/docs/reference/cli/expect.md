@@ -37,8 +37,8 @@ summarize  suite summarize:schema · repair auto
 
 | Option | Description |
 |--------|-------------|
-| `-a`, `--agent` | The workflow name (required) |
-| `--action` | Limit the listing to one action |
+| `-w`, `--workflow` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-A`, `--action` | Limit the listing to one action |
 | `--json` | Write the listing as JSON on stdout |
 
 ### The Three Declaration Routes Print Identically {/* #all-three-declaration-routes-print-identically */}
@@ -139,8 +139,8 @@ The report sorts the rules by how frequently they failed. Thus the rule that cos
 
 | Option | Description |
 |--------|-------------|
-| `-a`, `--agent` | The workflow name (required) |
-| `--action` | Limit the report to one action |
+| `-w`, `--workflow` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-A`, `--action` | Limit the report to one action |
 | `--json` | Write the report as JSON on stdout |
 | `--fail-under` | Exit with a non-zero code if the pass percentage of any action is less than this value |
 

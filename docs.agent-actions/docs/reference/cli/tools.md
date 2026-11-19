@@ -55,7 +55,7 @@ It finds misspelled function names or missing `@udf_tool` decorators before exec
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent` | The workflow name (required) |
+| `-w, --workflow` | The workflow name (required). `-a` and `--agent` name the same option. |
 | `-u, --user-code` | The path to the user code directory that contains the tools (required) |
 
 **Validated items:**

@@ -24,7 +24,7 @@ You can run inspect commands from any subdirectory in your project.
 
 | Option | Description |
 |--------|-------------|
-| `-a`, `--agent` | The workflow name. Required. Without it, `agac inspect` exits 2 with `Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage.` |
+| `-w`, `--workflow` | The workflow name. Required. `-a` and `--agent` name the same option. Without it, `agac inspect` exits 2 with `Missing required option '-w' / '--workflow'. Run 'agac inspect --help' for usage.` |
 | `-u`, `--user-code` | The path to the user code directory. `inspect action` and `inspect context` also accept this option |
 
 ## Default Behavior {/* #default-behavior */}
