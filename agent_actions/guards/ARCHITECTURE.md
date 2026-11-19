@@ -279,6 +279,12 @@ Guard not matched:
 
 In batch mode, filtered records are marked in the context_map during preparation and never submitted to the provider. The disposition must be explicitly written during batch finalization. In online mode, the disposition is written immediately by the result collector.
 
+### Sent elsewhere
+
+A filtered record is dead below the filtering action: the storage walk drops it at every fan-in (`_collect_upstream_filtered_guids`). An action marked with the internal key `_sends_elsewhere` (`record/elsewhere.py`) filters a record because it went to another branch. The row is still `filtered`, so the disposition gate and `agac retry` treat it as any filter, but its reason is `sent_elsewhere` (batch sets it as the record's skip reason at preparation). Below the action the record stays dead, so it cannot come back into the branch through another input, except at an action marked `_gathers` and below it: there the records that every action above the gatherer sent elsewhere are live again, and each arrives through the branch it went to. A filter with any other reason stays dead at a gatherer.
+
+Records sent elsewhere are not the action's: the collector counts them in `sent_elsewhere`, apart from `filtered` and outside the total, so an action whose every record went elsewhere writes no node-level skip (batch: no node-level `passthrough`) and completes on no records, and its readers run on nothing. The pre-filter log line, `ResultCollectionCompleteEvent` and `agac dispositions` count them as sent elsewhere, never as filtered.
+
 ---
 
 ## Batch vs Online Timing

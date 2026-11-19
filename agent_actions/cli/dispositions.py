@@ -21,9 +21,11 @@ from agent_actions.record.reasons import (
     EXPECTATIONS_FAILED,
     GUARD_SKIP_REASONS,
     HALTED_ON_EXHAUSTED,
+    SENT_ELSEWHERE,
 )
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
+    DISPOSITION_FILTERED,
     DISPOSITION_SUCCESS,
     DISPOSITION_UNPROCESSED,
     FAILURE_DISPOSITIONS,
@@ -90,14 +92,25 @@ class DispositionsCommand:
         table.add_column("Unprocessed", justify="right", style="yellow")
         table.add_column("Passthrough", justify="right", style="dim")
         table.add_column("Filtered", justify="right", style="dim")
-        table.add_column("Total", justify="right", style="bold")
-        table.add_column("Records", justify="right", style="bold")
 
         stored = self._records_stored(backend)
 
+        rows_by_action = {}
         for action in actions:
             rows = backend.get_disposition(action, snapshots=False)
-            rows = [r for r in rows if r.get("record_id") != NODE_LEVEL_RECORD_ID]
+            rows_by_action[action] = [r for r in rows if r.get("record_id") != NODE_LEVEL_RECORD_ID]
+        sent_by_action = {
+            action: sum(1 for row in rows if _sent_elsewhere(row))
+            for action, rows in rows_by_action.items()
+        }
+        show_sent = any(sent_by_action.values())
+        if show_sent:
+            table.add_column("Sent elsewhere", justify="right", style="dim")
+        table.add_column("Total", justify="right", style="bold")
+        table.add_column("Records", justify="right", style="bold")
+
+        for action in actions:
+            rows = [row for row in rows_by_action[action] if not _sent_elsewhere(row)]
 
             counts: dict[str, int] = {}
             for row in rows:
@@ -117,9 +130,10 @@ class DispositionsCommand:
             )
 
             total = sum(counts.values())
-            if total == 0:
+            if total == 0 and not sent_by_action[action]:
                 continue
 
+            sent_cell = [str(sent_by_action[action])] if show_sent else []
             table.add_row(
                 action,
                 str(counts.get("success", 0) - failed_checks),
@@ -130,6 +144,7 @@ class DispositionsCommand:
                 str(counts.get("unprocessed", 0) - guard_skipped),
                 str(counts.get("passthrough", 0)),
                 str(counts.get("filtered", 0)),
+                *sent_cell,
                 str(total),
                 "?" if stored is None else str(stored.get(action, 0)),
             )
@@ -149,7 +164,14 @@ class DispositionsCommand:
                 "them with that reason. Failed checks counts the records shipped "
                 "with a verdict that did not pass (on_exhausted: return_last, "
                 "repair: none): they are stored as successes, so nothing reading them "
-                "is blocked and retry does not re-run them.[/dim]"
+                "is blocked and retry does not re-run them."
+                + (
+                    " Sent elsewhere counts the records the action's guard sent to "
+                    "another branch: they are not the action's, so not in its Total."
+                    if show_sent
+                    else ""
+                )
+                + "[/dim]"
             )
         elif not action_level:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")
@@ -272,3 +294,7 @@ def dispositions(
     """Inspect record-level processing dispositions per action."""
     command = DispositionsCommand(agent, action, quarantined)
     command.execute(project_root=project_root)
+
+
+def _sent_elsewhere(row: dict) -> bool:
+    return row.get("disposition") == DISPOSITION_FILTERED and row.get("reason") == SENT_ELSEWHERE

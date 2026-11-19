@@ -161,6 +161,8 @@ class BatchTaskPreparationStats:
     phase2_filtered_items: int = 0
     phase2_skipped_items: int = 0
     error_items: int = 0
+    # Filtered by a guard that sends the record to another branch; not in total_filtered.
+    sent_elsewhere_items: int = 0
 
     @property
     def total_filtered(self) -> int:

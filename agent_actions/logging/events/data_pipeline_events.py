@@ -393,6 +393,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
     total_unprocessed: int = 0
     total_guard_skipped: int = 0
     total_deferred: int = 0
+    total_sent_elsewhere: int = 0
     guard_condition: str = ""
     guard_on_false: str = ""
     # Which input file this event's counts are for, so a reader folding every
@@ -413,6 +414,8 @@ class ResultCollectionCompleteEvent(BaseEvent):
         ]
         if self.total_deferred:
             parts.append(f"{self.total_deferred} deferred")
+        if self.total_sent_elsewhere:
+            parts.append(f"{self.total_sent_elsewhere} sent elsewhere")
         self.message = f"[{self.action_name}] Result collection complete: " + ", ".join(parts)
         self.data = {
             "action_name": self.action_name,
@@ -424,6 +427,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
             "total_unprocessed": self.total_unprocessed,
             "total_guard_skipped": self.total_guard_skipped,
             "total_deferred": self.total_deferred,
+            "total_sent_elsewhere": self.total_sent_elsewhere,
             "guard_condition": self.guard_condition,
             "guard_on_false": self.guard_on_false,
             "target_relative_path": self.target_relative_path,

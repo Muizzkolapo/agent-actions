@@ -24,4 +24,4 @@ and provide formatter hooks for the CLI/tracing system.
 | `cache_events.py` | Module | Cache lifecycle events (C prefix). 5 classes. | `logging` |
 | `initialization_events.py` | Module | Configuration (F), environment (E), initialization (I), and plugin (P) events. 13 classes. | `logging` |
 | `io_events.py` | Module | File I/O (FIO), schema operations (SO), and context introspection (CX) events, plus `LogFileCapReachedEvent` (FIO008). 15 classes. | `logging` |
-| `data_pipeline_events.py` | Module | Data validation (DV), transformation (DT), record processing (RP), batch processing (BP), and result collection (RC) events. 17 classes. | `logging` |
+| `data_pipeline_events.py` | Module | Data validation (DV), transformation (DT), record processing (RP), batch processing (BP), and result collection (RC) events. 17 classes. `ResultCollectionCompleteEvent.total_sent_elsewhere` counts records sent to another branch, apart from `total_filtered`. | `logging` |

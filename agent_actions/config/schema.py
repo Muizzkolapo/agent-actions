@@ -693,6 +693,16 @@ class ActionConfig(_RetryValidators):
     include_context: dict[str, Any] | None = Field(
         default=None, alias="_include", description="Branch origin injected by renderer"
     )
+    sends_elsewhere: bool | None = Field(
+        default=None,
+        alias="_sends_elsewhere",
+        description="A record the guard filters went to another branch, injected by renderer",
+    )
+    gathers: bool | None = Field(
+        default=None,
+        alias="_gathers",
+        description="Records sent elsewhere above come back here, injected by renderer",
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
