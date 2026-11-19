@@ -20,7 +20,9 @@ import json
 import sqlite3
 from pathlib import Path
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
+from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.integration.test_a_retry_answers_what_a_split_writes_below_it import (
     WORKFLOW,
     _project,
@@ -123,7 +125,7 @@ def _collect_everything(project: Path) -> str:
     """Run until no batch of `finalize` is left to collect."""
     code, output = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     for _ in range(5):
-        assert code == 0, output
+        assert code in RAN_TO_ITS_END, output
         if _status(project) != "batch_submitted":
             break
         code, output = _agac(project, "run", "-a", WORKFLOW)
@@ -135,7 +137,7 @@ class TestARecordTheGuardFiltered:
     def test_it_reads_filtered_though_the_collect_pass_could_not_write(self, tmp_path):
         project = _batch_project(tmp_path, GUARD)
         code, output = _agac(project, "run", "-a", WORKFLOW, "--fresh")
-        assert code == 0 and _status(project) == "batch_submitted", output
+        assert code == EXIT_PAUSED and _status(project) == "batch_submitted", output
 
         (project / FAULT).write_text("")
         code, output = _agac(project, "run", "-a", WORKFLOW)
@@ -167,6 +169,6 @@ class TestARecordThatExhaustedItsRetries:
 
         code, output = _agac(project, "run", "-a", WORKFLOW)
 
-        assert code == 0, output
+        assert code == EXIT_RECORD_FAILURES, output
         assert _dispositions(project) == written, output
         assert _status(project) == "completed_with_failures", output

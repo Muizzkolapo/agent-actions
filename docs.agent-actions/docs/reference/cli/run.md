@@ -56,6 +56,59 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
 | `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Give the flag more than one time to run more than one action again in the same run (`--rerun classify --rerun summarize`). Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have a name, the run stops before it starts, and names each name that it does not have |
 | `--verify-keys` | Verify the API keys before execution. The command probes each vendor one time for each endpoint. For an `openai` action with `base_url`, the probe uses `models.list()` at that URL. For an action without `base_url`, the probe uses the OpenAI endpoint. If a server does not answer, the command logs a warning and the run continues. A local server may serve `/v1/models` without a check of the key (llamafile 0.10.6 does this). Thus a passing probe there shows that the server is reachable, not that the key is correct. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) that the workflow uses also gets one structured-output request. For that request, three conditions are errors. They are a refused credential, a server that cannot be reached, and a reply that does not match the schema of the probe |
+| `--wait` | While the run is paused for a batch, wait and run the workflow again until no batch is open. Then exit with the code of the final status. See [Wait for batch jobs](#wait-for-batch-jobs) |
+| `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs (default: 60) |
+| `--wait-timeout SECONDS` | With `--wait`: stop the wait after this time and exit 4. The batch jobs stay open for the next run (default: no limit) |
+
+## Exit Codes {/* #exit-codes */}
+
+The exit code of `agac run` and of [`agac retry`](./retry) tells how the command ended. A script
+or a CI job can read the code. It does not have to read the text that the command prints.
+
+| Code | Status | Meaning |
+|------|--------|---------|
+| `0` | Success | Each action completed or was skipped, and no action holds a failed or exhausted record |
+| `1` | Failed | An action failed, or an error ended the command |
+| `2` | Usage error | The command line is not valid. Nothing ran |
+| `3` | Finished with failures | The workflow finished, but an action holds a record with the disposition `failed` or `exhausted`. The command names these actions. [`agac dispositions --quarantined`](./dispositions) lists the records, and [`agac retry`](./retry) repairs them |
+| `4` | Paused | A batch job is submitted and is not collected yet. Run the workflow again to check the batch job and continue, or use `--wait` |
+
+The code comes from the statuses of the actions in `agent_io/.agent_status.json`, which
+[`agac status`](./utilities#status) shows. An action that holds no successful record
+has the status `failed`. Thus the code is `1`, not `3`, when each record of an action failed.
+A failed action has priority: when one action failed and another action holds failed records, the code is `1`.
+A record that was filtered, skipped by a guard or left unprocessed below a failed record does not change the code.
+
+:::caution[Changed exit codes]
+In earlier versions, a paused run and a run that finished with failed or exhausted records
+exited `0`. They now exit `4` and `3`. A script that stops on each non-zero code (`set -e`)
+must accept `4` after it submits a batch, or use `--wait`.
+:::
+
+## Wait for Batch Jobs {/* #wait-for-batch-jobs */}
+
+A run that submits a batch job pauses and exits `4`. The next `agac run` checks the batch job,
+collects the results when they are ready, and continues with the next actions. With `--wait`, one command does all of this:
+
+```bash
+agac run -a my_workflow --wait --poll 60 --wait-timeout 86400
+```
+
+While the run is paused for a batch, `--wait` sleeps for the `--poll` time. Then it runs the workflow again,
+as a second `agac run` does. It repeats this until no batch is open. The command then exits with the code
+of the final status: `0`, `1` or `3`.
+
+`--fresh`, `--rerun` and `--verify-keys` apply to the first pass only. The later passes clear nothing.
+
+When the `--wait-timeout` time is over and a batch is still open, the command stops, names the actions
+that wait, and exits `4`. The batch jobs stay at the provider. To continue, run the command again:
+
+```
+Stopped waiting after 86400s: batch job(s) still open for: classify. Run again to check them and continue: agac run -a my_workflow --wait
+```
+
+The command holds the [run lock](#concurrent-runs) from the first pass to the last pass. Thus no other
+`agac run` or `agac retry` of the workflow can start during the wait.
 
 ## Run a Smaller Version of a Project {/* #running-a-project-smaller-than-it-is */}
 
@@ -319,6 +372,7 @@ Runs of different workflows do not block each other. Read-only commands (`inspec
 `records`, `status`, `traces`, `preview`, `dispositions`, `retry --dry-run`) never take the
 lock. The operating system releases the lock when the run exits or when something kills the run. Thus no lock
 stays after the run. A run that submits a batch job exits. Thus the next run can collect the batch job.
+A run with [`--wait`](#wait-for-batch-jobs) keeps the lock while it waits for its batch jobs.
 
 `agac clean` and the `reset_workflow.py --full` script of the skills also take the lock.
 `agac clean` takes the lock in each mode, when it finds something to remove.

@@ -23,9 +23,11 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
+from tests._support.exit_codes import RAN_TO_ITS_END
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -302,7 +304,7 @@ def _run(project: Path, *args: str) -> str:
     for _ in range(4):
         result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", *args, env=_env(project))
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
+        assert result.returncode in RAN_TO_ITS_END, output
         if "run again" not in output:
             return output
         args = tuple(arg for arg in args if arg != "--fresh")
@@ -312,8 +314,9 @@ def _run(project: Path, *args: str) -> str:
 def _retry(project: Path, *args: str) -> str:
     result = run_agac(project, "retry", "-a", WORKFLOW, *args, env=_env(project))
     output = result.stdout + result.stderr
-    assert result.returncode == 0, output
-    assert "Retry complete." in output, output
+    assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
+    ended = "Retry paused" if result.returncode == EXIT_PAUSED else "Retry complete."
+    assert ended in output, output
     return output
 
 
@@ -553,7 +556,7 @@ def test_a_review_a_retry_reaches_shows_only_the_records_it_names(tmp_path):
     approve = {**_env(project), "AGAC_HITL_AUTO_APPROVE": "true"}
     (project / "fail_alpha").touch()
     result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh", env=approve)
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == EXIT_RECORD_FAILURES, result.stdout + result.stderr
     (project / "fail_alpha").unlink()
     reviewed = {
         r["source_guid"]
@@ -981,7 +984,7 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
 
         result = run_agac(project, "retry", "-a", WORKFLOW, env=_env(project))
 
-        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.returncode == EXIT_RECORD_FAILURES, result.stdout + result.stderr
         assert _logged(project, "count_handed.jsonl") == [["Page beta. (item)"]]
         # Quarantined rows first, as FILE mode writes a file.
         assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [

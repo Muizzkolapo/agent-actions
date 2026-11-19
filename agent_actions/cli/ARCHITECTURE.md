@@ -252,10 +252,17 @@ RunCommand.execute()
   │
   ├─ workflow.run() or asyncio.run(workflow.async_run())
   │
-  ├─ State check: is_workflow_complete / is_workflow_done / batch pending
+  ├─ exit_codes.classify_outcome(state_manager)     ← SUCCESS / RECORD_FAILURES / PAUSED_FOR_BATCH /
+  │                                                    PAUSED / FAILED, from the action statuses
   │
-  └─ tracker.finalize_workflow_run()
-     └─ LoggerFactory.flush()
+  ├─ tracker.finalize_workflow_run()                ← TRACKER_STATUSES[outcome]
+  │  └─ LoggerFactory.flush()
+  │
+  ├─ --wait and PAUSED_FOR_BATCH? sleep --poll, then the steps from load_workflow again
+  │                                                    (no --fresh/--rerun/--verify-keys), under
+  │                                                    the same run lock, until --wait-timeout
+  │
+  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← 1 failed, 3 record failures, 4 paused
 ```
 
 ### `retry` -- Retry Failed Records
@@ -294,10 +301,10 @@ RetryCommand.execute()
   ├─ workflow.run()
   ├─ _put_back_what_the_repair_never_answered()     ← a cleared record the starting action never answered
   │
-  ├─ State check: is_workflow_complete / is_workflow_done / has_any_failed
+  ├─ exit_codes.classify_outcome(state_manager)     ← the classifier `run` uses
   ├─ _delete_manifest()                             ← the repair reached the end, either way
   │
-  └─ SystemExit(1) if a downstream action failed    ← same contract as `run`
+  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← same codes as `run`: 1, 3, 4
 ```
 
 ### `inspect` -- Command Group

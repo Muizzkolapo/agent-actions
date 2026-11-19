@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
@@ -121,7 +122,7 @@ def _run_to_the_end(project: Path) -> str:
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode == 0, "\n".join(outputs)
+        assert result.returncode in RAN_TO_ITS_END, "\n".join(outputs)
         if "run again" not in output:
             return "\n".join(outputs)
         args = ["run", "-a", WORKFLOW]

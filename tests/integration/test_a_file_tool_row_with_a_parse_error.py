@@ -6,6 +6,7 @@ the file was dispositioned failed and nothing was stored.
 
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_a_file_tool_that_invents_rows import _raw
 from tests.integration.test_retry_ignores_record_cap import (
@@ -52,7 +53,7 @@ def test_only_the_row_with_the_parse_error_fails(project):  # noqa: F811
 
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     backend = _backend(project)
     try:
         rows = backend.get_disposition("shape")

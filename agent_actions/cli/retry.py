@@ -24,6 +24,13 @@ from agent_actions.cli.cli_decorators import (
     requires_project,
     workflow_option,
 )
+from agent_actions.cli.exit_codes import (
+    EXIT_CODES,
+    TRACKER_STATUSES,
+    RunOutcome,
+    actions_with_record_failures,
+    classify_outcome,
+)
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
@@ -103,20 +110,6 @@ def _read_manifest(path: Path) -> dict[str, Any] | None:
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Corrupt retry manifest at %s: %s — ignoring", path, e)
         return None
-
-
-def _classify_outcome(state_mgr: Any) -> str:
-    """Decide the finished workflow the way ``run.py`` decides it.
-
-    Both commands hand this status to the run tracker and turn it into an exit
-    code, so a caller reading one reads the other. An action that completed with
-    record-level failures is a complete action, and so a success.
-    """
-    if state_mgr.is_workflow_complete():
-        return "SUCCESS"
-    if not state_mgr.is_workflow_done():
-        return "PAUSED"
-    return "FAILED" if state_mgr.has_any_failed() else "SUCCESS"
 
 
 def _halted_among(failures: dict[str, list[dict]], actions: list[str]) -> list[str]:
@@ -389,7 +382,7 @@ class RetryCommand:
             new_run=True,
         )
 
-        status = "FAILED"
+        outcome = RunOutcome.FAILED
         error_message = None
         try:
             workflow.run()
@@ -404,14 +397,14 @@ class RetryCommand:
                 snapshot_dispositions,
                 halted_above=_halted_among(failures, execution_order[:from_idx]),
             )
-            status = _classify_outcome(state_mgr)
+            outcome = classify_outcome(state_mgr, execution_order)
         except Exception:
             error_message = traceback.format_exc()
             raise
         finally:
             try:
                 tracker.finalize_workflow_run(
-                    run_id=run_id, status=status, error_message=error_message
+                    run_id=run_id, status=TRACKER_STATUSES[outcome], error_message=error_message
                 )
             except Exception as track_error:
                 logger.warning(
@@ -430,11 +423,33 @@ class RetryCommand:
         # reinstate the failures this run just re-decided.
         _delete_manifest(manifest_file)
 
-        if status == "FAILED":
-            self._report_failures(state_mgr, list(workflow.execution_order))
-            raise SystemExit(1)
+        self._report(outcome, state_mgr, execution_order)
+        if outcome is not RunOutcome.SUCCESS:
+            raise SystemExit(EXIT_CODES[outcome])
 
-        self.console.print("\n[green]Retry complete.[/green]")
+    def _report(self, outcome: RunOutcome, state_mgr, execution_order: list[str]) -> None:
+        """Print the sentence for *outcome*; the exit code is read from the outcome alone."""
+        if outcome is RunOutcome.FAILED:
+            self._report_failures(state_mgr, execution_order)
+        elif outcome is RunOutcome.RECORD_FAILURES:
+            partial = actions_with_record_failures(state_mgr, execution_order)
+            self.console.print(
+                f"\n[yellow]Retry finished with failed or exhausted records in: "
+                f"{', '.join(partial)}.[/yellow]"
+            )
+        elif outcome is RunOutcome.PAUSED_FOR_BATCH:
+            waiting = state_mgr.get_batch_submitted_actions(execution_order)
+            self.console.print(
+                f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
+                f"Collect them with: agac run -a {self.agent_name}[/cyan]"
+            )
+        elif outcome is RunOutcome.PAUSED:
+            self.console.print(
+                f"\n[cyan]Retry paused before every action finished. "
+                f"Continue with: agac run -a {self.agent_name}[/cyan]"
+            )
+        else:
+            self.console.print("\n[green]Retry complete.[/green]")
 
     @staticmethod
     def _clear_for_the_rerun(

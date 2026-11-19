@@ -18,7 +18,9 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.cli.main import cli
+from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
     RECORDS,
@@ -77,7 +79,7 @@ def _made_by(rows: list[dict], guid: str) -> set[str]:
 
 def _retry(project, *args: str):  # noqa: F811
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, *args])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in RAN_TO_ITS_END, result.output
     return result
 
 
@@ -124,7 +126,7 @@ class TestRetryingARowOfTheFirstMint:
 
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code in (EXIT_SUCCESS, EXIT_RECORD_FAILURES), result.output
         assert sorted(r["source_guid"] for r in _rows(two_mints, "split2")) == settled
 
 
@@ -160,7 +162,7 @@ def batch_below(two_mints, monkeypatch):
     (two_mints / "prompt_store" / f"{WORKFLOW}.md").write_text(PUBLISH_PROMPT)
     for _ in range(3):
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
-        assert result.exit_code == 0, result.output
+        assert result.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), result.output
         if len(_rows(two_mints, "publish")) == RECORDS * 4:
             break
     assert len(_rows(two_mints, "publish")) == RECORDS * 4
@@ -180,7 +182,7 @@ def test_a_batch_action_below_leaves_the_replacement_as_online_does(batch_below)
 
     result = _retry(batch_below, "--record", selected)
     collected = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
-    assert collected.exit_code == 0, collected.output
+    assert collected.exit_code == EXIT_RECORD_FAILURES, collected.output
 
     after = _rows(batch_below, "split2")
     assert len(after) == RECORDS * 4

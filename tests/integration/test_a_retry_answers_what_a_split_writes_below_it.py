@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
@@ -171,7 +172,7 @@ def _project(tmp_path: Path, finalize: str) -> Path:
 def _agac(project: Path, *args: str) -> str:
     result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
     output = result.stdout + result.stderr
-    assert result.returncode == 0, output
+    assert result.returncode in RAN_TO_ITS_END, output
     return output
 
 

@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.agac_cli import run_agac
+from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
@@ -123,10 +124,10 @@ def _project(tmp_path: Path, *, guard: bool = False, pages: list[str] = PAGES) -
     return root
 
 
-def _agac(project: Path, *args: str, code: int = 0) -> str:
+def _agac(project: Path, *args: str, code: int | None = None) -> str:
     result = run_agac(project, *args)
     output = result.stdout + result.stderr
-    assert result.returncode == code, output
+    assert result.returncode in (RAN_TO_ITS_END if code is None else {code}), output
     return output
 
 

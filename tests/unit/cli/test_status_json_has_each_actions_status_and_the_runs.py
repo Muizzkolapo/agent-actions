@@ -12,8 +12,8 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import run_status
 from agent_actions.cli.main import cli
-from agent_actions.cli.retry import _classify_outcome
 from agent_actions.cli.status import status_report
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
@@ -100,7 +100,7 @@ def test_the_run_status_agrees_with_retry_over_every_pair_of_statuses(project, s
 
     report = status_report(WORKFLOW, project)
 
-    assert report["run_status"] == _classify_outcome(ActionStateManager(status_file, list(stored)))
+    assert report["run_status"] == run_status(ActionStateManager(status_file, list(stored)))
 
 
 def test_a_workflow_that_never_ran_has_no_run_status_and_says_so_on_stderr(project):

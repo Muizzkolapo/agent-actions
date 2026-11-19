@@ -272,6 +272,8 @@ The shape is stable. A later release can add a key, but it does not rename or re
 - `FAILED`: Each action ended, and one or more actions failed.
 - `PAUSED`: One or more actions did not end. The run is in progress, or it waits for a batch, or it stopped early.
 
+The [exit code](./run.md#exit-codes) of `agac run` and of `agac retry` tells more than `run_status`. A run with the status `SUCCESS` exits `3`, not `0`, when an action holds failed or exhausted records. A run that waits for a batch exits `4`.
+
 The command reads only the status file. It does not read the workflow configuration. Thus an action that you removed from the configuration stays in the output until `agac run --fresh` clears the file.
 
 :::note[Run from Anywhere]

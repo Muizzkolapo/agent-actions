@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, DirectoryPath, Field
 
+DEFAULT_POLL_SECONDS = 60.0
+
 
 class BatchCommandArgs(BaseModel):
     """Pydantic model for the batch command arguments."""
@@ -105,4 +107,11 @@ class RunCommandArgs(BaseModel):
     )
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
+    )
+    wait: bool = Field(False, description="Run again while paused for a batch, until none is open")
+    poll: float = Field(
+        DEFAULT_POLL_SECONDS, description="Seconds between two passes of --wait", ge=0
+    )
+    wait_timeout: float | None = Field(
+        None, description="Seconds after which --wait stops and leaves the batches open", ge=0
     )

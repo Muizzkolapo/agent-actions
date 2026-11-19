@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -139,7 +140,7 @@ def _run_to_the_end(project: Path, *first: str) -> str:
     output = ""
     for _ in range(4):
         code, output = _agac(project, "run", "-a", WORKFLOW, "-u", "tools", *args)
-        assert code == 0, output
+        assert code in (EXIT_RECORD_FAILURES, EXIT_PAUSED), output
         if "run again" not in output:
             return output
         args = ()
@@ -206,6 +207,6 @@ def test_a_batch_retry_of_the_record_finishes_and_its_failure_stands(tmp_path):
 
     code, output = _agac(project, "retry", "-a", WORKFLOW)
 
-    assert code == 0, output
+    assert code == EXIT_RECORD_FAILURES, output
     assert "did not finish" not in output, output
     assert _outcome(project) == before

@@ -13,9 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
+from tests._support.exit_codes import RAN_TO_ITS_END
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
@@ -64,12 +66,12 @@ def _cycle(project, *args):
     """Drive one command to completion: it submits and pauses, the next run collects."""
     transcript = []
     code, output = _agac(project, *args)
-    assert code == 0, output
+    assert code in RAN_TO_ITS_END, output
     transcript.append(output)
     while "run again" in transcript[-1]:
         assert len(transcript) <= RECORDS, "the batch never stopped asking to be run again"
         code, output = _agac(project, "run", "-a", WORKFLOW)
-        assert code == 0, output
+        assert code in (EXIT_SUCCESS, EXIT_RECORD_FAILURES), output
         transcript.append(output)
     return transcript
 
@@ -213,7 +215,7 @@ class TestTheRepairSubmitsWhatItNamed:
         _set_disposition(project, selected, "failed")
 
         code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
 
         added = {b: n for b, n in _submitted_batches(project).items() if b not in before}
         assert list(added.values()) == [1], (
@@ -374,7 +376,7 @@ class TestARepairArrivingWhileABatchIsInFlight:
             json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
         )
         code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
         assert "run again" in output, "the fixture collected the batch instead of pausing on it"
         return root
 
@@ -537,7 +539,7 @@ class TestARepairArrivingWhileABatchIsInFlight:
 
         code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
 
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
 
 
 class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
@@ -560,7 +562,7 @@ class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
             json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
         )
         code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
         assert "run again" in output, "the fixture collected the batch instead of pausing on it"
         backend = _backend(root)
         try:
@@ -649,4 +651,4 @@ class TestACompletedActionWithAnEntryThatPredatesTheCollectedStamp:
 
         code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
 
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output

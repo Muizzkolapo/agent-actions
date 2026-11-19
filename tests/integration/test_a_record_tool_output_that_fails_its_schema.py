@@ -17,6 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
+from tests._support.exit_codes import RAN_TO_ITS_END
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 PAGES = {
@@ -115,7 +116,7 @@ class _Project:
             result = CliRunner().invoke(
                 cli, ["run", "-a", self.workflow, *(args if i == 0 else ())]
             )
-            assert result.exit_code == 0, result.output
+            assert result.exit_code in RAN_TO_ITS_END, result.output
         return result
 
     def retry(self):

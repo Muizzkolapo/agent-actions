@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -90,7 +91,7 @@ def project(tmp_path, monkeypatch):
 
 def _run(*extra):
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "-u", "tools", *extra])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), result.output
     return result
 
 

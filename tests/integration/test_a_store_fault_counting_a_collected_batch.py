@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_retry_answers_what_a_split_writes_below_it import (
     WORKFLOW,
@@ -65,7 +66,7 @@ def _faulted_collect(tmp_path: Path) -> tuple[Path, Path, str]:
     stand_in.mkdir()
     (stand_in / "sitecustomize.py").write_text(STAND_IN)
     code, output = _agac(project, stand_in, "run", "-a", WORKFLOW, "--fresh")
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     assert _status(project)["finalize"]["status"] == "batch_submitted", output
 
     (project / FAULT).write_text("")
