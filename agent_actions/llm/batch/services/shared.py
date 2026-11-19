@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
+from agent_actions.llm.providers.usage_tracker import MAIN, TOKEN_FIELDS, record_batch
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.response_builder import ResponseBuilder
 
@@ -24,8 +25,13 @@ def retrieve_and_reconcile(
     record_count: int | None = None,
     file_name: str | None = None,
     agent_config: dict[str, Any] | None = None,
+    usage_kind: str = MAIN,
+    model: str | None = None,
 ) -> list[BatchResult]:
     """Retrieve batch results from provider and log reconciliation.
+
+    What the results used is counted here, where every batch of a run is read, as
+    *usage_kind* calls of *model* (the action's model when not given).
 
     Given the *agent_config* of the action the results answer, each reply is read as its
     online call returns it, since a provider parses a line not knowing the action's mode:
@@ -41,6 +47,12 @@ def retrieve_and_reconcile(
     from agent_actions.processing.helpers import with_dispatch_results
 
     batch_results = provider.retrieve_results(batch_id, output_directory)
+    count_batch_usage(
+        batch_id,
+        batch_results,
+        kind=usage_kind,
+        model=model or (agent_config or {}).get("model_name"),
+    )
     if agent_config is not None:
         json_mode = agent_config.get("json_mode", get_default("json_mode"))
         if not json_mode:
@@ -70,6 +82,25 @@ def retrieve_and_reconcile(
     )
 
     return batch_results
+
+
+def count_batch_usage(
+    batch_id: str, batch_results: list[BatchResult], *, kind: str, model: str | None
+) -> None:
+    """Count what a batch's results used, each read as its vendor's online call reads its own.
+
+    A line the provider answered is a call, whatever it says of its usage; a request that
+    failed before any answer is none.
+    """
+    usage = dict.fromkeys(TOKEN_FIELDS, 0)
+    calls = 0
+    for result in batch_results:
+        if not result.success and not result.usage:
+            continue
+        calls += 1
+        for field, count in ResponseBuilder.batch_usage(result.usage).counted().items():
+            usage[field] += count
+    record_batch(batch_id, usage, calls=calls, kind=kind, model=model)
 
 
 def settle_unanswered(batch_results: list[BatchResult], *, json_mode: bool) -> None:

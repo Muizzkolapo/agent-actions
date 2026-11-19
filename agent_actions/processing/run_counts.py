@@ -21,11 +21,10 @@ if TYPE_CHECKING:
 @dataclass
 class RunCounts:
     """What one execution's collections found: guard skips (rows) and records shipped
-    with a failing verdict; and the tokens its batch results used, None when they say none."""
+    with a failing verdict."""
 
     guard_skipped: int = 0
     checks_failed: int = 0
-    tokens: dict[str, int] | None = None
 
 
 _current: ContextVar[RunCounts | None] = ContextVar("_run_counts", default=None)
@@ -49,14 +48,3 @@ def add_collection(stats: CollectionStats) -> None:
         return
     counts.guard_skipped += stats.guard_skipped
     counts.checks_failed += stats.checks_failed
-
-
-def add_tokens(usage: dict[str, int]) -> None:
-    """Add token counts, keyed as ``set_last_usage`` keys them, to the open counter."""
-    counts = _current.get()
-    if counts is None:
-        return
-    total = dict(counts.tokens or {})
-    for key, value in usage.items():
-        total[key] = total.get(key, 0) + value
-    counts.tokens = total

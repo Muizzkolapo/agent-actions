@@ -41,8 +41,6 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
-from agent_actions.output.response.response_builder import ResponseBuilder
-from agent_actions.processing.run_counts import add_tokens
 from agent_actions.processing.types import RecoveryMetadata
 
 if TYPE_CHECKING:
@@ -158,6 +156,9 @@ def process_recovery_batch(
             record_count=entry.record_count,
             file_name=file_name,
             agent_config=None if answers_side_calls else agent_config or {},
+            usage_kind=entry.usage_kind,
+            model=(state.side_model if answers_side_calls else None)
+            or (agent_config or {}).get("model_name"),
         )
 
     accumulated = deserialize_results(state.accumulated_results)
@@ -380,8 +381,6 @@ def finalize_batch_output(
     if service._storage_backend and output_path.exists():
         _remove_batch_placeholder(output_path)
 
-    report_batch_usage(batch_results)
-
     elapsed_time = time.time() - context.start_time
     total_count = len(batch_results)
     successful_count = sum(1 for r in batch_results if BatchResultReconciler.is_answered(r))
@@ -405,21 +404,6 @@ def finalize_batch_output(
     # cleanup below then removes that entry.
     context.manager.mark_collected(identity.file_name)
     return str(output_file)
-
-
-def report_batch_usage(batch_results: list[BatchResult]) -> None:
-    """Report the tokens the results used, summed, as an online call reports its own.
-
-    Read and keyed as ``ResponseBuilder.record_usage_and_event`` reads and keys them.
-    """
-    prompt = completion = total = 0
-    for result in batch_results:
-        usage = ResponseBuilder.batch_usage(result.usage)
-        prompt += usage.prompt_tokens
-        completion += usage.completion_tokens
-        total += usage.total_tokens
-    if prompt > 0 or completion > 0:
-        add_tokens({"input_tokens": prompt, "output_tokens": completion, "total_tokens": total})
 
 
 def cleanup_recovery(
@@ -946,6 +930,7 @@ def _send_side_batch(
         state.side_attempts[kind] = attempt
         state.side_kind = kind
         state.side_requests = submission.requests
+        state.side_model = next(iter(submission.sent.values())).model
         state.side_waiting = serialize_results(results)
         state.side_resumes = resumes
         requester.sent(step, submission.sent)
@@ -982,11 +967,11 @@ def handle_side_recovery(
     settled = state.side_results.setdefault(kind, {})
     for key, replies in read_side_batch(recovery_results, state.side_requests, kind).items():
         settled[key] = requester.settle(key, replies)
-    report_batch_usage(recovery_results)
     waiting = deserialize_results(state.side_waiting)
     resumes = state.side_resumes
     state.side_kind = None
     state.side_requests = {}
+    state.side_model = None
     state.side_waiting = []
     state.side_resumes = None
 

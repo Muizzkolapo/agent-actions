@@ -62,8 +62,7 @@ def _deps():
 
 def _online(executor: ActionExecutor) -> ActionExecutionResult:
     params = ActionRunParams("agent_a", 0, {"kind": "llm"}, True, datetime.now())
-    with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-        return executor._execute_action_run(params)
+    return executor._execute_action_run(params)
 
 
 def test_an_online_execution_reports_only_the_failures_it_collected():

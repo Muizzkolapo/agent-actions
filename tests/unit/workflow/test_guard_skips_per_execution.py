@@ -65,8 +65,7 @@ def test_an_online_execution_reports_only_the_skips_it_collected():
     deps.action_runner.run_action.side_effect = _collects(2, "/out")
     params = ActionRunParams("agent_a", 0, {"kind": "llm"}, True, datetime.now())
 
-    with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-        result = ActionExecutor(deps)._execute_action_run(params)
+    result = ActionExecutor(deps)._execute_action_run(params)
 
     assert result.status == ActionStatus.COMPLETED
     assert (result.metrics.record_count, result.metrics.guard_skipped) == (4, 2)
@@ -123,7 +122,6 @@ def test_parallel_executions_each_count_their_own_skips():
             ActionExecutor(second_deps)._execute_action_run_async(_params("agent_b")),
         )
 
-    with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-        first, second = asyncio.run(both())
+    first, second = asyncio.run(both())
 
     assert (first.metrics.guard_skipped, second.metrics.guard_skipped) == (2, 7)

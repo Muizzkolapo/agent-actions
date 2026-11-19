@@ -372,7 +372,7 @@ ResponseBuilder (static methods):
       Ollama       → response.prompt_eval_count / eval_count
 
   record_usage_and_event(response, provider, model, latency_ms, request_id)
-    → extract_usage + set_last_usage (ContextVar) + fire LLMResponseEvent
+    → extract_usage + usage_tracker.record_usage + fire LLMResponseEvent
 ```
 
 ---
