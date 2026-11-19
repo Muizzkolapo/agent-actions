@@ -2,8 +2,8 @@
 
 Against the mock provider, through the CLI: one run submits the main batch, the next reads
 it and sends the judge batch, the last reads that and writes the file. Each run that read a
-batch reports what the batch used in `artefact/runs.json`, with the judge batch as `judge`
-calls at the batch price.
+batch reports what the batch used in `artefact/runs.json`, and `agac usage` adds the runs up,
+with the judge batch as `judge` calls at the batch price.
 """
 
 from __future__ import annotations
@@ -119,6 +119,25 @@ def _runs(project: Path) -> list[dict]:
     return list(reversed(history["executions"]))
 
 
+def _usage(project: Path, *args: str):
+    return run_agac(project, "usage", "-a", WORKFLOW, *args, env={"COLUMNS": "200"})
+
+
+def _report(project: Path, *args: str) -> dict:
+    result = _usage(project, "--json", *args)
+    assert result.returncode == 0, result.stdout + result.stderr
+    return json.loads(result.stdout)
+
+
+def _with_prices(finished: Path, tmp_path: Path, prices: str) -> Path:
+    """A copy of the finished project whose agent_actions.yml holds *prices*."""
+    project = tmp_path / "project"
+    shutil.copytree(finished, project)
+    with open(project / "agent_actions.yml", "a") as config:
+        config.write(prices)
+    return project
+
+
 def test_the_run_history_shows_the_tokens_of_the_batches_each_run_read(finished):
     submit, read_main, read_judge = _runs(finished)
 
@@ -150,3 +169,122 @@ def test_each_run_s_entry_names_the_kind_of_call_and_that_it_was_a_batch(finishe
         MODEL,
         RECORDS * VOTES,
     )
+
+
+def test_usage_adds_up_the_runs_that_collected_the_action_s_batches(finished):
+    _submit, read_main, read_judge = _runs(finished)
+
+    report = _report(finished)
+
+    assert report["workflow"] == WORKFLOW
+    assert report["runs"] == sorted([read_main["id"], read_judge["id"]])
+    summarize = report["actions"]["summarize"]
+    assert summarize["calls"] == RECORDS + RECORDS * VOTES
+    for key in USAGE_KEYS:
+        assert summarize[key] == read_main["usage"][key] + read_judge["usage"][key]
+        assert report["total"][key] == summarize[key]
+    assert [(row["kind"], row["batch"], row["calls"]) for row in summarize["by_kind"]] == [
+        ("main", True, RECORDS),
+        ("judge", True, RECORDS * VOTES),
+    ]
+
+
+def test_one_run_s_usage_is_shown_by_its_id(finished):
+    _submit, _read_main, read_judge = _runs(finished)
+
+    report = _report(finished, "--run", read_judge["id"])
+
+    assert report["runs"] == [read_judge["id"]]
+    assert [row["kind"] for row in report["actions"]["summarize"]["by_kind"]] == ["judge"]
+    assert report["total"]["calls"] == RECORDS * VOTES
+
+
+def test_a_run_that_used_nothing_is_refused_with_the_runs_that_did(finished):
+    submit, read_main, read_judge = _runs(finished)
+
+    result = _usage(finished, "--run", submit["id"])
+
+    assert result.returncode != 0
+    output = result.stdout + result.stderr
+    assert f"No usage is recorded for run '{submit['id']}'" in output
+    assert read_main["id"] in output and read_judge["id"] in output
+
+
+def test_with_no_price_table_the_table_shows_tokens_and_says_how_to_add_prices(finished):
+    result = _usage(finished)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    table = result.stdout
+    assert "Usage: usage_in_batch (2 runs)" in table
+    for heading in ("Action", "Kind", "Pricing", "Calls", "Input", "Cache read", "Output"):
+        assert heading in table
+    assert "Est. cost" not in table
+    assert "summarize" in table and "judge" in table and "batch" in table and "Total" in table
+    assert "agent_actions.yml has no prices: block" in table
+    assert f"prices.{MODEL}" in table
+
+
+def test_with_no_price_table_the_json_report_has_no_cost(finished):
+    report = _report(finished)
+
+    assert report["priced"] is False
+    assert report["total"]["estimated_cost"] is None
+    assert report["unpriced"] == [f"prices.{MODEL}"]
+
+
+def test_a_price_table_adds_an_estimated_cost(finished, tmp_path):
+    project = _with_prices(
+        finished,
+        tmp_path,
+        f'prices:\n  "{MODEL}": {{input: 2.0, output: 10.0, batch_discount: 0.5}}\n',
+    )
+
+    report = _report(project)
+    table = _usage(project).stdout
+
+    total = report["total"]
+    expected = (total["input_tokens"] * 2.0 + total["output_tokens"] * 10.0) / 1_000_000 * 0.5
+    assert total["estimated_cost"] == pytest.approx(expected)
+    assert report["actions"]["summarize"]["estimated_cost"] == pytest.approx(expected)
+    assert all(
+        row["estimated_cost"] is not None for row in report["actions"]["summarize"]["by_kind"]
+    )
+    assert (report["priced"], report["unpriced"]) == (True, [])
+    assert "Est. cost" in table
+    assert "is an estimate from the prices: block" in table
+    assert f"{expected:,.4f}" in table
+
+
+def test_a_model_the_price_table_lacks_shows_no_cost_and_is_named(finished, tmp_path):
+    project = _with_prices(
+        finished, tmp_path, "prices:\n  another-model: {input: 2.0, output: 10.0}\n"
+    )
+
+    report = _report(project)
+    table = _usage(project).stdout
+
+    assert report["priced"] is True
+    assert report["total"]["estimated_cost"] is None
+    assert report["unpriced"] == [f"prices.{MODEL}"]
+    assert f"No cost for the calls that need: prices.{MODEL}" in table
+    assert "0.0000" not in table, "an unknown cost was shown as zero"
+
+
+def test_a_batch_call_of_a_model_with_no_batch_discount_shows_no_cost(finished, tmp_path):
+    project = _with_prices(
+        finished, tmp_path, f'prices:\n  "{MODEL}": {{input: 2.0, output: 10.0}}\n'
+    )
+
+    report = _report(project)
+
+    assert report["total"]["estimated_cost"] is None
+    assert report["unpriced"] == [f"prices.{MODEL}.batch_discount"]
+
+
+def test_a_mistake_in_the_price_table_is_refused_by_its_key(finished, tmp_path):
+    project = _with_prices(finished, tmp_path, f'prices:\n  "{MODEL}": {{input: cheap}}\n')
+
+    result = _usage(project)
+
+    assert result.returncode != 0
+    assert f"prices.{MODEL}.input: must be a number, 0 or more" in result.stdout + result.stderr

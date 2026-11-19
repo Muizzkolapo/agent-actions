@@ -108,6 +108,10 @@
 | `traces` | Function | Print the prompt traces of an action. | - |
 | `records.py` | Module | `agac records`: prints an action's stored records as JSON through a read-only store (each with `_action` and `_file`; `--source-guid`, `--file`, `--field` narrow them), or with `--snapshots` the input each failed or exhausted record was processed with; the store keeps these payloads compressed. | `cli`, `storage` |
 | `records` | Function | Print the records an action stored. | - |
+| `usage.py` | Module | `agac usage -a <workflow> [--run <id>] [--json]`: the tokens each action's model calls used, read through a read-only store from the sums the runs stored (`usage_tracker.stored_usage`), so it answers during a run and adds up the runs that submit and collect one batch. `usage_report` sums the entries per action, kind, pricing and model, in execution order, with a total; `--run` keeps one run's entries and refuses a run with none, naming those that have some. With a `prices:` block in `agent_actions.yml` (`llm.config.prices`) each row has an `estimated_cost`; a row the table cannot price has none, a sum is over the rows it can price (marked `+` in the table when it leaves one out), and `unpriced` names the keys the table lacks. With no block the table shows tokens only and says a price table can be added. The table is printed at its full width (`renderers.whole_table.print_whole`). | `cli`, `storage`, `llm.config`, `llm.providers` |
+| `UsageCommand` | Class | Implementation of the usage command. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Read the stored usage, price it and print the table or the JSON report. | - |
+| `usage` | Function | Show the tokens each action's model calls used, and an estimated cost. | - |
 
 ## Project Surface
 
@@ -119,6 +123,8 @@
 | `ExpectListCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `ExpectListCommand.execute()` | `schema/{workflow}/{action}.yml` | Reads | `schema` |
 | `ExpectReportCommand.execute()` | `agent_io/store/` | Reads | — |
+| `UsageCommand.execute()` | `agent_io/store/` | Reads | — |
+| `UsageCommand.execute()` | `agent_actions.yml` | Reads | `prices` |
 | `RunCommand.execute()` | `agent_config/{workflow}.yml` | Reads | — |
 | `RunCommand.execute()` | `prompt_store/**/*.md`, `agent_workflow/*/prompt_store/**/*.md` | Validates the prompt files that `load_workflow` read, after it returns or raises | — |
 | `RunCommand.execute()` | `agent_io/target/{action}/` | Writes | — |
