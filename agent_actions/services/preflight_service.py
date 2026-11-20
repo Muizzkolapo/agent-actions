@@ -20,6 +20,7 @@ from agent_actions.errors import (
     enrich_exception_context,
 )
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.llm.providers.tools.builtin import runs_udf
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.prompt.formatter import PromptFormatter
@@ -304,9 +305,7 @@ class PreflightService:
         # A tool of an `as:` include reads its siblings by their short names.
         action_names |= {short for c in configs for short in instance_names(c)}
         impl_refs = {
-            c["model_name"]
-            for c in configs
-            if c.get("kind") == "tool" and isinstance(c.get("model_name"), str)
+            c["model_name"] for c in configs if runs_udf(c) and isinstance(c.get("model_name"), str)
         }
         guard_refs = {
             c["conditional_clause"] for c in configs if isinstance(c.get("conditional_clause"), str)
@@ -362,7 +361,7 @@ class PreflightService:
         this is an advisory warning and must never break inspect."""
         inputs: dict[str, dict[str, Any]] = {}
         for name, config in self.action_configs.items():
-            if config.get("kind") != "tool":
+            if not runs_udf(config):
                 continue
             # Post-expansion, the UDF name lives in model_name (the expander maps
             # impl -> model_name); impl is the raw pre-expansion key.
@@ -401,7 +400,7 @@ class PreflightService:
         """
         inputs: dict[str, dict[str, Any]] = {}
         for name, config in self.action_configs.items():
-            if config.get("kind") != "tool":
+            if not runs_udf(config):
                 continue
             impl = config.get("model_name") or config.get("impl")
             if not impl:
@@ -428,7 +427,7 @@ class PreflightService:
     def _check_udfs_are_loaded(self) -> None:
         for action, config in self.action_configs.items():
             names = [config.get("conditional_clause")]
-            if config.get("kind") == "tool":
+            if runs_udf(config):
                 names.append(config.get("model_name"))
             for name in filter(None, names):
                 try:
@@ -551,7 +550,7 @@ class PreflightService:
         """
         synthesized: dict[str, set[str] | None] = {}
         for name, config in self.action_configs.items():
-            if config.get("kind") != "tool":
+            if not runs_udf(config):
                 continue
             impl = config.get("model_name") or config.get("impl")
             source = self._tool_udf_source(name, impl) if impl else None

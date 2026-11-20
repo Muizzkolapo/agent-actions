@@ -26,6 +26,8 @@ class RunCounts:
     guard_skipped: int = 0
     checks_failed: int = 0
     tokens: dict[str, int] | None = None
+    # A built-in router's rows per case.
+    cases: dict[str, int] | None = None
 
 
 _current: ContextVar[RunCounts | None] = ContextVar("_run_counts", default=None)
@@ -49,6 +51,11 @@ def add_collection(stats: CollectionStats) -> None:
         return
     counts.guard_skipped += stats.guard_skipped
     counts.checks_failed += stats.checks_failed
+    if stats.cases is not None:
+        total = dict(counts.cases or {})
+        for case, count in stats.cases.items():
+            total[case] = total.get(case, 0) + count
+        counts.cases = total
 
 
 def add_tokens(usage: dict[str, int]) -> None:

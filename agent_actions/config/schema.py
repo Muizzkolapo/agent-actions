@@ -703,6 +703,11 @@ class ActionConfig(_RetryValidators):
         alias="_gathers",
         description="Records sent elsewhere above come back here, injected by renderer",
     )
+    builtin: dict[str, Any] | None = Field(
+        default=None,
+        alias="_builtin",
+        description="A tool agac runs itself (route, pick) and its settings, injected by renderer",
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):

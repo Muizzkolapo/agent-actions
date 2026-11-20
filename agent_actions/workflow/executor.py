@@ -388,6 +388,8 @@ class ExecutionMetrics:
     # Records this execution shipped carrying a verdict whose overall_pass is false
     # (on_exhausted: return_last, repair: none). Stored as successes.
     checks_failed: int = 0
+    # A built-in router's rows per case this execution.
+    cases: dict[str, int] | None = None
 
 
 @dataclass
@@ -1396,6 +1398,7 @@ class ActionExecutor:
                 record_count=record_count,
                 guard_skipped=guard_skipped,
                 checks_failed=checks_failed,
+                cases=counts.cases,
             ),
         )
 

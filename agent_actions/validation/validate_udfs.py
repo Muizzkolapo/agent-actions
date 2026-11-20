@@ -23,6 +23,7 @@ from agent_actions.input.loaders.udf import (
     guard_udf_name,
     validate_udf_references,
 )
+from agent_actions.llm.providers.tools.builtin import BUILTIN_KEY
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
@@ -227,7 +228,8 @@ class ValidateUDFsCommand:
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     if key == "impl" and isinstance(value, str):
-                        impl_refs.add(value)
+                        if BUILTIN_KEY not in obj:
+                            impl_refs.add(value)
                     else:
                         extract_impl_refs(value)
             elif isinstance(obj, list):
