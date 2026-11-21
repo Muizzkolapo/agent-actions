@@ -10,6 +10,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.includes import instance_names
 from agent_actions.config.schema import branch_origins
 from agent_actions.errors import (
     AgentActionsError,
@@ -21,6 +22,7 @@ from agent_actions.errors import (
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+from agent_actions.prompt.aliases import header_names
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
 from agent_actions.utils.module_loader import _resolve_module_file, load_module_from_directory
@@ -269,14 +271,7 @@ class PreflightService:
         )
 
         # 6. Cross-check prompt refs against each producer's required set
-        self._warn_findings(
-            "prompt-contract",
-            find_unguarded_required_refs(
-                self._collect_prompts(),
-                self._collect_producing_schemas(),
-                self._collect_optional_observes(),
-            ),
-        )
+        self._warn_unguarded_prompt_refs()
 
         # 7. Cross-check kind:tool passthrough UDFs against strict output schemas
         self._warn_tool_passthrough_risks()
@@ -302,6 +297,16 @@ class PreflightService:
         action_names = set(self.action_configs) | {
             c["version_base_name"] for c in configs if c.get("version_base_name")
         }
+        # A tool of an `as:` include reads its instance's actions by their short names
+        # only; a tool function that serves several actions must suit each of them.
+        tool_namespaces: dict[str, set[str]] = {}
+        for c in configs:
+            impl = c.get("model_name")
+            if c.get("kind") != "tool" or not isinstance(impl, str):
+                continue
+            names = instance_names(c)
+            allowed = (action_names - set(names.values())) | set(names)
+            tool_namespaces[impl] = tool_namespaces.get(impl, allowed) & allowed
         impl_refs = {
             c["model_name"]
             for c in configs
@@ -318,6 +323,18 @@ class PreflightService:
                 guard_refs,
                 action_names,
                 promoted_version_names(self.action_configs),
+                tool_namespaces,
+            ),
+        )
+
+    def _warn_unguarded_prompt_refs(self) -> None:
+        self._warn_findings(
+            "prompt-contract",
+            find_unguarded_required_refs(
+                self._collect_prompts(),
+                self._collect_producing_schemas(),
+                self._collect_optional_observes(),
+                names={name: header_names(config) for name, config in self.action_configs.items()},
             ),
         )
 

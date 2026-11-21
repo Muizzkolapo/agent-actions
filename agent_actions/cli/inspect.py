@@ -10,6 +10,7 @@ Surface:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.markup import escape
@@ -58,9 +59,13 @@ class InspectCommand(BaseInspectCommand):
             else:
                 self.console.print(
                     f"  [green]✓[/green]  {name.ljust(width)}  "
-                    f"[dim]from branch {escape(branch['name'])}[/dim]",
+                    f"[dim]from branch {escape(branch['name'])}{_as(branch)}[/dim]",
                     highlight=False,
                 )
+
+
+def _as(branch: dict[str, Any]) -> str:
+    return f" as {escape(branch['instance'])}" if "instance" in branch else ""
 
 
 @click.group(name="inspect", invoke_without_command=True)

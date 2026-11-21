@@ -67,8 +67,10 @@ def _judged(ref: str) -> dict:
     }
 
 
-def _branch_reads(name: str, read: str, level: str = "", branch: str = "pair") -> str:
-    via = f" (from 'context_scope' under {level})" if level else ""
+def _branch_reads(
+    name: str, read: str, level: str = "", branch: str = "pair", key: str = "context_scope"
+) -> str:
+    via = f" (from '{key}' under {level})" if level else ""
     return (
         f"Branch '{branch}' (branches/{branch}.yml), included in {WF}, action '{name}': reads "
         f"'{read}'{via}, which is not a branch action or a declared input. Declare it under "
@@ -224,8 +226,10 @@ class TestAnInheritedReadOfARemovedAction:
 
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
-            "'b2', 'b3' still read it. Remove the readers too, or override them so that they do "
-            "not read it."
+            "'b2' (from 'expect' under 'defaults:' of include 'pair'), 'b3' (from 'expect' under "
+            "'defaults:' of include 'pair') still read it. Remove the readers too, override them "
+            "so that they do not read it, or remove the read from the defaults named above. In an "
+            "override, null takes away an inherited directive, and a list is added to it."
         )
 
 
@@ -248,7 +252,7 @@ class TestTheIncludeLevelWinsInTheReadCheck:
 
         assert agents["b1"]["expect"]["expectations"] == plain["expectations"]
         assert "z.text" not in agents["b1"]["context_scope"]["observe"]
-        assert message == _branch_reads("b1", "z")
+        assert message == _branch_reads("b1", "z", "the workflow's 'defaults:'", key="expect")
 
     def test_nested_chunk_config_beats_the_flat_setting_inside_the_include_level(self, tmp_path):
         chunk = {"chunk_size": 70, "chunk_config": {"chunk_size": 50}}
