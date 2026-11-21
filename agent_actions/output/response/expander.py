@@ -17,6 +17,7 @@ from typing import Any
 
 from agent_actions.config.schema import DefaultsConfig, dump_defaults, validate_version_block
 from agent_actions.llm.config.vendor import canonical_vendor
+from agent_actions.llm.providers.tools.builtin import BUILTIN_KEY
 from agent_actions.record.elsewhere import GATHERS_KEY, SENDS_ELSEWHERE_KEY
 
 from .config_fields import get_default, inherit_simple_fields
@@ -188,7 +189,7 @@ class ActionExpander:
         """
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
-        for internal in ("_include", SENDS_ELSEWHERE_KEY, GATHERS_KEY):
+        for internal in ("_include", SENDS_ELSEWHERE_KEY, GATHERS_KEY, BUILTIN_KEY):
             if internal in action:
                 agent[internal] = action[internal]
 

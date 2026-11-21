@@ -163,6 +163,8 @@ class ActionCompleteEvent(BaseEvent):
     guard_skipped: int = 0
     # Records this execution shipped carrying a verdict whose overall_pass is false.
     checks_failed: int = 0
+    # A built-in router's rows per case, in the router's order.
+    cases: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -186,6 +188,7 @@ class ActionCompleteEvent(BaseEvent):
             "kind": self.kind,
             "guard_skipped": self.guard_skipped,
             "checks_failed": self.checks_failed,
+            "cases": self.cases,
         }
 
     @property

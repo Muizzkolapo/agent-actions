@@ -13,6 +13,7 @@ from agent_actions.errors import (
 )
 from agent_actions.errors import terminal_failure as build_terminal_failure
 from agent_actions.expectations.report import verdict_of
+from agent_actions.llm.providers.tools.builtin import route_case_counts
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
@@ -157,6 +158,8 @@ class CollectionStats:
     # Records the guard sent to another branch: filtered here but not this action's,
     # so neither among ``filtered`` nor in the total.
     sent_elsewhere: int = 0
+    # A built-in router's rows per case, in the router's order; None for any other action.
+    cases: dict[str, int] | None = None
 
     @property
     def only_guard_outcomes(self) -> bool:
@@ -524,6 +527,7 @@ def collect_results_from_processing_results(
     failed_guids: set[str] = set()
     unidentified_failed = 0
     carried_rows = 0
+    routed: list[dict[str, Any]] = []
 
     for idx, result in enumerate(results):
         status = result.status
@@ -604,6 +608,7 @@ def collect_results_from_processing_results(
                 for d in data:
                     _stamp(d, RecordState.PROCESSED, action_name, SUCCESS)
                 output.extend(rows)
+                routed.extend(data)
                 echoed |= _schema_echoes(data, action_name)
             logger.debug(
                 "Collected SUCCESS result source_guid=%s count=%d",
@@ -1054,6 +1059,7 @@ def collect_results_from_processing_results(
         carry_forward=stats["carry_forward"],
         carried_success=stats["carried_success"],
         sent_elsewhere=stats["sent_elsewhere"],
+        cases=route_case_counts(effective_config, action_name, routed),
         guard_skipped=guard_skipped_count,
         checks_failed=len(failed_guids) + unidentified_failed,
     )

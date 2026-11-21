@@ -250,7 +250,7 @@ EDITS = [
     pytest.param(
         "schema: { saw: string }",
         "schema: { saw: string, note: string }",
-        "action config (prompt/schema/guard)",
+        "action config (prompt/schema/guard/routing)",
         id="schema",
     ),
 ]

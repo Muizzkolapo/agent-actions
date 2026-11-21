@@ -66,7 +66,7 @@ class TestAChangedConfigOnACompletedAction:
             pytest.param(
                 _config('density == "high"'),
                 {"guard": _config('density == "impossible"')["guard"]},
-                "action config (prompt/schema/guard)",
+                "action config (prompt/schema/guard/routing)",
                 id="guard",
             ),
             # The hash cannot see the model, so it is compared from the stamp.

@@ -27,6 +27,7 @@ from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+from agent_actions.llm.providers.tools.builtin import runs_udf
 from agent_actions.llm.providers.usage_tracker import clear_usage, get_last_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.diagnostics import DIAGNOSTIC
@@ -80,7 +81,7 @@ WHERE_SKIP_REASON = "WHERE clause — action skipped"
 
 
 # Keys that change which records an action and its readers receive.
-ROUTING_KEYS = ("_sends_elsewhere", "_gathers")
+ROUTING_KEYS = ("_sends_elsewhere", "_gathers", "_builtin")
 
 
 def _compute_action_config_hash(
@@ -183,7 +184,7 @@ def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
     """
     cfg: dict[str, Any] = action_config  # type: ignore[assignment]
     names = [cfg.get("conditional_clause")]
-    if cfg.get("kind") == "tool":
+    if runs_udf(cfg):
         names.append(cfg.get("model_name"))
     digests: dict[str, str] = {}
     for name in filter(None, names):
@@ -288,7 +289,7 @@ INPUT_AT_START = "staged_input_at_start"
 
 
 MODEL_EDIT = "model"
-CONFIG_EDIT = "action config (prompt/schema/guard)"
+CONFIG_EDIT = "action config (prompt/schema/guard/routing)"
 
 
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:
@@ -398,6 +399,8 @@ class ExecutionMetrics:
     # Records this execution shipped carrying a verdict whose overall_pass is false
     # (on_exhausted: return_last, repair: none). Stored as successes.
     checks_failed: int = 0
+    # A built-in router's rows per case this execution.
+    cases: dict[str, int] | None = None
 
 
 @dataclass
@@ -1406,6 +1409,7 @@ class ActionExecutor:
                 record_count=record_count,
                 guard_skipped=guard_skipped,
                 checks_failed=checks_failed,
+                cases=counts.cases,
             ),
         )
 
