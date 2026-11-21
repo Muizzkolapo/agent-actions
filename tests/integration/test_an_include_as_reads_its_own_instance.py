@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
@@ -172,7 +173,11 @@ def _run(root: Path, *extra: str) -> str:
         env={"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
     output = result.stdout + result.stderr
-    assert result.returncode == 0, output
+    if result.returncode == EXIT_PAUSED:
+        assert "run again" in output, output
+    else:
+        assert result.returncode == 0, output
+        assert "run again" not in output, output
     return output
 
 
