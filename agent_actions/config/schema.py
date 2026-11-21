@@ -643,6 +643,11 @@ class ActionConfig(_RetryValidators):
     json_mode: bool | None = Field(default=None, description="JSON mode setting")
     prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
     output_field: str | None = Field(default=None, description="Output field name")
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None,
+        description="Observed fields sent in the context block: auto (those the prompt does "
+        "not print), all, or none",
+    )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Generation temperature"
     )
@@ -826,6 +831,9 @@ class DefaultsConfig(_RetryValidators):
     )
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None, description="Default observed fields sent in the context block"
+    )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Default temperature"
     )

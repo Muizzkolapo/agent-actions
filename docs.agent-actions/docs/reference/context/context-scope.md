@@ -53,6 +53,28 @@ The `observe` directive selects the upstream namespaces and fields that the acti
 
 An entry that names a field (`action.field`) is explicit. If a record has the namespace of the action but not the field, the record fails with `RecordContextError`. The other records continue. One exception applies. If the namespace has none of the fields that the action names, the framework treats the namespace as null for that record. See [Troubleshooting](../../guides/troubleshooting.md#recordcontexterror-record-namespace). A wildcard entry (`action.*`) reads the fields that the record has, and does not fail.
 
+### The context block
+
+The request to the model holds the rendered prompt and then a context block: the observed fields as JSON. A field that the prompt prints is already in the prompt. By default (`context_block: auto`), Agent Actions does not send that field again in the context block. So a long field is paid for once.
+
+```yaml
+- name: assess_scope
+  prompt: |
+    Assess the scope of this page.
+
+    {{ source.page_content }}
+  context_scope:
+    observe:
+      - source.page_content   # printed by the prompt: sent once, in the prompt
+      - source.url            # not printed: sent in the context block
+```
+
+- A field counts as printed only when an output tag prints it as it is, as `{{ ns.field }}` or `{{ ns["field"] }}`, at the top level of the template. A tag inside `{% if %}`, `{% for %}`, a block or a macro does not count, and a tag with a filter (`{{ ns.field | tojson }}`) does not count. Such a field stays in the context block.
+- A request whose prompt does not hold the printed text, such as a repair prompt that does not repeat the first prompt, gets the field in the context block.
+- `context_block: all` sends every observed field in the context block, as before. `context_block: none` sends an empty context block. Set it on an action or in `defaults:`.
+- Ollama (`ollama_local`, `ollama_cloud`) sends the record in a user message of its own, apart from the prompt in the system message. Under `auto`, that message keeps every observed field. Set `none` to leave it out.
+- The same rule applies online and in batch, for every vendor. The prompt-size check counts what is sent. The `llm_context` of a [prompt trace](../data-io/prompt-traces.md) is the context block that was sent.
+
 ### Optional Fields
 
 Mark an `observe` entry as optional when a record may not have the field. Examples are a field of an action that a guard can skip (`on_false: skip`), and a field that an action returns only for some records.

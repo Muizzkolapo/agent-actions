@@ -32,6 +32,7 @@ from agent_actions.prompt.cache_scope import (
     SHARED_PROMPT_LEN_KEY,
     cache_points_of,
 )
+from agent_actions.prompt.context_block import context_block
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
@@ -208,12 +209,15 @@ class BaseBatchClient(ABC):
             cache_points = cache_points_of(row) if marks_cache_points else ()
             row.pop(CACHE_POINTS_KEY, None)
             varies_per_record = row.pop(REQUEST_VARIES_PER_RECORD_KEY, False)
+            prompt = row.get("prompt", agent_config.get("prompt", ""))
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
-                prompt=row.get("prompt", agent_config.get("prompt", "")),
+                prompt=prompt,
                 # Encoded by the function online's call uses, so both send the same text.
                 user_content=str(
-                    ContextService.prepare_context_data(row["content"], is_tool=False)
+                    ContextService.prepare_context_data(
+                        context_block(row["content"], agent_config, prompt), is_tool=False
+                    )
                 ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),

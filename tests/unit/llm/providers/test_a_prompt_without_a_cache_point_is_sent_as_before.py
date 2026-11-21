@@ -77,6 +77,8 @@ def _config(prompt: str, caching: bool) -> dict[str, Any]:
         "enable_prompt_caching": caching,
         "prompt": prompt,
         "context_scope": {"observe": ["source.page_content"]},
+        # The request as it was, the printed field sent again in the context block.
+        "context_block": "all",
     }
 
 

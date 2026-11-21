@@ -9,6 +9,7 @@ from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.schema import ResponseSchemaCompiler
+from agent_actions.prompt.context_block import context_block
 from agent_actions.utils import deep_json
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
@@ -68,6 +69,10 @@ def create_dynamic_agent(
     is_tool = agent_config.get("kind") == "tool"
 
     context_data = ContextService.prepare_context_data(context_data_str, is_tool)
+    # The schema's dispatch reads every observed field; the model is sent only the block.
+    sent_context = ContextService.prepare_context_data(
+        context_block(context_data_str, agent_config, prompt_config), is_tool
+    )
 
     captured_results = {}
 
@@ -87,9 +92,9 @@ def create_dynamic_agent(
         agent_config,
         prompt_config,
         (
-            context_data
-            if isinstance(context_data, str)
-            else deep_json.dumps(context_data, ensure_ascii=False)
+            sent_context
+            if isinstance(sent_context, str)
+            else deep_json.dumps(sent_context, ensure_ascii=False)
         ),
         schema,  # type: ignore[arg-type]
     )
@@ -101,7 +106,7 @@ def create_dynamic_agent(
         model_vendor,
         agent_config,
         prompt_config,
-        context_data,
+        sent_context,
         schema,  # type: ignore[arg-type]
         granularity,
         tool_args=tool_args,

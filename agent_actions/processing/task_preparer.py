@@ -18,6 +18,7 @@ from agent_actions.processing.source_resolution import (
     resolve_first_stage_source,
     resolve_source_content,
 )
+from agent_actions.prompt.context_block import context_block
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
@@ -50,7 +51,11 @@ def write_trace_row(
         action_name=context.agent_name,
         record_id=record_id,
         compiled_prompt=prompt,
-        llm_context=deep_json.dumps(llm_context, ensure_ascii=False, default=str),
+        llm_context=deep_json.dumps(
+            context_block(llm_context, context.agent_config, prompt),
+            ensure_ascii=False,
+            default=str,
+        ),
         model_name=context.agent_config.get("model_name") or context.agent_config.get("model"),
         model_vendor=context.agent_config.get("model_vendor"),
         run_mode=context.mode.value if context.mode else None,
