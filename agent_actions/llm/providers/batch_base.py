@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -26,6 +27,12 @@ if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
 
 logger = logging.getLogger(__name__)
+
+# A task row's text sent as the user message verbatim, in place of its serialised content.
+RAW_USER_CONTENT_KEY = "_raw_user_content"
+
+# Replaces each provider's cap on the requests in one batch.
+BATCH_MAX_REQUESTS_ENV = "AGENT_ACTIONS_BATCH_MAX_REQUESTS"
 
 # What a provider stamps on a result carrying no correlation id. It is not an
 # identity: two of them are two records, so nothing may deduplicate on it.
@@ -97,12 +104,47 @@ class BatchResult:
     # The expectation loop gave up on this record. Not a provider failure: it
     # reads as an exhausted record, as online's does.
     exhausted: bool = False
+    # The answer as the model wrote it, before any JSON parse; None when it was not text.
+    text: str | None = None
+
+
+def batch_task_bytes(task: Any) -> int:
+    """The bytes *task* takes in a batch: its JSON line, newline included."""
+    return len(json.dumps(task, default=str).encode("utf-8")) + 1
+
+
+def batch_request_cap(provider: BaseBatchClient) -> int:
+    """The most requests one batch to *provider* may hold."""
+    cap = batch_request_cap_from_environment()
+    return provider.max_batch_requests if cap is None else cap
+
+
+def batch_request_cap_from_environment() -> int | None:
+    """The cap ``AGENT_ACTIONS_BATCH_MAX_REQUESTS`` sets, None when it is unset or blank."""
+    raw = os.environ.get(BATCH_MAX_REQUESTS_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        cap = int(raw)
+    except ValueError:
+        cap = 0
+    if cap < 1:
+        raise ValueError(
+            f"{BATCH_MAX_REQUESTS_ENV} must be a whole number of 1 or more, not {raw!r}"
+        )
+    return cap
 
 
 class BaseBatchClient(ABC):
     """Abstract base class for batch processing clients."""
 
     _configured_model: str | None = None
+    # The most requests one batch may hold. A provider that documents no cap gets the
+    # lowest cap another provider documents (OpenAI and Groq: 50,000).
+    max_batch_requests: int = 50_000
+    # The most bytes one batch may hold. A provider that documents no limit gets the
+    # lowest limit another provider documents (Groq: 100 MB).
+    max_batch_bytes: int = 100_000_000
     # The vendor's errors for a provider that could not answer now. A status check
     # raises them as ConnectionError, which its callers take as "ask again later".
     _transient_errors: tuple[type[Exception], ...] = ()
@@ -121,7 +163,9 @@ class BaseBatchClient(ABC):
         cache_prompt = self._caches_prompt(agent_config)
 
         for row in data:
-            if "content" not in row:
+            # A judge request is a prompt alone, sent as written: it has no record content.
+            user_content = row.pop(RAW_USER_CONTENT_KEY, None)
+            if user_content is None and "content" not in row:
                 raise ValueError(
                     f"Record {row.get('target_id', row.get('id', '?'))} missing 'content' key. "
                     "Every record must have namespaced content in the additive model."
@@ -132,7 +176,9 @@ class BaseBatchClient(ABC):
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=deep_json.dumps(row["content"]),
+                user_content=(
+                    user_content if user_content is not None else deep_json.dumps(row["content"])
+                ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),
@@ -316,6 +362,7 @@ class BaseBatchClient(ABC):
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
+        text = content if isinstance(content, str) else self._answer_text(raw_response)
 
         # Parse JSON content if it's a string
         if isinstance(content, str) and not self._answer_was_cut_off(raw_response):
@@ -331,7 +378,12 @@ class BaseBatchClient(ABC):
             error=None,
             metadata=metadata,
             usage=usage,
+            text=text,
         )
+
+    def _answer_text(self, raw_response: Any) -> str | None:
+        """The answer's text, for a provider whose content extraction already parsed it."""
+        return None
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, or the sentinel if it carries none."""

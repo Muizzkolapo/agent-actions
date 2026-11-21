@@ -1038,7 +1038,7 @@ class FakeDataGenerator:
         while True:
             try:
                 shape, pos = decoder.raw_decode(line, pos)
-            except ValueError:
+            except (ValueError, RecursionError):
                 return None
             if not isinstance(shape, dict):
                 return None

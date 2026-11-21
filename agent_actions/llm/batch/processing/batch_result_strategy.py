@@ -63,6 +63,25 @@ logger = logging.getLogger(__name__)
 _UNSET = object()
 
 
+def validated_items(content: Any, *, json_mode: bool, output_field: str) -> list[Any]:
+    """What the writer runs a ``repair: none`` suite over, for one answered result.
+
+    Mirrors ``_process_successful_result`` up to its validation, so a judge batch
+    can be sent for these values before the writer reads them.
+    """
+    if isinstance(content, str):
+        content = (
+            {"raw_response": content, "_parse_error": "Failed to parse JSON from LLM response"}
+            if json_mode
+            else {output_field: content}
+        )
+    if _is_schema_echo(content):
+        content = _make_schema_echo_error(content)
+    if _is_empty_output(content):
+        return []
+    return list(DataTransformer.ensure_list(content))
+
+
 @dataclass
 class BatchProcessingContext:
     """Internal context for batch result parsing."""
@@ -341,15 +360,19 @@ class BatchResultStrategy:
         is what the judge cache and the per-run budget need.
         """
         if ctx.expectation_service is _UNSET:
+            from agent_actions.expectations.judge import BATCH_JUDGE_KEY
             from agent_actions.expectations.service import (
                 create_expectation_service_from_config,
             )
 
             agent_config = ctx.agent_config or {}
+            batch_judge = agent_config.get(BATCH_JUDGE_KEY) or {}
             service = create_expectation_service_from_config(
                 agent_config.get("expect"),
                 action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
                 agent_config=agent_config,
+                judge_budget_remaining=batch_judge.get("budget_remaining"),
+                judge_verdicts=batch_judge.get("verdicts"),
             )
             # Under a repair policy the verdict is already on the record: the
             # repair loop wrote the one it regenerated against. Re-validating
