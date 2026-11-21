@@ -116,13 +116,33 @@ def test_the_word_cache_point_in_a_prompt_is_no_tag():
     assert PromptPreparationService._render_prompt_template(prompt, {}) == prompt
 
 
-def test_adding_or_removing_a_tag_is_no_edit_of_the_action():
+@pytest.mark.parametrize(
+    "marked",
+    [
+        "{{ source.page_content }}\n{% cache_point %}{{ slots.fact }}",
+        "{{ source.page_content }}\n{% cache_point %}\n{{ slots.fact }}",
+        "{{ source.page_content }}\n  {%- cache_point %}  \n{{ slots.fact }}",
+        "{{ source.page_content }}\n{{ slots.fact }}\n{% cache_point %}",
+    ],
+    ids=["before-text", "own-line", "own-line-trimming", "last-line"],
+)
+def test_adding_or_removing_a_tag_is_no_edit_of_the_action(marked):
     plain = {"prompt": "{{ source.page_content }}\n{{ slots.fact }}"}
-    marked = {"prompt": "{{ source.page_content }}\n{% cache_point %}{{ slots.fact }}"}
+    if marked.endswith("%}"):
+        plain = {"prompt": plain["prompt"] + "\n"}
     edited = {"prompt": "{{ source.page_content }}\n{{ slots.other }}"}
 
-    assert _compute_action_config_hash(marked) == _compute_action_config_hash(plain)  # type: ignore[arg-type]
+    assert _compute_action_config_hash({"prompt": marked}) == _compute_action_config_hash(plain)  # type: ignore[arg-type]
     assert _compute_action_config_hash(edited) != _compute_action_config_hash(plain)  # type: ignore[arg-type]
+
+
+def test_a_tag_in_a_raw_block_stays_as_written():
+    prompt = "{% raw %}\nPage {% cache_point %}\nnext\n{% endraw %}"
+
+    prepared = _prepare(prompt)
+
+    assert prepared.formatted_prompt == "\nPage {% cache_point %}\nnext\n"
+    assert prepared.cache_points == ()
 
 
 def _use(prompt: str) -> Any:

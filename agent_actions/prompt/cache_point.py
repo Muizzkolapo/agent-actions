@@ -25,6 +25,12 @@ _INLINE_TAG_AT_LINE_END = re.compile(
     r"(?m)^(?P<before>[^\n]*\S[^\n]*?)(?P<tag>\{%\+?\s*" + CACHE_POINT_TAG + r"\s*%\})\n"
 )
 
+# A tag alone on its line, with that line's newline: the line the render removes.
+_TAG_LINE = re.compile(r"(?m)^[ \t]*\{%[-+]?\s*" + CACHE_POINT_TAG + r"\s*[-+]?%\}[ \t]*(?:\n|$)")
+
+# `{% raw %}` text stays as written, a tag in it included.
+_RAW_BLOCK = re.compile(r"(\{%-?\s*raw\s*-?%\}.*?\{%-?\s*endraw\s*-?%\})", re.S)
+
 MAX_CACHE_POINTS = 3
 """The most tags a template may hold. Anthropic takes four cache breakpoints in a request;
 one is kept for the end of a prompt that every record shares."""
@@ -39,6 +45,11 @@ def has_cache_point(template: str) -> bool:
     return CACHE_POINT_TAG_PATTERN.search(template) is not None
 
 
+def without_cache_points(template: str) -> str:
+    """*template* as it is written without its tags: a tag's own line goes with it."""
+    return CACHE_POINT_TAG_PATTERN.sub("", _TAG_LINE.sub("", template))
+
+
 class CachePointExtension(Extension):
     """Renders `{% cache_point %}` to a mark that `take_cache_points` removes."""
 
@@ -49,7 +60,12 @@ class CachePointExtension(Extension):
         """Keep the newline after a tag inside a line, which `trim_blocks` would eat."""
         if not self.environment.trim_blocks:
             return source
-        return _INLINE_TAG_AT_LINE_END.sub(lambda m: m.group(0) + "\n", source)
+        parts = _RAW_BLOCK.split(source)
+        # The odd parts are `{% raw %}` blocks.
+        return "".join(
+            part if i % 2 else _INLINE_TAG_AT_LINE_END.sub(lambda m: m.group(0) + "\n", part)
+            for i, part in enumerate(parts)
+        )
 
     def parse(self, parser: Any) -> nodes.Node:
         lineno = next(parser.stream).lineno

@@ -41,7 +41,7 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
 )
 from agent_actions.processing.run_counts import RunCounts, counting
-from agent_actions.prompt.cache_point import CACHE_POINT_TAG_PATTERN
+from agent_actions.prompt.cache_point import without_cache_points
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
     EVERY_INPUT_FAILED,
@@ -107,7 +107,7 @@ def _compute_action_config_hash(
     prompt = action_config.get("prompt", "")
     hash_input = {
         # A cache point changes how a request reaches the provider, not the text sent.
-        "prompt": CACHE_POINT_TAG_PATTERN.sub("", prompt) if isinstance(prompt, str) else prompt,
+        "prompt": without_cache_points(prompt) if isinstance(prompt, str) else prompt,
         "model": action_config.get("model", ""),  # frozen empty — see docstring
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", ""),
