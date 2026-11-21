@@ -970,8 +970,17 @@ class WorkflowConfig(BaseModel):
                 base_names.add(action.version_context["base_name"])
         dangling = all_deps - seen - base_names
         if dangling:
+            hints = []
+            for name in sorted(dangling):
+                finals = sorted(final for final in seen if final.endswith(f"__{name}"))
+                if finals:
+                    hints.append(
+                        f"'{name}' is a short name inside an include with 'as:'; outside the "
+                        f"include, write the final name: {', '.join(repr(f) for f in finals)}"
+                    )
+            hint = f". {'. '.join(hints)}." if hints else ""
             raise ValueError(
-                f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
+                f"Dangling dependency references (not defined as actions): {sorted(dangling)}{hint}"
             )
 
         # Iterative DFS cycle detection (avoids RecursionError on deep chains)

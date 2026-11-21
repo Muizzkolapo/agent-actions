@@ -21,7 +21,11 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from agent_actions.llm.providers.batch_base import UNSENT_ERROR_KEY, batch_request_cap
+from agent_actions.llm.providers.batch_base import (
+    UNSENT_ERROR_KEY,
+    batch_request_cap,
+    batch_task_bytes,
+)
 from agent_actions.llm.side_calls import SideCall, SideReplies
 
 if TYPE_CHECKING:
@@ -144,8 +148,9 @@ def submit_side_batch(
 ) -> SideSubmission:
     """Send one request per copy of each call, as ``<file>_<kind>_<attempt>``.
 
-    A batch takes one model and at most the provider's cap of requests, so only the
-    calls of the first model met go out, up to that cap.
+    A batch takes one model and at most the provider's cap of requests and of bytes, so
+    only the calls of the first model met go out, up to those caps; the rest go out in
+    the next round. The first call always goes, as a batch of nothing would stall the step.
     """
     first = next(iter(calls.values()))
     cap = batch_request_cap(provider)
@@ -176,7 +181,10 @@ def submit_side_batch(
     for row in rows:
         if UNSENT_ERROR_KEY in row:
             unsent.setdefault(requests[row["target_id"]], str(row[UNSENT_ERROR_KEY]))
-    requests = {request_id: key for request_id, key in requests.items() if key not in unsent}
+    sendable = {key: call.copies for key, call in sent.items() if key not in unsent}
+    kept, tasks = _within_byte_limit(provider, sendable, tasks)
+    sent = {key: call for key, call in sent.items() if key in kept or key in unsent}
+    requests = {request_id: key for request_id, key in requests.items() if key in kept}
     for key, error in unsent.items():
         logger.warning("%s request for %s could not be sent: %s", kind.capitalize(), key, error)
     if not requests:
@@ -193,6 +201,29 @@ def submit_side_batch(
         len(sent) - len(unsent),
     )
     return SideSubmission(batch_id=batch_id, requests=requests, sent=sent, unsent=unsent)
+
+
+def _within_byte_limit(
+    provider: BaseBatchClient, copies: dict[str, int], tasks: list[Any]
+) -> tuple[set[str], list[Any]]:
+    """The calls of *copies*, in order, whose tasks fit the provider's bytes per batch.
+
+    *tasks* holds each call's copies in turn, one task per copy; when it does not (a call
+    with only some copies unsent), no call is held back.
+    """
+    if len(tasks) != sum(copies.values()):
+        return set(copies), tasks
+    kept: set[str] = set()
+    size = 0
+    start = 0
+    for key, count in copies.items():
+        group_size = sum(batch_task_bytes(task) for task in tasks[start : start + count])
+        if kept and size + group_size > provider.max_batch_bytes:
+            break
+        kept.add(key)
+        size += group_size
+        start += count
+    return kept, tasks[:start]
 
 
 def read_side_batch(
