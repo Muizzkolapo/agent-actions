@@ -87,7 +87,7 @@ The example above uses observe mode. Observe mode runs the checks, attaches the 
 | `max_iterations` | integer 1–10 | `3` | The total number of generations for each record, including the first. If you set it explicitly with `repair: none`, it is a configuration error, not a setting that does nothing |
 | `on_exhausted` | string | `return_last` | The result when no iterations remain: `return_last`, `fail`, or `raise`. The same rule applies: do not set it under `repair: none` |
 | `judge_budget` | integer ≥ 1 | no limit | The maximum number of real `llm_judge` LLM calls that the suite of this action may make in the full run |
-| `judge_mode` | string | the run mode of the action | How the `llm_judge` calls of the action are sent: `batch` (as batches of their own, see [Judging in batch](#judging-in-batch)) or `online`. Set `online` to keep the judge calls of a batch action online. `batch` on an online action is a preflight defect |
+| `judge_mode` | string | the run mode of the action | How Agent Actions sends the `llm_judge` calls of the action: `batch` (as batches of their own, see [Judging in batch](#judging-in-batch)) or `online`. Set `online` to keep the judge calls of a batch action online. `batch` on an online action is a preflight defect |
 
 Each entry in `expectations:` (or in a suite file) has this shape:
 
@@ -257,13 +257,15 @@ At load time, Agent Actions automatically adds each reference in `context:` to t
 
 ### Judging in batch
 
-On a `run_mode: batch` action, the judge calls go out as a batch too. When a batch of the action returns, Agent Actions does not call the judge for each record. It sends all the judge calls of the batch as one batch of their own, named `<file>_judge_<n>`, and the run asks to be run again, as it does for a repair round. When that batch returns, Agent Actions reads the verdicts and continues: it attaches each verdict, or sends a repair round for the records that failed. The records that a repair round returns are judged by the next judge batch.
+On a `run_mode: batch` action, Agent Actions also sends the judge calls as a batch. When a batch of the action returns, Agent Actions does not call the judge for each record. Agent Actions sends all the judge calls of the batch as one batch of their own, named `<file>_judge_<n>`. Then the run asks to be run again, as for a repair round. When that batch returns, Agent Actions reads the verdicts and continues: it attaches each verdict, or sends a repair round for the records that failed. The next judge batch judges the records that a repair round returns. This applies with `repair: none` too. See [Judge rounds](../execution/batch-recovery.md#judge-rounds).
 
-- **Same verdicts.** Each vote is one request. Agent Actions reads each reply as it reads an online reply, and takes the majority in the same way: a tie fails closed. A request that fails at the provider fails the judge call, as an online call that has an error does. A judge batch that the provider fails or cancels fails each judge call that it held.
+- **Same verdicts.** Each vote is one request. Agent Actions reads each reply as it reads an online reply, and takes the majority in the same way: a tie fails closed. A request that fails at the provider fails the judge call, as an online call that has an error does. A judge batch that the provider fails or cancels fails each judge call that it held. Agent Actions keeps the failed verdict for the file in this run. It does not send the same value of that file to the judge again. Online, Agent Actions does not keep a failed verdict.
 - **Same grounding context.** A rule with `context:` references sends the judge the same grounding text as an online run. When Agent Actions prepares a record for the batch, it keeps the values that the judged rules of the action reference. It reads them back for each judge batch, also after a repair round and in a later run. A reference that the action does not observe fails the rule, as it does online.
-- **Same cache and budget.** A value that several records hold is judged one time. A judge batch counts one unit of `judge_budget` for each value, whatever its `votes`, and the budget applies to all the judge batches of the run together.
-- **Resume.** A run that stops while a judge batch is out reads that batch on the next run. Agent Actions never sends a judge batch again.
-- **One model for each batch.** A rule with its own `model` is judged in a batch of its own, after the batch of the other rules.
+- **Cache.** Agent Actions judges a value one time in each file. Online, Agent Actions judges a value one time in each run.
+- **Budget.** A judge batch counts one unit of `judge_budget` for each value. The `votes` setting does not change the count. The budget applies to all the judge batches of the run.
+- **Resume.** A run that stops while the provider processes a judge batch reads that batch on the next run. Agent Actions never sends a judge batch again. If a run stops after Agent Actions sends a judge batch and before it saves the state of the file, the next run cannot read that batch. Agent Actions then processes the file again from its main batch.
+- **One model for each batch.** A rule with its own `model` is judged in a judge batch of its own.
+- **Size of a batch.** A judge batch holds at most the number of requests that the provider accepts in one batch: 100,000 for Anthropic, 50,000 for OpenAI and Groq. For a provider that states no limit, the limit is 50,000. The environment variable `AGENT_ACTIONS_BATCH_MAX_REQUESTS` replaces the limit of each provider. The values that do not fit go in the next judge batch.
 
 Set `judge_mode: online` on the `expect:` block to call the judge online, one record at a time, after each batch returns.
 
