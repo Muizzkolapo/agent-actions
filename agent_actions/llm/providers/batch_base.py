@@ -16,7 +16,11 @@ from agent_actions.config.path_config import resolve_project_root
 from agent_actions.errors import PromptTooLargeError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
-from agent_actions.llm.providers.error_wrapper import NoAnswer, cut_off_parse_error
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    cut_off_parse_error,
+    unfinished_parse_error,
+)
 from agent_actions.llm.providers.generation_params import (
     VENDOR_PARAMS_KEY,
     extract_generation_params,
@@ -417,7 +421,7 @@ class BaseBatchClient(ABC):
 
     def _cut_off_parse_error(self, stop_reason: Any, _text: str) -> str:
         """The parse error online's JSON-mode call stores for an answer cut off at *stop_reason*."""
-        return cut_off_parse_error(stop_reason)
+        return unfinished_parse_error(stop_reason) or cut_off_parse_error(stop_reason)
 
     def _answer_text(self, raw_response: Any) -> str | None:
         """The answer's text, for a provider whose content extraction already parsed it."""

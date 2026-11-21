@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The results file of `agac batch retrieve` holds, on each answer of an `add_dispatch` action, the schema that its record''s dispatch chose, as `agac run` stores it.'
+time: 2026-11-21T12:10:00Z

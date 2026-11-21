@@ -7,6 +7,7 @@ case prepares two records for real, so the dispatch function runs once per recor
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,7 @@ import pytest
 from agent_actions.expectations.service import create_expectation_service_from_config
 from agent_actions.llm.batch.processing.batch_result_strategy import BatchResultStrategy
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.evaluation.strategies import ExpectationStrategy
@@ -197,3 +199,38 @@ def test_a_rule_reads_the_chosen_schema_in_a_repair_pass(project):
     )
 
     assert [strategy.evaluate(result).passed for result in results] == [True, True]
+
+
+def test_batch_retrieve_writes_the_chosen_schema_on_each_answer(project, tmp_path):
+    """`agac batch retrieve` hands the service the action's config, so its file holds the name."""
+    config = _config(project)
+    provider = MagicMock()
+    provider.retrieve_results.return_value = [
+        BatchResult(custom_id=custom_id, content=answer, success=True)
+        for custom_id, answer in ANSWERS["an object"].items()
+    ]
+    registry = MagicMock()
+    registry.get_batch_job_by_id.return_value = MagicMock(file_name="pages.json", record_count=2)
+    resolver = MagicMock()
+    resolver.get_for_batch_id.return_value = provider
+    contexts = MagicMock()
+    contexts.load_batch_context_map.return_value = _context_map(config)
+    service = BatchRetrievalService(
+        client_resolver=resolver,
+        context_manager=contexts,
+        registry_manager_factory=lambda action_name: registry,
+        storage_backend=MagicMock(),
+        action_name=ACTION,
+        agent_config=config,
+    )
+
+    results_file = service.retrieve_results("b1", str(tmp_path / "target"))
+
+    written = [
+        json.loads(json.loads(line)["response"]["body"]["choices"][0]["message"]["content"])
+        for line in results_file.read_text().splitlines()
+    ]
+    assert written == [
+        {"topic": "cats", "pick_schema": "topic_answer"},
+        {"verdict": "yes", "pick_schema": "verdict_answer"},
+    ]

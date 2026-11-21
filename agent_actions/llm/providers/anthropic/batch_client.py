@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
-from agent_actions.llm.providers.error_wrapper import NoAnswer, is_truncated
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    is_stopped_by_provider,
+    is_unfinished,
+    stopped_parse_error,
+)
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -212,12 +217,14 @@ class AnthropicBatchClient(BaseBatchClient):
     def _cut_off_parse_error(self, stop_reason: Any, text: str) -> str:
         from agent_actions.llm.providers.anthropic.client import no_tool_answer_message
 
+        if is_stopped_by_provider(stop_reason):
+            return stopped_parse_error(stop_reason)
         return no_tool_answer_message(stop_reason, text)
 
     def _answer_was_cut_off(self, raw_response: Any) -> bool:
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
-        return is_truncated(self._get_attribute_or_key(message, "stop_reason"))
+        return is_unfinished(self._get_attribute_or_key(message, "stop_reason"))
 
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         """Extract content from Anthropic response."""
