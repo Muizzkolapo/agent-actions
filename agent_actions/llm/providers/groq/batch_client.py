@@ -29,6 +29,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     """
 
     _vendor_label = "Groq"
+    max_batch_requests = 50_000
 
     # Every status of the SDK's batch types. One being cancelled has not ended yet.
     STATUS_MAPPING = {
