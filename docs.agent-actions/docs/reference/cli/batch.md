@@ -93,6 +93,8 @@ agac batch retrieve --batch-id batch_abc123
 
 The command writes the results to `agent_workflow/<workflow>/agent_io/target/<action>/<batch-id>_results.jsonl`. Then it prints that path.
 
+The command reads each answer as `agac run` reads it. With `json_mode: false`, the file holds the answer as text in the `output_field` of the action. To do this, the command loads the workflow configuration. The configuration can fail to load, or it can have no action of that name. A limit variable that is not an integer, such as `AGAC_RECORD_LIMIT=abc`, also stops the load. Then the command shows a warning and writes the raw answers of the provider.
+
 ## Batch Workflow {/* #batch-agentic-workflow */}
 
 The typical batch process has three parts: run (the run submits the batch), poll the status, and retrieve the results.

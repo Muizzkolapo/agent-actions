@@ -4,6 +4,8 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
+from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 
 if TYPE_CHECKING:
     from agent_actions.config.types import ActionConfigDict
@@ -21,13 +23,23 @@ def retrieve_and_reconcile(
     context_map: dict[str, Any] | None = None,
     record_count: int | None = None,
     file_name: str | None = None,
+    agent_config: dict[str, Any] | None = None,
 ) -> list[BatchResult]:
-    """Retrieve batch results from provider and log reconciliation."""
+    """Retrieve batch results from provider and log reconciliation.
+
+    Given the *agent_config* of an action in text mode, each reply becomes the record an
+    online call returns for it, its text under the output field: a provider parses every
+    reply as JSON, not knowing the action's mode.
+    """
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,
     )
 
     batch_results = provider.retrieve_results(batch_id, output_directory)
+    if agent_config is not None and not agent_config.get("json_mode", get_default("json_mode")):
+        for result in batch_results:
+            if result.text is not None:
+                (result.content,) = ResponseBuilder.wrap_non_json(result.text, agent_config)
 
     # Log reconciliation
     BatchResultReconciler.report_unparseable_lines(batch_results)

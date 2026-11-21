@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'With `json_mode: false`, a batch action stores the model''s reply as text under the action''s `output_field`, as the same action online does. Batch read every reply as JSON whatever the mode, so a reply that quoted JSON was stored as that JSON: `Here is a list: [1, 2, 3] done` became three records holding 1, 2 and 3, and a reply quoting an object became that object. An `expect:` block with a repair policy judges the stored record in batch too, where it failed every text reply as not a JSON object.'
+time: 2026-11-18T19:00:00Z

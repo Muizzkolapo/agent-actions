@@ -88,6 +88,16 @@ def _model_nonstreaming_limit(model: str) -> int | None:
     return MODEL_NONSTREAMING_TOKENS.get(model)
 
 
+def json_answer_in(text: str) -> dict[str, Any] | list[dict[str, Any]] | None:
+    """The JSON answer a text reply holds, an object or a list of objects; None for any other."""
+    parsed = parse_llm_json(text)
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list) and parsed and all(isinstance(item, dict) for item in parsed):
+        return parsed
+    return None
+
+
 def _sends_interleaved_thinking(vendor_params: Mapping[str, Any]) -> bool:
     """Whether the request carries the beta that lets a thinking budget exceed max_tokens."""
     headers = vendor_params.get("extra_headers")
@@ -289,15 +299,13 @@ class AnthropicClient(BaseClient):
         # A finished answer is read like every other client's; a cut-off one could only be
         # read by guessing its end.
         if text and not is_truncated(stop_reason):
-            parsed = parse_llm_json(text)
-            if isinstance(parsed, dict):
-                parsed = [parsed]
-            if isinstance(parsed, list) and parsed and all(isinstance(r, dict) for r in parsed):
+            answer = json_answer_in(text)
+            if answer is not None:
                 logger.debug(
                     "Anthropic model=%s answered in text, not the tool; read it as JSON",
                     model_name,
                 )
-                return parsed
+                return answer if isinstance(answer, list) else [answer]
         message = f"No tool_use block in response (stop_reason={stop_reason}): {text[:200]!r}"
         fire_event(
             LLMErrorEvent(

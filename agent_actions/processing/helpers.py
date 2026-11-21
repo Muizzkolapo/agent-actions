@@ -237,16 +237,21 @@ def _validate_llm_output_schema(
     """
     # Unconditional schema-echo rejection — runs even when validation is skipped
     response = _reject_schema_echo_items(response, agent_name)
+    warn_on_schema_mismatch(response, agent_config, agent_name)
+    return response
 
+
+def warn_on_schema_mismatch(response: Any, agent_config: dict[str, Any], agent_name: str) -> None:
+    """Log a warning when *response* does not match the schema *agent_config* holds."""
     schema = agent_config.get(SCHEMA_KEY)
     if not schema or not isinstance(schema, dict):
-        return response
+        return
 
     # Empty output is the on_empty handler's domain, not schema validation's:
     # an empty response has no fields to check, so rejecting it here would
     # pre-empt the on_empty policy (skip/warn/error) with a hard failure.
     if _is_empty_output(response):
-        return response
+        return
 
     try:
         from agent_actions.validation.schema_output_validator import (
@@ -268,8 +273,6 @@ def _validate_llm_output_schema(
         logger.warning("Schema output validator not available, skipping validation")
     except ValueError as e:
         logger.warning("Schema validation failed with error: %s", e, exc_info=True)
-
-    return response
 
 
 def transform_with_passthrough(

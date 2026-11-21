@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: 'Preflight refuses an action with `run_mode: batch` and `json_mode: true` (the default) that has no `schema` or `schema_name`, with the message batch submission gives: "Schema is required for batch processing when json_mode is enabled". The same action runs online, and in batch the refusal came only at submit, after the run had begun preparing the action''s records.'
-time: 2026-11-16T10:30:00Z
