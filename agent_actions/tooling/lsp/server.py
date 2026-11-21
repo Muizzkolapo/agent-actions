@@ -322,6 +322,9 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
     if file_path in index.file_actions:
         for name, action_meta in index.file_actions[file_path].items():
             location = action_meta.location
+            if location.file_path != file_path:
+                # A macro's action: its line is in the template, not in this outline.
+                continue
             symbols.append(
                 lsp.DocumentSymbol(
                     name=name,
