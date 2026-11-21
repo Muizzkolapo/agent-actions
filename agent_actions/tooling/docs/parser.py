@@ -10,6 +10,7 @@ import yaml
 from agent_actions.config.includes import action_defaults, has_include, has_written_origin
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathType
+from agent_actions.config.routes import has_route_or_join
 from agent_actions.config.schema import version_variant_names
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import ConfigurationError
@@ -127,9 +128,9 @@ class WorkflowParser:
     ) -> dict[str, Any] | None:
         """Parse a workflow YAML file and extract all relevant information.
 
-        A source file (*rendered* false) with an include entry or an ``_include`` key is
-        loaded through the render step a run uses, with every check it makes; a file that
-        step refuses is reported and left out.
+        A source file (*rendered* false) with an include, loop, route or join entry, or an
+        ``_include`` key, is loaded through the render step a run uses, with every check it
+        makes; a file that step refuses is reported and left out.
         """
         try:
             with open(yaml_path, encoding="utf-8") as f:
@@ -161,7 +162,9 @@ class WorkflowParser:
             )
             return None
 
-        if not rendered and (has_include(data) or has_written_origin(data)):
+        if not rendered and (
+            has_include(data) or has_written_origin(data) or has_route_or_join(data)
+        ):
             root = resolve_project_root(project_root)
             try:
                 data = yaml.safe_load(

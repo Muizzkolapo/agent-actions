@@ -1,0 +1,3 @@
+name: draft
+fields:
+  - {id: question, type: string, required: true}

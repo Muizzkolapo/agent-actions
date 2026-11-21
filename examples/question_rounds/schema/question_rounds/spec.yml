@@ -1,0 +1,4 @@
+name: spec
+fields:
+  - {id: topic, type: string, required: true}
+  - {id: bar, type: integer, required: true}

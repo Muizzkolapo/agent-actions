@@ -111,6 +111,8 @@ The load, and so `agac inspect` and `agac run`, refuse:
 
 `agac inspect action round_iter2__write` still shows one iteration's action, with its generated guard.
 
+[`agac docs`](../documentation-site.md) lists each iteration's actions and the action named after the loop. In the editor, the loop's name resolves to its `- loop:` entry; an action of its branch is not an action of the workflow. The example [`examples/question_rounds`](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/question_rounds) runs a loop, a router and a join offline.
+
 ## A Loop or an `expect` Repair {/* #loop-or-repair */}
 
 An [`expect` repair](../validation/expectations.md#repairing-instead-of-observing) generates one LLM action's output again until its own rules pass. Use it when the rules that judge the output belong to that action. Use a loop when the verdict comes from later actions (a tool, a validator LLM, an examiner), when more than one action must run again, or when the next attempt must read what those actions found.
