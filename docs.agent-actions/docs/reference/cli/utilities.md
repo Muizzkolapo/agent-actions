@@ -296,7 +296,13 @@ Error: Status file is corrupted: <project>/agent_workflow/my_workflow/agent_io/.
 Action 'summarize' is not an object: 'completed'
 ```
 
-`agac run` and the other commands that load the workflow also stop on such an entry, with the same two lines in their error. `agac run --fresh` does not stop: it clears the status file and starts again.
+`agac run`, `agac dispositions`, `agac schema` and `agac retry --dry-run` also stop on such an entry, with exit code 1 and the same two lines in their error. These four commands also stop on a status file that is not a JSON object, for example `[1]` or `null`. `agac status` stops on such a file too. The error for such a file is:
+
+```text
+Status file has unexpected format (expected JSON object): <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
+```
+
+In `run`, `dispositions`, `schema` and `retry`, the error tells you to edit the status file or to start again with `agac run --fresh`. `agac run --fresh` does not stop on these files. It clears the status file and starts again.
 
 The command reads only the status file. It does not read the workflow configuration. Thus an action that you removed from the configuration stays in the output until `agac run --fresh` clears the file.
 
