@@ -234,7 +234,7 @@ A response can come back with no answer in it. The record ends in the same way o
 - **A blocked prompt (Gemini).** The error names the block reason: `Gemini blocked the prompt (blockReason=SAFETY)`.
 - **A stop that is not the model's own.** Examples are a Gemini `SAFETY` stop before any text, and an Anthropic message that holds only a thinking block. The error names the stop reason.
 
-In text mode, the record fails with that error, and `retry` does not send it again. In JSON mode, the system stores the record with a parse error that holds the same reason, and `expect: {repair: auto}` can regenerate it.
+In text mode, the record fails with that error, and `retry` does not send it again. In JSON mode, Agent Actions stores the record with a parse error that holds the same reason, and `expect: {repair: auto}` can regenerate it.
 
 An Anthropic or Gemini answer that the model ended itself with no text in it is an empty answer. In text mode, [`on_empty`](#execution-fields) decides its result. In JSON mode, it is a parse error.
 :::
