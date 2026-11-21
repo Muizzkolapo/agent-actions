@@ -633,6 +633,8 @@ def check_and_submit_repair(
             context, identity, recovery_state, batch_results, "evaluate", context_map
         ):
             return False
+        recovery_state = recovery_state or _stored_state(context, identity)
+        verdicts = recovery_state.judge_verdicts if recovery_state else {}
         if verdicts:
             context.agent_config = {
                 **context.agent_config,
@@ -659,6 +661,15 @@ def check_and_submit_repair(
 
     if _send_judge_batch(context, identity, recovery_state, batch_results, "evaluate", context_map):
         return False
+    recovery_state = recovery_state or _stored_state(context, identity)
+    # A call that could not be sent has its verdict in the state now.
+    strategy = build_repair_strategy(
+        context.agent_config,
+        recovery_state.repair_judge_budget_remaining if recovery_state else None,
+        recovery_state.judge_verdicts if recovery_state else {},
+        context_map,
+    )
+    assert strategy is not None
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(batch_results)
@@ -800,6 +811,14 @@ def handle_repair_recovery(
     if _send_judge_batch(context, identity, state, recovery_results, "repair", context_map):
         raise_pending_exhaustion(context)
         return None
+    # A call that could not be sent has its verdict in the state now.
+    strategy = build_repair_strategy(
+        context.agent_config,
+        state.repair_judge_budget_remaining,
+        state.judge_verdicts,
+        context_map,
+    )
+    assert strategy is not None
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(recovery_results)
@@ -920,6 +939,14 @@ def handle_repair_recovery(
     )
 
 
+def _stored_state(context: RecoveryContext, identity: BatchIdentity) -> RecoveryState | None:
+    return RecoveryStateManager.load(
+        context.service._storage_backend,
+        context.service._resolve_action_name(context.action_name),
+        identity.file_name,
+    )
+
+
 def _send_judge_batch(
     context: RecoveryContext,
     identity: BatchIdentity,
@@ -932,7 +959,9 @@ def _send_judge_batch(
 
     True when one went out and the step must defer: *results* are saved with the
     state, and `handle_judge_recovery` runs the step named by *resumes* again
-    once the batch returns, with every judgement a cache hit.
+    once the batch returns, with every judgement a cache hit. A call whose request
+    cannot be sent fails alone, its verdict saved with the state; when False comes
+    back after that, the caller reads the verdicts from the stored state.
     """
     from agent_actions.llm.batch.services.judge_ops import (
         collect_judgements,
@@ -941,15 +970,6 @@ def _send_judge_batch(
     )
 
     if not judges_in_batch(context.agent_config):
-        return False
-    collection = collect_judgements(
-        context.agent_config,
-        results,
-        verdicts=state.judge_verdicts if state else {},
-        budget_remaining=state.repair_judge_budget_remaining if state else None,
-        context_map=context_map,
-    )
-    if not collection.pending:
         return False
     # Registering a judge batch retires the file's live round; one still regenerating
     # these records is left to finish, and this step judges as it always did.
@@ -963,18 +983,37 @@ def _send_judge_batch(
 
     if state is None:
         state = RecoveryState()
+    action_name = context.service._resolve_action_name(context.action_name)
     attempt = state.judge_attempt + 1
-    submission = submit_judge_batch(
-        context.provider,
-        collection,
-        context.agent_config,
-        file_name=identity.file_name,
-        attempt=attempt,
-        output_directory=context.output_directory,
-    )
+    while True:
+        collection = collect_judgements(
+            context.agent_config,
+            results,
+            verdicts=state.judge_verdicts,
+            budget_remaining=state.repair_judge_budget_remaining,
+            context_map=context_map,
+        )
+        if not collection.pending:
+            return False
+        submission = submit_judge_batch(
+            context.provider,
+            collection,
+            context.agent_config,
+            file_name=identity.file_name,
+            attempt=attempt,
+            output_directory=context.output_directory,
+        )
+        state.judge_verdicts.update(submission.failed)
+        state.repair_judge_budget_remaining = submission.budget_remaining
+        if submission.batch_id is not None:
+            batch_id = submission.batch_id
+            break
+        RecoveryStateManager.save(
+            context.service._storage_backend, action_name, identity.file_name, state
+        )
     register_recovery_batch(
         context.manager,
-        (submission.batch_id, len(submission.requests)),
+        (batch_id, len(submission.requests)),
         identity.file_name,
         identity.entry.provider,
         RecoveryType.JUDGE,
@@ -984,7 +1023,6 @@ def _send_judge_batch(
     state.judge_requests = submission.requests
     state.judge_results = serialize_results(results)
     state.judge_resumes = resumes
-    state.repair_judge_budget_remaining = submission.budget_remaining
     RecoveryStateManager.save(
         context.service._storage_backend,
         context.service._resolve_action_name(context.action_name),

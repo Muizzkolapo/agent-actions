@@ -149,7 +149,7 @@ def _batch(config: dict[str, Any], answers: dict[str, dict[str, Any]], bodies=BO
 
 def _judge_prompts(provider: JudgingProvider) -> list[str]:
     return [
-        task["body"]["messages"][-1]["content"]
+        task["body"]["messages"][0]["content"]
         for tasks in provider._tasks.values()
         for task in tasks
         if task["custom_id"].startswith("j_")

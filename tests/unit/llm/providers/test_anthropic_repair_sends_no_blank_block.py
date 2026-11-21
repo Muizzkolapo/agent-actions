@@ -13,7 +13,7 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
 from agent_actions.processing.invocation.online import OnlineStrategy
 from agent_actions.processing.prepared_task import PreparedTask
-from agent_actions.prompt.message_builder import MessageBuilder
+from agent_actions.prompt.message_builder import LLMMessage, MessageBuilder
 from agent_actions.prompt.service import PromptPreparationService
 from tests.unit.llm.providers import (
     test_anthropic_marks_only_a_prompt_every_record_shares as dispatch,
@@ -80,18 +80,24 @@ def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 class TestEmptyFeedback:
     @pytest.mark.parametrize("empty", ["", "  \n"], ids=["empty", "whitespace"])
     def test_a_round_with_no_feedback_sends_the_first_rounds_marked_prompt(self, tmp_path, empty):
-        params = _batch(tmp_path, repair._config(STATIC), {page: empty for page in PAGES}, 1)
+        config = repair._config(STATIC)
+        params = _batch(tmp_path, config, {page: empty for page in PAGES}, 1)
 
-        assert [p["system"] for p in params] == [
-            [{"type": "text", "text": STATIC, "cache_control": MARK}]
-        ] * 2
+        assert [repair._marked_texts(p) for p in params] == [[repair.SHARED]] * 2
+        assert [p["messages"] for p in params] == [
+            p["messages"] for p in _batch(tmp_path, config, None, 0)
+        ]
 
     def test_a_round_with_no_feedback_sends_the_prompt_untouched_with_caching_off(self, tmp_path):
-        params = _batch(
-            tmp_path, repair._config(STATIC, caching=False), {page: "" for page in PAGES}, 1
-        )
+        config = repair._config(STATIC, caching=False)
+        params = _batch(tmp_path, config, {page: "" for page in PAGES}, 1)
 
-        assert [p["system"] for p in params] == [STATIC] * 2
+        assert [p["messages"] for p in params] == [
+            p["messages"] for p in _batch(tmp_path, config, None, 0)
+        ]
+        assert [
+            p["messages"][0]["content"].startswith(f"{repair.SHARED} :<|end_of") for p in params
+        ] == [True, True]
 
 
 class TestNoBlankBlock:
@@ -128,26 +134,27 @@ class TestNoBlankBlock:
         assert len(bodies) == 2
         assert _blank_blocks(bodies) == []
 
-    def test_the_builder_marks_no_part_that_would_leave_a_blank_block(self):
-        blank_tail = MessageBuilder.build_for_batch(
+    def test_the_builder_sends_no_blank_block(self):
+        blank_tail = MessageBuilder.build(
             "anthropic",
             f"{STATIC}\n\n",
             "{}",
             enable_prompt_caching=True,
             shared_prompt_len=len(STATIC),
         )
-        blank_prompt = MessageBuilder.build_for_batch(
-            "anthropic", "   ", "{}", enable_prompt_caching=True
-        )
-        shared = MessageBuilder.build_for_batch(
-            "anthropic", STATIC, "{}", enable_prompt_caching=True
-        )
+        blank_prompt = MessageBuilder.build("anthropic", "   ", "{}", enable_prompt_caching=True)
+        shared = MessageBuilder.build("anthropic", STATIC, "{}", enable_prompt_caching=True)
 
-        assert blank_tail.to_dicts(role="system") == [
-            {"role": "system", "content": f"{STATIC}\n\n"}
-        ]
-        assert blank_prompt.to_dicts(role="system") == [{"role": "system", "content": "   "}]
-        assert repair._marked_texts(shared.to_dicts()) == [STATIC]
+        for envelope in (blank_tail, blank_prompt, shared):
+            assert _blank_blocks(envelope.to_dicts()) == []
+        assert repair._marked_texts(shared.to_dicts()) == [repair.SHARED]
+
+    def test_the_marking_rule_marks_no_part_that_would_leave_a_blank_block(self):
+        blank_tail = [LLMMessage(role="system", content=f"{STATIC}\n\n", static_len=len(STATIC))]
+        blank_prompt = [LLMMessage(role="system", content="   ", static_len=3)]
+
+        for messages in (blank_tail, blank_prompt):
+            assert MessageBuilder._mark_for_caching("anthropic", messages) == messages
 
     def test_the_blank_block_search_finds_a_blank_block(self):
         assert _blank_blocks(
@@ -159,12 +166,10 @@ class TestLaterRounds:
     def test_a_second_repair_round_marks_the_first_rounds_block(self, tmp_path):
         params = _batch(tmp_path, repair._config(STATIC), {page: FEEDBACK for page in PAGES}, 2)
 
-        assert [p["system"] for p in params] == [
-            [
-                {"type": "text", "text": STATIC, "cache_control": MARK},
-                {"type": "text", "text": f"\n\n{FEEDBACK}"},
-            ]
-        ] * 2
+        for request in params:
+            marked, rest = request["messages"][0]["content"]
+            assert marked == {"type": "text", "text": repair.SHARED, "cache_control": MARK}
+            assert rest["text"].startswith(f"\n\n{FEEDBACK} :<|end_of_user_instruction|>")
 
 
 def _online_dispatched(config: dict[str, Any]) -> list[dict[str, Any]]:

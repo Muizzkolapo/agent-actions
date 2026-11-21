@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.types import ActionConfigDict
+from agent_actions.llm.providers.batch_base import raise_unsent
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
@@ -119,6 +120,7 @@ class BatchStrategy(InvocationStrategy):
         if self._agent_config is None:
             raise RuntimeError("BatchStrategy._agent_config is None at flush time")
         formatted_tasks = self._provider.prepare_tasks(batch_tasks, dict(self._agent_config))
+        raise_unsent(batch_tasks)
         resolved_name = batch_name or f"batch-{task_count}-tasks"
         batch_id, _status = self._provider.submit_batch(
             formatted_tasks, resolved_name, output_directory

@@ -49,7 +49,7 @@ _BATCH_CREATED = {
 
 
 def _record_text(page: str) -> str:
-    return f"<|begin_of_text|>: {{'page': '{page}'}} :<|end_of_text|>\n"
+    return f'<|begin_of_text|>: {{"page": "{page}"}} :<|end_of_text|>\n'
 
 
 def _marks(value: Any) -> list[Any]:
@@ -93,7 +93,9 @@ def _transport(sent: list[httpx.Request]) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
-def _online(caching: bool, page: str, *, json_mode: bool = True) -> dict[str, Any]:
+def _online(
+    caching: bool, page: str, *, json_mode: bool = True, prompt: str = PROMPT
+) -> dict[str, Any]:
     sent: list[httpx.Request] = []
 
     def client(*_args: Any, **_kwargs: Any) -> anthropic.Anthropic:
@@ -104,9 +106,9 @@ def _online(caching: bool, page: str, *, json_mode: bool = True) -> dict[str, An
     config = {"model_name": MODEL, "enable_prompt_caching": caching}
     with patch("agent_actions.llm.providers.client_base.get_or_create_client", client):
         if json_mode:
-            AnthropicClient.call_json(None, config, PROMPT, {"page": page}, TOOLS)
+            AnthropicClient.call_json(None, config, prompt, {"page": page}, TOOLS)
         else:
-            AnthropicClient.call_non_json(None, config, PROMPT, {"page": page})
+            AnthropicClient.call_non_json(None, config, prompt, {"page": page})
     (request,) = sent
     return json.loads(request.content)
 
@@ -179,10 +181,25 @@ class TestOnline:
 
 
 class TestBatch:
-    def test_the_system_prompt_is_marked_and_the_record_is_not(self, tmp_path):
+    def test_the_instruction_is_marked_and_the_record_is_not(self, tmp_path):
         for params, page in zip(_batch(tmp_path, caching=True), ("alpha", "beta"), strict=True):
-            assert params["system"] == [{"type": "text", "text": PROMPT, "cache_control": MARK}]
-            assert params["messages"] == [{"role": "user", "content": json.dumps({"page": page})}]
+            assert "system" not in params
+            assert params["messages"] == [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": SHARED, "cache_control": MARK},
+                        {"type": "text", "text": CLOSE + _record_text(page)},
+                    ],
+                }
+            ]
+
+    def test_each_request_carries_the_messages_online_sends(self, tmp_path):
+        for caching in (True, False):
+            batch = _batch(tmp_path, caching=caching)
+            online = [_online(caching, page) for page in ("alpha", "beta")]
+
+            assert [p["messages"] for p in batch] == [body["messages"] for body in online]
 
     def test_each_request_carries_one_mark_with_caching_on_and_none_off(self, tmp_path):
         assert [_marks(p) for p in _batch(tmp_path, caching=True)] == [[MARK], [MARK]]
@@ -192,13 +209,14 @@ class TestBatch:
         on = _batch(tmp_path, caching=True)
         off = _batch(tmp_path, caching=False)
 
-        assert [_texts(p["system"]) for p in on] == [p["system"] for p in off] == [PROMPT] * 2
         assert [_texts(p["messages"][0]["content"]) for p in on] == [
             p["messages"][0]["content"] for p in off
         ]
+        assert off[0]["messages"][0]["content"] == SHARED + CLOSE + _record_text("alpha")
 
-    def test_an_empty_prompt_leaves_nothing_to_mark(self, tmp_path):
-        for params in _batch(tmp_path, caching=True, prompt=""):
+    def test_an_empty_prompt_sends_no_system_prompt_and_what_online_sends(self, tmp_path):
+        for params, page in zip(
+            _batch(tmp_path, caching=True, prompt=""), ("alpha", "beta"), strict=True
+        ):
             assert "system" not in params
-            assert isinstance(params["messages"][0]["content"], str)
-            assert _marks(params) == []
+            assert params["messages"] == _online(True, page, prompt="")["messages"]
