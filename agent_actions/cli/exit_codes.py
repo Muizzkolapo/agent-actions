@@ -5,10 +5,15 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
+import click
+
+from agent_actions.errors import ProviderQuotaStop
+
 EXIT_SUCCESS = 0
 EXIT_FAILED = 1
 EXIT_RECORD_FAILURES = 3
 EXIT_PAUSED = 4
+EXIT_QUOTA_STOP = 5
 
 
 class RunOutcome(str, Enum):
@@ -19,6 +24,7 @@ class RunOutcome(str, Enum):
     PAUSED_FOR_BATCH = "paused_for_batch"
     PAUSED = "paused"
     FAILED = "failed"
+    QUOTA_STOP = "quota_stop"
 
 
 EXIT_CODES: dict[RunOutcome, int] = {
@@ -27,6 +33,7 @@ EXIT_CODES: dict[RunOutcome, int] = {
     RunOutcome.PAUSED_FOR_BATCH: EXIT_PAUSED,
     RunOutcome.PAUSED: EXIT_PAUSED,
     RunOutcome.FAILED: EXIT_FAILED,
+    RunOutcome.QUOTA_STOP: EXIT_QUOTA_STOP,
 }
 
 # The run history keeps its three statuses; the documentation site reads no other.
@@ -36,6 +43,8 @@ TRACKER_STATUSES: dict[RunOutcome, str] = {
     RunOutcome.PAUSED_FOR_BATCH: "PAUSED",
     RunOutcome.PAUSED: "PAUSED",
     RunOutcome.FAILED: "FAILED",
+    # Nothing failed and the next run goes on from where this one stopped.
+    RunOutcome.QUOTA_STOP: "PAUSED",
 }
 
 
@@ -68,6 +77,12 @@ def classify_outcome(state_mgr: Any, execution_order: list[str]) -> RunOutcome:
     if actions_with_record_failures(state_mgr, execution_order):
         return RunOutcome.RECORD_FAILURES
     return RunOutcome.SUCCESS
+
+
+def report_quota_stop(stop: ProviderQuotaStop) -> None:
+    """Print the stop, unless the run that raised it has shown it already."""
+    if not getattr(stop, "_already_displayed", False):
+        click.echo(str(stop), err=True)
 
 
 def actions_with_record_failures(state_mgr: Any, execution_order: list[str]) -> list[str]:

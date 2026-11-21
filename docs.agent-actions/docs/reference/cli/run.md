@@ -72,6 +72,7 @@ or a CI job can read the code. It does not have to read the text that the comman
 | `2` | Usage error | The command line is not valid. Nothing ran |
 | `3` | Finished with failures | The workflow finished, but an action holds a record with the disposition `failed` or `exhausted`. The command names these actions. [`agac dispositions --quarantined`](./dispositions) lists the records, and [`agac retry`](./retry) repairs them |
 | `4` | Paused | A batch is open, or the run stopped before every action ended. Run the workflow again to continue. For a batch, you can also use `--wait` |
+| `5` | Quota or billing stop | A provider answered that the quota or the credit of the account is at its limit. The run stopped and failed nothing. Add credits. Then run the workflow again. See [When the quota of a provider is at its limit](#quota-stop) |
 | `130` | Interrupted | The user stopped the command (Ctrl+C). The batch jobs stay open |
 
 The code comes from the statuses of the actions in `agent_io/.agent_status.json`, which
@@ -86,6 +87,42 @@ exited `0`. They now exit `4` and `3`. A script that stops on each non-zero code
 must accept `4` after it submits a batch, or use `--wait`.
 :::
 
+## When the Quota of a Provider Is at Its Limit {/* #quota-stop */}
+
+A provider can answer that the quota, the credit or the balance of the account is at its limit. A wait clears a rate limit.
+A wait does not clear this answer. Each record that the run did not send yet gets the same answer.
+Thus the run stops:
+
+- The run does not retry the request, and sends no new request for that action. The OpenAI SDK also does not send the request again.
+- The records of the action that are already sent finish, and the run keeps their answers.
+- The record that got the answer, and each record that was not sent, keep no disposition. They are not `failed` and not `exhausted`.
+- The actions that run at the same time in the same step finish. The run starts no later action.
+- The action shows `interrupted` in [`agac status`](./utilities#status).
+- The run prints one message and exits with code `5`. The message says that the run stopped, and gives the provider and the text of its answer:
+
+```text
+■ my_workflow stopped — Provider quota or billing stop (ollama_cloud): you have reached your monthly usage limit (status code: 429). Add credits, then run again to resume.
+```
+
+After you add credits, run the workflow again with a plain `agac run`. The run answers only the records
+that have no answer, then continues with the later actions. You do not need `agac retry`. Do not use `--fresh`.
+If the quota is still at its limit, the run stops again in the same way.
+
+Agent Actions reads these answers as a quota or billing stop:
+
+| Answer | Providers |
+|--------|-----------|
+| HTTP 402 | Each provider and each [declared endpoint](../configuration/endpoints.md) |
+| HTTP 429 or 403 with `insufficient_quota` in its text | OpenAI |
+| HTTP 400 `invalid_request_error` with `credit balance is too low` in its text | Anthropic |
+| HTTP 429 or 403 with `usage limit` or `usage credits` in its text | Ollama Cloud |
+
+Each other HTTP 429 is a rate limit. The [retry policy](../execution/retry.md) retries a rate limit.
+
+In batch mode, the same rule applies when the provider refuses a batch at submission with one of these answers.
+The run stops at that file. A batch that another file already has at the provider stays, and the next run collects it.
+A billing error that a provider reports for one record inside the results of a finished batch fails that record.
+
 ## Wait for Batch Jobs {/* #wait-for-batch-jobs */}
 
 A run that submits a batch job pauses and exits `4`. The next `agac run` checks the batch job,
@@ -97,7 +134,7 @@ agac run -w my_workflow --wait --poll 60 --wait-timeout 86400
 
 While the run is paused for a batch, `--wait` sleeps for the `--poll` time. Then it runs the workflow again,
 as a second `agac run` does. It repeats this until no batch is open. The command then exits with the code
-of the final status: `0`, `1` or `3`.
+of the final status: `0`, `1`, `3` or `5`.
 
 `--fresh`, `--rerun` and `--verify-keys` apply to the first pass only. The later passes clear nothing.
 

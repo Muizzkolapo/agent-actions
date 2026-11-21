@@ -30,9 +30,11 @@ from agent_actions.cli.exit_codes import (
     RunOutcome,
     actions_with_record_failures,
     classify_outcome,
+    report_quota_stop,
 )
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
+from agent_actions.errors import ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.processing.disposition_gate import (
     answered_by_repair,
@@ -155,9 +157,14 @@ class RetryCommand:
         if self.args.dry_run:
             self._retry(paths, project_root)
             return
-        # Before the store is opened: a retry rewrites dispositions and runs the workflow.
-        with hold_run_lock(paths.io_dir, self.agent_name):
-            self._retry(paths, project_root)
+        try:
+            # Before the store is opened: a retry rewrites dispositions and runs the workflow.
+            with hold_run_lock(paths.io_dir, self.agent_name):
+                self._retry(paths, project_root)
+        except ProviderQuotaStop as stop:
+            # Its manifest stays, as after an interrupt, so the next retry resumes it.
+            report_quota_stop(stop)
+            raise SystemExit(EXIT_CODES[RunOutcome.QUOTA_STOP]) from None
 
     def _retry(self, paths: ProjectPaths, project_root: Path | None) -> None:
         backend = get_storage_backend(
@@ -398,6 +405,10 @@ class RetryCommand:
                 halted_above=_halted_among(failures, execution_order[:from_idx]),
             )
             outcome = classify_outcome(state_mgr, execution_order)
+        except ProviderQuotaStop as stop:
+            outcome = RunOutcome.QUOTA_STOP
+            error_message = str(stop)
+            raise
         except Exception:
             error_message = traceback.format_exc()
             raise

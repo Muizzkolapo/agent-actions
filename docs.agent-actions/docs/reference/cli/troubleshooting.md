@@ -51,6 +51,7 @@ For complex problems, send the debug output to a file: `AGENT_ACTIONS_LOG_LEVEL=
 | `2` | Usage error (invalid arguments) |
 | `3` | `agac run` or `agac retry` finished, but an action holds a failed or exhausted record |
 | `4` | `agac run` or `agac retry` paused: a batch is open, or the run stopped before every action ended |
+| `5` | `agac run` or `agac retry` stopped because a provider answered that the quota or the credit of the account is at its limit |
 | `130` | The user interrupted the command (Ctrl+C) |
 
 For the full meaning of each code of `agac run` and `agac retry`, see [Exit codes](./run.md#exit-codes).
