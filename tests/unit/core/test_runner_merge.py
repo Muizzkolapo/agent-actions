@@ -100,6 +100,7 @@ class TestStorageBackendMerge:
         # __new__ skips __init__, so the attributes the walk reads have to be
         # stated: a runner that is not repairing carries an empty set.
         runner.retried_records = frozenset()
+        runner.action_configs = {}
         return runner
 
     def test_merges_data_from_parallel_branches(self, runner):
