@@ -48,7 +48,7 @@ def _run(project, *args, checks_until_complete: int):
 
 
 # Every waiting run is bounded, so a batch that never completes fails a test, not the suite.
-WAIT = ("--wait", "--poll", "0.05", "--wait-timeout", "120")
+WAIT = ("--wait", "--poll", "1", "--wait-timeout", "120")
 
 
 def test_a_batch_run_with_wait_ends_with_exit_0_after_the_batches_finish(project):

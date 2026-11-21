@@ -155,6 +155,8 @@ class TestAProviderThatAnswers402AfterThreeRecords:
         assert output.count(PROVIDER_TEXT) == 1, output
         assert "Provider quota or billing stop (lab)" in output
         assert "Add credits, then run again to resume." in output
+        assert "stopped — Provider quota or billing stop" in output, output
+        assert "failed —" not in output, output
 
     def test_a_second_run_with_the_quota_back_finishes_with_no_retry(self, stopped, provider):
         root, _, _ = stopped

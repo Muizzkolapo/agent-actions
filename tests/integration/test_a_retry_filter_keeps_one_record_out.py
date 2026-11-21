@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
-from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
@@ -124,10 +124,10 @@ def _project(tmp_path: Path, *, guard: bool = False, pages: list[str] = PAGES) -
     return root
 
 
-def _agac(project: Path, *args: str, code: int | None = None) -> str:
+def _agac(project: Path, *args: str, code: int) -> str:
     result = run_agac(project, *args)
     output = result.stdout + result.stderr
-    assert result.returncode in (RAN_TO_ITS_END if code is None else {code}), output
+    assert result.returncode == code, output
     return output
 
 
@@ -181,7 +181,7 @@ def _failed(tmp_path: Path) -> tuple[Path, str, str]:
     """Run once: alpha and gamma fail at extract, beta goes through."""
     project = _project(tmp_path)
     (project / "FAIL_GAMMA").write_text("")
-    _agac(project, "run", "-a", WORKFLOW, "--fresh")
+    _agac(project, "run", "-a", WORKFLOW, "--fresh", code=EXIT_RECORD_FAILURES)
     return project, _failed_at_extract(project, "alpha"), _failed_at_extract(project, "gamma")
 
 
@@ -206,7 +206,7 @@ class TestAFilteredRecord:
         output = _filter(project, f"extract:{alpha}")
 
         assert "Filtered 1 record(s)" in output, output
-        plan = _agac(project, "retry", "-a", WORKFLOW, "--dry-run")
+        plan = _agac(project, "retry", "-a", WORKFLOW, "--dry-run", code=EXIT_SUCCESS)
         assert "Records to retry: 1" in plan, plan
         assert gamma[:8] in plan, plan
         assert alpha[:8] not in plan, plan
@@ -234,12 +234,12 @@ class TestAFilteredRecord:
         _filter(project, f"extract:{alpha}")
         (project / "FAIL_GAMMA").unlink()
 
-        output = _agac(project, "retry", "-a", WORKFLOW)
+        output = _agac(project, "retry", "-a", WORKFLOW, code=EXIT_SUCCESS)
 
         assert "cannot be attributed" not in output, output
         assert _handed(project) == ["Page beta.", "Page gamma."], output
         guarded = _project(tmp_path, guard=True)
-        _agac(guarded, "run", "-a", WORKFLOW, "--fresh")
+        _agac(guarded, "run", "-a", WORKFLOW, "--fresh", code=EXIT_SUCCESS)
         assert _target_guids(project, "finalize") == _target_guids(guarded, "finalize")
         # Its tombstone stays where it failed: a run carrying it forward re-asks a
         # record it holds no row for, and here no guard would filter it again.
@@ -248,7 +248,9 @@ class TestAFilteredRecord:
         )
         held = {key: value[0] for key, value in _dispositions(project).items()}
         assert held == {key: value[0] for key, value in _dispositions(guarded).items()}
-        quarantined = _agac(project, "dispositions", "-a", WORKFLOW, "--quarantined")
+        quarantined = _agac(
+            project, "dispositions", "-a", WORKFLOW, "--quarantined", code=EXIT_SUCCESS
+        )
         assert alpha[:8] not in quarantined, quarantined
 
     def test_survives_the_resume_of_an_interrupted_retry(self, tmp_path):
@@ -272,10 +274,10 @@ class TestAFilteredRecord:
         assert not [
             row for row in kept if row["record_id"] == alpha and row["action_name"] != "extract"
         ]
-        plan = _agac(project, "retry", "-a", WORKFLOW, "--dry-run")
+        plan = _agac(project, "retry", "-a", WORKFLOW, "--dry-run", code=EXIT_SUCCESS)
         assert alpha[:8] not in plan, plan
         assert gamma[:8] in plan, plan
-        output = _agac(project, "retry", "-a", WORKFLOW)
+        output = _agac(project, "retry", "-a", WORKFLOW, code=EXIT_SUCCESS)
         assert _dispositions(project)[("extract", alpha)][:2] == ("filtered", REASON), output
         assert ("finalize", alpha) not in _dispositions(project), output
         assert "Page alpha." not in _handed(project), output
@@ -358,6 +360,7 @@ class TestARefusedFilter:
             "--reason",
             REASON,
             "--dry-run",
+            code=EXIT_SUCCESS,
         )
 
         assert "would filter 1 record(s)" in output.lower(), output

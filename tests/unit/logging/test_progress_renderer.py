@@ -557,6 +557,17 @@ class TestAFailedRunIsUnmistakable:
         assert "schema 'answer' not found" in out
         assert "quiz_gen" in out, "the failure must name the workflow it belongs to"
 
+    def test_a_quota_stop_reads_stopped_not_failed(self, rendered):
+        out = rendered(
+            WorkflowFailedEvent(
+                workflow_name="quiz_gen",
+                error_message="Provider quota or billing stop (openai): insufficient_quota",
+                error_type="ProviderQuotaStop",
+            )
+        )
+        assert "quiz_gen stopped — Provider quota or billing stop (openai)" in out
+        assert "failed" not in out and "✗" not in out
+
     def test_the_footer_marks_a_failed_run(self, rendered):
         out = rendered(
             WorkflowCompleteEvent(

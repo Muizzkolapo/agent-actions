@@ -124,7 +124,7 @@ wrap_vendor_error()
      │
      ├── Quota or billing stop (every vendor, read first)
      │     ├── 402                               → QuotaExceededError, no event
-     │     └── 429/403 + a QUOTA_PHRASES phrase  → QuotaExceededError, no event
+     │     └── status + words in QUOTA_ANSWERS   → QuotaExceededError, no event
      │
      ├── Type-based match (OpenAI, Anthropic, Groq)
      │     ├── rate_limit_types     → RateLimitError + fire RateLimitEvent

@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
-from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "inline"
@@ -78,7 +78,7 @@ def _project(tmp_path: Path, mode: str, actions: str, pages: list[dict] = PAGES)
     return root
 
 
-def _run_to_the_end(project: Path, *command: str) -> str:
+def _run_to_the_end(project: Path, *command: str, ends_with: int) -> str:
     """Run *command*, a fresh run by default, then `agac run` until nothing is left to
     collect; the whole output."""
     outputs = []
@@ -87,9 +87,10 @@ def _run_to_the_end(project: Path, *command: str) -> str:
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode in RAN_TO_ITS_END, "\n".join(outputs)
         if "run again" not in output:
+            assert result.returncode == ends_with, "\n".join(outputs)
             return "\n".join(outputs)
+        assert result.returncode == EXIT_PAUSED, "\n".join(outputs)
         args = ["run", "-a", WORKFLOW]
     pytest.fail("the workflow never stopped asking to be run again:\n" + "\n".join(outputs))
 
@@ -122,7 +123,7 @@ def test_a_version_variable_renders_each_versions_value(tmp_path, mode):
 """,
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     for i in (1, 2, 3):
         assert _prompts(project, f"extract_raw_qa_{i}") == [
@@ -147,7 +148,7 @@ def test_a_custom_version_param_renders_the_versions_value(tmp_path, mode):
 """,
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     for i in (1, 2):
         assert _prompts(project, f"classify_{i}") == [
@@ -179,7 +180,7 @@ def test_an_inline_prompt_reads_each_records_upstream_field(tmp_path, mode):
 """,
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     assert _prompts(project, "simple_validate") == [
         f"Validate these facts: facts of {page['page_id']}\n"
@@ -210,7 +211,7 @@ def test_a_branch_on_the_version_renders_per_version_and_per_record(tmp_path, mo
 """,
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     focus = {1: "explicit statements", 2: "implicit meanings", 3: "contextual clues"}
     for i, words in focus.items():
@@ -239,7 +240,7 @@ def test_a_setting_that_branches_on_the_version_takes_each_versions_branch(tmp_p
 """,
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     for i, model in ((1, "model-one"), (2, "model-two"), (3, "model-three")):
         rows = trace_rows(
@@ -281,7 +282,7 @@ def test_a_value_the_prompt_captures_per_record_is_tested_per_record(tmp_path, m
         pages,
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     assert [prompt.strip() for prompt in _prompts(project, "triage")] == [
         "ESCALATE NOW. Kind=urgent len=6",
@@ -339,7 +340,7 @@ def test_an_inline_prompt_sends_each_record_what_its_store_twin_sends(tmp_path, 
     project = _project(tmp_path, mode, actions, pages)
     (project / "prompt_store" / "twins.md").write_text("# Twins\n\n" + "\n".join(store))
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     for case, (_, expected) in _TWINS.items():
         inline = [prompt.strip() for prompt in _prompts(project, f"inline_{case}")]
@@ -392,11 +393,11 @@ def test_agac_retry_sends_an_inline_prompt_per_record_and_per_version(tmp_path, 
     (project / "tools" / WORKFLOW / "flaky.py").write_text(_FLAKY_TOOL)
     marker = project / "fail_page"
     marker.write_text("p1")
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_RECORD_FAILURES)
     assert _prompts(project, "ask_1") == ["First strategy 1: facts of p0\n"]
     marker.unlink()
 
-    _run_to_the_end(project, "retry", "-a", WORKFLOW)
+    _run_to_the_end(project, "retry", "-a", WORKFLOW, ends_with=EXIT_SUCCESS)
 
     for i, word in ((1, "First"), (2, "Second")):
         assert _prompts(project, f"ask_{i}") == [
