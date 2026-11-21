@@ -20,6 +20,7 @@ from agent_actions.errors import (
     enrich_exception_context,
 )
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.input.context.normalizer import observe_entry_reference
 from agent_actions.llm.providers.tools.builtin import ROUTE, builtin_tool, runs_udf
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
@@ -127,7 +128,8 @@ def _observes(config: dict[str, Any], path: str) -> bool:
     """Whether the run gives *config* the field *path* (``<action>.<field>[.<field>...]``).
 
     An observe gives a tool the top field it names, or every field with ``*``; a bare
-    action name or a deeper path gives it nothing it can read at *path*.
+    action name or a deeper path gives it nothing it can read at *path*. An optional
+    entry (``a.b?`` or a mapping) counts by the reference it names.
     """
     scope = config.get("context_scope")
     observed = scope.get("observe") if isinstance(scope, dict) else None
@@ -135,7 +137,8 @@ def _observes(config: dict[str, Any], path: str) -> bool:
         return False
     root, _, rest = path.partition(".")
     top = rest.split(".", 1)[0]
-    return any(ref in (f"{root}.{top}", f"{root}.*") for ref in observed if isinstance(ref, str))
+    references = (observe_entry_reference(entry) for entry in observed)
+    return any(ref in (f"{root}.{top}", f"{root}.*") for ref in references)
 
 
 class PreflightService:
