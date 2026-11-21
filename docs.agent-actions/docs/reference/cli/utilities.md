@@ -173,6 +173,8 @@ If you did not retrieve the batch results yet, retrieve them before you clean. `
 
 Build and serve interactive documentation for your workflows. In one step, the `docs` command scans your project, generates the documentation data and starts an HTTP server.
 
+The documentation lists an [optional observe field](../context/context-scope.md#optional-fields) as a plain input of the action, without the `?`.
+
 ```bash
 agac docs [options]
 ```
