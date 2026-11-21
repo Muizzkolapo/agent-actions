@@ -1013,12 +1013,11 @@ def _process_online_mode_with_record_processor(
         ctx.agent_name, processing_context.target_relative_path
     )
     if ctx.retried_records and processing_context.target_relative_path:
-        from agent_actions.processing.repair_lineage import note_rewritten_by_repair
-        from agent_actions.workflow.pipeline import _actions_below
+        from agent_actions.processing.repair_lineage import actions_below, note_rewritten_by_repair
 
         note_rewritten_by_repair(
             ctx.storage_backend,
-            _actions_below(ctx.storage_backend, ctx.agent_name),
+            actions_below(ctx.storage_backend, ctx.agent_name),
             stored_before,
             _stored_rows(
                 ctx.storage_backend, ctx.agent_name, processing_context.target_relative_path

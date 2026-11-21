@@ -302,6 +302,8 @@ Under a repair policy, the action does not only report the quality. It enforces 
         hint: write exactly four options, one correct and three plausible distractors
 ```
 
+A repair generates the output of this one action again, against its own rules. When the verdict comes from later actions (a tool, a validator LLM, an examiner), or when several actions must run again and the next attempt must read what they found, use a [loop](../configuration/loops.md#loop-or-repair) instead.
+
 Each iteration runs the **full** suite again, not only the rules that failed the last time. If a repair fixes one rule but breaks another rule, the repair does not pass. The only difference between the policies is what the regeneration prompt says:
 
 - **`retry`** sends the original prompt again with no change. Use it when failures look like sampling noise.
