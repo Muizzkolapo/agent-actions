@@ -85,6 +85,23 @@ class TestTheEditor:
             "Unresolved action reference `b1`.",
         ]
 
+    def test_an_output_of_an_include_with_as_resolves_by_its_prefixed_name(self, tmp_path):
+        workflow = _project(tmp_path, [A, INCLUDE])
+        workflow.write_text(
+            HOST.format(read="c2__b2").replace("- include: pair", "- include: pair\n    as: c2")
+        )
+        index = build_index(tmp_path)
+
+        assert [
+            d.message
+            for d in collect_diagnostics(workflow, index)
+            if d.message.startswith(("Unresolved action reference", "Cannot resolve"))
+        ] == []
+        location = index.get_action("c2__b2", workflow)
+        assert location is not None
+        assert location.file_path == tmp_path / "branches" / "pair.yml"
+        assert index.get_action("b2", workflow) is None
+
     def test_the_output_points_at_the_branch_file(self, tmp_path):
         _project(tmp_path, [A, INCLUDE, C])
 

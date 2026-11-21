@@ -84,6 +84,7 @@ const sidebars: SidebarsConfig = {
           },
           items: [
             'reference/configuration/templates',
+            'reference/configuration/branches',
             'reference/configuration/defaults',
             'reference/configuration/endpoints',
           ],

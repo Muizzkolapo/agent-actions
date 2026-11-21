@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A branch action named like a framework namespace (`source`, `seed`, `version`, `workflow`, ...) is refused at load with `Reserved action name ''<name>'' cannot be used`, as in a workflow without an include. It hid that namespace from its instance.'
+time: 2026-11-21T13:30:00Z
