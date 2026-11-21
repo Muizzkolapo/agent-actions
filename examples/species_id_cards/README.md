@@ -26,8 +26,8 @@ combinations rather than in any one directive.
 ## Run it
 
 ```bash
-agac inspect -a species_id_cards -u tools
-agac run -a species_id_cards -u tools --fresh
+agac inspect -w species_id_cards -u tools
+agac run -w species_id_cards -u tools --fresh
 ```
 
 Offline, with no API key: point `model_vendor` at the built-in mock and the whole

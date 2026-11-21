@@ -233,7 +233,7 @@ defaults:
 ```
 
 ```bash
-AGAC_RUN_MODE=batch agac run -a my_workflow
+AGAC_RUN_MODE=batch agac run -w my_workflow
 ```
 
 - The value comes from the environment of the `agac` command. The project's `.env` is read into it first, and a variable that the shell already sets keeps the shell's value.
@@ -293,7 +293,7 @@ To see the rendered output, use `agac run`. It saves the rendered workflow under
 
 If the rendered text is not valid YAML, the framework saves it to `.agent-actions/cache/rendered_workflows/<workflow>_failed.yml`. The error shows the line and the column of the failure in the rendered text, with the lines around it. The saved file has the same line numbers. The error does not print the saved path. A Jinja error, for example an undefined name, is reported without a saved file.
 
-For deeper debugging, use `agac inspect context -a my_workflow <action_name>`. It shows the data namespaces and variables that are available to the template of a specific action.
+For deeper debugging, use `agac inspect context -w my_workflow <action_name>`. It shows the data namespaces and variables that are available to the template of a specific action.
 
 ## Best Practices
 
@@ -342,7 +342,7 @@ Always verify the template expansion before you run the workflow:
 
 ```bash
 # Render and validate; a rendering failure exits non-zero.
-agac inspect -a my_workflow
+agac inspect -w my_workflow
 ```
 
 ### 5. Use Whitespace Control

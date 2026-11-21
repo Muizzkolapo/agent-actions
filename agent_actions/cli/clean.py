@@ -5,7 +5,11 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.args import CleanCommandArgs
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.llm.realtime.cleaner import Cleaner
 
 
@@ -20,13 +24,7 @@ from agent_actions.llm.realtime.cleaner import Cleaner
         "a provider recorded locally about this workflow's batches."
     ),
 )
-@click.option(
-    "-a",
-    "--agent",
-    required=True,
-    metavar="<agent>",
-    help="Name of the agent whose workspace should be cleaned.",
-)
+@workflow_option(help="Name of the workflow whose workspace should be cleaned.")
 @click.option("-f", "--force", is_flag=True, default=False, help="Skip interactive confirmation.")
 @click.option(
     "--target",

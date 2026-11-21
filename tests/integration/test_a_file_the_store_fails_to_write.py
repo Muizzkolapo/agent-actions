@@ -14,6 +14,7 @@ from contextlib import contextmanager
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_answers import (
     ACTION,
@@ -179,7 +180,7 @@ def test_a_file_a_batch_collect_pass_fails_to_store_is_reported_as_a_failed_writ
     project,  # noqa: F811
 ):
     """The collect pass stores a file through the same writer, so it said the same."""
-    assert _run("--fresh").exit_code == 0
+    assert _run("--fresh").exit_code == EXIT_PAUSED
     fault = OSError(28, "No space left on device")
     with _the_store_fails_to_write(ACTION, NOT_STORED, fault):
         result = _run()
@@ -274,13 +275,13 @@ def test_a_batch_file_the_store_fails_to_collect_on_a_rerun_is_collected_by_a_la
     complete over the file's rows from before the edit and exited 0, and no later run
     collected it. The edit's batch for the file is answered and waiting, so a later run
     collects it rather than sending the file again."""
-    assert _run("--fresh").exit_code == 0
+    assert _run("--fresh").exit_code == EXIT_PAUSED
     assert _run().exit_code == 0
     assert _status(project) == "completed"
     before_the_edit = _stored(project)
 
     _edit_prompt(project)
-    assert _run("--rerun", ACTION).exit_code == 0
+    assert _run("--rerun", ACTION).exit_code == EXIT_PAUSED
     with _the_store_fails_to_write(ACTION, NOT_STORED, sqlite3.OperationalError("disk I/O")):
         failed = _run()
     assert failed.exit_code == 1, failed.output

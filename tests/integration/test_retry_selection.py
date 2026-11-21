@@ -4,6 +4,7 @@ import json
 
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.processing.result_collector import write_node_level_disposition
 from agent_actions.storage.backend import DISPOSITION_SKIPPED, NODE_LEVEL_RECORD_ID
@@ -37,7 +38,7 @@ def test_named_retry_preserves_other_failure_and_output(chained):  # noqa: F811
 
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(chained, selected, SECOND) == "success"
     backend = _backend(chained)
     try:

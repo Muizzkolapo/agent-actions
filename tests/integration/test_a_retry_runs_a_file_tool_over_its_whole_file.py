@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
@@ -296,15 +297,19 @@ def _env(project: Path) -> dict[str, str]:
     return {"ROLL_DIR": str(project), "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
 
 
-def _run(project: Path, *args: str) -> str:
-    """`agac run` until nothing is left in flight, returning the last run's output."""
+def _run(project: Path, *args: str, ends_with: int) -> str:
+    """`agac run` until nothing is left in flight, returning the last run's output.
+
+    Each run that asks to be run again pauses for a batch; the last exits *ends_with*.
+    """
     output = ""
     for _ in range(4):
         result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", *args, env=_env(project))
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
         if "run again" not in output:
+            assert result.returncode == ends_with, output
             return output
+        assert result.returncode == EXIT_PAUSED, output
         args = tuple(arg for arg in args if arg != "--fresh")
     pytest.fail(f"the workflow never stopped asking to be run again:\n{output}")
 
@@ -312,8 +317,9 @@ def _run(project: Path, *args: str) -> str:
 def _retry(project: Path, *args: str) -> str:
     result = run_agac(project, "retry", "-a", WORKFLOW, *args, env=_env(project))
     output = result.stdout + result.stderr
-    assert result.returncode == 0, output
-    assert "Retry complete." in output, output
+    assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
+    ended = "Retry paused" if result.returncode == EXIT_PAUSED else "Retry complete."
+    assert ended in output, output
     return output
 
 
@@ -387,7 +393,7 @@ def _finalized(project: Path) -> list[str]:
 def _failed_then_fixed(project: Path, flag: str = "fail_alpha") -> dict[str, list[dict]]:
     """A run in which alpha fails, then the fault gone; returns what roll_up then held."""
     (project / flag).touch()
-    _run(project, "--fresh")
+    _run(project, "--fresh", ends_with=EXIT_RECORD_FAILURES)
     (project / flag).unlink()
     (project / "handed.jsonl").unlink(missing_ok=True)
     (project / "final.jsonl").unlink(missing_ok=True)
@@ -433,7 +439,7 @@ class TestARollUpOverTheFile:
         _failed_then_fixed(project)
         _retry(project)
 
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
 
@@ -474,7 +480,7 @@ class TestACountAcrossTheFile:
         assert killed.returncode != 0, killed.stdout + killed.stderr
         (project / "die").unlink()
 
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert _summaries(_rows(project)["pages1.json"]) == [
             "Page alpha. (1 of 2)",
@@ -494,7 +500,7 @@ class TestACountAcrossTheFile:
         (project / "die_on_gamma").unlink()
         (project / "handed.jsonl").unlink()
 
-        _run(project)
+        _run(project, ends_with=EXIT_RECORD_FAILURES)
 
         assert _handed(project) == [["Page gamma.", "Page delta."]]
         rows = _rows(project)
@@ -553,7 +559,7 @@ def test_a_review_a_retry_reaches_shows_only_the_records_it_names(tmp_path):
     approve = {**_env(project), "AGAC_HITL_AUTO_APPROVE": "true"}
     (project / "fail_alpha").touch()
     result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh", env=approve)
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == EXIT_RECORD_FAILURES, result.stdout + result.stderr
     (project / "fail_alpha").unlink()
     reviewed = {
         r["source_guid"]
@@ -618,7 +624,7 @@ class TestWhatReadsTheToolAnswersTheFileAgain:
         _retry(project)
         (project / "final.jsonl").unlink(missing_ok=True)
 
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert _finalized(project) == []
         rows = _rows(project, "finalize")["pages1.json"]
@@ -637,7 +643,7 @@ class TestWhatReadsTheToolAnswersTheFileAgain:
         (project / "die_below").unlink()
         (project / "handed.jsonl").unlink()
 
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert _handed(project) == []
         assert _summaries(_rows(project, "finalize")["pages1.json"], "finalize") == [
@@ -651,7 +657,7 @@ class TestWhatReadsTheToolAnswersTheFileAgain:
         before = _rows(project, "restate")["pages2.json"]
 
         _retry(project)
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         rows = _rows(project, "restate")
         assert [r["source_guid"] for r in rows["pages1.json"]] == [
@@ -675,7 +681,7 @@ def test_a_record_limit_on_the_roll_up_admits_what_a_run_admits(tmp_path):
         "pages2.json": ["Page gamma.", "Page delta."],
     }
     project = _project(tmp_path, config, _ROLL_UP, staged)
-    _run(project, "--fresh")
+    _run(project, "--fresh", ends_with=EXIT_SUCCESS)
     assert _summaries(_rows(project)["pages1.json"]) == ["Page alpha. + Page beta."]
     _failed_then_fixed(project)
 
@@ -915,7 +921,7 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
         (project / "handed.jsonl").unlink(missing_ok=True)
         (project / "final.jsonl").unlink(missing_ok=True)
 
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert _handed(project) == []
         assert _finalized(project) == []
@@ -970,7 +976,7 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
         project = _project(tmp_path, COUNT_BELOW, _PER_RECORD_REFUSING_GAMMA, staged)
         (project / "tools" / WORKFLOW / "roll_count.py").write_text(_COUNT_BELOW_TOOL)
         (project / "fail_alpha").touch()
-        _run(project, "--fresh")
+        _run(project, "--fresh", ends_with=EXIT_RECORD_FAILURES)
         assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
             None,
             "Page beta. (item) [1 of 2]",
@@ -981,7 +987,7 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
 
         result = run_agac(project, "retry", "-a", WORKFLOW, env=_env(project))
 
-        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.returncode == EXIT_RECORD_FAILURES, result.stdout + result.stderr
         assert _logged(project, "count_handed.jsonl") == [["Page beta. (item)"]]
         # Quarantined rows first, as FILE mode writes a file.
         assert _summaries(_rows(project, "roll_count")["pages1.json"], "roll_count") == [
@@ -1040,7 +1046,7 @@ class TestARowTheToolWritesAgainUnchangedIsCarriedBelow:
         (beta,) = [guid for guid, row in before.items() if row["_state"] == "processed"]
 
         output = _retry(project)
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert "submitted: 1 requests" in output, output
         after = _by_guid(_rows(project, "restate", as_stored=True)["pages1.json"])
@@ -1193,7 +1199,7 @@ class TestARowAnExpandingToolWritesAgainUnchangedIsCarriedBelow:
         (project / "handed.jsonl").unlink(missing_ok=True)
         (project / "final.jsonl").unlink(missing_ok=True)
 
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert _handed(project) == []
         assert _finalized(project) == []
@@ -1219,6 +1225,6 @@ class TestARowAnExpandingToolWritesAgainUnchangedIsCarriedBelow:
         _failed_then_fixed(project)
 
         output = _retry(project)
-        _run(project)
+        _run(project, ends_with=EXIT_SUCCESS)
 
         assert "submitted: 2 requests" in output, output
