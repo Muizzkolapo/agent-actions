@@ -65,8 +65,8 @@ Note: failures also exist at: verify_b. Run 'retry' again after this completes t
 ### Retry until no failure is left {/* #retry-all */}
 
 ```bash
-agac retry -a my_workflow --all
-agac retry -a my_workflow --all --max-passes 5
+agac retry -w my_workflow --all
+agac retry -w my_workflow --all --max-passes 5
 ```
 
 `--all` repeats the retry. Each pass is one retry from the earliest action that holds a failed or
