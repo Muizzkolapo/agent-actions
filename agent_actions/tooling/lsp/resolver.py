@@ -115,8 +115,10 @@ def get_reference_at_position(content: str, line: int, character: int) -> Refere
                 raw_text=file_match.group(0),
             )
 
-    # 8. Context scope references: - action.field
-    context_match = re.search(r"^\s*-\s*([A-Za-z_][\w\.]*)", current_line)
+    # 8. Context scope references: - action.field, or an observe entry's `field: action.field`
+    context_match = re.search(
+        r"(?:^\s*-\s*|[{,]\s*)field:\s*['\"]?([A-Za-z_][\w\.]*)", current_line
+    ) or re.search(r"^\s*-\s*([A-Za-z_][\w\.]*)", current_line)
     if context_match and is_in_context_scope_list(lines, line):
         start = context_match.start(1)
         end = context_match.end(1)

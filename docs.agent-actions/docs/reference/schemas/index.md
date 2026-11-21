@@ -663,7 +663,7 @@ ls schema/*.yml schema/*.yaml schema/*.json agent_workflow/*/schema/*
 Agent Actions checks a schema file when it loads the workflow that names the file. To check a schema file and not run the workflow, use this command:
 
 ```bash
-agac inspect -a my_workflow
+agac inspect -w my_workflow
 ```
 
-If the command shows the action list, pre-flight passed. This includes the check for malformed schemas. To see what the schema of each action declares and how the fields go between actions, run `agac schema -a my_workflow`.
+If the command shows the action list, pre-flight passed. This includes the check for malformed schemas. To see what the schema of each action declares and how the fields go between actions, run `agac schema -w my_workflow`.

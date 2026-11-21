@@ -18,6 +18,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -75,10 +76,15 @@ def _made_by(rows: list[dict], guid: str) -> set[str]:
     return {r["source_guid"] for r in rows if r.get("producer_source_guids") == [guid]}
 
 
-def _retry(project, *args: str):  # noqa: F811
+def _retry(project, *args: str, exits: int):  # noqa: F811
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, *args])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == exits, result.output
     return result
+
+
+def _ends_with(failed_at: str) -> int:
+    """A failure put on the first split leaves a failed record held after the retry."""
+    return EXIT_RECORD_FAILURES if failed_at == "split" else EXIT_SUCCESS
 
 
 def test_the_premise_a_row_of_the_second_mint_names_no_input_of_its_action_as_parent(two_mints):
@@ -99,7 +105,7 @@ class TestRetryingARowOfTheFirstMint:
         assert len(stale) == 2
         _fail(two_mints, selected, failed_at)
 
-        result = _retry(two_mints, "--record", selected)
+        result = _retry(two_mints, "--record", selected, exits=_ends_with(failed_at))
 
         after = _rows(two_mints, "split2")
         assert len(after) == RECORDS * 4
@@ -112,19 +118,19 @@ class TestRetryingARowOfTheFirstMint:
         selected = _rows(two_mints, "split")[0]["source_guid"]
         for _ in range(2):
             _fail(two_mints, selected, failed_at)
-            _retry(two_mints, "--record", selected)
+            _retry(two_mints, "--record", selected, exits=_ends_with(failed_at))
 
         assert len(_rows(two_mints, "split2")) == RECORDS * 4
 
     def test_a_plain_run_afterwards_changes_nothing(self, two_mints, failed_at):
         selected = _rows(two_mints, "split")[0]["source_guid"]
         _fail(two_mints, selected, failed_at)
-        _retry(two_mints, "--record", selected)
+        _retry(two_mints, "--record", selected, exits=_ends_with(failed_at))
         settled = sorted(r["source_guid"] for r in _rows(two_mints, "split2"))
 
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == _ends_with(failed_at), result.output
         assert sorted(r["source_guid"] for r in _rows(two_mints, "split2")) == settled
 
 
@@ -160,7 +166,7 @@ def batch_below(two_mints, monkeypatch):
     (two_mints / "prompt_store" / f"{WORKFLOW}.md").write_text(PUBLISH_PROMPT)
     for _ in range(3):
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
-        assert result.exit_code == 0, result.output
+        assert result.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), result.output
         if len(_rows(two_mints, "publish")) == RECORDS * 4:
             break
     assert len(_rows(two_mints, "publish")) == RECORDS * 4
@@ -178,9 +184,9 @@ def test_a_batch_action_below_leaves_the_replacement_as_online_does(batch_below)
     stale = _made_by(_rows(batch_below, "split2"), selected)
     _fail(batch_below, selected, "split")
 
-    result = _retry(batch_below, "--record", selected)
+    result = _retry(batch_below, "--record", selected, exits=EXIT_PAUSED)
     collected = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
-    assert collected.exit_code == 0, collected.output
+    assert collected.exit_code == EXIT_RECORD_FAILURES, collected.output
 
     after = _rows(batch_below, "split2")
     assert len(after) == RECORDS * 4
@@ -197,7 +203,7 @@ def test_a_retry_of_every_failure_replaces_the_rows_too(two_mints):
     stale = _made_by(_rows(two_mints, "split2"), selected)
     _fail(two_mints, selected, "split2")
 
-    result = _retry(two_mints)
+    result = _retry(two_mints, exits=EXIT_SUCCESS)
 
     after = _rows(two_mints, "split2")
     assert len(after) == RECORDS * 4
@@ -213,7 +219,7 @@ def test_retrying_a_row_of_the_first_mint_leaves_the_diamond_its_size(diamond): 
     assert len(stale) == 2
     _fail(diamond, selected, "split")
 
-    result = _retry(diamond, "--record", selected)
+    result = _retry(diamond, "--record", selected, exits=EXIT_RECORD_FAILURES)
 
     after = _rows(diamond, "combine")
     assert len(after) == len(before)
@@ -288,7 +294,7 @@ def test_a_file_row_keeping_one_inputs_identity_survives_a_repair_of_another_fil
     assert len(untouched) == 2
     _fail(pairs_in_two_files, selected, ACTION)
 
-    _retry(pairs_in_two_files, "--record", selected)
+    _retry(pairs_in_two_files, "--record", selected, exits=EXIT_SUCCESS)
 
     after = _rows(pairs_in_two_files, "pairs")
     assert len(after) == 4

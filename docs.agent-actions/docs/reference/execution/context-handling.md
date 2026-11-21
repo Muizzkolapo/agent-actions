@@ -118,7 +118,7 @@ In the release after 3.0.0, Agent Actions changes the prompt of each online requ
 1. **Always put a namespace on the fields in a template** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never use a bare `{{ field }}`.
 2. **Select a mode for cost or latency, not for templates** — `run_mode: batch` changes when the LLM calls occur. It does not change the context that the prompt sees.
 3. **Use seed data for static content** — seed data works identically in the two modes.
-4. **Examine the rendered prompts** — `agac traces -w <workflow> -a <action>` shows the exact text that the LLM received.
+4. **Examine the rendered prompts** — `agac traces -w <workflow> -A <action>` shows the exact text that the LLM received.
 
 ## See Also
 

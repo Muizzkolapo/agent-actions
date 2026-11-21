@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
@@ -45,7 +46,7 @@ def submitted_and_collected(tmp_path):
         json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
     )
 
-    _cycle(root, "run", "-a", WORKFLOW, "--fresh")
+    _cycle(root, "run", "-a", WORKFLOW, "--fresh", ends_with=EXIT_SUCCESS)
     assert len(_guids(root)) == RECORDS, "the fixture did not collect a row per staged record"
     return root
 
@@ -60,17 +61,20 @@ def _unwrapped(output):
     return " ".join(output.split())
 
 
-def _cycle(project, *args):
-    """Drive one command to completion: it submits and pauses, the next run collects."""
+def _cycle(project, *args, ends_with: int):
+    """Drive one command to completion: it submits and pauses, the next run collects.
+
+    Each command that asks to be run again pauses for a batch; the last exits *ends_with*.
+    """
     transcript = []
     code, output = _agac(project, *args)
-    assert code == 0, output
     transcript.append(output)
     while "run again" in transcript[-1]:
+        assert code == EXIT_PAUSED, output
         assert len(transcript) <= RECORDS, "the batch never stopped asking to be run again"
         code, output = _agac(project, "run", "-a", WORKFLOW)
-        assert code == 0, output
         transcript.append(output)
+    assert code == ends_with, output
     return transcript
 
 
@@ -179,7 +183,7 @@ def two_files(tmp_path):
         staging.joinpath(name).write_text(
             json.dumps([{"page_id": f"{name}{i}", "page_content": f"{name} {i}"} for i in range(2)])
         )
-    _cycle(root, "run", "-a", WORKFLOW, "--fresh")
+    _cycle(root, "run", "-a", WORKFLOW, "--fresh", ends_with=EXIT_SUCCESS)
     return root
 
 
@@ -213,7 +217,7 @@ class TestTheRepairSubmitsWhatItNamed:
         _set_disposition(project, selected, "failed")
 
         code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
 
         added = {b: n for b, n in _submitted_batches(project).items() if b not in before}
         assert list(added.values()) == [1], (
@@ -227,7 +231,7 @@ class TestTheRepairSubmitsWhatItNamed:
         selected = _guids(project)[0]
         _set_disposition(project, selected, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_SUCCESS)
 
         assert _dispositions(project)[selected] == "success"
 
@@ -239,7 +243,7 @@ class TestTheRepairSubmitsWhatItNamed:
         selected = before[0]
         _set_disposition(project, selected, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_SUCCESS)
 
         assert _guids(project) == before
 
@@ -256,7 +260,9 @@ class TestARecordTheRepairDidNotName:
         _set_disposition(project, selected, "failed")
         _set_disposition(project, unnamed, "exhausted")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(
+            project, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_RECORD_FAILURES
+        )
 
         assert _dispositions(project)[unnamed] == "exhausted"
 
@@ -268,7 +274,9 @@ class TestARecordTheRepairDidNotName:
         _set_disposition(project, selected, "failed")
         _set_disposition(project, unnamed, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(
+            project, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_RECORD_FAILURES
+        )
 
         assert _dispositions(project)[unnamed] == "failed"
 
@@ -284,7 +292,9 @@ class TestARecordTheRepairDidNotName:
         _set_disposition(project, selected, "failed")
         _set_disposition(project, unnamed, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(
+            project, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_RECORD_FAILURES
+        )
 
         assert unnamed in _guids(project)
 
@@ -297,7 +307,7 @@ class TestARecordTheRepairDidNotName:
         selected, unnamed = _guids(project)[0], _guids(project)[-1]
         _set_disposition(project, selected, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(project, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_SUCCESS)
 
         assert _rows(project)[unnamed] == before[unnamed]
 
@@ -313,7 +323,9 @@ class TestAFileTheRepairNeverNamed:
         _set_disposition(two_files, selected, "failed")
         _set_disposition(two_files, unnamed, "exhausted")
 
-        _cycle(two_files, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(
+            two_files, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_RECORD_FAILURES
+        )
 
         assert _dispositions(two_files)[unnamed] == "exhausted"
 
@@ -323,7 +335,7 @@ class TestAFileTheRepairNeverNamed:
         before = _rows(two_files)
         _set_disposition(two_files, selected, "failed")
 
-        _cycle(two_files, "retry", "-a", WORKFLOW, "--record", selected)
+        _cycle(two_files, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_SUCCESS)
 
         assert _rows(two_files)[unnamed] == before[unnamed]
 
@@ -374,7 +386,7 @@ class TestARepairArrivingWhileABatchIsInFlight:
             json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
         )
         code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
         assert "run again" in output, "the fixture collected the batch instead of pausing on it"
         return root
 
@@ -482,7 +494,16 @@ class TestARepairArrivingWhileABatchIsInFlight:
         named = _deferred_ids(project)[0]
         _set_disposition(project, named, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+        _cycle(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--abandon-in-flight",
+            ends_with=EXIT_RECORD_FAILURES,
+        )
 
         assert _dispositions(project)[named] == "success"
 
@@ -499,7 +520,16 @@ class TestARepairArrivingWhileABatchIsInFlight:
         assert others, "the fixture batch holds only one record; nothing to strand"
         _set_disposition(project, named, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+        _cycle(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--abandon-in-flight",
+            ends_with=EXIT_RECORD_FAILURES,
+        )
 
         after = _dispositions(project)
         assert [after[r] for r in others] == ["failed"] * len(others), (
@@ -531,13 +561,13 @@ class TestARepairArrivingWhileABatchIsInFlight:
     def test_collecting_first_lets_the_repair_through(self, submitted_not_collected):
         """The refusal names a way forward, so the way forward has to work."""
         project = submitted_not_collected
-        _cycle(project, "run", "-a", WORKFLOW)
+        _cycle(project, "run", "-a", WORKFLOW, ends_with=EXIT_SUCCESS)
         selected = _guids(project)[0]
         _set_disposition(project, selected, "failed")
 
         code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
 
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
 
 
 class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
@@ -560,7 +590,7 @@ class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
             json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
         )
         code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
         assert "run again" in output, "the fixture collected the batch instead of pausing on it"
         backend = _backend(root)
         try:
@@ -587,7 +617,7 @@ class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
         _set_disposition(project, named, "failed")
 
         _agac(project, "retry", "-a", WORKFLOW, "--record", named)
-        _cycle(project, "run", "-a", WORKFLOW)
+        _cycle(project, "run", "-a", WORKFLOW, ends_with=EXIT_SUCCESS)
 
         after = _dispositions(project)
         assert [after[r] for r in others] == ["success"] * len(others), after
@@ -598,7 +628,16 @@ class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
         named, *others = _deferred_ids(project)
         _set_disposition(project, named, "failed")
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+        _cycle(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--abandon-in-flight",
+            ends_with=EXIT_RECORD_FAILURES,
+        )
 
         after = _dispositions(project)
         assert after[named] == "success"
@@ -618,7 +657,16 @@ class TestARepairArrivingWhileAFinishedBatchWaitsToBeCollected:
         finally:
             backend.close()
 
-        _cycle(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+        _cycle(
+            project,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            named,
+            "--abandon-in-flight",
+            ends_with=EXIT_RECORD_FAILURES,
+        )
 
         after = _dispositions(project)
         assert {r: after.get(r) for r in others} == dict.fromkeys(others, "failed")
@@ -649,4 +697,4 @@ class TestACompletedActionWithAnEntryThatPredatesTheCollectedStamp:
 
         code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", selected)
 
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output

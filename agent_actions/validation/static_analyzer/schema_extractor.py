@@ -274,6 +274,7 @@ class SchemaExtractor:
             input_schema.is_dynamic = True
             return
 
+        optional = context_scope.get("optional") or {}
         for field_ref in all_refs:
             if not isinstance(field_ref, str):
                 continue
@@ -285,12 +286,14 @@ class SchemaExtractor:
 
                 if field_path == "*":
                     input_schema.required_fields.add(f"{dep_name}.*")
+                elif field_ref in optional:
+                    input_schema.optional_fields.add(field_ref)
                 else:
                     input_schema.required_fields.add(field_ref)
             else:
                 input_schema.required_fields.add(f"{field_ref}.*")
 
-        if input_schema.required_fields:
+        if input_schema.all_fields:
             input_schema.is_dynamic = False
             input_schema.derived_from_context_scope = True
 

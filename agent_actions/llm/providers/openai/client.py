@@ -16,6 +16,7 @@ from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
+import httpx
 import openai
 from openai import OpenAI
 from openai.types.chat import (
@@ -30,6 +31,7 @@ from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     empty_parse_error,
     empty_response_error,
+    is_quota_answer,
     is_truncated,
     refusal_text,
     unfinished_parse_error,
@@ -65,6 +67,30 @@ _ERROR_MAPPING = VendorErrorMapping(
     base_api_error_type=openai.APIError,
     supports_retry_after=True,
 )
+
+
+_RATE_LIMITED = 429
+
+
+def without_quota_retries(client: Any, vendor: str) -> Any:
+    """*client*, which sends no request again after a 429 that says the quota is at its limit.
+
+    The SDK sends each 429 again, twice by default, before it raises; no wait clears a quota.
+    """
+    sdk_should_retry = getattr(client, "_should_retry", None)
+    if sdk_should_retry is None or getattr(client, "_agac_quota_retries_off", False):
+        return client
+
+    def _should_retry(response: httpx.Response) -> bool:
+        if response.status_code == _RATE_LIMITED:
+            response.read()
+            if is_quota_answer(vendor, response.status_code, response.text):
+                return False
+        return bool(sdk_should_retry(response))
+
+    client._should_retry = _should_retry
+    client._agac_quota_retries_off = True
+    return client
 
 
 class OpenAIClient(BaseClient):
@@ -134,7 +160,10 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, Any]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
+        client = without_quota_retries(
+            get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config)),
+            cls.VENDOR,
+        )
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "openai",
@@ -264,7 +293,10 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, str]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
+        client = without_quota_retries(
+            get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config)),
+            cls.VENDOR,
+        )
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]

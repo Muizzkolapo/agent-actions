@@ -7,6 +7,7 @@ fail the run at about 500 levels.
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration.test_a_deeply_nested_record_runs_in_batch import (
     ACTION,
@@ -39,7 +40,7 @@ def test_the_run_completes_and_the_other_record_is_answered(tmp_path, monkeypatc
 
     ran = _run_to_completion()
 
-    assert all(r.exit_code == 0 for r in ran), [r.output for r in ran]
+    assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [r.output for r in ran]
     from agent_actions.config.project_paths import ProjectPathsFactory
     from agent_actions.storage import get_storage_backend
 

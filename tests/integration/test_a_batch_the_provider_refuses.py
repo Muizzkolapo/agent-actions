@@ -21,6 +21,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.errors import AgentActionsError, ProcessingError
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -258,7 +259,7 @@ class TestAFileRefusedBesideOneThatIsSent:
         assert runs.refused.status == "failed"
 
     def test_the_runs_after_it_answer_every_record_of_both_files(self, runs):
-        assert [run.code for run in runs.then] == [0, 0], runs.then[-1].output
+        assert [run.code for run in runs.then] == [EXIT_PAUSED, 0], runs.then[-1].output
         assert runs.then[-1].status == "completed"
         assert _stored_rows(runs.project) == _answered("a", "b")
 
