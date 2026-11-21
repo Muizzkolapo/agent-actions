@@ -166,6 +166,20 @@ class TestTheEnvironmentIsCheckedBeforeTheRunStarts:
         with pytest.raises(ValueError, match="AGAC_RECORD_LIMIT"):
             check_environment()
 
+    @pytest.mark.parametrize("value", ["50k", "0", "-1"])
+    def test_an_unusable_batch_request_cap_is_refused_before_any_batch_is_sent(
+        self, monkeypatch, value
+    ):
+        monkeypatch.setenv("AGENT_ACTIONS_BATCH_MAX_REQUESTS", value)
+
+        with pytest.raises(ValueError, match="AGENT_ACTIONS_BATCH_MAX_REQUESTS"):
+            check_environment()
+
+    def test_a_usable_batch_request_cap_passes(self, monkeypatch):
+        monkeypatch.setenv("AGENT_ACTIONS_BATCH_MAX_REQUESTS", "10")
+
+        check_environment()
+
     def test_usable_values_pass(self, monkeypatch):
         monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
