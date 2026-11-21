@@ -5,7 +5,11 @@ from pathlib import Path
 
 import click
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    action_option,
+    handles_user_errors,
+    requires_project,
+)
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
@@ -29,8 +33,8 @@ def _print_trace(trace: dict) -> None:
 
 
 @click.command()
-@click.option("-w", "--workflow", required=True, help="Workflow configuration file name")
-@click.option("-a", "--action", required=True, help="Action whose traces to print")
+@click.option("-w", "--workflow", "--agent", "workflow", required=True, help="Workflow name")
+@action_option(required=True, help="Action whose traces to print")
 @click.option("--record", "record_id", default=None, help="Only this record's traces")
 @click.option("--json", "as_json", is_flag=True, help="Print the traces as a JSON list")
 @handles_user_errors("traces")

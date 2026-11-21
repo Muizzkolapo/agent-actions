@@ -15,6 +15,7 @@ from contextlib import contextmanager
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.operations import TemplateVariableError
@@ -201,7 +202,7 @@ def test_a_retry_after_an_action_failed_every_record_still_runs(chained):  # noq
 
     result = _retry("--record", named)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(chained, named, ACTION) == "success"
     assert _disposition(chained, named, SECOND) == "success"
 
@@ -343,9 +344,9 @@ def test_a_reader_whose_every_record_failed_after_a_reset_is_narrowed(chained): 
 
     result = _retry("--record", named)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(chained, named, SECOND) == "success"
-    assert _run().exit_code == 0
+    assert _run().exit_code == EXIT_RECORD_FAILURES
     assert _stored_guids(chained, SECOND) == _stored_guids(chained, ACTION)
 
 

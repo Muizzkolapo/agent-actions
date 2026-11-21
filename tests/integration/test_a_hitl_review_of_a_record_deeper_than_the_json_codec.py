@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.utils import deep_json
@@ -151,7 +152,7 @@ def _run_to_completion(root: Path):
     }
     result = run_agac(root, "run", "-a", WORKFLOW, "--fresh", env=env)
     for _ in range(3):
-        if result.returncode != 0 or "run again" not in result.stdout + result.stderr:
+        if result.returncode != EXIT_PAUSED:
             break
         result = run_agac(root, "run", "-a", WORKFLOW, env=env)
     return result

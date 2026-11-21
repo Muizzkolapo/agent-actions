@@ -18,7 +18,11 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.cli.inspect_base import render_title_row
 from agent_actions.cli.renderers.whole_table import print_whole
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -569,8 +573,8 @@ def expect() -> None:
 
 
 @expect.command("list")
-@click.option("-a", "--agent", "agent_opt", required=True, help="Workflow name.")
-@click.option("--action", default=None, help="Limit the listing to one action.")
+@workflow_option("agent_opt")
+@click.option("-A", "--action", default=None, help="Limit the listing to one action.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the listing as JSON.")
 @handles_user_errors("expect list")
 @requires_project
@@ -592,8 +596,8 @@ def list_rules(
 
 
 @expect.command("report")
-@click.option("-a", "--agent", "agent_opt", required=True, help="Workflow name.")
-@click.option("--action", default=None, help="Limit the report to one action.")
+@workflow_option("agent_opt")
+@click.option("-A", "--action", default=None, help="Limit the report to one action.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
 @click.option(
     "--fail-under",

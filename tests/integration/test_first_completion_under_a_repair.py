@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.llm.providers.tools import client as tool_client
@@ -163,7 +164,7 @@ class TestAFirstCompletionRecordsTheCapItRanUnder:
             ["retry", "-a", WORKFLOW, "--record", _a_failed_record(repair_reaches_a_new_action)],
         )
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert _stamp(repair_reaches_a_new_action, SECOND)["record_limit"] == 2
 
     def test_what_the_slice_admitted_is_left_unknown(
@@ -185,7 +186,7 @@ class TestAFirstCompletionRecordsTheCapItRanUnder:
             ["retry", "-a", WORKFLOW, "--record", _a_failed_record(repair_reaches_a_new_action)],
         )
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         stamp = _stamp(repair_reaches_a_new_action, SECOND)
         assert stamp["records_processed"] is None
         assert stamp["truncated"] is None
@@ -203,7 +204,7 @@ class TestAFirstCompletionRecordsTheCapItRanUnder:
             CliRunner().invoke(
                 cli, ["retry", "-a", WORKFLOW, "--record", _a_failed_record(project)]
             )
-        ).exit_code == 0
+        ).exit_code == EXIT_RECORD_FAILURES
         capped = _stored_records(project, SECOND)
         assert capped < RECORDS, "fixture failed to truncate the first completion"
 
@@ -269,13 +270,13 @@ class TestAnUnlimitedFirstCompletionIsStillUnlimited:
             CliRunner().invoke(
                 cli, ["retry", "-a", WORKFLOW, "--record", _a_failed_record(project)]
             )
-        ).exit_code == 0
+        ).exit_code == EXIT_RECORD_FAILURES
         assert _stamp(project, SECOND)["record_limit"] is None
         settled = _stored_records(project, SECOND)
 
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert _stored_records(project, SECOND) == settled
 
 
@@ -293,7 +294,7 @@ class TestAnUncappedRepairNeverVouchesForALaterLimit:
             CliRunner().invoke(
                 cli, ["retry", "-a", WORKFLOW, "--record", _a_failed_record(project)]
             )
-        ).exit_code == 0
+        ).exit_code == EXIT_RECORD_FAILURES
         assert _stored_records(project, SECOND) < RECORDS
 
         monkeypatch.setenv("AGAC_RECORD_LIMIT", str(RECORDS + 2))

@@ -92,6 +92,15 @@ def collapse_version_groups(actions: list[str], action_configs: dict) -> list[st
     return [r for r in result if r is not None]
 
 
+def observe_as_written(context_scope: dict[str, Any]) -> list[Any]:
+    """The observe references, an optional one shown with its `?`."""
+    optional = context_scope.get("optional") or {}
+    return [
+        f"{ref}?" if isinstance(ref, str) and ref in optional else ref
+        for ref in context_scope.get("observe") or []
+    ]
+
+
 class BaseInspectCommand:
     """Base class for inspect commands."""
 
@@ -160,7 +169,7 @@ class BaseInspectCommand:
                 "input_sources": input_sources,
                 "context_sources": context_sources,
                 "context_scope": {
-                    "observe": context_scope.get("observe", []),
+                    "observe": observe_as_written(context_scope),
                     "passthrough": context_scope.get("passthrough", []),
                     "drop": context_scope.get("drop", []),
                 },

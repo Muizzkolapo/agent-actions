@@ -375,10 +375,13 @@ class ValidateUDFsCommand:
 
 @click.command(name="validate-udfs")
 @click.option(
+    "-w",
+    "--workflow",
     "-a",
     "--agent",
+    "agent",
     required=True,
-    help="Agent configuration file name without path or extension",
+    help="Workflow name: its configuration file name without path or extension",
 )
 @click.option(
     "-u",

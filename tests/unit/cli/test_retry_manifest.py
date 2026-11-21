@@ -147,6 +147,7 @@ class TestManifestWriteBeforeClear:
 
             mock_wf = MagicMock()
             mock_wf.execution_order = ["classify"]
+            mock_wf.services.core.state_manager.is_completed_with_failures.return_value = False
             mock_load_wf.return_value = mock_wf
 
             args = RetryCommandArgs(agent="test_wf")
@@ -189,6 +190,7 @@ class TestManifestDeletedAfterSuccess:
 
             mock_wf = MagicMock()
             mock_wf.execution_order = ["classify"]
+            mock_wf.services.core.state_manager.is_completed_with_failures.return_value = False
             mock_load_wf.return_value = mock_wf
 
             args = RetryCommandArgs(agent="test_wf")
@@ -305,6 +307,7 @@ def _left_by(created_at: str, **statuses: ActionStatus) -> MagicMock:
     state_mgr.get_status_details.side_effect = lambda action: details[action]
     state_mgr.get_status.side_effect = lambda action: details[action]["status"]
     state_mgr.get_failed_actions.return_value = []
+    state_mgr.is_completed_with_failures.return_value = False
     return state_mgr
 
 

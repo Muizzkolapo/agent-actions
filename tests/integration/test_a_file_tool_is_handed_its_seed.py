@@ -11,6 +11,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     RECORDS,
@@ -90,7 +91,7 @@ def seeded(project):  # noqa: F811
     (project / "tools" / WORKFLOW / "seeded_report.py").write_text(REPORT_TOOL)
 
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     return project
 
 
