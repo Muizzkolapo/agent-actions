@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
@@ -81,7 +82,7 @@ def _run_to_completion(root: Path, workflow: str) -> list:
     for _ in range(4):
         result = _agac(root, "run", "-a", workflow, *(["--fresh"] if not ran else []))
         ran.append(result)
-        if result.returncode != 0 or "run again" not in result.stdout + result.stderr:
+        if result.returncode != EXIT_PAUSED:
             break
     return ran
 
@@ -134,7 +135,7 @@ def test_the_run_completes_and_stores_the_record_whole(tmp_path, workflow, actio
 
     ran = _run_to_completion(root, workflow)
 
-    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    assert all(r.returncode in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [_output(r) for r in ran]
     dispositions, rows = _stored(root, workflow, action)
     assert sorted(dispositions.values()) == ["success", "success"]
     assert _depth_and_leaf(_deep_value_of(rows)) == (DEPTH, LEAF)
@@ -158,13 +159,13 @@ def test_a_tool_that_observes_the_deep_field_runs_and_a_retry_reaches_the_record
 
     ran = _agac(root, "run", "-a", "tool_action", "--fresh")
 
-    assert ran.returncode == 0, _output(ran)
+    assert ran.returncode == EXIT_RECORD_FAILURES, _output(ran)
     first = _stored(root, "tool_action", "flatten")[0]
     assert sorted(first.values()) == ["failed", "success"]
 
     retried = _agac(root, "retry", "-a", "tool_action")
 
-    assert retried.returncode == 0, _output(retried)
+    assert retried.returncode == EXIT_RECORD_FAILURES, _output(retried)
     assert "malformed JSON" not in retried.stdout + retried.stderr
     assert _stored(root, "tool_action", "flatten")[0] == first
 
@@ -189,7 +190,7 @@ def test_an_llm_action_that_observes_the_deep_field_sends_it_and_a_retry_runs(tm
 
     ran = _run_to_completion(root, "batch_field_rules")
 
-    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    assert all(r.returncode in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [_output(r) for r in ran]
     assert "recursion" not in "".join(r.stdout + r.stderr for r in ran)
     assert sorted(_stored(root, "batch_field_rules", "summarize")[0].values()) == [
         "success",
@@ -222,7 +223,7 @@ def test_a_prompt_that_renders_the_deep_field_with_tojson_sends_it(tmp_path, run
 
     ran = _run_to_completion(root, "batch_field_rules")
 
-    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    assert all(r.returncode in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [_output(r) for r in ran]
     assert sorted(_stored(root, "batch_field_rules", "summarize")[0].values()) == [
         "success",
         "success",
@@ -254,7 +255,9 @@ def test_a_prompt_that_prints_the_deep_field_fails_that_record_naming_the_field_
 
     ran = _run_to_completion(root, "batch_field_rules")
 
-    assert all(r.returncode == 0 for r in ran), [_output(r) for r in ran]
+    assert all(r.returncode in (EXIT_RECORD_FAILURES, EXIT_PAUSED) for r in ran), [
+        _output(r) for r in ran
+    ]
     shown = " ".join("".join(r.stdout + r.stderr for r in ran).split())
     assert (
         f"cannot render source.deep: it is nested {DEPTH} levels deep" in shown

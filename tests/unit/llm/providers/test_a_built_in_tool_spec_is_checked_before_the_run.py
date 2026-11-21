@@ -105,7 +105,10 @@ def test_a_router_on_a_field_it_does_not_observe_is_refused_in_pre_flight(observ
         _preflight(config)
 
 
-@pytest.mark.parametrize("observed", ["source.kind", "source.*"])
+@pytest.mark.parametrize(
+    "observed",
+    ["source.kind", "source.*", "source.kind?", {"field": "source.kind", "optional": True}],
+)
 def test_a_router_that_observes_its_field_passes_pre_flight(observed):
     _preflight({"_builtin": ROUTE, "context_scope": {"observe": [observed]}})
 

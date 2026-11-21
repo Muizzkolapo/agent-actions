@@ -24,6 +24,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -249,7 +250,7 @@ def runs(request, tmp_path_factory):
         tmp_path_factory.mktemp(request.param) / "project", template.replace("{retry}", retry)
     )
     submitted = _run(project, "--fresh")
-    assert submitted.code == 0, submitted.output
+    assert submitted.code == EXIT_PAUSED, submitted.output
     (batch,) = _batches(project)
     custom_id = _lose(batch)
     if refused == 2:
@@ -294,7 +295,7 @@ def runs(request, tmp_path_factory):
 
 class TestARecordTheProviderLeavesOut:
     def test_the_collect_pass_sends_nothing_again(self, runs):
-        assert runs.collected.code == 0, runs.collected.output
+        assert runs.collected.code == EXIT_RECORD_FAILURES, runs.collected.output
         assert runs.sent_by_collect == set(), runs.collected.output
 
     def test_the_record_is_the_actions_failure(self, runs):
@@ -317,7 +318,7 @@ class TestARecordTheProviderLeavesOut:
         assert runs.after_collect.answer is None
 
     def test_agac_retry_sends_it_again(self, runs):
-        assert runs.retried.code == 0, runs.retried.output
+        assert runs.retried.code == EXIT_PAUSED, runs.retried.output
         assert "Nothing to retry" not in runs.retried.output, runs.retried.output
         assert runs.sent_by_retry == [[runs.custom_id]], runs.retried.output
 

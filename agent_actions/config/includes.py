@@ -354,7 +354,7 @@ def _normalised_reads(scope: Any) -> dict[str, list[Any]] | None:
     return {
         directive: refs
         for directive, refs in normalised.items()
-        if DIRECTIVE_REGISTRY[directive]["type"] == "list"
+        if DIRECTIVE_REGISTRY.get(directive, {}).get("type") == "list"
     }
 
 
@@ -1295,7 +1295,7 @@ def _renamed_refs(config: dict[str, Any], names: Mapping[str, str]) -> dict[str,
             if DIRECTIVE_REGISTRY.get(directive, {}).get("type") == "list" and isinstance(
                 refs, list
             ):
-                scope[directive] = [_renamed_root(ref, names) for ref in refs]
+                scope[directive] = [_renamed_scope_entry(ref, names) for ref in refs]
     guard = renamed.get("guard")
     if isinstance(guard, str):
         renamed["guard"] = renamed_clause(guard, names)
@@ -1308,6 +1308,14 @@ def _renamed_refs(config: dict[str, Any], names: Mapping[str, str]) -> dict[str,
     if isinstance(expect, dict) and isinstance(expect.get("expectations"), list):
         rename_judge_contexts(expect["expectations"], names)
     return renamed
+
+
+def _renamed_scope_entry(entry: Any, names: Mapping[str, str]) -> Any:
+    """A ``context_scope`` list entry with its action renamed; an optional observe entry
+    written as a mapping (``{field: action.field, optional: true}``) keeps its other keys."""
+    if isinstance(entry, dict) and isinstance(entry.get("field"), str):
+        return {**entry, "field": _renamed_root(entry["field"], names)}
+    return _renamed_root(entry, names)
 
 
 def rename_judge_contexts(rules: list[Any], names: Mapping[str, str]) -> None:

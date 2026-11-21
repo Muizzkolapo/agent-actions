@@ -132,13 +132,13 @@ The store keeps the prompt, context and response text in compressed form. Read t
 
 ```bash
 # Every trace of an action, as plain text
-agac traces -w <workflow> -a classify_issue
+agac traces -w <workflow> -A classify_issue
 
 # One record's traces (its target_id, or its parent_target_id if an expansion produced it)
-agac traces -w <workflow> -a classify_issue --record <target_id>
+agac traces -w <workflow> -A classify_issue --record <target_id>
 
 # The same traces as a JSON list
-agac traces -w <workflow> -a classify_issue --json
+agac traces -w <workflow> -A classify_issue --json
 ```
 
 ## Querying Trace Metadata

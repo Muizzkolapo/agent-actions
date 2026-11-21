@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
@@ -192,11 +193,13 @@ def _agac(root: Path, *args: str) -> tuple[int, str]:
 def _run_to_the_end(root: Path, *first: str) -> str:
     code, output = _agac(root, "run", *first)
     transcript = [output]
-    while code == 0 and "run again" in transcript[-1]:
+    while code == EXIT_PAUSED:
+        assert "run again" in transcript[-1], transcript[-1]
         assert len(transcript) <= 8, "the workflow never stopped asking to be run again"
         code, output = _agac(root, "run")
         transcript.append(output)
     assert code == 0, transcript[-1]
+    assert "run again" not in transcript[-1], transcript[-1]
     return "\n".join(transcript)
 
 
