@@ -259,12 +259,13 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     "type": f"{self.vendor_slug}_error",
                     "code": "inference_error",
                     "status": status,
-                    "retriable": (
-                        self._online_retries(e, str(task.get("body", {}).get("model", "")))
-                        if status is None
-                        else None
-                    ),
                 },
+                # Beside the error, not in it: the error dict becomes the record's error text.
+                "retriable": (
+                    self._online_retries(e, str(task.get("body", {}).get("model", "")))
+                    if status is None
+                    else None
+                ),
             }
 
     @staticmethod
@@ -288,8 +289,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return status if isinstance(status, int) else None
 
     def _extract_retriable(self, raw_response: dict[str, Any]) -> bool | None:
-        error = raw_response.get("error")
-        retriable = error.get("retriable") if isinstance(error, dict) else None
+        retriable = raw_response.get("retriable")
         return retriable if isinstance(retriable, bool) else None
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
