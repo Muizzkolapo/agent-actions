@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.cli.main import cli
 from tests.integration import (
     test_a_stopped_action_keeps_only_what_its_config_still_answers as summarizing,
@@ -388,7 +389,7 @@ def _switch(root, to):
 
 def _submit_and_collect():
     first, second = summarizing._run(), summarizing._run()
-    assert first.exit_code == 0, first.output
+    assert first.exit_code == EXIT_PAUSED, first.output
     assert second.exit_code == 0, second.output
 
 
@@ -434,7 +435,7 @@ def test_a_file_stored_by_batch_leaves_no_checkpoint_row_an_online_run_takes_for
     assert summarizing._status(online) == "interrupted"
     provider.answers()
     _switch(online, "batch")
-    assert summarizing._run().exit_code == 0
+    assert summarizing._run().exit_code == EXIT_PAUSED
     with summarizing._collecting_fails_on("pages2.json"):
         assert summarizing._run().exit_code != 0
     assert summarizing._status(online) == "failed"

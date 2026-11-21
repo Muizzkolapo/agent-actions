@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
@@ -80,7 +81,7 @@ def _run_to_completion() -> list:
     for _ in range(4):
         result = _invoke("run", "-a", WORKFLOW, *(["--fresh"] if not ran else []))
         ran.append(result)
-        if result.exit_code != 0 or "run again" not in result.output:
+        if result.exit_code != EXIT_PAUSED:
             break
     return ran
 
@@ -92,13 +93,13 @@ class TestARecordNestedDeeply:
 
         ran = _run_to_completion()
 
-        assert all(r.exit_code == 0 for r in ran), [r.output for r in ran]
+        assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [r.output for r in ran]
         assert sorted(_record_dispositions(root).values()) == ["success", "success"]
 
     def test_a_run_after_it_still_completes(self, tmp_path, monkeypatch):
         root = _project(tmp_path, monkeypatch, 600)
         ran = _run_to_completion()
-        assert all(r.exit_code == 0 for r in ran), [r.output for r in ran]
+        assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [r.output for r in ran]
 
         again = _invoke("run", "-a", WORKFLOW)
 

@@ -181,7 +181,7 @@ cp .env.sample .env
 Run the workflow:
 
 ```bash
-agac run -a contract_reviewer
+agac run -w contract_reviewer
 ```
 
 By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.

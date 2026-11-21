@@ -272,7 +272,9 @@ class PreflightService:
         self._warn_findings(
             "prompt-contract",
             find_unguarded_required_refs(
-                self._collect_prompts(), self._collect_producing_schemas()
+                self._collect_prompts(),
+                self._collect_producing_schemas(),
+                self._collect_optional_observes(),
             ),
         )
 
@@ -330,6 +332,17 @@ class PreflightService:
             except (ConfigValidationError, PromptValidationError) as exc:
                 logger.debug("Skipping prompt cross-check for %s: %s", name, exc)
         return prompts
+
+    def _collect_optional_observes(self) -> dict[str, set[str]]:
+        """The references each action observes as optional, a version also by its base name."""
+        optional: dict[str, set[str]] = {}
+        for name, config in self.action_configs.items():
+            scope = config.get("context_scope")
+            for ref in (scope.get("optional") or {}) if isinstance(scope, dict) else {}:
+                namespace, _, field = ref.partition(".")
+                base = self.action_configs.get(namespace, {}).get("version_base_name")
+                optional.setdefault(name, set()).update({ref, f"{base}.{field}"} if base else {ref})
+        return optional
 
     def _collect_producing_schemas(self) -> dict[str, dict[str, Any]]:
         """Available (non-dropped) schema-source fields per producing action.

@@ -74,7 +74,7 @@ class TestInspectAgentRequired:
         ):
             result = runner.invoke(inspect, [])
         assert result.exit_code != 0
-        assert "agent" in result.output.lower()
+        assert "--workflow" in result.output
 
 
 class TestWorkflowInspectorGetLevels:

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
@@ -126,13 +127,13 @@ def _lost_to_the_end(project: Path) -> tuple[int, str]:
     Returns how many batches went out in all, the original included.
     """
     code, output = _run(project, "--fresh")
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     (batch,) = _held_batches(project)
     _lose_one(batch)
     batches_sent = 1
     for _ in range(6):
         code, sent, output = _collect(project)
-        assert code == 0, output
+        assert code in (EXIT_RECORD_FAILURES, EXIT_PAUSED), output
         if not sent:
             return batches_sent, output
         batches_sent += len(sent)

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
@@ -140,7 +141,7 @@ def _run_to_the_end(project: Path) -> str:
             env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
+        assert result.returncode in (EXIT_RECORD_FAILURES, EXIT_PAUSED), output
         if "run again" not in output:
             return output
     pytest.fail(f"the workflow never stopped asking to be run again:\n{output}")

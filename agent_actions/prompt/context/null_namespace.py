@@ -9,6 +9,9 @@ sentence of the render error a prompt reading the namespace gets.
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
+from typing import Any
+
 
 class NullNamespace:
     """Sentinel replacing ``None`` for a namespace the record cannot supply.
@@ -68,6 +71,30 @@ SKIPPED_NAMESPACE = NullNamespace(reason=REASON_SKIPPED)
 NO_OUTPUT_NAMESPACE = NullNamespace(reason=REASON_NO_OUTPUT)
 NULL_NAMESPACE = NullNamespace(reason=REASON_NULL)
 ABSENT_NAMESPACE = NullNamespace(reason=REASON_ABSENT)
+
+
+class OptionalFieldsNamespace(NullNamespace, Mapping[str, Any]):
+    """A null namespace that still answers for the fields an action observes as optional.
+
+    A mapping, so a prompt reads ``{{ ns.field }}`` as the field's value when missing;
+    still null and falsy, so ``{% if ns %}`` and every other field read as they did.
+    """
+
+    __slots__ = ("fields",)
+
+    def __init__(self, null: object, fields: dict[str, Any]) -> None:
+        null = null if isinstance(null, NullNamespace) else NULL_NAMESPACE
+        super().__init__(null.reason, null.observed, null.present)
+        self.fields = fields
+
+    def __getitem__(self, name: str) -> Any:
+        return self.fields[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.fields)
+
+    def __len__(self) -> int:
+        return len(self.fields)
 
 
 def no_declared_fields_namespace(observed: list[str], present: list[str]) -> NullNamespace:

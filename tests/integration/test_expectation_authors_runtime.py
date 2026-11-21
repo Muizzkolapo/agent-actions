@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -219,7 +220,7 @@ def test_the_batch_author_submits_and_is_collected(run):
     this fixture was skipped for it.
     """
     first = run(BATCH_ONLY)
-    assert first.returncode == 0, first.output
+    assert first.returncode == EXIT_PAUSED, first.output
     assert "run again" in first.output, "the fixture did not pause on submission"
 
     second = run(BATCH_ONLY, again=True)
