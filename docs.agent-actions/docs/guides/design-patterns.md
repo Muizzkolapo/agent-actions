@@ -466,7 +466,7 @@ actions:
 **Limitations:**
 - Guard conditions must be deterministic.
 - Complex routing logic can be hard to debug.
-- A record that one handler filters is not in the action where the handlers meet again, so an action that depends on all three handlers receives no record.
+- A record that one handler filters is not in the action where the handlers meet again. Thus an action that depends on all three handlers receives no record.
 
 When each record goes to exactly one handler, write the same workflow with a router and join the handlers afterwards:
 

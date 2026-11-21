@@ -63,10 +63,28 @@ def test_default_filter_is_an_ordinary_filter_at_the_router():
     router = _by_name(expand_routes(_workflow(), WF))["router"]
 
     assert router["guard"] == {
-        "condition": 'classify.format IN ["a", "b"]',
+        "condition": (
+            'classify.format IN ["a", "b"] OR NOT (classify.format IS NULL '
+            'OR classify.format >= "")'
+        ),
         "on_false": "filter",
         "passthrough_on_error": False,
     }
+
+
+@pytest.mark.parametrize(
+    ("value", "passes"),
+    [("a", True), ("c", False), (None, False), ("", False), (1, True), (True, True), ([], True)],
+)
+def test_the_filter_lets_through_a_value_that_is_no_string_for_the_router_to_fail(value, passes):
+    from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+
+    router = _by_name(expand_routes(_workflow(), WF))["router"]
+    parsed = WhereClauseParser().parse(router["guard"]["condition"])
+
+    assert parsed.success, parsed.error
+    assert parsed.ast.evaluate({"classify": {"format": value}}) is passes
+    assert parsed.ast.evaluate({"classify": {}}) is False
 
 
 def test_each_entry_gets_the_guard_of_its_case_and_sends_the_others_elsewhere():
@@ -248,6 +266,44 @@ def test_a_router_on_a_field_that_holds_no_strings_is_refused_at_load(declared):
         finish_routes(data, WF)
 
 
+@pytest.mark.parametrize(
+    "declared",
+    [
+        {"id": "format", "type": ["string", "null"], "enum": ["a", "b"]},
+        {"id": "format", "type": "string", "enum": ["a", "b", None]},
+    ],
+    ids=["nullable-type", "null-in-enum"],
+)
+def test_a_router_on_a_nullable_string_field_is_accepted(declared):
+    data = expand_routes(_workflow(), WF)
+    _by_name(data)["classify"]["schema"] = {"name": "c", "fields": [declared]}
+
+    finish_routes(data, WF)
+
+
+def test_a_field_refused_for_its_type_names_the_type():
+    data = expand_routes(_workflow(), WF)
+    declared = {"id": "format", "type": ["integer", "null"], "enum": [1, 2]}
+    _by_name(data)["classify"]["schema"] = {"name": "c", "fields": [declared]}
+
+    with pytest.raises(ConfigurationError, match=r"is not a string field \(type \['integer'"):
+        finish_routes(data, WF)
+
+
+def test_a_route_can_read_the_case_of_an_earlier_router():
+    data = _workflow(
+        actions=[
+            {"route": "again", True: "router.case", "cases": {"a": ["on_x"]}, "default": "filter"},
+            _action("on_x"),
+        ]
+    )
+
+    again = _by_name(expand_routes(data, WF))["again"]
+
+    assert again["dependencies"] == ["router"]
+    assert again["context_scope"] == {"observe": ["router.case"]}
+
+
 def test_a_case_that_is_not_a_string_names_the_string_rule_and_no_quoting():
     message = _refusal(_workflow({"cases": {1: ["on_a"]}}))
 
@@ -287,6 +343,32 @@ def test_a_join_that_leaves_out_a_branch_of_a_router_is_warned_about(caplog):
         expand_routes(_workflow(join={"join": "joined", "of": ["after_a"]}), WF)
 
     assert "takes the branches of router 'router' for a but not for b" in caplog.text
+
+
+def test_a_join_inside_one_branch_of_an_outer_router_is_not_warned_about(caplog):
+    data = {
+        "name": "wf",
+        "actions": [
+            _action("classify"),
+            {"route": "r", True: "classify.format", "cases": {"1": ["one"], "2": ["two"]}},
+            _action("one"),
+            _action("two"),
+            {"route": "ri", True: "one.kind", "cases": {"x": ["dx"], "y": ["dy"]}},
+            _action("dx"),
+            _action("dy"),
+            {"join": "ja", "of": ["dx", "dy"]},
+            {"join": "j", "of": ["ja", "two"]},
+        ],
+    }
+    for entry in data["actions"]:
+        if "route" in entry:
+            entry["default"] = "filter"
+
+    with caplog.at_level("WARNING"):
+        expanded = _by_name(expand_routes(data, WF))
+
+    assert expanded["j"]["_builtin"]["of"] == ["ja", "two"]
+    assert "takes the branches" not in caplog.text
 
 
 def test_a_join_of_every_branch_is_not_warned_about(caplog):
