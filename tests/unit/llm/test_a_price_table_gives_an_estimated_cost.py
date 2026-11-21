@@ -135,3 +135,12 @@ def test_a_missing_key_names_the_unknown_key_beside_it():
         parse_prices({"m": {"input": 1, "outptu": 2}})
 
     assert "prices.m: output is required; unknown key 'outptu'" in str(refused.value)
+
+
+def test_a_bad_price_is_named_beside_a_missing_key():
+    with pytest.raises(ConfigValidationError) as refused:
+        parse_prices({"m": {"input": "cheap"}})
+
+    assert "prices.m: output is required; prices.m.input: must be a number, 0 or more" in str(
+        refused.value
+    )
