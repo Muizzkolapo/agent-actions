@@ -6,9 +6,10 @@ one kind go out as ``<file>_<kind>_<n>`` and the step defers; once that batch
 returns, each call's replies are handed back to its requester (`settle`) and kept
 under the call's key, and the step runs again with those calls answered.
 
-A side batch carries one kind and one model: a batch is prepared from one
-config, and its name says what the records wait on. Calls of another kind or
-model are still unanswered when the step runs again, and go out in the next round.
+A side batch carries one kind and one model, and at most the provider's cap of
+requests: a batch is prepared from one config, and its name says what the records
+wait on. Calls of another kind or model, or past the cap, are still unanswered when
+the step runs again, and go out in the next round.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from agent_actions.llm.providers.batch_base import raise_unsent
+from agent_actions.llm.providers.batch_base import batch_request_cap, raise_unsent
 from agent_actions.llm.side_calls import SideCall, SideReplies
 
 if TYPE_CHECKING:
@@ -134,10 +135,20 @@ def submit_side_batch(
 ) -> SideSubmission:
     """Send one request per copy of each call, as ``<file>_<kind>_<attempt>``.
 
-    A batch takes one model, so only the calls of the first model met go out.
+    A batch takes one model and at most the provider's cap of requests, so only the
+    calls of the first model met go out, up to that cap.
     """
     first = next(iter(calls.values()))
-    sent = {key: call for key, call in calls.items() if call.model == first.model}
+    cap = batch_request_cap(provider)
+    sent: dict[str, SideCall] = {}
+    held = 0
+    for key, call in calls.items():
+        if call.model != first.model:
+            continue
+        if sent and held + call.copies > cap:
+            break
+        sent[key] = call
+        held += call.copies
 
     rows: list[dict[str, Any]] = []
     requests: dict[str, str] = {}
