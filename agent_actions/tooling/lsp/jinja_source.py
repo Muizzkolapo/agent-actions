@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 _NAME_LINE = re.compile(r"^\s*(?:-\s+)?name:[ \t]*(?=\S)")
 _NAME_MARK = re.compile(r"  # @src (\S+?):(\d+):(\d+)")
-_ANY_MARK = re.compile(r"  # @(?:src|at) (\S+?):(\d+)")
+_LINE_MARK = re.compile(r"  # @at (\S+?):(\d+)")
 _MARK_TEXT = re.compile(r"  # @(?:src|at) \S+?:\d+(?::\d+)?")
 # The line breaks PyYAML counts in a node's line number.
 _LINE_BREAK = re.compile(r"\r\n|[\r\n\x85\u2028\u2029]")
@@ -48,8 +48,8 @@ class RenderedWorkflow:
     """The render of a workflow file.
 
     `action_lines` holds the workflow-file lines that define a parsed action. `live_lines`
-    holds the workflow-file lines whose text reached the render; it is None when no tag
-    can remove a line. When the marks cannot be trusted, both are empty for a file a tag
+    holds the workflow-file lines that the render output as written; it is None when no
+    tag can remove a line. When the marks cannot be trusted, both are empty for a file a tag
     can remove a line from, so nothing is read from its lines. `line_owners` maps a
     workflow-file line to the action whose text it became, or None when it became text of
     no action or of more than one.
@@ -79,14 +79,6 @@ class MarkingLoadRender(LoadRender):
     line that a tag removes is the line whose mark is missing from the output.
     """
 
-    def __init__(self, templates_folder: Path, workflow: str) -> None:
-        super().__init__(templates_folder, workflow)
-        # Lines of the workflow file left unmarked but still output as written.
-        self.unmarked_output: set[int] = set()
-        # The body lines of each `filter` block, and the line that closes it: the body is
-        # output where the closing line is output.
-        self.filter_bodies: list[tuple[range, int]] = []
-
     def wrap(self, source: str, origin: str) -> str:
         source = source.replace("\r\n", "\n").replace("\r", "\n")
         in_workflow = not origin.startswith("templates/")
@@ -100,21 +92,6 @@ class MarkingLoadRender(LoadRender):
         for line in lines:
             line_starts.append(offset)
             offset += len(line) + 1
-        if in_workflow:
-            for body_start, close_start, kind in values:
-                # A tag in the body can drop a body line, and no mark can show it.
-                if kind == "filter" and not any(
-                    body_start <= tag.start < close_start and tag.kind in "%#" for tag in tags
-                ):
-                    self.filter_bodies.append(
-                        (
-                            range(
-                                _line_of(line_starts, body_start),
-                                _line_of(line_starts, close_start),
-                            ),
-                            _line_of(line_starts, close_start),
-                        )
-                    )
         # A name written as a `{{ }}` tag over more than one line: its mark goes after the
         # tag, on the line where the tag ends, which renders onto the name line.
         pending: str | None = None
@@ -132,8 +109,6 @@ class MarkingLoadRender(LoadRender):
                 continue
             name_mark, pending = pending or "", None
             if not line.strip() or line.rstrip().endswith(_STRIPS_AFTER):
-                if in_workflow:
-                    self.unmarked_output.add(i)
                 continue
             if held:
                 continue
@@ -174,10 +149,6 @@ def _block_spans(
     return spans
 
 
-def _line_of(line_starts: list[int], pos: int) -> int:
-    return bisect.bisect_right(line_starts, pos) - 1
-
-
 def _tag_holding(tags: list[Any], starts: list[int], pos: int) -> Any:
     """The tag whose span holds the line end at *pos*, if any."""
     index = bisect.bisect_right(starts, pos) - 1
@@ -210,30 +181,21 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         logger.warning("Could not map actions of %s to source lines: the renders differ", yaml_file)
         return _unmapped(text, data, source)
 
-    assert isinstance(load, MarkingLoadRender)
-    sources, action_lines = _action_sources(nodes, marked_lines, yaml_file, project_root)
+    source_lines = source.split("\n")
+    sources, action_lines = _action_sources(
+        nodes, marked_lines, yaml_file, project_root, source_lines
+    )
+    written = _lines_as_written(marked_lines, source_lines, yaml_file.name)
     live_lines = None
     if any(opener in source for opener in _CONTROL_OPENERS):
-        live = {
-            int(line)
-            for marked_line in marked_lines
-            for origin, line in _ANY_MARK.findall(marked_line)
-            if origin == yaml_file.name
-        }
-        source_lines = source.split("\n")
-        for body, close_line in load.filter_bodies:
-            if close_line in live:
-                live.update(body)
-                # A name line in the body gets no mark, but it defines its action in place.
-                action_lines.update(i for i in body if _NAME_LINE.match(source_lines[i]))
-        live_lines = frozenset(live | load.unmarked_output)
+        live_lines = frozenset({line for _, line in written} | action_lines)
     return RenderedWorkflow(
         text=text,
         data=data,
         action_sources=sources,
         action_lines=frozenset(action_lines),
         live_lines=live_lines,
-        line_owners=_line_owners(nodes, marked_lines, yaml_file.name),
+        line_owners=_line_owners(nodes, written),
     )
 
 
@@ -244,13 +206,29 @@ def _unmapped(text: str, data: dict, source: str) -> RenderedWorkflow:
     return RenderedWorkflow(text, data, {})
 
 
-def _line_owners(
-    nodes: list[_ActionNode], marked_lines: list[str], origin: str
-) -> dict[int, str | None]:
-    """Each marked workflow line, and the action whose text it became in the render."""
+def _lines_as_written(
+    marked_lines: list[str], source_lines: list[str], origin: str
+) -> list[tuple[int, int]]:
+    """Each (rendered line, workflow line) where the render output the workflow line as written.
+
+    A filter, a `caller()` filter or a tag on the line can change the text around a mark;
+    such a line is not read, because its words are not what the render made of it.
+    """
+    found = []
+    for rendered_line, marked in enumerate(marked_lines):
+        text = _MARK_TEXT.sub("", marked).rstrip()
+        for mark_origin, line in _LINE_MARK.findall(marked):
+            i = int(line)
+            if mark_origin == origin and i < len(source_lines) and source_lines[i].rstrip() == text:
+                found.append((rendered_line, i))
+    return found
+
+
+def _line_owners(nodes: list[_ActionNode], written: list[tuple[int, int]]) -> dict[int, str | None]:
+    """Each workflow line output as written, and the action whose text it is in the render."""
     owners: dict[int, str | None] = {}
     starts = [node.start_line for node in nodes]
-    for rendered_line, marked in enumerate(marked_lines):
+    for rendered_line, line in written:
         index = bisect.bisect_right(starts, rendered_line) - 1
         node = nodes[index] if index >= 0 else None
         owner = None
@@ -259,10 +237,7 @@ def _line_owners(
             or (rendered_line == node.end_line and node.end_column > 0)
         ):
             owner = node.name
-        for mark_origin, line in _ANY_MARK.findall(marked):
-            if mark_origin == origin:
-                key = int(line)
-                owners[key] = owner if owners.get(key, owner) == owner else None
+        owners[line] = owner if owners.get(line, owner) == owner else None
     return owners
 
 
@@ -331,11 +306,29 @@ def _action_sources(
     marked_lines: list[str],
     yaml_file: Path,
     project_root: Path,
+    source_lines: list[str],
 ) -> tuple[dict[str, Location], set[int]]:
-    """Each action's mark, read on the rendered line that holds its `name:` key."""
+    """Each action's mark, read on the rendered line that holds its `name:` key.
+
+    A filter can change the text of a mark, so a mark counts only when it names the
+    workflow file or a template that exists, at a `name:` line.
+    """
     sources: dict[str, Location] = {}
     action_lines: set[int] = set()
     seen_on_line: dict[int, int] = {}
+    file_lines: dict[str, list[str] | None] = {yaml_file.name: source_lines}
+
+    def is_name_line(origin: str, line: int) -> bool:
+        if origin not in file_lines:
+            path = project_root / origin
+            file_lines[origin] = (
+                path.read_text(encoding="utf-8").split("\n")
+                if origin.startswith("templates/") and path.is_file()
+                else None
+            )
+        lines = file_lines[origin]
+        return lines is not None and line < len(lines) and bool(_NAME_LINE.match(lines[line]))
+
     for node in nodes:
         name, line_no = node.name, node.name_line
         marks = _NAME_MARK.findall(marked_lines[line_no])
@@ -345,7 +338,9 @@ def _action_sources(
             continue
         origin, src_line, column = marks[nth]
         line, col = int(src_line), int(column)
-        in_workflow = not origin.startswith("templates/")
+        if not is_name_line(origin, line):
+            continue
+        in_workflow = origin == yaml_file.name
         if in_workflow:
             action_lines.add(line)
         if name in sources:

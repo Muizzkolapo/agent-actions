@@ -255,7 +255,8 @@ def _build_action_data_map(actions: list) -> dict:
     """Build a map of action name to parsed action data."""
     action_map = {}
     for action in actions:
-        if isinstance(action, dict) and action.get("name"):
+        # PyYAML reads `name: yes` as True, which names no action.
+        if isinstance(action, dict) and isinstance(action.get("name"), str) and action["name"]:
             action_map[action["name"]] = action
     return action_map
 
