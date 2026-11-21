@@ -18,7 +18,11 @@ from jinja2 import Environment, meta, nodes
 from agent_actions.config.path_config import resolve_seed_file, seed_search_folders
 from agent_actions.output.response.dispatch_injection import dispatch_calls_in
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.prompt.cache_point import CACHE_POINT_TAG, PROMPT_EXTENSIONS, is_cache_point
+from agent_actions.prompt.cache_point import (
+    CACHE_POINT_TAG_PATTERN,
+    PROMPT_EXTENSIONS,
+    is_cache_point,
+)
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.context.seed_entry import parse_seed_entry
@@ -27,7 +31,7 @@ from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 _DISPATCH_START = re.compile(r"dispatch_task\s*\(")
-_CACHE_POINT_TAG = re.compile(r"\{%[-+]?\s*" + CACHE_POINT_TAG + r"\s*[-+]?%\}")
+_CACHE_POINT_TAG = CACHE_POINT_TAG_PATTERN
 
 REQUEST_VARIES_PER_RECORD_KEY = "_request_varies_per_record"
 """Set on one call's config when its prompt is not the action's rendered prompt: a repair

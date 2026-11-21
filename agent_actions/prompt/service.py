@@ -24,8 +24,8 @@ from agent_actions.errors import (
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.cache_point import (
-    CACHE_POINT_TAG,
     PROMPT_EXTENSIONS,
+    has_cache_point,
     take_cache_points,
 )
 from agent_actions.prompt.context.builder import LLMContextBuilder
@@ -294,7 +294,11 @@ class PromptPreparationService:
         formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
             formatted_prompt, llm_context, agent_config, tools_path
         )
-        formatted_prompt, cache_points = take_cache_points(formatted_prompt)
+        formatted_prompt, cache_points = (
+            take_cache_points(formatted_prompt)
+            if has_cache_point(raw_prompt)
+            else (formatted_prompt, ())
+        )
 
         metadata = {
             "mode": mode,
@@ -398,7 +402,11 @@ class PromptPreparationService:
         formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
             formatted_prompt, llm_context, request.agent_config, request.tools_path
         )
-        formatted_prompt, cache_points = take_cache_points(formatted_prompt)
+        formatted_prompt, cache_points = (
+            take_cache_points(formatted_prompt)
+            if has_cache_point(raw_prompt)
+            else (formatted_prompt, ())
+        )
 
         metadata: dict[str, Any] = {
             "mode": request.mode,
@@ -441,7 +449,7 @@ class PromptPreparationService:
             TemplateVariableError: If template syntax is invalid or rendering fails.
         """
         # A cache point is a tag, which only a render turns into no text.
-        if not prompt_context and CACHE_POINT_TAG not in raw_prompt:
+        if not prompt_context and not has_cache_point(raw_prompt):
             logger.debug("No prompt_context, using raw prompt")
             return raw_prompt
 

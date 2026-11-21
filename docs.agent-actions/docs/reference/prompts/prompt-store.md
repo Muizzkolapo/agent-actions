@@ -169,7 +169,7 @@ You are evaluator {{ i }} of {{ version.length }}.
 
 ### Cache Points
 
-`{% cache_point %}` marks the end of a long part of the prompt that many records share, for example the text of one source page. The tag renders to no text. A tag on a line of its own takes the line with it, so the prompt is the text that the same template gives without the tag:
+`{% cache_point %}` marks the end of a long part of the prompt that many records share, for example the text of one source page. The tag renders to no text. A tag on a line of its own removes the line. A tag after text on a line keeps the line break after it. Thus the prompt is the text that the template gives without the tag:
 
 ```markdown
 ## PAGE

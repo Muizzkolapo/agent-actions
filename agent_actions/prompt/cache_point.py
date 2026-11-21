@@ -7,6 +7,8 @@ environment that reads a prompt takes `PROMPT_EXTENSIONS`, or the tag is a synta
 
 from __future__ import annotations
 
+import re
+import secrets
 from typing import Any
 
 from jinja2 import nodes
@@ -14,13 +16,27 @@ from jinja2.ext import Extension
 
 CACHE_POINT_TAG = "cache_point"
 
+CACHE_POINT_TAG_PATTERN = re.compile(r"\{%[-+]?\s*" + CACHE_POINT_TAG + r"\s*[-+]?%\}")
+"""The tag as a template writes it, whitespace control included."""
+
+# A tag at the end of a line of text, before its newline: `trim_blocks` would eat the
+# newline, so the line would join the next one. A tag alone on its line is left to it.
+_INLINE_TAG_AT_LINE_END = re.compile(
+    r"(?m)^(?P<before>[^\n]*\S[^\n]*?)(?P<tag>\{%\+?\s*" + CACHE_POINT_TAG + r"\s*%\})\n"
+)
+
 MAX_CACHE_POINTS = 3
 """The most tags a template may hold. Anthropic takes four cache breakpoints in a request;
 one is kept for the end of a prompt that every record shares."""
 
-# Private-use characters, which no prompt text holds and no case filter changes, stand
-# where a tag rendered.
-_MARK = "\ue006\ue007"
+# Stands where a tag rendered: private-use characters around a token drawn for this
+# process, digits so no case filter changes it, so no record text can hold it.
+_MARK = "\ue006" + str(secrets.randbits(128)).zfill(39) + "\ue007"
+
+
+def has_cache_point(template: str) -> bool:
+    """Whether *template* holds a `{% cache_point %}` tag."""
+    return CACHE_POINT_TAG_PATTERN.search(template) is not None
 
 
 class CachePointExtension(Extension):
@@ -28,6 +44,12 @@ class CachePointExtension(Extension):
 
     tags = {CACHE_POINT_TAG}
     output = _MARK
+
+    def preprocess(self, source: str, name: str | None, filename: str | None = None) -> str:
+        """Keep the newline after a tag inside a line, which `trim_blocks` would eat."""
+        if not self.environment.trim_blocks:
+            return source
+        return _INLINE_TAG_AT_LINE_END.sub(lambda m: m.group(0) + "\n", source)
 
     def parse(self, parser: Any) -> nodes.Node:
         lineno = next(parser.stream).lineno

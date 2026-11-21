@@ -137,7 +137,8 @@ If you edit an action in the configuration, the edit does not run anything again
 - The provider endpoint of an LLM action: `base_url`, or the `url` of the declared endpoint that its `model_vendor` names
 
 A change to `request_timeout`, `retry`, `api_key` or `enable_prompt_caching` is not an edit. These settings
-change how a request gets to the provider, not what the request asks.
+change how a request gets to the provider, not what the request asks. A `{% cache_point %}` tag in a prompt is
+also not an edit, for the same reason: Agent Actions removes the tag before it compares the prompt.
 
 The records that the action already answered keep their
 answers. The actions that read these records also keep their answers. The action answers the records that it did not answer yet
