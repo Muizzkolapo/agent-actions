@@ -224,10 +224,20 @@ In JSON mode, an online Anthropic request offers the schema tool but does not fo
 :::
 
 :::note[An answer that the output budget cuts off]
-A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In an Anthropic batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. An Anthropic answer that the limit cuts off partway through its text is never completed by guessing the rest: online and in batch, the record fails with a parse error in JSON mode. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
+A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In a batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. A JSON answer that the limit cuts off partway through its text is never completed by guessing the rest. For every vendor, online and in batch, the record fails with a parse error that names the stop reason, for example `The answer was cut off at the output limit (stop_reason=length); raise max_tokens`. A JSON answer that the provider stops partway is also a parse error that names the stop reason, online and in batch. The stop can be a content filter, a Gemini `SAFETY` or `RECITATION` block, or an Anthropic `refusal`. An example is `The provider stopped the answer before its end (stop_reason=content_filter); the answer is not complete`. In text mode, the cut-off or stopped text is stored as the model wrote it. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
 :::
 
-An OpenAI model that declines to answer returns its reason instead of an answer. The error quotes the reason, for example `The model refused to answer: I can't help with that.`, online and in batch. In JSON mode, the record fails with a parse error, and the run log holds the reason.
+:::note[An answer that holds no content]
+A response can come back with no answer in it. The record ends in the same way online and in batch:
+
+- **A refusal (OpenAI).** The error quotes the reason, for example `The model refused to answer: I can't help with that.`
+- **A blocked prompt (Gemini).** The error names the block reason: `Gemini blocked the prompt (blockReason=SAFETY)`.
+- **A stop that is not the model's own.** Examples are a Gemini `SAFETY` stop before any text, and an Anthropic message that holds only a thinking block. The error names the stop reason.
+
+In text mode, the record fails with that error, and `retry` does not send it again. In JSON mode, Agent Actions stores the record with a parse error that holds the same reason, and `expect: {repair: auto}` can regenerate it.
+
+An Anthropic or Gemini answer that the model ended itself with no text in it is an empty answer. In text mode, [`on_empty`](#execution-fields) decides its result. In JSON mode, it is a parse error.
+:::
 
 ### Execution Fields
 

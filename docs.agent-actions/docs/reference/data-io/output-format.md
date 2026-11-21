@@ -93,7 +93,7 @@ Each element of the JSON array in `data` is a record. This example record comes 
 | `root_target_id`     | The `target_id` of the record of the first action for this source record (absent on the records of the first action) |
 | `content`            | Fields by namespace. The staged input is under `source`. The output of each upstream action is under the name of that action. The output of this action (schema-validated) is under its own name. |
 | `lineage`            | An array that tracks the processing chain |
-| `metadata`           | Execution metadata, for example `model` and `provider` |
+| `metadata`           | Execution metadata: the `model` and `provider` that the configuration of the action names. A batch record also holds `finish_reason`, the reason that the provider gave for the end of the answer. The system does not read a field of the answer of the model into `metadata` |
 
 ### Metadata Fields
 

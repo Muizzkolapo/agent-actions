@@ -312,6 +312,8 @@ This file is a summary of the workflow execution, with the metrics of each actio
 }
 ```
 
+For an Anthropic batch, the prompt-token count includes the cached prompt tokens, as for an online Anthropic call.
+
 An action that has a guard also carries a `guard_stats` object. The object holds the `condition`, the counts `passed` and `filtered`, and `on_false`.
 
 ### Run History (`runs.json`)

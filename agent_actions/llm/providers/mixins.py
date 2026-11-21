@@ -9,7 +9,15 @@ import logging
 from typing import Any
 
 from agent_actions.errors import VendorAPIError
-from agent_actions.llm.providers.error_wrapper import refusal_text
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    cut_off_parse_error,
+    empty_parse_error,
+    empty_response_error,
+    is_truncated,
+    is_unfinished,
+    refusal_text,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 
@@ -142,6 +150,9 @@ class OpenAICompatibleResponseMixin:
     from OpenAI-style batch responses.
     """
 
+    # The vendor as its online client names it in an empty-response error.
+    _vendor_label = "OpenAI"
+
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from OpenAI-compatible response."""
         if raw_response.get("error"):
@@ -153,11 +164,47 @@ class OpenAICompatibleResponseMixin:
             error = body.get("error") if isinstance(body, dict) else None
             message = error.get("message") if isinstance(error, dict) else None
             return f"HTTP {status_code}: {message}" if message else f"HTTP {status_code}"
-        choices = (response_data.get("body") or {}).get("choices") or [{}]
-        refusal = (choices[0].get("message") or {}).get("refusal")
-        if refusal:
-            return refusal_text(refusal)
         return None
+
+    @staticmethod
+    def _first_choice(raw_response: dict[str, Any]) -> dict[str, Any]:
+        body = (raw_response.get("response") or {}).get("body") or {}
+        return (body.get("choices") or [{}])[0] or {}
+
+    def _no_answer(self, raw_response: dict[str, Any]) -> NoAnswer | None:
+        """A refusal, or a message with no content, as the OpenAI online client ends each.
+
+        Content the output limit stopped before its first character is no content either.
+        """
+        choice = self._first_choice(raw_response)
+        message = choice.get("message") or {}
+        content = message.get("content")
+        finish_reason = choice.get("finish_reason")
+        cut_off_at_once = content == "" and is_truncated(finish_reason)
+        if content is not None and not cut_off_at_once:
+            return None
+        refusal = message.get("refusal")
+        if refusal:
+            reason = refusal_text(refusal)
+            return NoAnswer(parse_error=reason, error=VendorAPIError(reason))
+        body = (raw_response.get("response") or {}).get("body") or {}
+        return NoAnswer(
+            parse_error=(
+                cut_off_parse_error(finish_reason)
+                if cut_off_at_once
+                else empty_parse_error(finish_reason)
+            ),
+            error=empty_response_error(
+                self._vendor_label,
+                finish_reason,
+                model_name=body.get("model") or "",
+                vendor=self._vendor_label.lower(),
+                operation="chat.completions.create",
+            ),
+        )
+
+    def _answer_was_cut_off(self, raw_response: dict[str, Any]) -> bool:
+        return is_unfinished(self._first_choice(raw_response).get("finish_reason"))
 
     def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
         """The status of the line's response; None for a line that failed before any request."""

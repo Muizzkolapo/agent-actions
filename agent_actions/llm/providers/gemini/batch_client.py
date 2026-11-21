@@ -22,6 +22,10 @@ except ImportError:
     genai = None  # type: ignore[assignment]
     types = None  # type: ignore[assignment]
 from agent_actions.config.defaults import LLMDefaults
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    is_unfinished,
+)
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
@@ -158,37 +162,45 @@ class GeminiBatchClient(BaseBatchClient):
         """Extract error from Gemini response."""
         if "error" in raw_response:
             return str(raw_response["error"])
-        # Check if content is missing (Gemini-specific error condition)
-        response_data = raw_response.get("response", {})
-        candidates = response_data.get("candidates", [])
-        if not candidates:
-            return "No candidates in response"
-        candidate = candidates[0]
-        candidate_content = candidate.get("content", {})
-        parts = candidate_content.get("parts", [])
-        if not parts or not parts[0].get("text"):
-            return "No content in response"
         return None
 
     def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
-        """The error's code; 200 for an answer with no candidate or no text, such as a blocked prompt."""
         error = raw_response.get("error")
-        if error is None:
-            return 200
         code = error.get("code") if isinstance(error, dict) else None
         return code if isinstance(code, int) else None
 
+    @staticmethod
+    def _first_candidate(raw_response: dict[str, Any]) -> dict[str, Any]:
+        candidates = (raw_response.get("response") or {}).get("candidates") or [{}]
+        return candidates[0] or {}
+
+    def _answer_text_of(self, raw_response: dict[str, Any]) -> str:
+        """The answer as the SDK's ``response.text`` reads it: its text parts joined, thoughts left out."""
+        parts = (self._first_candidate(raw_response).get("content") or {}).get("parts") or []
+        return "".join(
+            part["text"]
+            for part in parts
+            if isinstance(part.get("text"), str) and not part.get("thought")
+        )
+
+    def _no_answer(self, raw_response: dict[str, Any]) -> NoAnswer | None:
+        if self._answer_text_of(raw_response):
+            return None
+        from agent_actions.llm.providers.gemini.client import no_answer
+
+        response_data = raw_response.get("response") or {}
+        return no_answer(
+            (response_data.get("promptFeedback") or {}).get("blockReason"),
+            self._first_candidate(raw_response).get("finishReason"),
+            response_data.get("modelVersion") or "",
+        )
+
+    def _answer_was_cut_off(self, raw_response: dict[str, Any]) -> bool:
+        return is_unfinished(self._first_candidate(raw_response).get("finishReason"))
+
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""
-        response_data = raw_response.get("response", {})
-        candidates = response_data.get("candidates", [])
-        if candidates:
-            candidate = candidates[0]
-            candidate_content = candidate.get("content", {})
-            parts = candidate_content.get("parts", [])
-            if parts:
-                return parts[0].get("text", "")
-        return None
+        return self._answer_text_of(raw_response)
 
     def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from Gemini response."""

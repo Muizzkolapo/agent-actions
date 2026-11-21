@@ -28,7 +28,13 @@ from ollama import Client
 
 from agent_actions.config.defaults import LLMDefaults, OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
-from agent_actions.llm.providers.ollama.client import _VENDOR_PARAMS, _extract_ollama_schema
+from agent_actions.llm.providers.error_wrapper import wrap_vendor_error
+from agent_actions.llm.providers.ollama.client import (
+    _ERROR_MAPPING_CLOUD,
+    _ERROR_MAPPING_LOCAL,
+    _VENDOR_PARAMS,
+    _extract_ollama_schema,
+)
 from agent_actions.llm.providers.ollama.failure_injection import (
     failed_batch_id_for,
     is_injected_failed_batch,
@@ -40,6 +46,10 @@ from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
 logger = logging.getLogger(__name__)
+
+# Written on the line of a request that failed with no HTTP answer in a way online does not
+# retry. A retry reads the status alone, and any client error reads as "fail it now".
+_NOT_RETRIED_STATUS = 400
 
 
 def _finish_reason(ollama_response: dict | object) -> str:
@@ -62,6 +72,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     Parameterized by ``vendor_slug`` and ``cloud`` to serve both
     ``ollama_local`` and ``ollama_cloud`` from a single class.
     """
+
+    _vendor_label = "Ollama"
 
     def __init__(
         self,
@@ -248,8 +260,33 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     "message": str(e),
                     "type": f"{self.vendor_slug}_error",
                     "code": "inference_error",
+                    "status": self._failure_status(e, str(task.get("body", {}).get("model", ""))),
                 },
             }
+
+    def _failure_status(self, error: Exception, model: str) -> int | None:
+        """The status a failed request's line carries, which decides whether a retry resends it.
+
+        An HTTP error answer carries its own. Any other failure is classified as the online
+        client classifies it: one it retries carries no status and is resent, one it fails
+        at once carries a client error.
+        """
+        from agent_actions.processing.recovery.retry import is_retriable_error
+
+        status = getattr(error, "status_code", None)
+        if status is None:
+            status = getattr(getattr(error, "response", None), "status_code", None)
+        if isinstance(status, int) and status > 0:
+            return status
+        mapping = _ERROR_MAPPING_CLOUD if self.cloud else _ERROR_MAPPING_LOCAL
+        if is_retriable_error(wrap_vendor_error(error, model, mapping)):
+            return None
+        return _NOT_RETRIED_STATUS
+
+    def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
+        error = raw_response.get("error")
+        status = error.get("status") if isinstance(error, dict) else None
+        return status if isinstance(status, int) else None
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch with concurrent workers (default: 1 = sequential)."""
