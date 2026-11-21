@@ -11,9 +11,9 @@ from typing import Any
 import jinja2
 import yaml
 
-from agent_actions.errors import TemplateRenderingError
-from agent_actions.prompt.deferred_values import LoadRender, _scan
-from agent_actions.prompt.render_workflow import new_load_render
+from agent_actions.errors import ConfigurationError, TemplateRenderingError
+from agent_actions.prompt.deferred_values import _INLINE_SET, LoadRender, _scan
+from agent_actions.prompt.render_workflow import _load_yaml_content, new_load_render
 
 from .models import Location
 
@@ -22,16 +22,16 @@ logger = logging.getLogger(__name__)
 _NAME_LINE = re.compile(r"^\s*(?:-\s+)?name:[ \t]*(?=\S)")
 _NAME_MARK = re.compile(r"  # @src (\S+?):(\d+):(\d+)")
 _ANY_MARK = re.compile(r"  # @(?:src|at) (\S+?):(\d+)")
+_MARK_TEXT = re.compile(r"  # @(?:src|at) \S+?:\d+(?::\d+)?")
+# The line breaks PyYAML counts in a node's line number.
+_LINE_BREAK = re.compile(r"\r\n|[\r\n\x85\u2028\u2029]")
 # A tag that strips the whitespace after it would strip nothing once a mark follows it.
 _STRIPS_AFTER = ("-}}", "-%}", "-#}")
 _CONTROL_OPENERS = ("{%", "{#")
-# Blocks whose body is text that is held, not output in place where it is written.
-_CAPTURE_OPEN = re.compile(r"\{%[-+]?\s*(set|macro|call|filter)\b(.*)", re.S)
-_CAPTURE_CLOSE = re.compile(r"\{%[-+]?\s*end(set|macro|call|filter)\b")
-# `{% set a, ns.b = ... %}` assigns and holds no body; `{% set a | f(k=1) %}` opens one.
-_SET_ASSIGNS = re.compile(r"\s*[\w.]+(?:\s*,\s*[\w.]+)*\s*=(?!=)")
-# A `name:` mark changes the text a value block holds; a macro or call body needs it.
-_VALUE_BLOCKS = frozenset({"set", "filter"})
+_BLOCK_TAG = re.compile(r"\{%[-+]?\s*(end)?(set|filter|macro)\b")
+# A `set` block holds its body as a value; a `filter` block changes its body before output.
+# A mark in either body would change the text, so neither body gets a mark.
+_VALUE_BLOCKS = ("set", "filter")
 
 
 class WorkflowRenderError(Exception):
@@ -63,68 +63,94 @@ class MarkingLoadRender(LoadRender):
     """Tags source lines with the file and line they came from, as YAML comments.
 
     Each `name:` line gets `# @src <origin>:<line>:<column>`; each other line of the
-    workflow file gets `# @at <origin>:<line>`, so a line that a tag removes is the line
-    whose mark is missing from the output.
+    workflow file that is output where it is written gets `# @at <origin>:<line>`, so a
+    line that a tag removes is the line whose mark is missing from the output.
     """
 
     def __init__(self, templates_folder: Path, workflow: str) -> None:
         super().__init__(templates_folder, workflow)
         # Lines of the workflow file left unmarked but still output as written.
         self.unmarked_output: set[int] = set()
+        # The body lines of each `filter` block, and the line that closes it: the body is
+        # output where the closing line is output.
+        self.filter_bodies: list[tuple[range, int]] = []
 
     def wrap(self, source: str, origin: str) -> str:
         source = source.replace("\r\n", "\n").replace("\r", "\n")
         in_workflow = not origin.startswith("templates/")
         tags = _scan(source)
         starts = [tag.start for tag in tags]
-        captures = _capture_spans(source, tags) if in_workflow else []
+        values = _block_spans(source, tags, _VALUE_BLOCKS)
+        macros = _block_spans(source, tags, ("macro",))
         lines = source.split("\n")
+        line_starts = []
         offset = 0
+        for line in lines:
+            line_starts.append(offset)
+            offset += len(line) + 1
+        if in_workflow:
+            for body_start, close_start, kind in values:
+                if kind == "filter":
+                    self.filter_bodies.append(
+                        (
+                            range(
+                                _line_of(line_starts, body_start),
+                                _line_of(line_starts, close_start),
+                            ),
+                            _line_of(line_starts, close_start),
+                        )
+                    )
         for i, line in enumerate(lines):
-            end = offset + len(line)
-            offset = end + 1
+            end = line_starts[i] + len(line)
             tag = _tag_holding(tags, starts, end)
-            if tag is not None:
-                # A mark inside a tag would be Jinja, not a YAML comment.
-                if in_workflow and tag.kind == "raw":
-                    self.unmarked_output.add(i)
+            if tag is not None and tag.kind != "raw":
+                # A mark inside a tag would be Jinja, not a YAML comment. The text of a raw
+                # block is output as written, so a mark in it is a comment.
                 continue
             if not line.strip() or line.rstrip().endswith(_STRIPS_AFTER):
                 if in_workflow:
                     self.unmarked_output.add(i)
                 continue
-            block = next((kind for start, stop, kind in captures if start <= end < stop), None)
+            if any(start <= end < stop for start, stop, _ in values):
+                continue
             match = _NAME_LINE.match(line)
-            if match and block not in _VALUE_BLOCKS:
+            if match:
                 column = match.end() + (line[match.end()] in "'\"")
                 lines[i] = f"{line.rstrip()}  # @src {origin}:{i}:{column}"
-            elif in_workflow and block is None:
+            elif in_workflow and not any(start <= end < stop for start, stop, _ in macros):
+                # A macro body is output where the macro is called, not where it is
+                # written, so it gets no line mark and is not live.
                 lines[i] = f"{line.rstrip()}  # @at {origin}:{i}"
-            # A line in a block body is left without a line mark, so it is not live: the
-            # text is held, and a mark would change what a test of it reads.
         return super().wrap("\n".join(lines), origin)
 
 
-def _capture_spans(source: str, tags: list[Any]) -> list[tuple[int, int, str]]:
-    """The body of each outermost `set`, `macro`, `call` or `filter` block, by offset."""
+def _block_spans(
+    source: str, tags: list[Any], kinds: tuple[str, ...]
+) -> list[tuple[int, int, str]]:
+    """The body of each outermost block of one of *kinds*, by offset, and its kind."""
     spans: list[tuple[int, int, str]] = []
     stack: list[tuple[str, int]] = []
     for tag in tags:
         if tag.kind != "%":
             continue
         text = source[tag.start : tag.end]
-        opened = _CAPTURE_OPEN.match(text)
-        if opened:
-            if opened.group(1) == "set" and _SET_ASSIGNS.match(opened.group(2)):
-                continue
-            stack.append((opened.group(1), tag.end))
+        block = _BLOCK_TAG.match(text)
+        if block is None or block.group(2) not in kinds:
             continue
-        closed = _CAPTURE_CLOSE.match(text)
-        if closed and stack and stack[-1][0] == closed.group(1):
-            kind, body_start = stack.pop()
+        kind = block.group(2)
+        if block.group(1) is None:
+            # `{% set a, (b, c) = ... %}` assigns and holds no body.
+            if kind != "set" or not _INLINE_SET.match(text):
+                stack.append((kind, tag.end))
+        elif stack and stack[-1][0] == kind:
+            _, body_start = stack.pop()
             if not stack:
                 spans.append((body_start, tag.start, kind))
     return spans
+
+
+def _line_of(line_starts: list[int], pos: int) -> int:
+    return bisect.bisect_right(line_starts, pos) - 1
 
 
 def _tag_holding(tags: list[Any], starts: list[int], pos: int) -> Any:
@@ -137,17 +163,25 @@ def _tag_holding(tags: list[Any], starts: list[int], pos: int) -> Any:
 
 def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkflow:
     """Render *yaml_file* with the load step of `agac` only: no prompt fill, no versions, no writes."""
-    source = yaml_file.read_text(encoding="utf-8")
+    raw = yaml_file.read_text(encoding="utf-8")
+    try:
+        source = _load_yaml_content(yaml_file, project_root=project_root)
+    except ConfigurationError as e:
+        raise WorkflowRenderError(f"{e} ({raw.strip()})", 0) from e
     text, _ = _render(LoadRender, source, yaml_file, project_root)
     data, name_lines = _parse(text, source)
+    if source != raw:
+        # The workflow is a prompt store entry; its lines are not the lines of this file.
+        return RenderedWorkflow(text=text, data=data, action_sources={})
     try:
         marked, load = _render(MarkingLoadRender, source, yaml_file, project_root)
     except WorkflowRenderError as e:
         # The plain render passed, so only a mark broke this one; locations fall back.
         logger.warning("Could not map actions of %s to source lines: %s", yaml_file, e.message)
         return RenderedWorkflow(text=text, data=data, action_sources={})
-    marked_lines = marked.split("\n")
-    if len(marked_lines) != len(text.split("\n")):
+    marked_lines = _LINE_BREAK.split(marked)
+    if not _same_text(marked_lines, _LINE_BREAK.split(text)):
+        # A mark changed what the render output, so no mark can be trusted.
         logger.warning("Could not map actions of %s to source lines: the renders differ", yaml_file)
         return RenderedWorkflow(text=text, data=data, action_sources={})
 
@@ -161,6 +195,12 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
             for origin, line in _ANY_MARK.findall(marked_line)
             if origin == yaml_file.name
         }
+        source_lines = source.split("\n")
+        for body, close_line in load.filter_bodies:
+            if close_line in live:
+                live.update(body)
+                # A name line in the body gets no mark, but it defines its action in place.
+                action_lines.update(i for i in body if _NAME_LINE.match(source_lines[i]))
         live_lines = frozenset(live | load.unmarked_output)
     return RenderedWorkflow(
         text=text,
@@ -168,6 +208,14 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         action_sources=sources,
         action_lines=frozenset(action_lines),
         live_lines=live_lines,
+    )
+
+
+def _same_text(marked_lines: list[str], lines: list[str]) -> bool:
+    """True when the marked render, without its marks, is the plain render."""
+    return len(marked_lines) == len(lines) and all(
+        _MARK_TEXT.sub("", marked).rstrip() == line.rstrip()
+        for marked, line in zip(marked_lines, lines, strict=True)
     )
 
 
