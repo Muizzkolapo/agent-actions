@@ -25,6 +25,9 @@ _ANY_MARK = re.compile(r"  # @(?:src|at) (\S+?):(\d+)")
 # A tag that strips the whitespace after it would strip nothing once a mark follows it.
 _STRIPS_AFTER = ("-}}", "-%}", "-#}")
 _CONTROL_OPENERS = ("{%", "{#")
+# Blocks whose body is text a template can read back, not output in place.
+_CAPTURE_OPEN = re.compile(r"\{%-?\s*(set|macro|call|filter)\b(.*)", re.S)
+_CAPTURE_CLOSE = re.compile(r"\{%-?\s*end(set|macro|call|filter)\b")
 
 
 class WorkflowRenderError(Exception):
@@ -70,6 +73,7 @@ class MarkingLoadRender(LoadRender):
         in_workflow = not origin.startswith("templates/")
         tags = _scan(source)
         starts = [tag.start for tag in tags]
+        captures = _capture_spans(source, tags) if in_workflow else []
         lines = source.split("\n")
         offset = 0
         for i, line in enumerate(lines):
@@ -89,9 +93,35 @@ class MarkingLoadRender(LoadRender):
             if match:
                 column = match.end() + (line[match.end()] in "'\"")
                 lines[i] = f"{line.rstrip()}  # @src {origin}:{i}:{column}"
+            elif in_workflow and any(start <= end < stop for start, stop in captures):
+                # A mark would change the text a `{% set %}` block captures, and the branch
+                # a test of it takes; the line may still be output, so it stays live.
+                self.unmarked_output.add(i)
             elif in_workflow:
                 lines[i] = f"{line.rstrip()}  # @at {origin}:{i}"
         return super().wrap("\n".join(lines), origin)
+
+
+def _capture_spans(source: str, tags: list[Any]) -> list[tuple[int, int]]:
+    """The body of each outermost `set`, `macro`, `call` or `filter` block, by offset."""
+    spans: list[tuple[int, int]] = []
+    stack: list[tuple[str, int]] = []
+    for tag in tags:
+        if tag.kind != "%":
+            continue
+        text = source[tag.start : tag.end]
+        opened = _CAPTURE_OPEN.match(text)
+        if opened:
+            if opened.group(1) == "set" and "=" in opened.group(2):
+                continue  # `{% set x = ... %}` holds no body
+            stack.append((opened.group(1), tag.end))
+            continue
+        closed = _CAPTURE_CLOSE.match(text)
+        if closed and stack and stack[-1][0] == closed.group(1):
+            _, body_start = stack.pop()
+            if not stack:
+                spans.append((body_start, tag.start))
+    return spans
 
 
 def _tag_holding(tags: list[Any], starts: list[int], pos: int) -> Any:
