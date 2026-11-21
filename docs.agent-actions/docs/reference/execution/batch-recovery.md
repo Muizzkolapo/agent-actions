@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Batch Recovery
 
-Batch recovery handles two problems of a batch API, in a process with two phases, when you turn it on. Phase 1 needs a `retry:` block. Phase 2 needs an `expect:` block with a `repair` policy other than `none`. In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
+Batch recovery handles two problems of a batch API, in a process with two phases, when you turn it on. Phase 1 needs a `retry:` block. Phase 2 needs an `expect:` block with a `repair` policy other than `none`. An `expect:` block with an `llm_judge` rule also adds judge rounds, with any `repair` policy. See [Judge rounds](#judge-rounds). In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
 
 ## The Two Phases
 
@@ -20,14 +20,20 @@ flowchart TD
     D --> E[Submit a Retry Batch]
     E --> F[Collected by a Later Run]
     F --> G{Expectations Configured?}
-    G -->|Yes| H[Phase 2: Validate All Results]
+    G -->|Yes| M{Values Not Judged Yet?}
     G -->|No| L[Done]
+    M -->|Yes| N[Submit a Judge Batch]
+    N --> O[Collected by a Later Run]
+    O --> M
+    M -->|No| H[Phase 2: Validate All Results]
     H --> I{Failures?}
     I -->|Yes| J[Append Feedback + Resubmit]
     J --> K[Merge Results]
-    K --> H
+    K --> M
     I -->|No| L
 ```
+
+The judge round runs only for an `llm_judge` rule on an action whose `judge_mode` is not `online`.
 
 **Phase 1 (Retry)** recovers the records that the provider did not answer. The provider dropped some of these records completely (network errors, timeouts, silent failures). The provider returned the other records with an error for each record and no content. Phase 1 submits the same request again, with no change.
 
@@ -143,6 +149,21 @@ two shapes. Filter on `_recovery.retry.succeeded == false`, not on the dispositi
 After Phase 1 makes sure that all recoverable records are present, Phase 2 checks whether the
 outputs are valid. Phase 2 runs when the action has an [`expect:`](../validation/expectations.md)
 block with a repair policy.
+
+### Judge rounds
+
+An `llm_judge` rule adds a judge round before each validation. The judge round runs with any
+`repair` policy, `repair: none` included:
+
+1. Agent Actions finds the values that the judge must check and that it did not judge yet.
+2. Agent Actions sends the judge calls for these values as a judge batch, named
+   `<file>_judge_<n>`, and the run defers. A later run collects the judge batch.
+3. Agent Actions validates the records with the verdicts of the judge batch.
+
+Each repair round adds a judge round for the values that the repair round returns. A judge
+batch holds one model and at most the number of requests that the provider accepts in one
+batch. If some values do not fit, the next judge round sends them. Set `judge_mode: online` to
+call the judge online. See [Judging in batch](../validation/expectations.md#judging-in-batch).
 
 ### How It Works
 

@@ -137,7 +137,10 @@ class Run:
         self.online: list[Any] = []
         self.finalized: list[BatchResult] | None = None
         self.written: dict[str, Any] = {}
+        self.exhausted: dict[str, Any] | None = None
         self.context_map: dict[str, Any] = {}
+        # The retry service the passes use; None stands one in that rebuilds nothing.
+        self.retry_service: Any = None
 
     def _patches(self, stack: ExitStack) -> None:
         def online_call(**kwargs):
@@ -146,6 +149,7 @@ class Run:
 
         def finalize(context, identity, batch_results, context_map, exhausted_recovery=None):
             self.finalized = batch_results
+            self.exhausted = exhausted_recovery
             self.written = _write(context.agent_config, batch_results, context_map)
             return "/out.json"
 
@@ -168,6 +172,8 @@ class Run:
         service._client_resolver.get_for_batch_id.return_value = self.provider
         service._context_manager.load_batch_context_map.return_value = self.context_map
         service._retry_service.build_exhausted_recovery.return_value = None
+        if self.retry_service is not None:
+            service._retry_service = self.retry_service
         return service
 
     def main_batch_returns(self, results: list[BatchResult]) -> bool:
@@ -239,7 +245,7 @@ def _write(agent_config, batch_results, context_map) -> dict[str, Any]:
         batch_results, context_map=context_map, agent_config=agent_config
     ):
         for row in result.data or []:
-            written[row["target_id"]] = row["content"][ACTION].get("expect")
+            written[row["target_id"]] = (row["content"].get(ACTION) or {}).get("expect")
     return written
 
 

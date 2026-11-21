@@ -20,7 +20,7 @@ from agent_actions.expectations.judge import (
     tally_votes,
     verdict_from_reply,
 )
-from agent_actions.llm.providers.batch_base import RAW_USER_CONTENT_KEY
+from agent_actions.llm.providers.batch_base import RAW_USER_CONTENT_KEY, batch_request_cap
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -123,11 +123,21 @@ def submit_judge_batch(
 ) -> JudgeSubmission:
     """Send one request per vote of each pending call, as ``<file>_judge_<attempt>``.
 
-    A batch takes one model, so only the calls of the first model met go out; the
-    rest are still uncached when the step runs again, and go out in the next round.
+    A batch takes one model and at most the provider's cap of requests, so only the
+    calls of the first model met go out, up to that cap; the rest are still uncached
+    when the step runs again, and go out in the next round.
     """
     model = next(iter(collection.pending.values())).model
-    sent = {key: r for key, r in collection.pending.items() if r.model == model}
+    cap = batch_request_cap(provider)
+    sent: dict[str, JudgeRequest] = {}
+    held = 0
+    for key, request in collection.pending.items():
+        if request.model != model:
+            continue
+        if sent and held + request.votes > cap:
+            break
+        sent[key] = request
+        held += request.votes
 
     rows: list[dict[str, Any]] = []
     requests: dict[str, str] = {}

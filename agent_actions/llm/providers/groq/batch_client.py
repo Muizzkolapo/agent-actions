@@ -28,6 +28,8 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     - Completion windows: 24h to 7 days
     """
 
+    max_batch_requests = 50_000
+
     # Every status of the SDK's batch types. One being cancelled has not ended yet.
     STATUS_MAPPING = {
         "validating": "validating",
