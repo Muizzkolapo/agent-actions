@@ -28,6 +28,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     - Completion windows: 24h to 7 days
     """
 
+    _vendor_label = "Groq"
     max_batch_requests = 50_000
     max_batch_bytes = 100_000_000
 

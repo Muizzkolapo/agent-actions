@@ -42,6 +42,7 @@ from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchCompleteEvent
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.processing.run_counts import add_tokens
 from agent_actions.processing.types import RecoveryMetadata
 
@@ -184,11 +185,12 @@ def process_recovery_batch(
             provider,
             batch_id,
             output_directory,
-            # A judge batch answers judge requests, not the records of the map.
+            # A judge batch answers judge requests, not the records of the map, and its
+            # replies are read by the judge's own rules, not the action's mode.
             context_map=None if answers_judges else context_map,
             record_count=entry.record_count,
             file_name=file_name,
-            agent_config=None if answers_judges else agent_config,
+            agent_config=None if answers_judges else agent_config or {},
         )
 
     accumulated = deserialize_results(state.accumulated_results)
@@ -441,17 +443,14 @@ def finalize_batch_output(
 def report_batch_usage(batch_results: list[BatchResult]) -> None:
     """Report the tokens the results used, summed, as an online call reports its own.
 
-    Keyed as ``ResponseBuilder.record_usage_and_event`` keys them; a vendor's usage reads
-    ``prompt_tokens``/``completion_tokens`` or ``input_tokens``/``output_tokens``.
+    Read and keyed as ``ResponseBuilder.record_usage_and_event`` reads and keys them.
     """
     prompt = completion = total = 0
     for result in batch_results:
-        usage = result.usage if isinstance(result.usage, dict) else {}
-        used_in = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
-        used_out = usage.get("completion_tokens") or usage.get("output_tokens") or 0
-        prompt += used_in
-        completion += used_out
-        total += usage.get("total_tokens") or used_in + used_out
+        usage = ResponseBuilder.batch_usage(result.usage)
+        prompt += usage.prompt_tokens
+        completion += usage.completion_tokens
+        total += usage.total_tokens
     if prompt > 0 or completion > 0:
         add_tokens({"input_tokens": prompt, "output_tokens": completion, "total_tokens": total})
 

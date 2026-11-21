@@ -235,8 +235,8 @@ def tally_judge_results(
 ) -> dict[str, list[Any]]:
     """Each verdict key's verdict, read from its votes as online reads its replies.
 
-    A request that errored, or came back with no reply, fails the whole call, as an
-    online judge call that raises does.
+    A request that errored, came back with no reply, or came back with no content and
+    an error (a refusal), fails the whole call, as an online judge call that raises does.
     """
     by_id = {str(result.custom_id): result for result in results}
     votes: dict[str, list[tuple[bool, str]]] = {}
@@ -250,6 +250,10 @@ def tally_judge_results(
             errors.setdefault(key, result.error or "the judge request failed")
             continue
         payload = result.text if result.text is not None else result.content
+        if payload is None and result.error:
+            # A refusal or a blocked prompt: online's text-mode judge call raises it.
+            errors.setdefault(key, result.error)
+            continue
         if payload is None:
             votes.setdefault(key, []).append((False, "judge call returned an empty response"))
             continue

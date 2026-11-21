@@ -24,9 +24,12 @@ from agent_actions.llm.providers.anthropic import (
 )
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
     VendorErrorMapping,
     empty_response_error,
+    is_stopped_by_provider,
     is_truncated,
+    stopped_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -60,6 +63,34 @@ build_sdk_models(
 
 # The API requires max_tokens; agac sends this when the action sets none.
 _DEFAULT_MAX_TOKENS = 4096
+
+# The stop reasons of a message the model ended itself.
+_OWN_STOP_REASONS = frozenset({None, "end_turn", "stop_sequence"})
+
+
+def no_tool_answer_message(stop_reason: Any, text: str) -> str:
+    """The parse error for a JSON-mode message that holds no tool answer and no readable text."""
+    return f"No tool_use block in response (stop_reason={stop_reason}): {text[:200]!r}"
+
+
+def no_answer(stop_reason: Any, *, only_text: bool, model_name: str, operation: str) -> NoAnswer:
+    """How a message with no tool answer and no text ends, online and in a batch result.
+
+    ``only_text`` says the message holds nothing but text blocks, which are then empty. Such
+    a message the model ended itself is an empty answer, left to the action's ``on_empty``.
+    One that was stopped, or that holds other blocks only (thinking), is an error naming
+    the stop reason.
+    """
+    parse_error = no_tool_answer_message(stop_reason, "")
+    if only_text and stop_reason in _OWN_STOP_REASONS:
+        return NoAnswer(parse_error=parse_error)
+    return NoAnswer(
+        parse_error=parse_error,
+        error=empty_response_error(
+            "Anthropic", stop_reason, model_name=model_name, vendor="anthropic", operation=operation
+        ),
+    )
+
 
 # The SDK refuses a non-streamed request it expects to run past 10 minutes: at 128,000
 # output tokens an hour, that is any max_tokens above 21,333.
@@ -298,6 +329,10 @@ class AnthropicClient(BaseClient):
         # Offered the tool, a model can answer in text instead, often in a ```json fence.
         # A finished answer is read like every other client's; a cut-off one could only be
         # read by guessing its end.
+        if text and is_stopped_by_provider(stop_reason):
+            parse_error = stopped_parse_error(stop_reason)
+            logger.warning("Anthropic model=%s: %s", model_name, parse_error)
+            return [{"raw_response": text, "_parse_error": parse_error}]
         if text and not is_truncated(stop_reason):
             answer = json_answer_in(text)
             if answer is not None:
@@ -306,7 +341,7 @@ class AnthropicClient(BaseClient):
                     model_name,
                 )
                 return answer if isinstance(answer, list) else [answer]
-        message = f"No tool_use block in response (stop_reason={stop_reason}): {text[:200]!r}"
+        message = no_tool_answer_message(stop_reason, text)
         fire_event(
             LLMErrorEvent(
                 provider="anthropic",
@@ -335,14 +370,15 @@ class AnthropicClient(BaseClient):
             (block.text for block in response.content if hasattr(block, "text")),
             None,
         )
-        if content is None:
-            error = empty_response_error(
-                "Anthropic",
+        if not content:
+            error = no_answer(
                 getattr(response, "stop_reason", None),
+                only_text=all(hasattr(block, "text") for block in response.content),
                 model_name=model_name,
-                vendor="anthropic",
                 operation="messages.create",
-            )
+            ).error
+            if error is None:
+                return []
             fire_event(
                 LLMErrorEvent(
                     provider="anthropic",

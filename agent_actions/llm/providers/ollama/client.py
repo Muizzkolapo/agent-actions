@@ -27,6 +27,7 @@ from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
     empty_response_error,
     is_truncated,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -195,6 +196,11 @@ def _call_ollama_json(
     maybe_inject_online_failure(model, vendor_slug=vendor_slug)
 
     content = response.message.content
+    done_reason = getattr(response, "done_reason", None)
+    parse_error = unfinished_parse_error(done_reason)
+    if isinstance(content, str) and parse_error:
+        logger.warning("%s (model=%s)", parse_error, model)
+        return [{"raw_response": content, "_parse_error": parse_error}]
     if isinstance(content, str):
         from agent_actions.utils.json_parsing import parse_llm_json
 

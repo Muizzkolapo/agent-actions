@@ -22,6 +22,7 @@ from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     VendorErrorMapping,
     empty_response_error,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -167,6 +168,11 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 vendor="cohere",
                 operation="chat",
             )
+        finish_reason = getattr(response, "finish_reason", None)
+        parse_error = unfinished_parse_error(finish_reason)
+        if parse_error:
+            logger.warning("%s (model=%s)", parse_error, model_name)
+            return [{"raw_response": answer, "_parse_error": parse_error}]
         result = CohereClient.parse_json_response(
             response_content=answer,
             vendor_name="Cohere",

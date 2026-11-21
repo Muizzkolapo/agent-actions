@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.batch.services.shared import settle_unanswered
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
 
 THINKING = {"type": "thinking", "thinking": "Let me work out the quiz", "signature": "sig"}
@@ -38,10 +40,12 @@ def _result(content: list[dict[str, Any]], stop_reason: str = "end_turn") -> dic
 
 
 class TestAnAnswerWithNoTextOrTool:
+    """The line was answered, so it is no failed request; it has no content and says why."""
+
     def test_a_thinking_block_alone_fails_the_record_with_the_stop_reason(self):
         result = _client().parse_provider_response(_result([THINKING], "max_tokens"))
 
-        assert result.success is False
+        assert BatchResultReconciler.is_answered(result) is False
         assert result.content is None
         assert "stop_reason=max_tokens" in (result.error or "")
 
@@ -50,7 +54,7 @@ class TestAnAnswerWithNoTextOrTool:
 
         result = _client().parse_provider_response(_result([redacted], "end_turn"))
 
-        assert result.success is False
+        assert BatchResultReconciler.is_answered(result) is False
         assert "stop_reason=end_turn" in (result.error or "")
 
     def test_text_after_thinking_is_the_answer(self):
@@ -68,7 +72,12 @@ class TestAnAnswerWithNoTextOrTool:
         assert (result.success, result.content) == (True, {"a": 1})
 
     def test_an_empty_content_list_is_left_to_on_empty(self):
+        """In text mode; a JSON-mode read of it is the parse error online returns."""
         result = _client().parse_provider_response(_result([]))
+        assert result.error is None
+        assert "stop_reason=end_turn" in (result.parse_error or "")
+
+        settle_unanswered([result], json_mode=False)
 
         assert (result.success, result.content) == (True, [])
 
