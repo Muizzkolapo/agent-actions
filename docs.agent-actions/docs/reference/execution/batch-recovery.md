@@ -66,8 +66,9 @@ Phase 1 sends a record again only if an online call retries the same failure:
   character.
 
 Each other failure fails its record immediately, with the message of the provider. Examples are
-an HTTP 400 or 404, such as an Ollama model that is not pulled, and an answer that holds no
-content: a refusal, a prompt that Gemini blocked, or a message with only a thinking block.
+an HTTP 400 and an HTTP 404, for example an Ollama model that is not pulled. An answer that holds
+no content also fails: a refusal, a prompt that Gemini blocked, or a message with only a thinking
+block.
 
 In JSON mode, an answer with no content is not a failed request. It is the same parse-error
 record that an online call stores: `{"raw_response": "", "_parse_error": "<the reason>"}`. Phase 1
@@ -205,8 +206,8 @@ not let the record become a silent passthrough. A record whose request failed (a
 an expired request) failed at the provider, not at its expectations. Thus that record keeps its
 own error, and Phase 2 does not regenerate it.
 
-In JSON mode, an answer that the provider returned with no content, or that the output limit
-cut off, is a parse-error record, as it is online. Phase 2 regenerates this record when the
+In JSON mode, the system stores a parse-error record, as online does. This occurs for an answer
+with no content and for an answer that the output limit cut off. Phase 2 regenerates this record when the
 suite rejects it, which the schema gate does for an action with a schema. The `structural:`
 mode sets the prompt of the regeneration, as it does online. In text mode, a refused or cut-off
 answer fails its record before any expectation runs, as it does online.
@@ -287,6 +288,12 @@ Final output:
    5 records — _recovery.retry present (recovered in Phase 1)
    1 record  — _recovery.expectations present (exhausted in Phase 2)
 ```
+
+## Token Counts
+
+In batch, the run does not count the tokens of a generation that a retry or a repair round
+replaces later. Online, the run counts the tokens of each call. Thus the token totals of a batch
+run and of an online run can be different.
 
 ## See Also
 
