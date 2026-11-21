@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: A test of Ctrl-C during concurrent online records no longer fails when the records submitted last are still queued as the interrupt lands. Those records are cancelled and never sent, as designed; the test now expects only the records that settled before the interrupt to have started.
+time: 2026-11-21T12:40:00Z

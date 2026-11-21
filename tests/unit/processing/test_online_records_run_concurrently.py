@@ -338,5 +338,6 @@ def test_an_interrupt_the_moment_a_record_is_submitted_still_keeps_its_answer(mo
     with pytest.raises(KeyboardInterrupt):
         strategy.invoke(_records(12), _context(backend))
 
-    assert 5 <= len(strategy.started) < 12
+    # The fifth submit follows two settled records; a record still queued is cancelled.
+    assert 2 <= len(strategy.started) < 12
     assert sorted(backend.dispositions) == sorted(f"g{n}" for n in strategy.started)
