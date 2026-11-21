@@ -125,6 +125,10 @@ function ToolNode({ data, isConnectable, selected }: NodeProps<Node<DAGNodeData>
   return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} isLlm={false} selected={selected ?? false} />
 }
 
+// A 40+ action workflow lays out ~20,000px wide, so fitting it needs a zoom near 0.05.
+// A floor above that clips the graph at both edges and blocks zooming out.
+const MIN_ZOOM = 0.02
+
 // ─── DAG Content ────────────────────────────────────────────────────────────
 
 function DAGContent({
@@ -179,7 +183,7 @@ function DAGContent({
       onEdgesChange={onEdgesChange}
       onNodeClick={handleNodeClick}
       fitView
-      minZoom={0.1}
+      minZoom={MIN_ZOOM}
       maxZoom={1.5}
       nodesDraggable
       nodesConnectable={false}
