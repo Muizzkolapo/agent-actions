@@ -64,6 +64,8 @@ NO_CONTENT: dict[str, tuple[str, dict[str, Any]]] = {
     "gemini empty text part": ("gemini", gemini_response([{"text": ""}], "STOP")),
     "gemini cut off before any text": ("gemini", gemini_response([], "MAX_TOKENS")),
     "gemini thoughts only, cut off": ("gemini", gemini_response([THOUGHT], "MAX_TOKENS")),
+    "gemini thoughts only": ("gemini", gemini_response([THOUGHT], "STOP")),
+    "gemini empty text part, cut off": ("gemini", gemini_response([{"text": ""}], "MAX_TOKENS")),
     "gemini answer blocked": ("gemini", gemini_response([], "SAFETY")),
     "anthropic no blocks": ("anthropic", anthropic_message([])),
     "anthropic empty text block": ("anthropic", anthropic_message([{"type": "text", "text": ""}])),
@@ -153,8 +155,12 @@ class TestAGeminiAnswerWithNoText:
         else:
             assert end == End(error=message, resent=False)
 
-    def test_an_empty_text_answer_is_left_to_on_empty(self):
-        assert batch_end("gemini", gemini_response([], "STOP"), json_mode=False) == End(empty=True)
+    @pytest.mark.parametrize("parts", [[], [{"text": ""}]], ids=["no parts", "an empty text part"])
+    def test_an_empty_text_answer_is_left_to_on_empty(self, parts):
+        body = gemini_response(parts, "STOP")
+
+        assert batch_end("gemini", body, json_mode=False) == End(empty=True)
+        assert online_end("gemini", body, json_mode=False) == End(empty=True)
 
     def test_text_cut_off_before_it_began_is_resent(self):
         end = batch_end("gemini", gemini_response([], "MAX_TOKENS"), json_mode=False)
