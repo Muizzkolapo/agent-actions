@@ -9,6 +9,7 @@ gathers them back: it writes the output of the branch each record went through.
 from __future__ import annotations
 
 import copy
+import logging
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -34,6 +35,8 @@ _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
 _VERSION_SUFFIX = re.compile(r"_\d+\Z")
 _UNQUOTABLE = re.compile(r'["\\\x00-\x1f]')
 
+logger = logging.getLogger(__name__)
+
 
 def is_route(entry: Any) -> bool:
     return isinstance(entry, dict) and "route" in entry and "name" not in entry
@@ -54,7 +57,7 @@ def expand_routes(data: Any, workflow_file: str, inclusions: Sequence[Inclusion]
         return data
     data = copy.deepcopy(data)
     entries: list[Any] = data["actions"]
-    actions = {
+    actions: dict[str, dict[str, Any]] = {
         e["name"]: e for e in entries if isinstance(e, dict) and isinstance(e.get("name"), str)
     }
     instances = {inclusion.instance: inclusion for inclusion in inclusions}
@@ -66,8 +69,12 @@ def expand_routes(data: Any, workflow_file: str, inclusions: Sequence[Inclusion]
             router = _router(entry, workflow_file, actions, instances, taken)
             routers.append(router)
             expanded.append(router)
+            # A later entry can name it in on:, cases:, default: or of:.
+            actions[router["name"]] = router
         elif is_join(entry):
-            expanded.append(_join(entry, workflow_file, actions, instances, taken))
+            join = _join(entry, workflow_file, actions, instances, taken)
+            expanded.append(join)
+            actions[join["name"]] = join
         else:
             expanded.append(entry)
     data["actions"] = expanded
@@ -78,6 +85,7 @@ def expand_routes(data: Any, workflow_file: str, inclusions: Sequence[Inclusion]
         _guard_entries(router, by_name)
     for router in routers:
         _refuse_cross_case_reads(router, by_name, workflow_file)
+    _warn_partial_joins(routers, by_name, workflow_file)
     return data
 
 
@@ -195,8 +203,8 @@ def _field_action(on: Any, where: str, actions: Mapping[str, dict[str, Any]]) ->
 def _case_value(value: Any, where: str) -> str:
     if not isinstance(value, str):
         raise ConfigurationError(
-            f"{where}: case {value!r} is not a string. A router compares string values; "
-            f"quote it in the YAML ('\"{value}\"').",
+            f"{where}: case {value!r} is not a string. A router matches string values only, "
+            "so its field must hold strings.",
             context={"case": repr(value)},
         )
     if not value or _UNQUOTABLE.search(value):
@@ -363,11 +371,22 @@ def _check_cases_against_enum(
     workflow_file: str,
 ) -> None:
     action_name, field = spec["field"].split(".", 1)
+    where = f"Route '{router['name']}' in {workflow_file}"
+    declared = _field_spec(by_name.get(action_name, {}).get("schema"), field)
+    kind = declared.get("type") if isinstance(declared, dict) else None
     enum = _field_enum(by_name.get(action_name, {}).get("schema"), field)
+    if (kind is not None and kind != "string") or any(
+        not isinstance(value, str) for value in enum or []
+    ):
+        raise ConfigurationError(
+            f"{where}: {spec['field']} is not a string field "
+            f"({'enum ' + repr(enum) if enum else 'type ' + repr(kind)}). A router matches "
+            "string values only, so no record could enter a case.",
+            context={"route": router["name"], "field": spec["field"]},
+        )
     if enum is None:
         return
-    where = f"Route '{router['name']}' in {workflow_file}"
-    allowed = [str(value) for value in enum]
+    allowed = list(enum)
     for case in spec["cases"]:
         if case not in allowed:
             raise ConfigurationError(
@@ -385,6 +404,21 @@ def _check_cases_against_enum(
         )
 
 
+def _field_spec(schema: Any, field: str) -> Any:
+    """The declaration of *field* in a compiled schema, None when it declares none."""
+    if not isinstance(schema, dict):
+        return None
+    if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
+        schema = schema["items"]
+    fields = schema.get("fields")
+    if isinstance(fields, list):
+        found = next((f for f in fields if isinstance(f, dict) and f.get("id") == field), None)
+        if found is not None:
+            return found
+    properties = schema.get("properties")
+    return properties.get(field) if isinstance(properties, dict) else None
+
+
 def _field_enum(schema: Any, field: str) -> list[Any] | None:
     """The ``enum`` of *field* in a compiled schema, None when it declares none."""
     if not isinstance(schema, dict):
@@ -400,6 +434,58 @@ def _field_enum(schema: Any, field: str) -> list[Any] | None:
         spec = properties.get(field)
     enum = spec.get("enum") if isinstance(spec, dict) else None
     return enum if isinstance(enum, list) and enum else None
+
+
+def _branch_members(
+    router: dict[str, Any], by_name: Mapping[str, dict[str, Any]]
+) -> dict[str, set[str]]:
+    """Each case of *router* to the actions of its branch, down to a gathering action."""
+    readers: dict[str, list[str]] = {}
+    for name, action in by_name.items():
+        deps = action.get("dependencies") or []
+        for dep in [deps] if isinstance(deps, str) else deps:
+            readers.setdefault(dep, []).append(name)
+    members: dict[str, set[str]] = {}
+    for case, entries in router[BUILTIN_KEY]["branches"].items():
+        if not isinstance(entries, list):
+            continue
+        seen: set[str] = set()
+        stack = list(entries)
+        while stack:
+            name = stack.pop()
+            if name in seen or name not in by_name:
+                continue
+            seen.add(name)
+            if not by_name[name].get(GATHERS_KEY):
+                stack.extend(readers.get(name, ()))
+        members[case] = seen
+    return members
+
+
+def _warn_partial_joins(
+    routers: list[dict[str, Any]], by_name: Mapping[str, dict[str, Any]], workflow_file: str
+) -> None:
+    """Warn of a join that takes some branches of a router but not all of them.
+
+    The records of a branch left out stop at the join, and the run still succeeds.
+    """
+    joins = [a for a in by_name.values() if (builtin_tool(a) or {}).get("tool") == PICK]
+    for router in routers:
+        members = _branch_members(router, by_name)
+        for join in joins:
+            sources = set(join[BUILTIN_KEY]["of"])
+            covered = [case for case, names in members.items() if names & sources]
+            missing = [case for case in members if case not in covered]
+            if covered and missing:
+                logger.warning(
+                    "Join '%s' in %s takes the branches of router '%s' for %s but not for %s: "
+                    "the records of those cases stop at the join.",
+                    join["name"],
+                    workflow_file,
+                    router["name"],
+                    ", ".join(covered),
+                    ", ".join(missing),
+                )
 
 
 # -- join --------------------------------------------------------------------
@@ -433,6 +519,13 @@ def _join(
                 )
             sources.extend(outputs)
         elif source in actions:
+            if actions[source].get("versions"):
+                raise ConfigurationError(
+                    f"{where}: 'of:' names '{source}', which runs as versions, and a record "
+                    f"holds only its version outputs. Join the action that merges the versions "
+                    f"of '{source}'.",
+                    context={"join": name, "source": source},
+                )
             sources.append(source)
         else:
             raise ConfigurationError(

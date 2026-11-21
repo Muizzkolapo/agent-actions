@@ -621,6 +621,12 @@ def parse_branch(name: str, source: Any, workflow_file: str) -> Branch:
     actions = source["actions"]
     if not isinstance(actions, list) or not actions:
         raise ConfigurationError(f"{label}: 'actions' must be a list of actions.")
+    if any(isinstance(a, dict) and ("route" in a or "join" in a) for a in actions):
+        raise ConfigurationError(
+            f"{label}: the branch contains a '- route:' or '- join:' entry. Write routes and "
+            "joins in the workflow, not in a branch file.",
+            context={"branch_file": file},
+        )
     if any(_is_include(action) for action in actions):
         raise ConfigurationError(
             f"{label}: the branch contains an include. A branch cannot include another branch.",
