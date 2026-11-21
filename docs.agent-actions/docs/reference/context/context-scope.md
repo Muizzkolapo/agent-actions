@@ -103,7 +103,7 @@ These rules apply to the syntax:
 - The `?` goes one time, at the end of the entry. Agent Actions refuses the entry `review?.text` when it loads the workflow.
 - A wildcard cannot be optional. Agent Actions refuses `review.*?` when it loads the workflow, because a wildcard already reads only the fields that the record has.
 - Only `observe` has optional entries. Agent Actions refuses a `passthrough` or `drop` entry that is written as optional when it loads the workflow.
-- Do not observe a field as optional and also drop it. The `drop` directive removes the field before `observe` reads it, thus each record gets the default. Agent Actions refuses this pair when it loads the workflow. It also refuses the pair when one entry is in `defaults` and the other entry is in the action.
+- Do not observe a field as optional and also drop it, by its name or by a wildcard of its namespace (`review.*`). The `drop` directive removes the field before `observe` reads it. Thus each record gets the default. Agent Actions refuses this pair when it loads the workflow. It also refuses the pair when one entry is in `defaults` and the other entry is in the action.
 - Do not write a `context_scope.optional` block. Agent Actions keeps the optional entries in this block itself, and refuses the block in a workflow file when it loads the workflow.
 - An entry that ends in `?` reads the field without the `?`. To read a field whose name really ends in `?`, use a wildcard.
 - In an inline list or mapping (`[ ]` or `{ }`), YAML does not accept a bare `?`. Put the entry in quotes, or write the list with one entry on each line:

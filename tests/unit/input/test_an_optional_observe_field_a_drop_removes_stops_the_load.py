@@ -58,3 +58,16 @@ def test_the_same_pair_without_the_mark_is_left_to_the_record():
     scope = {"observe": ["review.x"], "drop": ["review.x"]}
 
     assert split_optional_observe(scope) is scope
+
+
+def test_a_wildcard_drop_of_the_namespace_is_refused_naming_the_wildcard():
+    with pytest.raises(
+        ConfigurationError, match=r"observe entry 'review\.x\?'.*drop entry 'review\.\*'"
+    ):
+        split_optional_observe({"observe": ["review.x?"], "drop": ["review.*"]})
+
+
+def test_a_wildcard_drop_of_another_namespace_is_accepted():
+    scope = {"observe": ["review.x?"], "drop": ["other.*"]}
+
+    assert split_optional_observe(scope)["optional"] == {"review.x": None}
