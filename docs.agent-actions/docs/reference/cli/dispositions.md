@@ -52,7 +52,7 @@ The command does not cut a count or an action name short.
 | **Unprocessed** | The action never answered the record, for any other reason. An example is an upstream failure that cascaded |
 | **Passthrough** | The model or the tool gave no answer, and `on_empty: skip` kept the record as a tombstone |
 | **Filtered** | The action removed the record from the stream |
-| **Sent elsewhere** | The guard of the action sent the record to another branch. The store keeps it as `filtered` with reason `sent_elsewhere`. The record was never the action's, so it is not in **Filtered** or **Total**. The table shows this column only when an action sent a record elsewhere, as the first action of each branch of a [router](../configuration/routes.md) does. |
+| **Sent elsewhere** | The guard of the action sent the record to another branch. The store keeps it as `filtered` with reason `sent_elsewhere`. The record was never the action's, so it is not in **Filtered** or **Total**. The table shows this column only when an action sent a record elsewhere, as the first action of each branch of a [router](../configuration/routes.md) does. `--json` always has this count, as `sent_elsewhere`. |
 
 In the two run modes, the store keeps a guard skip as `unprocessed`. The reason is `guard_skip`.
 For an action of `granularity: file`, the reason is `guard_prefilter_skip`.
@@ -143,7 +143,7 @@ The shape is stable. A later release can add a key, but it does not rename or re
 | `actions[].name` | The action name |
 | `actions[].counts` | The number of records for each count. The object always has each of the ten keys, with `0` for a count that has no record. The first eight keys are the columns of the table, in snake_case, with the same numbers. `skipped` and `deferred` are the two other dispositions that the store can keep for a record. The table has no column for them, but **Total** counts them. A `deferred` record waits for the result of a batch or for a review |
 | `actions[].total` | The **Total** column. It is the sum of the ten counts |
-| `actions[].sent_elsewhere` | The **Sent elsewhere** column: the records that the guard of the action sent to another branch. It is `0` when the table shows no such column. These records are not in `counts` or `total` |
+| `actions[].sent_elsewhere` | The **Sent elsewhere** column: the records that the guard of the action sent to another branch. The key is always there, with `0` for an action that sent no record elsewhere, also when the table shows no such column. These records are not in `counts` or `total` |
 | `actions[].records` | The **Records** column. It is `null` where the table shows `?` |
 | `actions[].action_level` | The rows of the `Action-level state` table for this action, or an empty list. Each row has `state` (the disposition, for example `failed`), `halted` (`true` when the action halted after it used all its retries) and `reason` |
 
