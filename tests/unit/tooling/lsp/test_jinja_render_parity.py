@@ -10,6 +10,7 @@ from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.tooling.lsp.diagnostics import collect_diagnostics
 from agent_actions.tooling.lsp.indexer import build_index
 from agent_actions.tooling.lsp.jinja_source import WorkflowRenderError, render_workflow_source
+from agent_actions.tooling.lsp.models import ReferenceType
 
 
 def _project(tmp_path: Path, workflow: str, templates: dict[str, str] | None = None) -> Path:
@@ -17,6 +18,15 @@ def _project(tmp_path: Path, workflow: str, templates: dict[str, str] | None = N
     (tmp_path / "templates").mkdir()
     for name, text in (templates or {}).items():
         (tmp_path / "templates" / name).write_text(text)
+    config = tmp_path / "agent_workflow" / "wf" / "agent_config"
+    config.mkdir(parents=True)
+    wf = config / "wf.yml"
+    wf.write_text(textwrap.dedent(workflow))
+    return wf
+
+
+def _project_without_templates_folder(tmp_path: Path, workflow: str) -> Path:
+    (tmp_path / "agent_actions.yml").write_text("default_agent_config: {}\n")
     config = tmp_path / "agent_workflow" / "wf" / "agent_config"
     config.mkdir(parents=True)
     wf = config / "wf.yml"
@@ -1095,3 +1105,168 @@ def test_a_block_that_changes_its_text_keeps_the_other_actions_mapped(tmp_path, 
     )
 
     assert render_workflow_source(wf, tmp_path).action_sources["b"].line == b_line
+
+
+def test_a_tag_that_pulls_text_onto_a_name_line_gives_no_false_duplicate(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set v2 = true %}
+        actions:
+          - name: extract
+            kind: tool
+            impl: tool_one
+          - name: extract
+        {%- if v2 %}_v2{% endif %}
+            kind: tool
+            impl: tool_two
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert [a["name"] for a in render_workflow_source(wf, tmp_path).data["actions"]] == [
+        "extract",
+        "extract_v2",
+    ]
+    assert idx.duplicate_actions_by_file[wf] == set()
+    assert idx.file_actions[wf]["extract"].location.line == 2
+
+
+_OPENS_CONTEXT_SCOPE = "    context_scope:\n      observe:\n        - setup.x\n"
+
+
+@pytest.mark.parametrize(
+    ("emitter", "templates"),
+    [
+        pytest.param(
+            "{% include 'scope.yml.jinja2' %}\n",
+            {"scope.yml.jinja2": _OPENS_CONTEXT_SCOPE},
+            id="include",
+        ),
+        pytest.param(
+            "{% from 'common.jinja2' import scope %}    {{ scope() }}\n",
+            {
+                "common.jinja2": "{% macro scope() -%}\n"
+                + _OPENS_CONTEXT_SCOPE.lstrip()
+                + "{%- endmacro %}\n"
+            },
+            id="macro-call",
+        ),
+    ],
+)
+def test_a_tag_that_opens_a_key_ends_the_list_above_it(tmp_path, emitter, templates):
+    wf = _project(
+        tmp_path,
+        "actions:\n  - name: setup\n    kind: tool\n  - name: b\n    kind: tool\n"
+        "    dependencies:\n      - setup\n" + emitter + "        - setup.y\n"
+        "  - name: c\n    kind: tool\n    dependencies: [missing]\n",
+        templates,
+    )
+
+    observe = render_workflow_source(wf, tmp_path).data["actions"][1]["context_scope"]["observe"]
+
+    assert observe == ["setup.x", "setup.y"]
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_a_tag_that_opens_dependencies_ends_the_context_list_above_it(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% from 'common.jinja2' import deps %}
+        actions:
+          - name: setup
+            kind: tool
+          - name: b
+            kind: tool
+            context_scope:
+              observe:
+                - setup.x
+            {{ deps() }}
+              - a
+          - name: a
+            kind: tool
+        """,
+        {"common.jinja2": "{% macro deps() -%}\ndependencies:\n      - setup\n{%- endmacro %}\n"},
+    )
+
+    refs = build_index(tmp_path).references_by_file[wf]
+
+    assert render_workflow_source(wf, tmp_path).data["actions"][1]["dependencies"] == ["setup", "a"]
+    assert [r.type for r in refs if r.value == "a"] in ([], [ReferenceType.ACTION])
+
+
+def test_the_lines_inside_a_multiline_expression_give_no_reference(tmp_path):
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "templates" / "pick.jinja2").write_text(
+        "{% macro pick(a, b) -%}\n{{ b }}\n{%- endmacro %}\n"
+    )
+    wf = _project_without_templates_folder(
+        tmp_path,
+        """\
+        actions:
+          - name: a
+            kind: tool
+            impl: tool_a
+            description: {{ "x
+            impl: ghost_tool
+            y" | tojson }}
+          - name: b
+            kind: tool
+            context_scope:
+              seed_path: {{ pick(
+                "$file:old.json",
+                "$file:new.json") }}
+        """,
+    )
+
+    assert build_index(tmp_path).file_actions[wf]["a"].impl_ref == "tool_a"
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_a`."]
+
+
+def test_a_line_an_expression_changes_sets_no_value_from_its_words(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: judge
+            kind: tool
+            impl: tool_{{ 'x' }}
+            schema: verdict{{ '_v2' }}
+          - name: c
+            kind: tool
+            impl: tool_c
+        """,
+    )
+
+    meta = build_index(tmp_path).file_actions[wf]["judge"]
+
+    assert render_workflow_source(wf, tmp_path).data["actions"][0]["schema"] == "verdict_v2"
+    assert meta.schema_ref != "verdict"
+    assert meta.impl_ref != "tool_"
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_c`."]
+
+
+def test_the_fallback_location_of_an_action_is_not_in_a_dropped_branch(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        actions:
+        {% if false %}
+          - name: a
+            impl: dropped_tool
+        {% endif %}
+        {% set block %}
+          - name: a
+            kind: tool
+        {% endset %}
+        {{ block }}
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"a"}
+    assert idx.file_actions[wf]["a"].location.line != 2
