@@ -1442,3 +1442,160 @@ def test_a_name_mark_moved_to_a_line_that_is_not_a_name_gives_no_source(tmp_path
 
     assert [a["name"] for a in r.data["actions"]] == ["x", "ok"]
     assert {name: loc.line for name, loc in r.action_sources.items()} == {"ok": 1}
+
+
+def _ref_pairs(wf: Path, tmp_path: Path) -> set[tuple[str, str]]:
+    return {(r.type.value, r.value) for r in build_index(tmp_path).references_by_file[wf]}
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        pytest.param(
+            "    prompt: Summarize {{ source.topic }} in one line,\n      and keep it short.\n",
+            id="starts-on-the-key-line",
+        ),
+        pytest.param(
+            "    prompt:\n      Summarize {{ source.topic }} in one line,\n      and keep it short.\n",
+            id="starts-on-the-next-line",
+        ),
+    ],
+)
+def test_a_multiline_plain_prompt_keeps_the_references_of_the_file(tmp_path, prompt):
+    wf = _project(
+        tmp_path,
+        "actions:\n  - name: extract\n    kind: tool\n    impl: t1\n    schema: s1\n"
+        "  - name: summarize\n" + prompt + "    schema: s2\n    dependencies: [extract]\n"
+        "    context_scope:\n      observe:\n        - extract.x\n",
+    )
+
+    assert _ref_pairs(wf, tmp_path) == {
+        ("tool", "t1"),
+        ("schema", "s1"),
+        ("schema", "s2"),
+        ("action", "extract"),
+        ("context_field", "extract.x"),
+    }
+
+
+def test_an_action_that_merges_a_name_keeps_its_own(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        actions:
+          - &tpl
+            name: base
+            kind: tool
+            impl: t1
+          - name: derived
+            <<: *tpl
+            impl: t2
+            schema: s2
+            dependencies: [base]
+          - name: last
+            <<: *tpl
+            dependencies:
+              - derived
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert idx.file_actions[wf]["derived"].impl_ref == "t2"
+    assert {("tool", "t2"), ("schema", "s2"), ("action", "base"), ("action", "derived")} <= (
+        _ref_pairs(wf, tmp_path)
+    )
+
+
+def test_a_yaml_error_line_counts_lines_as_the_editor_does(tmp_path):
+    wf = _project(
+        tmp_path,
+        'name: wf\ndescription: "a b"\nactions:\n  - name: a\n    kind: tool\n'
+        "  - name: b\n   bad: x\n",
+    )
+
+    error = build_index(tmp_path).parse_errors[wf]
+
+    assert error.location.line == 6
+
+
+def test_the_fallback_location_points_at_the_name_not_into_the_key(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro m() %}
+        - name: q
+        {% endmacro %}
+        {% set x = m() %}
+        name: wf
+        actions:
+        {% if x | trim == '- name: q' %}
+          - name: a
+            kind: tool
+        {% else %}
+          - name: b
+            kind: tool
+        {% endif %}
+        """,
+    )
+
+    location = build_index(tmp_path).file_actions[wf]["a"].location
+
+    assert (location.line, location.column) == (7, 10)
+
+
+def test_words_in_a_block_scalar_give_no_reference_or_value(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+            prompt: $wf.real
+            description: |
+              prompt: $wf.fake
+              impl: fake_tool
+              schema: fake_schema
+              dependencies: [ghost]
+          - name: b
+            kind: tool
+            impl: >-
+              real_tool
+            # impl: comment_tool
+        """,
+    )
+
+    idx = build_index(tmp_path)
+    a, b = idx.file_actions[wf]["a"], idx.file_actions[wf]["b"]
+
+    assert (a.prompt_ref, a.impl_ref, a.schema_ref) == ("wf.real", None, None)
+    assert b.impl_ref is None
+    assert {value for _, value in _ref_pairs(wf, tmp_path)} == {"wf.real"}
+
+
+def test_raw_text_with_braces_sets_no_prompt_schema_or_seed_value(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+        {% raw %}
+            prompt: $wf.p{{ x }}
+            schema: verdict{{ x }}
+            context_scope:
+              seed_path: $file:old{{ v }}.json
+        {% endraw %}
+          - name: c
+            kind: tool
+            impl: tool_c
+        """,
+    )
+
+    meta = build_index(tmp_path).file_actions[wf]["a"]
+
+    assert meta.prompt_ref != "wf.p"
+    assert meta.schema_ref != "verdict"
+    assert _ref_pairs(wf, tmp_path) == {("tool", "tool_c")}
