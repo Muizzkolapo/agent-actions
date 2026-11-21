@@ -19,7 +19,13 @@ agac dispositions -w <workflow-name> [options]
 | `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
 | `-A, --action TEXT` | Show the dispositions for only the specified action |
 | `--quarantined` | Show only the failed, exhausted and unprocessed records, with details |
-| `--json` | Print the counts as one JSON document, for a script. See [JSON Output](#json-output). `--json` does not take `--quarantined` |
+| `--json` | Print the counts as one JSON document, for a script. See [JSON Output](#json-output). `--json` does not take `--quarantined`. If you give the two flags together, the command stops with exit code 2. See the error below this table |
+
+This is the error for `--json` with `--quarantined`:
+
+```text
+Error: --json prints the counts, so it takes no --quarantined. 'agac records --snapshots' prints the failed and exhausted records as JSON.
+```
 
 ## Output
 
@@ -138,7 +144,7 @@ The shape is stable. A later release can add a key, but it does not rename or re
 | `actions[].records` | The **Records** column. It is `null` where the table shows `?` |
 | `actions[].action_level` | The rows of the `Action-level state` table for this action, or an empty list. Each row has `state` (the disposition, for example `failed`), `halted` (`true` when the action halted after it used all its retries) and `reason` |
 
-The sum of `failed` and `exhausted` for an action is the number that [`agac retry --dry-run`](./retry) shows as `Records to retry` when the retry starts from that action and you give no `--record`. There is one exception: after a retry that was interrupted, the dry run also counts the failures that the next retry puts back, and the store does not hold these yet. A failure in `action_level` is a failure of the action as a whole, not of a record. Thus the counts do not include it. `agac retry --dry-run` shows it on its `Action status` line.
+For an action, the sum of `failed` and `exhausted` is the `Records to retry` value of [`agac retry --dry-run`](./retry). This is true when the retry starts from that action and has no `--record`. There is one exception. If a retry stopped before its end, the dry run also counts the failures that the next retry restores. The store does not hold those failures yet. A failure in `action_level` is a failure of the action as a whole, not of a record. Thus the counts do not include it. `agac retry --dry-run` shows it on its `Action status` line.
 
 This example counts the open failures of a workflow:
 

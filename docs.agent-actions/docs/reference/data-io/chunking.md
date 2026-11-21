@@ -160,7 +160,7 @@ actions:
 
 1. **Match split method to model**: Use `tiktoken` for OpenAI models. Use `chars` for other models.
 2. **Account for prompt size**: Leave space in the chunk size for your prompt template.
-3. **Test boundaries**: Run `agac run -a <workflow> --file-limit 1`. Then read the records of the first action with `agac records -w <workflow> -A <action>` to see each chunk.
+3. **Test boundaries**: Run `agac run -w <workflow> --file-limit 1`. Then read the records of the first action with `agac records -w <workflow> -A <action>` to see each chunk.
 
 ## Disabling Chunking
 

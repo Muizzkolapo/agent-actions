@@ -57,7 +57,7 @@ pip install agent-actions
 ```bash
 agac init my_project && cd my_project                # scaffold a project
 agac init example contract_reviewer my_project       # or start from an example
-agac run -a my_workflow                              # execute
+agac run -w my_workflow                              # execute
 ```
 
 ## Why not just write Python?

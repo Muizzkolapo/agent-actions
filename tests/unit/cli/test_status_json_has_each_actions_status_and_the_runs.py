@@ -127,3 +127,29 @@ def test_the_table_is_printed_without_json(project):
     assert result.exit_code == 0, result.output
     assert "Workflow Status for wf" in result.stdout
     assert "extract" in result.stdout and "completed" in result.stdout
+
+
+@pytest.mark.parametrize("as_json", [True, False], ids=["json", "table"])
+@pytest.mark.parametrize(
+    "stored", ["weird", 3, ["completed"]], ids=["unknown name", "a number", "a list"]
+)
+def test_an_unknown_stored_status_stops_the_command_as_a_corrupted_file_does(
+    project, as_json, stored
+):
+    _store(project, {"extract": {"status": "completed"}, "a": {"status": stored}})
+
+    result = CliRunner().invoke(cli, ["status", "-w", WORKFLOW, *(["--json"] if as_json else [])])
+
+    assert result.exit_code == 1, result.output
+    assert result.stdout == ""
+    assert "Status file is corrupted:" in result.stderr
+    assert f"Action 'a' has an unknown status: {stored!r}" in result.stderr
+
+
+def test_an_action_with_no_stored_status_is_not_refused(project):
+    _store(project, {"extract": {"status": "completed"}, "summarize": {}})
+
+    result = _status_json()
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["run_status"] == "PAUSED"

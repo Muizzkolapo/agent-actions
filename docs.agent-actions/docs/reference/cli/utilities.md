@@ -132,7 +132,7 @@ The `clean` command removes the working directories of a workflow under `agent_i
 If `clean` finds something to remove during a run or a retry of the workflow, it removes nothing. It exits 1 with `Another run of workflow '<workflow>' is in progress` (see [Concurrent runs](./run.md#concurrent-runs)). `clean` holds the same lock from before it asks for confirmation until it finishes. It keeps the lock file. After `--all`, `agent_io/store/` holds only the empty `<workflow>.db.lock`.
 
 ```bash
-agac clean -a <workflow-name> [options]
+agac clean -w <workflow-name> [options]
 ```
 
 The command removes these items:
@@ -152,13 +152,13 @@ The command removes these items:
 **Examples:**
 ```bash
 # Remove regenerable preprocessed inputs (with confirmation)
-agac clean -a my_workflow
+agac clean -w my_workflow
 
 # Also remove generated output
-agac clean -a my_workflow --target
+agac clean -w my_workflow --target
 
 # Remove everything, including staging inputs and the durable store
-agac clean -a my_workflow --all
+agac clean -w my_workflow --all
 ```
 
 :::note[Run from Anywhere]
@@ -260,7 +260,7 @@ The shape is stable. A later release can add a key, but it does not rename or re
 | Key | Value |
 |-----|-------|
 | `workflow` | The workflow name |
-| `run_status` | The status that [`agac run`](./run) gives to a run with these action statuses: `SUCCESS`, `FAILED` or `PAUSED`. It is `null` when no action status is stored, because the workflow did not run. Then the command also prints a message on stderr |
+| `run_status` | The status that [`agac run`](./run) gives to a run with these action statuses: `SUCCESS`, `FAILED` or `PAUSED`. It is `null` when no action status is stored, because the workflow did not run. Then the command also prints a message on stderr. See the text below this table |
 | `actions` | One object for each action in `agent_io/.agent_status.json`, in the order of the file |
 | `actions[].name` | The action name. The table shows it in the **Agent Name** column |
 | `actions[].status` | The **Status** column: `pending`, `running`, `batch_submitted`, `checking_batch`, `completed`, `completed_with_failures`, `failed`, `skipped` or `interrupted`. It is `null` where the table shows `N/A` |
@@ -273,6 +273,21 @@ The shape is stable. A later release can add a key, but it does not rename or re
 - `PAUSED`: One or more actions did not end. The run is in progress, or it waits for a batch, or it stopped early.
 
 The [exit code](./run.md#exit-codes) of `agac run` and of `agac retry` tells more than `run_status`. A run with the status `SUCCESS` exits `3`, not `0`, when an action holds failed or exhausted records. A run that waits for a batch exits `4`.
+
+`run_status` is `PAUSED` also while a run is in progress. Thus `run_status` cannot tell a running workflow from a paused one. A monitor must read `actions[].status` for this, for example to find an action with the status `running`.
+
+If no action status is stored, the command prints this message and stops with exit code 0. An empty status file (`{}`) gives the same message. With `--json`, the message goes to stderr, and stdout has the document with `run_status` set to `null`. Without `--json`, the message goes to stdout:
+
+```text
+No action status is stored for workflow 'my_workflow'. Has it been run?
+```
+
+If the status file holds a status that is not in the list above, the command stops with exit code 1. The command does this also for a status file that is not valid JSON. The error names the file and the action:
+
+```text
+Error: Status file is corrupted: <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
+Action 'summarize' has an unknown status: 'weird'
+```
 
 The command reads only the status file. It does not read the workflow configuration. Thus an action that you removed from the configuration stays in the output until `agac run --fresh` clears the file.
 

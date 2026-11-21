@@ -197,7 +197,7 @@ default_agent_config:
 ## 6. Run Your Workflow {/* #6-run-your-agentic-workflow */}
 
 ```bash
-agac run -a product_pipeline
+agac run -w product_pipeline
 ```
 
 The output is similar to this:

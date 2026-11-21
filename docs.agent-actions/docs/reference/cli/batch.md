@@ -19,7 +19,7 @@ defaults:
 ```
 
 ```bash
-agac run -a my_workflow
+agac run -w my_workflow
 ```
 
 When `run_mode: batch` is set, Agent Actions submits the records asynchronously. Then it pauses the workflow with `Workflow paused - batch job(s) submitted for: <actions>`. The batch ID is in the `Batch <id> submitted: <n> requests to <provider>` line. Use the commands below to manage the batch from submission to retrieval.
