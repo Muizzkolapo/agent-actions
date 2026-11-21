@@ -129,7 +129,7 @@ The load renames the short names in these keys of each action of the instance:
 
 - `dependencies`
 - the `observe`, `passthrough` and `drop` lists of `context_scope`
-- the guard clause (`guard:`, or `condition:` under `guard:`). Only the action at the start of a field path changes. Text in quotes, numbers, keywords and spaces stay as written. A UDF guard is not changed.
+- the guard clause (`guard:`, or `condition:` under `guard:`). Only the action at the start of a field path changes. Text in quotes, numbers, keywords and spaces stay as written. A UDF guard is not changed, and at run time its function gets its data with the final names, for example `data["c2__write"]`.
 - `version_consumption.source`
 - the `context` list of each `llm_judge` rule in the `expect:` block of the action
 - the same keys in the `defaults:` and the `override:` of the include entry
@@ -158,7 +158,7 @@ the prompt of `c2__review` in the rendered workflow is:
 {% set write = c2__write %}{% set spec = draft_spec %}Review {{ write.question }} against {{ spec.text }}.
 ```
 
-The header outputs nothing and is on the first line of the prompt, so the rendered text and the line numbers in an error do not change. A short name is also visible inside a macro that the prompt defines. Text in single braces, for example `{item.name}`, does not render, so it reads nothing. The checks of `agac inspect` and `agac run` read a short name as the action that it means. For example, if the prompt of `c2__review` reads `write.question` and the action does not observe `write`, the error says: `template references namespace 'c2__write' which is not declared in context_scope.observe or passthrough`.
+The header outputs nothing and is on the first line of the prompt. The rendered text and the line numbers in an error do not change. A short name is also visible inside a macro that the prompt defines. Text in single braces, for example `{item.name}`, renders as written. The checks report it as a reference, as in a workflow without an include: `Referenced action 'item' does not exist in workflow`. The checks of `agac inspect` and `agac run` read a short name as the action that it means. They follow only the header that the load writes: a `{% set %}` tag that you write in a prompt is a local variable, as in a workflow without an include. The context JSON that the model gets with the prompt keeps the final names, for example `c1__write`, and the prompt text uses the short names. For example, if the prompt of `c2__review` reads `write.question` and the action does not observe `write`, the error says: `template references namespace 'c2__write' which is not declared in context_scope.observe or passthrough`.
 
 **Tools.** A tool action of an instance gets its record under the short names. In instance `c2`, `data["write"]` holds the output of `c2__write`, and `data["spec"]` holds the output of `draft_spec`. The final names of these actions are not keys of `data`. Other keys, for example `source`, do not change. A tool at `granularity: file` gets its records with the final names.
 
@@ -169,7 +169,7 @@ def check_question(data, *args):
     ...
 ```
 
-**Schema files.** The `context` list of each `llm_judge` rule in the schema file of an action, on a field or in the `expectations:` block of the file, uses the short names. Each instance gets its own copy of the compiled schema, with the final names. A rule in a named `suite:` is not renamed.
+**Schema files.** The `context` list of each `llm_judge` rule uses the short names. This applies to a rule on a field and to a rule in the `expectations:` block of the schema file. Each instance gets its own copy of the compiled schema, with the final names. A rule in a named `suite:` is not renamed.
 
 ```yaml
 # schema/review.yml
