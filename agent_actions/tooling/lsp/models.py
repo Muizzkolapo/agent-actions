@@ -39,6 +39,14 @@ class Reference:
 
 
 @dataclass
+class ParseError:
+    """Why a workflow file does not render, at the line that caused it."""
+
+    message: str
+    location: Location
+
+
+@dataclass
 class ActionMetadata:
     """Detailed action metadata captured from workflow files."""
 
@@ -131,6 +139,9 @@ class ProjectIndex:
 
     # Per-file duplicate action names: file_path → {duplicate action name}
     duplicate_actions_by_file: dict[Path, set[str]] = field(default_factory=dict)
+
+    # Workflow files that do not render: file_path → ParseError
+    parse_errors: dict[Path, ParseError] = field(default_factory=dict)
 
     def workflow_for_file(self, file_path: Path) -> str | None:
         """Derive the workflow name from a file path.

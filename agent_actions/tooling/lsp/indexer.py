@@ -6,8 +6,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from ruamel.yaml import YAML
-
 from agent_actions.config.path_config import get_tool_dirs, load_project_config
 from agent_actions.config.schema import version_variant_names
 from agent_actions.errors import ConfigValidationError
@@ -18,9 +16,11 @@ from agent_actions.utils.file_utils import load_structured_file, read_python_sou
 from agent_actions.utils.path_utils import resolve_relative_to
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
+from .jinja_source import WorkflowRenderError, render_workflow_source
 from .models import (
     ActionMetadata,
     Location,
+    ParseError,
     ProjectIndex,
     PromptDefinition,
     Reference,
@@ -113,7 +113,6 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
     if not workflow_dir.exists():
         return
 
-    yaml = YAML(typ="safe")
     project_output_field = _project_output_field(project_root)
 
     for workflow_path in workflow_dir.iterdir():
@@ -127,33 +126,52 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
             continue
 
         for yaml_file in config_dir.glob("*.yml"):
-            _index_workflow_file(index, yaml_file, yaml, project_output_field)
+            _index_workflow_file(index, yaml_file, project_output_field)
 
 
 def _index_workflow_file(
-    index: ProjectIndex, yaml_file: Path, yaml: YAML, project_output_field: str | None = None
+    index: ProjectIndex, yaml_file: Path, project_output_field: str | None = None
 ) -> None:
-    """Index a single workflow YAML file."""
+    """Index a single workflow file, from the text `agac` renders it to."""
+    index.file_actions[yaml_file] = {}
+    index.references_by_file[yaml_file] = []
+    index.duplicate_actions_by_file[yaml_file] = set()
+    workflow_name = index.workflow_for_file(yaml_file)
+    if workflow_name:
+        index.file_to_workflow[yaml_file] = workflow_name
     try:
-        content = yaml_file.read_text()
-        lines = content.split("\n")
+        lines = yaml_file.read_text().split("\n")
+        try:
+            rendered = render_workflow_source(yaml_file, index.root)
+        except WorkflowRenderError as e:
+            index.parse_errors[yaml_file] = ParseError(e.message, Location(yaml_file, e.line))
+            return
 
-        data = yaml.load(content) or {}
-        index.file_actions[yaml_file] = {}
-        index.references_by_file[yaml_file] = []
-        index.duplicate_actions_by_file[yaml_file] = set()
-
-        actions = data.get("actions", []) if isinstance(data, dict) else []
+        data = rendered.data
+        actions = data.get("actions", [])
         action_data_map = _build_action_data_map(actions)
-        defaults = data.get("defaults") if isinstance(data, dict) else None
+        defaults = data.get("defaults")
         workflow_default = defaults.get("output_field") if isinstance(defaults, dict) else None
         default_output_field = workflow_default or project_output_field
 
         _index_workflow_lines(index, yaml_file, lines, action_data_map, default_output_field)
-        _backfill_unseen_actions(index, yaml_file, lines, action_data_map, default_output_field)
+        _backfill_unseen_actions(
+            index, yaml_file, lines, action_data_map, default_output_field, rendered.action_sources
+        )
+        index.duplicate_actions_by_file[yaml_file].update(_repeated_names(actions))
 
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
+
+
+def _repeated_names(actions: Any) -> set[str]:
+    seen: set[str] = set()
+    repeated: set[str] = set()
+    for action in actions if isinstance(actions, list) else []:
+        name = action.get("name") if isinstance(action, dict) else None
+        if isinstance(name, str):
+            (repeated if name in seen else seen).add(name)
+    return repeated
 
 
 def _backfill_unseen_actions(
@@ -162,6 +180,7 @@ def _backfill_unseen_actions(
     lines: list[str],
     action_data_map: dict,
     default_output_field: str | None,
+    action_sources: dict[str, Location],
 ) -> None:
     """Index an action the line pass could not see, so the index matches the document.
 
@@ -175,22 +194,10 @@ def _backfill_unseen_actions(
     for action_name, action_data in action_data_map.items():
         if action_name in known:
             continue
-        line_no, column = 0, 0
-        for i, line in enumerate(lines):
-            match = re.match(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$", line)
-            if match:
-                line_no, column = i, line.index(action_name)
-                break
-        meta = ActionMetadata(
-            name=action_name,
-            location=Location(
-                file_path=yaml_file,
-                line=line_no,
-                column=column,
-                end_line=line_no,
-                end_column=column + len(action_name),
-            ),
+        location = action_sources.get(action_name) or _raw_name_location(
+            yaml_file, lines, action_name
         )
+        meta = ActionMetadata(name=action_name, location=location)
         _populate_versions_summary(meta, action_data)
         _populate_from_parsed(meta, action_data, default_output_field)
         known[action_name] = meta
@@ -198,6 +205,22 @@ def _backfill_unseen_actions(
         workflow_name = index.file_to_workflow.get(yaml_file)
         if workflow_name:
             index.workflow_actions.setdefault(workflow_name, {})[action_name] = meta.location
+
+
+def _raw_name_location(yaml_file: Path, lines: list[str], action_name: str) -> Location:
+    line_no, column = 0, 0
+    for i, line in enumerate(lines):
+        match = re.match(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$", line)
+        if match:
+            line_no, column = i, line.index(action_name)
+            break
+    return Location(
+        file_path=yaml_file,
+        line=line_no,
+        column=column,
+        end_line=line_no,
+        end_column=column + len(action_name),
+    )
 
 
 def _build_action_data_map(actions: list) -> dict:
@@ -235,6 +258,11 @@ def _index_workflow_lines(
 
     for i, line in enumerate(lines):
         action_match = re.match(r"^(\s*)-\s*name:\s*['\"]?([^'\"#]+?)['\"]?\s*(?:#.*)?$", line)
+        if action_match and "{" in action_match.group(2):
+            # A name a tag renders: its actions come from the rendered text, not this line.
+            current_action = None
+            current_action_indent = None
+            continue
         if action_match:
             action_name = action_match.group(2)
             action_indent = len(action_match.group(1))
