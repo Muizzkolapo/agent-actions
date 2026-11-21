@@ -1,0 +1,198 @@
+"""The index sees what the render of `agac` produces, and nothing the render removes."""
+
+import textwrap
+from pathlib import Path
+
+import pytest
+import yaml
+
+from agent_actions.tooling.lsp.diagnostics import collect_diagnostics
+from agent_actions.tooling.lsp.indexer import build_index
+from agent_actions.tooling.lsp.jinja_source import WorkflowRenderError, render_workflow_source
+
+
+def _project(tmp_path: Path, workflow: str, templates: dict[str, str] | None = None) -> Path:
+    (tmp_path / "agent_actions.yml").write_text("default_agent_config: {}\n")
+    (tmp_path / "templates").mkdir()
+    for name, text in (templates or {}).items():
+        (tmp_path / "templates" / name).write_text(text)
+    config = tmp_path / "agent_workflow" / "wf" / "agent_config"
+    config.mkdir(parents=True)
+    wf = config / "wf.yml"
+    wf.write_text(textwrap.dedent(workflow))
+    return wf
+
+
+def _messages(wf: Path, tmp_path: Path) -> list[str]:
+    return [d.message for d in collect_diagnostics(wf, build_index(tmp_path))]
+
+
+def test_an_action_in_a_branch_that_does_not_render_is_not_indexed(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set mode = 'fast' %}
+        name: wf
+        actions:
+        {% if mode == 'fast' %}
+          - name: summarize
+            kind: tool
+        {% else %}
+          - name: summarize
+            kind: tool
+        {% endif %}
+          - name: use
+            kind: tool
+            dependencies: [debug_action]
+        {% if false %}
+          - name: debug_action
+            kind: tool
+        {% endif %}
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"summarize", "use"}
+    assert idx.file_actions[wf]["summarize"].location.line == 4
+    assert idx.duplicate_actions_by_file[wf] == set()
+    # The reference to the action that does not render is the live control.
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `debug_action`."]
+
+
+def test_a_line_that_does_not_render_gives_no_reference(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        actions:
+          - name: x
+            kind: tool
+            {% if false %}
+            dependencies: [nope]
+            {% endif %}
+          - name: y
+            kind: tool
+            dependencies: [missing]
+        """,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_jinja_in_a_dependency_list_gives_no_false_reference(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        actions:
+          - name: a__x
+            kind: tool
+          - name: flow
+            kind: tool
+            dependencies: [{% for p in ['a'] %}{{ p }}__x{% endfor %}]
+          - name: block
+            kind: tool
+            dependencies:
+            {% for p in ['a'] %}
+              - {{ p }}__x
+            {% endfor %}
+              - missing
+        """,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_an_action_in_a_jinja_comment_is_not_indexed(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        actions:
+          - name: kept
+            kind: tool
+        {#
+          - name: ghost
+            kind: tool
+        #}
+        """,
+    )
+
+    assert set(build_index(tmp_path).file_actions[wf]) == {"kept"}
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("\"{{ 'a' + 1 }}\"", id="type-error"),
+        pytest.param("\"{{ load_prompt('nope.missing') }}\"", id="missing-prompt"),
+    ],
+)
+def test_any_render_failure_is_one_error_diagnostic(tmp_path, value):
+    wf = _project(tmp_path, f"description: {value}\nactions:\n  - name: x\n    kind: tool\n")
+
+    idx = build_index(tmp_path)
+
+    assert idx.parse_errors[wf].location.line == 0
+    diags = collect_diagnostics(wf, idx)
+    assert [d.message.startswith("Workflow does not render: ") for d in diags] == [True]
+
+
+def test_the_yaml_step_is_the_one_agac_uses(tmp_path):
+    # PyYAML's safe_load, which agac uses, keeps the last of two equal keys; ruamel refuses.
+    text = "actions:\n  - name: a\n    impl: t\n    impl: u\n    kind: tool\n"
+    wf = _project(tmp_path, text)
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert r.data == yaml.safe_load(text)
+    assert r.data["actions"][0]["impl"] == "u"
+    assert build_index(tmp_path).parse_errors == {}
+
+
+def test_a_strip_tag_ending_a_name_line_keeps_later_lines_in_place(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        actions:
+          - name: {{ 'a' -}}
+        {{ '' }}
+            kind: tool
+          - name: b
+            kind: tool
+        """,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["a", "b"]
+    assert r.action_sources["b"].line == 4
+
+
+def test_a_multiline_set_tag_keeps_its_actions_mapped(tmp_path):
+    # The shape of ql_compact: a dict literal that spans lines inside one `{% set %}`.
+    wf = _project(
+        tmp_path,
+        """\
+        {% set profiles = {
+          'fast': {'vendor': 'x'},
+          'slow': {'vendor': 'y'}} %}
+        actions:
+          - name: a
+            kind: tool
+            intent: {{ profiles.fast.vendor }}
+        """,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert r.data["actions"][0]["intent"] == "x"
+    assert r.action_sources["a"].line == 4
+
+
+def test_a_yaml_error_in_a_jinja_file_names_the_rendered_line(tmp_path):
+    wf = _project(tmp_path, "{% set v = 'tool' %}\nactions:\n  - name: x\n   kind: {{ v }}\n")
+
+    with pytest.raises(WorkflowRenderError) as e:
+        render_workflow_source(wf, tmp_path)
+
+    assert e.value.line == 0
+    assert "of the rendered workflow" in e.value.message
