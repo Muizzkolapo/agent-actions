@@ -98,11 +98,7 @@ def split_optional_observe(context_scope: Any) -> Any:
 
     stated = context_scope.get(OPTIONAL_DIRECTIVE)
     if stated is not None and not isinstance(stated, dict):
-        raise ConfigurationError(
-            "context_scope.optional is not written by hand. Mark the observe entry instead: "
-            "'action.field?' or {field: action.field, optional: true}.",
-            context={"directive": OPTIONAL_DIRECTIVE},
-        )
+        raise hand_written_optional_error()
     entries = context_scope.get("observe")
     if not isinstance(entries, list) or all(
         isinstance(entry, str) and _OPTIONAL_MARK not in entry for entry in entries
@@ -125,6 +121,14 @@ def split_optional_observe(context_scope: Any) -> Any:
     if optional:
         split[OPTIONAL_DIRECTIVE] = optional
     return split
+
+
+def hand_written_optional_error() -> ConfigurationError:
+    return ConfigurationError(
+        "context_scope.optional is not written by hand. Mark the observe entry instead: "
+        "'action.field?' or {field: action.field, optional: true}.",
+        context={"directive": OPTIONAL_DIRECTIVE},
+    )
 
 
 def observe_entry_reference(entry: Any) -> str | None:

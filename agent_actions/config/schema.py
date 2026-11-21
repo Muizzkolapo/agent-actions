@@ -17,7 +17,11 @@ from pydantic import (
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardParser, parse_guard_config
-from agent_actions.input.context.normalizer import split_optional_observe
+from agent_actions.input.context.normalizer import (
+    OPTIONAL_DIRECTIVE,
+    hand_written_optional_error,
+    split_optional_observe,
+)
 
 # Measured: a transposition or a dropped letter scores 0.667 and above, a
 # spelling belonging to no field 0.600 and below. Distinct names still collide,
@@ -63,8 +67,13 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
 
 
 def _plain_observe_references(context_scope: Any) -> Any:
-    """Read both optional observe forms into the one shape the run reads."""
+    """Read both optional observe forms into the one shape the run reads.
+
+    Only the normaliser writes ``optional``, and it never hands its output back here.
+    """
     try:
+        if isinstance(context_scope, dict) and OPTIONAL_DIRECTIVE in context_scope:
+            raise hand_written_optional_error()
         return split_optional_observe(context_scope)
     except ConfigurationError as e:
         raise ValueError(str(e)) from e
