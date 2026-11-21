@@ -63,12 +63,14 @@ def status_report(agent: str, project_root: Path | None = None) -> dict[str, Any
         raise click.ClickException(
             f"Status file has unexpected format (expected JSON object): {status_file}"
         )
+    for name, details in status_data.items():
+        if not isinstance(details, dict):
+            raise click.ClickException(
+                f"Status file is corrupted: {status_file}\n"
+                f"Action '{name}' is not an object: {details!r}"
+            )
     actions = [
-        {
-            "name": name,
-            "status": details.get("status") if isinstance(details, dict) else None,
-            "error": _error_of(details) if isinstance(details, dict) else None,
-        }
+        {"name": name, "status": details.get("status"), "error": _error_of(details)}
         for name, details in status_data.items()
     ]
     for action in actions:
