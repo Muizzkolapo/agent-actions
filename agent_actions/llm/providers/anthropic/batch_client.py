@@ -249,15 +249,32 @@ class AnthropicBatchClient(BaseBatchClient):
         return self._parse_content_list(content_list)
 
     def _answer_text(self, raw_response: Any) -> str | None:
+        """The first text block, which online's text-mode call reads beside any tool answer."""
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if not isinstance(content_list, list):
+            return None
+        return self._extract_text_content(content_list)
+
+    def _no_text_answer(self, raw_response: Any) -> NoAnswer | None:
+        """A tool answer with no text fails in text mode, as online's text-mode call raises."""
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
         if (
             not isinstance(content_list, list)
-            or self._extract_tool_use_content(content_list) is not None
+            or self._extract_tool_use_content(content_list) is None
         ):
             return None
-        return self._extract_text_content(content_list)
+        from agent_actions.llm.providers.anthropic.client import no_answer
+
+        return no_answer(
+            self._get_attribute_or_key(message, "stop_reason"),
+            only_text=False,
+            model_name=self._get_attribute_or_key(message, "model") or "",
+            operation="messages.batches",
+        )
 
     def _parse_json_content(self, content_str: str) -> Any:
         """Read a text answer as online reads it: an object or a list of objects.
