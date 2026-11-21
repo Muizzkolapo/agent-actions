@@ -153,7 +153,7 @@ class RetryCommand:
         self._abandoned: set[tuple[str, str, str]] = set()
         # What the last pass planned over: the workflow's actions, and its open failures.
         self._execution_order: list[str] = []
-        self._open_before = 0
+        self._open_before: frozenset[tuple[str, str]] = frozenset()
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
@@ -180,19 +180,23 @@ class RetryCommand:
         return EXIT_SUCCESS if outcome is None else EXIT_CODES[outcome]
 
     def _retry_while_it_helps(self, paths: ProjectPaths, project_root: Path | None) -> int:
-        """`--all`: retry from the earliest failure, pass after pass, while the count of open
-        failures goes down. Stops when none is left, a pass lowers nothing, or at
-        ``--max-passes``; a pass that paused for a batch ends it too, since nothing can be
-        retried over a batch nobody has collected.
+        """`--all`: retry from the earliest failure, again while a pass closes an open failure.
+
+        A failure is an (action, record) pair, so a pass that repairs records at one action
+        helps even when they fail at the next one. Stops when none is left, when a pass closes
+        none, when a pass leaves failures an earlier pass left (so it cannot cycle), or at
+        ``--max-passes``; a pass that paused ends it too, since nothing can be retried over
+        a batch nobody has collected.
         """
         code = EXIT_SUCCESS
         done = 0
+        seen: list[frozenset[tuple[str, str]]] = []
         while True:
             outcome = self._retry(paths, project_root)
             if self.args.dry_run:
                 self.console.print(
-                    f"[yellow]--all: {self._open_before} open failure(s). Each pass retries "
-                    f"from the earliest action that holds one, while the count goes down."
+                    f"[yellow]--all: {len(self._open_before)} open failure(s). Each pass "
+                    f"retries from the earliest action that holds one, while a pass closes one."
                     f"[/yellow]"
                 )
                 return EXIT_SUCCESS
@@ -200,35 +204,40 @@ class RetryCommand:
                 return code
             done += 1
             before, left = self._open_before, self._open_failures(paths)
-            self.console.print(f"\n[bold]Pass {done}: {left} open failure(s) left[/bold]")
+            seen.append(before)
+            self.console.print(f"\n[bold]Pass {done}: {len(left)} open failure(s) left[/bold]")
             code = EXIT_CODES[outcome]
             if code == EXIT_SUCCESS and left:
                 code = EXIT_RECORD_FAILURES
             if outcome in (RunOutcome.PAUSED_FOR_BATCH, RunOutcome.PAUSED) or not left:
                 return code
-            if left >= before:
+            if before <= left:
                 self.console.print(
-                    f"[yellow]Pass {done} did not lower the count of open failures "
-                    f"({before} before it, {left} after). Stopping.[/yellow]"
+                    f"[yellow]Pass {done} closed none of the open failures "
+                    f"({len(before)} before it, {len(left)} after). Stopping.[/yellow]"
+                )
+                return code
+            if left in seen:
+                self.console.print(
+                    f"[yellow]Pass {done} left the same open failures as an earlier pass. "
+                    f"Stopping.[/yellow]"
                 )
                 return code
             if self.args.max_passes is not None and done >= self.args.max_passes:
                 self.console.print(
-                    f"[yellow]Stopped at --max-passes {self.args.max_passes} with {left} "
+                    f"[yellow]Stopped at --max-passes {self.args.max_passes} with {len(left)} "
                     f"open failure(s) left.[/yellow]"
                 )
                 return code
 
-    def _open_failures(self, paths: ProjectPaths) -> int:
-        """How many failures `_find_failures` finds in the store now, over every action."""
+    def _open_failures(self, paths: ProjectPaths) -> frozenset[tuple[str, str]]:
+        """The failures `_find_failures` finds in the store now, over every action."""
         backend = get_storage_backend(
             workflow_path=str(paths.io_dir.parent),
             workflow_name=self.agent_name,
         )
         backend.initialize()
-        return sum(
-            len(rows) for rows in self._find_failures(backend, self._execution_order).values()
-        )
+        return _open_pairs(self._find_failures(backend, self._execution_order))
 
     def _retry(self, paths: ProjectPaths, project_root: Path | None) -> RunOutcome | None:
         """One retry. The outcome of its re-run, or None when it re-ran nothing."""
@@ -254,7 +263,7 @@ class RetryCommand:
         )
         execution_order = list(workflow.execution_order)
         self._execution_order = execution_order
-        self._open_before = 0
+        self._open_before = frozenset()
         state_mgr = workflow.services.core.state_manager
 
         resumed = self._left_by_an_interrupted_retry(prior_manifest, state_mgr)
@@ -314,7 +323,7 @@ class RetryCommand:
                 )
                 return None
             failures = found
-        self._open_before = sum(len(rows) for rows in failures.values())
+        self._open_before = _open_pairs(failures)
 
         from_action = self.args.from_action
         if from_action:
@@ -1417,13 +1426,20 @@ class RetryCommand:
         other_actions = [a for a in all_failures if a != from_action]
         if other_actions:
             then = (
-                "A later pass of --all retries them."
+                "A later pass of --all retries them if this pass closes an open failure."
                 if self.args.all
                 else "Run 'retry' again after this completes to address them, or use --all."
             )
             self.console.print(
                 f"\n[dim]Note: failures also exist at: {', '.join(other_actions)}. {then}[/dim]"
             )
+
+
+def _open_pairs(failures: dict[str, list[dict]]) -> frozenset[tuple[str, str]]:
+    """Each open failure as its (action, record) pair."""
+    return frozenset(
+        (action, str(row.get("record_id"))) for action, rows in failures.items() for row in rows
+    )
 
 
 @click.command()
@@ -1471,8 +1487,9 @@ class RetryCommand:
     "retry_all",
     is_flag=True,
     default=False,
-    help="Retry from the earliest failure, then again, pass after pass, while the count of "
-    "open failures goes down. Stops when none is left or a pass lowers nothing.",
+    help="Retry from the earliest failure, then again while a pass closes an open failure. "
+    "Stops when none is left, or when a pass closes none or leaves the failures an earlier "
+    "pass left.",
 )
 @click.option(
     "--max-passes",

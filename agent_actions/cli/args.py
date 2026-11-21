@@ -74,7 +74,7 @@ class RetryCommandArgs(BaseModel):
     )
     all: bool = Field(
         default=False,
-        description="Retry pass after pass while the count of open failures goes down.",
+        description="Retry again while a pass closes an open failure.",
     )
     max_passes: int | None = Field(
         default=None, ge=1, description="The most passes --all makes; None is no limit."

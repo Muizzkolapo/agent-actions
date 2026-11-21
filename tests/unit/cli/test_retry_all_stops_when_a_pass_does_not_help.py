@@ -1,8 +1,9 @@
 """The stop rules of `agac retry --all`, with each pass stood in for.
 
-A pass is one retry from the earliest failure. `--all` repeats it while the count of
-open failures goes down: it stops when none is left, when a pass lowered nothing, at
-`--max-passes`, and when a pass paused for a batch. The exit code is the code of the
+A pass is one retry from the earliest failure. `--all` repeats it while a pass closes
+an open failure, an (action, record) pair: it stops when none is left, when a pass closed
+none, when a pass left the failures an earlier pass left, at `--max-passes`, and when a
+pass paused for a batch. The exit code is the code of the
 last pass's outcome, and 3 whenever a failure is still open.
 """
 
@@ -25,6 +26,13 @@ from agent_actions.errors import ProviderQuotaStop
 CLEAN, PARTIAL = RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES
 
 
+def _open(failures) -> frozenset[tuple[str, str]]:
+    """A count stands for that many failures at action `a`; a string names `action:record`."""
+    if isinstance(failures, int):
+        return frozenset(("a", str(n)) for n in range(failures))
+    return frozenset(tuple(name.split(":")) for name in failures)
+
+
 class Passes:
     """Each pass is (open failures before it, its outcome, open failures after it)."""
 
@@ -39,13 +47,13 @@ class Passes:
     def _retry(self, _paths, _project_root):
         before, outcome, _after = self.passes[self.ran]
         self.ran += 1
-        self.command._open_before = before
+        self.command._open_before = _open(before)
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
 
-    def _open_failures(self, _paths) -> int:
-        return self.passes[self.ran - 1][2]
+    def _open_failures(self, _paths) -> frozenset[tuple[str, str]]:
+        return _open(self.passes[self.ran - 1][2])
 
     def run(self) -> int:
         lock = MagicMock()
@@ -78,12 +86,46 @@ def test_it_repeats_while_the_count_goes_down_and_exits_0_when_none_is_left(tmp_
     assert "Pass 2: 0 open failure(s) left" in passes.printed
 
 
-def test_it_stops_after_a_pass_that_did_not_lower_the_count(tmp_path):
+def test_it_stops_after_a_pass_that_closed_none_of_the_open_failures(tmp_path):
     passes = Passes(tmp_path, (2, PARTIAL, 2), (2, CLEAN, 0))
 
     assert passes.run() == EXIT_RECORD_FAILURES
     assert passes.ran == 1
-    assert "did not lower the count of open failures (2 before it, 2 after)" in passes.printed
+    assert "closed none of the open failures (2 before it, 2 after)" in passes.printed
+
+
+def test_it_goes_on_when_a_pass_closes_failures_and_as_many_open_at_a_later_action(tmp_path):
+    passes = Passes(
+        tmp_path,
+        (["a:t1", "a:t2"], PARTIAL, ["b:t1", "b:t2"]),
+        (["b:t1", "b:t2"], CLEAN, []),
+    )
+
+    assert passes.run() == EXIT_SUCCESS
+    assert passes.ran == 2
+    assert "Pass 1: 2 open failure(s) left" in passes.printed
+
+
+def test_it_goes_on_when_a_pass_closes_one_failure_and_more_open(tmp_path):
+    passes = Passes(
+        tmp_path, (["a:t1", "a:t2"], PARTIAL, ["a:t2", "b:t1", "b:t3"]), (["a:t2"], CLEAN, [])
+    )
+
+    assert passes.run() == EXIT_SUCCESS
+    assert passes.ran == 2
+
+
+def test_it_stops_when_a_pass_leaves_the_failures_an_earlier_pass_left(tmp_path):
+    passes = Passes(
+        tmp_path,
+        (["a:t1"], PARTIAL, ["b:t1"]),
+        (["b:t1"], PARTIAL, ["a:t1"]),
+        (["a:t1"], CLEAN, []),
+    )
+
+    assert passes.run() == EXIT_RECORD_FAILURES
+    assert passes.ran == 2
+    assert "left the same open failures as an earlier pass" in passes.printed
 
 
 def test_it_stops_after_a_pass_that_left_more_failures_than_it_found(tmp_path):

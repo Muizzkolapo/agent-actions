@@ -31,7 +31,7 @@ resumes from where it stopped.
 | `--abandon-in-flight` | Retry even when a batch was not collected, and abandon the results of that batch |
 | `--filter ACTION:RECORD_ID` | Mark a failed record as filtered at `ACTION`, in place of a retry. Thus no retry selects the record again. You can give this option more than one time. The command records the exclusion and exits. The command runs nothing again and calls no LLM. See [Keep a record out for good](#keep-a-record-out-for-good) |
 | `--reason TEXT` | The reason why the `--filter` records are filtered (required with `--filter`). The command stores this reason as the disposition reason of the records. |
-| `--all` | Retry from the earliest failure, then retry again, pass after pass, while the count of open failures decreases. See [Retry until no failure is left](#retry-all) |
+| `--all` | Retry from the earliest failure. Then retry again while a pass closes an open failure. See [Retry until no failure is left](#retry-all) |
 | `--max-passes N` | With `--all`: stop after N passes (default: no limit) |
 
 ## Examples
@@ -53,7 +53,7 @@ agac retry -w my_workflow
 ```
 
 A retry starts at one action. A failure of a different record in another action stays, for example in
-an action next to it that does not read it. The plan names these actions:
+a sibling action that does not read the output of the first action. The plan names these actions:
 
 ```
 Note: failures also exist at: verify_b. Run 'retry' again after this completes to address them, or use --all.
@@ -75,22 +75,23 @@ Pass 1: 2 open failure(s) left
 ```
 
 An open failure is a record with the disposition `failed` or `exhausted` at an action, or an action that
-failed as a whole. The command stops in one of these cases:
+failed as a whole. A pass helps when it closes an open failure, also when the record then fails at a later action.
+Thus the count of open failures can stay the same from one pass to the next. The command stops in one of these cases:
 
 - No failure is left. The exit code is `0`.
-- A pass did not decrease the count of open failures. The command says so. The reason is that one more pass
-  would retry the same records with the same result.
+- A pass closed none of the open failures. The command prints the count before and after the pass.
+- A pass left the same open failures as an earlier pass. One more pass would not change them.
 - The command made `--max-passes` passes.
-- A pass submitted a batch. The records of that pass wait for the batch, and no retry runs on top of a batch
-  that is not collected. The exit code is `4`. Collect the batch with `agac run`. Then run `retry --all` again.
+- A pass submitted a batch. The records of that pass wait for the batch, and no retry runs while a batch
+  is not collected. The exit code is `4`. Collect the batch with `agac run`. Then run `retry --all` again.
 - A pass stopped before every action ended, with no open batch. The exit code is `4`.
 - A provider answered that its [quota is at its limit](./run.md#quota-stop). The exit code is `5`.
 
 When failures are left, the exit code is `3`. It is `1` when an action failed as a whole in the last pass
 (see [Exit codes](./run.md#exit-codes)).
 
-Each pass starts at the earliest action that holds a failure. Thus, if the failures of that action cannot be
-repaired, the first pass decreases nothing, and the command stops before it gets to the failures of a later action.
+Each pass starts at the earliest action that holds a failure. If the failures of that action cannot be repaired,
+a pass can stop the command. The command then does not retry the failures of a later action.
 Keep such a record out with [`--filter`](#keep-a-record-out-for-good), or retry the later action with `--from`.
 
 `--all` holds the [run lock](./run.md#concurrent-runs) from the first pass to the last pass.

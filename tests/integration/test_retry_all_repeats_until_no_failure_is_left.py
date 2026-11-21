@@ -1,9 +1,9 @@
-"""`agac retry --all` retries pass after pass while the count of open failures goes down.
+"""`agac retry --all` retries again while a pass closes an open failure.
 
 One `agac retry` starts at the earliest action that holds a failure, so a failure of
 another record in a sibling action stays, and each project wrote its own loop around
 the command. `--all` is that loop: after each pass it reads the failures again, prints
-how many are open, and stops when none is left, when a pass did not lower the count, or
+how many are open, and stops when none is left, when a pass closed none of them, or
 after `--max-passes`.
 
 Every command is run through the CLI against a stub server. Two sibling actions read
@@ -166,7 +166,7 @@ def test_with_a_provider_that_always_fails_it_stops_after_one_pass_with_no_progr
     assert code == RECORD_FAILURES, output
     assert "Pass 1: 2 open failure(s) left" in output, output
     assert "Pass 2" not in output, output
-    assert "did not lower" in output, output
+    assert "closed none of the open failures" in output, output
 
 
 def test_max_passes_stops_it_while_failures_remain(project, provider):
