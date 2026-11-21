@@ -69,12 +69,26 @@ def _status_code(e: BaseException) -> int | None:
     return None
 
 
-def _says_quota_is_used_up(status_code: int | None, text: str, vendor: str) -> bool:
+def _error_words(e: BaseException, text: str) -> str:
+    """The error's text with the code, type and body the SDK keeps beside it.
+
+    Some SDK versions leave the error code (``insufficient_quota``) out of the message.
+    """
+    parts = [text]
+    for name in ("code", "type", "body"):
+        value = getattr(e, name, None)
+        if value is not None and not isinstance(value, int):
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def _says_quota_is_used_up(e: BaseException, text: str, vendor: str) -> bool:
+    status_code = _status_code(e)
     if status_code == _PAYMENT_REQUIRED:
         return True
     if status_code not in _QUOTA_PHRASE_STATUSES:
         return False
-    lowered = text.lower()
+    lowered = _error_words(e, text).lower()
     return any(phrase in lowered for phrase in QUOTA_PHRASES.get(vendor, ()))
 
 
@@ -100,7 +114,7 @@ def find_quota_error(e: BaseException, vendor: str) -> QuotaExceededError | None
         if isinstance(current, QuotaExceededError):
             return current
         text = _redact_sensitive_data(str(current))
-        if _says_quota_is_used_up(_status_code(current), text, vendor):
+        if _says_quota_is_used_up(current, text, vendor):
             return _quota_error(text, vendor, "", current)
         current = current.__cause__
     return None
@@ -202,7 +216,7 @@ def wrap_vendor_error(
     # --- Quota or billing stop, before the rate limit a 429 would otherwise read as ---
     # No event: the run it stops reports it once, where an event for each request in
     # flight would print the provider's answer once per record.
-    if _says_quota_is_used_up(_status_code(e), text, vendor):
+    if _says_quota_is_used_up(e, text, vendor):
         return _quota_error(text, vendor, model_name, e)
 
     # --- Type-based rate-limit detection ---
