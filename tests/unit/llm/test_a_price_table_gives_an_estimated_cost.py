@@ -11,6 +11,7 @@ import pytest
 
 from agent_actions.errors import ConfigValidationError
 from agent_actions.llm.config.prices import estimated_cost, parse_prices
+from agent_actions.logging.errors import format_user_error
 
 PRICES = parse_prices(
     {
@@ -135,6 +136,17 @@ def test_a_missing_key_names_the_unknown_key_beside_it():
         parse_prices({"m": {"input": 1, "outptu": 2}})
 
     assert "prices.m: output is required; unknown key 'outptu'" in str(refused.value)
+
+
+def test_the_refusal_is_titled_by_agent_actions_yml_and_names_no_workflow():
+    with pytest.raises(ConfigValidationError) as refused:
+        parse_prices({"m": {"input": 1}})
+
+    shown = format_user_error(refused.value, {"command": "usage", "agent": "wf"})
+
+    assert shown.startswith("Configuration Error: Invalid configuration in agent_actions.yml\n")
+    assert "Agent:" not in shown
+    assert "wf" not in shown
 
 
 def test_a_bad_price_is_named_beside_a_missing_key():

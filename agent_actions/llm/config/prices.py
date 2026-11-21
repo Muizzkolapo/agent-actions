@@ -128,7 +128,7 @@ def _raise(text: str) -> NoReturn:
         "prices",
         f"{text} (in agent_actions.yml)",
         context={
-            "file": "agent_actions.yml",
+            "config_file": "agent_actions.yml",
             "hint": "Fix the prices: block of agent_actions.yml.",
         },
     ) from None
