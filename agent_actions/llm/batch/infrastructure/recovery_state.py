@@ -166,16 +166,19 @@ class AwaitingRecovery:
     failure: str | None
     # The kind of side call a side batch answers; None for a retry or repair round.
     side_kind: str | None = None
+    # The batch does not hold the record: its file, written whole, waits on that batch.
+    for_its_file: bool = False
 
 
 def records_awaiting_recovery(
     backend: "StorageBackend", action_name: str
 ) -> dict[str, AwaitingRecovery]:
-    """Each source_guid a recovery batch not yet collected holds, and where it waits.
+    """Each source_guid a recovery batch not yet collected holds or waits for, and where.
 
     Read from what a collect pass leaves once it submits a recovery batch: the registry
-    entry, the parent file's recovery state and its context map. A file whose state or
-    map cannot be read contributes nothing, so its records stay unexplained.
+    entry, the parent file's recovery state and its context map. The other records of
+    that file wait for it (``for_its_file``). A file whose state or map cannot be read
+    contributes nothing, so its records stay unexplained.
     """
     parents = {
         entry.parent_file_name: (RecoveryType(entry.recovery_type), entry.side_kind)
@@ -184,6 +187,7 @@ def records_awaiting_recovery(
     }
 
     awaiting: dict[str, AwaitingRecovery] = {}
+    file_mates: dict[str, AwaitingRecovery] = {}
     for parent, (recovery_type, side_kind) in parents.items():
         try:
             state = RecoveryStateManager.load(backend, action_name, parent)
@@ -217,4 +221,13 @@ def records_awaiting_recovery(
                 awaiting[str(guid)] = AwaitingRecovery(
                     recovery_type, attempt, max_attempts, failures.get(custom_id), side_kind
                 )
+        held_ids = set(held)
+        for custom_id, record in context_map.items():
+            guid = record.get("source_guid") if isinstance(record, dict) else None
+            if guid and custom_id not in held_ids:
+                file_mates[str(guid)] = AwaitingRecovery(
+                    recovery_type, attempt, max_attempts, None, side_kind, for_its_file=True
+                )
+    for guid, where in file_mates.items():
+        awaiting.setdefault(guid, where)
     return awaiting

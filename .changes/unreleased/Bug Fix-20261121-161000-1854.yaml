@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'While a batch file waits on a repair, retry or side batch, its other records are no longer reported as "possible orphans". They are reported in their own line, as waiting for their file and the round it waits on. A DEFERRED record that no pending batch holds or waits for is still called a possible orphan.'
+time: 2026-11-21T16:10:00Z
