@@ -20,7 +20,7 @@ from agent_actions.expectations.judge import (
     tally_votes,
     verdict_from_reply,
 )
-from agent_actions.llm.providers.batch_base import batch_request_cap, raise_unsent
+from agent_actions.llm.providers.batch_base import UNSENT_ERROR_KEY, batch_request_cap
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -38,11 +38,16 @@ class JudgeCollection:
 
 @dataclass(frozen=True)
 class JudgeSubmission:
-    """A judge batch in flight: each request id to the verdict key it votes on."""
+    """A judge batch in flight: each request id to the verdict key it votes on.
 
-    batch_id: str
+    ``failed`` holds the verdict of each call whose request could not be sent, as
+    online fails that call alone; ``batch_id`` is None when no request could be sent.
+    """
+
+    batch_id: str | None
     requests: dict[str, str]
     budget_remaining: int | None
+    failed: dict[str, list[Any]]
 
 
 def judges_in_batch(agent_config: dict[str, Any]) -> bool:
@@ -163,22 +168,33 @@ def submit_judge_batch(
     config.pop("compiled_schema", None)
     batch_name = f"{file_name}_judge_{attempt}"
     tasks = provider.prepare_tasks(rows, config)
-    raise_unsent(rows)
-    batch_id, _status = provider.submit_batch(
-        tasks=tasks, batch_name=batch_name, output_directory=output_directory
-    )
-    logger.info(
-        "Judge batch %s submitted as %s: %d request(s) for %d value(s)",
-        batch_id,
-        batch_name,
-        len(tasks),
-        len(sent),
-    )
+    failed: dict[str, list[Any]] = {}
+    for row in rows:
+        if UNSENT_ERROR_KEY in row:
+            key = requests[row["target_id"]]
+            failed.setdefault(key, [False, f"judge call failed: {row[UNSENT_ERROR_KEY]}"])
+    requests = {request_id: key for request_id, key in requests.items() if key not in failed}
+    batch_id = None
+    if requests:
+        batch_id, _status = provider.submit_batch(
+            tasks=tasks, batch_name=batch_name, output_directory=output_directory
+        )
+        logger.info(
+            "Judge batch %s submitted as %s: %d request(s) for %d value(s)",
+            batch_id,
+            batch_name,
+            len(tasks),
+            len(sent) - len(failed),
+        )
+    for key, verdict in failed.items():
+        logger.warning("Judge request for %s could not be sent: %s", key, verdict[1])
     budget_before = collection.budget_before
     return JudgeSubmission(
         batch_id=batch_id,
         requests=requests,
+        # Online charges a call before it is made, so one that cannot be sent costs a unit too.
         budget_remaining=None if budget_before is None else budget_before - len(sent),
+        failed=failed,
     )
 
 
