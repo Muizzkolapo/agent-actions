@@ -304,6 +304,7 @@ actions:
 - It applies online and in `run_mode: batch`, and to the judge calls of the action.
 - It changes only this check. Agent Actions does not send the value to the provider. A prompt that is larger than the real window of the model fails at the provider.
 - It does not change any answer. Thus a change to it keeps the answers that an action holds.
+- To send a record that is too large for the window, split its longest field into parts with [`chunk_config.field`](../data-io/chunking.md#split-one-field-of-a-record).
 
 ### Record concurrency
 

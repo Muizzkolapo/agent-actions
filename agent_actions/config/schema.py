@@ -374,6 +374,28 @@ class ChunkConfig(BaseModel):
     )
     tokenizer_model: str | None = Field(default=None, description="Tokenizer used to measure size")
     split_method: str | None = Field(default=None, description="How text is split into chunks")
+    field: str | None = Field(
+        default=None,
+        description="The field of each staged record to split into parts, as source.<name>",
+    )
+
+    @field_validator("field")
+    @classmethod
+    def _one_top_level_field(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        name = split_field_name(value)
+        if not name or "." in name:
+            raise ValueError(
+                f"field '{value}' must name one top-level field of the staged record, "
+                "as source.<name> or <name>"
+            )
+        return value
+
+
+def split_field_name(field: str) -> str:
+    """The staged record's key that ``chunk_config.field`` names."""
+    return field.removeprefix("source.")
 
 
 class MergePattern(str, Enum):

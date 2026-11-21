@@ -69,6 +69,7 @@ def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, 
     block = project_defaults.get("chunk_config")
     if block is None:
         return project_defaults
+    _refuse_project_split_field(project_defaults)
     try:
         validated = ChunkConfig.model_validate(block).model_dump(exclude_unset=True)
     except ValidationError as e:
@@ -79,6 +80,18 @@ def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, 
             cause=e,
         ) from e
     return {**{k: v for k, v in project_defaults.items() if k != "chunk_config"}, **validated}
+
+
+def _refuse_project_split_field(project_defaults: dict[str, Any]) -> None:
+    """Refuse a field split in the project file: the field belongs to one workflow's records."""
+    block = project_defaults.get("chunk_config")
+    if isinstance(block, dict) and block.get("field") is not None:
+        raise ConfigurationError(
+            "default_agent_config chunk_config: 'field' names a field of one workflow's "
+            "staged records. Set it in the chunk_config of the first action, or of the "
+            "workflow's defaults",
+            context={"operation": "load_project_defaults", "field": block["field"]},
+        )
 
 
 def _validate_project_expect_block(project_defaults: dict[str, Any]) -> dict[str, Any]:
@@ -151,6 +164,7 @@ def project_agent_config(project_config: dict[str, Any]) -> dict[str, Any]:
     _refuse_or_raise(defaults, "default_agent_config", "merge_agent_configs")
     _refuse_retired_or_raise(defaults, "default_agent_config", "merge_agent_configs")
     _refuse_removed_spellings_or_raise(defaults, "default_agent_config", "merge_agent_configs")
+    _refuse_project_split_field(defaults)
     return DefaultAgentConfig.model_validate(defaults).model_dump()
 
 

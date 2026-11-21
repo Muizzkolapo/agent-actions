@@ -60,6 +60,8 @@ def inherited_context_scope(
 # The settings the chunker reads out of chunk_config, which are also writable as
 # keys of their own on an action or in defaults.
 CHUNK_SETTINGS = ("chunk_size", "chunk_overlap", "tokenizer_model", "split_method")
+# Read only out of a chunk_config block: as a loose key, `field` would mean anything.
+SPLIT_FIELD = "field"
 
 
 def process_chunk_config(
@@ -80,7 +82,7 @@ def process_chunk_config(
 
     merged: dict[str, Any] = {}
     for layer in layers:
-        for setting in CHUNK_SETTINGS:
+        for setting in (*CHUNK_SETTINGS, SPLIT_FIELD):
             value = layer.get(setting)
             if value is not None:
                 merged[setting] = value
