@@ -232,11 +232,14 @@ class TestRunLogFileHandler:
     def test_retrieve_registers_a_run_scoped_log_handler(
         self, single_workflow_project, monkeypatch
     ):
+        from agent_actions.llm.batch import batch_cli
         from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
 
         monkeypatch.setattr(
             BatchRetrievalService, "retrieve_results", lambda self, batch_id, target_dir: "ok"
         )
+        # The seeded workflow holds no actions to load.
+        monkeypatch.setattr(batch_cli, "_action_config", lambda ctx: None)
 
         result = CliRunner().invoke(
             cli, ["batch", "retrieve", "--action", "solo_action", "--batch-id", "fake_solo_batch"]
