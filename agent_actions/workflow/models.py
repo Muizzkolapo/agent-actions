@@ -30,12 +30,14 @@ class WorkflowRuntimeConfig:
     paths: WorkflowPaths
     use_tools: bool
     fresh: bool = False
-    rerun: str | None = None
+    rerun: tuple[str, ...] = ()
     verify_keys: bool = False
+    sends_requests: bool = True
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
     record_limit: int | None = None
     file_limit: int | None = None
+    rendered_workflow: str | None = None
 
     def resolve_project_root(self) -> Path:
         """Resolve effective project root from manager, config, or cwd."""

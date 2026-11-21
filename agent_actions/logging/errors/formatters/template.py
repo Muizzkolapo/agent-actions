@@ -3,6 +3,7 @@
 from difflib import SequenceMatcher
 from typing import Any
 
+from ..docs_links import TEMPLATE_FIELD_REFERENCE
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -17,7 +18,7 @@ class TemplateErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
-        agent_name = context.get("agent") or context.get("agent_name") or "NOT_SET"
+        agent = context.get("agent")
         missing = context.get("missing_variables", [])
         available = context.get("available_variables", [])
 
@@ -25,10 +26,7 @@ class TemplateErrorFormatter(ErrorFormatter):
         namespace_context = getattr(exc, "namespace_context", {}) or {}
         storage_hints = getattr(exc, "storage_hints", {}) or {}
 
-        details_lines: list[str] = [
-            f"Template rendering failed for agent '{agent_name}'",
-            "",
-        ]
+        details_lines: list[str] = ["The prompt template could not be rendered.", ""]
 
         for var in missing:
             details_lines.extend(
@@ -45,17 +43,19 @@ class TemplateErrorFormatter(ErrorFormatter):
 
         return UserError(
             category="Template Error",
-            title="Template rendering failed",
+            title=f"Template rendering failed in agent '{agent}'"
+            if agent
+            else "Template rendering failed",
             details="\n".join(details_lines),
             fix=hint,
             context={
-                "agent": agent_name,
+                **self._workflow_and_action(context),
                 "missing_variables": missing,
                 "available_variables": available,
                 "template_line": context.get("template_line"),
                 "mode": context.get("mode"),
             },
-            docs_url="https://docs.runagac.com/config/prompting",
+            docs_url=TEMPLATE_FIELD_REFERENCE,
         )
 
     def _format_variable_diagnostic(

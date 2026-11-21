@@ -1,22 +1,20 @@
 ---
 title: CLI Reference
-description: Complete reference for Agent Actions command-line interface
+description: The reference for the Agent Actions command-line interface (CLI)
 sidebar_position: 1
 ---
 
 # CLI Reference
 
-The Agent Actions CLI (`agac`) is your primary interface for building and running agentic workflows. Think of it like a conductor's baton for orchestrating LLM actions - you can execute workflows, inspect field dependencies, manage batch processing, and debug issues all from the command line.
-
-Let's explore what `agac` can do for you.
+The Agent Actions command-line interface (CLI) is `agac`. It is the primary interface to build and run workflows. From the command line, you can run workflows, inspect field dependencies, manage batch processing and debug problems. The sections below describe what `agac` can do.
 
 ## Global Flags
 
-These flags work with all commands and help you understand what's happening inside your agentic workflows:
+These flags work with all commands. They help you see what occurs inside your workflows:
 
 ### `--version`
 
-Display the Agent Actions version.
+Show the Agent Actions version.
 
 ```bash
 agac --version
@@ -24,10 +22,10 @@ agac --version
 
 ### `--debug`
 
-Enable debug mode with verbose logging and source file/line references.
+Enable debug mode. Debug mode gives verbose logging and the source file and line references.
 
 ```bash
-agac --debug run -a my_workflow
+agac --debug run -w my_workflow
 ```
 
 ### `-v` / `--verbose`
@@ -35,35 +33,81 @@ agac --debug run -a my_workflow
 Enable verbose output.
 
 ```bash
-agac --verbose run -a my_workflow
+agac --verbose run -w my_workflow
 ```
 
 ### `-q` / `--quiet`
 
-Show only warnings and errors. Useful for scripts and CI/CD pipelines where you only want to see problems.
+Show only warnings and errors. This flag is useful for scripts and CI/CD pipelines when you want to see only the problems.
 
 ```bash
-agac --quiet run -a my_workflow
+agac --quiet run -w my_workflow
 ```
 
 ### `--help`
 
-Show help message and available commands.
+Show the help message and the available commands.
 
 ```bash
 agac --help
 agac run --help
 ```
 
+## The Workflow and the Action
+
+Each command that reads a workflow takes its name as `-w` or `--workflow`. `-a` and `--agent` name the same option:
+
+```bash
+agac run -w my_workflow
+agac dispositions -w my_workflow
+agac run -a my_workflow          # the same as -w
+```
+
+Each command that reads one action takes its name as `-A` or `--action`:
+
+```bash
+agac traces -w my_workflow -A classify_issue
+agac dispositions -w my_workflow -A classify_issue
+```
+
+[`traces`](./traces), [`records`](./records) and [`preview`](./preview) are the exception for `-a`. In these three commands, `-a` still names the action. In these three commands, `--agent` names the workflow. In a later release, `-a` will name the workflow in these commands too.
+
+When you type `-a` in one of these three commands, the command prints a warning on stderr. The warning tells you to type `-A` for the action and `-w` for the workflow. This is the warning for `traces`:
+
+```text
+Warning: -a is deprecated in 'agac traces', where it names the action, and will name the workflow as it does in the other commands. Type -A or --action for the action, and -w or --workflow for the workflow.
+```
+
+The warning names the command that you typed. If `-a` is in front of `--help`, the command prints the warning before the help output. The command also prints the warning before the error of an option that is in front of `-a` on the command line. An example is a bad `-n` value in `agac preview -w my_workflow -n abc -a extract_data`.
+
+### Errors in the Workflow and the Action
+
+If one of these options is missing or wrong, the command prints an error on stderr and stops with exit code 2:
+
+| Cause | Error |
+|-------|-------|
+| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `traces`, `records`, `preview` and `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
+| No workflow option, in `traces`, `records` or `preview` | `Error: Missing option '-w' / '--workflow' / '--agent'.` |
+| No action option, in `traces` | `Error: Missing option '-A' / '--action'.` |
+| `-a` and `-A` together, in `traces`, `records` or `preview` | `Error: -a and -A both name the action: give -A alone.` |
+
+[`agac inspect`](./inspect), with no subcommand, gives its own error for a missing workflow option:
+
+```text
+Error: Missing required option '-w' / '--workflow'. Run 'agac inspect --help' for usage.
+```
+
+Before each `Error:` line, the command also prints a log line on stderr in the form `HH:MM:SS | Usage error: <the same text>`.
+
 ## Working Directory
 
-You might wonder: do I need to be in my project's root directory to run commands?
+You do not have to be in the root directory of your project to run commands.
 
-No - Agent Actions CLI commands automatically detect your project root by searching for `agent_actions.yml`, similar to how git finds `.git` or npm finds `package.json`. This means you can run commands from **any subdirectory** within your project.
+The CLI commands find the project root automatically. They search for `agent_actions.yml`. Git finds `.git` and npm finds `package.json` in the same way. Thus you can run commands from **any subdirectory** in your project.
 
 ### How It Works
 
-The CLI walks up the directory tree from your current location looking for `agent_actions.yml`:
+The CLI starts in your current directory. It searches each parent directory in turn for `agent_actions.yml`:
 
 ```bash
 my-project/
@@ -77,28 +121,28 @@ my-project/
 
 # From project root
 cd my-project
-agac run -a my_workflow
+agac run -w my_workflow
 
 # From subdirectory
 cd my-project/src/utils
-agac run -a my_workflow
+agac run -w my_workflow
 # 📁 Project root: /path/to/my-project
 
 # From any depth
 cd my-project/src/agents/helpers
-agac run -a my_workflow
+agac run -w my_workflow
 # 📁 Project root: /path/to/my-project
 ```
 
-From the project root the command prints no banner. From a subdirectory it prints the `📁 Project root:` line, with the absolute path of the project root, on stderr.
+From the project root, the command prints no banner. From a subdirectory, the command prints the `📁 Project root:` line on stderr. The line gives the absolute path of the project root.
 
-### Not in a Project?
+### Outside a Project {/* #not-in-a-project */}
 
-If you're outside a project directory, the command stops with a `ProjectNotFoundError`:
+If you are outside a project directory, the command stops with a `ProjectNotFoundError`:
 
 ```bash
 $ cd /tmp
-$ agac inspect -a my_workflow
+$ agac inspect -w my_workflow
 
 Error: Operation Failed: command
 
@@ -114,51 +158,51 @@ Error: Operation Failed: command
 
 ### Commands That Work Anywhere
 
-These commands don't require being in a project:
-- `init` - Create a new project
-- `--version` - Show version
-- `--help` - Display help
+These commands do not require a project:
+- `init`: Create a new project
+- `--version`: Show the version
+- `--help`: Show the help
 
 ## Commands Overview
 
-Here's what each command does - organized by what you're trying to accomplish:
+The tables give each command, in groups by the purpose of the command:
 
-**Running agentic workflows:**
+**Run workflows:**
 
 | Command | Description |
 |---------|-------------|
-| [`run`](./run) | Execute an agentic workflow |
+| [`run`](./run) | Run a workflow |
 | [`batch`](./batch) | Manage batch processing operations |
 
-**Inspecting and debugging:**
+**Inspect and debug:**
 
 | Command | Description |
 |---------|-------------|
-| [`inspect`](./inspect) | Preflight + introspection — validation + action list with `dependencies` / `action` / `context` drill-downs |
-| [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
-| [`preview`](./preview) | Preview data stored in the SQLite storage backend |
-| [`traces`](./traces) | Print the prompt, context and response an action's records were run with |
-| [`records`](./records) | Print the records an action stored, or the input each failed record was processed with, as JSON |
-| [`dispositions`](./dispositions) | Inspect record-level processing dispositions per action |
-| [`expect`](./expect) | Show the expectation rules each action would run, and report the verdicts a run stored |
-| [`retry`](./retry) | Retry failed/exhausted records from a specific action forward |
+| [`inspect`](./inspect) | Preflight checks and introspection: validation, plus the action list with the `dependencies`, `action` and `context` drill-downs |
+| [`schema`](./schema) | Show the input and output schemas and analyze the field dependencies |
+| [`preview`](./preview) | Show the data in the SQLite storage backend |
+| [`traces`](./traces) | Print the prompt, the context and the response that each record of an action used |
+| [`records`](./records) | Print, as JSON, the records that an action stored, or the input of each failed record |
+| [`dispositions`](./dispositions) | Inspect the processing disposition of each record, for each action |
+| [`expect`](./expect) | Show the expectation rules that each action would run, and report the verdicts that a run stored |
+| [`retry`](./retry) | Retry the failed or exhausted records, from a specified action to the end of the workflow |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |
 
-**Project management:**
+**Manage the project:**
 
 | Command | Description |
 |---------|-------------|
 | [`init`](./utilities#init) | Initialize a new project |
-| [`example`](./utilities#example) | Browse and install example projects from GitHub |
-| [`clean`](./utilities#clean) | Remove a workflow's working directories (output/staging opt-in) |
+| [`example`](./utilities#example) | Find and install example projects from GitHub |
+| [`clean`](./utilities#clean) | Remove the working directories of a workflow (output and staging only if you select them) |
 | [`docs`](./utilities#docs) | Generate documentation |
-| [`status`](./utilities#status) | Check agentic workflow status |
-| [`skills`](./skills) | Install AI assistant skills (Claude Code / Codex) |
+| [`status`](./utilities#status) | Show the status of a workflow |
+| [`skills`](./skills) | Install AI assistant skills (Claude Code or Codex) |
 
 ## Next Steps
 
-- **[run Command](./run)** - Execute agentic workflows with all available options
-- **[batch Commands](./batch)** - Manage batch processing for large-scale operations
-- **[preview Command](./preview)** - Inspect data in the SQLite storage backend
-- **[Troubleshooting](./troubleshooting)** - Error messages and debugging strategies
+- **[run Command](./run)**: Run workflows, with all the available options
+- **[batch Commands](./batch)**: Manage batch processing for large operations
+- **[preview Command](./preview)**: Inspect the data in the SQLite storage backend
+- **[Troubleshooting](./troubleshooting)**: Error messages and debug methods

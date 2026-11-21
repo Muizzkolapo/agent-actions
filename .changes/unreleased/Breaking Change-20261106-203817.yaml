@@ -1,3 +1,0 @@
-kind: Breaking Change
-body: A FILE tool's named observe field keeps its bare key beside a wildcard. A field named in observe was renamed to its qualified key whenever another namespace was observed by wildcard, and preflight called that a collision. Now the named field is delivered bare, a wildcard field of the same name arrives qualified (ns.field), and preflight reports a key only when the declared schemas show a real collision. A tool that read the qualified key of a named field beside a wildcard must read the bare key.
-time: 2026-11-06T20:38:17.850105Z

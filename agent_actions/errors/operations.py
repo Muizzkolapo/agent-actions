@@ -72,7 +72,7 @@ class TemplateVariableError(TemplateRenderingError):
         ctx: dict[str, Any] = {
             "missing_variables": missing_variables,
             "available_variables": available_variables,
-            "agent_name": agent_name,
+            "action_name": agent_name,
             "mode": mode,
         }
         if namespace_context:

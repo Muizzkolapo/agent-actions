@@ -48,3 +48,20 @@ def is_inline_schema_shorthand(schema_value: Any) -> bool:
             return False
 
     return True
+
+
+def bare_array_fields(schema: dict[str, Any]) -> list[str]:
+    """Shorthand fields typed ``array`` with no item type, which compile to an array of strings."""
+    return [
+        name
+        for name, value in schema.items()
+        if isinstance(value, str) and value.rstrip("!") == "array"
+    ]
+
+
+def bare_array_warning(owner: str, field: str) -> str:
+    return (
+        f"{owner}: inline schema field '{field}' is a bare 'array', so it is read as an "
+        "array of strings and an item of any other type fails. Write 'array[string]' "
+        "for strings or 'array[object]' for objects."
+    )

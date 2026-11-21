@@ -1,28 +1,35 @@
 ---
 title: dispositions Command
-description: Inspect record-level processing dispositions per action
+description: Show the processing disposition of each record, for each action
 sidebar_position: 8
 ---
 
 # dispositions Command
 
-The `dispositions` command shows, per action, what happened to every record a workflow processed — read from the `record_disposition` table in the durable store. Use it to see at a glance where records succeeded, failed, or fell out of the stream, before reaching for [`retry`](./retry).
+The `dispositions` command shows, for each action, what occurred to each record that a workflow processed. The command reads the `record_disposition` table in the durable store. Use it to see quickly where records succeeded, failed or left the stream. Use it before you use [`retry`](./retry).
 
 ```bash
-agac dispositions -a <workflow-name> [options]
+agac dispositions -w <workflow-name> [options]
 ```
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | Agent configuration file name without path or extension (required) |
-| `--action TEXT` | Show dispositions for a specific action only |
-| `--quarantined` | Show only failed/exhausted/unprocessed records, with details |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
+| `-A, --action TEXT` | Show the dispositions for only the specified action |
+| `--quarantined` | Show only the failed, exhausted and unprocessed records, with details |
+| `--json` | Print the counts as one JSON document, for a script. See [JSON Output](#json-output). `--json` does not take `--quarantined`. If you give the two flags together, the command stops with exit code 2. See the error below this table |
+
+This is the error for `--json` with `--quarantined`:
+
+```text
+Error: --json prints the counts, so it takes no --quarantined. 'agac records --snapshots' prints the failed and exhausted records as JSON.
+```
 
 ## Output
 
-One row per action, with a count per disposition:
+The output has one row for each action, with a count for each disposition:
 
 ```
                               Dispositions: my_workflow
@@ -32,92 +39,151 @@ One row per action, with a count per disposition:
 │ split   │       1 │             0 │      0 │         0 │             0 │           0 │           0 │        0 │     1 │       5 │
 ```
 
-The table is printed at its full width. In a terminal narrower than that, its lines wrap
-instead of cutting a count or an action name short.
+The command prints the table at its full width. In a narrower terminal, the lines of the table wrap.
+The command does not cut a count or an action name short.
 
 | Disposition | Meaning |
 |-------------|---------|
-| **Success** | The record was processed by the action |
-| **Failed checks** | The record was processed and shipped with a failing [expectations](../validation/expectations.md) verdict, as `on_exhausted: return_last` and `repair: none` ship it. Stored as `success` with reason `expectations_failed`: it is not a failure, nothing reading it is blocked, and `agac retry` does not re-run it. Counted apart from **Success** so the columns still add up to **Total** |
-| **Failed** | Processing failed for the record |
-| **Exhausted** | The record failed and its retries are used up |
-| **Guard skipped** | The action's guard skipped the record and it flows on unchanged. Stored as `unprocessed` (see below) |
-| **Unprocessed** | The action never answered the record for any other reason, such as an upstream failure that cascaded |
-| **Passthrough** | The model or tool answered nothing and `on_empty: skip` kept the record as a tombstone |
+| **Success** | The action processed the record |
+| **Failed checks** | The action processed the record and sent it on with a failing [expectations](../validation/expectations.md) verdict. `on_exhausted: return_last` and `repair: none` send the record on in this way. The store keeps it as `success` with reason `expectations_failed`. It is not a failure. Nothing that reads it is blocked, and `agac retry` does not run it again. The summary counts it separately from **Success**, so that the columns still add up to **Total** |
+| **Failed** | The processing of the record failed |
+| **Exhausted** | The record failed and no retries remain for it |
+| **Guard skipped** | The guard of the action skipped the record, and the record continues downstream with no change. The store keeps it as `unprocessed` (see below) |
+| **Unprocessed** | The action never answered the record, for any other reason. An example is an upstream failure that cascaded |
+| **Passthrough** | The model or the tool gave no answer, and `on_empty: skip` kept the record as a tombstone |
 | **Filtered** | The action removed the record from the stream |
 
-A guard skip is stored as `unprocessed` in both run modes, with reason `guard_skip`, or
-`guard_prefilter_skip` for an action of `granularity: file` (`guard_filter` on the rare
-unprocessed row a batch path writes with no reason of its own): unprocessed keeps the record
-open, so once the guard passes it again it is sent to the model, where a terminal
-disposition would carry the tombstone for good. The summary counts those rows under
-**Guard skipped** and the rest of the unprocessed rows under **Unprocessed**, so the columns
-still add up to **Total**. `--quarantined` lists guard skips with their reason, as before.
+In the two run modes, the store keeps a guard skip as `unprocessed`. The reason is `guard_skip`.
+For an action of `granularity: file`, the reason is `guard_prefilter_skip`.
+In rare cases, a batch path writes an unprocessed row with no reason of its own. That row gets the reason `guard_filter`.
 
-### Why Total and Records can differ
+The disposition `unprocessed` keeps the record open. Thus, when the guard lets the record pass again, the action sends it to the model.
+A terminal disposition would keep the tombstone permanently.
 
-**A disposition names the record it accounts for.** `Total` counts those rows;
-`Records` counts the records currently stored under the action. They match for an
-action that turns one record into one record, and they legitimately differ
-otherwise.
+The summary counts the guard skip rows under **Guard skipped**, and the other unprocessed rows under **Unprocessed**. Thus the columns still add up to **Total**.
+`--quarantined` does not separate guard skips. It lists them as `unprocessed` rows, and the Reason column shows `guard_skip`, `guard_prefilter_skip` or `guard_filter`.
 
-An action that folds records together shows more dispositions than records:
-every input it consumed is accounted for even though only one output carries
-them, and those it consumed without leaving a row of their own say so with
-`reason=consumed_into_output`. A FILE action that fans out also shows more, since
-the rows it minted an identity for are accounted beside the inputs that produced
+### Total and Records Can Differ {/* #why-total-and-records-can-differ */}
+
+**A disposition names the record that it accounts for.** `Total` counts those rows.
+`Records` counts the records that the store currently keeps under the action. For an
+action that changes one record into one record, the two counts match. For other actions, the two counts can differ, and this difference is correct.
+
+An action that merges records into one record shows more dispositions than records.
+Each input that the action consumed has a disposition, although only one output contains
+the inputs. Each input that the action consumed and that has no row of its own shows
+`reason=consumed_into_output`. A FILE action that makes many records from one record also shows more dispositions.
+The reason is that the action gives a new identity to each new row. The dispositions count these rows next to the inputs that made
 them. Neither case is data loss.
 
-This is also why [`retry`](./retry)
-targets inputs: retrying a record means re-running the input that failed.
+For the same reason, [`retry`](./retry)
+operates on inputs. To retry a record is to run the failed input again.
 
-`Records` counts every record stored under the action, which is not the same as
-the records it successfully produced. A record that was guard-skipped, cascade-
-skipped or failed is kept in the action's output as a placeholder so downstream
-actions can still see it, and those placeholders are counted here. The `rewrite`
-row above shows this: 4 successes and 21 guard skips, `Records 25`. The run line says the
-same: `✓ rewrite  25 records in 1.2s — 21 skipped by guard`. So a high
-`Records` is not on its own evidence that the action worked — read it against
-the `Failed checks`, `Failed`, `Guard skipped`, `Unprocessed` and `Passthrough` columns, or use `--quarantined` for
-the detail.
+`Records` counts each record that the store keeps under the action. This count is not the same as
+the number of records that the action produced successfully. The output of the action keeps a placeholder for each record that failed, or that a guard skip or a cascade skip
+skipped. The placeholder lets downstream
+actions still see the record. `Records` counts these placeholders. The `rewrite`
+row above shows this: 4 successes and 21 guard skips, `Records 25`. The run line gives the
+same data: `✓ rewrite  25 records in 1.2s — 21 skipped by guard`. Thus a high
+`Records` count alone does not prove that the action worked. Compare it with
+the `Failed checks`, `Failed`, `Guard skipped`, `Unprocessed` and `Passthrough` columns. For
+the details, use `--quarantined`.
 
-`Records` also reads what is in the store *now*, not only this run's output.
-Re-running a workflow over differently named input files leaves the earlier
-run's records in place and counts them too; `agac run --fresh` clears them. A
-`?` means the count could not be read at all — which is not the same as zero.
+`Records` also reads what is in the store *now*, not only the output of this run.
+A second run of a workflow can use input files with different names. The records of the earlier
+run then stay in the store. `Records` counts them too. `agac run --fresh` clears them. A
+`?` means that the command could not read the count at all. A `?` is not the same as zero.
 
-An action with an action-level row, such as one halted after its retries were used up, appears in a second table titled `Action-level state`, followed by a hint that a halted action is not re-run by `agac run` and is resumed with `agac retry` or restarted with `agac run --fresh`.
+An action with an action-level row shows in a second table, with the title `Action-level state`. An example is an action that halted after it used all its retries.
+After the table, a hint tells you that `agac run` does not run a halted action again.
+To resume a halted action, use `agac retry`. To start it again from the beginning, use `agac run --fresh`.
+
+## JSON Output
+
+`--json` prints one JSON document on stdout, and nothing else. Warnings and progress lines go to stderr. Read the counts from this document. Do not read them from the lines of the table: the columns and the box characters of the table can change.
+
+```bash
+agac dispositions -w my_workflow --json
+```
+
+```json
+{
+  "workflow": "my_workflow",
+  "actions": [
+    {
+      "name": "extract",
+      "counts": {
+        "success": 120,
+        "failed_checks": 0,
+        "failed": 2,
+        "exhausted": 1,
+        "guard_skipped": 0,
+        "unprocessed": 0,
+        "passthrough": 0,
+        "filtered": 0,
+        "skipped": 0,
+        "deferred": 0
+      },
+      "total": 123,
+      "records": 123,
+      "action_level": []
+    }
+  ]
+}
+```
+
+The shape is stable. A later release can add a key, but it does not rename or remove one.
+
+| Key | Value |
+|-----|-------|
+| `workflow` | The workflow name |
+| `actions` | One object for each action, in execution order. The list has each action of the workflow, also an action with no disposition. With `--action`, the list has only that action |
+| `actions[].name` | The action name |
+| `actions[].counts` | The number of records for each count. The object always has each of the ten keys, with `0` for a count that has no record. The first eight keys are the columns of the table, in snake_case, with the same numbers. `skipped` and `deferred` are the two other dispositions that the store can keep for a record. The table has no column for them, but **Total** counts them. A `deferred` record waits for the result of a batch or for a review |
+| `actions[].total` | The **Total** column. It is the sum of the ten counts |
+| `actions[].records` | The **Records** column. It is `null` where the table shows `?` |
+| `actions[].action_level` | The rows of the `Action-level state` table for this action, or an empty list. Each row has `state` (the disposition, for example `failed`), `halted` (`true` when the action halted after it used all its retries) and `reason` |
+
+For an action, the sum of `failed` and `exhausted` is the `Records to retry` value of [`agac retry --dry-run`](./retry). This is true when the retry starts from that action and has no `--record`. There is one exception. If a retry stopped before its end, the dry run also counts the failures that the next retry restores. The store does not hold those failures yet. A failure in `action_level` is a failure of the action as a whole, not of a record. Thus the counts do not include it. `agac retry --dry-run` shows it on its `Action status` line.
+
+This example counts the open failures of a workflow:
+
+```bash
+agac dispositions -w my_workflow --json | jq '[.actions[].counts | .failed + .exhausted] | add'
+```
 
 ## Examples
 
-### Full workflow overview
+### Full Workflow Overview
 
 ```bash
-agac dispositions -a my_workflow
+agac dispositions -w my_workflow
 ```
 
-### One action only
+### One Action Only
 
 ```bash
-agac dispositions -a my_workflow --action extract_facts
+agac dispositions -w my_workflow --action extract_facts
 ```
 
-### Inspect stuck records
+### Inspect Stuck Records
 
-`--quarantined` lists each failed, exhausted, or unprocessed record — action, record ID, disposition, and reason — so you can decide what to [`retry`](./retry):
+`--quarantined` lists each failed, exhausted or unprocessed record. For each record, it gives the action, the record ID, the disposition and the reason. Use this list to decide what to [`retry`](./retry):
 
 ```bash
-agac dispositions -a my_workflow --quarantined
+agac dispositions -w my_workflow --quarantined
 ```
 
-`retry` acts on the failed and exhausted ones. An unprocessed record is listed with the
-reason no answer reached it — an upstream failure (`upstream_unprocessed`), a guard skip
-(`guard_skip`), a record a `granularity: File` tool left out (`tool_missing_record`) or
-folded into another record's row (`consumed_into_another_record`) — which tells you
-where to look instead.
+`retry` operates on the failed and exhausted records. The list gives each unprocessed record with the
+reason that no answer reached it. The reason tells you where to look. The reasons are:
 
-When nothing is stuck it reports `No quarantined records found.`
+- An upstream failure (`upstream_unprocessed`)
+- A guard skip (`guard_skip`)
+- A `granularity: file` tool did not include the record (`tool_missing_record`)
+- A `granularity: file` tool merged the record into the row of a different record (`consumed_into_another_record`)
 
-:::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
+When no record is stuck, the command reports `No quarantined records found.`
+
+:::note[Run from Anywhere]
+You can run this command from any subdirectory in your project.
 :::

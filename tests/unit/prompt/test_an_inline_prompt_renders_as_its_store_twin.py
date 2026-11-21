@@ -193,7 +193,7 @@ def test_a_defined_test_on_the_version_is_decided_per_version(tmp_path):
 
 
 def test_a_templates_macro_that_tests_its_caller_per_record_fails_the_load(tmp_path):
-    """The store prompt cannot call it at all; inline, it must not decide at load."""
+    """Neither the inline nor the store prompt may decide it at load."""
     with pytest.raises((ConfigurationError, TemplateRenderingError)) as raised:
         _twins(
             tmp_path,
@@ -205,3 +205,38 @@ def test_a_templates_macro_that_tests_its_caller_per_record_fails_the_load(tmp_p
         )
 
     assert "'bullet'" in str(raised.value)
+
+
+STYLE = {
+    "style.j2": "{% set tone = 'warm' %}{% macro voice(kind) %}Speak {{ kind }}.{% endmacro %}"
+}
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        pytest.param("Use a {{ tone }} voice: {{ source.page_content }}", id="variable"),
+        pytest.param("{{ voice('calm') }}\nText: {{ source.page_content }}", id="macro"),
+        pytest.param("{{ voice(tone) }} {{ source.page_id }}", id="macro-of-a-variable"),
+        pytest.param("{{ voice('calm') }} and nothing per record", id="no-record-name"),
+    ],
+)
+def test_a_store_prompt_reads_templates_as_the_inline_prompt_does(tmp_path, prompt):
+    prompts = _twins(tmp_path, prompt, templates=STYLE)
+
+    for record in (URGENT, ROUTINE):
+        assert _sent(prompts["inline"], record) == _sent(prompts["store"], record)
+    assert "{{ tone" not in prompts["store"] and "voice(" not in prompts["store"]
+
+
+def test_a_store_prompt_using_a_templates_macro_beside_a_record_name_fails_the_load(tmp_path):
+    with pytest.raises((ConfigurationError, TemplateRenderingError)) as raised:
+        _load(
+            tmp_path,
+            "actions:\n  - name: store\n    prompt: $twin.P\n",
+            "{{ voice(source.page_id) }}",
+            STYLE,
+        )
+
+    assert "store prompt twin.P reads 'source'" in str(raised.value)
+    assert "'voice', a macro of the load" in str(raised.value)

@@ -12,6 +12,7 @@ import re
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.workflow.managers.state import ActionStatus
 from tests.integration.test_retry_selection_under_batch import (
     RECORDS,
@@ -77,7 +78,7 @@ def _guids(project, action):
 
 def _run(project, *extra):
     code, output = _agac(project, "run", "-a", WORKFLOW, *extra)
-    assert code == 0, output
+    assert code in (EXIT_SUCCESS, EXIT_PAUSED), output
     return output
 
 

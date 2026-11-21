@@ -55,6 +55,14 @@ def render_title_row(
         console.print(line)
 
 
+def branch_of(action_config: dict[str, Any]) -> dict[str, str] | None:
+    """The branch name and branch file an included action comes from; None for a host action."""
+    origin = action_config.get("_include")
+    if not isinstance(origin, dict):
+        return None
+    return {"name": origin["branch"], "file": origin["branch_file"]}
+
+
 def collapse_version_groups(actions: list[str], action_configs: dict) -> list[str]:
     """`foo_1, foo_2, foo_3` → `foo (×3)`, but ONLY when the runtime flagged
     the actions as version expansions (`is_versioned_agent`). Without that
@@ -82,6 +90,15 @@ def collapse_version_groups(actions: list[str], action_configs: dict) -> list[st
             result[first_slot[base]] = f"{base} (×{count})"
 
     return [r for r in result if r is not None]
+
+
+def observe_as_written(context_scope: dict[str, Any]) -> list[Any]:
+    """The observe references, an optional one shown with its `?`."""
+    optional = context_scope.get("optional") or {}
+    return [
+        f"{ref}?" if isinstance(ref, str) and ref in optional else ref
+        for ref in context_scope.get("observe") or []
+    ]
 
 
 class BaseInspectCommand:
@@ -152,7 +169,7 @@ class BaseInspectCommand:
                 "input_sources": input_sources,
                 "context_sources": context_sources,
                 "context_scope": {
-                    "observe": context_scope.get("observe", []),
+                    "observe": observe_as_written(context_scope),
                     "passthrough": context_scope.get("passthrough", []),
                     "drop": context_scope.get("drop", []),
                 },

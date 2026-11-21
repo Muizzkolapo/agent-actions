@@ -2,6 +2,7 @@
 
 import functools
 import logging
+import os
 import textwrap
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 import jinja2
 import yaml
 
+from agent_actions.config.includes import check_include_reads, expand_includes
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
@@ -19,7 +21,11 @@ from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.deferred_values import LoadedPrompt, LoadRender
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
-from agent_actions.utils.schema_utils import is_compiled_schema
+from agent_actions.utils.schema_utils import (
+    bare_array_fields,
+    bare_array_warning,
+    is_compiled_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +163,11 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     return f"\nRendered output saved to: {failed_render_path}"
 
 
-def _resolve_prompt_fields(item, project_root: Path | None = None):
+def _resolve_prompt_fields(
+    item,
+    project_root: Path | None = None,
+    fill: Callable[[str, str], str] | None = None,
+):
     """
     Recursively resolve prompt fields starting with '$'.
 
@@ -167,6 +177,7 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
     Args:
         item: Dictionary, list, or other value to process
         project_root: Optional project root for prompt file search
+        fill: Renders what a resolved prompt reads of the load, given it and its name
     """
     if isinstance(item, dict):
         for key, value in item.items():
@@ -179,7 +190,8 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                         resolved = PromptLoader.load_prompt_expanded(
                             prompt_key, project_root=project_root
                         )
-                        item[key] = resolved + (" " + extra if extra else "")
+                        resolved += " " + extra if extra else ""
+                        item[key] = fill(resolved, prompt_key) if fill else resolved
                     except ValueError as e:
                         raise ConfigurationError(
                             f"Failed to resolve prompt reference '{value}'",
@@ -191,63 +203,15 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                             cause=e,
                         ) from e
             elif isinstance(value, dict | list):
-                _resolve_prompt_fields(value, project_root=project_root)
+                _resolve_prompt_fields(value, project_root=project_root, fill=fill)
     elif isinstance(item, list):
         for sub_item in item:
-            _resolve_prompt_fields(sub_item, project_root=project_root)
+            _resolve_prompt_fields(sub_item, project_root=project_root, fill=fill)
 
 
 # =============================================================================
 # Schema Compilation Functions
 # =============================================================================
-
-
-def _expand_inline_schema(schema_dict: dict[str, str]) -> dict[str, Any]:
-    """
-    Expand inline schema dict format to unified schema format.
-
-    Converts shorthand: {"field_name": "string", "count": "number!"}
-    To unified format: {"name": "InlineSchema", "fields": [...]}
-
-    Args:
-        schema_dict: Simple dict with field_name: type mappings
-
-    Returns:
-        Unified schema format
-    """
-    fields = []
-    for field_name, field_type in schema_dict.items():
-        # Handle required marker
-        is_required = field_type.endswith("!")
-        if is_required:
-            field_type = field_type[:-1]
-
-        # Handle array types
-        if field_type.startswith("array[") and field_type.endswith("]"):
-            item_type = field_type[6:-1]
-            field_def = {
-                "id": field_name,
-                "type": "array",
-                "items": {"type": item_type},
-                "required": is_required,
-            }
-        elif field_type == "array":
-            field_def = {
-                "id": field_name,
-                "type": "array",
-                "items": {"type": "string"},
-                "required": is_required,
-            }
-        else:
-            field_def = {
-                "id": field_name,
-                "type": field_type,
-                "required": is_required,
-            }
-
-        fields.append(field_def)
-
-    return {"name": "InlineSchema", "fields": fields}
 
 
 def _is_inline_schema_dict(schema_value: Any) -> bool:
@@ -351,7 +315,9 @@ def _compile_action_schemas(
     # Handle schema: {field: type} (inline dict) -> expand to unified format
     schema_value = action.get("schema")
     if schema_value and _is_inline_schema_dict(schema_value):
-        action["schema"] = _expand_inline_schema(schema_value)
+        for field_name in bare_array_fields(schema_value):
+            logger.warning(bare_array_warning(f"Action '{action_name}'", field_name))
+        action["schema"] = SchemaLoader.construct_schema_from_dict(schema_value)
         logger.debug("Expanded inline schema for action '%s'", action_name)
     elif schema_value and isinstance(schema_value, dict) and not is_compiled_schema(schema_value):
         logger.warning(
@@ -582,6 +548,24 @@ def _load_prompt(prompt_name: str, project_root: Path | None = None) -> LoadedPr
     return LoadedPrompt(PromptLoader.load_prompt_expanded(prompt_name, project_root=project_root))
 
 
+_UNSET = object()
+
+
+def _env(name: str, default: Any = _UNSET, *, yaml_path: str | Path) -> Any:
+    """The variable *name* of the process environment, which holds the project's .env."""
+    value = os.environ.get(name)
+    if value is not None:
+        return value
+    if default is not _UNSET:
+        return default
+    raise TemplateRenderingError(
+        f"Error rendering YAML template from '{yaml_path}': env('{name}') reads '{name}', "
+        f"which the environment does not hold, and gives no default. Set {name} in the "
+        f"environment or in the project's .env, or give a default: env('{name}', '...')",
+        context={"yaml_path": str(yaml_path), "variable": name},
+    )
+
+
 def _load_yaml_content(yaml_path, project_root: Path | None = None):
     """
     Load YAML content from file, resolving prompt references if needed.
@@ -624,13 +608,18 @@ def new_load_render(
     templates_folder: Path,
     project_root: Path | None,
     load_class: type[LoadRender] = LoadRender,
-) -> LoadRender:
-    """A load of *yaml_content* with the prompt loader, the filters and the templates/ globals."""
+    yaml_path: str | Path = "workflow",
+) -> tuple[LoadRender, frozenset[str]]:
+    """A load of *yaml_content* with the prompt loader, `env()`, the filters and the
+    templates/ globals, and the names templates/ set."""
     load = load_class(templates_folder, yaml_content)
-    load.env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
-    load.env.filters["dedent"] = textwrap.dedent
+    env = load.env
+    env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
+    env.globals["env"] = functools.partial(_env, yaml_path=yaml_path)
+    env.filters["dedent"] = textwrap.dedent
+    own_names = set(env.globals)
     _load_template_globals(load, str(templates_folder))
-    return load
+    return load, frozenset(set(env.globals) - own_names)
 
 
 def render_pipeline_with_templates(
@@ -671,7 +660,9 @@ def render_pipeline_with_templates(
     """
     yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
 
-    load = new_load_render(yaml_content, Path(templates_folder), project_root)
+    load, folder_names = new_load_render(
+        yaml_content, Path(templates_folder), project_root, yaml_path=yaml_path
+    )
 
     # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
     # and a value that reads a version variable, are left for the stage that has them.
@@ -714,10 +705,18 @@ def render_pipeline_with_templates(
             cause=e,
         ) from e
 
+    # Step 2a: Put the actions of each included branch file in place of its include entry
+    data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
+
     # Step 3: Resolve prompt references
     data = load.fill_loaded(data)
     data = load.fill_prompts(data)
-    _resolve_prompt_fields(data, project_root=project_root)
+    # A store prompt reads templates/ as a prompt written here does: the record has none.
+    _resolve_prompt_fields(
+        data,
+        project_root=project_root,
+        fill=lambda text, name: load.fill_store_prompt(text, f"store prompt {name}", folder_names),
+    )
 
     # Step 4: Expand versioned actions
     if data:
@@ -735,5 +734,8 @@ def render_pipeline_with_templates(
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
         _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
+
+    # Step 6: Every name an action reads is final here, so the branch boundary is checked now
+    check_include_reads(data, inclusions, project_root=project_root)
 
     return yaml.dump(data, sort_keys=False)

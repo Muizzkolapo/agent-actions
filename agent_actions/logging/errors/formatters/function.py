@@ -9,6 +9,7 @@ from agent_actions.errors import (
     UDFLoadError,
 )
 
+from ..docs_links import FUNCTION_NOT_FOUND
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -27,6 +28,8 @@ class FunctionNotFoundFormatter(ErrorFormatter):
             return False
         if isinstance(exc, self._HANDLED_TYPES) or isinstance(root, self._HANDLED_TYPES):
             return True
+        if self._is_preflight_refusal(exc, root):
+            return False
         if "function" in message.lower() and "not found" in message.lower():
             return True
 
@@ -43,8 +46,6 @@ class FunctionNotFoundFormatter(ErrorFormatter):
         details = (
             f"The function '{function_name}' is not registered as a UDF (User Defined Function)."
         )
-        if context.get("action_name"):
-            details += f" Action '{context['action_name']}' names it."
         skipped = context.get("skipped_tool_files") or {}
         if skipped:
             details += "\n\nThese tool files failed to import and were skipped:\n" + "\n".join(
@@ -74,10 +75,11 @@ class FunctionNotFoundFormatter(ErrorFormatter):
             details=details,
             fix="\n".join(fix_parts),
             context={
+                **self._workflow_and_action(context),
                 "function_name": function_name,
                 "similar_functions": similar[:3] if similar else None,
             },
-            docs_url="https://docs.runagac.com/user-defined-functions",
+            docs_url=FUNCTION_NOT_FOUND,
         )
 
     def _find_similar_functions(self, target: str, available: list[str]) -> list[str]:

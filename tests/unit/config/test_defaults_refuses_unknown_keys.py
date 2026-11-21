@@ -149,7 +149,6 @@ class TestWhatTheFrameworkReadsFromADefaultsBlock:
         "key,value",
         [
             ("enable_prompt_caching", True),
-            ("anthropic_version", "2023-06-01"),
             ("tokenizer_model", "gpt2"),
             ("split_method", "sentence"),
             ("on_empty", "skip"),

@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests.integration.test_a_batch_the_provider_refuses import (
     CLI_ACTION,
     REPO,
@@ -95,7 +96,7 @@ class TestTwoOfThreeFilesOutOfReach:
         return _runs(project, unreachable="b_pages.json,c_pages.json")
 
     def test_the_run_that_could_not_reach_them_waits_for_them(self, runs):
-        assert runs.cut_off.code == 0, runs.cut_off.output
+        assert runs.cut_off.code == EXIT_PAUSED, runs.cut_off.output
         assert runs.cut_off.status == "batch_submitted"
 
     def test_the_run_that_could_not_reach_them_names_them(self, runs):
@@ -120,7 +121,7 @@ class TestEveryFileOutOfReach:
         return _runs(project, unreachable="a_pages.json,b_pages.json")
 
     def test_the_run_that_could_not_reach_any_waits_for_them(self, runs):
-        assert runs.cut_off.code == 0, runs.cut_off.output
+        assert runs.cut_off.code == EXIT_PAUSED, runs.cut_off.output
         assert runs.cut_off.status == "batch_submitted"
 
     def test_the_run_after_it_answers_every_record(self, runs):

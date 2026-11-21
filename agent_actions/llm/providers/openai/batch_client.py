@@ -9,6 +9,7 @@ from typing import Any
 import openai
 from openai import OpenAI
 
+from agent_actions.llm.providers.openai.client import without_quota_retries
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import BaseBatchClient, BatchTask
@@ -42,7 +43,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def __init__(self, api_key: str | None = None):
         """Initialize OpenAI client."""
-        self.client = OpenAI(api_key=api_key)
+        self.client = without_quota_retries(OpenAI(api_key=api_key), "openai")
         self._transient_errors = (openai.APIConnectionError, openai.InternalServerError)
 
     def format_task_for_provider(
@@ -71,19 +72,19 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             "model": model_name,
             "messages": envelope.to_dicts(),
         }
-        default_temp_only_models = ["gpt-5-mini", "gpt-5-nano", "gpt-5"]
-        if "temperature" in batch_task.model_config:
-            temp_value = batch_task.model_config["temperature"]
-            if model_name not in default_temp_only_models or temp_value == 1:
-                if model_name not in default_temp_only_models:
-                    body["temperature"] = temp_value
-        if (
-            "max_tokens" in batch_task.model_config
-            and batch_task.model_config["max_tokens"] is not None
-        ):
-            body["max_tokens"] = batch_task.model_config["max_tokens"]
+        # Unset stays out of the body: the API refuses a null. A reasoning model's
+        # temperature other than 1 is refused at preflight.
+        if batch_task.model_config.get("temperature") is not None:
+            body["temperature"] = batch_task.model_config["temperature"]
+        # Only OpenAI serves this API, and it refuses max_tokens on its reasoning models.
+        if batch_task.model_config.get("max_tokens") is not None:
+            body["max_completion_tokens"] = batch_task.model_config["max_tokens"]
+        body.update(self._sampling_params(batch_task.model_config, penalties=True))
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        from agent_actions.llm.providers.openai.client import OpenAIClient
+
+        OpenAIClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))
         return {
             "custom_id": batch_task.custom_id,
             "method": "POST",

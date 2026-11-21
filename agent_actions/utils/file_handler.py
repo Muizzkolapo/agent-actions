@@ -67,15 +67,6 @@ class FileHandler:
     """Utilities for file and directory path discovery."""
 
     @staticmethod
-    def find_file_in_directory(directory, target_filename):
-        """Recursively search for a file by name, returning its full path or None."""
-        for root, dirs, files in os.walk(directory):
-            prune_non_project_dirs(root, dirs)
-            if target_filename in files:
-                return str(Path(root) / target_filename)
-        return None
-
-    @staticmethod
     def find_specific_folder(current_dir, parent_folder_name, folder_name):
         """Find a subfolder under a named parent folder, returning its full path or None."""
         for root, dirs, _ in os.walk(current_dir):

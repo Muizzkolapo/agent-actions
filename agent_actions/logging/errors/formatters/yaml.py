@@ -7,6 +7,7 @@ import yaml
 
 from agent_actions.errors import UDFLoadError
 
+from ..docs_links import TROUBLESHOOTING
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -59,13 +60,17 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
 
         fix = self._get_fix_suggestion(yaml_context["problem"])
 
+        ctx = self._workflow_and_action(context)
+        if yaml_context["file_path"]:
+            ctx["file_path"] = yaml_context["file_path"]
+
         return UserError(
             category="YAML Syntax Error",
             title=title,
             details="\n".join(details_parts),
             fix=fix,
-            context={"file_path": yaml_context["file_path"]} if yaml_context["file_path"] else None,
-            docs_url="https://docs.runagac.com/troubleshooting/yaml-errors",
+            context=ctx or None,
+            docs_url=TROUBLESHOOTING,
         )
 
     def _extract_yaml_context(self, context: dict[str, Any]) -> dict[str, Any]:
@@ -131,6 +136,10 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
                 "File appears incomplete. Check for missing closing brackets or quotes."
             ),
             "found character '\\t'": "Remove tab characters. Use spaces for indentation.",
+            "but got '?'": (
+                "Inside [ ] or { } a '?' must be quoted. Quote an optional observe entry "
+                '("action.field?"), or write the list with one entry per line.'
+            ),
         }
 
         for pattern, suggestion in fix_suggestions.items():

@@ -199,7 +199,7 @@ class TestMessageBuilderStructure:
     def test_batch_always_system_plus_user(self):
         env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
         assert len(env.messages) == 2
-        assert env.messages[0] == LLMMessage(role="system", content=PROMPT)
+        assert env.messages[0] == LLMMessage(role="system", content=PROMPT, static_len=len(PROMPT))
         assert env.messages[1] == LLMMessage(role="user", content=CONTEXT_STR)
 
 
@@ -356,7 +356,7 @@ class TestBatchBuilder:
         env = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT_STR)
         assert isinstance(env, LLMMessageEnvelope)
         assert len(env.messages) == 2
-        assert env.messages[0] == LLMMessage(role="system", content=PROMPT)
+        assert env.messages[0] == LLMMessage(role="system", content=PROMPT, static_len=len(PROMPT))
         assert env.messages[1] == LLMMessage(role="user", content=CONTEXT_STR)
 
     def test_batch_prompt_body_is_prompt(self):
@@ -709,3 +709,24 @@ class TestStripSchemaMetadata:
         body = env.prompt_body
         assert "InlineSchema" not in body
         assert "answer" in body
+
+
+class TestSharedPromptLength:
+    @pytest.mark.parametrize("length", [-1, len(PROMPT) + 1])
+    def test_a_length_outside_the_prompt_is_refused_online_and_in_batch(self, length):
+        with pytest.raises(ValueError, match=f"shared_prompt_len {length} is outside"):
+            MessageBuilder.build("anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=length)
+        with pytest.raises(ValueError, match=f"shared_prompt_len {length} is outside"):
+            MessageBuilder.build_for_batch(
+                "anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=length
+            )
+
+    def test_a_length_inside_the_prompt_builds(self):
+        env = MessageBuilder.build_for_batch(
+            "anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=5, enable_prompt_caching=True
+        )
+
+        assert env.to_dicts(role="system")[0]["content"] == [
+            {"type": "text", "text": PROMPT[:5], "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": PROMPT[5:]},
+        ]

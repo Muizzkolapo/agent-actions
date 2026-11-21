@@ -158,16 +158,26 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
 
     def test_anthropic_format_task_with_schema_uses_tools(self, provider, sample_batch_task):
         """
-        Anthropic-specific: Verify schema is converted to tools.
+        Anthropic-specific: the compiled schema is sent as the tool list.
 
-        Anthropic uses tool calling for structured output, not response_format.
+        Anthropic uses tool calling for structured output, not response_format. The tool
+        is offered, not forced, as an online request offers it.
         """
-        schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+        schema = [
+            {
+                "name": "answer",
+                "description": "",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"answer": {"type": "string"}},
+                    "required": ["answer"],
+                    "additionalProperties": False,
+                },
+            }
+        ]
         result = provider.format_task_for_provider(sample_batch_task, schema=schema)
-        assert "tools" in result["params"], "Anthropic should use tools for structured output"
-        assert "tool_choice" in result["params"], "Anthropic should specify tool_choice"
-        assert isinstance(result["params"]["tools"], list), "Tools should be a list"
-        assert len(result["params"]["tools"]) > 0, "Should have at least one tool"
+        assert result["params"]["tools"] == schema
+        assert "tool_choice" not in result["params"]
 
     def test_submit_batch_returns_the_anthropic_batch_id(
         self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode

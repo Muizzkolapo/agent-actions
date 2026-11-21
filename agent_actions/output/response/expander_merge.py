@@ -4,6 +4,7 @@ import copy
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.input.context.normalizer import split_optional_observe
 from agent_actions.output.response.config_fields import get_default
 
 
@@ -30,6 +31,10 @@ def deep_merge_context_scope(
     if not action_scope:
         return defaults_scope or {}
 
+    # Plain references on both sides: a mapping entry cannot be deduplicated, and one
+    # field written `a.b` at one level and `a.b?` at the other is one field.
+    defaults_scope = split_optional_observe(defaults_scope)
+    action_scope = split_optional_observe(action_scope)
     merged = {**defaults_scope}
 
     for key, value in action_scope.items():
@@ -39,6 +44,17 @@ def deep_merge_context_scope(
             merged[key] = value
 
     return merged
+
+
+def inherited_context_scope(
+    action: dict[str, Any], defaults: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The ``context_scope`` *action* gets: its own directives merged over the defaults'."""
+    defaults_scope = defaults.get("context_scope")
+    action_scope = action.get("context_scope")
+    if not defaults_scope and not action_scope:
+        return None
+    return deep_merge_context_scope(defaults_scope, action_scope)
 
 
 # The settings the chunker reads out of chunk_config, which are also writable as
@@ -205,4 +221,43 @@ def merge_expect(defaults: Any, action: Any) -> dict[str, Any] | None:
         return None
     # An empty dict is the bare block — "read my own schema" — so it survives
     # the merge as a block rather than collapsing to no block at all.
+    return {**copy.deepcopy(base or {}), **copy.deepcopy(override or {})}
+
+
+def layered_defaults(outer: dict[str, Any], inner: dict[str, Any]) -> dict[str, Any]:
+    """*inner*'s defaults over *outer*'s, each key merged as an action merges over defaults.
+
+    ``context_scope``, ``expect`` and ``vendor_params`` merge key by key, and the chunk
+    settings name by name, so an inner value wins whichever spelling either level uses.
+    Every other key is replaced.
+    """
+    merged = {**outer, **inner}
+    if outer.get("context_scope") or inner.get("context_scope"):
+        merged["context_scope"] = deep_merge_context_scope(
+            outer.get("context_scope"), inner.get("context_scope")
+        )
+    for key, merge in (("expect", merge_expect), ("vendor_params", merge_vendor_params)):
+        value = merge(outer.get(key), inner.get(key))
+        if value is not None:
+            merged[key] = value
+    if inner.get("chunk_config") or any(inner.get(name) is not None for name in CHUNK_SETTINGS):
+        chunk: dict[str, Any] = {}
+        for level in (outer, inner):
+            for layer in (
+                {name: level.get(name) for name in CHUNK_SETTINGS},
+                level.get("chunk_config") or {},
+            ):
+                chunk.update(
+                    {name: layer[name] for name in CHUNK_SETTINGS if layer.get(name) is not None}
+                )
+        merged["chunk_config"] = chunk
+    return merged
+
+
+def merge_vendor_params(base: Any, override: Any) -> dict[str, Any] | None:
+    """*override*'s ``vendor_params`` over *base*'s, key by key; ``None`` when neither has any."""
+    base = base if isinstance(base, dict) else None
+    override = override if isinstance(override, dict) else None
+    if base is None and override is None:
+        return None
     return {**copy.deepcopy(base or {}), **copy.deepcopy(override or {})}

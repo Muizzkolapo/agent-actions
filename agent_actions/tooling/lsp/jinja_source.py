@@ -355,7 +355,9 @@ def _render(
     load_class: type[LoadRender], source: str, yaml_file: Path, project_root: Path
 ) -> tuple[str, LoadRender]:
     try:
-        load = new_load_render(source, project_root / "templates", project_root, load_class)
+        load, _ = new_load_render(
+            source, project_root / "templates", project_root, load_class, yaml_file
+        )
     except TemplateRenderingError as e:
         context = getattr(e, "context", None) or {}
         detail = context.get("message") or str(e)

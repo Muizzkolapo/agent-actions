@@ -3,6 +3,7 @@
 from agent_actions.config.defaults import (
     ApiDefaults,
     DocsDefaults,
+    LLMDefaults,
     LockDefaults,
     OllamaDefaults,
     PromptDefaults,
@@ -26,6 +27,11 @@ class TestLockDefaults:
 class TestOllamaDefaults:
     def test_base_url(self):
         assert OllamaDefaults.BASE_URL == "http://localhost:11434"
+
+
+class TestLLMDefaults:
+    def test_request_timeout(self):
+        assert LLMDefaults.REQUEST_TIMEOUT_SECONDS == 600.0
 
 
 class TestApiDefaults:

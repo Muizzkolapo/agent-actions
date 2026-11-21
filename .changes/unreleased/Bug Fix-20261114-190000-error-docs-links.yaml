@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: The "Learn more" link that a CLI error prints now opens a page of the documentation site. Each link pointed to a path that the site does not serve, and returned HTTP 404.
+time: 2026-11-14T19:00:00Z

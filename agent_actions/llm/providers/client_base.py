@@ -13,6 +13,7 @@ from typing import Any, ClassVar
 
 from pydantic import SecretStr
 
+from agent_actions.llm.providers.generation_params import VendorParamSpec
 from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,8 @@ class BaseClient(ABC):
     """Common functionality shared by LLM clients."""
 
     CAPABILITIES: ClassVar[dict[str, Any]] = {}  # Subclasses must override
+    # The vendor's request keys a workflow's ``vendor_params`` may set; None takes none.
+    VENDOR_PARAMS: ClassVar[VendorParamSpec | None] = None
 
     @staticmethod
     def redact_sensitive_data(
@@ -143,7 +146,7 @@ class BaseClient(ABC):
             raise ConfigurationError(
                 "API key configuration is missing",
                 context={
-                    "agent": agent_config["agent_type"],
+                    "action_name": agent_config["agent_type"],
                     "field": API_KEY_KEY,
                     "operation": "get_api_key",
                     "hint": "Add api_key to agent_actions.yml, workflow defaults, or action config",
@@ -154,7 +157,7 @@ class BaseClient(ABC):
             raise ConfigurationError(
                 f"Environment variable '{env_var_name}' is not set",
                 context={
-                    "agent": agent_config["agent_type"],
+                    "action_name": agent_config["agent_type"],
                     "env_var": env_var_name,
                     "config_value": key_name,
                     "operation": "get_api_key",
@@ -166,7 +169,7 @@ class BaseClient(ABC):
             raise ConfigurationError(
                 f"Environment variable '{env_var_name}' is set but empty",
                 context={
-                    "agent": agent_config["agent_type"],
+                    "action_name": agent_config["agent_type"],
                     "env_var": env_var_name,
                     "config_value": key_name,
                     "operation": "get_api_key",

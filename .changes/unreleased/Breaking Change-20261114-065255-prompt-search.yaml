@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: Prompt files now load only from prompt_store/ and agent_workflow/<workflow>/prompt_store/, with their subfolders. A prompt file name that is in more than one of these folders stops the load, and the error names every copy.
+time: 2026-11-14T06:52:55+00:00

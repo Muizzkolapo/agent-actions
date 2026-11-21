@@ -136,6 +136,7 @@ Call-time execution order (top-down):
 - Passes through `click.ClickException` unchanged (already formatted)
 - Passes through unexpected `Exception` for the top-level catch in `CLI.execute()`
 - Checks `_already_displayed` flag to avoid double-printing errors
+- Passes the command's options as context; the formatter adds an option only for a key the error does not set or sets to `None`, and never adds an option that is `None`
 
 ### `@requires_project`
 
@@ -181,7 +182,7 @@ the state it was opened to read.
 
 ## `load_workflow()` Shared Helper
 
-`workflow_loader.py` provides a single function used by `run`, `retry`, `schema`, and `dispositions`:
+`workflow_loader.py` provides a single function used by `run`, `retry`, `retry --filter`, `schema`, and `dispositions`:
 
 ```
 load_workflow(agent_name, paths, project_root, ...)
@@ -196,6 +197,7 @@ load_workflow(agent_name, paths, project_root, ...)
          use_tools=...,
          fresh=...,
          verify_keys=...,
+         sends_requests=...,     ← required: does this command call a model?
          project_root=...,
        ),
        read_only=...,            ← suppresses the startup state reset
@@ -207,6 +209,18 @@ load_workflow(agent_name, paths, project_root, ...)
 | `run` | `False` | reset-before-execute is the intent |
 | `schema`, `dispositions` | `True` | pure reads |
 | `retry` | `True` | reads the disposition table *after* loading, then makes its own status transitions |
+
+`sends_requests` is a required keyword: each command states whether it will call a
+model. With `False`, preflight reports an API key or endpoint credential absent from
+this environment as a warning ending `; connection check skipped`, because the run's
+environment may hold it. With `True`, the same finding refuses the load.
+
+| command | `sends_requests` |
+|---------|------------------|
+| `run` | `True` |
+| `retry` | `True`; `False` with `--dry-run` |
+| `retry --filter`, `schema`, `dispositions` | `False` |
+| `inspect`, `expect list`, `validate-udfs` (through `WorkflowInspector`) | `False` |
 
 `retry` is the case that shows why this matters: it calls `_find_failures()`
 after constructing the workflow, so with the reset in place it reported
@@ -225,8 +239,10 @@ The inspect commands do NOT use this helper -- `BaseInspectCommand._load_inspect
 RunCommand.execute()
   │
   ├─ ProjectPathsFactory.create_project_paths()    ← auto_create=True (default)
-  ├─ PromptValidator().validate()                   ← check prompt files exist
-  ├─ load_workflow(... fresh=, verify_keys=)        ← load + validate config
+  ├─ load_workflow(... fresh=, verify_keys=)        ← load + validate config, inside
+  │                                                    PromptLoader.record_loads()
+  ├─ PromptValidator().validate(prompt_files)       ← lint the prompt files the load read,
+  │                                                    also when the load raises
   │
   ├─ RunTracker.start_workflow_run()                ← docs tracking (run_results.json)
   ├─ LoggerFactory.initialize(output_dir=...)       ← Phase 4 logging init
@@ -236,10 +252,17 @@ RunCommand.execute()
   │
   ├─ workflow.run() or asyncio.run(workflow.async_run())
   │
-  ├─ State check: is_workflow_complete / is_workflow_done / batch pending
+  ├─ exit_codes.classify_outcome(state_manager)     ← SUCCESS / RECORD_FAILURES / PAUSED_FOR_BATCH /
+  │                                                    PAUSED / FAILED, from the action statuses
   │
-  └─ tracker.finalize_workflow_run()
-     └─ LoggerFactory.flush()
+  ├─ tracker.finalize_workflow_run()                ← TRACKER_STATUSES[outcome]
+  │  └─ LoggerFactory.flush()
+  │
+  ├─ --wait and PAUSED_FOR_BATCH? sleep --poll, then the steps from load_workflow again
+  │                                                    (no --fresh/--rerun/--verify-keys), under
+  │                                                    the same run lock, until --wait-timeout
+  │
+  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← 1 failed, 3 record failures, 4 paused (a batch is open, or not every action ended)
 ```
 
 ### `retry` -- Retry Failed Records
@@ -278,10 +301,16 @@ RetryCommand.execute()
   ├─ workflow.run()
   ├─ _put_back_what_the_repair_never_answered()     ← a cleared record the starting action never answered
   │
-  ├─ State check: is_workflow_complete / is_workflow_done / has_any_failed
+  ├─ exit_codes.classify_outcome(state_manager)     ← the classifier `run` uses
   ├─ _delete_manifest()                             ← the repair reached the end, either way
   │
-  └─ SystemExit(1) if a downstream action failed    ← same contract as `run`
+  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← same codes as `run`: 1, 3, 4, 5
+
+--all: the steps from get_storage_backend() down are one pass, repeated under one run lock
+  while a pass closes an open failure: _open_failures() is the set of (action, record)
+  pairs _find_failures finds, and the loop stops when a pass closes none of the pairs it
+  planned over or leaves a set an earlier pass left, up to --max-passes; a pass that paused for a batch ends it. Exit: the last outcome's
+  code, and 3 while a failure is open.
 ```
 
 ### `inspect` -- Command Group
@@ -293,7 +322,7 @@ RetryCommand.execute()
 ```
 
 All inherit from `BaseInspectCommand` which provides:
-- `_load_inspector()` — read-only workflow load + preflight (`verify_keys=False`)
+- `_load_inspector()` — read-only workflow load + preflight (`verify_keys=False`; a missing API key is a warning, not an error)
 - `_analyze_dependencies()` for inferring data flow
 - `_get_action_schema()`, `_get_output_fields()` helpers
 

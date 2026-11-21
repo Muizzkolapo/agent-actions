@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -88,7 +89,7 @@ def project(tmp_path, monkeypatch):
 def after_a_collect_error(project, monkeypatch):
     """A submitted batch whose collect pass then failed on an ordinary error."""
     submitted = _invoke("run", "-a", WORKFLOW, "--fresh")
-    assert submitted.exit_code == 0, submitted.output
+    assert submitted.exit_code == EXIT_PAUSED, submitted.output
     assert "run again" in submitted.output
 
     def provider_dropped(self, *args, **kwargs):
@@ -137,7 +138,7 @@ class TestTheAdviceItGivesWorks:
 
         for _ in range(4):
             ran = _invoke("run", "-a", WORKFLOW)
-            assert ran.exit_code == 0, ran.output
+            assert ran.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), ran.output
             if "run again" not in ran.output:
                 break
 

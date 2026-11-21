@@ -25,9 +25,9 @@ from typing import Any
 
 from ollama import Client
 
-from agent_actions.config.defaults import OllamaCloudDefaults, OllamaDefaults
+from agent_actions.config.defaults import LLMDefaults, OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
-from agent_actions.llm.providers.ollama.client import _extract_ollama_schema
+from agent_actions.llm.providers.ollama.client import _VENDOR_PARAMS, _extract_ollama_schema
 from agent_actions.llm.providers.ollama.failure_injection import (
     failed_batch_id_for,
     is_injected_failed_batch,
@@ -39,6 +39,19 @@ from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
 logger = logging.getLogger(__name__)
+
+
+def _finish_reason(ollama_response: dict | object) -> str:
+    """Why the model stopped, from ``done_reason`` (``stop``, ``length``, ...) as online reads it."""
+    if isinstance(ollama_response, dict):
+        done_reason = ollama_response.get("done_reason")
+        done = ollama_response.get("done")
+    else:
+        done_reason = getattr(ollama_response, "done_reason", None)
+        done = getattr(ollama_response, "done", False)
+    if done_reason:
+        return str(done_reason)
+    return "stop" if done else "length"
 
 
 class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
@@ -57,6 +70,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         vendor_slug: str = "ollama_local",
         cloud: bool = False,
         max_workers: int | None = None,
+        timeout: float = LLMDefaults.REQUEST_TIMEOUT_SECONDS,
     ):
         self.vendor_slug = vendor_slug
         self.cloud = cloud
@@ -78,10 +92,11 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             self.client = Client(
                 host=self.base_url,
                 headers={"Authorization": f"Bearer {api_key}"},
+                timeout=timeout,
             )
         else:
             self.base_url = base_url or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
-            self.client = Client(host=self.base_url)
+            self.client = Client(host=self.base_url, timeout=timeout)
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
@@ -96,15 +111,21 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             "messages": envelope.to_dicts(),
         }
 
-        if "temperature" in batch_task.model_config:
-            body["temperature"] = batch_task.model_config["temperature"]
+        temperature = batch_task.model_config.get("temperature")
+        if temperature is not None:
+            body["temperature"] = temperature
 
         max_tokens = batch_task.model_config.get("max_tokens")
         if max_tokens is not None:
             body["max_tokens"] = max_tokens
+        body.update(self._sampling_params(batch_task.model_config, stop_as_list=True))
 
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        elif batch_task.model_config.get("json_mode"):
+            body["response_format"] = {"type": "json_object"}
+        if batch_task.model_config.get("vendor_params"):
+            body["vendor_params"] = batch_task.model_config.get("vendor_params")
 
         return {
             "custom_id": batch_task.custom_id,
@@ -116,8 +137,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _get_default_model(self) -> str:
         return "llama2"
 
-    def _get_default_temperature(self) -> float:
-        return 1.0
+    def _get_default_temperature(self) -> float | None:
+        # As online: an unset temperature is left to the model.
+        return None
 
     def _prepare_batch_input_file(
         self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
@@ -173,13 +195,14 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             messages = body["messages"]
             model = body.get("model", self._get_default_model())
 
+            options: dict[str, Any] = {}
             temperature = body.get("temperature")
-            options: dict[str, Any] = {
-                "temperature": temperature if temperature is not None else 1.0
-            }
+            if temperature is not None:
+                options["temperature"] = temperature
             max_tokens = body.get("max_tokens")
             if max_tokens is not None:
                 options["num_predict"] = max_tokens
+            options.update({key: body[key] for key in ("top_p", "stop") if key in body})
 
             # Handle JSON mode with structured outputs.
             # Cloud: format param not supported (ollama/ollama#12362).
@@ -190,15 +213,16 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     if response_format.get("type") == "json_schema":
                         json_schema = response_format.get("json_schema", {})
                         format_param = _extract_ollama_schema(json_schema)
-                        if not format_param:
-                            format_param = "json"
+                    if not format_param:
+                        format_param = "json"
 
-            ollama_response = self.client.chat(
-                model=model,
-                messages=messages,
-                options=options,
-                format=format_param,  # type: ignore[arg-type]
-            )
+            chat_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "options": options,
+                "format": format_param,
+            }
+            ollama_response = self.client.chat(**_VENDOR_PARAMS.apply(chat_kwargs, body))
 
             if should_fail_batch_record(custom_id, idx):
                 logger.debug("[INJECTION] Simulating missing result for %s", custom_id)
@@ -332,13 +356,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                         {
                             "index": 0,
                             "message": {"role": role, "content": content},
-                            "finish_reason": "stop"
-                            if (
-                                ollama_response.get("done")
-                                if isinstance(ollama_response, dict)
-                                else getattr(ollama_response, "done", False)
-                            )
-                            else "length",
+                            "finish_reason": _finish_reason(ollama_response),
                         }
                     ],
                     "usage": {

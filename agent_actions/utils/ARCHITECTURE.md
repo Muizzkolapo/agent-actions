@@ -288,7 +288,7 @@ get_existing_content(record, is_first_stage=False)
 | `safe_format.py` | Crash-proof exception formatting and chain walking |
 | `dict.py` | `get_nested_value` — dot-separated field access on nested dicts |
 | `graph_utils.py` | `topological_sort` for action dependency resolution |
-| `schema_utils.py` | Schema file loading and format detection |
+| `schema_utils.py` | Schema file loading and format detection; names inline fields typed bare `array` and words their warning |
 | `schema_echo.py` | Detects when an LLM returns its schema definition instead of data |
 | `template_escape.py` | Jinja2 template escaping utilities |
 

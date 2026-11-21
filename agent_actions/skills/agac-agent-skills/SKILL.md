@@ -283,7 +283,7 @@ You are a domain expert. Analyze the following data.
 {end_prompt}
 ```
 
-Every `{{ namespace.field }}` must have a matching observe entry. Use `{% if %}` for fields that may be null (from skipped guards).
+Every `{{ namespace.field }}` must have a matching observe entry. Observe a field that may be null (from a skipped guard) as optional (`namespace.field?`) and wrap its use in `{% if %}`.
 
 ## Context Scope
 
@@ -317,16 +317,16 @@ All commands run from the **project root** (where `agent_actions.yml` lives). `-
 uv sync
 
 # Validate all impl: references resolve to real @udf_tool functions before running
-agac validate-udfs -a {workflow} -u tools
+agac validate-udfs -w {workflow} -u tools
 
 # Run (resumes from last completed action)
-agac run -a {workflow} -u tools
+agac run -w {workflow} -u tools
 
 # Fresh run (clears all state first)
-agac run -a {workflow} -u tools --fresh
+agac run -w {workflow} -u tools --fresh
 
 # Per-record status across all actions
-agac dispositions -a {workflow} -u tools
+agac dispositions -w {workflow} -u tools
 ```
 
 Use `record_limit: N` on any action in the YAML to test cheaply on a subset of its records — on the first action to shrink the whole run, further down to shrink one step. To shrink a run without editing the YAML, pass `--record-limit N` or `--file-limit N` to `agac run`, or set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` — the first bounds records per input file, the second how many files are walked.
@@ -357,7 +357,7 @@ expect:                  # in defaults — applies to LLM actions only
 6. Is a large upstream field (e.g. full page content) polluting a downstream action? Check if a distilled field already carries what you need.
 
 **Tracing records across actions:**
-Records carry `version_correlation_id` — same ID across all actions for the same source record. Use `agac traces -w {workflow} -a {action}` for rendered prompts and `agac records -w {workflow} -a {action}` for stored outputs (the store keeps both compressed, so `sqlite3` shows blobs). Correlate by `target_id` or `version_correlation_id`, not by array index.
+Records carry `version_correlation_id` — same ID across all actions for the same source record. Use `agac traces -w {workflow} -A {action}` for rendered prompts and `agac records -w {workflow} -A {action}` for stored outputs (the store keeps both compressed, so `sqlite3` shows blobs). Correlate by `target_id` or `version_correlation_id`, not by array index.
 
 **Inspecting an action's config, context, and schema:**
 
@@ -366,10 +366,10 @@ Records carry `version_correlation_id` — same ID across all actions for the sa
 python3 scripts/inspect_action.py {workflow} {action_name}
 
 # All action schemas (input → output) in one table
-agac schema -a {workflow} -u tools
+agac schema -w {workflow} -u tools
 
 # Full pipeline graph
-agac inspect -a {workflow} -u tools
+agac inspect -w {workflow} -u tools
 ```
 
 **Inspecting live output data and rendered prompts:**
@@ -378,8 +378,8 @@ Use `agac preview` — backend-agnostic, works regardless of store type:
 
 ```bash
 agac preview -w {workflow}                          # list actions with data
-agac preview -w {workflow} -a {action_name}         # records for one action
-agac preview -w {workflow} -a {action_name} -f json # JSON format
+agac preview -w {workflow} -A {action_name}         # records for one action
+agac preview -w {workflow} -A {action_name} -f json # JSON format
 agac preview -w {workflow} --stats                  # storage stats
 ```
 
@@ -389,8 +389,10 @@ agac preview -w {workflow} --stats                  # storage stats
 # Soft reset: clears agent_status so next run starts from scratch (keeps DB)
 python3 scripts/reset_workflow.py {workflow}
 
-# Full reset: wipes source, store, target and status, and reclaims what a provider
-# recorded locally about this workflow's batches (the store is what names them)
+# Full reset: wipes source, target, status and the store (all but its run lock file),
+# and reclaims what a provider recorded locally about this workflow's batches (the
+# store is what names them). It exits while a run of the workflow is in progress
+# (with a plain python3 on Windows it cannot check, and only warns).
 python3 scripts/reset_workflow.py {workflow} --full
 ```
 

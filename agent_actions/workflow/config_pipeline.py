@@ -22,8 +22,8 @@ from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfi
 logger = logging.getLogger(__name__)
 
 
-def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -> Any:
-    """Call *fn* and enrich any exception with the failing stage name.
+def _run_config_stage(fn: Any, stage: str, workflow_name: str, *args: Any) -> Any:
+    """Call *fn* and enrich any exception with the workflow and the failing stage name.
 
     Uses ``pipeline_stage`` instead of ``operation`` so inner handlers
     (e.g. ``_load_single_config`` setting ``operation: template_rendering``)
@@ -32,9 +32,8 @@ def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -
     try:
         return fn(*args)
     except Exception as e:
-        agent = getattr(manager, "agent_name", "unknown")
-        logger.debug("Config stage '%s' failed for agent '%s': %s", stage, agent, e)
-        enrich_exception_context(e, agent=agent, pipeline_stage=stage)
+        logger.debug("Config stage '%s' failed for agent '%s': %s", stage, workflow_name, e)
+        enrich_exception_context(e, agent=workflow_name, pipeline_stage=stage)
         raise
 
 
@@ -47,33 +46,35 @@ def load_workflow_configs(
     (inspect CLI): no file ever sees these events (LoggerFactory only attaches
     a run-log file handler when a workflow run supplies ``output_dir``) — this
     only silences the initialization/UDF-discovery banner on `-v` consoles."""
+    # The config file is named for its workflow, so the name is known before the file
+    # renders; a file whose own name differs is refused before its actions load.
+    workflow_name = Path(config.paths.constructor_path).stem
     if fire_events:
-        fire_event(
-            WorkflowInitializationStartEvent(
-                workflow_name=config.manager.agent_name if config.manager else "unknown"
-            )
-        )
+        fire_event(WorkflowInitializationStartEvent(workflow_name=workflow_name))
 
     if config.manager is None:
         config.manager = ConfigManager(
             config.paths.constructor_path,
             config.paths.default_path,
             project_root=config.project_root,
+            rendered_workflow=config.rendered_workflow,
         )
 
     manager = config.manager
-    _run_config_stage(manager.load_configs, "load_configs", manager)
-    _run_config_stage(manager.validate_agent_name, "validate_agent_name", manager)
+    _run_config_stage(manager.load_configs, "load_configs", workflow_name)
+    _run_config_stage(manager.validate_agent_name, "validate_agent_name", workflow_name)
     # Discover UDFs BEFORE expanding actions (which needs UDF metadata)
     discover_workflow_udfs(config, console, fire_events=fire_events)
 
-    user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", manager)
-    _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
+    user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", workflow_name)
+    _run_config_stage(
+        manager.merge_agent_configs, "merge_agent_configs", workflow_name, user_agents
+    )
 
     _run_config_stage(
         manager.determine_execution_order,
         "determine_execution_order",
-        manager,
+        workflow_name,
     )
 
     check_environment()

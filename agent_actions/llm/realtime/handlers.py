@@ -79,8 +79,22 @@ class AgentManager:
         )
 
     @classmethod
-    def clean_directory(cls, agent: str, directory: Path) -> None:
-        """Clean a specific directory for an agent."""
-        if directory.exists():
+    def clean_directory(cls, agent: str, directory: Path, keep: Path | None = None) -> None:
+        """Clean a specific directory for an agent, all but *keep* when it is inside it.
+
+        *keep* is the run lock file the caller holds: deleting it would let another run
+        lock a new file beside it, and Windows refuses to delete a file held open.
+        """
+        if not directory.exists():
+            return
+        if keep is None or keep.parent != directory:
             shutil.rmtree(directory)
-            logger.info("Cleaned directory %s for agent %s", directory, agent)
+        else:
+            for child in directory.iterdir():
+                if child == keep:
+                    continue
+                if child.is_dir() and not child.is_symlink():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+        logger.info("Cleaned directory %s for agent %s", directory, agent)

@@ -319,7 +319,8 @@ format_user_error(exc, context)          -- errors/__init__.py
 ErrorTranslator.translate(exc, context)  -- errors/translator.py
      |
      +-- ErrorContextService.merge_exception_context()
-     |     Extracts context from exception attributes
+     |     Extracts context from exception attributes; the caller's
+     |     context fills only keys the exception leaves unset or None
      |
      +-- extract_root_cause(exc)
      |     Walks __cause__ / __context__ chain
@@ -344,7 +345,7 @@ UserError.format_for_cli() -> str
      |
      +-- "Category: Title"
      +-- "  Problem: ..."
-     +-- "  Agent: ... / File: ... / Field: ..."   (priority context)
+     +-- "  Agent: ... / Action: ... / File: ... / Field: ..."   (priority context)
      +-- "  Fix: ..."
      +-- "  Learn more: ..."
 ```

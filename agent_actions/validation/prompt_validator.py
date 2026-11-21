@@ -16,13 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class PromptValidator(BaseValidator):
-    """Validates prompt files in a given directory.
-
-    When a ``config`` dict with a ``"workflow_name"`` key is passed to
-    :meth:`validate`, only prompt files referenced by that workflow are
-    scanned (i.e. ``{workflow_name}.md``).  Without it the validator
-    falls back to scanning every ``.md`` file in the directory.
-    """
+    """Validates the prompt files it is given."""
 
     _PROMPT_SECTION_PATTERN = re.compile("^#+\\s+(.+?)$", re.MULTILINE)
     _MAX_PROMPT_SIZE = PromptDefaults.MAX_PROMPT_SIZE_BYTES
@@ -73,26 +67,14 @@ class PromptValidator(BaseValidator):
             return None
 
     def _check_prompt_id_duplicates(
-        self, file_name: str, prompt_ids_in_file: list[str], all_prompt_ids_seen: set[str]
-    ) -> tuple[set[str], list[str]]:
+        self, file_name: str, prompt_ids_in_file: list[str]
+    ) -> set[str]:
+        """Report IDs used twice in one file; a `$file.ID` reference lets other files reuse an ID."""
         duplicates = self._find_duplicate_ids_in_list(prompt_ids_in_file)
         if duplicates:
             id_list = ", ".join(duplicates)
             self.add_error(f"Duplicate prompt IDs found in file '{file_name}': {id_list}.")
-        cross_file = [
-            pid
-            for pid in prompt_ids_in_file
-            if pid in all_prompt_ids_seen and pid not in duplicates
-        ]
-        if cross_file:
-            id_list = ", ".join(cross_file)
-            # Cross-file duplicates are a warning, not an error.  The runtime
-            # loads prompts per-workflow (one .md file per workflow), so IDs
-            # only need to be unique within a single file.
-            self.add_warning(
-                f"Prompt IDs in file '{file_name}' duplicate IDs from other files: {id_list}."
-            )
-        return (duplicates, cross_file)
+        return duplicates
 
     def _run_prompt_format_check(self, content: str, file_name: str) -> None:
         try:
@@ -104,7 +86,7 @@ class PromptValidator(BaseValidator):
                 f"PromptLoader validation or internal format check failed for '{file_name}': {e}."
             )
 
-    def _validate_single_prompt_file(self, prompt_file: Path, all_prompt_ids_seen: set[str]) -> int:
+    def _validate_single_prompt_file(self, prompt_file: Path) -> int:
         """Validate a single prompt file and return the number of valid prompts found."""
         file_prompts_count = 0
         try:
@@ -117,13 +99,8 @@ class PromptValidator(BaseValidator):
             prompt_ids_in_file = self._find_prompt_ids_in_content(content)
             if not sections:
                 self.add_warning(f"No prompt sections found in file '{prompt_file.name}'.")
-            duplicates, cross_file = self._check_prompt_id_duplicates(
-                prompt_file.name, prompt_ids_in_file, all_prompt_ids_seen
-            )
+            duplicates = self._check_prompt_id_duplicates(prompt_file.name, prompt_ids_in_file)
             if not duplicates:
-                # Cross-file duplicates are now warnings (not errors), so
-                # they should not prevent tracking or counting prompts.
-                all_prompt_ids_seen.update(prompt_ids_in_file)
                 file_prompts_count = len(prompt_ids_in_file)
             self._run_prompt_format_check(content, prompt_file.name)
             logger.debug("Prompt file validation processed for: %s", prompt_file.name)
@@ -170,37 +147,11 @@ class PromptValidator(BaseValidator):
                 return f"Empty prompt content for ID '{prompt_id}' in file '{file_name}'."
         return None
 
-    @staticmethod
-    def _resolve_prompt_files(prompt_dir: Path, workflow_name: str | None) -> list[Path]:
-        """Return the prompt files that should be validated.
-
-        When *workflow_name* is provided, only ``{workflow_name}.md`` is
-        returned.  If the file does not exist, all ``.md`` files in
-        *prompt_dir* are returned as a fallback — the workflow may
-        reference a prompt file whose name differs from the workflow
-        name.  Without a workflow name every ``.md`` file is returned.
-        """
-        if workflow_name:
-            # Guard against path traversal — workflow_name must be a simple name
-            if ".." in workflow_name or "/" in workflow_name or "\\" in workflow_name:
-                return []
-            target = prompt_dir / f"{workflow_name}.md"
-            if target.is_file():
-                return [target]
-            # Workflow-named file not found — fall back to all .md files.
-            # The prompt file may have a different name than the workflow.
-        return sorted(prompt_dir.glob("*.md"))
-
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
-        """Validate prompt files in the directory specified by *data* (Path).
-
-        If *config* contains a ``"workflow_name"`` key, only the prompt
-        file for that workflow is validated instead of every ``.md``
-        file in the directory.
-        """
+        """Validate each prompt file in *data*, a list of paths, once per file; *config* is unused."""
         self.clear_errors()
         self.clear_warnings()
-        self._validation_target = str(data) if isinstance(data, Path) else self.validator_name
+        self._validation_target = self.validator_name
         self._validation_start_time = time.time()
 
         if self._fire_events:
@@ -211,33 +162,20 @@ class PromptValidator(BaseValidator):
                 )
             )
 
-        if not isinstance(data, Path):
-            self.add_error(
-                "Validation data must be a Path object pointing to the prompt directory."
-            )
+        if not isinstance(data, list) or not all(isinstance(path, Path) for path in data):
+            self.add_error("Validation data must be a list of prompt file paths.")
             return self._complete_validation()
-        prompt_dir: Path = data
-        logger.debug("Starting prompt validation for directory: %s", prompt_dir)
-        if not self._ensure_path_exists(prompt_dir):
-            self.add_error(f"Prompt directory not found: {prompt_dir}.")
-            return self._complete_validation()
-        if not self._is_directory(prompt_dir):
-            self.add_error(f"Prompt path is not a directory: {prompt_dir}.")
-            return self._complete_validation()
-
-        workflow_name = (config or {}).get("workflow_name")
-        all_prompt_ids_seen: set[str] = set()
+        unique: dict[Path, Path] = {}
+        for path in data:
+            unique.setdefault(path.resolve(), path)
+        prompt_files = list(unique.values())
         stats = {"total_files_processed": 0, "files_with_errors": 0, "total_prompts_validated": 0}
-        prompt_files = self._resolve_prompt_files(prompt_dir, workflow_name)
-        if not prompt_files:
-            self.add_warning(f"No .md files found in prompt directory: {prompt_dir}")
-            return self._complete_validation()
         for prompt_file in prompt_files:
             stats["total_files_processed"] += 1
             errors_before_file = len(self.get_errors())
-            prompts_in_file = self._validate_single_prompt_file(prompt_file, all_prompt_ids_seen)
+            prompts_in_file = self._validate_single_prompt_file(prompt_file)
             if len(self.get_errors()) > errors_before_file:
                 stats["files_with_errors"] += 1
             stats["total_prompts_validated"] += prompts_in_file
-        logger.debug("Prompt validation complete for directory: %s. Stats: %s", prompt_dir, stats)
+        logger.debug("Prompt validation complete. Stats: %s", stats)
         return self._complete_validation()

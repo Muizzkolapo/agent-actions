@@ -111,6 +111,41 @@ class TestTheProbe:
         assert result.error.startswith(f"endpoint 'lab' {NOT_HONOURED} (HTTP {status}: ")
         assert "response_format is not supported" in result.error
 
+    def test_a_rejected_parameter_is_not_blamed_on_the_schema(self, probe):
+        with FakeEndpoint(statuses=[400]) as server:
+            server.error_message = (
+                "Unsupported parameter: 'max_tokens' is not supported with this model. "
+                "Use 'max_completion_tokens' instead."
+            )
+            _declare(server.base_url)
+
+            result = probe.probe_endpoint("lab", "stub-7b")
+
+        assert result.kind == "rejected"
+        assert result.error.startswith("endpoint 'lab' rejected the probe request (HTTP 400: ")
+        assert "Use 'max_completion_tokens' instead." in result.error
+        assert "json_schema" not in result.error
+
+    @pytest.mark.parametrize(
+        ("setup", "reason"),
+        [
+            ({"refusal": "I can't help with that."}, "The model refused to answer: I can't help"),
+            ({"mode": "empty", "finish_reason": "length"}, "(stop_reason=length)"),
+        ],
+    )
+    def test_no_answer_at_all_is_not_blamed_on_the_schema(self, probe, setup, reason):
+        with FakeEndpoint(mode=setup.pop("mode", "honour")) as server:
+            for name, value in setup.items():
+                setattr(server, name, value)
+            _declare(server.base_url)
+
+            result = probe.probe_endpoint("lab", "stub-7b")
+
+        assert result.kind == "no_answer"
+        assert result.error.startswith("endpoint 'lab' gave no answer to the probe: ")
+        assert reason in result.error
+        assert "json_schema" not in result.error
+
     @pytest.mark.parametrize("status", [404, 500])
     def test_any_other_answer_is_reported_with_its_status(self, probe, status):
         with FakeEndpoint(statuses=[status] * 3) as server:
@@ -254,7 +289,7 @@ class TestTwoEndpoints:
         [
             ([401], "Check the credential in endpoints.lab.auth."),
             ([404], "The server answered, but not with a completion"),
-            ([400], "Use a server that honours response_format json_schema"),
+            ([400], "The server refused the request for another reason than response_format"),
         ],
     )
     def test_the_hint_follows_the_outcome(self, monkeypatch, statuses, hint_start):

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
 
@@ -278,7 +279,7 @@ def test_a_retry_of_one_merge_record_leaves_the_others_answers_as_they_were(proj
             project, "run", "-a", WORKFLOW, "--fresh", before_collect=_provider_fails("gamma")
         )
 
-    assert result.returncode == 0, _output(result)
+    assert result.returncode == EXIT_RECORD_FAILURES, _output(result)
     assert _status(project, MERGE) == "completed_with_failures", _output(result)
     assert _answered_by_the_merge(_rows(project, MERGE)["items.json"]) == ["alpha", "beta"]
 
@@ -374,7 +375,7 @@ def test_a_retry_after_a_file_every_version_holds_empty_brings_none_of_it_back(p
     else:
         result = _agac(project, *rerun, before_collect=_provider_fails("alpha"))
 
-    assert result.returncode == 0, _output(result)
+    assert result.returncode == EXIT_RECORD_FAILURES, _output(result)
     assert _status(project, MERGE) == "completed_with_failures", _output(result)
 
     result = _agac(project, "retry", "-a", WORKFLOW)

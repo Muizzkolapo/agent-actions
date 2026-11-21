@@ -44,7 +44,10 @@ from agent_actions.errors.external_services import (
     ExternalServiceError,
     NetworkError,
     PromptTooLargeError,
+    ProviderQuotaStop,
+    QuotaExceededError,
     RateLimitError,
+    ResponseTruncatedError,
     VendorAPIError,
 )
 
@@ -151,8 +154,11 @@ __all__ = [
     "VendorAPIError",
     "AnthropicError",
     "NetworkError",
+    "ProviderQuotaStop",
+    "QuotaExceededError",
     "RateLimitError",
     "PromptTooLargeError",
+    "ResponseTruncatedError",
     # File System
     "FileSystemError",
     "FileLoadError",

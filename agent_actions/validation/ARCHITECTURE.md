@@ -57,12 +57,12 @@ BaseValidator (ABC)
   |     - detects suspicious keys (typos in JSON Schema keywords)
   |     - validates $ref references resolve
   |
-  +--> PromptValidator     Validates prompt_store/*.md files
+  +--> PromptValidator     Validates the prompt files it is given
   |     - prompt ID extraction (delegates to PromptLoader.get_all_prompt_names)
-  |     - duplicate ID detection (within-file = error, cross-file = warning)
+  |     - duplicate ID detection within one file (an ID may repeat across files)
   |     - unclosed {prompt_id}...{end_prompt} blocks
   |     - file size limits (PromptDefaults.MAX_PROMPT_SIZE_BYTES)
-  |     - workflow-scoped: only validates {workflow_name}.md when config provided
+  |     - validates only the files in the list it is given, once per resolved path
   |
   +--> PathValidator       Validates file/directory paths
         - existence, readability, writability, executability
@@ -142,7 +142,16 @@ WorkflowStaticAnalyzer.analyze()
 `PreflightService.validate` (`services/preflight_service.py`) refuses the run on any error, with
 the full report, warnings included. Without an error it prints the warnings itself, one grouped
 `Pre-flight: static analysis` block with each distinct finding once, so `agac run` and
-`agac inspect` show them; before 1536 they printed only beside an error.
+`agac inspect` show them; before 1536 they printed only beside an error. Every refusal it raises
+carries the workflow name as `agent`, so each command that runs pre-flight names the workflow
+in the refusal's title. A refusal or a warning group about an included action names its branch
+and branch file: the refusal carries an `origin` that the CLI prints as `Origin:`, and the warning
+group ends with an `Origin:` line, after its `Fix:` line. The actions come only from structured
+data, never from the words of a message: the refusal's `action_name`, the action of each analyzer
+issue and the action it refers to, and the action each per-action finding is attached to. An
+action matches by its name or by the version base name its config holds. A check whose findings
+are text only (guard syntax, observe without a dependency, schema dispatch, prompt contract, bus
+namespaces) gets no `Origin:` line. A workflow with no include prints as before.
 
 ### DataFlowGraph
 
@@ -185,6 +194,12 @@ WorkflowResolutionService.resolve_all()
   |      (agac-provider, ollama_local, tool, hitl, llamafile, declared endpoints)
   |    - resolves env var name with api_key_env_var() (llm/config/vendor.py)
   |    - supports custom $ENV_VAR and literal key syntax
+  |    - a missing key is an error when the caller sends requests
+  |      (sends_requests=True: run, retry); for a structural check
+  |      (sends_requests=False: inspect, schema, expect list) it is a warning
+  |      ending "; connection check skipped". An endpoint's unset url,
+  |      credential or header variable and a command auth not on PATH follow
+  |      the same rule; a set variable with a bad value is always an error
   |    - optional --verify-keys: probes vendor endpoints
   |    - AA_SKIP_ENV_VALIDATION=1 skips key checks ONLY (not seed/vendor checks)
   |
@@ -426,7 +441,7 @@ schema is never valid output.
 
 9. **ConfigValidator dispatches on an "operation" key.** Unlike the other validators that take direct data, `ConfigValidator.validate()` expects `data["operation"]` to be one of `"validate_agent_config_file_meta"` or `"validate_agent_entries"`. Passing raw config data without an operation key will produce an error, not a validation.
 
-10. **PromptValidator validates differently with/without workflow_name.** When `config["workflow_name"]` is provided, only `{workflow_name}.md` is validated. Without it, every `.md` file in the prompt directory is scanned. Cross-file duplicate prompt IDs are warnings (not errors) because the runtime loads prompts per-workflow.
+10. **PromptValidator validates only the files it is given.** `validate()` takes a list of prompt file paths and checks each resolved path once; it ignores `config`, which the base class signature carries. `agac run` gives it the files that `PromptLoader.load_prompt` read while `load_workflow` ran (`PromptLoader.record_loads()`), nested `load_prompt` tags included, also when the load raises; a file the workflow does not load is not checked. An empty list gives no warnings or errors. A prompt ID used twice in one file is an error; an ID in two files is not reported, because a `$file.ID` reference names its file.
 
 11. **ActionEntryValidationOrchestrator stops on critical failure.** If `ActionEntryStructureValidator` returns `is_critical_failure=True` (entry is not a dict), the remaining 7 validators never run. This means you will only see structural errors, not semantic ones, until the structure is fixed.
 

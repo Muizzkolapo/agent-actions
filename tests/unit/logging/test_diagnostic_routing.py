@@ -9,8 +9,6 @@ everywhere else.
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
@@ -19,6 +17,7 @@ from agent_actions.logging.core.handlers.bridge import LoggingBridgeHandler
 from agent_actions.logging.core.manager import EventManager
 from agent_actions.logging.diagnostics import DIAGNOSTIC, DIAGNOSTIC_KEY
 from agent_actions.logging.factory import LoggerFactory
+from tests._support.logs import only_through
 
 
 class _Capture:
@@ -95,11 +94,10 @@ class TestTheBridgeCarriesTheMarker:
     def _emit(self, extra: dict | None) -> BaseEvent:
         capture = _Capture()
         EventManager.get().register(capture)
-        log = logging.getLogger("agent_actions.prompt.test_diagnostic_routing")
-        log.setLevel(logging.DEBUG)
-        log.handlers = [LoggingBridgeHandler()]
-        log.propagate = False
-        log.warning("internal detail", extra=extra or {})
+        with only_through(
+            LoggingBridgeHandler(), "agent_actions.prompt.test_diagnostic_routing"
+        ) as log:
+            log.warning("internal detail", extra=extra or {})
 
         assert capture.events, "no event reached the manager"
         return capture.events[-1]

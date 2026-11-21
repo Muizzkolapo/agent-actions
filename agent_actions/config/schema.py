@@ -17,6 +17,11 @@ from pydantic import (
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardParser, parse_guard_config
+from agent_actions.input.context.normalizer import (
+    OPTIONAL_DIRECTIVE,
+    hand_written_optional_error,
+    split_optional_observe,
+)
 
 # Measured: a transposition or a dropped letter scores 0.667 and above, a
 # spelling belonging to no field 0.600 and below. Distinct names still collide,
@@ -61,6 +66,19 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
     )
 
 
+def _plain_observe_references(context_scope: Any) -> Any:
+    """Read both optional observe forms into the one shape the run reads.
+
+    Only the normaliser writes ``optional``, and it never hands its output back here.
+    """
+    try:
+        if isinstance(context_scope, dict) and OPTIONAL_DIRECTIVE in context_scope:
+            raise hand_written_optional_error()
+        return split_optional_observe(context_scope)
+    except ConfigurationError as e:
+        raise ValueError(str(e)) from e
+
+
 # Version fan-out puts each version in the dependency graph as its own action, so
 # what order they run in is the graph's answer and no key can change it.
 _VERSION_ORDER_HINT = (
@@ -93,6 +111,7 @@ _FILE_GRANULARITY_REPLACES_REDUCE_KEY = (
 # and sends the author to try the same block one level up. A value is where the
 # behaviour the key named is reachable another way.
 _RETIRED_CONFIG_KEYS: dict[str, str] = {
+    "anthropic_version": "the Anthropic SDK sets the API version",
     "constraints": "write the instruction into the action's prompt",
     "enable_caching": "Anthropic prompt caching is enable_prompt_caching",
     "ephemeral": "",
@@ -285,6 +304,21 @@ def version_variant_names(action_name: str, version_config: Any) -> list[str]:
     else:
         values = list(validated.range)
     return [f"{action_name}_{value}" for value in values]
+
+
+def branch_origins(origins: dict[str, dict[str, Any]]) -> str:
+    """A sentence per branch naming the actions of *origins* it defines; empty for none.
+
+    *origins* maps an action name to its ``_include`` metadata.
+    """
+    by_branch: dict[tuple[str, str], list[str]] = {}
+    for name, origin in origins.items():
+        by_branch.setdefault((origin["branch"], origin["branch_file"]), []).append(name)
+    return " ".join(
+        f"{', '.join(repr(n) for n in members)} "
+        f"{'comes' if len(members) == 1 else 'come'} from branch '{branch}' ({file})."
+        for (branch, file), members in by_branch.items()
+    )
 
 
 def validate_version_block(version_config: Any, action_name: str) -> VersionConfig:
@@ -625,11 +659,12 @@ class ActionConfig(_RetryValidators):
         default=None, ge=-2.0, le=2.0, description="Presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
+    vendor_params: dict[str, Any] | None = Field(
+        default=None,
+        description="Request parameters passed to the vendor SDK as written, over the defaults' key by key",
+    )
 
     # --- Runtime-consumed keys (from AgentConfig) ---
-    anthropic_version: str | None = Field(
-        default=None, description="API version header for Anthropic requests"
-    )
     enable_prompt_caching: bool | None = Field(
         default=None, description="Enable Anthropic prompt caching"
     )
@@ -668,6 +703,9 @@ class ActionConfig(_RetryValidators):
     version_context: dict[str, Any] | None = Field(
         default=None, alias="_version_context", description="Version context injected by renderer"
     )
+    include_context: dict[str, Any] | None = Field(
+        default=None, alias="_include", description="Branch origin injected by renderer"
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -677,6 +715,11 @@ class ActionConfig(_RetryValidators):
         if self.kind == ActionKind.TOOL and not self.impl:
             raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
         return self
+
+    @field_validator("context_scope")
+    @classmethod
+    def _plain_observe(cls, v: Any) -> Any:
+        return _plain_observe_references(v)
 
     @field_validator("guard")
     @classmethod
@@ -708,6 +751,11 @@ class DefaultsConfig(_RetryValidators):
             cls,
             "defaults",
         )
+
+    @field_validator("context_scope")
+    @classmethod
+    def _plain_observe(cls, v: Any) -> Any:
+        return _plain_observe_references(v)
 
     model_vendor: str | None = Field(default=None, description="Default model vendor")
     model_name: str | None = Field(default=None, description="Default model name")
@@ -757,6 +805,9 @@ class DefaultsConfig(_RetryValidators):
         default=None, ge=-2.0, le=2.0, description="Default presence penalty (OpenAI, Groq)"
     )
     stop: str | list[str] | None = Field(default=None, description="Default stop seq")
+    vendor_params: dict[str, Any] | None = Field(
+        default=None, description="Default request parameters passed to the vendor SDK"
+    )
     retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
     expect: ExpectConfig | None = Field(
         default=None,
@@ -773,9 +824,6 @@ class DefaultsConfig(_RetryValidators):
     chunk_overlap: int | None = Field(default=None, ge=0, description="Default chunk overlap")
 
     # --- Read out of defaults by field inheritance ---
-    anthropic_version: str | None = Field(
-        default=None, description="Default API version header for Anthropic requests"
-    )
     enable_prompt_caching: bool | None = Field(
         default=None, description="Default Anthropic prompt caching setting"
     )
@@ -800,6 +848,13 @@ class DefaultsConfig(_RetryValidators):
         le=32,
         description="Default records of an online LLM action in flight at once (1-32)",
     )
+
+
+def dump_defaults(defaults: DefaultsConfig | None) -> dict[str, Any]:
+    """The keys a ``defaults:`` block sets, as the expander reads them."""
+    if defaults is None:
+        return {}
+    return defaults.model_dump(mode="python", exclude_unset=True, by_alias=True)
 
 
 class StorageConfig(BaseModel):
@@ -934,12 +989,25 @@ class WorkflowConfig(BaseModel):
                     idx = cycle.index(dep)
                     cycle = cycle[idx:]
                     cycle.append(dep)
-                    raise ValueError(f"Circular dependency detected: {' -> '.join(cycle)}")
+                    raise ValueError(
+                        f"Circular dependency detected: {' -> '.join(cycle)}"
+                        f"{self._branch_origins(cycle[:-1])}"
+                    )
                 elif color[dep] == WHITE:
                     color[dep] = GRAY
                     stack.append((dep, iter(dep_graph.get(dep, []))))
 
         return self
+
+    def _branch_origins(self, names: list[str]) -> str:
+        """A sentence per branch naming which of *names* it defines; empty for none."""
+        origins: dict[str, dict[str, Any]] = {}
+        for name in dict.fromkeys(names):
+            action = self.get_action(name)
+            if action and action.include_context:
+                origins[name] = action.include_context
+        sentences = branch_origins(origins)
+        return f". {sentences}" if sentences else ""
 
     def get_action(self, name: str) -> ActionConfig | None:
         """Get an action by name."""
@@ -966,4 +1034,6 @@ __all__ = [
     "StorageConfig",
     "DefaultsConfig",
     "WorkflowConfig",
+    "branch_origins",
+    "dump_defaults",
 ]

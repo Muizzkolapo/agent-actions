@@ -129,7 +129,7 @@ class ProjectPathsFactory:
                     "does not exist. Please create the agent directory structure "
                     "or check the agent name.",
                     context={
-                        "agent_name": agent_name,
+                        "agent": agent_name,
                         "operation": "get_agent_paths",
                         "missing_path": "agent_config_dir",
                         "expected_path": f"{agent_name}/agent_config",
@@ -142,7 +142,7 @@ class ProjectPathsFactory:
                     f"The directory '{agent_name}/agent_io' does not exist. "
                     f"Please create the required directory structure.",
                     context={
-                        "agent_name": agent_name,
+                        "agent": agent_name,
                         "operation": "get_agent_paths",
                         "missing_path": "io_dir",
                         "expected_path": f"{agent_name}/agent_io",
@@ -156,7 +156,7 @@ class ProjectPathsFactory:
             logger.exception("Failed to get agent paths for %s: %s", agent_name, e)
             raise ValidationError(
                 "Failed to get agent paths",
-                context={"agent_name": agent_name, "operation": "get_agent_paths"},
+                context={"agent": agent_name, "operation": "get_agent_paths"},
                 cause=e,
             ) from e
 
@@ -229,6 +229,6 @@ class ProjectPathsFactory:
                 raise
             raise ValidationError(
                 "Failed to create project paths",
-                context={"agent_name": agent_name, "filename": filename},
+                context={"agent": agent_name, "filename": filename},
                 cause=e,
             ) from e

@@ -1,27 +1,27 @@
 ---
 title: Key Concepts
-description: Understanding agentic workflows, actions, and schema validation
+description: The core concepts of Agent Actions, which include workflows, actions and schema validation
 sidebar_position: 2
 ---
 
 # Key Concepts
 
-Let's explore the core ideas behind Agent Actions. Understanding these concepts will help you design effective agentic workflows.
+This page gives the core concepts of Agent Actions. These concepts help you design effective workflows.
 
-## What is an Agentic Workflow?
+## Workflows {/* #what-is-an-agentic-workflow */}
 
-An agentic workflow is a system where AI agents perform tasks autonomously, making decisions and taking actions to achieve a goal. Unlike simple prompt-response interactions, agentic workflows involve multiple steps, tool use, and coordination between components.
+A workflow is a system in which AI agents do tasks autonomously. The agents make decisions and take actions to achieve a goal. A workflow is different from a simple prompt-response interaction. A workflow has more than one action, uses tools and coordinates its components.
 
-### How Agent Actions Models This
+### How Agent Actions Models a Workflow {/* #how-agent-actions-models-this */}
 
-Agent Actions represents agentic workflows as a directed acyclic graph (DAG) of actions. Each action declares:
+Agent Actions represents a workflow as a directed acyclic graph (DAG) of actions. Each action declares:
 - Its **dependencies** (what must run first)
-- Its **inputs** (what data it needs via context scope)
+- Its **inputs** (the data that it needs, through the context scope)
 - Its **output schema** (what it will produce)
 - Its **prompt** (instructions for the LLM)
 - Its **model** (which provider and model to use)
 
-Agent Actions uses these declarations to determine execution order, validate outputs, and parallelize where possible.
+Agent Actions uses these declarations to find the execution order, to validate the outputs and to run actions in parallel where possible.
 
 ```mermaid
 flowchart LR
@@ -31,25 +31,25 @@ flowchart LR
     C --> D
 ```
 
-In this example, `transform` and `validate` both depend on `extract`, but are independent of each other. Agent Actions runs them in parallel.
+In this example, `transform` and `validate` both depend on `extract`, but they do not depend on each other. Agent Actions runs `transform` and `validate` in parallel.
 
-This structure guarantees:
+The DAG structure guarantees these conditions:
 - Actions run only after their dependencies complete
 - Data flows in one direction (no cycles)
 - Independent actions run in parallel automatically
 
 ## Actions
 
-An action is a single step in your agentic workflow—either an LLM call, a tool call (e.g., a Python function), or a human review gate (HITL).
+An action is one unit of work in your workflow. An action is an LLM call, a tool call (for example, a Python function) or a human review gate (HITL, human-in-the-loop).
 
-**Why define actions in YAML instead of chaining API calls directly?**
+**Reasons to define actions in YAML, and not to chain API calls directly:**
 
-- **Structure** — Actions declare dependencies and schemas, making the workflow self-documenting
-- **Validation** — Output schemas are enforced automatically
-- **Reusability** — Prompts and schemas are shared across workflows through the prompt store and the schema directory, and Jinja2 templates reuse action patterns
-- **Version control** — YAML configs are diffable and reviewable
-- **Separation of concerns** — Prompts, schemas, and logic live in separate files
-- **Progressive context disclosure** — Control exactly what data each action sees via context scope
+- **Structure**: Actions declare dependencies and schemas. Thus the workflow documents itself
+- **Validation**: Agent Actions enforces the output schemas automatically
+- **Reusability**: Workflows share prompts and schemas through the prompt store and the schema directory. Jinja2 templates reuse action patterns
+- **Version control**: You can diff and review YAML configurations
+- **Separation of concerns**: Prompts, schemas and logic are in separate files
+- **Progressive context disclosure**: The context scope controls exactly what data each action sees
 
 ```yaml
 actions:
@@ -73,23 +73,23 @@ actions:
 | Field | Description |
 |-------|-------------|
 | **name** | Unique identifier for this action |
-| **intent** | Human-readable description of what this action does (required) |
+| **intent** | A description, for people, of what this action does (required) |
 | **dependencies** | Actions that must complete first |
-| **schema** | JSON Schema name for output validation (a tool action must name one) |
-| **prompt** | LLM instructions (inline or `$workflow.PromptName` reference) |
+| **schema** | The name of the JSON Schema for output validation (a tool action must name one) |
+| **prompt** | The instructions for the LLM (inline or a `$workflow.PromptName` reference) |
 | **kind** | `llm` (default), `tool` for Python functions, or `hitl` for human review gates |
-| **impl** | For tool actions, the function name to call |
-| **hitl** | For hitl actions, configuration block (port, instructions, timeout, etc.) |
-| **context_scope** | Progressive context disclosure—control exactly what data flows into this action (`observe`, `drop`, `passthrough`). Every action must declare one |
-| **expect** | Output rules and the repair policy that regenerates on failure |
+| **impl** | For tool actions, the name of the function to call |
+| **hitl** | For hitl actions, the configuration block (for example port, instructions and timeout) |
+| **context_scope** | Progressive context disclosure. It controls exactly what data flows into this action (`observe`, `drop`, `passthrough`). Each action must declare one |
+| **expect** | Output rules, and the repair policy that regenerates the output on failure |
 | **model_vendor** | Which provider to use (inherited from defaults if not specified) |
 | **model_name** | Which model to use (inherited from defaults if not specified) |
 | **run_mode** | `online` or `batch` processing (inherited from defaults if not specified) |
-| **granularity** | `record` (per-item) or `file` (all items at once) processing (inherited from defaults if not specified; `file` is for tool and HITL actions, so an LLM action stays at `record`) |
+| **granularity** | `record` (one record at a time) or `file` (all records at once) processing (inherited from defaults if not specified). `file` is for tool and HITL actions. Thus an LLM action stays at `record` |
 
-**Configuration inheritance:** Agent Actions uses a hierarchical config system. Settings cascade from `agent_actions.yml` → workflow `defaults` → individual actions. You only need to specify fields at the action level if you want to override the inherited values.
+**Configuration inheritance:** Agent Actions uses a hierarchical configuration system. Settings cascade from `agent_actions.yml` → workflow `defaults` → individual actions. Set a field at the action level only if you want to override the inherited value.
 
-Actions are stateless—they receive input, process it, and produce validated output. This makes them easy to test, retry, and reason about.
+Actions are stateless. An action receives input, processes the input and produces validated output. Thus actions are easy to test, to retry and to understand.
 
 ### Action Kinds
 
@@ -99,9 +99,9 @@ Agent Actions supports three kinds of actions:
 |------|-------------|---------|
 | **`llm`** | Call an LLM to generate, classify, or transform data | Summarize text, extract entities, classify categories |
 | **`tool`** | Execute Python functions for deterministic operations | Data validation, API calls, file I/O |
-| **`hitl`** | Pause workflow for human review and approval | Quality gates, manual data verification, compliance checks |
+| **`hitl`** | Pause the workflow for human review and approval | Quality gates, manual data verification, compliance checks |
 
-**Example: Combining all three kinds**
+**Example: All three kinds in one workflow**
 
 ```yaml
 actions:
@@ -148,14 +148,14 @@ actions:
       on_false: skip
 ```
 
-See the [Human-in-the-Loop guide](../guides/human-in-the-loop.md) for more details on HITL actions.
+For more details on HITL actions, see the [Human-in-the-Loop guide](../guides/human-in-the-loop.md).
 
 ### Dependency Types
 
-Agent Actions distinguishes between two types of dependencies:
+Agent Actions has two types of dependencies:
 
-- **Execution dependencies**: Declared via `dependencies: [action_name]`. These control execution order—ensuring upstream actions complete before downstream actions start.
-- **Context dependencies**: Declared via `context_scope` entries like `action_name.field`. The referenced field must be defined in that action's output schema—this is how Agent Actions knows the field exists and can pass it to downstream actions.
+- **Execution dependencies**: You declare them with `dependencies: [action_name]`. They control the execution order. Upstream actions complete before downstream actions start.
+- **Context dependencies**: You declare them with `context_scope` entries such as `action_name.field`. The output schema of that action must define the referenced field. From the schema, Agent Actions knows that the field exists and that it can pass the field to downstream actions.
 
 **Example: Execution dependency**
 
@@ -167,7 +167,7 @@ Agent Actions distinguishes between two types of dependencies:
   prompt: $incident_triage.Classify_Severity
 ```
 
-**Example: Context dependency (via context_scope)**
+**Example: Context dependency (through context_scope)**
 
 ```yaml
 # From the incident_triage example
@@ -195,11 +195,11 @@ flowchart TB
     context --> |"Sets"| E[Data Flow]
 ```
 
-You declare both. A prompt may reference only a namespace that `context_scope` lists in `observe` or `passthrough`, and each action a prompt or `context_scope` names must be upstream through `dependencies`: only the actions a record passed through are sure to be on it, and preflight refuses any other name.
+You declare both types. A prompt may refer only to a namespace that `context_scope` lists in `observe` or `passthrough`. Each action that a prompt or `context_scope` names must be upstream through `dependencies`. The reason is that only the actions that a record passed through are sure to be on the record. Preflight refuses any other name.
 
 ## Field References
 
-**How do actions share data?** Field references work like spreadsheet formulas. When you write `{{ extract_data.product_name }}`, you're pointing to a cell that will be filled in when that action completes.
+**How actions share data:** A field reference points to a field in the output of an upstream action. When you write `{{ extract_data.product_name }}`, you point to the `product_name` field of `extract_data`. The field gets its value when that action completes. Thus a field reference is similar to a formula in a spreadsheet that points to a cell.
 
 ```yaml
 prompt: |
@@ -207,13 +207,13 @@ prompt: |
   Features: {{ extract_data.key_features }}
 ```
 
-The `{{ action_name.field }}` syntax pulls data from completed upstream actions. Agent Actions validates these references at configuration time—you'll catch typos before making any API calls.
+The `{{ action_name.field }}` syntax gets data from completed upstream actions. Agent Actions validates these references at configuration time. Thus you find typos before Agent Actions makes any API calls.
 
-**Declared context**: A prompt can use `{{ extract_data.product_name }}` only if the action's `context_scope` lists `extract_data.product_name` or `extract_data.*` under `observe` (or `passthrough`). Preflight refuses a prompt that references a namespace the `context_scope` does not list.
+**Declared context**: A prompt can use `{{ extract_data.product_name }}` only if the `context_scope` of the action lists `extract_data.product_name` or `extract_data.*` under `observe` (or `passthrough`). Preflight refuses a prompt that refers to a namespace that the `context_scope` does not list.
 
 ## Schema Validation
 
-**What happens when an LLM returns malformed JSON?** Every action output is validated against its JSON Schema. If you configure `expect:` with a repair policy, Agent Actions regenerates the output, up to `max_iterations` times (default 3), until it conforms.
+**Malformed JSON from an LLM:** Agent Actions validates the output of each action against its JSON Schema. You can configure `expect:` with a repair policy. Then Agent Actions regenerates the output until it conforms, up to `max_iterations` times (default 3).
 
 ```json
 {
@@ -233,7 +233,7 @@ The `{{ action_name.field }}` syntax pulls data from completed upstream actions.
 }
 ```
 
-Schemas can also be defined in YAML using the `fields` shorthand, which is more concise:
+You can also define schemas in YAML with the `fields` shorthand, which is more concise:
 
 ```yaml
 # schema/my_workflow/sentiment_result.yml
@@ -250,17 +250,17 @@ required:
   - confidence
 ```
 
-This means downstream actions always receive well-structured data. However, schema validation catches structural errors but cannot verify semantic correctness—a response might match your schema but still contain incorrect information.
+Thus downstream actions always receive data with a correct structure. But schema validation finds structural errors and cannot verify semantic correctness. A response might match your schema but still contain incorrect information.
 
 ## Context Scope
 
-Consider what happens when you have a large document. Do you really want to pass the entire raw HTML to every downstream action? Context scope lets you control what data flows between actions—keeping prompts focused and token costs down.
+Context scope controls what data flows between actions. It keeps prompts focused and token costs low. For example, with a large document, you can keep the full raw HTML away from the downstream actions.
 
 | Directive | Effect |
 |-----------|--------|
 | `observe` | Fields sent to the LLM prompt/context |
 | `drop` | Fields excluded from context entirely |
-| `passthrough` | Fields attached to output without going through the LLM |
+| `passthrough` | Fields attached to the output. The LLM does not receive these fields |
 
 ```yaml
 context_scope:
@@ -272,11 +272,11 @@ context_scope:
     - source.id
 ```
 
-This configuration sends `product_name` to the LLM, excludes raw HTML from context entirely, and keeps the source ID on the action's output record without the LLM seeing it. The ID stays under its origin namespace, `source.id`, not under the action's own name, so a later action reads it as `source.id`.
+This configuration sends `product_name` to the LLM and excludes raw HTML from context entirely. It also keeps the source ID on the output record of the action, and the LLM does not see the source ID. The ID stays under its origin namespace, `source.id`, not under the name of the action. Thus a downstream action reads the ID as `source.id`.
 
 ## Execution Flow
 
-Let's trace how data moves through an agentic workflow from start to finish:
+The diagram shows how data moves through a workflow from start to finish:
 
 ```mermaid
 flowchart LR
@@ -303,14 +303,14 @@ flowchart LR
 
 The flow:
 
-1. Input data placed in `agent_io/staging/`
+1. You put the input data in `agent_io/staging/`
 2. Agent Actions stages each record into the store under `agent_io/store/`
-3. Actions execute in dependency order (parallel where possible)
-4. Each action output is validated and written to the store's `target_data` table, keyed by action name
+3. Actions execute in dependency order (in parallel where possible)
+4. Agent Actions validates the output of each action and writes it to the `target_data` table of the store, keyed by action name
 
 ## Further Reading
 
-- **[Field References](../reference/context/field-references)** — Reference syntax details
-- **[Context Scope](../reference/context/context-scope)** — Data flow control
-- **[Schemas](../reference/schemas/)** — Schema design patterns
-- **[Guards](../reference/execution/guards)** — Conditional execution
+- **[Field References](../reference/context/field-references)**: Details of the reference syntax
+- **[Context Scope](../reference/context/context-scope)**: Control of the data flow
+- **[Schemas](../reference/schemas/)**: Schema design patterns
+- **[Guards](../reference/execution/guards)**: Conditional execution

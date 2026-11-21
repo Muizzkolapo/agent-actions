@@ -1,6 +1,6 @@
 """Tests for runtime field propagation through the expander pipeline.
 
-Action-level runtime fields (anthropic_version, enable_prompt_caching, on_empty)
+Action-level runtime fields (enable_prompt_caching, on_empty)
 must survive expansion and appear in the final agent dict.
 """
 
@@ -35,7 +35,6 @@ class TestRuntimeFieldPropagation:
     @pytest.mark.parametrize(
         "field,value",
         [
-            ("anthropic_version", "2023-06-01"),
             ("enable_prompt_caching", True),
             ("on_empty", "error"),
         ],
@@ -50,33 +49,30 @@ class TestRuntimeFieldPropagation:
         """Fields not set in action or defaults get their hardcoded default."""
         action = _minimal_action()
         result = _make_agent(action)
-        for field in ["anthropic_version", "enable_prompt_caching"]:
-            assert result[field] is None, f"{field} should default to None"
+        assert result["enable_prompt_caching"] is None
         assert result["on_empty"] == "warn"
 
     def test_defaults_level_inheritance(self):
         """Fields set in defaults propagate when action omits them."""
         action = _minimal_action()
-        defaults = {"anthropic_version": "2023-06-01", "enable_prompt_caching": True}
+        defaults = {"enable_prompt_caching": True}
         result = _make_agent(action, defaults)
 
-        assert result["anthropic_version"] == "2023-06-01"
         assert result["enable_prompt_caching"] is True
 
     def test_action_overrides_defaults(self):
         """Action-level value wins over defaults-level value."""
-        defaults = {"anthropic_version": "2023-01-01", "enable_prompt_caching": False}
-        action = _minimal_action(anthropic_version="2024-01-01", enable_prompt_caching=True)
+        defaults = {"enable_prompt_caching": False}
+        action = _minimal_action(enable_prompt_caching=True)
         result = _make_agent(action, defaults)
 
-        assert result["anthropic_version"] == "2024-01-01"
         assert result["enable_prompt_caching"] is True
 
 
 class TestEndToEndPropagation:
     """Integration tests through expand_actions_to_agents (full pipeline)."""
 
-    RUNTIME_FIELDS = {"anthropic_version": "2023-06-01", "enable_prompt_caching": True}
+    RUNTIME_FIELDS = {"enable_prompt_caching": True}
 
     def test_non_versioned_action_propagates_fields(self):
         """Runtime fields survive the full expand_actions_to_agents path."""
@@ -127,8 +123,7 @@ class TestInheritSimpleFieldsRuntime:
     """Unit tests for inherit_simple_fields with the runtime fields."""
 
     def test_runtime_fields_in_simple_config(self):
-        for field in ["anthropic_version", "enable_prompt_caching"]:
-            assert field in SIMPLE_CONFIG_FIELDS, f"{field} missing from SIMPLE_CONFIG_FIELDS"
+        assert "enable_prompt_caching" in SIMPLE_CONFIG_FIELDS
 
     def test_a_dict_from_the_action_is_deep_copied(self):
         """A dict value must be deep-copied to prevent cross-agent mutation."""

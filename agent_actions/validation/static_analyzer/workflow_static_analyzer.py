@@ -272,6 +272,9 @@ class WorkflowStaticAnalyzer:
         for warning in self._check_json_mode_schema_mismatch():
             result.add_warning(warning)
 
+        for warning in self._check_prompt_caching_on_record_data():
+            result.add_warning(warning)
+
         return result
 
     def _build_graph(self) -> None:
@@ -1136,6 +1139,77 @@ class WorkflowStaticAnalyzer:
 
         return warnings
 
+    def _check_prompt_caching_on_record_data(self) -> list[StaticTypeWarning]:
+        """Warn, once per action, when an Anthropic action caches a prompt that differs per record.
+
+        A cache mark is placed only on a prompt that is the same text, after the same
+        tools, for every record; any other prompt is sent unmarked. The versions of one
+        action share its prompt and schema, so they warn once, under the action's name.
+        """
+        from agent_actions.errors import (
+            ConfigurationError,
+            PromptValidationError,
+            SchemaValidationError,
+        )
+        from agent_actions.prompt.cache_scope import record_reads_in_prompt, schema_dispatches
+
+        warnings: list[StaticTypeWarning] = []
+        warned: set[str] = set()
+        for action in self.workflow_config.get("actions", []):
+            if not isinstance(action, dict) or action.get("enable_prompt_caching") is not True:
+                continue
+            if action.get("model_vendor") != "anthropic":
+                continue
+            name = action.get("name", "<unnamed>")
+            if action.get("is_versioned_agent") and action.get("version_base_name"):
+                name = action["version_base_name"]
+            if name in warned:
+                continue
+            try:
+                reads = record_reads_in_prompt(action)
+                dispatches = schema_dispatches(action)
+            except (
+                ConfigurationError,
+                PromptValidationError,
+                SchemaValidationError,
+                TemplateSyntaxError,
+                OSError,
+                ValueError,
+            ) as exc:
+                # A prompt, schema or seed file that does not load or parse is reported by
+                # the checks that read it.
+                logger.debug("Cannot read the prompt or schema of action '%s': %s", name, exc)
+                continue
+            reasons = []
+            if reads:
+                reasons.append(f"its prompt reads record data ({', '.join(reads)})")
+            if dispatches:
+                reasons.append(
+                    f"its schema, sent as tools before the prompt, calls {', '.join(dispatches)}"
+                )
+            if not reasons:
+                continue
+            warned.add(name)
+            warnings.append(
+                StaticTypeWarning(
+                    message=(
+                        f"Action '{name}' has enable_prompt_caching on, but "
+                        f"{' and '.join(reasons)}. The request can differ per record, so "
+                        "the prompt is sent without a cache mark and is not cached."
+                    ),
+                    location=FieldLocation(agent_name=name, config_field="enable_prompt_caching"),
+                    referenced_agent=name,
+                    referenced_field="enable_prompt_caching",
+                    hint=(
+                        "To cache the prompt, move the record data out of the prompt text "
+                        "into context_scope.observe, and give the action a schema with no "
+                        "dispatch_task call. Observed fields are sent in the separate user "
+                        "content, after the prompt."
+                    ),
+                )
+            )
+        return warnings
+
     def _check_guard_skipped_observe_refs(self) -> list[StaticTypeWarning]:
         """Warn when observe refs target specific fields from skip-guarded actions.
 
@@ -1146,7 +1220,8 @@ class WorkflowStaticAnalyzer:
         empty when skipped and are safe.
 
         Only ``on_false: "skip"`` is checked — ``"filter"`` removes individual
-        records but the namespace still exists for remaining records.
+        records but the namespace still exists for remaining records. A field the
+        action observes as optional is not warned about: it resolves to its default.
         """
         warnings: list[StaticTypeWarning] = []
         actions = self.workflow_config.get("actions", [])
@@ -1175,9 +1250,10 @@ class WorkflowStaticAnalyzer:
             observe_refs = context_scope.get("observe", [])
             if not isinstance(observe_refs, list):
                 continue
+            optional = context_scope.get("optional") or {}
 
             for ref in observe_refs:
-                if not isinstance(ref, str) or "." not in ref:
+                if not isinstance(ref, str) or "." not in ref or ref in optional:
                     continue
                 source_name, field_name = ref.split(".", 1)
                 if field_name == "*":
@@ -1201,7 +1277,8 @@ class WorkflowStaticAnalyzer:
                         referenced_agent=source_name,
                         referenced_field=field_name,
                         hint=(
-                            f"Use '{source_name}.*' instead of "
+                            f"Mark the field optional ('{source_name}.{field_name}?'), "
+                            f"use '{source_name}.*' instead of "
                             f"'{source_name}.{field_name}', or handle null in the "
                             f"downstream prompt or tool."
                         ),
@@ -1298,11 +1375,12 @@ class WorkflowStaticAnalyzer:
             observe_refs = context_scope.get("observe", [])
             if not isinstance(observe_refs, list):
                 continue
+            optional = context_scope.get("optional") or {}
 
             # Find observe refs targeting filter-guarded actions (specific fields only).
             hazard_sources: dict[str, list[str]] = {}  # filtered_action -> [field_refs]
             for ref in observe_refs:
-                if not isinstance(ref, str) or "." not in ref:
+                if not isinstance(ref, str) or "." not in ref or ref in optional:
                     continue
                 source_name, field_name = ref.split(".", 1)
                 if field_name == "*":
@@ -1354,8 +1432,9 @@ class WorkflowStaticAnalyzer:
                         hint=(
                             f"Consider: (1) Add a matching guard to '{consumer_name}', "
                             f"(2) Change '{filtered_action}' guard to on_false=\"skip\", "
-                            f"or (3) Use '{filtered_action}.*' (null-safe) instead of "
-                            f"specific fields."
+                            f"(3) Use '{filtered_action}.*' (null-safe) instead of "
+                            f"specific fields, or (4) Mark the field optional "
+                            f"('{example_ref}?')."
                         ),
                     )
                 )

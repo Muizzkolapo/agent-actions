@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_actions.utils.file_handler import FileHandler
+from agent_actions.utils.file_handler import FileHandler, find_project_dirs
 
 
 def _make_venv(root: Path, name: str = ".venv") -> Path:
@@ -17,83 +17,74 @@ def _make_venv(root: Path, name: str = ".venv") -> Path:
     return venv
 
 
-class TestFindFileInDirectorySkipsNonProjectDirs:
-    def test_file_only_inside_a_virtualenv_is_not_found(self, tmp_path):
-        """A dependency's markdown is not the user's prompt file."""
+def _named_overview(name: str) -> bool:
+    return name == "overview"
+
+
+class TestFindProjectDirsSkipsNonProjectDirs:
+    def test_dir_only_inside_a_virtualenv_is_not_found(self, tmp_path):
+        """A dependency's folder is not the user's."""
         venv = _make_venv(tmp_path)
-        (venv / "lib" / "overview.md").write_text("dependency docs")
+        (venv / "lib" / "overview").mkdir()
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") is None
+        assert find_project_dirs(tmp_path, _named_overview) == []
 
-    def test_file_only_inside_git_or_node_modules_is_not_found(self, tmp_path):
-        (tmp_path / ".git" / "objects").mkdir(parents=True)
-        (tmp_path / ".git" / "objects" / "notes.md").write_text("vcs internals")
-        (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
-        (tmp_path / "node_modules" / "pkg" / "readme.md").write_text("js dep")
+    def test_dir_only_inside_git_or_node_modules_is_not_found(self, tmp_path):
+        (tmp_path / ".git" / "objects" / "overview").mkdir(parents=True)
+        (tmp_path / "node_modules" / "pkg" / "overview").mkdir(parents=True)
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "notes.md") is None
-        assert FileHandler.find_file_in_directory(str(tmp_path), "readme.md") is None
+        assert find_project_dirs(tmp_path, _named_overview) == []
 
-    def test_project_file_is_still_found(self, tmp_path):
+    def test_project_dir_is_still_found(self, tmp_path):
         """Pruning must not narrow the search within the user's own tree."""
-        nested = tmp_path / "agent_workflow" / "wf" / "prompt_store"
-        nested.mkdir(parents=True)
-        target = nested / "overview.md"
-        target.write_text("real prompt")
+        target = tmp_path / "agent_workflow" / "wf" / "overview"
+        target.mkdir(parents=True)
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+        assert find_project_dirs(tmp_path, _named_overview) == [target]
 
-    def test_project_copy_wins_over_a_same_named_file_in_a_virtualenv(self, tmp_path):
-        """The collision the unpruned walk resolved by filesystem order."""
+    def test_only_the_project_copy_is_found_beside_a_same_named_dir_in_a_virtualenv(self, tmp_path):
         venv = _make_venv(tmp_path)
-        (venv / "lib" / "overview.md").write_text("dependency docs")
-        prompts = tmp_path / "prompt_store"
-        prompts.mkdir()
-        target = prompts / "overview.md"
-        target.write_text("real prompt")
+        (venv / "lib" / "overview").mkdir()
+        target = tmp_path / "prompt_store" / "overview"
+        target.mkdir(parents=True)
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+        assert find_project_dirs(tmp_path, _named_overview) == [target]
 
 
 class TestVirtualenvDetectionIsByMarkerNotName:
     def test_virtualenv_under_an_arbitrary_name_is_skipped(self, tmp_path):
         """Projects name their env anything; pyvenv.cfg is what identifies it."""
         venv = _make_venv(tmp_path, name=".myproject_env")
-        (venv / "lib" / "overview.md").write_text("dependency docs")
+        (venv / "lib" / "overview").mkdir()
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") is None
+        assert find_project_dirs(tmp_path, _named_overview) == []
 
     def test_directory_named_venv_without_the_marker_is_still_searched(self, tmp_path):
         """A plain directory called venv is the user's, not an environment."""
-        plain = tmp_path / "venv"
-        plain.mkdir()
-        target = plain / "overview.md"
-        target.write_text("real prompt")
+        target = tmp_path / "venv" / "overview"
+        target.mkdir(parents=True)
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+        assert find_project_dirs(tmp_path, _named_overview) == [target]
 
     def test_unlisted_dot_directory_is_still_searched(self, tmp_path):
         """Only the named dirs and virtualenvs are skipped, not every dot-directory."""
-        skills = tmp_path / ".claude" / "skills"
-        skills.mkdir(parents=True)
-        target = skills / "overview.md"
-        target.write_text("real prompt")
+        target = tmp_path / ".claude" / "skills" / "overview"
+        target.mkdir(parents=True)
 
-        assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+        assert find_project_dirs(tmp_path, _named_overview) == [target]
 
 
 class TestUnreadableDirectoriesDoNotBreakTheSearch:
     @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory permissions")
     def test_directory_the_user_cannot_read_is_skipped_not_raised(self, tmp_path):
         """The venv probe stats inside every candidate dir; an unreadable one must not crash."""
-        (tmp_path / "prompt_store").mkdir()
-        target = tmp_path / "prompt_store" / "overview.md"
-        target.write_text("real prompt")
+        target = tmp_path / "prompt_store" / "overview"
+        target.mkdir(parents=True)
         restricted = tmp_path / "restricted"
         restricted.mkdir()
         restricted.chmod(0o000)
         try:
-            assert FileHandler.find_file_in_directory(str(tmp_path), "overview.md") == str(target)
+            assert find_project_dirs(tmp_path, _named_overview) == [target]
         finally:
             restricted.chmod(0o755)
 

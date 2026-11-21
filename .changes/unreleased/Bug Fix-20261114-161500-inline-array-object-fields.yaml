@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: An inline schema field written as array[object:{...}] now keeps its item fields. Before, the render step stored the whole text as the item type, so agac inspect passed and agac run failed every record. A missing required item field now fails only the record that lacks it. Item fields that cannot be read, for example array[object:{bad}], now stop agac inspect and agac run at config load; before, inspect passed them.
+time: 2026-11-14T16:15:00Z

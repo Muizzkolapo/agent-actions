@@ -110,6 +110,7 @@ class AgentWorkflow:
             project_root=self.config.resolve_project_root(),
             workflow_config_path=self.config.paths.constructor_path,
             verify_keys=self.config.verify_keys,
+            sends_requests=self.config.sends_requests,
         )
         service.validate()
         # Reuse the rebuilt schema service to avoid a second pass.
@@ -120,12 +121,13 @@ class AgentWorkflow:
 
     def _prepare_state(self, *, read_only: bool) -> None:
         """Reset persisted state for the coming run; a read-only load mutates nothing."""
-        if read_only:
-            return
-        if self.config.fresh:
+        if self.config.fresh and not read_only:
             self._clear_for_fresh_run()
             return
-        if self.config.rerun is None:
+        self.services.core.state_manager.refuse_an_entry_that_is_not_an_object()
+        if read_only:
+            return
+        if not self.config.rerun:
             self._reset_retryable_actions()
             return
         # A batch out at an action --rerun resets is given up, not collected: name no edit
@@ -142,19 +144,24 @@ class AgentWorkflow:
         logger.info("--rerun: %s answer every record again", ", ".join(reopened))
 
     def _rerun_actions(self) -> list[str]:
-        """The actions ``--rerun`` names: the action, or every version of a versioned one."""
-        if self.config.rerun is None:
-            return []
-        return expand_version_base_names([self.config.rerun], list(self.action_configs))
+        """The actions ``--rerun`` names: each action, or every version of a versioned one."""
+        expanded = expand_version_base_names(list(self.config.rerun), list(self.action_configs))
+        return list(dict.fromkeys(expanded))
 
     def _check_rerun_names_an_action(self) -> None:
-        if self.config.rerun is not None and not set(self._rerun_actions()) & set(
-            self.action_configs
-        ):
+        unknown = [
+            name
+            for name in dict.fromkeys(self.config.rerun)
+            if not set(expand_version_base_names([name], list(self.action_configs)))
+            & set(self.action_configs)
+        ]
+        if unknown:
+            quoted = ", ".join(f"'{name}'" for name in unknown)
+            verb = "is not an action" if len(unknown) == 1 else "are not actions"
             raise ConfigurationError(
-                f"--rerun: '{self.config.rerun}' is not an action of {self.agent_name}. "
+                f"--rerun: {quoted} {verb} of {self.agent_name}. "
                 f"Actions: {', '.join(self.action_configs)}",
-                context={"rerun": self.config.rerun, "workflow": self.agent_name},
+                context={"rerun": unknown, "workflow": self.agent_name},
             )
 
     def _clear_for_fresh_run(self) -> None:

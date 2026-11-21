@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+from agent_actions.errors.preflight import PreFlightValidationError
+
 from ..user_error import UserError
 
 
@@ -33,6 +35,23 @@ class ErrorFormatter(ABC):
             return "cohere"
 
         return str(context.get("provider", "API"))
+
+    @staticmethod
+    def _is_preflight_refusal(exc: Exception, root: Exception) -> bool:
+        """A pre-flight refusal states its own problem and fix; no word match may claim it."""
+        return isinstance(exc, PreFlightValidationError) or isinstance(
+            root, PreFlightValidationError
+        )
+
+    @staticmethod
+    def _workflow_and_action(context: dict[str, Any]) -> dict[str, Any]:
+        """The workflow (``agent``), the action (``action_name``) and the branch an action
+        comes from (``origin``) that the context names."""
+        return {
+            key: context[key]
+            for key in ("agent", "action_name", "origin")
+            if context.get(key) is not None and str(context[key]).strip()
+        }
 
     @staticmethod
     def _hint_or(context: dict[str, Any], fallback: str) -> str:

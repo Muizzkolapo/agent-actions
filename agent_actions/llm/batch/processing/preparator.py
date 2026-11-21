@@ -30,6 +30,7 @@ from agent_actions.processing.task_preparer import (
     get_task_preparer,
     write_trace_row,
 )
+from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
@@ -70,13 +71,21 @@ def _stops_the_action(error: Exception) -> bool:
     return is_action_fatal(error) or isinstance(error, (ConfigurationError, TemplateVariableError))
 
 
+# A record's repair: text appended to its prompt, or a function that builds the prompt.
+RepairFeedback = str | Callable[[str], str]
+
+
 def _append_feedback(
-    tasks: list[dict[str, Any]], feedback_by_id: dict[str, str]
+    tasks: list[dict[str, Any]], feedback_by_id: dict[str, RepairFeedback]
 ) -> list[dict[str, Any]]:
     """Append each record's validation feedback to the prompt it will be sent with.
 
     Called on the pre-provider rows, whose ``prompt`` becomes the provider's
-    system message. A record with no entry is left alone, but that is an
+    system message, and records how much of it every record shares. Blank feedback,
+    as ``repair: retry`` gives, leaves the prompt untouched. A function (a
+    ``repair: {prompt: ...}`` template) builds the whole prompt from the one this
+    round sends; the shared length is recorded only when its result still starts
+    with that prompt. A record with no entry is left alone too, but that is an
     invariant violation worth seeing: feedback is built from the same failed set
     these rows come from. Returns the rows whose prompt changed.
     """
@@ -91,7 +100,17 @@ def _append_feedback(
                 key,
             )
             continue
-        task["prompt"] = f"{task.get('prompt', '')}\n\n{feedback}"
+        prompt = task.get("prompt", "")
+        if callable(feedback):
+            task["prompt"] = feedback(prompt)
+            if prompt and task["prompt"].startswith(prompt):
+                task[SHARED_PROMPT_LEN_KEY] = len(prompt)
+            changed.append(task)
+            continue
+        if not feedback.strip():
+            continue
+        task["prompt"] = f"{prompt}\n\n{feedback}"
+        task[SHARED_PROMPT_LEN_KEY] = len(prompt)
         changed.append(task)
     return changed
 
@@ -121,7 +140,7 @@ class BatchTaskPreparator:
         source_data: list[Any] | None = None,
         workflow_metadata: dict[str, Any] | None = None,
         attempt: int = 0,
-        feedback_by_id: dict[str, str] | None = None,
+        feedback_by_id: dict[str, RepairFeedback] | None = None,
     ) -> PreparedBatchTasks:
         """Prepare batch tasks from raw data.
 

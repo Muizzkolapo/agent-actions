@@ -20,7 +20,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 |--------|------|-------------|------------|
 | `scan_workflows()` | `agent_config/{workflow}.yml` | Reads | — |
 | `scan_readmes()` | `agent_config/{workflow}.yml` | Reads | — |
-| `scan_prompts()` | `prompt_store/{workflow}.md` | Reads | — |
+| `scan_prompts()` | `prompt_store/**/*.md`, `agent_workflow/*/prompt_store/**/*.md` | Reads | — |
 | `scan_schemas()` | `schema/{workflow}/{action}.yml` | Reads | — |
 | `scan_tool_functions()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
 | `scan_workflow_data()` | `agent_io/store/{workflow}.db` | Reads | — |
@@ -30,11 +30,12 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | `generate_docs()` | `agent_actions.yml` | Reads | `tool_path` |
 | `CatalogGenerator.generate()` | `agent_config/{workflow}.yml` | Reads | `actions`, `defaults` |
 | `WorkflowParser.parse_workflow()` | `agent_config/{workflow}.yml` | Reads | `actions`, `dependencies`, `context_scope` |
+| `WorkflowParser.parse_workflow()` | `branches/{name}.yml` | Reads | `actions[].include` (a source file with an include entry or an `_include` key is loaded through the render step a run uses; a workflow that step refuses is left out with a warning) |
 | `RunTracker.record_run()` | `artefact/runs.json` | Writes | — |
 | `RunTracker.start_workflow_run()` | `artefact/runs.json` | Writes | — |
 | `serve_docs()` | `artefact/`, `docs_site/` | Reads | — |
 | `build_index()` | `agent_config/{workflow}.yml` | Reads | `actions` |
-| `build_index()` | `prompt_store/{workflow}.md` | Reads | — |
+| `build_index()` | `prompt_store/**/*.md`, `agent_workflow/*/prompt_store/**/*.md` | Reads | — |
 | `build_index()` | `tools/{workflow}/*.py` | Reads | `tool_path` |
 | `build_index()` | `schema/{workflow}/{action}.yml` | Reads | — |
 | `find_project_root()` | `agent_actions.yml` | Reads | — |

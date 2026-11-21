@@ -5,25 +5,25 @@ sidebar_position: 3
 
 # Non-JSON Mode
 
-Use `json_mode: false` when working with models that cannot produce structured JSON reliably — local models via Ollama, small open-source models, or any provider where JSON formatting is unreliable.
+Use `json_mode: false` for models that cannot reliably produce structured JSON. These models include local models through Ollama, small open-source models, and any provider where JSON formatting is unreliable.
 
 ## How It Works
 
-In JSON mode (the default), each action uses a **schema** to define its output fields, and the framework injects the schema into the prompt so the LLM returns structured JSON.
+In JSON mode (the default), each action uses a **schema** to define its output fields. The framework injects the schema into the prompt, so that the LLM returns structured JSON.
 
-In non-JSON mode, schemas are not injected. Instead, each action uses **`output_field`** to name a single field. The LLM returns plain text, and the framework maps the raw response to that field name.
+In non-JSON mode, the framework does not inject schemas. Each action uses **`output_field`** to name one field. The LLM returns plain text, and the framework maps the raw response to that field name.
 
 | | JSON Mode (`true`) | Non-JSON Mode (`false`) |
 |---|---|---|
 | Output definition | `schema: my_schema` | `output_field: field_name` |
-| LLM returns | Structured JSON matching schema | Plain text |
-| Validation | Schema validation + `expect:` repair | None (raw text stored) |
-| Model requirements | Must support JSON output | Any model works |
+| LLM returns | Structured JSON that matches the schema | Plain text |
+| Validation | Schema validation + `expect:` repair | None (the framework stores the raw text) |
+| Model requirements | The model must support JSON output | Any model works |
 | Fields per action | Multiple | One |
 
 ## Field-by-Field Construction
 
-The key pattern: instead of one action producing a complex JSON object with many fields, you chain multiple actions where each produces **one field**. By the end of the pipeline, all fields accumulate into a complete record.
+The key pattern is to chain several actions, each of which produces **one field**. One action does not produce a complex JSON object with many fields. At the end of the workflow, all fields accumulate into a complete record.
 
 ```yaml
 defaults:
@@ -33,25 +33,34 @@ defaults:
 
 actions:
   - name: classify_topic
+    intent: "Classify the topic"
     output_field: topic              # LLM response → stored as "topic"
     prompt: $my_workflow.Classify
+    context_scope:
+      observe: [source.page_content]
 
   - name: assess_sentiment
+    intent: "Assess the sentiment"
     dependencies: [classify_topic]
     output_field: sentiment          # LLM response → stored as "sentiment"
     prompt: $my_workflow.Sentiment
+    context_scope:
+      observe: [source.page_content, classify_topic.topic]
 
   - name: write_summary
+    intent: "Write the summary"
     dependencies: [classify_topic, assess_sentiment]
     output_field: summary            # LLM response → stored as "summary"
     prompt: $my_workflow.Summary
+    context_scope:
+      observe: [classify_topic.topic, assess_sentiment.sentiment]
 ```
 
-After all three actions, the record contains `{topic, sentiment, summary}` — structured output assembled from plain text responses.
+After all three actions, the record contains `{topic, sentiment, summary}`. This structured output is assembled from plain text responses.
 
 ## Prompt Style
 
-Non-JSON prompts should ask for **one answer** in the simplest possible format:
+A non-JSON prompt should ask for **one answer** in the simplest possible format:
 
 ```markdown
 {prompt Classify}
@@ -64,11 +73,11 @@ Answer with the category name only. Nothing else.
 {end_prompt}
 ```
 
-The "answer with X only, nothing else" instruction is important. Without it, smaller models tend to add explanations or formatting that pollute the field value.
+The "answer with X only, nothing else" instruction is important. Without the instruction, smaller models tend to add explanations or formatting that pollute the field value.
 
 ## Per-Action Model Override
 
-Non-JSON mode works with per-action model overrides. Use a cheap local model for simple classification, and override to a stronger model for actions that need better reasoning:
+Non-JSON mode works with per-action model overrides. Use a cheap local model for simple classification. For actions that need better reasoning, override the default with a stronger model:
 
 ```yaml
 defaults:
@@ -78,12 +87,19 @@ defaults:
 
 actions:
   - name: classify_issue
+    intent: "Classify the issue"
     output_field: issue_type
     prompt: $workflow.Classify        # Simple classification → local model is fine
+    context_scope:
+      observe: [source.body]
 
   - name: draft_response
+    intent: "Draft a response"
+    dependencies: [classify_issue]
     output_field: suggested_response
     prompt: $workflow.Draft_Response
+    context_scope:
+      observe: [classify_issue.issue_type]
     model_vendor: openai              # Override: customer-facing text needs quality
     model_name: gpt-4o-mini
     api_key: OPENAI_API_KEY
@@ -91,12 +107,15 @@ actions:
 
 ## Guards Still Work
 
-Guards evaluate upstream field values the same way regardless of JSON mode:
+Guards evaluate upstream field values in the same way in JSON mode and in non-JSON mode:
 
 ```yaml
   - name: draft_response
+    intent: "Draft a response"
     dependencies: [classify_issue]
     output_field: suggested_response
+    context_scope:
+      observe: [classify_issue.issue_type]
     guard:
       condition: 'classify_issue.issue_type != "question"'  # Skip for questions → save tokens
       on_false: "skip"
@@ -104,10 +123,11 @@ Guards evaluate upstream field values the same way regardless of JSON mode:
 
 ## Context Scope Still Works
 
-Progressive context narrowing applies identically. Later actions can observe specific upstream fields:
+Progressive context narrowing applies in the same way. Downstream actions can observe specific upstream fields:
 
 ```yaml
   - name: draft_response
+    intent: "Draft a response"
     dependencies: [classify_issue, summarize_issue]
     context_scope:
       observe:
@@ -122,9 +142,9 @@ Progressive context narrowing applies identically. Later actions can observe spe
 | Scenario | Recommendation |
 |---|---|
 | Ollama / local models | Use non-JSON mode |
-| Small models (< 7B params) | Use non-JSON mode |
+| Small models (fewer than 7B parameters) | Use non-JSON mode |
 | Models without JSON support | Use non-JSON mode |
-| Cost-sensitive pipelines | Mix: non-JSON for simple steps, JSON for complex |
-| Prototyping / testing | Non-JSON is faster to set up (no schemas) |
+| Workflows where cost is important | Mix: non-JSON for simple actions, JSON for complex actions |
+| Prototyping / testing | Non-JSON is faster to configure (no schemas) |
 | Production with capable models | JSON mode with schemas for validation |
 

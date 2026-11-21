@@ -3,6 +3,7 @@
 import re
 from typing import Any
 
+from ..docs_links import VENDOR_SUPPORT
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -11,6 +12,8 @@ class ModelErrorFormatter(ErrorFormatter):
     """Handles model validation errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
+        if self._is_preflight_refusal(exc, root):
+            return False
         message_lower = message.lower()
         model_patterns = [
             "unsupported model",
@@ -43,7 +46,7 @@ class ModelErrorFormatter(ErrorFormatter):
             details=f"Model '{model}' is not available for provider '{provider}'",
             fix=fix_msg,
             context={**context, "model": model, "provider": provider},
-            docs_url=f"https://docs.runagac.com/models/{provider}",
+            docs_url=VENDOR_SUPPORT,
         )
 
     def _extract_model_name(self, message: str, context: dict) -> str:

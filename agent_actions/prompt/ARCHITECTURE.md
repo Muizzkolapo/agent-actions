@@ -62,7 +62,9 @@ PromptFormatter.get_raw_prompt(agent_config)
   +-- prompt starts with "$"?
   |     YES --> PromptLoader.load_prompt("summarize.main_prompt")
   |               1. Split on first dot: file="summarize", block="main_prompt"
-  |               2. Find prompt_store/summarize.md recursively
+  |               2. Find summarize.md in prompt_store/ and agent_workflow/*/prompt_store/,
+  |                  recursively; no match or more than one match is a ValueError
+  |                  that names the searched folders or every match
   |               3. Extract text between {prompt main_prompt} and {end_prompt}
   |               4. Validate: no duplicate blocks, all blocks closed
   |     NO  --> Use string as-is
@@ -341,8 +343,23 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |     SYSTEM_ONLY      --> [{role: "system", content: body}]
   |       (TAGGED + context --> splits into system + user for injection safety)
   |
-  6. Anthropic prompt caching
-  |     --> Adds cache_control: {type: "ephemeral"} to messages
+  6. Anthropic prompt caching (build_for_batch applies the same rule)
+  |     --> Only when the caller asks: the Anthropic clients ask when
+  |         cache_scope.prompt_is_shared holds (no name in the template
+  |         that can differ per record, no dispatch_task in the prompt, in
+  |         a value rendered into it, or in the schema, no random filter
+  |         or lipsum, not a judge call, not a repair call whose prompt
+  |         does not begin with the rendered prompt); it fails closed
+  |     --> One cache_control: {type: "ephemeral"} at the end of the prompt
+  |         part (LLMMessage.static_len); none on the record content
+  |     --> A repair call passes shared_prompt_len, the rendered prompt's
+  |         length; its feedback follows the mark, unmarked, so the marked
+  |         block is the one the first call sent
+  |     --> Batch: the system prompt carries it; the record message is plain;
+  |         a repair round's feedback is a second, unmarked system block
+  |     --> Online: the user message is sent as two text blocks, the
+  |         opening tag and prompt (marked) then any feedback, the
+  |         closing tag and the record (unmarked); same text
   |
   7. Token overflow pre-flight
   |     --> chars/4 heuristic vs _MODEL_CONTEXT_LIMITS
@@ -416,7 +433,11 @@ render_pipeline_with_templates(yaml_path, templates_folder)
   Step 2: Parse YAML
   Step 3: Resolve prompt references ($file.block --> inline text)
   Step 4: Expand versioned actions (versions: {param: i, range: [1,3]})
-  Step 5: Compile schemas (schema_name: "foo" --> inline schema from file)
+  Step 5: Compile schemas (schema_name: "foo" --> inline schema from file;
+          inline shorthand --> unified fields by
+          SchemaLoader.construct_schema_from_dict; a bare `array` becomes an
+          array of strings and logs a warning that names the action and field;
+          `array[object:{...}]` keeps its item fields)
   |
   --> Fully self-contained YAML string
 ```
@@ -430,7 +451,7 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 |------|------|
 | `service.py` | `PromptPreparationService` -- single source of truth for prompt preparation (both batch and online). Orchestrates all 7 pipeline steps. |
 | `formatter.py` | `PromptFormatter` -- resolves raw prompt from agent_config (inline or `$file.block` reference). |
-| `handler.py` | `PromptLoader` -- loads and validates prompts from `prompt_store/*.md` files. Extracts named blocks, validates uniqueness and closure. |
+| `handler.py` | `PromptLoader` -- loads and validates prompts from the `.md` files in `prompt_store/` and each `agent_workflow/*/prompt_store/`, recursively, and nowhere else. A file name in more than one of them is refused. Extracts named blocks, validates uniqueness and closure. |
 | `message_builder.py` | `MessageBuilder` -- assembles vendor-specific `LLMMessageEnvelope` from prompt + context. `PROVIDER_MESSAGE_CONFIGS` registry. |
 
 ### Context scope

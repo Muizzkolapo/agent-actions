@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: 'A built-in expectation now refuses a parameter of the wrong type when the rule is loaded, at preflight and at run time. A list given as a string, such as `terms: source.essay` on `contains_terms_from`, was read one character at a time, so the check passed almost any text; it now fails with a message saying params hold literal values. A string where a number is meant, and a boolean given as a number, are refused too.'
-time: 2026-11-06T20:37:08.68707Z

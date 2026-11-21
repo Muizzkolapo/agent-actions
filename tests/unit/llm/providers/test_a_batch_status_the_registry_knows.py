@@ -63,7 +63,9 @@ def _anthropic(status: str) -> AnthropicBatchClient:
     client.client = NS(
         messages=NS(
             batches=NS(
-                create=lambda requests: NS(id="msgbatch_1", processing_status=status),
+                create=lambda requests, extra_headers=None: NS(
+                    id="msgbatch_1", processing_status=status
+                ),
                 retrieve=lambda batch_id: NS(id=batch_id, processing_status=status),
             )
         )

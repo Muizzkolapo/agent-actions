@@ -1,7 +1,0 @@
-kind: Breaking Change
-body: >-
-  `agac inspect` and `agac run` now refuse an action whose named schema file does not exist,
-  before any action runs. An LLM action was refused only when another action read one of its
-  fields, after the actions upstream had run; a tool action ran with no schema checked. A
-  workflow with a tool naming a missing schema ran before and is refused now.
-time: 2026-11-07T10:00:00Z

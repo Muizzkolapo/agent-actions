@@ -13,7 +13,11 @@ class ErrorContextService:
     def merge_exception_context(
         exc: Exception, additional_context: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        """Merge context from the entire exception chain; outer overrides inner."""
+        """Merge context from the exception chain, outer over inner.
+
+        *additional_context* fills only keys the exception leaves unset or ``None``; a
+        ``None`` in it is never added.
+        """
         merged_context = {}
 
         chain = []
@@ -70,7 +74,8 @@ class ErrorContextService:
                         exc_inner,
                     )
 
-        if additional_context:
-            merged_context.update(additional_context)
+        for key, value in (additional_context or {}).items():
+            if value is not None and merged_context.get(key) is None:
+                merged_context[key] = value
 
         return merged_context

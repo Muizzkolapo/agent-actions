@@ -1,8 +1,0 @@
-kind: Breaking Change
-body: >-
-  An action with `schema: dispatch_task('fn')` now declares `schema_options:`, the list of schema
-  names the function can choose. The function returns one of those names; a returned schema
-  definition is refused. `agac inspect` loads every option before any action runs, checks a
-  downstream read against all options, and refuses a `dispatch_task` inside a fixed schema's
-  fields.
-time: 2026-11-07T14:00:00Z

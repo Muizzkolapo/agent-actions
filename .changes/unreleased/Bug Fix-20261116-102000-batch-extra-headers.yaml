@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Preflight refuses `vendor_params.extra_headers` and `vendor_params.extra_query` on an action with `run_mode: batch`, naming the action and the key. A batch request line is a JSON body with no headers or query string of its own, so batch dropped them without a word while online sent them.'
+time: 2026-11-16T10:20:00Z

@@ -1,37 +1,37 @@
 ---
 title: preview Command
-description: Preview data stored in the SQLite storage backend
+description: Show the data that the SQLite storage backend keeps
 sidebar_position: 7
 ---
 
 # preview Command
 
-The `preview` command lets you inspect data stored in the SQLite storage backend during workflow execution. This is useful for debugging, verifying outputs, and understanding what data flows between actions.
+The `preview` command shows the data that the SQLite storage backend keeps while a workflow runs. Use it to debug, to verify outputs and to see the data that goes between actions.
 
 ```bash
 agac preview -w <workflow-name> [options]
 ```
 
-:::tip Quick Inspection
-Use `preview` to quickly check what records were written by an action without manually opening SQLite files.
-:::
+Use `preview` to check quickly which records an action wrote. You do not have to open SQLite files manually.
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | Workflow configuration file name (required) |
-| `-a, --action TEXT` | Action name to preview (lists all actions if not specified) |
-| `-n, --limit INT` | Maximum number of records to show (default: 10) |
-| `--offset INT` | Number of records to skip (default: 0) |
-| `-f, --format` | Output format: `table`, `json`, or `raw` (default: table) |
-| `--stats` | Show storage statistics only |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `--agent` names the same option. |
+| `-A, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions. `-a` also names the action in this command, and prints a warning on stderr. In the other commands, `-a` names the workflow. If you type `-a` and `-A` together, the command stops with exit code 2. |
+| `-n, --limit INT` | The maximum number of records to show (default: 10) |
+| `--offset INT` | The number of records to skip (default: 0) |
+| `-f, --format` | The output format: `table`, `json` or `raw` (default: table) |
+| `--stats` | Show only the storage statistics |
+
+Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '--agent'.` The warning for `-a` comes before the error of an earlier option. It also comes before the help output if `-a` is in front of `--help`. See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
 
 ## Examples
 
 ### List All Actions
 
-See which actions have stored data:
+Show the actions that have stored data:
 
 ```bash
 agac preview -w my_workflow
@@ -39,35 +39,35 @@ agac preview -w my_workflow
 
 ### Preview Action Output
 
-View records from a specific action:
+Show the records of a specified action:
 
 ```bash
-agac preview -w my_workflow -a extract_facts
+agac preview -w my_workflow -A extract_facts
 ```
 
 ### JSON Output
 
-Get machine-readable output for scripting:
+Get output that a machine can read, for scripts:
 
 ```bash
-agac preview -w my_workflow -a extract_facts -f json
+agac preview -w my_workflow -A extract_facts -f json
 ```
 
 ### Pagination
 
-Browse through large datasets:
+Move through large datasets one page at a time:
 
 ```bash
 # First 10 records
-agac preview -w my_workflow -a extract_facts -n 10
+agac preview -w my_workflow -A extract_facts -n 10
 
 # Next 10 records
-agac preview -w my_workflow -a extract_facts -n 10 --offset 10
+agac preview -w my_workflow -A extract_facts -n 10 --offset 10
 ```
 
 ### Storage Statistics
 
-Check how much data each action has stored:
+Show the quantity of data that each action stored:
 
 ```bash
 agac preview -w my_workflow --stats
@@ -77,7 +77,7 @@ agac preview -w my_workflow --stats
 
 ### Table Format (default)
 
-Displays one row per record, numbered from the offset. With `-a`, the columns are the action's output fields, sorted by name and capped at the first six. Without `-a`, the command lists the actions that have stored data instead.
+The table shows one row for each record. The row numbers start from the offset. With `-A`, the columns are the output fields of the action, sorted by name. The table shows a maximum of the first six fields. Without `-A`, the command lists the actions that have stored data.
 
 ```
 ┏━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
@@ -89,43 +89,43 @@ Displays one row per record, numbered from the offset. With `-a`, the columns ar
 
 ### JSON Format
 
-Full record data as a JSON array, including lineage and metadata fields:
+The full data of each record, as a JSON array. The data includes the lineage and metadata fields:
 
 ```bash
-agac preview -w my_workflow -a extract_facts -f json
+agac preview -w my_workflow -A extract_facts -f json
 ```
 
 ### Raw Format
 
-Unformatted output for piping to other tools:
+Output with no format, to send through a pipe to other tools:
 
 ```bash
-agac preview -w my_workflow -a extract_facts -f raw | jq '.[] | .content'
+agac preview -w my_workflow -A extract_facts -f raw | jq '.[] | .content'
 ```
 
 ## Use Cases
 
-### Debugging Missing Data
+### Debug Missing Data {/* #debugging-missing-data */}
 
-If a downstream action isn't receiving expected data:
+If a downstream action does not receive the expected data, examine the output of the upstream action:
 
 ```bash
 # Check what the upstream action actually produced
-agac preview -w my_workflow -a upstream_action -n 5 -f json
+agac preview -w my_workflow -A upstream_action -n 5 -f json
 ```
 
-### Verifying Field References
+### Verify Field References {/* #verifying-field-references */}
 
-Confirm that fields exist before referencing them:
+Make sure that fields exist before you refer to them:
 
 ```bash
 # See the actual content structure
-agac preview -w my_workflow -a extract_facts -f json | jq '.[0].content | keys'
+agac preview -w my_workflow -A extract_facts -f json | jq '.[0].content | keys'
 ```
 
-### Monitoring Workflow Progress
+### Monitor the Progress of a Workflow {/* #monitoring-workflow-progress */}
 
-During long-running workflows, check what's been processed:
+During a workflow that runs for a long time, check which records the workflow processed:
 
 ```bash
 agac preview -w my_workflow --stats
@@ -133,6 +133,6 @@ agac preview -w my_workflow --stats
 
 ## See Also
 
-- **[inspect Command](./inspect)** - Analyze workflow structure and dependencies
-- **[run Command](./run)** - Execute agentic workflows
-- **[batch Commands](./batch)** - Manage batch processing operations
+- **[inspect Command](./inspect)**: Analyze the structure and the dependencies of a workflow
+- **[run Command](./run)**: Run workflows
+- **[batch Commands](./batch)**: Manage batch processing operations

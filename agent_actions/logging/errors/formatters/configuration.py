@@ -5,6 +5,7 @@ from typing import Any
 from agent_actions.errors import UDFLoadError
 from agent_actions.errors.preflight import PreFlightValidationError
 
+from ..docs_links import CONFIGURATION, MISSING_REQUIRED_FIELD, SCHEMA_VALIDATION_ERROR
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -73,32 +74,37 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 details=details,
                 fix=self._hint_or(context, "Check your YAML/JSON syntax and required fields"),
                 context=context,
-                docs_url="https://docs.runagac.com/config/schema",
+                docs_url=SCHEMA_VALIDATION_ERROR,
             )
 
         return self._format_invalid_configuration(message, context)
 
     def _format_invalid_configuration(self, message: str, context: dict[str, Any]) -> UserError:
-        agent = context.get("agent", "unknown")
+        agent = context.get("agent")
         return UserError(
             category="Configuration Error",
-            title=f"Invalid configuration in agent '{agent}'",
+            title=f"Invalid configuration in agent '{agent}'" if agent else "Invalid configuration",
             details=message,
             fix=self._hint_or(context, "Check your agent configuration file for errors"),
             context=context,
-            docs_url="https://docs.runagac.com/config",
+            docs_url=CONFIGURATION,
         )
 
-    def _format_missing_required_fields_error(self, _message: str, context: dict) -> UserError:
+    def _format_missing_required_fields_error(self, message: str, context: dict) -> UserError:
         """Format error for missing required configuration fields after hierarchy resolution."""
-        action_name = context.get("action_name", context.get("agent", "unknown"))
+        action_name = context.get("action_name")
         missing_fields = context.get("missing_fields", [])
         missing_display = context.get("missing_display", missing_fields)
 
         api_key_line = f"api_key: ${{{context.get('api_key_env_var') or 'YOUR_PROVIDER_API_KEY'}}}"
         fields_str = ", ".join([f"'{f}'" for f in missing_display])
-        details = f"Action '{action_name}' is missing required configuration: {fields_str}\n\n"
-        details += "These fields were not found at any level (project → workflow → action)."
+        if missing_display:
+            details = (
+                f"The action is missing required configuration: {fields_str}\n\n"
+                "These fields were not found at any level (project → workflow → action)."
+            )
+        else:
+            details = message
 
         fix_parts = [
             "Add the missing field(s) to one of these levels:\n",
@@ -135,7 +141,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 "",
                 "3. Action-level config:",
                 "   actions:",
-                "     - name: " + action_name,
+                f"     - name: {action_name or '<action name>'}",
             ]
         )
 
@@ -152,14 +158,13 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Missing required configuration fields",
             details=details,
             fix="\n".join(fix_parts),
-            context={"action": action_name, "missing_fields": missing_display},
-            docs_url="https://docs.runagac.com/core-concepts/configuration-hierarchy",
+            context={**self._workflow_and_action(context), "missing_fields": missing_display},
+            docs_url=MISSING_REQUIRED_FIELD,
         )
 
     def _format_missing_env_var_error(self, _message: str, context: dict) -> UserError:
         """Format error for missing environment variable."""
         env_var = context.get("env_var", "UNKNOWN")
-        agent_name = context.get("agent", "unknown")
         config_value = context.get("config_value", f"${{{env_var}}}")
 
         details = f"Environment variable '{env_var}' is not set.\n\n"
@@ -179,5 +184,5 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Environment variable not set",
             details=details,
             fix="\n".join(fix_parts),
-            context={"agent": agent_name, "env_var": env_var},
+            context={**self._workflow_and_action(context), "env_var": env_var},
         )

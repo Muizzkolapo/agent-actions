@@ -31,6 +31,9 @@ class DefaultAgentConfig(BaseModel):
     record_concurrency: int | None = Field(
         default=None, strict=True, ge=1, le=32, description="Default record concurrency"
     )
+    vendor_params: dict[str, Any] | None = Field(
+        default=None, description="Default request parameters passed to the vendor SDK"
+    )
     model_config = ConfigDict(extra="allow")
 
 
@@ -66,9 +69,6 @@ class AgentConfig(BaseModel):
     prompt_debug: bool = Field(
         default=False, description="Enable debug output showing prompts being sent to the agent"
     )
-    anthropic_version: str | None = Field(
-        default=None, description="API version header for Anthropic requests (e.g., '2023-06-01')"
-    )
     enable_prompt_caching: bool | None = Field(
         default=None,
         description="Enable Anthropic's prompt caching feature for improved performance",
@@ -89,6 +89,9 @@ class AgentConfig(BaseModel):
         ge=1,
         le=32,
         description="Records of an online LLM action in flight at once",
+    )
+    vendor_params: dict[str, Any] | None = Field(
+        default=None, description="Request parameters passed to the vendor SDK as written"
     )
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn", description="What an empty answer does to its record or action"

@@ -11,6 +11,7 @@ from rich.console import Console
 
 from agent_actions.errors import (
     DuplicateFunctionError,
+    FileLoadError,
     FunctionNotFoundError,
     UDFLoadError,
 )
@@ -109,7 +110,7 @@ _CLEAR_REGISTRY = "agent_actions.validation.validate_udfs.clear_registry"
 # end-to-end in test_validate_udfs_is_a_complete_gate.py.
 _SKIP_STRUCTURAL = patch(
     "agent_actions.validation.validate_udfs.ValidateUDFsCommand._run_structural_preflight",
-    new=lambda self: None,
+    new=lambda self, rendered_workflow: None,
 )
 
 
@@ -162,8 +163,9 @@ class TestValidate:
         mock_pf.create_project_paths.return_value = paths
 
         cmd = ValidateUDFsCommand("my_agent.yml", str(tmp_path))
-        with pytest.raises(FileNotFoundError, match="Config file not found"):
+        with pytest.raises(FileLoadError, match="Config file not found") as excinfo:
             cmd.validate()
+        assert excinfo.value.context["config_path"] == str(paths.agent_config_dir / "my_agent.yml")
 
     @patch(_CLEAR_REGISTRY)
     @patch(_DISCOVER)

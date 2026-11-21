@@ -153,6 +153,41 @@ class BatchResultReconciler:
         return expected - received
 
     @staticmethod
+    def is_retriable(batch_result: Any) -> bool:
+        """Whether an unanswered result is worth sending again, as online's retry policy decides.
+
+        Online retries a rate limit, a server or network error and an answer cut off at the
+        output limit (``is_retriable_error``) and fails anything else at once. An answer with
+        no content (a refusal, a safety block) reads as online's empty answer, retried only
+        when cut off. A failure whose line gives no status is retried.
+        """
+        from agent_actions.llm.providers.error_wrapper import error_for_status, is_truncated
+        from agent_actions.processing.recovery.retry import is_retriable_error
+
+        if getattr(batch_result, "success", False):
+            metadata = getattr(batch_result, "metadata", None) or {}
+            return is_truncated(metadata.get("finish_reason") or metadata.get("stop_reason"))
+        status = getattr(batch_result, "error_status", None)
+        if status is None:
+            return True
+        return is_retriable_error(
+            error_for_status(status, getattr(batch_result, "error", "") or "")
+        )
+
+    @staticmethod
+    def retriable_ids(custom_ids: set[str], batch_results: list[Any]) -> set[str]:
+        """*custom_ids* less those whose result failed in a way online would not retry.
+
+        Each is left out to be failed with the provider's error; an id no result answers stays.
+        """
+        latest = {str(r.custom_id): r for r in batch_results or []}
+        return {
+            custom_id
+            for custom_id in custom_ids
+            if custom_id not in latest or BatchResultReconciler.is_retriable(latest[custom_id])
+        }
+
+    @staticmethod
     def resendable_ids(custom_ids: set[str], context_map: dict[str, Any]) -> set[str]:
         """*custom_ids* less those whose context-map row has no source_guid.
 

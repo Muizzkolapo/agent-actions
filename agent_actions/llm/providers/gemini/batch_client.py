@@ -4,6 +4,7 @@ Gemini Batch API client implementation.
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None  # type: ignore[assignment]
     types = None  # type: ignore[assignment]
+from agent_actions.config.defaults import LLMDefaults
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
@@ -44,6 +46,25 @@ _STATUS_MAPPING = {
 _STATES_WITH_RESULTS = frozenset({"JOB_STATE_SUCCEEDED", "JOB_STATE_PARTIALLY_SUCCEEDED"})
 
 
+# GenerateContentConfig fields a request carries beside generation_config, not in it.
+_REQUEST_LEVEL_FIELDS = frozenset(
+    {"safety_settings", "system_instruction", "tool_config", "cached_content", "labels"}
+)
+
+
+def _join_vendor_params(request: dict[str, Any], vendor_params: dict[str, Any] | None) -> None:
+    """Put each ``vendor_params`` key where a batch request line carries it."""
+    from agent_actions.llm.providers.gemini.client import GeminiClient
+
+    for key, value in (vendor_params or {}).items():
+        if key in GeminiClient.VENDOR_PARAMS.reserved:
+            continue
+        if key in _REQUEST_LEVEL_FIELDS:
+            request[key] = value
+        else:
+            request.setdefault("generation_config", {})[key] = value
+
+
 class GeminiBatchClient(BaseBatchClient):
     """
     Gemini Batch API implementation of the BaseBatchClient interface.
@@ -66,7 +87,13 @@ class GeminiBatchClient(BaseBatchClient):
                     "vendor": "gemini",
                 },
             )
-        self.client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options={
+                "api_version": "v1alpha",
+                "timeout": math.ceil(LLMDefaults.REQUEST_TIMEOUT_SECONDS * 1000),
+            },
+        )
         # The SDK lets its transport's errors through unwrapped.
         self._transient_errors = (httpx.TransportError, genai_errors.ServerError)
 
@@ -87,7 +114,8 @@ class GeminiBatchClient(BaseBatchClient):
                 }],
                 "generation_config": {
                     "temperature": 0.1,
-                    "max_tokens": 1000
+                    "max_output_tokens": 1000,
+                    "response_mime_type": "application/json"
                 }
             }
         }
@@ -96,17 +124,23 @@ class GeminiBatchClient(BaseBatchClient):
             "gemini", batch_task.prompt, batch_task.user_content, schema=schema
         )
         combined_text = envelope.messages[0].content
-        generation_config = {}
-        if "temperature" in batch_task.model_config:
+        generation_config: dict[str, Any] = {}
+        if batch_task.model_config.get("temperature") is not None:
             generation_config["temperature"] = batch_task.model_config["temperature"]
-        if "max_tokens" in batch_task.model_config:
-            generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
+        if batch_task.model_config.get("max_tokens") is not None:
+            generation_config["max_output_tokens"] = batch_task.model_config["max_tokens"]
+        generation_config.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
+        # As online: JSON output, with the schema given in the prompt text.
+        if schema or batch_task.model_config.get("json_mode"):
+            generation_config["response_mime_type"] = "application/json"
         request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
         if generation_config:
             request["generation_config"] = generation_config
-        if schema:
-            request["response_schema"] = schema
-            request["response_mime_type"] = "application/json"
+        _join_vendor_params(request, batch_task.model_config.get("vendor_params"))
         return {"key": batch_task.custom_id, "request": request}
 
     def _extract_custom_id(self, raw_response: dict[str, Any]) -> str:
@@ -128,6 +162,14 @@ class GeminiBatchClient(BaseBatchClient):
         if not parts or not parts[0].get("text"):
             return "No content in response"
         return None
+
+    def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
+        """The error's code; 200 for an answer with no candidate or no text, such as a blocked prompt."""
+        error = raw_response.get("error")
+        if error is None:
+            return 200
+        code = error.get("code") if isinstance(error, dict) else None
+        return code if isinstance(code, int) else None
 
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""
@@ -155,10 +197,16 @@ class GeminiBatchClient(BaseBatchClient):
         """Extract usage from Gemini response."""
         response_data = raw_response.get("response", {})
         usage_metadata = response_data.get("usageMetadata", {})
+        candidates = usage_metadata.get("candidatesTokenCount")
+        thoughts = usage_metadata.get("thoughtsTokenCount")
+        # Thinking tokens are output: the total counts them, the candidates count does not.
+        completion = (
+            None if candidates is None and thoughts is None else (candidates or 0) + (thoughts or 0)
+        )
         return {
             "total_tokens": usage_metadata.get("totalTokenCount"),
             "prompt_tokens": usage_metadata.get("promptTokenCount"),
-            "completion_tokens": usage_metadata.get("candidatesTokenCount"),
+            "completion_tokens": completion,
         }
 
     def _get_default_model(self) -> str:

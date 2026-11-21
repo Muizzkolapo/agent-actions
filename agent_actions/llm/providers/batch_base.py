@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
+from agent_actions.llm.providers.generation_params import (
+    VENDOR_PARAMS_KEY,
+    extract_generation_params,
+)
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
 from agent_actions.utils import deep_json
 
 if TYPE_CHECKING:
@@ -28,6 +33,10 @@ logger = logging.getLogger(__name__)
 UNIDENTIFIED_RECORD = "__agac_unidentified__"
 
 _KNOWN_STATUSES = frozenset(status.value for status in BatchStatus)
+
+# The generation settings past temperature and max_tokens, by their canonical names.
+_SAMPLING_PARAMS = ("top_p", "stop")
+_PENALTY_PARAMS = ("frequency_penalty", "presence_penalty")
 
 
 def retry(
@@ -66,6 +75,9 @@ class BatchTask:
     user_content: str
     model_config: dict[str, Any]
     metadata: dict[str, Any] | None = None
+    cache_prompt: bool = False
+    shared_prompt_len: int | None = None
+    """The length of the leading part of ``prompt`` every record shares; None means all of it."""
 
 
 @dataclass
@@ -76,6 +88,9 @@ class BatchResult:
     content: Any
     success: bool
     error: str | None = None
+    # The HTTP status the provider answered this record's request with, when its line
+    # says; what a retry reads to resend only what online would retry.
+    error_status: int | None = None
     metadata: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
     recovery_metadata: RecoveryMetadata | None = None  # From agent_actions.core.types
@@ -103,6 +118,7 @@ class BaseBatchClient(ABC):
         if not json_mode and agent_config.get("compiled_schema") is not None:
             warn_schema_without_json_mode(agent_config)
         schema = agent_config.get("compiled_schema") if json_mode else None
+        cache_prompt = self._caches_prompt(agent_config)
 
         for row in data:
             if "content" not in row:
@@ -112,6 +128,7 @@ class BaseBatchClient(ABC):
                 )
             # A row of an action whose schema is chosen per record carries its own.
             row_schema = row.pop("compiled_schema", None)
+            shared_prompt_len = row.pop(SHARED_PROMPT_LEN_KEY, None)
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
@@ -120,8 +137,17 @@ class BaseBatchClient(ABC):
                     "model_name": agent_config.get("model_name", self._get_default_model()),
                     "temperature": agent_config.get("temperature", self._get_default_temperature()),
                     "max_tokens": agent_config.get("max_tokens"),
+                    "json_mode": json_mode,
+                    VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
+                    **{
+                        key: agent_config[key]
+                        for key in (*_SAMPLING_PARAMS, *_PENALTY_PARAMS)
+                        if agent_config.get(key) is not None
+                    },
                 },
                 metadata=row,
+                cache_prompt=cache_prompt,
+                shared_prompt_len=shared_prompt_len,
             )
             task_schema = row_schema if row_schema is not None else schema
             provider_task = self.format_task_for_provider(
@@ -131,12 +157,36 @@ class BaseBatchClient(ABC):
 
         return tasks
 
+    @staticmethod
+    def _sampling_params(
+        model_config: dict[str, Any],
+        *,
+        key_map: dict[str, str] | None = None,
+        stop_as_list: bool = False,
+        penalties: bool = False,
+    ) -> dict[str, Any]:
+        """The task's top_p and stop (and penalties) under the names the vendor's online client sends.
+
+        Takes that client's ``extract_generation_params`` arguments; unset settings are left out.
+        """
+        names = (*_SAMPLING_PARAMS, *(_PENALTY_PARAMS if penalties else ()))
+        return extract_generation_params(
+            {key: model_config.get(key) for key in names},
+            key_map=key_map,
+            stop_as_list=stop_as_list,
+            extra_params=_PENALTY_PARAMS if penalties else (),
+        )
+
+    def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
+        """Whether this call's tasks mark their prompt for prompt caching."""
+        return False
+
     @abstractmethod
     def _get_default_model(self) -> str:
         """Return provider's default model name."""
 
-    def _get_default_temperature(self) -> float:
-        """Return provider's default temperature (0.1)."""
+    def _get_default_temperature(self) -> float | None:
+        """Return provider's default temperature (0.1); None sends none."""
         return 0.1
 
     @abstractmethod
@@ -256,13 +306,19 @@ class BaseBatchClient(ABC):
 
         error = self._extract_error_from_response(raw_response)
         if error:
-            return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
+            return BatchResult(
+                custom_id=custom_id,
+                content=None,
+                success=False,
+                error=error,
+                error_status=self._extract_error_status(raw_response),
+            )
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
 
         # Parse JSON content if it's a string
-        if isinstance(content, str):
+        if isinstance(content, str) and not self._answer_was_cut_off(raw_response):
             content = self._parse_json_content(content)
 
         metadata = self._extract_metadata_from_response(raw_response)
@@ -286,6 +342,10 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Extract error message from response, or None if no error."""
+
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status a failed line's request was answered with; None when it does not say."""
+        return None
 
     @abstractmethod
     def _extract_content_from_response(self, raw_response: Any) -> Any:
@@ -380,6 +440,14 @@ class BaseBatchClient(ABC):
             target[key] = value
         elif default is not None:
             target[key] = default
+
+    def _answer_was_cut_off(self, _raw_response: Any) -> bool:
+        """Whether the output limit stopped the answer; its text is then kept unparsed.
+
+        Parsing would guess the end of a half-written JSON. In JSON mode the unparsed
+        text becomes a parse error, as online refuses to read a cut-off answer.
+        """
+        return False
 
     def _parse_json_content(self, content_str: str) -> Any:
         """Parse JSON string from an LLM response.

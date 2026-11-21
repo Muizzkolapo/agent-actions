@@ -114,7 +114,7 @@ def test_a_workflow_using_one_of_its_tools_is_refused_before_any_action_runs(tmp
 
     assert code != 0
     assert "Function 'broken_second' not found" in output
-    assert "Action 'second' names it" in output
+    assert "Action: second " in output
     assert "These tool files failed to import and were skipped:" in output
     assert "broken.py: boom at import" in output
     assert not (root / "first.log").exists(), "an action ran before the refusal"

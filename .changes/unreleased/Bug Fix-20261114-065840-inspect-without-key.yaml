@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: '`agac inspect` no longer fails when an API key variable is not set. It shows a warning that ends with "connection check skipped". `agac run` still refuses to start without the key. A credential that a declared endpoint reads follows the same rule.'
+time: 2026-11-14T06:58:40+00:00

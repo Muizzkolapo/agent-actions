@@ -9,6 +9,7 @@ import yaml
 from pydantic import ValidationError
 from yaml import YAMLError
 
+from agent_actions.config.includes import action_defaults
 from agent_actions.config.path_config import get_schema_path
 from agent_actions.config.types import ActionConfigMap, ActionEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
@@ -215,7 +216,10 @@ class ConfigRenderingService:
         defaults: dict[str, Any] = config.get("defaults") or {}
         if defaults.get("json_mode") is not False:
             return True
-        return any(a.get("json_mode") is True for a in (config.get("actions") or []))
+        return any(
+            action.get("json_mode", action_defaults(action, defaults).get("json_mode")) is True
+            for action in (config.get("actions") or [])
+        )
 
     def _build_agent_entry_from_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Build agent entry dictionary from action configuration."""
@@ -265,7 +269,7 @@ class ConfigRenderingService:
             raise ConfigValidationError(
                 config_key=config_key,
                 reason=f"Invalid {config_key.replace('_', ' ')}",
-                context={"action_name": entry.get("name", "unknown"), "agent_name": agent_name},
+                context={"action_name": entry.get("name"), "agent_name": agent_name},
                 cause=e,
             ) from e
 
@@ -353,24 +357,10 @@ class ConfigRenderingService:
         template_dir: str | Path,
         output_dir: str | Path | None = None,
         project_root: Path | None = None,
-    ) -> ActionConfigMap:
-        """
-        Render templates and load configuration data.
+    ) -> str:
+        """Render the workflow file, validate it, and return the rendered YAML.
 
-        Args:
-            agent_name: Name of the agent.
-            config_path: Path to the agent configuration file.
-            template_dir: Path to the template directory.
-            output_dir: Path to the output directory.
-            project_root: Optional project root for resolving relative paths.
-
-        Returns:
-            Parsed configuration data as a dictionary.
-
-        Raises:
-            FileNotFoundError: If required files are not found.
-            TemplateRenderingError: If template rendering fails.
-            ConfigurationError: If configuration parsing fails.
+        A caller parses the returned text, so the file is not rendered a second time.
         """
         logger.debug(
             "Starting render and load config",
@@ -427,4 +417,4 @@ class ConfigRenderingService:
             "Successfully completed render and load config",
             extra={"operation": "render and load config", "agent_name": agent_name},
         )
-        return config
+        return rendered_template

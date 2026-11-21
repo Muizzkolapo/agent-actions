@@ -452,7 +452,7 @@ class TestRenderAndLoadConfig:
 
         result = svc.render_and_load_config("agent1", str(config_file), str(template_dir))
 
-        assert "agent1" in result
+        assert result == rendered
         mock_validate.assert_called_once()
 
     @patch("agent_actions.prompt.renderer.SchemaValidator")

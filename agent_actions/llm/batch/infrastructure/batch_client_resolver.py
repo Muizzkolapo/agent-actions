@@ -17,6 +17,21 @@ from agent_actions.logging.events.cache_events import CacheHitEvent, CacheMissEv
 from agent_actions.utils.constants import API_KEY_KEY
 
 
+def _client_settings(agent_config: dict[str, Any] | None) -> dict[str, Any]:
+    """The action's settings a batch client is built with, apart from its API key.
+
+    An unset value is left out, so the factory applies its environment variable or default.
+    """
+    config = agent_config or {}
+    settings: dict[str, Any] = {}
+    if config.get("base_url"):
+        settings["base_url"] = config["base_url"]
+    for key in ("batch_max_workers", "request_timeout", "enable_prompt_caching"):
+        if config.get(key) is not None:
+            settings[key] = config[key]
+    return settings
+
+
 class BatchClientResolver:
     """Resolves and caches batch clients from agent config or batch registry."""
 
@@ -89,13 +104,9 @@ class BatchClientResolver:
         )
 
         try:
-            client_config: dict[str, Any] = {}
+            client_config = _client_settings(agent_config)
             if agent_config.get(API_KEY_KEY):
                 client_config["api_key"] = BaseClient.get_api_key(agent_config)
-            if agent_config.get("base_url"):
-                client_config["base_url"] = agent_config["base_url"]
-            if agent_config.get("batch_max_workers") is not None:
-                client_config["batch_max_workers"] = agent_config["batch_max_workers"]
 
             client = BatchClientFactory.create_client(client_type, client_config)
 
@@ -175,7 +186,13 @@ class BatchClientResolver:
         client_type = self._resolve_client_type(batch_id, registry_manager, output_directory)
 
         if client_type:
-            cached = self._find_cached_client(client_type)
+            # With the action's config, only the client built for exactly that config will
+            # do: a sibling's may send to another host or wait another timeout.
+            cached = (
+                self._client_cache.get(self._build_cache_key(client_type, agent_config))
+                if agent_config
+                else self._find_cached_client(client_type)
+            )
             if cached is not None:
                 fire_event(CacheHitEvent(cache_type="batch_client", key=f"batch_id:{batch_id}"))
                 return cached
@@ -187,7 +204,10 @@ class BatchClientResolver:
                     reason="client not cached",
                 )
             )
-            config = self._resolve_api_key_config(client_type, agent_config)
+            config = {
+                **self._resolve_api_key_config(client_type, agent_config),
+                **_client_settings(agent_config),
+            }
             try:
                 return BatchClientFactory.create_client(client_type, config)
             except ConfigurationError:
@@ -321,9 +341,9 @@ class BatchClientResolver:
     def _build_cache_key(client_type: str, agent_config: dict[str, Any]) -> str:
         _raw = agent_config.get(API_KEY_KEY) or ""
         api_key = _raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw
-        base_url = agent_config.get("base_url") or ""
-        discriminator = f"{api_key}|{base_url}"
-        if api_key or base_url:
+        settings = _client_settings(agent_config)
+        if api_key or settings:
+            discriminator = "|".join([api_key, *(f"{k}={v}" for k, v in sorted(settings.items()))])
             key_hash = hashlib.sha256(discriminator.encode()).hexdigest()[:12]
             return f"{client_type}:{key_hash}"
         return client_type

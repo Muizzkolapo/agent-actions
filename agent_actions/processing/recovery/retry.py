@@ -8,7 +8,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
+from agent_actions.errors import (
+    NetworkError,
+    RateLimitError,
+    ResponseTruncatedError,
+    VendorAPIError,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.validation_events import RetryExhaustedEvent
 from agent_actions.utils.safe_format import safe_format_error
@@ -16,7 +21,7 @@ from agent_actions.utils.safe_format import safe_format_error
 logger = logging.getLogger(__name__)
 
 
-RETRIABLE_ERRORS = (NetworkError, RateLimitError)
+RETRIABLE_ERRORS = (NetworkError, RateLimitError, ResponseTruncatedError)
 
 
 class RetryExhaustedException(Exception):
@@ -65,6 +70,8 @@ def classify_error(error: Exception) -> str:
         if "timeout" in error_str:
             return "timeout"
         return "network_error"
+    elif isinstance(error, ResponseTruncatedError):
+        return "truncated"
     elif isinstance(error, VendorAPIError):
         return "api_error"
     else:

@@ -1,14 +1,11 @@
-"""Tests for Anthropic prompt caching in online mode.
-
-Verifies that enable_prompt_caching=True produces the beta header and
-cache_control markers in the online client, while leaving batch mode
-and non-Anthropic providers unaffected.
-"""
+"""Tests for Anthropic prompt caching: cache_control markers and the beta header."""
 
 from __future__ import annotations
 
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from agent_actions.prompt.message_builder import (
     LLMMessage,
@@ -127,7 +124,9 @@ class TestToDictsWithCacheControl:
 
     def test_cache_control_returns_structured_content_blocks(self):
         """With cache_control, content becomes a list of typed content blocks."""
-        msg = LLMMessage(role="user", content="hello", cache_control={"type": "ephemeral"})
+        msg = LLMMessage(
+            role="user", content="hello", cache_control={"type": "ephemeral"}, static_len=5
+        )
         env = LLMMessageEnvelope(messages=[msg])
         dicts = env.to_dicts()
         assert len(dicts) == 1
@@ -145,7 +144,9 @@ class TestToDictsWithCacheControl:
         """Messages with and without cache_control format correctly together."""
         env = LLMMessageEnvelope(
             messages=[
-                LLMMessage(role="system", content="sys", cache_control={"type": "ephemeral"}),
+                LLMMessage(
+                    role="system", content="sys", cache_control={"type": "ephemeral"}, static_len=3
+                ),
                 LLMMessage(role="user", content="usr"),
             ]
         )
@@ -161,12 +162,37 @@ class TestToDictsWithCacheControl:
         env = LLMMessageEnvelope(
             messages=[
                 LLMMessage(role="system", content="sys"),
-                LLMMessage(role="user", content="usr", cache_control={"type": "ephemeral"}),
+                LLMMessage(
+                    role="user", content="usr", cache_control={"type": "ephemeral"}, static_len=3
+                ),
             ]
         )
         user_dicts = env.to_dicts(role="user")
         assert len(user_dicts) == 1
         assert isinstance(user_dicts[0]["content"], list)
+
+    def test_a_mark_inside_the_text_splits_it_into_two_blocks(self):
+        msg = LLMMessage(
+            role="user", content="sharedrecord", cache_control={"type": "ephemeral"}, static_len=6
+        )
+        assert LLMMessageEnvelope(messages=[msg]).to_dicts() == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "shared", "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": "record"},
+                ],
+            }
+        ]
+
+    def test_a_mark_with_no_prompt_text_before_it_is_refused(self):
+        with pytest.raises(ValueError, match="static_len is 0"):
+            LLMMessage(role="user", content="record", cache_control={"type": "ephemeral"})
+        assert LLMMessage(role="user", content="record", static_len=0).cache_control is None
+
+    def test_a_prompt_length_past_the_text_is_refused(self):
+        with pytest.raises(ValueError, match="outside a content of length 6"):
+            LLMMessage(role="user", content="record", static_len=7)
 
 
 # ---------------------------------------------------------------------------
@@ -325,15 +351,28 @@ class TestCallApiCachingIntegration:
 
 
 # ---------------------------------------------------------------------------
-# Batch client — no regression
+# Batch envelope
 # ---------------------------------------------------------------------------
 
 
 class TestBatchClientNoRegression:
-    """Batch client prompt caching still works after message_builder changes."""
+    """The batch envelope is marked for caching only when asked, by the online rule."""
+
+    def test_batch_caching_marks_the_system_prompt_and_not_the_record(self):
+        envelope = MessageBuilder.build_for_batch(
+            "anthropic", PROMPT, CONTEXT, enable_prompt_caching=True
+        )
+        assert [msg.cache_control for msg in envelope.messages] == [CACHE_CONTROL_MARKER, None]
+
+    def test_batch_caching_marks_nothing_for_another_provider(self):
+        for provider in ("openai", "gemini"):
+            envelope = MessageBuilder.build_for_batch(
+                provider, PROMPT, CONTEXT, enable_prompt_caching=True
+            )
+            assert all(msg.cache_control is None for msg in envelope.messages), provider
 
     def test_batch_build_for_batch_no_cache_control(self):
-        """build_for_batch does NOT inject cache_control (batch has its own header path)."""
+        """Caching off by default: no message is marked."""
         envelope = MessageBuilder.build_for_batch("anthropic", PROMPT, CONTEXT)
         for msg in envelope.messages:
             assert msg.cache_control is None

@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: '`agac expect report` no longer heads an action with an unqualified `100%` when a `warn` or `info` rule failed on its records. The heading now names each non-blocking rule that failed, with failed over checked: `warned  4/4 records passed · 100%  ⚠ 1 non-blocking rule failed: never_matches_warn (warn) 4/4`. The rate, `--fail-under` and `--json` output are unchanged.'
-time: 2026-11-07T10:25:07.929094Z

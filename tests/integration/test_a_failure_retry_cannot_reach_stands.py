@@ -19,6 +19,7 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli import retry as retry_module
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from tests.integration import test_retry_selection_under_batch as under_batch
@@ -69,7 +70,7 @@ def test_a_failure_under_an_id_no_input_carries_stands_after_a_retry(project):  
 
     result = _retry()
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(project, LEGACY) == "failed"
 
 
@@ -110,7 +111,7 @@ def test_a_record_the_retry_reaches_is_repaired_beside_one_it_cannot(project):  
 
     result = _retry()
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert (_disposition(project, reached), _disposition(project, LEGACY)) == ("success", "failed")
 
 
@@ -123,7 +124,7 @@ def test_a_record_whose_input_is_gone_keeps_its_failure(project):  # noqa: F811
 
     result = _retry("--record", named)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(project, named) == "failed"
 
 
@@ -186,7 +187,7 @@ def test_a_batch_retry_leaves_a_failure_under_a_target_id_standing(
 
     code, output = under_batch._agac(root, "retry", "-a", under_batch.WORKFLOW)
 
-    assert code == 0, output
+    assert code == EXIT_RECORD_FAILURES, output
     assert under_batch._dispositions(root)[LEGACY] == "failed"
     assert _status(root, under_batch.ACTION, under_batch.WORKFLOW) == "completed_with_failures"
 
@@ -439,11 +440,11 @@ def test_a_retry_stopped_after_its_put_back_restores_only_that(project, monkeypa
     _fail(project, reached)
     _fail(project, LEGACY)
 
-    def stopped(state_mgr):
+    def stopped(state_mgr, execution_order):
         raise RuntimeError("stopped")
 
     with monkeypatch.context() as patched:
-        patched.setattr("agent_actions.cli.retry._classify_outcome", stopped)
+        patched.setattr("agent_actions.cli.retry.classify_outcome", stopped)
         assert _retry().exit_code != 0
 
     result = _retry()
@@ -495,7 +496,7 @@ def test_a_batch_retry_that_reaches_one_record_still_pauses_for_it(
 
     code, output = under_batch._agac(root, "retry", "-a", under_batch.WORKFLOW)
 
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     assert "run again" in output, output
     assert _status(root, under_batch.ACTION, under_batch.WORKFLOW) == "batch_submitted"
 
@@ -508,7 +509,7 @@ def test_the_run_that_collects_it_repairs_one_and_keeps_the_other(
     under_batch._set_disposition(root, reached, "failed")
     under_batch._set_disposition(root, LEGACY, "failed")
 
-    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW)
+    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW, ends_with=EXIT_RECORD_FAILURES)
 
     dispositions = under_batch._dispositions(root)
     assert (dispositions[reached], dispositions[LEGACY]) == ("success", "failed")
@@ -528,6 +529,6 @@ def test_a_failure_put_back_with_no_reason_is_collected_over(
     finally:
         backend.close()
 
-    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW)
+    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW, ends_with=EXIT_RECORD_FAILURES)
 
     assert under_batch._dispositions(root)[LEGACY] == "failed"

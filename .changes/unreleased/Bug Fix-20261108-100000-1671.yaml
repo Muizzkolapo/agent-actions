@@ -1,7 +1,0 @@
-kind: Bug Fix
-body: >-
-  An llm_judge param (rule, model, votes, context), an expression condition, or a
-  row_condition of the wrong type is refused at preflight and when a suite is built at
-  run time, in the same words as the built-in checks: rule: ["be concise"] is "type
-  'llm_judge' takes parameter 'rule' as a string, got list ['be concise']".
-time: 2026-11-08T10:00:00Z

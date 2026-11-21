@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: An Anthropic, OpenAI, Groq or OpenAI-compatible request no longer fails with `Invalid timeout argument` on an SDK that runs on httpx2 (anthropic 1.x, openai 3.x). The request timeout is built with the SDK's own `Timeout` class instead of httpx's.
+time: 2026-11-14T18:00:00Z

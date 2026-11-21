@@ -37,3 +37,24 @@ def framework_records(name: str, level: int = logging.WARNING) -> Iterator[list[
     finally:
         logger.removeHandler(handler)
         logger.setLevel(previous)
+
+
+@contextmanager
+def only_through(handler: logging.Handler, name: str) -> Iterator[logging.Logger]:
+    """The logger *name* at DEBUG, with *handler* its only handler and propagation off.
+
+    Its handlers, level and propagation come back after the block. Left behind on a
+    framework logger, the handler holds an EventManager that the next test resets, and
+    with propagation off nothing that logger emits reaches the console again.
+    """
+    logger = logging.getLogger(name)
+    handlers, level, propagate = logger.handlers, logger.level, logger.propagate
+    logger.handlers = [handler]
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    try:
+        yield logger
+    finally:
+        logger.handlers = handlers
+        logger.setLevel(level)
+        logger.propagate = propagate

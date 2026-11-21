@@ -16,17 +16,33 @@ from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
+import httpx
 import openai
 from openai import OpenAI
-from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
+from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
-from agent_actions.llm.providers.generation_params import (
-    extract_generation_params,
-    request_timeout_kwargs,
+from agent_actions.llm.providers.error_wrapper import (
+    VendorErrorMapping,
+    empty_response_error,
+    is_quota_answer,
+    refusal_text,
+    stop_reason_name,
+    wrap_vendor_error,
 )
+from agent_actions.llm.providers.generation_params import (
+    ALWAYS_RESERVED,
+    VendorParamSpec,
+    connect_limited_timeout_kwargs,
+    extract_generation_params,
+    sdk_keyword_params,
+)
+from agent_actions.llm.providers.sdk_models import build_sdk_models
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -35,6 +51,8 @@ from agent_actions.logging.events import (
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
+
+build_sdk_models(ChatCompletion)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="openai",
@@ -47,6 +65,30 @@ _ERROR_MAPPING = VendorErrorMapping(
     base_api_error_type=openai.APIError,
     supports_retry_after=True,
 )
+
+
+_RATE_LIMITED = 429
+
+
+def without_quota_retries(client: Any, vendor: str) -> Any:
+    """*client*, which sends no request again after a 429 that says the quota is at its limit.
+
+    The SDK sends each 429 again, twice by default, before it raises; no wait clears a quota.
+    """
+    sdk_should_retry = getattr(client, "_should_retry", None)
+    if sdk_should_retry is None or getattr(client, "_agac_quota_retries_off", False):
+        return client
+
+    def _should_retry(response: httpx.Response) -> bool:
+        if response.status_code == _RATE_LIMITED:
+            response.read()
+            if is_quota_answer(vendor, response.status_code, response.text):
+                return False
+        return bool(sdk_should_retry(response))
+
+    client._should_retry = _should_retry
+    client._agac_quota_retries_off = True
+    return client
 
 
 class OpenAIClient(BaseClient):
@@ -63,6 +105,11 @@ class OpenAIClient(BaseClient):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "base_url", "temperature", "max_tokens"],
     }
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
+        accepted=sdk_keyword_params(openai.resources.chat.completions.Completions.create),
+        reserved=ALWAYS_RESERVED | {"stream_options"},
+        merged=frozenset({"extra_headers", "extra_body", "extra_query"}),
+    )
 
     @classmethod
     def _error_mapping(cls) -> VendorErrorMapping:
@@ -72,6 +119,33 @@ class OpenAIClient(BaseClient):
     def _client_options(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
         """Constructor kwargs for the SDK client; a declared endpoint adds headers and a timeout."""
         return {"base_url": agent_config.get("base_url")}
+
+    @classmethod
+    def _request_timeout_kwargs(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        return connect_limited_timeout_kwargs(agent_config, openai)
+
+    @classmethod
+    def _request_headers(cls) -> dict[str, Any]:
+        """Headers each request sends beside the client's own; a declared endpoint sets some."""
+        return {}
+
+    @classmethod
+    def _max_tokens_key(cls, agent_config: dict[str, Any]) -> str:
+        """The name the server reads the output limit under.
+
+        OpenAI refuses ``max_tokens`` on its reasoning models and takes
+        ``max_completion_tokens`` on every model; another server at a ``base_url`` may
+        know only ``max_tokens``.
+        """
+        return "max_tokens" if agent_config.get("base_url") else "max_completion_tokens"
+
+    @classmethod
+    def _generation_params(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
+        return extract_generation_params(
+            agent_config,
+            key_map={"max_tokens": cls._max_tokens_key(agent_config)},
+            extra_params=("frequency_penalty", "presence_penalty"),
+        )
 
     @classmethod
     def call_json(
@@ -84,7 +158,10 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, Any]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
+        client = without_quota_retries(
+            get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config)),
+            cls.VENDOR,
+        )
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
             "openai",
@@ -115,14 +192,14 @@ class OpenAIClient(BaseClient):
                 if schema
                 else {"type": "json_object"}
             ),
-            **extract_generation_params(
-                agent_config,
-                extra_params=("frequency_penalty", "presence_penalty"),
-            ),
+            **cls._generation_params(agent_config),
             # Per request, so it outranks a declared endpoint's client-wide timeout.
-            **request_timeout_kwargs(agent_config),
+            **cls._request_timeout_kwargs(agent_config),
         }
 
+        if request_headers := cls._request_headers():
+            completion_kwargs["extra_headers"] = request_headers
+        cls.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
         start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
@@ -137,6 +214,20 @@ class OpenAIClient(BaseClient):
         response_message = response.choices[0].message
         response_content: str | None = response_message.content
         if response_content is None:
+            if response_message.refusal:
+                reason = refusal_text(response_message.refusal)
+                fire_event(
+                    LLMErrorEvent(
+                        provider=cls.VENDOR,
+                        model=model_name,
+                        error_type="Refusal",
+                        error_message=reason,
+                        request_id=request_id,
+                    )
+                )
+                # The disposition keeps only the code parse_error; the run log carries the why.
+                logger.warning("%s (model=%s)", reason, model_name)
+                return [{"raw_response": "", "_parse_error": reason}]
             fire_event(
                 LLMErrorEvent(
                     provider=cls.VENDOR,
@@ -150,7 +241,13 @@ class OpenAIClient(BaseClient):
                 "Empty response content from OpenAI API, model=%s",
                 model_name,
             )
-            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
+            finish_reason = stop_reason_name(response.choices[0].finish_reason)
+            return [
+                {
+                    "raw_response": "",
+                    "_parse_error": f"Empty response from API (stop_reason={finish_reason})",
+                }
+            ]
         from agent_actions.utils.json_parsing import parse_llm_json
 
         response_data = parse_llm_json(response_content)
@@ -190,7 +287,10 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, str]]:
         from agent_actions.llm.providers.client_base import get_or_create_client
 
-        client = get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config))
+        client = without_quota_retries(
+            get_or_create_client(OpenAI, api_key, **cls._client_options(agent_config)),
+            cls.VENDOR,
+        )
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
@@ -209,14 +309,14 @@ class OpenAIClient(BaseClient):
         completion_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": messages,
-            **extract_generation_params(
-                agent_config,
-                extra_params=("frequency_penalty", "presence_penalty"),
-            ),
+            **cls._generation_params(agent_config),
             # Per request, so it outranks a declared endpoint's client-wide timeout.
-            **request_timeout_kwargs(agent_config),
+            **cls._request_timeout_kwargs(agent_config),
         }
 
+        if request_headers := cls._request_headers():
+            completion_kwargs["extra_headers"] = request_headers
+        cls.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
         start_time = time.perf_counter()
         try:
             response = client.chat.completions.create(**completion_kwargs)
@@ -231,22 +331,32 @@ class OpenAIClient(BaseClient):
         response_message = response.choices[0].message
         content: str | None = response_message.content
         if content is None:
+            error = (
+                VendorAPIError(
+                    refusal_text(response_message.refusal),
+                    context={
+                        "model_name": model_name,
+                        "vendor": cls.VENDOR,
+                        "api_operation": "chat.completions.create",
+                    },
+                )
+                if response_message.refusal
+                else empty_response_error(
+                    "OpenAI",
+                    response.choices[0].finish_reason,
+                    model_name=model_name,
+                    vendor=cls.VENDOR,
+                    operation="chat.completions.create",
+                )
+            )
             fire_event(
                 LLMErrorEvent(
                     provider=cls.VENDOR,
                     model=model_name,
                     error_type="EmptyResponse",
-                    error_message="Empty response content from OpenAI API",
+                    error_message=str(error),
                     request_id=request_id,
                 )
             )
-            raise VendorAPIError(
-                "Empty response content from OpenAI API",
-                context={
-                    "model_name": model_name,
-                    "vendor": cls.VENDOR,
-                    "api_operation": "chat.completions.create",
-                    "output_field": agent_config.get("output_field", "raw_response"),
-                },
-            )
+            raise error
         return ResponseBuilder.wrap_non_json(content, agent_config)

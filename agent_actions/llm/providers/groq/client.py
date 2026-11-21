@@ -19,16 +19,26 @@ from typing import Any, ClassVar
 
 import groq
 from groq import Groq
+from groq.types.chat import ChatCompletion
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.error_wrapper import (
+    VendorErrorMapping,
+    empty_response_error,
+    is_truncated,
+    wrap_vendor_error,
+)
 from agent_actions.llm.providers.generation_params import (
+    ALWAYS_RESERVED,
+    VendorParamSpec,
+    connect_limited_timeout_kwargs,
     extract_generation_params,
-    request_timeout_kwargs,
+    sdk_keyword_params,
 )
 from agent_actions.llm.providers.mixins import JSONResponseMixin
+from agent_actions.llm.providers.sdk_models import build_sdk_models
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
@@ -40,6 +50,7 @@ from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
+build_sdk_models(ChatCompletion)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="groq",
@@ -65,6 +76,11 @@ class GroqClient(BaseClient, JSONResponseMixin):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "temperature", "max_tokens"],
     }
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
+        accepted=sdk_keyword_params(groq.resources.chat.completions.Completions.create),
+        reserved=ALWAYS_RESERVED,
+        merged=frozenset({"extra_headers", "extra_body", "extra_query"}),
+    )
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -99,12 +115,14 @@ class GroqClient(BaseClient, JSONResponseMixin):
             **extract_generation_params(
                 agent_config, extra_params=("frequency_penalty", "presence_penalty")
             ),
-            **request_timeout_kwargs(agent_config),
+            **connect_limited_timeout_kwargs(agent_config, groq),
         }
 
         start_time = time.perf_counter()
         try:
-            llm = client.chat.completions.create(**json_completion_kwargs)
+            llm = client.chat.completions.create(
+                **GroqClient.VENDOR_PARAMS.apply(json_completion_kwargs, agent_config)
+            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
@@ -146,13 +164,11 @@ class GroqClient(BaseClient, JSONResponseMixin):
         client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
-        params = extract_generation_params(agent_config)
-        params.setdefault("max_tokens", 1000)
         completion_kwargs = {
             "messages": envelope.to_dicts(),
             "model": model_name,
-            **params,
-            **request_timeout_kwargs(agent_config),
+            **extract_generation_params(agent_config),
+            **connect_limited_timeout_kwargs(agent_config, groq),
         }
 
         # Generate request ID for correlation
@@ -169,7 +185,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         start_time = time.perf_counter()
         try:
-            response = client.chat.completions.create(**completion_kwargs)
+            response = client.chat.completions.create(
+                **GroqClient.VENDOR_PARAMS.apply(completion_kwargs, agent_config)
+            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
@@ -179,6 +197,15 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)
 
+        choice = response.choices[0] if getattr(response, "choices", None) else None
+        if choice is not None and not choice.message.content and is_truncated(choice.finish_reason):
+            raise empty_response_error(
+                "Groq",
+                choice.finish_reason,
+                model_name=model_name,
+                vendor="groq",
+                operation="chat.completions.create",
+            )
         try:
             response_content = response.choices[0].message.content
             return ResponseBuilder.wrap_non_json(response_content, agent_config)

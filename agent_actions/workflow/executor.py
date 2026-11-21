@@ -23,10 +23,11 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.llm.providers.usage_tracker import get_last_usage
+from agent_actions.llm.providers.usage_tracker import clear_usage, get_last_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
@@ -183,6 +184,42 @@ def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
     return _digest(digests) if digests else ""
 
 
+def _compute_output_settings_hash(action_config: ActionConfigDict) -> str:
+    """A digest of the settings that shape what an answer is and how it is stored.
+
+    The transport settings (timeout, retry, credential, prompt caching) are left out: they
+    change how a request travels, not what it asks for. ``json_mode``, ``output_field`` and
+    the run mode only for an LLM action, the only kind that reads them.
+    """
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    granularity = cfg.get("granularity")
+    settings: dict[str, Any] = {
+        "granularity": granularity.lower() if isinstance(granularity, str) else granularity,
+        "on_empty": cfg.get("on_empty"),
+        "expect": cfg.get("expect"),
+    }
+    if (cfg.get("kind") or DEFAULT_ACTION_KIND) == DEFAULT_ACTION_KIND:
+        settings.update(
+            json_mode=cfg.get("json_mode"),
+            output_field=cfg.get("output_field"),
+            run_mode=effective_run_mode(action_config).value,
+        )
+    return _digest(settings)
+
+
+def _compute_endpoint_hash(action_config: ActionConfigDict) -> str:
+    """A digest of where an LLM action's requests go; empty for any other kind."""
+    if (action_config.get("kind") or DEFAULT_ACTION_KIND) != DEFAULT_ACTION_KIND:
+        return ""
+    endpoint = project_endpoint(str(action_config.get("model_vendor")))
+    return _digest(
+        {
+            "base_url": action_config.get("base_url"),
+            "endpoint_url": endpoint.url if endpoint is not None else None,
+        }
+    )
+
+
 # What an action reads and how it is asked, each stamped under its own key and named
 # by its label when an edit is logged.
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], ...] = (
@@ -191,6 +228,8 @@ _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], 
     ("generation_hash", "generation settings", _compute_generation_hash),
     ("udf_source_hash", "tool/guard code", _compute_udf_source_hash),
     ("schema_options_hash", "schema options", _compute_schema_options_hash),
+    ("output_settings_hash", "output settings", _compute_output_settings_hash),
+    ("endpoint_hash", "provider endpoint", _compute_endpoint_hash),
 )
 
 
@@ -289,17 +328,6 @@ def config_in_force(action_config: ActionConfigDict) -> dict[str, Any]:
         "model_vendor": cfg.get("model_vendor"),
         **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
     }
-
-
-def _warn_of_an_edit(action_name: str, edits: list[str]) -> None:
-    logger.warning(
-        "%s was edited since it completed (%s): its answers stand, and only records "
-        "it has not answered use the edit. Run again with --rerun %s to answer every "
-        "record under the edit",
-        action_name,
-        ", ".join(edits),
-        action_name,
-    )
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -761,7 +789,7 @@ class ActionExecutor:
                 self.deps.state_manager.mark_mixed_answers([action_name])
             return ActionStatus.PENDING
         if edits:
-            _warn_of_an_edit(action_name, edits)
+            self._warn_of_an_edit(action_name, edits)
         elif details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
             logger.warning(
                 "%s may hold answers given under more than one config. Run again with --rerun "
@@ -770,6 +798,22 @@ class ActionExecutor:
                 action_name,
             )
         return current_status
+
+    def _warn_of_an_edit(self, action_name: str, edits: list[str]) -> None:
+        """Name the edit, and every action whose input is the output the edit left standing."""
+        readers = self.readers_of(action_name)
+        logger.warning(
+            "%s was edited since it completed (%s): its answers stand, and only records "
+            "it has not answered use the edit.%s Run again with --rerun %s to answer every "
+            "record under the edit%s",
+            action_name,
+            ", ".join(edits),
+            f" What reads it was answered from its output before the edit: {', '.join(readers)}."
+            if readers
+            else "",
+            action_name,
+            ", there and at what reads it" if readers else "",
+        )
 
     def rerun(self, action_names: Iterable[str]) -> list[str]:
         """Answer every record of *action_names* and of what reads them again (``--rerun``).
@@ -845,7 +889,7 @@ class ActionExecutor:
                 mixed.append(name)
             edits = _edits_since(details, configs[name]) if name in configs else []
             if edits:
-                _warn_of_an_edit(name, edits)
+                self._warn_of_an_edit(name, edits)
                 held[name] = {key: details.get(key) for key in config_in_force(configs[name])}
         self.deps.state_manager.reopen(names)
         for name, stamp in held.items():
@@ -1336,7 +1380,7 @@ class ActionExecutor:
             execution_time=duration,
             **self._completion_metadata(params.action_name, params.action_config),
         )
-        tokens = get_last_usage()
+        tokens = counts.tokens or get_last_usage()
         self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
 
         return ActionExecutionResult(
@@ -2360,6 +2404,7 @@ class ActionExecutor:
                 status=final_status,
                 metrics=ExecutionMetrics(
                     duration=wall_clock,
+                    tokens=counts.tokens,
                     record_count=record_count,
                     guard_skipped=guard_skipped,
                     checks_failed=checks_failed,
@@ -2458,6 +2503,8 @@ class ActionExecutor:
         An error here ends the run, since the store is not answering (see
         ``_record_store_failure``).
         """
+        # What a call before this action used must not be reported as this action's.
+        clear_usage()
         try:
             self._start_work(params)
         except Exception as error:

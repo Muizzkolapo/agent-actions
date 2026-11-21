@@ -21,11 +21,15 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     VendorErrorMapping,
+    empty_response_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
+    ALWAYS_RESERVED,
+    VendorParamSpec,
     extract_generation_params,
     request_timeout_kwargs,
+    sdk_keyword_params,
 )
 from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
@@ -50,6 +54,16 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
+def _answer_text(response: Any) -> str | None:
+    """The first text item of the reply; a thinking item, which has no text, can come first."""
+    message = getattr(response, "message", None)
+    for item in getattr(message, "content", None) or []:
+        text = getattr(item, "text", None)
+        if isinstance(text, str):
+            return text
+    return None
+
+
 class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     """Cohere API client for JSON and non-JSON LLM invocations."""
 
@@ -61,6 +75,10 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         "required_fields": ["model_name"],
         "optional_fields": ["api_key", "temperature", "max_tokens"],
     }
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(
+        accepted=sdk_keyword_params(cohere.ClientV2.chat),
+        reserved=ALWAYS_RESERVED | {"request_options"},
+    )
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -105,7 +123,9 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "model": model_name,
                 "messages": messages,
                 "response_format": (
-                    {"type": "json_object", "schema": schema} if schema else {"type": "json_object"}
+                    {"type": "json_object", "json_schema": schema}
+                    if schema
+                    else {"type": "json_object"}
                 ),
                 **extract_generation_params(
                     agent_config,
@@ -113,7 +133,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     stop_as_list=True,
                 ),
             }
-            response = co.chat(**chat_kwargs)
+            response = co.chat(**CohereClient.VENDOR_PARAMS.apply(chat_kwargs, agent_config))
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
@@ -138,16 +158,17 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             response, "cohere", model_name, latency_ms, request_id
         )
 
-        # Guard against empty or missing content in Cohere v2 response
-        if not hasattr(response, "message") or not response.message or not response.message.content:
-            raise VendorAPIError(
-                "Cohere JSON response contained no content",
+        answer = _answer_text(response)
+        if answer is None:
+            raise empty_response_error(
+                "Cohere",
+                getattr(response, "finish_reason", None),
+                model_name=model_name,
                 vendor="cohere",
+                operation="chat",
             )
-        intermediate_json = response.message.content[0].text  # type: ignore[union-attr]
-
         result = CohereClient.parse_json_response(
-            response_content=intermediate_json,
+            response_content=answer,
             vendor_name="Cohere",
             operation="call_json",
             model_name=model_name,
@@ -184,7 +205,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     stop_as_list=True,
                 ),
             }
-            response = co.chat(**non_json_kwargs)
+            response = co.chat(**CohereClient.VENDOR_PARAMS.apply(non_json_kwargs, agent_config))
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
@@ -223,21 +244,22 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             response, "cohere", model_name, latency_ms, request_id
         )
 
-        # Guard against empty or missing content in Cohere v2 response
-        if not hasattr(response, "message") or not response.message or not response.message.content:
-            raise VendorAPIError(
-                "Cohere non-JSON response contained no content",
+        answer = _answer_text(response)
+        if answer is None:
+            raise empty_response_error(
+                "Cohere",
+                getattr(response, "finish_reason", None),
+                model_name=model_name,
                 vendor="cohere",
+                operation="chat",
             )
-        response_message = response.message.content[0].text  # type: ignore[union-attr]
-
         logger.debug(
             "Cohere non-JSON response retrieved successfully",
             extra={
                 "operation": "cohere_call_non_json",
                 "model": model_name,
-                "response_length": len(response_message) if response_message else 0,
+                "response_length": len(answer),
                 "request_id": request_id,
             },
         )
-        return ResponseBuilder.wrap_non_json(response_message, agent_config)
+        return ResponseBuilder.wrap_non_json(answer, agent_config)

@@ -15,6 +15,8 @@ from tests._support.agac_cli import run_agac
 
 REPO = Path(__file__).resolve().parents[2]
 LAUNCHER = REPO / "tests" / "_support" / "agac_cli.py"
+# The launcher starts this warm process itself, with the tree first on its path.
+FORK_SERVER = REPO / "tests" / "_support" / "agac_fork_server.py"
 AUDIT = Path(__file__).resolve()
 # Reads the `agac` commands the docs' code blocks show as text, and walks the
 # command tree in-process: it names the program but launches nothing.
@@ -140,7 +142,8 @@ def test_no_test_launches_agac_but_through_the_shared_launcher():
         for path in sorted((REPO / "tests").rglob("*.py"))
         # This file and the docs check name what they look for; tests/manual
         # is run by hand, against the `agac` on PATH.
-        if path not in (LAUNCHER, AUDIT, DOCS_CHECK) and not path.is_relative_to(MANUAL)
+        if path not in (LAUNCHER, FORK_SERVER, AUDIT, DOCS_CHECK)
+        and not path.is_relative_to(MANUAL)
         for line in launches_in(path.read_text())
     ]
 

@@ -20,6 +20,7 @@ from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
     ChunkConfig,
     WorkflowConfig,
+    dump_defaults,
     refuse_blank_output_field,
     refuse_context_scope_siblings,
     refuse_retired_keys,
@@ -29,6 +30,7 @@ from agent_actions.llm.config.endpoints import clear_project_endpoints, load_pro
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.expander_merge import merge_vendor_params
 
 if TYPE_CHECKING:
     from agent_actions.output.response.config_schema import AgentConfig
@@ -118,6 +120,56 @@ def _refuse_blank_project_output_field(project_defaults: dict[str, Any]) -> None
         raise ConfigurationError(str(e), context={"operation": "load_project_defaults"}) from e
 
 
+def project_action_defaults(project_config: dict[str, Any]) -> dict[str, Any]:
+    """The project's ``default_agent_config`` as the defaults each workflow's sit over."""
+    project_defaults = project_config.get("default_agent_config", {})
+    _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
+    project_defaults = _flatten_project_chunk_block(project_defaults)
+    project_defaults = _validate_project_expect_block(project_defaults)
+    _refuse_blank_project_output_field(project_defaults)
+    return project_defaults
+
+
+def merge_workflow_defaults(
+    project_defaults: dict[str, Any], workflow_defaults: dict[str, Any]
+) -> dict[str, Any]:
+    """The workflow's defaults over the project's, key by key; ``vendor_params`` merged."""
+    merged = {**project_defaults, **workflow_defaults}
+    vendor_params = merge_vendor_params(
+        project_defaults.get("vendor_params"), workflow_defaults.get("vendor_params")
+    )
+    if vendor_params is not None:
+        merged["vendor_params"] = vendor_params
+    return merged
+
+
+def project_agent_config(project_config: dict[str, Any]) -> dict[str, Any]:
+    """The project's ``default_agent_config``, validated, as it fills each agent's unset keys."""
+    from agent_actions.output.response.config_schema import DefaultAgentConfig
+
+    defaults = project_config.get("default_agent_config", {})
+    _refuse_or_raise(defaults, "default_agent_config", "merge_agent_configs")
+    _refuse_retired_or_raise(defaults, "default_agent_config", "merge_agent_configs")
+    _refuse_removed_spellings_or_raise(defaults, "default_agent_config", "merge_agent_configs")
+    return DefaultAgentConfig.model_validate(defaults).model_dump()
+
+
+def merge_over_agent_defaults(base: dict[str, Any], agent: dict[str, Any]) -> dict[str, Any]:
+    """*agent*'s keys over *base*; ``vendor_params`` and ``chunk_config`` merged key by key."""
+    merged = {**base}
+    for key, value in agent.items():
+        if key == "vendor_params" and isinstance(value, dict):
+            merged[key] = merge_vendor_params(merged.get(key), value)
+        elif key == "chunk_config" and isinstance(value, dict):
+            default_chunk = merged.get(key)
+            if not isinstance(default_chunk, dict):
+                default_chunk = {}
+            merged[key] = {**default_chunk, **value}
+        else:
+            merged[key] = value
+    return merged
+
+
 def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
     """Raise the framework's own error for a misplaced context_scope directive."""
     try:
@@ -160,10 +212,18 @@ def _refuse_removed_spellings_or_raise(
 
 
 class ConfigManager:
-    def __init__(self, constructor_path: str, default_path: str, project_root: Path | None = None):
+    def __init__(
+        self,
+        constructor_path: str,
+        default_path: str,
+        project_root: Path | None = None,
+        rendered_workflow: str | None = None,
+    ):
+        """``rendered_workflow`` is the workflow file already rendered; given it, no render runs."""
         self.constructor_path = constructor_path
         self.default_path = default_path
         self.project_root = project_root
+        self.rendered_workflow = rendered_workflow
         self.user_config: dict[str, Any] | None = None
         self.default_config: dict[str, Any] | None = None
         self.agent_name: str | None = None
@@ -173,27 +233,23 @@ class ConfigManager:
         self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
 
-    def _load_single_config(self, config_path: str, config_type: str) -> dict[str, Any]:
-        """Load and parse a single config file with template rendering.
+    def _load_single_config(
+        self, config_path: str, config_type: str, rendered: str | None = None
+    ) -> tuple[dict[str, Any], str]:
+        """Parse *rendered*, or render *config_path* first; return the config and the text.
 
-        Args:
-            config_path: Path to the config file.
-            config_type: Human-readable config type for events/errors (e.g. "workflow", "default").
-
-        Returns:
-            Parsed config dictionary.
-
-        Raises:
-            ConfigurationError: On rendering, YAML parsing, or unexpected errors.
+        *config_type* names the file in events and errors ("workflow", "default").
+        Every failure is raised as a ``ConfigurationError``.
         """
         from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
         fire_event(ConfigLoadStartEvent(config_file=str(config_path)))
         try:
-            config_data = render_pipeline_with_templates(
-                config_path, self.template_dir, project_root=self.project_root
-            )
-            loaded = yaml.safe_load(config_data)
+            if rendered is None:
+                rendered = render_pipeline_with_templates(
+                    config_path, self.template_dir, project_root=self.project_root
+                )
+            loaded = yaml.safe_load(rendered)
             if not isinstance(loaded, dict):
                 config_name = Path(config_path).name
                 raise ConfigurationError(
@@ -206,7 +262,7 @@ class ConfigManager:
                     },
                 )
             fire_event(ConfigLoadEvent(config_file=str(config_path), config_type=config_type))
-            return loaded
+            return loaded, rendered
         except TemplateRenderingError as e:
             config_name = Path(config_path).name
             raise ConfigurationError(
@@ -238,9 +294,11 @@ class ConfigManager:
             ) from e
 
     def load_configs(self):
-        self.user_config = self._load_single_config(self.constructor_path, "workflow")
+        self.user_config, self.rendered_workflow = self._load_single_config(
+            self.constructor_path, "workflow", self.rendered_workflow
+        )
         if self.default_path:
-            self.default_config = self._load_single_config(self.default_path, "default")
+            self.default_config, _ = self._load_single_config(self.default_path, "default")
         # Resolve tool_path with priority: workflow > default > project config
         user_tool_path = None
         if isinstance(self.user_config, dict):
@@ -311,11 +369,7 @@ class ConfigManager:
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
                 warn_unread_project_keys(project_config)
-                project_defaults = project_config.get("default_agent_config", {})
-                _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
-                project_defaults = _flatten_project_chunk_block(project_defaults)
-                project_defaults = _validate_project_expect_block(project_defaults)
-                _refuse_blank_project_output_field(project_defaults)
+                project_defaults = project_action_defaults(project_config)
             except (FileNotFoundError, ProjectRootNotFoundError):
                 project_config = {}
                 project_defaults = {}
@@ -358,12 +412,9 @@ class ConfigManager:
                 action.model_dump(mode="python", exclude_unset=True, by_alias=True)
                 for action in workflow.actions
             ]
-            validated_defaults = (
-                workflow.defaults.model_dump(mode="python", exclude_unset=True, by_alias=True)
-                if workflow.defaults
-                else {}
+            merged_defaults = merge_workflow_defaults(
+                project_defaults, dump_defaults(workflow.defaults)
             )
-            merged_defaults = {**project_defaults, **validated_defaults}
             workflow_name = workflow.name
             config_for_expander = {
                 "name": workflow_name,
@@ -424,20 +475,9 @@ class ConfigManager:
         load_project_endpoints(project_config)
 
     def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
-        from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
+        from agent_actions.output.response.config_schema import AgentConfig
 
-        project_agent_defaults = (
-            self.default_config.get("default_agent_config", {}) if self.default_config else {}
-        )
-        _refuse_or_raise(project_agent_defaults, "default_agent_config", "merge_agent_configs")
-        _refuse_retired_or_raise(
-            project_agent_defaults, "default_agent_config", "merge_agent_configs"
-        )
-        _refuse_removed_spellings_or_raise(
-            project_agent_defaults, "default_agent_config", "merge_agent_configs"
-        )
-        default_model = DefaultAgentConfig.model_validate(project_agent_defaults)
-        default_agent_config = default_model.model_dump()
+        default_agent_config = project_agent_config(self.default_config or {})
         for agent in user_agents:
             _refuse_or_raise(agent, "agent", "merge_agent_configs")
             _refuse_retired_or_raise(agent, "agent", "merge_agent_configs")
@@ -459,19 +499,13 @@ class ConfigManager:
                     cause=e,
                 ) from e
             agent_type = agent_model.agent_type
-            agent_dict = agent_model.model_dump(exclude_unset=True)
-            merged_dict = {**default_agent_config}
+            base = {**default_agent_config}
             # Add root-level tool_path to agent config for dispatch_task() support
             if self.tool_path:
-                merged_dict["tool_path"] = self.tool_path
-            for key, value in agent_dict.items():
-                if key == "chunk_config" and isinstance(value, dict):
-                    default_chunk = merged_dict.get(key)
-                    if not isinstance(default_chunk, dict):
-                        default_chunk = {}
-                    merged_dict[key] = {**default_chunk, **value}
-                else:
-                    merged_dict[key] = value
+                base["tool_path"] = self.tool_path
+            merged_dict = merge_over_agent_defaults(
+                base, agent_model.model_dump(exclude_unset=True)
+            )
             merged_agent_config = AgentConfig.model_validate(merged_dict)
             self.agent_configs[agent_type] = merged_agent_config
 
@@ -559,7 +593,7 @@ class ConfigManager:
                 if not config_dict.get("model_vendor"):
                     raise ConfigurationError(
                         f"Action '{agent_type}' is missing required field 'model_vendor'",
-                        context={"action": agent_type, "field": "model_vendor"},
+                        context={"action_name": agent_type, "missing_fields": ["model_vendor"]},
                     )
 
             # Optional fields — default None → "" to satisfy downstream
@@ -571,7 +605,6 @@ class ConfigManager:
                 "prompt": "",
                 "schema_name": "",
                 "code_path": "",
-                "anthropic_version": "",
             }
             for field, default_value in optional_string_defaults.items():
                 if field in config_dict and config_dict[field] is None:

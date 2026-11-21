@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "An Ollama batch record is now sent as an online Ollama call is. With no `temperature` set it sends none, leaving the model's own default, where batch sent 1.0. JSON mode with no schema now sends `format: json` to a local Ollama, where batch sent no format and the answer was not held to JSON. A record cut off at the output limit is now labelled `finish_reason: length` from Ollama's `done_reason`; batch read `done`, which is true for a cut-off answer too, and labelled it `stop`."
+time: 2026-11-16T10:40:00Z

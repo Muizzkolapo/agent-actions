@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..docs_links import TROUBLESHOOTING
 from ..user_error import UserError
 from .base import ErrorFormatter
 
@@ -38,5 +39,5 @@ class GenericErrorFormatter(ErrorFormatter):
                 "or check logs/events.json for details.",
             ),
             context=context,
-            docs_url="https://docs.runagac.com/troubleshooting",
+            docs_url=TROUBLESHOOTING,
         )

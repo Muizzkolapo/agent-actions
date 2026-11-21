@@ -12,6 +12,7 @@ from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import (
     ConfigurationError,
     DuplicateFunctionError,
+    FileLoadError,
     FunctionNotFoundError,
     UDFLoadError,
     enrich_exception_context,
@@ -55,7 +56,10 @@ class ValidateUDFsCommand:
         filename = f"{self.agent_name}.yml"
         config_path = paths.agent_config_dir / filename
         if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config_path}")
+            raise FileLoadError(
+                f"Config file not found: {config_path}",
+                context={"config_path": str(config_path)},
+            )
         clear_registry()
         try:
             registry = discover_udfs(self.user_code)
@@ -103,7 +107,7 @@ class ValidateUDFsCommand:
                 "error_type": "not_found",
             }
 
-        structural = self._run_structural_preflight()
+        structural = self._run_structural_preflight(config_manager.rendered_workflow)
         if structural is not None:
             return structural
 
@@ -116,7 +120,7 @@ class ValidateUDFsCommand:
             "action_names": self._extract_action_names(config),
         }
 
-    def _run_structural_preflight(self) -> dict[str, Any] | None:
+    def _run_structural_preflight(self, rendered_workflow: str | None) -> dict[str, Any] | None:
         """Run the same structural pass inspect/schema/run do. None if it passes.
 
         UDF references and structure are disjoint checks — a broken ``impl:``
@@ -130,7 +134,11 @@ class ValidateUDFsCommand:
         from agent_actions.services.workflow_inspector import WorkflowInspector
 
         try:
-            WorkflowInspector(self.agent_name, user_code_path=str(self.user_code)).validate()
+            WorkflowInspector(
+                self.agent_name,
+                user_code_path=str(self.user_code),
+                rendered_workflow=rendered_workflow,
+            ).validate()
         except Exception as e:
             return {"valid": False, "error": e, "error_type": "structural"}
         return None
@@ -367,10 +375,13 @@ class ValidateUDFsCommand:
 
 @click.command(name="validate-udfs")
 @click.option(
+    "-w",
+    "--workflow",
     "-a",
     "--agent",
+    "agent",
     required=True,
-    help="Agent configuration file name without path or extension",
+    help="Workflow name: its configuration file name without path or extension",
 )
 @click.option(
     "-u",

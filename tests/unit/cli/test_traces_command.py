@@ -34,7 +34,7 @@ def _traces(*args):
 
 
 def test_an_actions_traces_print_as_plain_text(project):
-    result = _traces("-a", ACTION)
+    result = _traces("-A", ACTION)
 
     assert result.exit_code == 0, result.output
     assert PROMPT in result.output
@@ -44,7 +44,7 @@ def test_an_actions_traces_print_as_plain_text(project):
 
 
 def test_one_records_trace_prints_alone(project):
-    result = _traces("-a", ACTION, "--record", "tid-2")
+    result = _traces("-A", ACTION, "--record", "tid-2")
 
     assert result.exit_code == 0, result.output
     assert "Page beta prompt." in result.output
@@ -52,7 +52,7 @@ def test_one_records_trace_prints_alone(project):
 
 
 def test_json_output_carries_the_plain_text_fields(project):
-    result = _traces("-a", ACTION, "--json")
+    result = _traces("-A", ACTION, "--json")
 
     assert result.exit_code == 0, result.output
     traces = json.loads(result.output)
@@ -62,7 +62,7 @@ def test_json_output_carries_the_plain_text_fields(project):
 
 
 def test_an_action_with_no_traces_says_so(project):
-    result = _traces("-a", "classify")
+    result = _traces("-A", "classify")
 
     assert result.exit_code != 0
     assert "No prompt traces for action 'classify'" in result.output

@@ -5,9 +5,9 @@ sidebar_position: 10
 
 # Documentation Site
 
-As your agentic workflows grow in complexity, keeping track of all actions, schemas, and prompts becomes challenging. Agent Actions solves this with an interactive documentation site that automatically scans your project and generates a browsable interface.
+When your workflows become more complex, it becomes difficult to track all actions, schemas and prompts. Agent Actions has an interactive documentation site for this problem. The site automatically scans your project and generates an interface that you can browse.
 
-The screenshot below shows the documentation site homepage. You can explore your agentic workflows, browse schemas, view prompts, and analyze execution history—all from a single interface.
+The screenshot shows the homepage of the documentation site. From this one interface, you can explore your workflows, browse schemas, view prompts and analyze the execution history.
 
 ![Documentation Site Overview](/img/docs-site/home.png)
 
@@ -24,16 +24,16 @@ agac docs
 
 ### `agac docs`
 
-Scans your project, generates documentation data, and serves an interactive documentation site. Think of this as taking a snapshot of your entire project—every agentic workflow, prompt, and schema gets cataloged—then immediately launching a browsable interface.
+Scans your project, generates documentation data and serves an interactive documentation site. The command catalogs each workflow, prompt and schema in your project. Then it immediately starts an interface that you can browse. Thus the command is similar to a snapshot of your full project.
 
 **What it scans:**
-- Agentic workflows in `artefact/rendered_workflows/` and `*/agent_config/`
-- Prompts in `.md` files under `prompt_store/`, including subdirectories
+- Workflows in `artefact/rendered_workflows/` and `*/agent_config/`
+- Prompts in `.md` files in `prompt_store/`, including subdirectories
 - Schemas in `schema/` files (`.yml`, `.yaml`, `.json`)
 
 **Output:**
-- `artefact/catalog.json` — Agentic workflow catalog
-- `artefact/runs.json` — Execution history
+- `artefact/catalog.json`: The workflow catalog
+- `artefact/runs.json`: The execution history
 
 ```bash
 agac docs
@@ -43,7 +43,11 @@ agac docs --output ./custom-artefact
 
 ### `agac docs test`
 
-Runs browser tests to verify the documentation site renders correctly. It does not start the server: it needs Node.js, a running docs server (`-p` sets its port, default `8890`), and the test scripts in the project root.
+Runs browser tests to verify that the documentation site renders correctly. The command does not start the server. It needs these items:
+
+- Node.js
+- A running docs server (`-p` sets its port, default `8890`)
+- The test scripts in the project root
 
 ```bash
 agac docs test
@@ -52,74 +56,75 @@ agac docs test -t schemas
 
 ## Site Features
 
-### Agentic Workflow Catalog
+### Workflow Catalog {/* #agentic-workflow-catalog */}
 
-The catalog is your project's table of contents. Browse all agentic workflows with:
+The catalog is the table of contents of your project. Browse all workflows with these features:
 
-- **DAG Visualization** — Interactive graph showing action dependencies
-- **Action List** — All actions with kind (LLM/tool), dependencies, intent
-- **Configuration** — Defaults, vendor settings, context scope
+- **DAG Visualization**: An interactive graph that shows the action dependencies
+- **Action List**: All actions with their kind (LLM/tool), dependencies and intent
+- **Configuration**: Defaults, vendor settings and context scope
 
-The screenshot below shows a detailed agentic workflow view. Notice how the DAG visualization makes it easy to understand the execution order at a glance.
+The screenshot shows the detail view of a workflow. The DAG visualization makes the execution order easy to understand quickly.
 
 ![Workflow Detail](/img/docs-site/workflow_detail.png)
 
 ### Run History
 
-You might wonder: "How do I know if my agentic workflow is performing well over time?" The run history answers this question. View execution history for each agentic workflow:
+The run history shows if your workflow performs well over time. View the execution history for each workflow:
 
-- **Run list** — Status, duration, and how many actions succeeded, failed or were skipped
-- **Run detail** — Duration, action count, tokens, result, and a timeline with one bar per action; skipped actions are drawn in a muted colour
+- **Run list**: Status, duration, and the number of actions that succeeded, failed or were skipped
+- **Run detail**: Duration, action count, tokens, result, and a timeline with one bar for each action. The timeline shows skipped actions in a muted colour
 
-The run history view helps you identify patterns—which actions take longest and which are skipped.
+The run history view helps you find patterns, for example which actions take longest and which actions are skipped.
 
 ![Run History](/img/docs-site/runs.png)
 
 ### Schema Browser
 
-Explore all schemas with their field names and types. This is especially helpful when debugging schema validation errors—you can see exactly what structure is expected.
+Explore all schemas with their field names and types. The schema browser is especially helpful when you debug schema validation errors, because it shows the exact structure that the schema expects.
 
 ![Schema Browser](/img/docs-site/schemas.png)
 
 ### Prompt Library
 
-View all prompts with full content and source file location. When you need to understand what an action does, the prompt library gives you the complete picture.
+View all prompts with their full content and the location of their source file. The prompt library gives you the complete prompt of each action. Use it when you need to understand what an action does.
 
 ![Prompt Library](/img/docs-site/prompts.png)
 
 ### Logs & Events
 
-The event explorer is where a "why did that happen?" ends. It reads the same
-structured events the framework writes to `agent_io/**/logs/events.json` and the
-project's own `logs/events.json`, showing the most recent slice shared across
-every log:
+The event explorer answers the question "why did that happen?". It reads the same
+structured events that the framework writes to `agent_io/**/logs/events.json` and to
+the `logs/events.json` file of the project. It shows the most recent slice, shared across
+all logs:
 
-- **Stream or grouped** — reverse-chronological rows, or collapsed by event code
-  with counts and a share bar
-- **Filters** — level, workflow, free text, and every `key=value` in an event's
-  payload
-- **Diagnostics toggle** — framework-internal events are hidden by default, the
-  same way the console hides them outside a verbose run
-- **Run trace** — click an `invocation_id` to see that run laid out as spans on
-  a time axis
+- **Stream or grouped**: Rows in reverse-chronological order, or rows collapsed by
+  event code, with counts and a share bar
+- **Filters**: Level, workflow, free text, and each `key=value` in the payload of an
+  event
+- **Diagnostics toggle**: By default, the explorer hides framework-internal events.
+  The console also hides these events outside a verbose run
+- **Run trace**: Click an `invocation_id` to see that run as spans on a time axis
 
 ![Logs & Events](/img/docs-site/logs.png)
 
 ### Search
 
-Find resources quickly with full-text search across agentic workflows, actions,
-schemas, prompts and tools. Press `⌘K` or `Ctrl+K` (or `/`) from anywhere. As your project
-grows, search becomes essential for navigating between related components. Event
+Find resources quickly with full-text search across workflows, actions,
+schemas, prompts and tools. Press `⌘K` or `Ctrl+K` (or `/`) from any page. When your project
+becomes larger, you need search to move between related components. Event
 codes and messages have their own search box on the Logs & Events page.
 
 ## Deployment
 
-The documentation site is a static HTML/CSS/JS application. After running `agac docs`, you can deploy it anywhere static files are served:
+The documentation site is a static HTML/CSS/JS application. After you run `agac docs`, you can deploy the site to any location that serves static files:
 
-- **Local development** — `agac docs`
-- **Static hosting** — Copy the docs site to any web server (S3, Netlify, etc.)
-- **CI/CD** — Generate docs as part of your pipeline
+- **Local development**: `agac docs`
+- **Static hosting**: Copy the docs site to a web server (for example S3 or Netlify)
+- **CI/CD**: Generate the docs as part of your CI/CD pipeline
 
-:::info
-The documentation site generates static files only. It does not require a backend server, but it also cannot show real-time execution data—you need to regenerate after runs complete.
+:::note
+The documentation site generates static files only. It does not require a backend server. But it also cannot show real-time execution data.
 :::
+
+To show the data of new runs, regenerate the site after the runs complete.

@@ -2,6 +2,7 @@
 Vendor configuration models for LLM providers.
 """
 
+import re
 from collections.abc import Mapping
 from enum import Enum
 from typing import Any, Literal
@@ -50,6 +51,23 @@ def runs_in_batch(action_config: Mapping[str, Any]) -> bool:
 def effective_run_mode(action_config: Mapping[str, Any]) -> RunMode:
     """The mode an action runs in, whatever its run_mode says."""
     return RunMode.BATCH if runs_in_batch(action_config) else RunMode.ONLINE
+
+
+# Dated snapshots and fine-tunes ("ft:o4-mini-...") included; gpt-5-chat-* does not reason.
+_ALWAYS_REASONING = re.compile(r"^(?:ft:)?(?:o\d+|gpt-5(?!\.)(?!.*-chat))(?:[-:]|$)")
+_REASONING_OPTIONAL = re.compile(r"^(?:ft:)?gpt-5\.\d+(?!.*-chat)(?:[-:]|$)")
+
+
+def openai_model_reasons(model_name: str, reasoning_effort: Any = None) -> bool:
+    """Whether an OpenAI model reasons on a request, so it takes only the default temperature.
+
+    The o-series and gpt-5 always reason. gpt-5.1 and later default to reasoning_effort
+    ``none``, which does not reason, so they count only when another effort is set.
+    """
+    name = model_name.lower()
+    if _ALWAYS_REASONING.match(name):
+        return True
+    return bool(_REASONING_OPTIONAL.match(name)) and reasoning_effort not in (None, "none")
 
 
 def vendor_names() -> list[str]:
@@ -112,7 +130,6 @@ class AnthropicConfig(BaseVendorConfig):
 
     vendor_type: Literal[VendorType.ANTHROPIC] = VendorType.ANTHROPIC
     api_key_env_name: str = "ANTHROPIC_API_KEY"
-    anthropic_version: str = Field(default="2023-06-01", description="API version header")
     enable_prompt_caching: bool = Field(default=False, description="Enable prompt caching")
     tools_mode: bool = Field(default=True, description="Use tools for JSON responses")
 

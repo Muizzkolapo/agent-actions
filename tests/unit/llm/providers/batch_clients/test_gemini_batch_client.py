@@ -47,30 +47,22 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         mock_file.name = "files/test-file-123"
         mock_client.files.upload.return_value = mock_file
         mock_client.files.download.return_value = b'{"key": "test-1", "response": {"candidates": [{"content": {"parts": [{"text": "test"}]}}]}}\n'
-        with patch.dict(
-            "sys.modules",
-            {
-                "google": Mock(),
-                "google.genai": mock_genai_module,
-                "google.genai.types": mock_types_module,
-            },
-        ):
-            with patch("agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True):
+        with patch("agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True):
+            with patch(
+                "agent_actions.llm.providers.gemini.batch_client.genai",
+                mock_genai_module,
+            ):
                 with patch(
-                    "agent_actions.llm.providers.gemini.batch_client.genai",
-                    mock_genai_module,
+                    "agent_actions.llm.providers.gemini.batch_client.types",
+                    mock_types_module,
                 ):
-                    with patch(
-                        "agent_actions.llm.providers.gemini.batch_client.types",
-                        mock_types_module,
-                    ):
-                        from agent_actions.llm.providers.gemini.batch_client import (
-                            GeminiBatchClient,
-                        )
+                    from agent_actions.llm.providers.gemini.batch_client import (
+                        GeminiBatchClient,
+                    )
 
-                        provider = GeminiBatchClient(api_key="test-gemini-key")
-                        provider.client = mock_client
-                        yield provider
+                    provider = GeminiBatchClient(api_key="test-gemini-key")
+                    provider.client = mock_client
+                    yield provider
 
     @pytest.fixture
     def provider_success_response_json(self):
@@ -144,17 +136,13 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         assert isinstance(result["request"]["contents"], list), "contents should be list"
         assert "parts" in result["request"]["contents"][0], "Gemini requires 'parts'"
 
-    def test_gemini_format_task_with_schema_uses_response_schema(self, provider, sample_batch_task):
-        """
-        Gemini-specific: Verify schema is added as response_schema.
-
-        Gemini has native schema support with response_schema field.
-        """
+    def test_gemini_format_task_with_schema_asks_for_json(self, provider, sample_batch_task):
+        """Gemini-specific: a schema asks for JSON in the generation config, as online does."""
         schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
         result = provider.format_task_for_provider(sample_batch_task, schema=schema)
-        assert "response_schema" in result["request"], "Gemini should use response_schema"
-        assert "response_mime_type" in result["request"], "Gemini should set response_mime_type"
-        assert result["request"]["response_mime_type"] == "application/json"
+        generation_config = result["request"]["generation_config"]
+        assert generation_config["response_mime_type"] == "application/json"
+        assert "response_schema" not in result["request"]
 
     def test_format_task_basic(self, provider, sample_batch_task):
         """Override: Gemini uses 'key' not 'custom_id'."""
@@ -204,3 +192,12 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
         with pytest.raises(VendorAPIError):
             provider.retrieve_results("nonexistent-batch-id", str(tmp_path))
+
+
+def test_the_gemini_batch_client_waits_600_seconds_per_request():
+    from agent_actions.llm.providers.gemini import batch_client
+
+    with patch.object(batch_client.genai, "Client") as sdk:
+        batch_client.GeminiBatchClient(api_key="k")
+
+    assert sdk.call_args.kwargs["http_options"] == {"api_version": "v1alpha", "timeout": 600_000}

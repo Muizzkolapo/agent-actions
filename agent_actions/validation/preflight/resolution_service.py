@@ -15,7 +15,7 @@ import re
 import shutil
 from difflib import get_close_matches
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from agent_actions.config.path_config import (
     SeedFileError,
@@ -31,6 +31,8 @@ from agent_actions.llm.config.vendor import (
     ONLINE_ONLY_VENDORS,
     api_key_env_var,
     canonical_vendor,
+    openai_model_reasons,
+    runs_in_batch,
     vendor_needs_api_key,
 )
 from agent_actions.llm.providers.client_base import api_key_env_name
@@ -49,6 +51,10 @@ logger = logging.getLogger(__name__)
 
 _VENDORS_WITHOUT_ENDPOINT = NON_LLM_VENDORS
 
+# vendor_params keys an online request sends that a batch line has nowhere to put
+# (VendorParamSpec.apply_to_body drops them).
+_BATCH_UNSENT_VENDOR_PARAMS = ("extra_headers", "extra_query")
+
 
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
@@ -65,12 +71,17 @@ def _endpoint_error(action_name: str, field: str, message: str, hint: str) -> St
 
 def _endpoint_environment_errors(
     action_name: str, subject: str, endpoint: Endpoint
-) -> list[StaticTypeError]:
-    """The variables and the command an endpoint reads, checked against this environment."""
-    errors: list[StaticTypeError] = []
+) -> tuple[list[StaticTypeError], list[StaticTypeError]]:
+    """The variables and the command an endpoint reads, checked against this environment.
+
+    Returns (absent, invalid): a variable not set or a command not on PATH, then a
+    variable whose value breaks a url rule.
+    """
+    absent: list[StaticTypeError] = []
+    invalid: list[StaticTypeError] = []
 
     def unset(message: str, variable: str) -> None:
-        errors.append(
+        absent.append(
             _endpoint_error(
                 action_name,
                 "model_vendor",
@@ -88,7 +99,7 @@ def _endpoint_environment_errors(
         except ConfigurationError as exc:
             # A literal url was checked at load; only a variable's value can fail here.
             rule = exc.context["reason"].split(": ", 1)[-1]
-            errors.append(
+            invalid.append(
                 _endpoint_error(
                     action_name,
                     "model_vendor",
@@ -102,7 +113,7 @@ def _endpoint_environment_errors(
     if auth is not None and auth.env is not None and not os.environ.get(auth.env):
         unset(f"{subject} reads {auth.env}, which is not set", auth.env)
     if auth is not None and auth.command is not None and shutil.which(auth.command[0]) is None:
-        errors.append(
+        absent.append(
             _endpoint_error(
                 action_name,
                 "model_vendor",
@@ -116,7 +127,45 @@ def _endpoint_environment_errors(
             if not os.environ.get(variable):
                 unset(f"{subject} reads {variable} for header {header}, which is not set", variable)
 
-    return errors
+    return absent, invalid
+
+
+_Issue = TypeVar("_Issue", StaticTypeError, StaticTypeWarning)
+
+
+def _unset_key_issue(
+    issue_type: type[_Issue],
+    env_var_name: str,
+    action_name: str,
+    required_by: str,
+    suffix: str = "",
+) -> _Issue:
+    return issue_type(
+        message=(
+            f"API key environment variable '{env_var_name}' is not set "
+            f"(required by {required_by}){suffix}"
+        ),
+        location=FieldLocation(
+            agent_name=action_name, config_field="api_key", raw_reference=env_var_name
+        ),
+        referenced_agent=action_name,
+        referenced_field="api_key",
+        hint=f"Set the environment variable: export {env_var_name}=...",
+    )
+
+
+def _unset_key_warning(env_var_name: str, users: list[tuple[str, str]]) -> StaticTypeWarning:
+    """One warning per unset variable, naming the actions and vendors that read it."""
+    first_action, first_vendor = users[0]
+    if len(users) == 1:
+        required_by = f"action '{first_action}', vendor '{first_vendor}'"
+    else:
+        names = ", ".join(action for action, _ in users[:3]) + (", ..." if len(users) > 3 else "")
+        vendors = ", ".join(f"'{vendor}'" for vendor in sorted({vendor for _, vendor in users}))
+        required_by = f"{len(users)} actions: {names}; vendor(s) {vendors}"
+    return _unset_key_issue(
+        StaticTypeWarning, env_var_name, first_action, required_by, "; connection check skipped"
+    )
 
 
 _SEED_FORMATS = {".json": "JSON", ".yml": "YAML", ".yaml": "YAML", ".csv": "CSV"}
@@ -142,6 +191,16 @@ def _nested_key_exists(data: Any, path: str) -> bool:
     return True
 
 
+_VENDOR_PARAMS_KEY_HINT = (
+    "vendor_params takes the keyword arguments of the vendor SDK's request; a parameter "
+    "newer than the installed SDK goes under extra_body where the SDK has it."
+)
+_VENDOR_PARAMS_CONFLICT_HINT = (
+    "The vendor's API refuses these settings together: change one, or turn the "
+    "vendor_params setting off."
+)
+
+
 class WorkflowResolutionService:
     """Performs unified pre-flight resolution checks."""
 
@@ -151,11 +210,16 @@ class WorkflowResolutionService:
         workflow_config_path: str | None = None,
         project_root: Path | None = None,
         verify_keys: bool = False,
+        *,
+        sends_requests: bool = True,
     ):
         self.action_configs = action_configs
         self.workflow_config_path = workflow_config_path
         self.project_root = project_root
         self.verify_keys = verify_keys
+        # False for a check that sends nothing: a credential absent from this
+        # environment is then a warning, since the run's environment may hold it.
+        self.sends_requests = sends_requests
         # Declared endpoints the workflow uses, with the first model named for each.
         self._endpoint_models: dict[str, str] = {}
 
@@ -166,7 +230,14 @@ class WorkflowResolutionService:
         # Before the key probe, so a refused action is never probed at the wrong endpoint.
         for error in self._check_vendor_base_url():
             result.add_error(error)
-        for error in self._check_endpoint_actions():
+        endpoint_errors, endpoint_warnings = self._check_endpoint_actions()
+        for error in endpoint_errors:
+            result.add_error(error)
+        for warning in endpoint_warnings:
+            result.add_warning(warning)
+        for error in self._check_vendor_params():
+            result.add_error(error)
+        for error in self._check_reasoning_model_temperature():
             result.add_error(error)
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
@@ -189,7 +260,11 @@ class WorkflowResolutionService:
         for warning in seed_warnings:
             result.add_warning(warning)
 
-        for error in self._check_vendor_run_mode_compatibility():
+        run_mode_errors = self._check_vendor_run_mode_compatibility()
+        for error in run_mode_errors:
+            result.add_error(error)
+        no_batch = {error.referenced_agent for error in run_mode_errors}
+        for error in self._check_batch_json_mode_schema(skip=no_batch):
             result.add_error(error)
         for warning in self._check_runtime_json_object():
             result.add_warning(warning)
@@ -233,14 +308,26 @@ class WorkflowResolutionService:
 
     def _verify_endpoints(self, result: StaticValidationResult) -> None:
         """Send the structured-output probe to each endpoint the workflow uses."""
-        from agent_actions.llm.providers.openai.endpoint_probe import probe_endpoint
+        from agent_actions.llm.providers.openai.endpoint_probe import (
+            PROBE_MAX_TOKENS,
+            probe_endpoint,
+        )
 
         hints = {
             "refused": "Check the credential in endpoints.{name}.auth.",
             "not_honoured": (
                 "Use a server that honours response_format json_schema, or put one "
-                "(vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean "
-                "a wrong model name or parameter: read the server's text in the message."
+                "(vLLM, TGI, a LiteLLM proxy) in front of this one."
+            ),
+            "rejected": (
+                "The server refused the request for another reason than response_format: "
+                "read its text in the message. The probe sends the model name, the messages, "
+                "response_format and max_tokens."
+            ),
+            "no_answer": (
+                "The model returned no text: read the reason in the message. A reasoning "
+                f"model can spend the probe's limit of {PROBE_MAX_TOKENS} output tokens "
+                "before it answers."
             ),
             "answered": (
                 "The server answered, but not with a completion: check endpoints.{name}.url, "
@@ -266,14 +353,18 @@ class WorkflowResolutionService:
                 )
             )
 
-    def _check_endpoint_actions(self) -> list[StaticTypeError]:
+    def _check_endpoint_actions(
+        self,
+    ) -> tuple[list[StaticTypeError], list[StaticTypeWarning]]:
         """Hold an action on a declared endpoint to the endpoint rules.
 
         An endpoint runs with structured output only, so the action needs json_mode
         and a schema. Its url, credential and header variables must be set and a
-        command auth must be on PATH; those are reported once per endpoint.
+        command auth must be on PATH; those are reported once per endpoint, and
+        an absent one is a warning when nothing is sent.
         """
         errors: list[StaticTypeError] = []
+        warnings: list[StaticTypeWarning] = []
         check_environment = os.environ.get("AA_SKIP_ENV_VALIDATION") != "1"
         checked: set[str] = set()
 
@@ -307,9 +398,32 @@ class WorkflowResolutionService:
 
             if check_environment and vendor not in checked:
                 checked.add(vendor)
-                errors.extend(_endpoint_environment_errors(action_name, subject, endpoint))
+                absent, invalid = _endpoint_environment_errors(action_name, subject, endpoint)
+                errors.extend(invalid)
+                self._report_absent(absent, errors, warnings)
 
-        return errors
+        return errors, warnings
+
+    def _report_absent(
+        self,
+        absent: list[StaticTypeError],
+        errors: list[StaticTypeError],
+        warnings: list[StaticTypeWarning],
+    ) -> None:
+        """File each absent credential as an error, or as a warning when nothing is sent."""
+        if self.sends_requests:
+            errors.extend(absent)
+            return
+        for issue in absent:
+            warnings.append(
+                StaticTypeWarning(
+                    message=f"{issue.message}; connection check skipped",
+                    location=issue.location,
+                    referenced_agent=issue.referenced_agent,
+                    referenced_field=issue.referenced_field,
+                    hint=issue.hint,
+                )
+            )
 
     # ── API key checks ─────────────────────────────────────────────────
 
@@ -318,14 +432,16 @@ class WorkflowResolutionService:
     ) -> tuple[list[StaticTypeError], list[StaticTypeWarning], list[ProbeTarget]]:
         """Check that all required API key env vars are set.
 
-        Returns (errors, warnings, targets).  Missing keys are errors.
-        targets holds one probe target per resolved vendor (deduplicated)
-        for optional downstream probing.
+        Returns (errors, warnings, targets). A missing key is an error, or a
+        warning when this check sends no request. targets holds one probe target
+        per resolved vendor (deduplicated) for optional downstream probing.
         """
         errors: list[StaticTypeError] = []
         warnings: list[StaticTypeWarning] = []
         # Deduplicated (vendor, base_url) → probe target (first seen wins).
         targets: dict[tuple[str, str | None], ProbeTarget] = {}
+        # Unset variable → (action, vendor) pairs that read it, in action order.
+        unset_keys: dict[str, list[tuple[str, str]]] = {}
 
         for action_name, config in self.action_configs.items():
             vendor = canonical_vendor((config.get("model_vendor") or "").lower())
@@ -346,22 +462,17 @@ class WorkflowResolutionService:
             key_value = os.environ.get(env_var_name, "")
 
             if not key_value:
-                errors.append(
-                    StaticTypeError(
-                        message=(
-                            f"API key environment variable '{env_var_name}' is not set "
-                            f"(required by action '{action_name}', vendor '{vendor}')"
-                        ),
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field="api_key",
-                            raw_reference=env_var_name,
-                        ),
-                        referenced_agent=action_name,
-                        referenced_field="api_key",
-                        hint=f"Set the environment variable: export {env_var_name}=your_key_here",
+                if self.sends_requests:
+                    errors.append(
+                        _unset_key_issue(
+                            StaticTypeError,
+                            env_var_name,
+                            action_name,
+                            f"action '{action_name}', vendor '{vendor}'",
+                        )
                     )
-                )
+                else:
+                    unset_keys.setdefault(env_var_name, []).append((action_name, vendor))
                 continue
 
             # Only the openai client sends requests to a configured base_url,
@@ -371,6 +482,9 @@ class WorkflowResolutionService:
                 targets[(vendor, base_url)] = ProbeTarget(
                     vendor=vendor, api_key=key_value, base_url=base_url
                 )
+
+        for env_var_name, users in unset_keys.items():
+            warnings.append(_unset_key_warning(env_var_name, users))
 
         return errors, warnings, list(targets.values())
 
@@ -751,6 +865,130 @@ class WorkflowResolutionService:
 
         return errors
 
+    # ── Vendor request parameters ──────────────────────────────────────
+
+    def _check_vendor_params(self) -> list[StaticTypeError]:
+        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets.
+
+        Also refuse settings the vendor's API refuses beside a ``vendor_params`` value, as
+        the client's ``vendor_params_conflicts`` names them (Anthropic's thinking).
+        """
+        from agent_actions.errors import DependencyError
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+        from agent_actions.llm.realtime.services.invocation import _resolve_client
+
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            vendor_params = config.get(VENDOR_PARAMS_KEY)
+            vendor = (config.get("model_vendor") or "").lower()
+            if not vendor_params or not vendor:
+                continue
+            try:
+                client = _resolve_client(vendor)
+            except DependencyError:
+                continue  # A missing SDK is reported on its own.
+            spec = getattr(client, "VENDOR_PARAMS", None)
+            # A tool or hitl action sends no request; it may inherit the block from defaults.
+            if spec is None:
+                continue
+            problems = [
+                (problem, _VENDOR_PARAMS_KEY_HINT) for problem in spec.defects(vendor_params)
+            ]
+            conflicts = getattr(client, "vendor_params_conflicts", None)
+            if conflicts is not None:
+                problems += [
+                    (problem, _VENDOR_PARAMS_CONFLICT_HINT) for problem in conflicts(config)
+                ]
+            for problem, hint in problems:
+                errors.append(
+                    StaticTypeError(
+                        message=f"Action '{action_name}': vendor_params for '{vendor}': {problem}.",
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field=VENDOR_PARAMS_KEY,
+                            raw_reference=f"{VENDOR_PARAMS_KEY}={sorted(vendor_params)}",
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field=VENDOR_PARAMS_KEY,
+                        hint=hint,
+                    )
+                )
+            if runs_in_batch(config):
+                errors.extend(self._unsent_in_batch(action_name, vendor_params, spec.allowed()))
+        return errors
+
+    # ── OpenAI reasoning models ────────────────────────────────────────
+
+    def _check_reasoning_model_temperature(self) -> list[StaticTypeError]:
+        """Refuse a temperature other than 1 on an OpenAI model that reasons.
+
+        OpenAI refuses it on every record; dropping it would change what the author asked
+        for without a word. A server at a ``base_url`` is not OpenAI and is not checked.
+        """
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            vendor = (config.get("model_vendor") or "").lower()
+            temperature = config.get("temperature")
+            model_name = config.get("model_name")
+            if vendor != "openai" or config.get("base_url") or not isinstance(model_name, str):
+                continue
+            if temperature is None or temperature == 1:
+                continue
+            effort = (config.get(VENDOR_PARAMS_KEY) or {}).get("reasoning_effort")
+            if not openai_model_reasons(model_name, effort):
+                continue
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{action_name}': model '{model_name}' is a reasoning model "
+                        f"and takes only the default temperature (1), not {temperature}."
+                    ),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="temperature",
+                        raw_reference=f"temperature={temperature}, model_name={model_name}",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="temperature",
+                    hint="Set temperature: 1 on this action, or use a model that does not reason.",
+                )
+            )
+        return errors
+
+    @staticmethod
+    def _unsent_in_batch(
+        action_name: str, vendor_params: dict[str, Any], allowed: list[str] | None
+    ) -> list[StaticTypeError]:
+        """Refuse each vendor_params key a batch line cannot carry, on a batch action.
+
+        A key the vendor does not take at all is refused by ``defects`` already.
+        """
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+
+        return [
+            StaticTypeError(
+                message=(
+                    f"Action '{action_name}': vendor_params '{key}' cannot be sent in "
+                    "run_mode: batch."
+                ),
+                location=FieldLocation(
+                    agent_name=action_name,
+                    config_field=VENDOR_PARAMS_KEY,
+                    raw_reference=f"run_mode=batch, {VENDOR_PARAMS_KEY}.{key}",
+                ),
+                referenced_agent=action_name,
+                referenced_field=VENDOR_PARAMS_KEY,
+                hint=(
+                    "A batch request line is a JSON body with no headers or query string "
+                    f"of its own. Set run_mode: online, or remove '{key}'."
+                ),
+            )
+            for key in _BATCH_UNSENT_VENDOR_PARAMS
+            if key in vendor_params and (allowed is None or key in allowed)
+        ]
+
     # ── Vendor run-mode compatibility ──────────────────────────────────
 
     def _check_vendor_run_mode_compatibility(self) -> list[StaticTypeError]:
@@ -813,6 +1051,37 @@ class WorkflowResolutionService:
                     )
                 )
 
+        return errors
+
+    def _check_batch_json_mode_schema(self, skip: set[str]) -> list[StaticTypeError]:
+        """Refuse a batch action in JSON mode with no schema, which batch submission refuses.
+
+        An action in *skip* cannot run in batch at all, which is refused on its own.
+        """
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            if action_name in skip or not runs_in_batch(config):
+                continue
+            if not config.get("json_mode", True):
+                continue
+            if config.get(SCHEMA_KEY) or config.get("schema_name"):
+                continue
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{action_name}': Schema is required for batch processing "
+                        "when json_mode is enabled."
+                    ),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="schema",
+                        raw_reference="run_mode=batch, json_mode=true",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="schema",
+                    hint="Either provide a schema or set json_mode: false",
+                )
+            )
         return errors
 
     def _check_runtime_json_object(self) -> list[StaticTypeWarning]:

@@ -43,6 +43,8 @@ class ContextScopeDict(TypedDict, total=False):
     passthrough: list[str]
     drop: list[str]
     seed: dict[str, Any]
+    # Each observe reference marked optional, with the value a record lacking it is given.
+    optional: dict[str, Any]
 
 
 class GuardConfigDict(TypedDict, total=False):
@@ -122,8 +124,9 @@ class ActionConfigDict(TypedDict, total=False):
     # Generation parameters
     temperature: float
     max_tokens: int
-    request_timeout: float  # seconds per LLM request; unset keeps the SDK's own
+    request_timeout: float  # seconds per LLM request; unset means the default
     record_concurrency: int  # online LLM records in flight at once; unset is 1
+    vendor_params: dict[str, Any]  # passed to the vendor SDK request as written
 
     # Dependencies & flow
     dependencies: list[str]
@@ -141,13 +144,13 @@ class ActionConfigDict(TypedDict, total=False):
     defaults: dict[str, Any]  # output fields a tool UDF synthesizes; read by the dag-fit check
 
     # Anthropic-specific
-    anthropic_version: str
     enable_prompt_caching: bool
 
     # Versioning
     is_versioned_agent: bool
     version_base_name: str
     _version_context: dict[str, Any]  # runtime-injected versioning metadata
+    _include: dict[str, Any]  # branch origin of an included action, set by the render step
     version_consumption_config: dict[str, Any]  # controls version iteration
 
     # Runtime-injected by coordinator (subscript-assigned)
@@ -193,8 +196,6 @@ class ActionEntryDict(TypedDict, total=False):
     conditional_clause: str | None
     add_dispatch: bool | None
     # Anthropic-specific configuration options
-    # API version header for Anthropic requests (e.g., "2023-06-01")
-    anthropic_version: str | None
     # Enable Anthropic's prompt caching feature for improved performance
     enable_prompt_caching: bool | None
     # Control field flow: observe (LLM context), drop (block), passthrough (output)

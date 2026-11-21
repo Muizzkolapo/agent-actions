@@ -6,9 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ruamel.yaml import YAML, YAMLError
+
+from agent_actions.config.includes import branch_file
 from agent_actions.config.path_config import get_tool_dirs, load_project_config
 from agent_actions.config.schema import version_variant_names
 from agent_actions.errors import ConfigValidationError
+from agent_actions.input.context.normalizer import observe_entry_reference
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
@@ -176,6 +180,7 @@ def _index_workflow_file(
         )
         _drop_jinja_line_references(index, yaml_file, lines)
         index.duplicate_actions_by_file[yaml_file].update(_repeated_names(actions))
+        _index_included_outputs(index, yaml_file, actions, default_output_field)
 
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
@@ -231,7 +236,7 @@ def _backfill_unseen_actions(
     for action_name, action_data in action_data_map.items():
         if action_name in known:
             continue
-        location = action_sources.get(action_name) or _raw_name_location(
+        location = action_sources.get(action_name) or _name_location(
             yaml_file, lines, action_name, live_lines
         )
         meta = ActionMetadata(name=action_name, location=location)
@@ -244,9 +249,10 @@ def _backfill_unseen_actions(
             index.workflow_actions.setdefault(workflow_name, {})[action_name] = meta.location
 
 
-def _raw_name_location(
-    yaml_file: Path, lines: list[str], action_name: str, live_lines: frozenset[int] | None = None
+def _name_location(
+    file_path: Path, lines: list[str], action_name: str, live_lines: frozenset[int] | None = None
 ) -> Location:
+    """Where `name: <action_name>` is written in *lines*; the file's start if nowhere."""
     line_no, column = 0, 0
     for i, line in enumerate(lines):
         # A mapped Jinja file marks each name line it defines an action on, so a name with no
@@ -259,12 +265,53 @@ def _raw_name_location(
             line_no, column = i, match.start(1)
             break
     return Location(
-        file_path=yaml_file,
+        file_path=file_path,
         line=line_no,
         column=column,
         end_line=line_no,
         end_column=column + len(action_name),
     )
+
+
+def _index_included_outputs(
+    index: ProjectIndex,
+    yaml_file: Path,
+    actions: list,
+    default_output_field: str | None,
+) -> None:
+    """Index the outputs of each branch the workflow includes as actions of the workflow.
+
+    The load puts a branch's actions into the workflow under their own names, and the
+    workflow may read only the ones the branch lists under `outputs`.
+    """
+    known = index.file_actions.setdefault(yaml_file, {})
+    workflow_name = index.file_to_workflow.get(yaml_file)
+    for entry in actions:
+        if not isinstance(entry, dict) or not isinstance(entry.get("include"), str):
+            continue
+        branch_path = index.root / branch_file(entry["include"])
+        try:
+            content = branch_path.read_text()
+            branch = YAML(typ="safe").load(content)
+        except (OSError, YAMLError) as e:
+            logger.warning("Error indexing branch file %s: %s", branch_path, e)
+            continue
+        outputs = branch.get("outputs") if isinstance(branch, dict) else None
+        branch_actions = branch.get("actions") if isinstance(branch, dict) else None
+        if not isinstance(outputs, list) or not isinstance(branch_actions, list):
+            continue
+        lines = content.split("\n")
+        for action_data in branch_actions:
+            name = action_data.get("name") if isinstance(action_data, dict) else None
+            if not isinstance(name, str) or name not in outputs or name in known:
+                continue
+            meta = ActionMetadata(name=name, location=_name_location(branch_path, lines, name))
+            _populate_versions_summary(meta, action_data)
+            _populate_from_parsed(meta, action_data, default_output_field)
+            known[name] = meta
+            index.actions[name] = meta.location
+            if workflow_name:
+                index.workflow_actions.setdefault(workflow_name, {})[name] = meta.location
 
 
 def _build_action_data_map(actions: list) -> dict:
@@ -518,21 +565,25 @@ def _index_workflow_lines(
                     if not item_match and line.strip() and line_indent <= context_list_indent:
                         # A non-list-item at or before list indent means we've exited the list
                         current_context_list = None
-                    elif item_match and under(i, "context_scope", current_context_list):
+                    elif under(i, "context_scope", current_context_list):
                         # Only the reference range is taken here. The quotes are YAML's:
                         # left on, `- 'up.title'` resolves as the action `'up` and is
                         # reported unresolvable at Error severity.
-                        value, offset = _unquoted(item_match.group(1).strip())
-                        _add_reference(
-                            index,
-                            yaml_file,
-                            ReferenceType.CONTEXT_FIELD,
-                            value,
-                            i,
-                            item_match.start(1) + offset,
-                            item_match.start(1) + offset + len(value),
-                            value,
+                        found = _context_item_reference(
+                            line, item_match, optional_forms=current_context_list == "observe"
                         )
+                        if found:
+                            value, start = found
+                            _add_reference(
+                                index,
+                                yaml_file,
+                                ReferenceType.CONTEXT_FIELD,
+                                value,
+                                i,
+                                start,
+                                start + len(value),
+                                value,
+                            )
 
         # Only the anchor line is taken here -- both spellings, inline and block, and either
         # may carry a trailing comment. The condition itself comes from the parsed document.
@@ -681,6 +732,32 @@ def _dispatches_schema(value: str) -> bool:
     return schema_dispatch_function(value.split(" #", 1)[0].strip()) is not None
 
 
+# The `field:` key of an observe entry written as a mapping, block or flow.
+_MAPPING_FIELD = re.compile(r"(?:^\s*(?:-\s*)?|[{,]\s*)field:\s*([^\s#,}]+)")
+
+
+def _context_item_reference(
+    line: str, item_match: re.Match[str] | None, *, optional_forms: bool
+) -> tuple[str, int] | None:
+    """The reference a context_scope list line names, and the column it starts at.
+
+    An observe entry may be optional: `- a.b?`, or a mapping whose `field:` names it.
+    """
+    mapping = optional_forms and (
+        item_match is None or item_match.group(1).endswith(":") or item_match.group(1)[0] == "{"
+    )
+    if item_match and not mapping:
+        raw, start = item_match.group(1).strip(), item_match.start(1)
+    elif mapping and (field := _MAPPING_FIELD.search(line)):
+        raw, start = field.group(1), field.start(1)
+    else:
+        return None
+    value, offset = _unquoted(raw)
+    if optional_forms:
+        value = value.removesuffix("?")
+    return value, start + offset
+
+
 def _unquoted(raw: str) -> tuple[str, int]:
     """Strip YAML's surrounding quotes, returning the value and how far the start moved."""
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
@@ -737,6 +814,8 @@ def _populate_from_parsed(
             if isinstance(refs, str):
                 refs = [refs]
             if isinstance(refs, list):
+                if directive == "observe":
+                    refs = [observe_entry_reference(ref) or ref for ref in refs]
                 target.extend(str(ref) for ref in refs if isinstance(ref, str | int | float))
 
     # The one shape that inverts namespacing. Same three conditions the framework's own

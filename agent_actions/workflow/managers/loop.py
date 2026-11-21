@@ -202,7 +202,7 @@ class VersionOutputCorrelator:
             raise ConfigurationError(
                 f"Version correlation failed for '{agent_name}' from sources "
                 f"{version_sources}: {e}",
-                context={"agent": agent_name, "version_sources": version_sources},
+                context={"action_name": agent_name, "version_sources": version_sources},
             ) from e
 
     def _forget_files_no_version_holds(self, agent_name: str, version_sources: list[str]) -> None:

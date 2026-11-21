@@ -1,20 +1,20 @@
 ---
 title: Utility Commands
-description: Additional CLI commands for project management
+description: More CLI commands to set up, debug and maintain a project
 sidebar_position: 4
 ---
 
 # Utility Commands
 
-Beyond running agentic workflows, `agac` provides commands for project setup, debugging, and maintenance. These utilities help you initialize projects, debug template rendering, run tests, and keep your workspace clean.
+`agac` runs workflows. It also has commands for project setup, debugging and maintenance. These utility commands initialize projects, help you debug template rendering, run tests and keep your workspace clean.
 
 ## render / compile
 
-There are no standalone `agac render` or `agac compile` commands. Rendering happens implicitly during preflight — when
-[`agac inspect`](./inspect) loads a workflow it Jinja2-expands templates,
-resolves prompts, inlines schemas, and expands versions. A rendering
-failure exits non-zero. When the rendered text is not valid YAML, the
-command also writes it to
+There are no standalone `agac render` or `agac compile` commands. Rendering occurs implicitly during the preflight checks.
+When [`agac inspect`](./inspect) loads a workflow, it expands the templates with Jinja2 and
+resolves the prompts. It also puts the schemas inline and expands the versions. If rendering fails,
+the command exits with a non-zero code. When the rendered text is not valid YAML, the
+command also writes the text to
 `.agent-actions/cache/rendered_workflows/<workflow>_failed.yml` for
 debugging.
 
@@ -22,7 +22,7 @@ To create the project folders, use [`agac init`](#init).
 
 ## init
 
-Starting a new Agent Actions project from scratch? The `init` command creates a well-organized directory structure with all the standard folders you'll need.
+Use the `init` command to start a new Agent Actions project from the beginning. The command creates an organized directory structure with all the standard folders that you will need.
 
 ```bash
 agac init <project-name> [options]
@@ -30,7 +30,7 @@ agac init list
 agac init example <name> [project-name]
 ```
 
-This creates:
+The command creates this structure:
 
 ```
 my-project/
@@ -43,21 +43,21 @@ my-project/
 └── seed_data/             # Static reference data
 ```
 
-Think of this like `npm init` or `git init` - it gives you a working starting point with sensible defaults.
+The command gives you a working start point with sensible defaults. It is similar to `npm init` or `git init`.
 
 **Subcommands:**
 | Subcommand | Description |
 |------------|-------------|
-| `new <project-name>` | Create a project from a template (the default when the first word is not a subcommand) |
-| `list` | List available example projects from GitHub |
-| `example <name> [project-name]` | Scaffold from a GitHub example (takes `-o, --output-dir` and `-f, --force`) |
+| `new <project-name>` | Create a project from a template. This is the default when the first word is not a subcommand |
+| `list` | List the available example projects from GitHub |
+| `example <name> [project-name]` | Create a project from a GitHub example. This subcommand accepts `-o, --output-dir` and `-f, --force` |
 
 **Options (for `agac init <project-name>`):**
 | Option | Description |
 |--------|-------------|
-| `-o, --output-dir` | Directory to create the project in (default: current directory) |
-| `-t, --template` | Template name: `default`, `minimal` or `full` (default: `default`). All three create the same structure |
-| `-f, --force` | Force project creation even if directory exists |
+| `-o, --output-dir` | The directory in which to create the project (default: the current directory) |
+| `-t, --template` | The template name: `default`, `minimal` or `full` (default: `default`). The three templates create the same structure |
+| `-f, --force` | Create the project, even if the directory exists |
 
 **Examples:**
 ```bash
@@ -83,13 +83,18 @@ agac init example contract_reviewer my_project
 agac init my_project -f
 ```
 
-:::tip Start from an Example
-Use `agac init list` to see available examples, then `agac init example <name>` to scaffold a fully working project you can run immediately. Examples are fetched from GitHub so the package stays lightweight.
+To start from an example, do these steps:
+
+1. Run `agac init list` to see the available examples.
+2. Run `agac init example <name>` to create a fully working project. You can run the project immediately.
+
+:::note[Start from an Example]
+The command gets the examples from GitHub. Thus the package stays small.
 :::
 
 ## example
 
-The `example` command browses and installs example projects from GitHub. It offers the same catalog as `agac init list` / `agac init example`, as a standalone command group.
+The `example` command lists and installs example projects from GitHub. It gives the same catalog as `agac init list` / `agac init example`, as a standalone command group.
 
 ```bash
 agac example list
@@ -99,14 +104,14 @@ agac example install <name> [project-name] [options]
 **Subcommands:**
 | Subcommand | Description |
 |------------|-------------|
-| `list` | List available example projects from GitHub |
+| `list` | List the available example projects from GitHub |
 | `install <name> [project-name]` | Install an example project from GitHub |
 
 **Options for `install`:**
 | Option | Description |
 |--------|-------------|
-| `-o, --output-dir TEXT` | Directory to create the project in (default: current directory) |
-| `-f, --force` | Force project creation even if directory exists |
+| `-o, --output-dir TEXT` | The directory in which to create the project (default: the current directory) |
+| `-f, --force` | Create the project, even if the directory exists |
 
 **Examples:**
 ```bash
@@ -122,49 +127,53 @@ agac example install contract_reviewer my_project
 
 ## clean
 
-The `clean` command removes a workflow's working directories under `agent_io/`. By default it removes only `agent_io/source/`, a directory the framework does not write — on a project without one, a plain `clean` finds nothing to remove. Your staged input is untouched. Anything beyond that is opt-in.
+The `clean` command removes the working directories of a workflow under `agent_io/`. By default, it removes only `agent_io/source/`. The framework does not write this directory. Thus, on a project without this directory, a plain `clean` finds nothing to remove. The command does not touch your staged input. It removes other items only if you select them with an option.
+
+If `clean` finds something to remove during a run or a retry of the workflow, it removes nothing. It exits 1 with `Another run of workflow '<workflow>' is in progress` (see [Concurrent runs](./run.md#concurrent-runs)). `clean` holds the same lock from before it asks for confirmation until it finishes. It keeps the lock file. After `--all`, `agent_io/store/` holds only the empty `<workflow>.db.lock`.
 
 ```bash
-agac clean -a <workflow-name> [options]
+agac clean -w <workflow-name> [options]
 ```
 
-Removes:
-- `agent_io/source/` — not written by the framework; removed if present (always)
-- `agent_io/target/` — your generated output (only with `--target` or `--all`)
-- `agent_io/staging/` and the durable store — your input data and run history (only with `--all`)
-- what a provider recorded locally about this workflow's batches, under `.agac/` at the project root — the store being removed is what names them, so this is the last moment anything can reach them (only with `--all`)
+The command removes these items:
+- `agent_io/source/`: The framework does not write this directory. The command removes it if it is present (always).
+- `agent_io/target/`: Your generated output (only with `--target` or `--all`).
+- `agent_io/staging/` and the durable store: Your input data and run history (only with `--all`).
+- The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data.
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | Agentic workflow name (required) |
-| `-f, --force` | Skip interactive confirmation |
-| `--target` | Also remove `agent_io/target/` — your generated output |
-| `--all` | Remove all directories including target, staging, and the durable store, and reclaim what a provider recorded locally about this workflow's batches — unrecoverable |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-f, --force` | Skip the interactive confirmation |
+| `--target` | Also remove `agent_io/target/`, your generated output |
+| `--all` | Remove all directories, which include target, staging and the durable store. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
 
 **Examples:**
 ```bash
 # Remove regenerable preprocessed inputs (with confirmation)
-agac clean -a my_workflow
+agac clean -w my_workflow
 
 # Also remove generated output
-agac clean -a my_workflow --target
+agac clean -w my_workflow --target
 
 # Remove everything, including staging inputs and the durable store
-agac clean -a my_workflow --all
+agac clean -w my_workflow --all
 ```
 
-:::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
+:::note[Run from Anywhere]
+You can run this command from any subdirectory in your project.
 :::
 
-:::warning Data Loss
-`--target` deletes your generated output, and `--all` additionally deletes staging inputs and the durable store — none of it recoverable. If you haven't retrieved batch results yet, do that first before cleaning.
+:::danger[WARNING]
+If you did not retrieve the batch results yet, retrieve them before you clean. `--target` deletes your generated output. `--all` also deletes the staging inputs and the durable store. You cannot recover any of this data.
 :::
 
 ## docs
 
-Build and serve interactive documentation for your agentic workflows. The `docs` command scans your project, generates documentation data, and starts an HTTP server in one step.
+Build and serve interactive documentation for your workflows. In one step, the `docs` command scans your project, generates the documentation data and starts an HTTP server.
+
+The documentation lists an [optional observe field](../context/context-scope.md#optional-fields) as a plain input of the action, without the `?`.
 
 ```bash
 agac docs [options]
@@ -173,8 +182,8 @@ agac docs [options]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-o, --output` | Output directory for generated files; a relative path resolves against the project root (default: `artefact`) |
-| `-p, --port` | Port to run server on (default: `8000`) |
+| `-o, --output` | The output directory for the generated files. A relative path is relative to the project root (default: `artefact`) |
+| `-p, --port` | The port of the server (default: `8000`) |
 
 **Examples:**
 ```bash
@@ -190,7 +199,7 @@ agac docs --output ./custom-artefact
 
 ### docs test
 
-Run Playwright tests to verify the documentation site renders correctly.
+Run Playwright tests to verify that the documentation site renders correctly.
 
 ```bash
 agac docs test [options]
@@ -199,40 +208,112 @@ agac docs test [options]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-t, --test` | Test suite to run: `schemas`, `actions` or `all` (default: `all`) |
-| `-p, --port` | Port where the docs server is running (default: `8890`) |
+| `-t, --test` | The test suite to run: `schemas`, `actions` or `all` (default: `all`) |
+| `-p, --port` | The port of the running docs server (default: `8890`) |
 
 The command does not start a server. It needs Node.js, a running docs server, and the test scripts (`test-all-schemas.js`, `test-run-actions-complete.js`, `test-actions-specific.js`) in the project root.
-:::tip Run from Anywhere
-You can run docs commands from any subdirectory within your project.
+
+:::note[Run from Anywhere]
+You can run docs commands from any subdirectory in your project.
 :::
 
 ## status
 
-Check the execution status of a specific agentic workflow. This shows which actions are running, completed, or failed.
+Show the execution status of a specified workflow. The status shows which actions are running, completed or failed.
 
-When an action has failed as a whole and its status holds the error (`error_message` in `agent_io/.agent_status.json`), an **Error** column shows that error's first line beside it, cut to 200 characters. The column appears only when some failed action has one. Failures of single records are not listed here; see [`agac dispositions`](./dispositions) or [`agac retry --dry-run`](./retry).
+An action can fail as a whole, with the error in its status (`error_message` in `agent_io/.agent_status.json`). For such an action, an **Error** column shows the first line of that error next to the action. The command cuts the line to 200 characters. The column shows only when a failed action has an error message. This command does not list the failures of single records. For those, see [`agac dispositions`](./dispositions) or [`agac retry --dry-run`](./retry).
 
 ```bash
-agac status -a <workflow-name> [options]
+agac status -w <workflow-name> [options]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | Agentic workflow name (required) |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `--json` | Print the status of each action and the status of the run as one JSON document |
 
 **Example:**
 ```bash
-agac status -a my_workflow
+agac status -w my_workflow
 ```
 
-:::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
+**JSON output:**
+
+`--json` prints one JSON document on stdout, and nothing else. Warnings go to stderr.
+
+```bash
+agac status -w my_workflow --json
+```
+
+```json
+{
+  "workflow": "my_workflow",
+  "run_status": "FAILED",
+  "actions": [
+    { "name": "extract", "status": "completed", "error": null },
+    { "name": "summarize", "status": "failed", "error": "the error that stopped the action" }
+  ]
+}
+```
+
+The shape is stable. A later release can add a key, but it does not rename or remove one.
+
+| Key | Value |
+|-----|-------|
+| `workflow` | The workflow name |
+| `run_status` | The status that [`agac run`](./run) gives to a run with these action statuses: `SUCCESS`, `FAILED` or `PAUSED`. It is `null` when no action status is stored, because the workflow did not run. Then the command also prints a message on stderr. See the text below this table |
+| `actions` | One object for each action in `agent_io/.agent_status.json`, in the order of the file |
+| `actions[].name` | The action name. The table shows it in the **Agent Name** column |
+| `actions[].status` | The **Status** column: `pending`, `running`, `batch_submitted`, `checking_batch`, `completed`, `completed_with_failures`, `failed`, `skipped` or `interrupted`. It is `null` where the table shows `N/A` |
+| `actions[].error` | The full error message of a failed action, or `null`. The **Error** column of the table shows only its first line |
+
+`run_status` has these values:
+
+- `SUCCESS`: Each action completed. An action that completed with failed records (`completed_with_failures`) is also a completed action. To count the failed records, use [`agac dispositions --json`](./dispositions#json-output).
+- `FAILED`: Each action ended, and one or more actions failed.
+- `PAUSED`: One or more actions did not end. The run is in progress, or it waits for a batch, or it stopped early.
+
+The [exit code](./run.md#exit-codes) of `agac run` and of `agac retry` tells more than `run_status`. A run with the status `SUCCESS` exits `3`, not `0`, when an action holds failed or exhausted records. A run that waits for a batch exits `4`. A run that a provider quota stopped exits `5`, and `run_status` is `PAUSED`.
+
+`run_status` is `PAUSED` also while a run is in progress. Thus `run_status` cannot tell a running workflow from a paused one. A monitor must read `actions[].status` for this, for example to find an action with the status `running`.
+
+If the status file holds no action status, the command prints this message and stops with exit code 0. An empty status file (`{}`) gives the same message. With `--json`, the message goes to stderr, and stdout has the document with `run_status` set to `null`. Without `--json`, the message goes to stdout:
+
+```text
+No action status is stored for workflow 'my_workflow'. Has it been run?
+```
+
+If the status file holds a status that is not in the list above, the command stops with exit code 1. The command does this also for a status file that is not valid JSON. The error names the file and the action:
+
+```text
+Error: Status file is corrupted: <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
+Action 'summarize' has an unknown status: 'weird'
+```
+
+Each action entry in the status file must be a JSON object. If an entry is not an object, for example `"summarize": "completed"`, the command stops with exit code 1 and gives this error:
+
+```text
+Error: Status file is corrupted: <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
+Action 'summarize' is not an object: 'completed'
+```
+
+`agac run`, `agac dispositions`, `agac schema` and `agac retry --dry-run` also stop on such an entry, with exit code 1 and the same two lines in their error. These four commands also stop on a status file that is not a JSON object, for example `[1]` or `null`. `agac status` stops on such a file too. The error for such a file is:
+
+```text
+Status file has unexpected format (expected JSON object): <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
+```
+
+In `run`, `dispositions`, `schema` and `retry`, the error tells you to edit the status file or to start again with `agac run --fresh`. `agac run --fresh` does not stop on these files. It clears the status file and starts again.
+
+The command reads only the status file. It does not read the workflow configuration. Thus an action that you removed from the configuration stays in the output until `agac run --fresh` clears the file.
+
+:::note[Run from Anywhere]
+You can run this command from any subdirectory in your project.
 :::
 
 ## See Also
 
-- **[run Command](./run)** - Execute agentic workflows
-- **[batch Commands](./batch)** - Manage batch processing
-- **[schema Command](./schema)** - Analyze agentic workflow structure
+- **[run Command](./run)**: Run workflows
+- **[batch Commands](./batch)**: Manage batch processing
+- **[schema Command](./schema)**: Analyze the structure of a workflow

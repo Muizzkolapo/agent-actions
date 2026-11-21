@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
+from agent_actions.llm.providers.generation_params import VendorParamSpec
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
@@ -40,6 +41,8 @@ class AgacClient(BaseClient):
     - Attempt 3+: Full responses (25 words) - should pass validation
     """
 
+    # Fake data reads no request settings, so a workflow switched to it keeps its own.
+    VENDOR_PARAMS: ClassVar[VendorParamSpec] = VendorParamSpec(accepted=None)
     CAPABILITIES: ClassVar[dict[str, Any]] = {
         "supports_json_mode": True,
         "supports_batch": True,

@@ -14,6 +14,7 @@ import typing
 from unittest.mock import MagicMock, patch
 
 import pytest
+from anthropic.types import Usage
 
 from agent_actions.output.response.schema import compile_unified_schema
 
@@ -56,6 +57,7 @@ def _make_openai_style_mocks(text, prompt_tokens=10, completion_tokens=5, total_
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = text
+    mock_response.choices[0].message.refusal = None
     mock_response.usage.prompt_tokens = prompt_tokens
     mock_response.usage.completion_tokens = completion_tokens
     mock_response.usage.total_tokens = total_tokens
@@ -78,8 +80,7 @@ def _make_anthropic_mocks(text, input_tokens=10, output_tokens=20):
     text_block.text = text
     mock_response = MagicMock()
     mock_response.content = [text_block]
-    mock_response.usage.input_tokens = input_tokens
-    mock_response.usage.output_tokens = output_tokens
+    mock_response.usage = Usage(input_tokens=input_tokens, output_tokens=output_tokens)
     mock_response.stop_reason = "end_turn"
     return mock_response
 
@@ -229,8 +230,9 @@ class TestGeminiCallNonJson:
 
         call_kwargs = mock_client.models.generate_content.call_args[1]
         assert call_kwargs["model"] == "test-model"
-        # Empty gen_params produces config=None (no JSON forcing)
-        assert call_kwargs.get("config") is None
+        assert call_kwargs["config"].response_mime_type is None
+        assert call_kwargs["config"].response_schema is None
+        assert call_kwargs["config"].http_options.timeout == 600_000
 
 
 # ---------------------------------------------------------------------------
@@ -259,11 +261,10 @@ class TestGroqCallNonJson:
 
     @patch("agent_actions.llm.providers.groq.client.fire_event")
     @patch("agent_actions.llm.providers.groq.client.Groq")
-    def test_none_temperature_and_max_tokens_use_defaults(self, mock_groq_cls, mock_fire):
-        """When config has temperature=None / max_tokens=None, fall back to defaults.
+    def test_none_temperature_and_max_tokens_are_not_sent(self, mock_groq_cls, mock_fire):
+        """When config has temperature=None / max_tokens=None, neither is sent.
 
-        Groq does not inject a temperature default (parity with other providers).
-        Only max_tokens has a default (required by the Groq API).
+        Groq injects no default for either, as its JSON mode and batch do not.
         """
         from agent_actions.llm.providers.groq.client import GroqClient
 
@@ -278,7 +279,7 @@ class TestGroqCallNonJson:
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert "temperature" not in call_kwargs
-        assert call_kwargs["max_tokens"] == 1000
+        assert "max_tokens" not in call_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -381,8 +382,7 @@ class TestAnthropicCallNonJson:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 0
+        mock_response.usage = Usage(input_tokens=10, output_tokens=0)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -422,8 +422,7 @@ class TestAnthropicCallJsonNormalization:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
+        mock_response.usage = Usage(input_tokens=10, output_tokens=20)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -446,8 +445,7 @@ class TestAnthropicCallJsonNormalization:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
+        mock_response.usage = Usage(input_tokens=10, output_tokens=20)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -759,7 +757,7 @@ class TestOpenAITopPStopForwarding:
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert call_kwargs["temperature"] == 0.3
-        assert call_kwargs["max_tokens"] == 500
+        assert call_kwargs["max_completion_tokens"] == 500
         assert call_kwargs["top_p"] == 0.95
         assert call_kwargs["stop"] == ["\\n"]
         assert call_kwargs["frequency_penalty"] == 0.5
@@ -802,6 +800,7 @@ class TestOpenAICallJsonParseErrors:
 
         mock_response = _make_openai_style_mocks(None)
         mock_response.choices[0].message.content = None
+        mock_response.choices[0].finish_reason = "length"
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai_cls.return_value = mock_client
@@ -811,7 +810,7 @@ class TestOpenAICallJsonParseErrors:
         result = OpenAIClient.call_json("key", config, "prompt", "data", schema)
 
         assert len(result) == 1
-        assert result[0]["_parse_error"] == "Empty response from API"
+        assert result[0]["_parse_error"] == "Empty response from API (stop_reason=length)"
         assert result[0]["raw_response"] == ""
 
     @patch("agent_actions.llm.providers.openai.client.fire_event")
@@ -851,7 +850,8 @@ class TestAnthropicStopForwarding:
 
         call_kwargs = mock_client.messages.create.call_args[1]
         assert call_kwargs["stop_sequences"] == ["END"]
-        assert call_kwargs["top_p"] == 0.9
+        # anthropic 1.x's create takes no top_p; it then travels in extra_body.
+        assert {**call_kwargs.get("extra_body", {}), **call_kwargs}["top_p"] == 0.9
 
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")

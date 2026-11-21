@@ -363,7 +363,7 @@ class ExpectationService:
         """The prompt for one generation; retry re-samples the original, auto composes feedback."""
         if iteration == 1 or last_suite_result is None:
             return original_prompt
-        mode = self._mode_for(last_suite_result)
+        mode = self.mode_for(last_suite_result)
         if isinstance(mode, dict):
             return render_repair_template(
                 mode["prompt"], original_prompt, last_response, last_suite_result, self._hints
@@ -372,7 +372,7 @@ class ExpectationService:
             return original_prompt
         return compose_repair_prompt(original_prompt, last_response, last_suite_result, self._hints)
 
-    def _mode_for(self, suite_result: SuiteResult) -> str | dict[str, Any]:
+    def mode_for(self, suite_result: SuiteResult) -> str | dict[str, Any]:
         """Which regeneration mode governs the failure that just happened.
 
         A schema failure and a rule failure carry different information: the

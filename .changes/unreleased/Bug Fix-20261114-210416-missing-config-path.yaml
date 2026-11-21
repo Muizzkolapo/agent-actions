@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: '`agac validate-udfs` on a workflow that has no config file now names the file to create by the path it looked for, for example `agent_workflow/<name>/agent_config/<name>.yml`. It said `agents/<name>.yaml`, a path the CLI never reads.'
+time: 2026-11-14T21:04:16Z

@@ -1,8 +1,0 @@
-kind: Bug Fix
-body: >-
-  The mock provider (`agac-provider`) keeps a generated value inside the `minimum`/`maximum`
-  its schema declares, and a string inside its `minLength`/`maxLength`. Its field-name rules
-  answered first, so an integer `score` declared 1 to 4 was drawn from 1 to 100. A declared
-  bound now wins, and the value is drawn across the bound; a one-sided bound is completed
-  from 0, or 1000 past its edge. A field with no bound keeps the name rule.
-time: 2026-11-07T11:00:00Z

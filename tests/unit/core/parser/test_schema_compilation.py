@@ -17,7 +17,6 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.render_workflow import (
     _compile_action_schemas,
     _compile_workflow_schemas,
-    _expand_inline_schema,
     _is_inline_schema_dict,
 )
 
@@ -69,8 +68,14 @@ class TestSchemaLoadingViaCompilation:
         assert "not found" in errors[0]
 
 
+def _expand_inline_schema(inline_schema):
+    action = {"name": "a", "schema": inline_schema}
+    _compile_action_schemas(action)
+    return action["schema"]
+
+
 class TestExpandInlineSchema:
-    """Tests for _expand_inline_schema function."""
+    """The render step compiles an inline shorthand schema to unified fields."""
 
     def test_expand_simple_fields(self):
         """Test expanding simple field types."""
@@ -130,6 +135,23 @@ class TestExpandInlineSchema:
         items_field = next(f for f in result["fields"] if f["id"] == "items")
         assert items_field["type"] == "array"
         assert items_field["items"]["type"] == "string"
+
+    def test_expand_array_of_objects_keeps_the_item_fields(self):
+        result = _expand_inline_schema({"rows": "array[object:{'q': 'string!', 'n': 'number'}]"})
+
+        (rows,) = result["fields"]
+        assert rows["type"] == "array"
+        assert rows["items"] == {
+            "type": "object",
+            "properties": {"q": {"type": "string"}, "n": {"type": "number"}},
+            "required": ["q"],
+        }
+
+    def test_expand_array_of_objects_with_no_fields_stays_a_plain_object(self):
+        result = _expand_inline_schema({"rows": "array[object]"})
+
+        (rows,) = result["fields"]
+        assert rows["items"] == {"type": "object"}
 
 
 class TestIsInlineSchemaDict:
@@ -355,3 +377,53 @@ class TestCompileActionSchemasWarning:
         # No warning should fire — valid shorthand gets expanded
         for call in mock_warn.call_args_list:
             assert "not in shorthand or compiled format" not in call[0][0]
+
+
+def _bare_array_message(action: str, field: str) -> str:
+    return (
+        f"Action '{action}': inline schema field '{field}' is a bare 'array', so it is read "
+        "as an array of strings and an item of any other type fails. Write 'array[string]' "
+        "for strings or 'array[object]' for objects."
+    )
+
+
+class TestBareArrayWarning:
+    """Expanding a bare 'array' to an array of strings warns for each such field."""
+
+    def test_each_bare_array_field_warns_and_typed_arrays_do_not(self, tmp_path, caplog):
+        _setup_project(tmp_path)
+        action = {
+            "name": "pick",
+            "schema": {
+                "candidates": "array",
+                "picks": "array!",
+                "tags": "array[string]",
+                "rows": "array[object]",
+                "pairs": "array[object:{'q': 'string'}]",
+                "title": "string",
+            },
+        }
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions.prompt.render_workflow"):
+            _compile_action_schemas(action, project_root=tmp_path)
+
+        warned = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+        assert warned == [
+            _bare_array_message("pick", "candidates"),
+            _bare_array_message("pick", "picks"),
+        ]
+        items = {f["id"]: f.get("items") for f in action["schema"]["fields"]}
+        assert items["candidates"] == {"type": "string"}
+        assert items["picks"] == {"type": "string"}
+
+    def test_typed_arrays_alone_give_no_warning(self, tmp_path, caplog):
+        _setup_project(tmp_path)
+        action = {
+            "name": "pick",
+            "schema": {"tags": "array[string]!", "rows": "array[object]", "title": "string"},
+        }
+
+        with caplog.at_level(logging.WARNING, logger="agent_actions.prompt.render_workflow"):
+            _compile_action_schemas(action, project_root=tmp_path)
+
+        assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == []

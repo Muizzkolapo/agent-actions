@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES
+from agent_actions.prompt.handler import PromptLoader
 
 logger = logging.getLogger(__name__)
 
@@ -336,7 +337,8 @@ def scan_examples(project_root: Path) -> dict[str, Any]:
                     workflows.append(wf_dir.name)
 
         # Check for other artifacts
-        has_prompts = (example_dir / "prompt_store").exists()
+        prompt_count = len(PromptLoader.discover_prompt_files(example_dir))
+        has_prompts = prompt_count > 0
         has_schemas = (example_dir / "schema").exists()
         has_tools = (example_dir / "tools").exists()
 
@@ -344,10 +346,6 @@ def scan_examples(project_root: Path) -> dict[str, Any]:
         schema_count = 0
         if has_schemas:
             schema_count = len(list((example_dir / "schema").glob("*.yml")))
-
-        prompt_count = 0
-        if has_prompts:
-            prompt_count = len(list((example_dir / "prompt_store").glob("*.md")))
 
         tool_count = 0
         if has_tools:
