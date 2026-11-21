@@ -189,3 +189,34 @@ def test_plain_project_index_unchanged(tmp_path):
     ]
     assert idx.duplicate_actions_by_file[wf] == set()
     assert idx.parse_errors == {}
+
+
+def test_a_called_macro_body_gives_no_reference_where_it_is_written(tmp_path):
+    # The body is output at the call in `b`, not under `a` where it is written.
+    paths = _project(
+        tmp_path,
+        {
+            "wf": """\
+            name: wf
+            actions:
+              - name: a
+                kind: tool
+                impl: real_tool
+            {% macro extra() %}
+                impl: ghost_tool
+            {% endmacro %}
+              - name: b
+                kind: tool
+                {{ extra() | trim }}
+            """
+        },
+        templates={},
+    )
+    wf = paths["wf"]
+
+    idx = build_index(tmp_path)
+
+    assert idx.file_actions[wf]["a"].impl_ref == "real_tool"
+    assert [d.message for d in collect_diagnostics(wf, idx)] == [
+        "Unresolved tool reference `real_tool`."
+    ]
