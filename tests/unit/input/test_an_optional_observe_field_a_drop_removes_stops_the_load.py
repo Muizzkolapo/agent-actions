@@ -85,3 +85,20 @@ def test_a_drop_of_a_sibling_whose_name_starts_the_same_is_accepted():
     scope = {"observe": ["review.meta.reason?"], "drop": ["review.meta_x"]}
 
     assert split_optional_observe(scope)["optional"] == {"review.meta.reason": None}
+
+
+def test_a_wildcard_drop_of_one_version_of_an_optional_field_is_refused_once_versions_expand():
+    versions = {"ext": ["ext_1", "ext_2"]}
+
+    with pytest.raises(
+        ConfigurationError, match=r"observe entry 'ext_1\.x\?'.*drop entry 'ext_1\.\*'"
+    ):
+        normalize_context_scope({"observe": ["ext.x?"], "drop": ["ext_1.*"]}, versions)
+
+
+def test_a_drop_of_another_version_family_is_accepted_once_versions_expand():
+    versions = {"ext": ["ext_1", "ext_2"]}
+
+    scope = normalize_context_scope({"observe": ["ext.x?"], "drop": ["other_1.*"]}, versions)
+
+    assert scope["optional"] == {"ext_1.x": None, "ext_2.x": None}
