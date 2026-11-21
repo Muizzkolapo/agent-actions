@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
-from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.trace_store import trace_rows
 
 WORKFLOW = "w"
@@ -115,16 +115,17 @@ def _project(tmp_path: Path, mode: str, prompt: str) -> Path:
     return root
 
 
-def _run_to_the_end(project: Path) -> str:
+def _run_to_the_end(project: Path, *, ends_with: int) -> str:
     outputs = []
     args = ["run", "-a", WORKFLOW, "--fresh"]
     for _ in range(4):
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode in RAN_TO_ITS_END, "\n".join(outputs)
         if "run again" not in output:
+            assert result.returncode == ends_with, "\n".join(outputs)
             return "\n".join(outputs)
+        assert result.returncode == EXIT_PAUSED, "\n".join(outputs)
         args = ["run", "-a", WORKFLOW]
     pytest.fail("the workflow never stopped asking to be run again:\n" + "\n".join(outputs))
 
@@ -160,7 +161,7 @@ def _dispositions(project: Path) -> list[tuple[str, str]]:
 def test_a_record_missing_a_field_named_items_fails_as_a_missing_field(tmp_path, mode, read):
     project = _project(tmp_path, mode, f"List these: {{{{ {read} }}}}")
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_RECORD_FAILURES)
 
     assert _sent(project) == ["List these: apple, pear\n"]
     (failed, succeeded) = _dispositions(project)
@@ -178,7 +179,7 @@ def test_a_prompt_calling_a_dict_method_still_renders(tmp_path, mode):
         "{% for k, v in source.items() %}{{ k }}={{ v }};{% endfor %}",
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     assert _sent(project) == [
         "has items | page_content=has items;",

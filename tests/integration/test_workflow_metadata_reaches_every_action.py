@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
-from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.store import stored_rows
 from tests.helpers.trace_store import trace_rows
 
@@ -162,7 +162,7 @@ def _project(tmp_path: Path, config: str) -> Path:
     return root
 
 
-def _run_to_the_end(project: Path) -> str:
+def _run_to_the_end(project: Path, *, ends_with: int) -> str:
     """Run until nothing is left to collect; the whole run's output."""
     outputs = []
     args = ["--fresh"]
@@ -179,9 +179,10 @@ def _run_to_the_end(project: Path) -> str:
         )
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode in RAN_TO_ITS_END, "\n".join(outputs)
         if "run again" not in output:
+            assert result.returncode == ends_with, "\n".join(outputs)
             return "\n".join(outputs)
+        assert result.returncode == EXIT_PAUSED, "\n".join(outputs)
         args = []
     pytest.fail("the workflow never stopped asking to be run again:\n" + "\n".join(outputs))
 
@@ -228,7 +229,7 @@ def test_a_prompt_below_the_first_action_reads_the_workflow(tmp_path, mode):
     )
     project = _project(tmp_path, config)
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     _assert_rendered_workflow(project, "ask")
     assert _states(project, "ask") == ["processed"] * PAGES
@@ -241,7 +242,7 @@ def test_a_guard_below_the_first_action_reads_the_workflow(tmp_path, mode):
     below = _BELOW.format(prompt="PlainBelow") + _WORKFLOW_GUARD
     project = _project(tmp_path, _HEAD.format(mode=mode) + _FIRST.format(prompt="Plain") + below)
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     assert _states(project, "ask") == ["processed"] * PAGES
 
@@ -254,7 +255,7 @@ def test_traces_below_the_first_action_name_the_run(tmp_path):
     )
     project = _project(tmp_path, config)
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     (run_id,) = {run_id for _, run_id in _traces(project, "summarize")}
     assert run_id
@@ -270,7 +271,7 @@ def test_a_retry_below_the_first_action_reads_the_retrys_workflow(tmp_path):
     (project / "tools" / WORKFLOW / "flaky.py").write_text(_FLAKY_TOOL)
     marker = project / "fail_page"
     marker.write_text("p1")
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_RECORD_FAILURES)
     (first_run,) = {run_id for _, run_id in _traces(project, "summarize")}
     marker.unlink()
 
@@ -290,7 +291,7 @@ def test_a_retry_below_the_first_action_reads_the_retrys_workflow(tmp_path):
 def test_a_first_action_prompt_reads_the_workflow(tmp_path, mode):
     project = _project(tmp_path, _HEAD.format(mode=mode) + _FIRST.format(prompt="WorkflowFirst"))
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     _assert_rendered_workflow(project, "summarize")
     assert _states(project, "summarize") == ["processed"] * PAGES
@@ -302,7 +303,7 @@ def test_a_versioned_first_action_prompt_reads_its_version(tmp_path, mode):
         tmp_path, _HEAD.format(mode=mode) + _VERSIONED_FIRST.format(prompt="VersionFirst")
     )
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     for i in (1, 2):
         prompts = [prompt for prompt, _ in _traces(project, f"summarize_{i}")]
@@ -319,7 +320,7 @@ def test_a_versioned_first_action_guard_reads_its_version(tmp_path, mode):
     )
     project = _project(tmp_path, _HEAD.format(mode=mode) + first)
 
-    _run_to_the_end(project)
+    _run_to_the_end(project, ends_with=EXIT_SUCCESS)
 
     assert _states(project, "summarize_1") == ["processed"] * PAGES
     assert _traces(project, "summarize_2") == []

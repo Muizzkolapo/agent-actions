@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.cli.main import cli
-from tests._support.exit_codes import RAN_TO_ITS_END
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 PAGES = {
@@ -110,13 +110,16 @@ class _Project:
         self.action = action
         self.passes = passes
 
-    def run(self, *args: str):
+    def run(self, *args: str, ends_with: int, between: int = EXIT_PAUSED):
+        """Run the passes of a first run: each but the last exits *between*."""
         result = None
         for i in range(self.passes):
             result = CliRunner().invoke(
                 cli, ["run", "-a", self.workflow, *(args if i == 0 else ())]
             )
-            assert result.exit_code in RAN_TO_ITS_END, result.output
+            assert result.exit_code == (ends_with if i == self.passes - 1 else between), (
+                result.output
+            )
         return result
 
     def retry(self):
@@ -212,7 +215,7 @@ def project(request, tmp_path, monkeypatch):
 def test_the_file_keeps_its_valid_records_and_the_bad_one_fails(project):
     project.breaks()
 
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
 
     assert project.summaries() == {
         "pages1.json": ["v1 Page beta."],
@@ -228,7 +231,7 @@ def test_the_file_keeps_its_valid_records_and_the_bad_one_fails(project):
 
 def test_a_retry_answers_the_bad_record_again(project):
     project.breaks()
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
     project.breaks(on=False)
 
     result = project.retry()
@@ -242,12 +245,14 @@ def test_a_retry_answers_the_bad_record_again(project):
 
 def test_after_a_rerun_the_file_keeps_no_row_from_before_it(project):
     """`--rerun` reopens the tool, and its answers change with the tag."""
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_SUCCESS)
     assert project.status() == "completed"
     project.tag("v2")
     project.breaks()
 
-    project.run("--rerun", project.action)
+    project.run(
+        "--rerun", project.action, ends_with=EXIT_RECORD_FAILURES, between=EXIT_RECORD_FAILURES
+    )
 
     assert project.summaries() == {
         "pages1.json": ["v2 Page beta."],
