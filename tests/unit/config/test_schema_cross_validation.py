@@ -147,3 +147,30 @@ class TestCircularDependencyDetection:
             )
         wf = WorkflowConfig(**_workflow(actions=actions))
         assert len(wf.actions) == n
+
+
+class TestADanglingShortNameOfAnInclude:
+    def _refusal(self, dependency: str) -> str:
+        actions = [
+            {"name": "c__close", "intent": "a", "kind": "llm"},
+            {"name": "c2__close", "intent": "a", "kind": "llm"},
+            {"name": "after", "intent": "b", "kind": "llm", "dependencies": [dependency]},
+        ]
+        with pytest.raises(ValidationError) as caught:
+            WorkflowConfig(**_workflow(actions=actions))
+        return str(caught.value)
+
+    def test_it_names_the_final_names_that_end_in_it(self):
+        message = self._refusal("close")
+
+        assert "Dangling dependency references (not defined as actions): ['close']" in message
+        assert (
+            "'close' is a short name inside an include with 'as:'; outside the include, write "
+            "the final name: 'c2__close', 'c__close'."
+        ) in message
+
+    def test_a_name_no_final_name_ends_in_gets_no_hint(self):
+        message = self._refusal("open")
+
+        assert "['open']" in message
+        assert "short name" not in message

@@ -3,7 +3,8 @@
  *
  * Parses agent_config YAML files to extract:
  * - Workflow name
- * - Actions with dependencies
+ * - Actions with dependencies, with each include, route and join entry as nodes
+ *   (workflowEntries.ts, which holds the logic free of `vscode`)
  * - Line numbers for navigation (CodeLens)
  *
  * Uses the 'yaml' library (from PR #820/#821) for robust parsing
@@ -13,11 +14,12 @@ import * as vscode from 'vscode';
 import { parse } from 'yaml';
 import { ParsedWorkflowConfig, ParsedAction } from './types';
 import { logger } from '../utils/logger';
-
-/** Factory function to avoid regex state sharing issues */
-function createActionNameRegex(): RegExp {
-    return /^\s*-\s*name:\s*([^\s#]+)\s*$/gm;
-}
+import {
+    branchNames,
+    extractActionLocations,
+    normalizeOutputFields,
+    parseEntries,
+} from './workflowEntries';
 
 /**
  * Parse a workflow config file and extract action information
@@ -37,7 +39,8 @@ export async function parseWorkflowConfig(uri: vscode.Uri): Promise<ParsedWorkfl
             : uri.path.split('/').pop()?.replace(/\.(ya?ml)$/, '') ?? 'workflow';
 
         const actionLocations = extractActionLocations(content);
-        const actions = parseActions(doc, content);
+        const branches = await readBranches(uri, branchNames(doc.actions));
+        const actions = parseActions(doc, content, branches);
 
         return {
             name: workflowName,
@@ -51,102 +54,45 @@ export async function parseWorkflowConfig(uri: vscode.Uri): Promise<ParsedWorkfl
 }
 
 /**
+ * The parsed branch files of *names*, from `<project>/branches/<name>.yml` (or `.yaml`),
+ * the project being three folders above `agent_workflow/<workflow>/agent_config/`.
+ * A file that cannot be read or parsed is left out; its include then shows no actions.
+ */
+async function readBranches(
+    configUri: vscode.Uri,
+    names: string[]
+): Promise<Map<string, unknown>> {
+    const branches = new Map<string, unknown>();
+    const project = vscode.Uri.joinPath(configUri, '..', '..', '..', '..');
+    for (const name of names) {
+        for (const extension of ['yml', 'yaml']) {
+            const branchUri = vscode.Uri.joinPath(project, 'branches', `${name}.${extension}`);
+            try {
+                const bytes = await vscode.workspace.fs.readFile(branchUri);
+                branches.set(name, parse(Buffer.from(bytes).toString('utf8')));
+                break;
+            } catch {
+                // Not there under this extension; try the next one.
+            }
+        }
+    }
+    return branches;
+}
+
+/**
  * Extract action definitions from the parsed YAML
  */
-function parseActions(doc: Record<string, unknown>, content: string): ParsedAction[] {
+function parseActions(
+    doc: Record<string, unknown>,
+    content: string,
+    branches: Map<string, unknown>
+): ParsedAction[] {
     const actionsValue = doc.actions;
     if (!Array.isArray(actionsValue)) {
         // Try plan-based format (from PR #822)
         return parsePlanBasedActions(doc, content);
     }
-
-    const actions: ParsedAction[] = [];
-    for (const entry of actionsValue) {
-        const expanded = parseActionEntry(entry);
-        if (expanded) {
-            actions.push(...expanded);
-        }
-    }
-    return actions;
-}
-
-/**
- * Parse a single action entry from the YAML, expanding versions if present
- * Returns array to handle version expansion (e.g., action with versions: {range: [1,2,3]}
- * becomes action_1, action_2, action_3)
- */
-function parseActionEntry(entry: unknown): ParsedAction[] | null {
-    if (!entry || typeof entry !== 'object') {
-        return null;
-    }
-
-    const action = entry as Record<string, unknown>;
-    const name = typeof action.name === 'string' ? action.name : undefined;
-    if (!name) {
-        return null;
-    }
-
-    const dependencies = normalizeDependencies(action.dependencies);
-    const outputFields = normalizeOutputFields(action.schema ?? action.output_fields);
-    const type = typeof action.kind === 'string' ? action.kind : undefined;
-
-    // Check for versions expansion
-    const versions = action.versions as Record<string, unknown> | undefined;
-    if (versions && typeof versions === 'object') {
-        const expanded = expandVersions(name, versions, dependencies, outputFields, type);
-        if (expanded.length > 0) {
-            return expanded;
-        }
-    }
-
-    return [{ name, dependencies, type, outputFields }];
-}
-
-/**
- * Expand a versioned action into multiple concrete actions.
- *
- * Supports two range formats (mirroring the core engine in expander.py):
- *   - Pair: [start, end] → expands to start..end inclusive
- *   - Explicit list: [1, 2, 3] → used as-is
- */
-function expandVersions(
-    baseName: string,
-    versions: Record<string, unknown>,
-    baseDependencies: string[],
-    outputFields: string[],
-    type: string | undefined
-): ParsedAction[] {
-    const range = versions.range;
-    if (!Array.isArray(range) || range.length === 0) {
-        return [];
-    }
-
-    // When range is a [start, end] pair, expand to the full sequence.
-    // This matches the core engine: range(start, end + 1).
-    let rangeValues: (number | string)[] = range;
-    if (range.length === 2 && typeof range[0] === 'number' && typeof range[1] === 'number') {
-        const [start, end] = range as [number, number];
-        rangeValues = [];
-        for (let v = start; v <= end; v++) {
-            rangeValues.push(v);
-        }
-    }
-
-    return rangeValues.map((version) => {
-        const versionSuffix = `_${version}`;
-        const versionedName = `${baseName}${versionSuffix}`;
-
-        // Version dependencies: if base depends on "foo", versioned depends on "foo"
-        // (the actual version resolution happens at runtime)
-        return {
-            name: versionedName,
-            dependencies: baseDependencies,
-            type,
-            outputFields,
-            baseName, // Track the base name for grouping
-            version: version as number | string,
-        };
-    });
+    return parseEntries(actionsValue, (name) => branches.get(name));
 }
 
 /**
@@ -209,55 +155,4 @@ function parsePlanEntry(entry: string): { name: string; dependencies: string[] }
         : [];
 
     return { name: namePart, dependencies };
-}
-
-/**
- * Extract line numbers for each action (for CodeLens navigation)
- */
-function extractActionLocations(content: string): Map<string, number> {
-    const locations = new Map<string, number>();
-    const actionNameRegex = createActionNameRegex();
-    let match: RegExpExecArray | null;
-
-    while ((match = actionNameRegex.exec(content)) !== null) {
-        const actionName = match[1];
-        const line = content.slice(0, match.index).split(/\r?\n/).length - 1;
-        if (!locations.has(actionName)) {
-            locations.set(actionName, line);
-        }
-    }
-
-    return locations;
-}
-
-/**
- * Normalize dependencies to string array
- */
-function normalizeDependencies(value: unknown): string[] {
-    if (!value) {
-        return [];
-    }
-    if (Array.isArray(value)) {
-        return value.map((d) => String(d)).filter(Boolean);
-    }
-    if (typeof value === 'string' && value.trim()) {
-        return [value.trim()];
-    }
-    return [];
-}
-
-/**
- * Normalize output fields from schema or output_fields
- */
-function normalizeOutputFields(value: unknown): string[] {
-    if (!value) {
-        return [];
-    }
-    if (Array.isArray(value)) {
-        return value.map((f) => String(f)).filter(Boolean);
-    }
-    if (typeof value === 'object') {
-        return Object.keys(value);
-    }
-    return [];
 }
