@@ -1220,7 +1220,8 @@ class WorkflowStaticAnalyzer:
         empty when skipped and are safe.
 
         Only ``on_false: "skip"`` is checked — ``"filter"`` removes individual
-        records but the namespace still exists for remaining records.
+        records but the namespace still exists for remaining records. A field the
+        action observes as optional is not warned about: it resolves to its default.
         """
         warnings: list[StaticTypeWarning] = []
         actions = self.workflow_config.get("actions", [])
@@ -1249,9 +1250,10 @@ class WorkflowStaticAnalyzer:
             observe_refs = context_scope.get("observe", [])
             if not isinstance(observe_refs, list):
                 continue
+            optional = context_scope.get("optional") or {}
 
             for ref in observe_refs:
-                if not isinstance(ref, str) or "." not in ref:
+                if not isinstance(ref, str) or "." not in ref or ref in optional:
                     continue
                 source_name, field_name = ref.split(".", 1)
                 if field_name == "*":
@@ -1275,7 +1277,8 @@ class WorkflowStaticAnalyzer:
                         referenced_agent=source_name,
                         referenced_field=field_name,
                         hint=(
-                            f"Use '{source_name}.*' instead of "
+                            f"Mark the field optional ('{source_name}.{field_name}?'), "
+                            f"use '{source_name}.*' instead of "
                             f"'{source_name}.{field_name}', or handle null in the "
                             f"downstream prompt or tool."
                         ),
@@ -1372,11 +1375,12 @@ class WorkflowStaticAnalyzer:
             observe_refs = context_scope.get("observe", [])
             if not isinstance(observe_refs, list):
                 continue
+            optional = context_scope.get("optional") or {}
 
             # Find observe refs targeting filter-guarded actions (specific fields only).
             hazard_sources: dict[str, list[str]] = {}  # filtered_action -> [field_refs]
             for ref in observe_refs:
-                if not isinstance(ref, str) or "." not in ref:
+                if not isinstance(ref, str) or "." not in ref or ref in optional:
                     continue
                 source_name, field_name = ref.split(".", 1)
                 if field_name == "*":
@@ -1428,8 +1432,9 @@ class WorkflowStaticAnalyzer:
                         hint=(
                             f"Consider: (1) Add a matching guard to '{consumer_name}', "
                             f"(2) Change '{filtered_action}' guard to on_false=\"skip\", "
-                            f"or (3) Use '{filtered_action}.*' (null-safe) instead of "
-                            f"specific fields."
+                            f"(3) Use '{filtered_action}.*' (null-safe) instead of "
+                            f"specific fields, or (4) Mark the field optional "
+                            f"('{example_ref}?')."
                         ),
                     )
                 )

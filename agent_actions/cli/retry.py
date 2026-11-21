@@ -19,9 +19,24 @@ from rich.table import Table
 from rich.text import Text
 
 from agent_actions.cli.args import RetryCommandArgs
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
+from agent_actions.cli.exit_codes import (
+    EXIT_CODES,
+    EXIT_RECORD_FAILURES,
+    EXIT_SUCCESS,
+    TRACKER_STATUSES,
+    RunOutcome,
+    actions_with_record_failures,
+    classify_outcome,
+    report_quota_stop,
+)
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
+from agent_actions.errors import ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.processing.disposition_gate import (
     answered_by_repair,
@@ -101,20 +116,6 @@ def _read_manifest(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def _classify_outcome(state_mgr: Any) -> str:
-    """Decide the finished workflow the way ``run.py`` decides it.
-
-    Both commands hand this status to the run tracker and turn it into an exit
-    code, so a caller reading one reads the other. An action that completed with
-    record-level failures is a complete action, and so a success.
-    """
-    if state_mgr.is_workflow_complete():
-        return "SUCCESS"
-    if not state_mgr.is_workflow_done():
-        return "PAUSED"
-    return "FAILED" if state_mgr.has_any_failed() else "SUCCESS"
-
-
 def _halted_among(failures: dict[str, list[dict]], actions: list[str]) -> list[str]:
     """The *actions* halted by ``on_exhausted: raise``, in order.
 
@@ -150,19 +151,96 @@ class RetryCommand:
         self.agent_name = Path(args.agent).stem
         self.console = Console()
         self._abandoned: set[tuple[str, str, str]] = set()
+        # What the last pass planned over: the workflow's actions, and its open failures.
+        self._execution_order: list[str] = []
+        self._open_before: frozenset[tuple[str, str]] = frozenset()
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
+        passes = self._retry_while_it_helps if self.args.all else self._retry_once
         if self.args.dry_run:
-            self._retry(paths, project_root)
-            return
-        # Before the store is opened: a retry rewrites dispositions and runs the workflow.
-        with hold_run_lock(paths.io_dir, self.agent_name):
-            self._retry(paths, project_root)
+            code = passes(paths, project_root)
+        else:
+            try:
+                # Before the store is opened: a retry rewrites dispositions and runs the
+                # workflow. Held from the first pass of --all to the last.
+                with hold_run_lock(paths.io_dir, self.agent_name):
+                    code = passes(paths, project_root)
+            except ProviderQuotaStop as stop:
+                # Its manifest stays, as after an interrupt, so the next retry resumes it.
+                report_quota_stop(stop)
+                code = EXIT_CODES[RunOutcome.QUOTA_STOP]
+        if code != EXIT_SUCCESS:
+            raise SystemExit(code)
 
-    def _retry(self, paths: ProjectPaths, project_root: Path | None) -> None:
+    def _retry_once(self, paths: ProjectPaths, project_root: Path | None) -> int:
+        outcome = self._retry(paths, project_root)
+        return EXIT_SUCCESS if outcome is None else EXIT_CODES[outcome]
+
+    def _retry_while_it_helps(self, paths: ProjectPaths, project_root: Path | None) -> int:
+        """`--all`: retry from the earliest failure, again while a pass closes an open failure.
+
+        A failure is an (action, record) pair, so a pass that repairs records at one action
+        helps even when they fail at the next one. Stops when none is left, when a pass closes
+        none, when a pass leaves failures an earlier pass left (so it cannot cycle), or at
+        ``--max-passes``; a pass that paused ends it too, since nothing can be retried over
+        a batch nobody has collected.
+        """
+        code = EXIT_SUCCESS
+        done = 0
+        seen: list[frozenset[tuple[str, str]]] = []
+        while True:
+            outcome = self._retry(paths, project_root)
+            if self.args.dry_run:
+                self.console.print(
+                    f"[yellow]--all: {len(self._open_before)} open failure(s). Each pass "
+                    f"retries from the earliest action that holds one, while a pass closes one."
+                    f"[/yellow]"
+                )
+                return EXIT_SUCCESS
+            if outcome is None:
+                return code
+            done += 1
+            before, left = self._open_before, self._open_failures(paths)
+            seen.append(before)
+            self.console.print(f"\n[bold]Pass {done}: {len(left)} open failure(s) left[/bold]")
+            code = EXIT_CODES[outcome]
+            if code == EXIT_SUCCESS and left:
+                code = EXIT_RECORD_FAILURES
+            if outcome in (RunOutcome.PAUSED_FOR_BATCH, RunOutcome.PAUSED) or not left:
+                return code
+            if before <= left:
+                self.console.print(
+                    f"[yellow]Pass {done} closed none of the open failures "
+                    f"({len(before)} before it, {len(left)} after). Stopping.[/yellow]"
+                )
+                return code
+            if left in seen:
+                self.console.print(
+                    f"[yellow]Pass {done} left the same open failures as an earlier pass. "
+                    f"Stopping.[/yellow]"
+                )
+                return code
+            if self.args.max_passes is not None and done >= self.args.max_passes:
+                self.console.print(
+                    f"[yellow]Stopped at --max-passes {self.args.max_passes} with {len(left)} "
+                    f"open failure(s) left.[/yellow]"
+                )
+                return code
+
+    def _open_failures(self, paths: ProjectPaths) -> frozenset[tuple[str, str]]:
+        """The failures `_find_failures` finds in the store now, over every action."""
+        backend = get_storage_backend(
+            workflow_path=str(paths.io_dir.parent),
+            workflow_name=self.agent_name,
+        )
+        backend.initialize()
+        return _open_pairs(self._find_failures(backend, self._execution_order))
+
+    def _retry(self, paths: ProjectPaths, project_root: Path | None) -> RunOutcome | None:
+        """One retry. The outcome of its re-run, or None when it re-ran nothing."""
         backend = get_storage_backend(
             workflow_path=str(paths.io_dir.parent),
             workflow_name=self.agent_name,
@@ -184,6 +262,8 @@ class RetryCommand:
             read_only=True,
         )
         execution_order = list(workflow.execution_order)
+        self._execution_order = execution_order
+        self._open_before = frozenset()
         state_mgr = workflow.services.core.state_manager
 
         resumed = self._left_by_an_interrupted_retry(prior_manifest, state_mgr)
@@ -196,7 +276,7 @@ class RetryCommand:
         if self._refused_below_a_stopped_retry(
             prior_manifest, bool(restoring or never_run_since), execution_order
         ):
-            return
+            return None
         self._name_live_rows_it_overwrites(backend, restoring, manifest_file)
         if prior_manifest and self.args.dry_run:
             self.console.print(
@@ -236,13 +316,14 @@ class RetryCommand:
                 backend, state_mgr, execution_order, unwritten
             )
             if found is None:
-                return
+                return None
             if not found:
                 self.console.print(
                     "[green]No failed or exhausted records found. Nothing to retry.[/green]"
                 )
-                return
+                return None
             failures = found
+        self._open_before = _open_pairs(failures)
 
         from_action = self.args.from_action
         if from_action:
@@ -258,14 +339,14 @@ class RetryCommand:
 
         if not from_action:
             self.console.print("[green]No actionable failures found.[/green]")
-            return
+            return None
 
         target_records = failures.get(from_action, [])
         if not target_records:
             self.console.print(
                 f"[yellow]No failed records at action '{from_action}'. Nothing to retry.[/yellow]"
             )
-            return
+            return None
         if self.args.record:
             target_records = [r for r in target_records if r["record_id"] == self.args.record]
             if not target_records:
@@ -313,7 +394,7 @@ class RetryCommand:
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
-            return
+            return None
 
         logger.info(
             "Clearing dispositions for retry: records=%s, actions=%s. "
@@ -385,7 +466,7 @@ class RetryCommand:
             new_run=True,
         )
 
-        status = "FAILED"
+        outcome = RunOutcome.FAILED
         error_message = None
         try:
             workflow.run()
@@ -400,14 +481,18 @@ class RetryCommand:
                 snapshot_dispositions,
                 halted_above=_halted_among(failures, execution_order[:from_idx]),
             )
-            status = _classify_outcome(state_mgr)
+            outcome = classify_outcome(state_mgr, execution_order)
+        except ProviderQuotaStop as stop:
+            outcome = RunOutcome.QUOTA_STOP
+            error_message = str(stop)
+            raise
         except Exception:
             error_message = traceback.format_exc()
             raise
         finally:
             try:
                 tracker.finalize_workflow_run(
-                    run_id=run_id, status=status, error_message=error_message
+                    run_id=run_id, status=TRACKER_STATUSES[outcome], error_message=error_message
                 )
             except Exception as track_error:
                 logger.warning(
@@ -426,11 +511,32 @@ class RetryCommand:
         # reinstate the failures this run just re-decided.
         _delete_manifest(manifest_file)
 
-        if status == "FAILED":
-            self._report_failures(state_mgr, list(workflow.execution_order))
-            raise SystemExit(1)
+        self._report(outcome, state_mgr, execution_order)
+        return outcome
 
-        self.console.print("\n[green]Retry complete.[/green]")
+    def _report(self, outcome: RunOutcome, state_mgr, execution_order: list[str]) -> None:
+        """Print the sentence for *outcome*; the exit code is read from the outcome alone."""
+        if outcome is RunOutcome.FAILED:
+            self._report_failures(state_mgr, execution_order)
+        elif outcome is RunOutcome.RECORD_FAILURES:
+            partial = actions_with_record_failures(state_mgr, execution_order)
+            self.console.print(
+                f"\n[yellow]Retry finished with failed or exhausted records in: "
+                f"{', '.join(partial)}.[/yellow]"
+            )
+        elif outcome is RunOutcome.PAUSED_FOR_BATCH:
+            waiting = state_mgr.get_batch_submitted_actions(execution_order)
+            self.console.print(
+                f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
+                f"Collect them with: agac run -a {self.agent_name}[/cyan]"
+            )
+        elif outcome is RunOutcome.PAUSED:
+            self.console.print(
+                f"\n[cyan]Retry paused before every action finished. "
+                f"Continue with: agac run -a {self.agent_name}[/cyan]"
+            )
+        else:
+            self.console.print("\n[green]Retry complete.[/green]")
 
     @staticmethod
     def _clear_for_the_rerun(
@@ -1319,19 +1425,25 @@ class RetryCommand:
     def _note_other_failures(self, from_action: str, all_failures: dict[str, list[dict]]) -> None:
         other_actions = [a for a in all_failures if a != from_action]
         if other_actions:
+            then = (
+                "A later pass of --all retries them if this pass closes an open failure."
+                if self.args.all
+                else "Run 'retry' again after this completes to address them, or use --all."
+            )
             self.console.print(
-                f"\n[dim]Note: failures also exist at: {', '.join(other_actions)}. "
-                f"Run 'retry' again after this completes to address them.[/dim]"
+                f"\n[dim]Note: failures also exist at: {', '.join(other_actions)}. {then}[/dim]"
             )
 
 
+def _open_pairs(failures: dict[str, list[dict]]) -> frozenset[tuple[str, str]]:
+    """Each open failure as its (action, record) pair."""
+    return frozenset(
+        (action, str(row.get("record_id"))) for action, rows in failures.items() for row in rows
+    )
+
+
 @click.command()
-@click.option(
-    "-a",
-    "--agent",
-    required=True,
-    help="Agent configuration file name without path or extension",
-)
+@workflow_option()
 @click.option(
     "--from",
     "from_action",
@@ -1370,6 +1482,22 @@ class RetryCommand:
     default=None,
     help="Why the --filter records are filtered; stored as their disposition reason.",
 )
+@click.option(
+    "--all",
+    "retry_all",
+    is_flag=True,
+    default=False,
+    help="Retry from the earliest failure, then again while a pass closes an open failure. "
+    "Stops when none is left, or when a pass closes none or leaves the failures an earlier "
+    "pass left.",
+)
+@click.option(
+    "--max-passes",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="N",
+    help="With --all: stop after N passes (default: no limit).",
+)
 @handles_user_errors("retry")
 @requires_project
 def retry(
@@ -1380,9 +1508,28 @@ def retry(
     abandon_in_flight: bool,
     filters: list[tuple[str, str]],
     reason: str | None,
+    retry_all: bool = False,
+    max_passes: int | None = None,
     project_root: Path | None = None,
 ) -> None:
-    """Retry failed/exhausted records from a specific action forward."""
+    """Retry failed/exhausted records from a specific action forward.
+
+    \b
+    Exit codes: 0 no failed or exhausted record is left, 1 an action failed,
+    3 a failed or exhausted record remains, 4 paused: a batch is open, or the
+    retry stopped before every action ended, 5 stopped by a provider's quota
+    or billing.
+    """
+    if retry_all:
+        for refused, flag, why in (
+            (bool(from_action), "--from", "--all starts each pass at the earliest failure itself"),
+            (bool(record), "--record", "--all retries every failed record, not one"),
+            (bool(filters), "--filter", "--filter records an exclusion and retries nothing"),
+        ):
+            if refused:
+                raise click.UsageError(f"--all takes no {flag}: {why}.")
+    elif max_passes is not None:
+        raise click.UsageError("--max-passes bounds the passes of --all, which was not given.")
     if filters:
         for given, flag in (
             (from_action, "--from"),
@@ -1406,6 +1553,8 @@ def retry(
         abandon_in_flight=abandon_in_flight,
         filters=filters,
         reason=reason.strip() if reason else None,
+        all=retry_all,
+        max_passes=max_passes,
     )
     if filters:
         # Deferred import: retry_filter imports this module.

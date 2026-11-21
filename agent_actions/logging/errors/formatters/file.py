@@ -63,6 +63,6 @@ class FileErrorFormatter(ErrorFormatter):
             category="File Error",
             title="File operation failed",
             details=message,
-            fix="Check file permissions and paths",
+            fix=self._hint_or(context, "Check file permissions and paths"),
             context=context,
         )

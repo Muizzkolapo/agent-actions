@@ -18,12 +18,14 @@ Use `preview` to check quickly which records an action wrote. You do not have to
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The name of the workflow configuration file (required) |
-| `-a, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `--agent` names the same option. |
+| `-A, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions. `-a` also names the action in this command, and prints a warning on stderr. In the other commands, `-a` names the workflow. If you type `-a` and `-A` together, the command stops with exit code 2. |
 | `-n, --limit INT` | The maximum number of records to show (default: 10) |
 | `--offset INT` | The number of records to skip (default: 0) |
 | `-f, --format` | The output format: `table`, `json` or `raw` (default: table) |
 | `--stats` | Show only the storage statistics |
+
+Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '--agent'.` The warning for `-a` comes before the error of an earlier option. It also comes before the help output if `-a` is in front of `--help`. See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
 
 ## Examples
 
@@ -40,7 +42,7 @@ agac preview -w my_workflow
 Show the records of a specified action:
 
 ```bash
-agac preview -w my_workflow -a extract_facts
+agac preview -w my_workflow -A extract_facts
 ```
 
 ### JSON Output
@@ -48,7 +50,7 @@ agac preview -w my_workflow -a extract_facts
 Get output that a machine can read, for scripts:
 
 ```bash
-agac preview -w my_workflow -a extract_facts -f json
+agac preview -w my_workflow -A extract_facts -f json
 ```
 
 ### Pagination
@@ -57,10 +59,10 @@ Move through large datasets one page at a time:
 
 ```bash
 # First 10 records
-agac preview -w my_workflow -a extract_facts -n 10
+agac preview -w my_workflow -A extract_facts -n 10
 
 # Next 10 records
-agac preview -w my_workflow -a extract_facts -n 10 --offset 10
+agac preview -w my_workflow -A extract_facts -n 10 --offset 10
 ```
 
 ### Storage Statistics
@@ -75,7 +77,7 @@ agac preview -w my_workflow --stats
 
 ### Table Format (default)
 
-The table shows one row for each record. The row numbers start from the offset. With `-a`, the columns are the output fields of the action, sorted by name. The table shows a maximum of the first six fields. Without `-a`, the command lists the actions that have stored data.
+The table shows one row for each record. The row numbers start from the offset. With `-A`, the columns are the output fields of the action, sorted by name. The table shows a maximum of the first six fields. Without `-A`, the command lists the actions that have stored data.
 
 ```
 ┏━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━┓
@@ -90,7 +92,7 @@ The table shows one row for each record. The row numbers start from the offset. 
 The full data of each record, as a JSON array. The data includes the lineage and metadata fields:
 
 ```bash
-agac preview -w my_workflow -a extract_facts -f json
+agac preview -w my_workflow -A extract_facts -f json
 ```
 
 ### Raw Format
@@ -98,7 +100,7 @@ agac preview -w my_workflow -a extract_facts -f json
 Output with no format, to send through a pipe to other tools:
 
 ```bash
-agac preview -w my_workflow -a extract_facts -f raw | jq '.[] | .content'
+agac preview -w my_workflow -A extract_facts -f raw | jq '.[] | .content'
 ```
 
 ## Use Cases
@@ -109,7 +111,7 @@ If a downstream action does not receive the expected data, examine the output of
 
 ```bash
 # Check what the upstream action actually produced
-agac preview -w my_workflow -a upstream_action -n 5 -f json
+agac preview -w my_workflow -A upstream_action -n 5 -f json
 ```
 
 ### Verify Field References {/* #verifying-field-references */}
@@ -118,7 +120,7 @@ Make sure that fields exist before you refer to them:
 
 ```bash
 # See the actual content structure
-agac preview -w my_workflow -a extract_facts -f json | jq '.[0].content | keys'
+agac preview -w my_workflow -A extract_facts -f json | jq '.[0].content | keys'
 ```
 
 ### Monitor the Progress of a Workflow {/* #monitoring-workflow-progress */}

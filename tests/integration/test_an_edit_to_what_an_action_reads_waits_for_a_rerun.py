@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
 
@@ -351,7 +352,7 @@ def test_a_retry_after_a_scope_edit_answers_only_what_it_names_and_the_edit_wait
     was: the next run still names the edit, and --rerun answers every record under it."""
     (project / FAULT).write_text(json.dumps({"item": "beta", "raise": "error"}))
     result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
-    assert result.returncode == 0, _output(result)
+    assert result.returncode == EXIT_RECORD_FAILURES, _output(result)
     assert _status(project, "recap") == "completed_with_failures", _output(result)
     (project / FAULT).unlink()
     _ran(project)

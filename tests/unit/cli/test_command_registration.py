@@ -16,8 +16,8 @@ class TestCommandErrorHandling:
 
     @pytest.mark.parametrize("command", ["run", "schema", "clean", "status"])
     def test_missing_agent_argument(self, runner, command):
-        """The command exits as a usage error when --agent is missing."""
+        """The command exits as a usage error when the workflow is missing."""
         result = runner.invoke(cli, [command])
 
         assert result.exit_code == 2
-        assert "Missing option '-a' / '--agent'" in result.output
+        assert "Missing option '-w' / '--workflow' / '-a' / '--agent'" in result.output

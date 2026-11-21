@@ -164,7 +164,7 @@ The framework tracks the identity of each item that it gives to the tool. When y
 agac list-udfs -u tools/
 
 # Validate tool references in workflow
-agac validate-udfs -a my_workflow -u tools/
+agac validate-udfs -w my_workflow -u tools/
 ```
 
 ## Learn More
