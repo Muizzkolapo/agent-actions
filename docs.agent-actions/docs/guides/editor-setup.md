@@ -434,7 +434,7 @@ The LSP starts at the opened file and goes up through the parent directories unt
 
 | Directory | What Is Indexed |
 |-----------|----------------|
-| `agent_workflow/*/agent_config/*.yml` | Actions (`- name: X`) |
+| `agent_workflow/*/agent_config/*.yml` | Actions (`- name: X`), the action each `- route: X`, `- join: X` and `- loop: X` entry becomes, and the outputs of each included branch |
 | `prompt_store/*.md` | Prompts (`{prompt X}`) |
 | `tools/**/*.py` | Tools (`@udf_tool def`) |
 | `schema/*.{yml,yaml,json}` | Schema files |
