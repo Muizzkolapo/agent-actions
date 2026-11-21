@@ -65,8 +65,26 @@ def test_the_next_run_does_not_write_the_file_from_the_old_state():
     assert judge_2 not in provider.read, "the batch was read against the wrong state"
 
 
+def _with_a_side_round_in_the_state(run: Run) -> None:
+    """The stale state still names a side round, as one stopped mid-round would."""
+    import json
+
+    from .judge_batch_world import ACTION, FILE
+
+    key = f"recovery_state:{ACTION}:{FILE}"
+    stored = json.loads(run.backend.meta[key])
+    stored.update(
+        side_kind="judge",
+        side_requests={"j_old_0": "old"},
+        side_waiting=[{"custom_id": "r1"}],
+        side_resumes="repair",
+    )
+    run.backend.meta[key] = json.dumps(stored)
+
+
 def test_the_drop_says_what_happened_and_resets_the_side_round_of_the_state(caplog):
     run, _provider = _stopped_after_registering_judge_2()
+    _with_a_side_round_in_the_state(run)
     judge_2 = run.live_entry().batch_id
 
     with caplog.at_level("WARNING"):
