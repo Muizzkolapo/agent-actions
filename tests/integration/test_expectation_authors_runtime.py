@@ -264,7 +264,7 @@ def test_the_batch_judge_is_sent_the_field_its_rule_references(run):
         for state in state_dir.glob("*.json"):
             for task in json.loads(state.read_text())["tasks"]:
                 if task["custom_id"].startswith("j_"):
-                    judge_requests[task["custom_id"]] = task["user_content"]
+                    judge_requests[task["custom_id"]] = task["prompt"]
         if result.returncode != EXIT_PAUSED:
             assert result.returncode == 0, result.output
             assert "run again" not in result.output, result.output

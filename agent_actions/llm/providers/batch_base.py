@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.errors import PromptTooLargeError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
 from agent_actions.llm.providers.generation_params import (
@@ -20,16 +21,16 @@ from agent_actions.llm.providers.generation_params import (
     extract_generation_params,
 )
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
-from agent_actions.utils import deep_json
+from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY, SHARED_PROMPT_LEN_KEY
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
 
 logger = logging.getLogger(__name__)
 
-# A task row's text sent as the user message verbatim, in place of its serialised content.
-RAW_USER_CONTENT_KEY = "_raw_user_content"
+# Set by ``prepare_tasks`` on a row it built no request for: the error online raises for
+# that record's call. Whoever prepared the row fails the record with it, alone.
+UNSENT_ERROR_KEY = "_unsent_error"
 
 # Replaces each provider's cap on the requests in one batch.
 BATCH_MAX_REQUESTS_ENV = "AGENT_ACTIONS_BATCH_MAX_REQUESTS"
@@ -86,6 +87,10 @@ class BatchTask:
     shared_prompt_len: int | None = None
     """The length of the leading part of ``prompt`` every record shares; None means all of it."""
 
+    def json_mode(self, schema: dict[str, Any] | None) -> bool:
+        """Whether the task's online twin is a JSON-mode call: it has a schema or asks for JSON."""
+        return bool(schema or self.model_config.get("json_mode"))
+
 
 @dataclass
 class BatchResult:
@@ -106,6 +111,13 @@ class BatchResult:
     exhausted: bool = False
     # The answer as the model wrote it, before any JSON parse; None when it was not text.
     text: str | None = None
+
+
+def raise_unsent(rows: list[dict[str, Any]]) -> None:
+    """Raise the first error ``prepare_tasks`` left on *rows*, for a caller that cannot fail one row."""
+    for row in rows:
+        if UNSENT_ERROR_KEY in row:
+            raise row[UNSENT_ERROR_KEY]
 
 
 def batch_task_bytes(task: Any) -> int:
@@ -153,6 +165,8 @@ class BaseBatchClient(ABC):
         self, data: list[dict[str, Any]], agent_config: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """Convert agent-actions data format to provider-specific task format (Template Method)."""
+        from agent_actions.llm.realtime.services import ContextService
+
         self._configured_model = agent_config.get("model_name", self._get_default_model())
 
         tasks = []
@@ -163,9 +177,7 @@ class BaseBatchClient(ABC):
         cache_prompt = self._caches_prompt(agent_config)
 
         for row in data:
-            # A judge request is a prompt alone, sent as written: it has no record content.
-            user_content = row.pop(RAW_USER_CONTENT_KEY, None)
-            if user_content is None and "content" not in row:
+            if "content" not in row:
                 raise ValueError(
                     f"Record {row.get('target_id', row.get('id', '?'))} missing 'content' key. "
                     "Every record must have namespaced content in the additive model."
@@ -173,11 +185,13 @@ class BaseBatchClient(ABC):
             # A row of an action whose schema is chosen per record carries its own.
             row_schema = row.pop("compiled_schema", None)
             shared_prompt_len = row.pop(SHARED_PROMPT_LEN_KEY, None)
+            varies_per_record = row.pop(REQUEST_VARIES_PER_RECORD_KEY, False)
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
                 prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=(
-                    user_content if user_content is not None else deep_json.dumps(row["content"])
+                # Encoded by the function online's call uses, so both send the same text.
+                user_content=str(
+                    ContextService.prepare_context_data(row["content"], is_tool=False)
                 ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
@@ -193,13 +207,17 @@ class BaseBatchClient(ABC):
                     },
                 },
                 metadata=row,
-                cache_prompt=cache_prompt,
+                cache_prompt=cache_prompt and not varies_per_record,
                 shared_prompt_len=shared_prompt_len,
             )
             task_schema = row_schema if row_schema is not None else schema
-            provider_task = self.format_task_for_provider(
-                batch_task, task_schema if json_mode else None
-            )
+            try:
+                provider_task = self.format_task_for_provider(
+                    batch_task, task_schema if json_mode else None
+                )
+            except PromptTooLargeError as error:
+                row[UNSENT_ERROR_KEY] = error
+                continue
             tasks.append(provider_task)
 
         return tasks
