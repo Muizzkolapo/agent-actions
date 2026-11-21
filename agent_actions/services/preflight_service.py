@@ -271,14 +271,7 @@ class PreflightService:
         )
 
         # 6. Cross-check prompt refs against each producer's required set
-        self._warn_findings(
-            "prompt-contract",
-            find_unguarded_required_refs(
-                self._collect_prompts(),
-                self._collect_producing_schemas(),
-                {name: header_names(config) for name, config in self.action_configs.items()},
-            ),
-        )
+        self._warn_unguarded_prompt_refs()
 
         # 7. Cross-check kind:tool passthrough UDFs against strict output schemas
         self._warn_tool_passthrough_risks()
@@ -331,6 +324,16 @@ class PreflightService:
                 action_names,
                 promoted_version_names(self.action_configs),
                 tool_namespaces,
+            ),
+        )
+
+    def _warn_unguarded_prompt_refs(self) -> None:
+        self._warn_findings(
+            "prompt-contract",
+            find_unguarded_required_refs(
+                self._collect_prompts(),
+                self._collect_producing_schemas(),
+                {name: header_names(config) for name, config in self.action_configs.items()},
             ),
         )
 
