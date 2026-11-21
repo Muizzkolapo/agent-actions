@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The `_builtin` spec of a built-in tool is checked at load: `route` needs `field` (text), `cases` (a list of text, not `default`) and `default` (true or false); `pick` needs `of`, a list of actions the action depends on; an unknown key or tool, and an `impl` other than `agac.<tool>`, are refused. Pre-flight refuses a built-in tool per file and a router on a field it does not observe. At run time, `route` refuses a record that holds no value at its field, and `pick` refuses a record that holds an output of two of its actions. An edit of the spec is an edit of the action, and a built-in tool hashes no project function of the same name. The editor no longer reports `impl: agac.route` or `agac.pick` as unresolved.'
+time: 2026-11-21T14:10:00Z

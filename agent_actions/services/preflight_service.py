@@ -20,9 +20,10 @@ from agent_actions.errors import (
     enrich_exception_context,
 )
 from agent_actions.errors.preflight import PreFlightValidationError
-from agent_actions.llm.providers.tools.builtin import runs_udf
+from agent_actions.llm.providers.tools.builtin import ROUTE, builtin_tool, runs_udf
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+from agent_actions.output.response.expander_validation import is_file_granularity
 from agent_actions.prompt.aliases import header_names
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import NON_PROMPT_ACTION_KINDS
@@ -122,6 +123,16 @@ def _per_action(
     return findings, actions
 
 
+def _observes(config: dict[str, Any], path: str) -> bool:
+    """Whether *config* observes the field *path*, by name, by its namespace or with ``*``."""
+    scope = config.get("context_scope")
+    observed = scope.get("observe") if isinstance(scope, dict) else None
+    if not isinstance(observed, list):
+        return False
+    root = path.split(".", 1)[0]
+    return any(ref in (path, root, f"{root}.*") for ref in observed if isinstance(ref, str))
+
+
 class PreflightService:
     """Validate a workflow config without executing it.
 
@@ -187,6 +198,7 @@ class PreflightService:
         # 0. Every tool and UDF guard named was loaded. A missing one would fail only when
         # its action runs, after every action before it has run.
         self._check_udfs_are_loaded()
+        self._check_builtin_tools()
         self._check_schema_dispatches()
 
         # 1. Schema validation
@@ -447,6 +459,29 @@ class PreflightService:
                 except FunctionNotFoundError as exc:
                     exc.context["action_name"] = action
                     raise
+
+    def _check_builtin_tools(self) -> None:
+        """Refuse a built-in tool the run cannot run: one per file, or a router that does not
+        observe the field it routes on."""
+        problems: list[str] = []
+        for action, config in self.action_configs.items():
+            spec = builtin_tool(config)
+            if spec is None:
+                continue
+            if is_file_granularity(config.get("granularity")):
+                problems.append(
+                    f"Action '{action}' runs the built-in tool '{spec['tool']}', which reads one "
+                    "record at a time. Remove 'granularity: file' from the action."
+                )
+            if spec["tool"] == ROUTE and not _observes(config, spec["field"]):
+                problems.append(
+                    f"Action '{action}' routes on '{spec['field']}', which it does not observe. "
+                    f"Add '{spec['field']}' to its context_scope.observe."
+                )
+        if problems:
+            raise PreFlightValidationError(
+                "\n".join(problems), hint="Fix each built-in tool above before running."
+            )
 
     def _check_schema_dispatches(self) -> None:
         """Refuse a ``schema: dispatch_task(...)`` the run could not resolve.
