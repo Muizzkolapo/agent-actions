@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
 
@@ -83,10 +84,13 @@ def _run_to_the_end(root: Path, env: dict[str, str] | None = None) -> str:
     for args in (("--fresh",), (), (), (), (), ()):
         result = run_agac(root, "run", "-a", "w", *args, env=env)
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
         printed += output
-        if "run again" not in output:
-            return printed
+        if result.returncode == EXIT_PAUSED:
+            assert "run again" in output, output
+            continue
+        assert result.returncode == 0, output
+        assert "run again" not in output, output
+        return printed
     raise AssertionError(printed)
 
 
