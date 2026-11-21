@@ -72,6 +72,13 @@ class RetryCommandArgs(BaseModel):
         default=None,
         description="Why the records given to filters are filtered; stored as their reason.",
     )
+    all: bool = Field(
+        default=False,
+        description="Retry again while a pass closes an open failure.",
+    )
+    max_passes: int | None = Field(
+        default=None, ge=1, description="The most passes --all makes; None is no limit."
+    )
 
 
 class RunCommandArgs(BaseModel):

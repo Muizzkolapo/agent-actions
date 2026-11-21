@@ -304,7 +304,13 @@ RetryCommand.execute()
   ├─ exit_codes.classify_outcome(state_manager)     ← the classifier `run` uses
   ├─ _delete_manifest()                             ← the repair reached the end, either way
   │
-  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← same codes as `run`: 1, 3, 4
+  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← same codes as `run`: 1, 3, 4, 5
+
+--all: the steps from get_storage_backend() down are one pass, repeated under one run lock
+  while a pass closes an open failure: _open_failures() is the set of (action, record)
+  pairs _find_failures finds, and the loop stops when a pass closes none of the pairs it
+  planned over or leaves a set an earlier pass left, up to --max-passes; a pass that paused for a batch ends it. Exit: the last outcome's
+  code, and 3 while a failure is open.
 ```
 
 ### `inspect` -- Command Group
