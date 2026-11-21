@@ -74,3 +74,23 @@ def test_under_a_repair_policy_the_failed_call_sends_its_record_to_repair():
     assert wrote is False
     assert [name for name, _ in provider.batches] == ["f.json_repair_1"]
     assert run.online == []
+
+
+def test_a_repair_round_whose_judge_request_is_too_large_fails_that_call_without_an_online_judge():
+    """The step after a repair round rebuilds its strategy over the saved verdicts."""
+    provider = SizeCheckingProvider(
+        lambda prompt, vote: verdict(value_in(prompt) == ["good"]),
+        repair=lambda _custom_id: {"options": ["huge"]},
+    )
+    run = Run(judged_config([judge_rule()], repair="auto", max_iterations=2), provider)
+    assert run.main_batch_returns(answers({"r1": ["bad"]})) is False
+    out = None
+    for _pass in range(6):
+        out = run.recovery_batch_returns()
+        if out is not None:
+            break
+
+    assert out == "/out.json"
+    assert run.online == []
+    (outcome,) = run.verdicts()["r1"]["outcomes"]
+    assert (outcome["passed"], outcome["detail"]) == (False, f"judge call failed: {TOO_LARGE}")

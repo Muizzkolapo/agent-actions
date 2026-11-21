@@ -8,7 +8,10 @@ no test.
 
 from __future__ import annotations
 
+import pytest
+
 from agent_actions.config.includes import expand_workflow_includes
+from agent_actions.errors import ConfigurationError
 from tests.unit.config.test_a_workflow_includes_a_branch_file import (
     A,
     Z,
@@ -157,3 +160,26 @@ def test_expand_alone_keeps_a_bound_read_by_its_input(tmp_path):
     expanded, _ = expand_workflow_includes(host, WF, {"round": _round()}, ["round"])
 
     assert [action["name"] for action in expanded["actions"]] == ["a", "c__write", "c__review"]
+
+
+def test_a_short_name_read_through_the_workflow_defaults_names_the_defaults_not_a_prompt(
+    tmp_path,
+):
+    import yaml
+
+    workflow = _project(tmp_path, [A, _use("c")], {"round": _round()})
+    data = yaml.safe_load(workflow.read_text())
+    data["defaults"]["context_scope"] = {"drop": ["write.word"]}
+    workflow.write_text(yaml.safe_dump(data, sort_keys=False))
+    from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
+    with pytest.raises(ConfigurationError) as caught:
+        render_pipeline_with_templates(
+            workflow, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+        )
+
+    message = str(caught.value)
+    assert "reads 'write' (from 'context_scope' under the workflow's 'defaults:')" in message
+    assert "a prompt" not in message
+    assert "A default outside the include does not take the short names" in message
+    assert "Write the final name 'c__write'." in message
