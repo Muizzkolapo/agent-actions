@@ -45,10 +45,8 @@ class TestTheBlockTheNormaliserWroteIsReadAgain:
     def test_a_scope_normalised_twice_is_unchanged(self):
         once = normalize_context_scope({"observe": ["review.x?", "spec.text"]}, {})
 
-        assert normalize_context_scope(once, {}) == once == {
-            "observe": ["review.x", "spec.text"],
-            "optional": {"review.x": None},
-        }
+        assert once == {"observe": ["review.x", "spec.text"], "optional": {"review.x": None}}
+        assert normalize_context_scope(once, {}) == once
 
     def test_validated_defaults_merged_over_a_validated_action_keep_the_field_optional(self):
         defaults = dump_defaults(
