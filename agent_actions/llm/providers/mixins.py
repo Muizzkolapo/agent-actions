@@ -12,7 +12,7 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.error_wrapper import (
     NoAnswer,
     chat_no_answer,
-    is_truncated,
+    is_unfinished,
     unparsed_json_record,
 )
 from agent_actions.logging.core.manager import fire_event
@@ -178,7 +178,7 @@ class OpenAICompatibleResponseMixin:
         )
 
     def _answer_was_cut_off(self, raw_response: dict[str, Any]) -> bool:
-        return is_truncated(self._first_choice(raw_response).get("finish_reason"))
+        return is_unfinished(self._first_choice(raw_response).get("finish_reason"))
 
     def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
         """The status of the line's response; None for a line that failed before any request."""

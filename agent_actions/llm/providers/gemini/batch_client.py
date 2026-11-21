@@ -22,7 +22,10 @@ except ImportError:
     genai = None  # type: ignore[assignment]
     types = None  # type: ignore[assignment]
 from agent_actions.config.defaults import LLMDefaults
-from agent_actions.llm.providers.error_wrapper import NoAnswer, is_truncated
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    is_unfinished,
+)
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
@@ -193,7 +196,7 @@ class GeminiBatchClient(BaseBatchClient):
         )
 
     def _answer_was_cut_off(self, raw_response: dict[str, Any]) -> bool:
-        return is_truncated(self._first_candidate(raw_response).get("finishReason"))
+        return is_unfinished(self._first_candidate(raw_response).get("finishReason"))
 
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""
