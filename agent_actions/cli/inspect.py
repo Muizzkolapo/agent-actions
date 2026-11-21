@@ -10,6 +10,7 @@ Surface:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.markup import escape
@@ -20,6 +21,8 @@ from agent_actions.cli.cli_decorators import (
     workflow_option,
 )
 from agent_actions.cli.inspect_base import branch_of, render_title_row
+from agent_actions.config.loops import is_loop_pick, loop_of
+from agent_actions.llm.providers.tools.builtin import PICK, ROUTE, builtin_tool
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
 
@@ -38,7 +41,12 @@ class InspectCommand(BaseInspectCommand):
         # `get_levels()` includes non-operational actions that ConfigManager
         # filters out of `execution_order`. Sort within each level so
         # version siblings render `foo_1, foo_2, foo_3` (runtime order is reversed).
-        order = [name for level in inspector.get_levels() for name in sorted(level)]
+        order = [
+            name
+            for level in inspector.get_levels()
+            for name in sorted(level)
+            if not _in_loop(inspector.action_configs.get(name, {}))
+        ]
         n = len(order)
 
         self.console.print()
@@ -52,15 +60,43 @@ class InspectCommand(BaseInspectCommand):
 
         width = max((len(name) for name in order), default=0)
         for name in order:
-            branch = branch_of(inspector.action_configs.get(name, {}))
-            if branch is None:
+            note = _note(inspector.action_configs.get(name, {}))
+            if note is None:
                 self.console.print(f"  [green]✓[/green]  {name}", highlight=False)
             else:
                 self.console.print(
-                    f"  [green]✓[/green]  {name.ljust(width)}  "
-                    f"[dim]from branch {escape(branch['name'])}[/dim]",
+                    f"  [green]✓[/green]  {name.ljust(width)}  [dim]{escape(note)}[/dim]",
                     highlight=False,
                 )
+
+
+def _in_loop(config: dict[str, Any]) -> bool:
+    """Whether *config* is an action of one iteration of a loop, shown as the loop."""
+    return loop_of(config) is not None and not is_loop_pick(config)
+
+
+def _note(config: dict[str, Any]) -> str | None:
+    """What an action is beyond its name: its branch, or the router or join it was written as."""
+    spec = builtin_tool(config)
+    loop = loop_of(config) if is_loop_pick(config) else None
+    if loop is not None:
+        return (
+            f"loop ×{loop['max_iterations']} max, until {loop['until']} "
+            f"(branch {loop['branch']}, result {loop['result']})"
+        )
+    if spec is not None and spec["tool"] == ROUTE:
+        cases = " · ".join(
+            f"{case} → {members if isinstance(members, str) else ', '.join(members)}"
+            for case, members in spec.get("branches", {}).items()
+        )
+        return f"route on {spec['field']}: {cases}"
+    if spec is not None and spec["tool"] == PICK:
+        return f"join of {', '.join(spec['of'])}"
+    branch = branch_of(config)
+    if branch is None:
+        return None
+    named = f" as {branch['instance']}" if "instance" in branch else ""
+    return f"from branch {branch['name']}{named}"
 
 
 @click.group(name="inspect", invoke_without_command=True)

@@ -19,6 +19,9 @@ LLM_LAYER_GUARD_SKIP = "llm_layer_guard_skip"
 # and counts them for the run line; ``agac dispositions`` counts them as Guard skipped.
 GUARD_SKIP_REASONS = frozenset({GUARD_SKIP, GUARD_PREFILTER_SKIP, GUARD_FILTER})
 LLM_LAYER_GUARD_FILTER = "llm_layer_guard_filter"
+# On a ``filtered`` row of an action marked ``_sends_elsewhere``: the record went to
+# another branch. It leaves this one, but an action marked ``_gathers`` takes it back.
+SENT_ELSEWHERE = "sent_elsewhere"
 
 # -- Cascade / upstream ------------------------------------------------------
 UPSTREAM_UNPROCESSED = "upstream_unprocessed"

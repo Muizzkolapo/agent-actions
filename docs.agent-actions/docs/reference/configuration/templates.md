@@ -89,6 +89,10 @@ project/
 
 Define reusable action groups with Jinja2 macros. You can combine these macros into larger workflows:
 
+:::note
+A macro must write the full name of each action that it reads. To use one group of actions more than one time, write a [branch](./branches.md). Include the branch with `as:`.
+:::
+
 ```jinja2
 {# templates/thinkific_tools.jinja2 #}
 

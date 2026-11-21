@@ -1,0 +1,4 @@
+default_agent_config:
+  model_name: mock
+schema_path: schema
+tool_path: ["tools"]

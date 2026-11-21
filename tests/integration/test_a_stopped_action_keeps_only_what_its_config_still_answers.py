@@ -1032,7 +1032,7 @@ def test_an_action_stopped_by_an_error_answers_what_its_guard_skipped_once_it_pa
 
 
 EDITED_PROMPT = (
-    f"{ACTION} was edited since its last run started (action config (prompt/schema/guard))"
+    f"{ACTION} was edited since its last run started (action config (prompt/schema/guard/routing))"
 )
 
 

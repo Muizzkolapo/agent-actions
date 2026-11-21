@@ -193,6 +193,9 @@ class ProgressRenderer(ConsoleEventHandler):
         )
         line = f"  {icon} {self._subject(event)}{' '.join(detail)}"
         notes = []
+        cases = event.data.get("cases") or {}
+        if cases:
+            notes.append(", ".join(f"{self._escape(str(c))} {n}" for c, n in cases.items()))
         guard_skipped = event.data.get("guard_skipped", 0)
         if guard_skipped:
             notes.append(f"{guard_skipped} skipped by guard")

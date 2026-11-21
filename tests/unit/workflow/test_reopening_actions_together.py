@@ -109,7 +109,7 @@ def test_a_retry_says_so_for_the_edited_action_it_is_about_to_re_run(tmp_path, c
 
     assert status == ActionStatus.PENDING
     assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
-        "split was edited since it completed (action config (prompt/schema/guard)). A retry "
+        "split was edited since it completed (action config (prompt/schema/guard/routing)). A retry "
         "answers only the records it names and leaves the rest as they are: run again with "
         "--rerun split to answer every record under the edit"
     ]
