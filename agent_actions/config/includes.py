@@ -38,7 +38,7 @@ from agent_actions.output.response.expander_validation import (
     is_file_granularity,
     resolved_granularity,
 )
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 INCLUDE_KEYS = ("include", "as", "inputs", "defaults", "override", "remove")
 BRANCH_KEYS = ("branch", "description", "inputs", "outputs", "actions")
@@ -665,6 +665,12 @@ def _checked_action(branch: str, workflow_file: str, index: int, action: Any) ->
         raise ConfigurationError(
             f"{named}: the name {reason} {_NAME_RULE}",
             context={"action_name": name},
+        )
+    if name.strip().lower() in RESERVED_AGENT_NAMES:
+        named = _branch_where(branch, workflow_file, f"'{name}'")
+        raise ConfigurationError(
+            f"{named}: Reserved action name '{name}' cannot be used",
+            context={"action_name": name, "reserved_names": sorted(RESERVED_AGENT_NAMES)},
         )
     prompt = action.get("prompt")
     if isinstance(prompt, str) and not prompt.strip().startswith("$"):
