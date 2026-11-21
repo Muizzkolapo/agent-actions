@@ -52,6 +52,11 @@ def field_value(data: Mapping[str, Any], path: str) -> Any:
 
 def route_case(spec: Mapping[str, Any], data: Mapping[str, Any]) -> str:
     value = field_value(data, spec["field"])
+    if value is not None and not isinstance(value, str):
+        raise TypeError(
+            f"{spec['field']} holds {value!r} ({type(value).__name__}); "
+            "a router matches strings only"
+        )
     if isinstance(value, str) and value in spec["cases"]:
         return value
     if spec.get("default"):

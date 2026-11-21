@@ -354,3 +354,23 @@ def test_inspect_shows_the_router_its_cases_and_its_default_and_the_join(tmp_pat
         "matching → m__write · fill_blank → fb_write · default → other_write"
     ) in output, output
     assert "bank join of mc_write, m__finalize, fb_write, other_write" in output, output
+
+
+@pytest.mark.parametrize("default", ["filter", "[other_write]"])
+def test_a_source_value_that_is_no_string_fails_its_record_naming_the_type(tmp_path, default):
+    root = _project(tmp_path, "online", ["multi_choice", "matching"], default=default, enum=None)
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().replace("on: route_focus.format", "on: source.format"))
+    staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "items.json"
+    staging.write_text(
+        json.dumps(
+            [{"text": "topic 0", "format": "multi_choice"}, {"text": "topic 1", "format": 1}]
+        )
+    )
+
+    _code, output = _agac(root, "run", "--fresh")
+
+    assert "source.format holds 1 (int); a router matches strings only" in output, output
+    assert [row for row in _rows(root, "format_router") if not row.get("_tombstone")] != []
+    assert len([row for row in _rows(root, "format_router") if row.get("_tombstone")]) == 1
+    assert _dispositions(root, "format_router").count(("filtered", "guard_filter")) == 0
