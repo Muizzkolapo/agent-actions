@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 from tests.unit.config.test_a_workflow_includes_a_branch_file import A, _names, _refusal, _render
 from tests.unit.config.test_an_include_as_gives_each_instance_its_own_names import (
     REVIEW,
@@ -18,7 +19,7 @@ from tests.unit.config.test_an_include_as_gives_each_instance_its_own_names impo
 WF = "agent_workflow/wf/agent_config/wf.yml"
 
 
-@pytest.mark.parametrize("name", ["source", "seed", "version", "workflow"])
+@pytest.mark.parametrize("name", sorted(RESERVED_AGENT_NAMES))
 def test_a_reserved_name_is_refused_with_the_text_a_workflow_gives(tmp_path, name):
     reserved = {**WRITE, "name": name}
     reader = {**REVIEW, "dependencies": [name], "context_scope": {"observe": [f"{name}.text"]}}
@@ -27,7 +28,7 @@ def test_a_reserved_name_is_refused_with_the_text_a_workflow_gives(tmp_path, nam
     message = _refusal(tmp_path, [A, _use("c")], {"round": _round([reserved, reader])})
 
     assert message == (
-        f"Branch 'round' (branches/round.yml), included in {WF}, action '{name}': "
+        f"Branch 'round' (branches/round.yml), included in {WF} as 'c', action '{name}': "
         f"Reserved action name '{name}' cannot be used"
     )
 

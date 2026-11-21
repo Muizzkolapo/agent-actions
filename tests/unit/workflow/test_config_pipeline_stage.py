@@ -178,3 +178,40 @@ class TestDiscoverUDFsFromPathTypedHandling:
 
         assert exc_info.value.context["module"] == UDFLoadError.DISCOVERY_SENTINEL
         assert exc_info.value.context["search_path"] == str(path_dir.resolve())
+
+
+def _assembled(monkeypatch):
+    manager = MagicMock()
+    manager.agent_name = None
+    config = WorkflowRuntimeConfig(
+        paths=WorkflowPaths(
+            constructor_path="/p/agent_workflow/quiz/agent_config/quiz.yml",
+            user_code_path=None,
+            default_path="/p/agent_actions.yml",
+        ),
+        use_tools=False,
+        manager=manager,
+    )
+    monkeypatch.setattr(
+        "agent_actions.workflow.config_pipeline.discover_workflow_udfs", lambda *a, **k: None
+    )
+    return config
+
+
+@pytest.mark.parametrize("value", ["50k", "0", "-1"])
+def test_an_unusable_batch_request_cap_stops_the_assembly_before_any_batch(monkeypatch, value):
+    config = _assembled(monkeypatch)
+    monkeypatch.setenv("AGENT_ACTIONS_BATCH_MAX_REQUESTS", value)
+
+    with pytest.raises(ValueError, match="AGENT_ACTIONS_BATCH_MAX_REQUESTS"):
+        load_workflow_configs(config, MagicMock(), fire_events=False)
+
+
+def test_a_usable_batch_request_cap_passes_the_assembly_check(monkeypatch):
+    config = _assembled(monkeypatch)
+    monkeypatch.setenv("AGENT_ACTIONS_BATCH_MAX_REQUESTS", "10")
+
+    try:
+        load_workflow_configs(config, MagicMock(), fire_events=False)
+    except Exception as error:  # a mock manager can fail a later stage
+        assert "AGENT_ACTIONS_BATCH_MAX_REQUESTS" not in str(error)

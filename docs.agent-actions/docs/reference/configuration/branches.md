@@ -85,8 +85,8 @@ Without `as:`, an input must be bound to an action of the same name, because the
 The load checks each read after it expands the includes:
 
 - An action of the workflow reads only the `outputs` of a branch.
-- A branch action reads only the actions of its include and the actions that its inputs bind. It can also read the framework namespaces: `source`, `seed`, `version`, `workflow`, `prompt`, `schema` and `action`.
-- Inside an include with `as:`, a branch action reads a bound action only through its input. A read of the bound action by its workflow name is refused.
+- A branch action reads only the actions of its include and the actions that its inputs bind. It can also read the framework namespaces `source`, `seed`, `version` and `workflow`. The include check does not refuse a read of `prompt`, `schema` or `action`, but pre-flight refuses it.
+- Inside an include with `as:`, a branch action reads a bound action only through its input. The load refuses a read of the bound action by its workflow name.
 
 A dependency, a `context_scope` entry, a guard clause, a prompt, the source of `version_consumption` and the `context` of an `llm_judge` rule are reads. A read that the action inherits from `defaults:` is also a read.
 

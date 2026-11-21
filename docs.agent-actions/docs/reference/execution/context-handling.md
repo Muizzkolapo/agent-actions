@@ -103,14 +103,14 @@ The same configuration works identically in the two modes.
 
 The two modes also send the same request. For the same prompt, record, schema and `json_mode`, a batch request holds the messages that the online request holds. The prompt, the record and the schema instructions are in the same places.
 
-Agent Actions sends the record to the model as JSON, with no change to its text. Agent Actions does not escape text that is not ASCII. A `NaN` or an infinite number becomes `null`.
+Agent Actions sends the record to the model as JSON, with no escape of its text. Agent Actions does not escape text that is not ASCII. A `NaN` or an infinite number becomes `null`.
 
 A prompt that is too large for the context window of the model fails its record in the two modes. In batch mode, Agent Actions does not send that record. It sends the other records of the batch. A judge request that is too large fails only its judge call, with `judge call failed: <error>`, as online. Agent Actions sends the other judge requests.
 
-Agent Actions estimates the size of a prompt as its number of characters divided by 4. It compares the estimate with the context window of the model. For OpenAI in text mode, Gemini, Groq, Ollama and a judge call, Agent Actions uses a window of 128,000 tokens. Thus a record of about 600,000 characters fails before Agent Actions sends it.
+Agent Actions estimates the size of a prompt as its number of characters divided by 4. It compares the estimate with the context window of the model. For OpenAI in text mode, Gemini, Groq, Ollama and a judge call, Agent Actions uses a window of 128,000 tokens. If the prompt has more than about 512,000 characters, Agent Actions does not send it.
 
 :::note
-This version changes the prompt of each online request for OpenAI, Anthropic, Gemini, Groq and Cohere. Before, the record JSON in the prompt had double braces. Now Agent Actions sends the JSON with no change. Thus an answer can change. The Anthropic prompt cache misses one time after the update.
+From this change on (the release after 3.0.0), Agent Actions changes the prompt of each online request for OpenAI, Anthropic, Gemini, Groq and Cohere. Before, the record JSON in the prompt had double braces. Now Agent Actions sends the JSON with no change. Thus an answer can change. The Anthropic prompt cache misses one time after the update.
 :::
 
 ## Best Practices
