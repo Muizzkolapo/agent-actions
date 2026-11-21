@@ -371,3 +371,13 @@ def test_a_drop_in_the_defaults_of_a_field_an_action_observes_as_optional_stops_
         "context_scope.observe entry 'note_direct.summary?' is optional, and the drop entry "
         "'note_direct.summary' removes the same field" in output
     )
+
+
+def test_a_hand_written_optional_block_stops_the_load(tmp_path):
+    root = _project(tmp_path, 'note_direct.summary\n      optional: { note_direct.summary: "z" }')
+
+    result = _agac(root, "inspect", "-a", WORKFLOW)
+    output = " ".join((result.stdout + result.stderr).split())
+
+    assert result.returncode != 0, output
+    assert "context_scope.optional is not written by hand" in output
