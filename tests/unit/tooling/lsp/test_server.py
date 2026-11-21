@@ -1,6 +1,7 @@
 """Tests for LSP server — _index_for_file routing, did_save, and integration tests."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from lsprotocol import types as lsp
@@ -15,6 +16,7 @@ from agent_actions.tooling.lsp.server import (
     did_change_watched_files,
     did_save,
     initialized,
+    rendered_workflow,
     server,
 )
 
@@ -1000,3 +1002,71 @@ class TestInitializedAndRegistration:
         ) as mock_cap:
             _register_file_watchers()
             mock_cap.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Jinja workflows: template watchers and the rendered-workflow request
+# ---------------------------------------------------------------------------
+
+_MACRO = "{% macro branch_b(p) -%}\n- name: {{ p }}__extract\n  kind: tool\n{%- endmacro %}\n"
+
+
+def _jinja_project(root: Path, workflow: str) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "agent_actions.yml").write_text("default_agent_config: {}\n")
+    (root / "templates").mkdir()
+    (root / "templates" / "branch_b.jinja2").write_text(_MACRO)
+    config = root / "agent_workflow" / "wf" / "agent_config"
+    config.mkdir(parents=True)
+    wf = config / "wf.yml"
+    wf.write_text(workflow)
+    return wf
+
+
+class TestRenderedWorkflowRequest:
+    def setup_method(self):
+        _reset_server()
+
+    def teardown_method(self):
+        _reset_server()
+
+    def test_watchers_include_templates(self, tmp_path: Path):
+        patterns = {w.glob_pattern.pattern for w in _build_watchers_for_project(tmp_path)}
+        assert {"templates/**/*.jinja2", "templates/**/*.j2"} <= patterns
+
+    def test_rendered_workflow_request_returns_sources(self, tmp_path: Path):
+        root = tmp_path.resolve()
+        wf = _jinja_project(
+            root,
+            "{% from 'branch_b.jinja2' import branch_b %}\n"
+            "actions:\n  {{ branch_b('b') | indent(2) }}\n  - name: local\n    kind: tool\n",
+        )
+        server.project_indexes[root] = build_index(root)
+
+        res = rendered_workflow(SimpleNamespace(uri=wf.as_uri()))
+
+        assert res["error"] is None
+        assert "- name: b__extract" in res["text"]
+        assert res["actionSources"]["b__extract"] == {
+            "uri": (root / "templates" / "branch_b.jinja2").as_uri(),
+            "line": 1,
+        }
+        assert res["actionSources"]["local"] == {"uri": wf.as_uri(), "line": 3}
+
+    def test_rendered_workflow_request_reports_error(self, tmp_path: Path):
+        root = tmp_path.resolve()
+        wf = _jinja_project(root, "{% if %}\nactions: []\n")
+        server.project_indexes[root] = build_index(root)
+
+        res = rendered_workflow(SimpleNamespace(uri=wf.as_uri()))
+
+        assert res["text"] is None
+        assert res["error"]
+        assert res["actionSources"] == {}
+
+    def test_rendered_workflow_request_outside_projects(self, tmp_path: Path):
+        wf = _jinja_project(tmp_path.resolve(), "actions: []\n")
+
+        res = rendered_workflow(SimpleNamespace(uri=wf.as_uri()))
+
+        assert res == {"text": None, "error": None, "actionSources": {}}
