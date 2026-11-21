@@ -721,6 +721,11 @@ class ActionConfig(_RetryValidators):
         alias="_gathers",
         description="Records sent elsewhere above come back here, injected by renderer",
     )
+    builtin: dict[str, Any] | None = Field(
+        default=None,
+        alias="_builtin",
+        description="A tool agac runs itself (route, pick) and its settings, injected by renderer",
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -729,7 +734,27 @@ class ActionConfig(_RetryValidators):
             raise ValueError(f"HITL action '{self.name}' requires 'hitl' configuration block")
         if self.kind == ActionKind.TOOL and not self.impl:
             raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
+        if self.builtin is not None:
+            self._check_builtin()
         return self
+
+    def _check_builtin(self) -> None:
+        """Refuse a ``_builtin`` spec its tool cannot run, before the run starts."""
+        from agent_actions.llm.providers.tools.builtin_spec import checked_builtin
+
+        spec = checked_builtin(self.builtin)
+        expected = f"agac.{spec['tool']}"
+        if self.impl != expected:
+            raise ValueError(
+                f"Action '{self.name}' runs the built-in tool '{spec['tool']}', so its 'impl' "
+                f"must be '{expected}', not {self.impl!r}"
+            )
+        missing = [name for name in spec.get("of", []) if name not in self.dependencies]
+        if missing:
+            raise ValueError(
+                f"Action '{self.name}' picks from {', '.join(missing)}, which it does not "
+                "depend on. List each action of 'of' under 'dependencies'."
+            )
 
     @field_validator("context_scope")
     @classmethod
