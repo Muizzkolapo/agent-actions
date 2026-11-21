@@ -77,6 +77,7 @@ def build_repair_strategy(
     agent_config: dict[str, Any] | None,
     judge_budget_remaining: int | None = None,
     judge_verdicts: dict[str, Any] | None = None,
+    context_map: dict[str, Any] | None = None,
 ) -> ExpectationStrategy | None:
     """The action's repair strategy, or None when it does not repair.
 
@@ -84,7 +85,8 @@ def build_repair_strategy(
     previous round is handed back in — otherwise the budget would bound a round
     instead of the run, and `max_iterations` rounds could spend that many times
     the configured cap. The verdicts the judge batches returned are handed back
-    the same way.
+    the same way. *context_map* gives each record the judge context its
+    preparation kept, which a rule's ``context:`` refs resolve against.
     """
     from agent_actions.expectations.service import create_expectation_service_from_config
     from agent_actions.processing.evaluation.strategies import ExpectationStrategy
@@ -99,7 +101,7 @@ def build_repair_strategy(
     )
     if service is None or service.repair == "none":
         return None
-    return ExpectationStrategy(service)
+    return ExpectationStrategy(service, BatchContextMetadata.judge_contexts(context_map))
 
 
 def stamp_exhausted(

@@ -5,9 +5,10 @@ Both vendors use the same in-process loop (no real batch API exists for
 either). The ``cloud`` flag controls client construction (Bearer auth)
 and whether the ``format`` param is passed to ``client.chat()``.
 
-Records are processed concurrently via ``ThreadPoolExecutor``.  Concurrency
-is controlled by ``OLLAMA_BATCH_MAX_WORKERS`` (env var) or the constructor
-``max_workers`` parameter.  Default is 1 (sequential, matching prior behavior).
+Records are processed concurrently via ``ThreadPoolExecutor``.  Its worker count
+is the action's ``batch_max_workers`` (the constructor's ``max_workers``), else
+``OLLAMA_BATCH_MAX_WORKERS``, else 1 (sequential).  ``record_concurrency`` is the
+online setting: it never sets these workers, and is refused on a batch action.
 
 When Ollama ships a real cloud batch API, add a
 ``_submit_to_cloud_batch_api`` branch inside ``_submit_to_provider_api``.
@@ -137,10 +138,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _get_default_model(self) -> str:
         return "llama2"
 
-    def _get_default_temperature(self) -> float | None:
-        # As online: an unset temperature is left to the model.
-        return None
-
     def _prepare_batch_input_file(
         self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
@@ -156,10 +153,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             else OllamaDefaults.BATCH_MAX_WORKERS
         )
 
+        setting = "batch_max_workers"
         if self._max_workers is not None:
             val = self._max_workers
         else:
-            env_val = os.getenv("OLLAMA_BATCH_MAX_WORKERS")
+            setting = "OLLAMA_BATCH_MAX_WORKERS"
+            env_val = os.getenv(setting)
             if env_val:
                 try:
                     val = int(env_val)
@@ -172,11 +171,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 return default
 
         if val < 1:
-            logger.warning("batch_max_workers=%s invalid (must be >= 1), using default", val)
+            logger.warning("%s=%s invalid (must be >= 1), using default", setting, val)
             return default
         if val > self._MAX_WORKERS_LIMIT:
             logger.warning(
-                "batch_max_workers=%s exceeds limit of %s, clamping",
+                "%s=%s exceeds limit of %s, clamping",
+                setting,
                 val,
                 self._MAX_WORKERS_LIMIT,
             )

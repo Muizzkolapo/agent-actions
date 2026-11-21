@@ -181,7 +181,8 @@ class BaseBatchClient(ABC):
                 ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
-                    "temperature": agent_config.get("temperature", self._get_default_temperature()),
+                    # None when the action sets none: each client then sends none, as online.
+                    "temperature": agent_config.get("temperature"),
                     "max_tokens": agent_config.get("max_tokens"),
                     "json_mode": json_mode,
                     VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
@@ -230,10 +231,6 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _get_default_model(self) -> str:
         """Return provider's default model name."""
-
-    def _get_default_temperature(self) -> float | None:
-        """Return provider's default temperature (0.1); None sends none."""
-        return 0.1
 
     @abstractmethod
     def format_task_for_provider(

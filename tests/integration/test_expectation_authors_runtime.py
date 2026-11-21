@@ -48,7 +48,6 @@ ACCEPTED: dict[str, dict[str, list[str]]] = {
 
 REFUSED = [
     "array_member_rule",
-    "judged_context_under_batch",
     "many_mistakes",
     "old_flat_shape",
     "repair_auto_at_file_granularity",
@@ -200,16 +199,17 @@ class TestTheTwoSuitesAgree:
         from tests.integration.test_expectation_authors import REFUSED as PREFLIGHT_REFUSED
 
         on_disk = {p.name for p in (FIXTURE / "agent_workflow").iterdir() if p.is_dir()}
-        here = set(ACCEPTED) | set(REFUSED) | {BATCH_ONLY}
+        here = set(ACCEPTED) | set(REFUSED) | {BATCH_ONLY, BATCH_JUDGED}
 
         assert here == on_disk, "a fixture was added or removed without classifying it"
         assert set(REFUSED) == set(PREFLIGHT_REFUSED), "the two suites disagree on refusals"
-        assert set(ACCEPTED) | {BATCH_ONLY} == set(PREFLIGHT_ACCEPTED), (
+        assert set(ACCEPTED) | {BATCH_ONLY, BATCH_JUDGED} == set(PREFLIGHT_ACCEPTED), (
             "the two suites disagree on what preflight accepts"
         )
 
 
 BATCH_ONLY = "batch_field_rules"
+BATCH_JUDGED = "judged_context_under_batch"
 
 
 def test_the_batch_author_submits_and_is_collected(run):
@@ -247,3 +247,47 @@ def test_the_batch_author_reaches_the_verdict_its_online_twin_does(run):
     assert "is not one of" in outcomes["density_is_known"]["detail"], (
         "the density rule reported an absent field, not a value it rejected"
     )
+
+
+def test_the_batch_judge_is_sent_the_field_its_rule_references(run):
+    """`summarize` judges its summary against `extract.body`, and both actions batch.
+
+    The rule names a field of another action, which a batch run reads when it
+    prepares the record and the judge needs only once the answers are back. Each
+    judge request is read from the provider's own record of the batch, between the
+    run that sent it and the run that collects it.
+    """
+    result = run(BATCH_JUDGED)
+    state_dir = result.project / ".agac" / "batch_state"
+    judge_requests: dict[str, str] = {}
+    for _ in range(8):
+        for state in state_dir.glob("*.json"):
+            for task in json.loads(state.read_text())["tasks"]:
+                if task["custom_id"].startswith("j_"):
+                    judge_requests[task["custom_id"]] = task["user_content"]
+        if result.returncode != EXIT_PAUSED:
+            assert result.returncode == 0, result.output
+            assert "run again" not in result.output, result.output
+            break
+        assert "run again" in result.output, result.output
+        result = run(BATCH_JUDGED, again=True)
+    else:
+        pytest.fail(f"the workflow never stopped asking to be run again:\n{result.output}")
+
+    bodies = {
+        record["content"]["extract"]["body"]
+        for db in result._dbs()
+        for (blob,) in stored_rows(db, "select data from target_data where action_name = 'extract'")
+        for record in json.loads(blob)
+    }
+
+    assert judge_requests, "no judge batch went out"
+    grounding = {
+        prompt.split("## Grounding context\n", 1)[-1].split("\n\n## Value under test", 1)[0]
+        for prompt in judge_requests.values()
+    }
+    assert grounding == {f"- extract.body: {body}" for body in bodies}
+
+    (outcome,) = result.verdicts["summarize"]["outcomes"]
+    assert (outcome["id"], outcome["type"]) == ("grounded", "llm_judge")
+    assert "context" not in outcome["detail"], "the rule failed on its context, not on a verdict"

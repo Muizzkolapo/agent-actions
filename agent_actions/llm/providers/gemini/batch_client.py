@@ -113,12 +113,14 @@ class GeminiBatchClient(BaseBatchClient):
                     }]
                 }],
                 "generation_config": {
-                    "temperature": 0.1,
                     "max_output_tokens": 1000,
                     "response_mime_type": "application/json"
                 }
             }
         }
+
+        ``generation_config`` holds a temperature or ``max_output_tokens`` only when
+        the action sets one; unset, it is left to the model, as online.
         """
         envelope = MessageBuilder.build_for_batch(
             "gemini", batch_task.prompt, batch_task.user_content, schema=schema

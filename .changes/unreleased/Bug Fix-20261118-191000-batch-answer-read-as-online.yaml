@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A `run_mode: batch` action now reads each answer into the fields it stores with the same passthrough strategies an online action uses, so the stored record is the same in both modes. Two cases differed. An answer item that itself has `source_guid` and `content` keys was stored whole in batch; it is now stored as its `content`, as online stores it. With a `context_scope.passthrough` that resolved to no field (a field passed through and dropped again), online also copies a record value stored under that field''s bare name into the action''s output; batch now does the same. Passthrough of one field or of a whole namespace was already stored alike.'
+time: 2026-11-18T19:10:00Z

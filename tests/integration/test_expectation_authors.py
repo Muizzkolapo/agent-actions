@@ -20,6 +20,7 @@ ACCEPTED = [
     "field_scoped_rules",
     "inline_rules",
     "judge_votes_and_budget",
+    "judged_context_under_batch",
     "pair_and_pattern_rules",
     "record_expression",
     "repair_auto",
@@ -34,10 +35,6 @@ REFUSED = {
         "nested member 'text'",
         "a selector reaches top-level fields only",
         "write a custom check",
-    ],
-    "judged_context_under_batch": [
-        "not available under batch run_mode",
-        "run the action online",
     ],
     "many_mistakes": [
         "field 'no_such_field' is not produced by this action",
