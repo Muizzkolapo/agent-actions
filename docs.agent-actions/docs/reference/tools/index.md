@@ -262,7 +262,7 @@ Tool registration is thread-safe. The framework loads a module only one time.
 agac list-udfs -u ./tools
 
 # Validate tool references in workflow
-agac validate-udfs -a my_workflow -u ./tools
+agac validate-udfs -w my_workflow -u ./tools
 ```
 
 ## Import Rules

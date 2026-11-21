@@ -317,16 +317,16 @@ All commands run from the **project root** (where `agent_actions.yml` lives). `-
 uv sync
 
 # Validate all impl: references resolve to real @udf_tool functions before running
-agac validate-udfs -a {workflow} -u tools
+agac validate-udfs -w {workflow} -u tools
 
 # Run (resumes from last completed action)
-agac run -a {workflow} -u tools
+agac run -w {workflow} -u tools
 
 # Fresh run (clears all state first)
-agac run -a {workflow} -u tools --fresh
+agac run -w {workflow} -u tools --fresh
 
 # Per-record status across all actions
-agac dispositions -a {workflow} -u tools
+agac dispositions -w {workflow} -u tools
 ```
 
 Use `record_limit: N` on any action in the YAML to test cheaply on a subset of its records — on the first action to shrink the whole run, further down to shrink one step. To shrink a run without editing the YAML, pass `--record-limit N` or `--file-limit N` to `agac run`, or set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` — the first bounds records per input file, the second how many files are walked.
@@ -366,10 +366,10 @@ Records carry `version_correlation_id` — same ID across all actions for the sa
 python3 scripts/inspect_action.py {workflow} {action_name}
 
 # All action schemas (input → output) in one table
-agac schema -a {workflow} -u tools
+agac schema -w {workflow} -u tools
 
 # Full pipeline graph
-agac inspect -a {workflow} -u tools
+agac inspect -w {workflow} -u tools
 ```
 
 **Inspecting live output data and rendered prompts:**

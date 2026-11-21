@@ -225,7 +225,7 @@ export OLLAMA_API_KEY=ollama
 4. Run the workflow:
 
 ```bash
-agac run -a support_resolution
+agac run -w support_resolution
 ```
 
 By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.

@@ -132,7 +132,7 @@ The `clean` command removes the working directories of a workflow under `agent_i
 If `clean` finds something to remove during a run or a retry of the workflow, it removes nothing. It exits 1 with `Another run of workflow '<workflow>' is in progress` (see [Concurrent runs](./run.md#concurrent-runs)). `clean` holds the same lock from before it asks for confirmation until it finishes. It keeps the lock file. After `--all`, `agent_io/store/` holds only the empty `<workflow>.db.lock`.
 
 ```bash
-agac clean -a <workflow-name> [options]
+agac clean -w <workflow-name> [options]
 ```
 
 The command removes these items:
@@ -152,13 +152,13 @@ The command removes these items:
 **Examples:**
 ```bash
 # Remove regenerable preprocessed inputs (with confirmation)
-agac clean -a my_workflow
+agac clean -w my_workflow
 
 # Also remove generated output
-agac clean -a my_workflow --target
+agac clean -w my_workflow --target
 
 # Remove everything, including staging inputs and the durable store
-agac clean -a my_workflow --all
+agac clean -w my_workflow --all
 ```
 
 :::note[Run from Anywhere]

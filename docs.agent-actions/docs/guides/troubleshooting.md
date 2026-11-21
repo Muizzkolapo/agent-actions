@@ -373,7 +373,7 @@ agac records -w <workflow> -A <previous_action> --source-guid 37812c37-80a2-596b
 To get detailed tracebacks, run this command:
 
 ```bash
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 ```
 
 ### Step 5: Enable Prompt Debug
@@ -544,7 +544,7 @@ This section gives the commands and the patterns for debugging.
 
 ```bash
 # Debug mode (full tracebacks)
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w workflow
 ```
 
 ### Common Fixes Cheatsheet
