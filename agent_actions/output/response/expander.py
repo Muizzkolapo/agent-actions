@@ -17,6 +17,7 @@ from typing import Any
 
 from agent_actions.config.schema import DefaultsConfig, dump_defaults, validate_version_block
 from agent_actions.llm.config.vendor import canonical_vendor
+from agent_actions.record.elsewhere import GATHERS_KEY, SENDS_ELSEWHERE_KEY
 
 from .config_fields import get_default, inherit_simple_fields
 from .expander_action_types import (
@@ -187,8 +188,9 @@ class ActionExpander:
         """
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
-        if "_include" in action:
-            agent["_include"] = action["_include"]
+        for internal in ("_include", SENDS_ELSEWHERE_KEY, GATHERS_KEY):
+            if internal in action:
+                agent[internal] = action[internal]
 
         # Decided once here; every later reader, here and at run time, reads kind alone.
         # A tool or HITL action routes to its own client whatever vendor it inherits.

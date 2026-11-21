@@ -27,6 +27,13 @@ from agent_actions.workflow.executor import (
 from agent_actions.workflow.runner import ActionRunner, FileProcessParams
 from agent_actions.workflow.runner_file_processing import _MAX_TRACKED_ERRORS, process_files
 
+
+def _configured(runner: ActionRunner) -> ActionRunner:
+    """A runner as a run sets it up: it reads stored input only with its action configs."""
+    runner.action_configs = {}
+    return runner
+
+
 ACTION = "collect_questions"
 CAUSE = "Function 'write_rows' not found"
 
@@ -65,7 +72,20 @@ def _backend_runner(relative_paths: list[str]) -> ActionRunner:
     backend.read_target.return_value = [{"id": 1}]
     backend.get_disposition.return_value = []
     backend.load_metadata.return_value = None
-    return ActionRunner(use_tools=True, storage_backend=backend)
+    return _configured(ActionRunner(use_tools=True, storage_backend=backend))
+
+
+def test_a_runner_with_no_action_configs_refuses_to_read_stored_input(tmp_path):
+    runner = _backend_runner(["data.json"])
+    runner.action_configs = None
+    params = _params(
+        _failing_strategy(FunctionNotFoundError(CAUSE)),
+        [str(tmp_path / "target" / "author_stem")],
+        tmp_path / "out",
+    )
+
+    with pytest.raises(RuntimeError, match="before its action configs are set"):
+        process_files(runner, params)
 
 
 class TestTheSurfacedErrorNamesTheRealCause:
@@ -91,7 +111,7 @@ class TestTheSurfacedErrorNamesTheRealCause:
         second = tmp_path / "target" / "dep2"
         _write(first / "a.json")
         _write(second / "b.json")
-        runner = ActionRunner(use_tools=True)
+        runner = _configured(ActionRunner(use_tools=True))
         params = _params(
             _failing_strategy(FunctionNotFoundError(CAUSE)),
             [str(first), str(second)],
@@ -108,7 +128,7 @@ class TestTheSurfacedErrorNamesTheRealCause:
     def test_the_single_directory_path_names_the_file_and_the_cause(self, tmp_path):
         source = tmp_path / "input"
         _write(source / "page.json")
-        runner = ActionRunner(use_tools=True)
+        runner = _configured(ActionRunner(use_tools=True))
         params = _params(
             _failing_strategy(FunctionNotFoundError(CAUSE)),
             [str(source)],
@@ -161,7 +181,7 @@ class TestTheCauseIsWhereTheReaderLooks:
         params = _params(_failing_strategy(refused), [str(source)], tmp_path / "out")
 
         with pytest.raises(DependencyError) as exc_info:
-            process_files(ActionRunner(use_tools=True), params)
+            process_files(_configured(ActionRunner(use_tools=True)), params)
 
         message = str(exc_info.value)
         assert "a.json: Failed to submit batch job" in message
@@ -175,7 +195,7 @@ class TestTheCauseIsWhereTheReaderLooks:
         source = tmp_path / "input"
         for i in range(failing_files):
             _write(source / f"page{i}.json")
-        runner = ActionRunner(use_tools=True)
+        runner = _configured(ActionRunner(use_tools=True))
         params = _params(
             _failing_strategy(FunctionNotFoundError(CAUSE)),
             [str(source)],
@@ -201,7 +221,7 @@ class TestTheCauseReachesTheStoredDisposition:
         backend.initialize()
         source = tmp_path / "input"
         _write(source / "page.json")
-        runner = ActionRunner(use_tools=True, storage_backend=backend)
+        runner = _configured(ActionRunner(use_tools=True, storage_backend=backend))
         params = _params(
             _failing_strategy(FunctionNotFoundError(CAUSE)),
             [str(source)],
@@ -241,7 +261,7 @@ class TestOnlyFailingRunsAreAffected:
     def test_a_run_that_processes_its_files_raises_nothing(self, tmp_path):
         source = tmp_path / "input"
         _write(source / "page.json")
-        runner = ActionRunner(use_tools=True)
+        runner = _configured(ActionRunner(use_tools=True))
         strategy = MagicMock()
 
         process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
@@ -261,7 +281,7 @@ class TestOnlyFailingRunsAreAffected:
                 raise FunctionNotFoundError(CAUSE)
 
         strategy.execute.side_effect = execute
-        runner = ActionRunner(use_tools=True)
+        runner = _configured(ActionRunner(use_tools=True))
 
         process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
 
