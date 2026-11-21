@@ -135,6 +135,7 @@ const sidebars: SidebarsConfig = {
           items: [
             'reference/prompts/prompt-store',
             'reference/prompts/dispatch',
+            'reference/prompts/prompt-caching',
           ],
         },
         'reference/schemas/index',

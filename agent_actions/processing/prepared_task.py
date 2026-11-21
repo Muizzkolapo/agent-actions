@@ -29,6 +29,8 @@ class PreparedTask:
     source_guid: str | None
     formatted_prompt: str = ""
     llm_context: dict[str, Any] = field(default_factory=dict)
+    cache_points: tuple[int, ...] = ()
+    """The length of ``formatted_prompt`` before each `{% cache_point %}` its render reached."""
 
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
     original_content: Any = None

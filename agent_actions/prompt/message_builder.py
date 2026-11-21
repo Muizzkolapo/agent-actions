@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from textwrap import dedent
@@ -136,18 +137,34 @@ class LLMMessage:
 
     role: str
     content: str
-    cache_control: dict[str, str] | None = None
     static_len: int = 0
-    """Length of the leading prompt text, before any record content; a cache mark sits
-    at its end."""
+    """Length of the leading prompt text, before any record content."""
+    cache_boundaries: tuple[int, ...] = ()
+    """Lengths of leading content, ascending, that other requests begin with too. A
+    vendor with cache marks puts one at each; any other sends the content."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.static_len <= len(self.content):
             raise ValueError(
                 f"static_len {self.static_len} is outside a content of length {len(self.content)}"
             )
-        if self.cache_control is not None and self.static_len == 0:
-            raise ValueError("A cache mark needs prompt text before it; static_len is 0")
+        ends = (0, *self.cache_boundaries)
+        if any(a >= b for a, b in zip(ends, ends[1:], strict=False)) or ends[-1] > self.static_len:
+            raise ValueError(
+                f"Cache boundaries {self.cache_boundaries} must ascend within the prompt text, "
+                f"whose length is {self.static_len}"
+            )
+
+    def segments(self) -> list[tuple[str, bool]]:
+        """The content in order, as (text, whether a cache boundary ends it) pairs."""
+        parts = []
+        start = 0
+        for end in self.cache_boundaries:
+            parts.append((self.content[start:end], True))
+            start = end
+        if start < len(self.content) or not parts:
+            parts.append((self.content[start:], False))
+        return parts
 
 
 @dataclass
@@ -168,22 +185,7 @@ class LLMMessageEnvelope:
             role: If set, only include messages with this role.
         """
         msgs = self.messages if role is None else [m for m in self.messages if m.role == role]
-        result: list[dict[str, Any]] = []
-        for m in msgs:
-            d: dict[str, Any] = {"role": m.role, "content": m.content}
-            if m.cache_control is not None:
-                blocks: list[dict[str, Any]] = [
-                    {
-                        "type": "text",
-                        "text": m.content[: m.static_len],
-                        "cache_control": m.cache_control,
-                    }
-                ]
-                if m.static_len < len(m.content):
-                    blocks.append({"type": "text", "text": m.content[m.static_len :]})
-                d["content"] = blocks
-            result.append(d)
-        return result
+        return [{"role": m.role, "content": m.content} for m in msgs]
 
 
 # ---------------------------------------------------------------------------
@@ -296,13 +298,19 @@ class MessageBuilder:
         enable_prompt_caching: bool = False,
         shared_prompt_len: int | None = None,
         model_name: str | None = None,
+        cache_points: Sequence[int] = (),
     ) -> LLMMessageEnvelope:
         """Build the message envelope of one provider request, online or a batch line.
 
         ``shared_prompt_len`` is the length of the leading part of ``prompt_config`` every
-        record is sent; None means all of it. A cache mark sits at its end.
+        record is sent; None means all of it. ``enable_prompt_caching`` puts a cache
+        boundary at its end. ``cache_points`` are lengths of leading ``prompt_config``
+        the template marked as shared by some records; each is a cache boundary.
         """
         MessageBuilder._check_shared_len(shared_prompt_len, prompt_config)
+        MessageBuilder._check_cache_points(
+            cache_points, _shared_len(prompt_config, shared_prompt_len)
+        )
         config = MessageBuilder._get_config(provider)
         style = config.json_prompt_style if json_mode else config.non_json_prompt_style
         role = config.json_role if json_mode else config.non_json_role
@@ -349,8 +357,13 @@ class MessageBuilder:
             shared_prompt_len=shared_prompt_len,
         )
 
-        if enable_prompt_caching:
-            messages = MessageBuilder._mark_for_caching(provider, messages)
+        if enable_prompt_caching or cache_points:
+            messages = MessageBuilder._place_cache_boundaries(
+                messages,
+                cache_points,
+                _shared_len(prompt_config, shared_prompt_len),
+                at_prompt_end=enable_prompt_caching,
+            )
 
         # Token overflow pre-flight guard — always runs.
         # When model_name is unknown, falls back to _DEFAULT_CONTEXT_LIMIT.
@@ -388,16 +401,29 @@ class MessageBuilder:
             )
 
     @staticmethod
-    def _mark_for_caching(provider: str, messages: list[LLMMessage]) -> list[LLMMessage]:
-        """Put one cache mark at the end of the prompt text; only Anthropic reads it.
+    def _check_cache_points(cache_points: Sequence[int], shared_len: int) -> None:
+        ends = (0, *cache_points)
+        if any(a > b for a, b in zip(ends, ends[1:], strict=False)) or ends[-1] > shared_len:
+            raise ValueError(
+                f"Cache points {tuple(cache_points)} must ascend within the shared prompt, "
+                f"whose length is {shared_len}"
+            )
 
-        Record content is never marked. A caller asks for the mark only when the prompt
-        is the same for every record: a mark on text that changes per record writes a
-        cache entry no other request reads. No mark is placed where either text block it
-        splits into would be blank, a block the API refuses.
+    @staticmethod
+    def _place_cache_boundaries(
+        messages: list[LLMMessage],
+        cache_points: Sequence[int],
+        shared_len: int,
+        *,
+        at_prompt_end: bool,
+    ) -> list[LLMMessage]:
+        """Put a cache boundary at each cache point and, asked to, at the end of the prompt text.
+
+        Record content is never behind a boundary. A caller asks for the one at the end
+        only when the prompt is the same for every record: a mark on text that changes
+        per record writes a cache entry no other request reads. No boundary is placed
+        where a text block it splits off would be blank, a block the API refuses.
         """
-        if provider != "anthropic":
-            return messages
         last_shared: int | None = None
         for index, message in enumerate(messages):
             if message.static_len:
@@ -407,12 +433,22 @@ class MessageBuilder:
         if last_shared is None:
             return messages
         message = messages[last_shared]
-        head, tail = message.content[: message.static_len], message.content[message.static_len :]
-        if not head.strip() or (tail and not tail.strip()):
+        prompt_start = message.static_len - shared_len
+        wanted = [prompt_start + point for point in cache_points]
+        if at_prompt_end:
+            wanted.append(message.static_len)
+        boundaries: list[int] = []
+        for end in wanted:
+            if message.content[boundaries[-1] if boundaries else 0 : end].strip():
+                boundaries.append(end)
+        tail = message.content[boundaries[-1] :] if boundaries else ""
+        if tail and not tail.strip():
+            boundaries.pop()
+        if not boundaries:
             return messages
-        marked = list(messages)
-        marked[last_shared] = replace(messages[last_shared], cache_control={"type": "ephemeral"})
-        return marked
+        placed = list(messages)
+        placed[last_shared] = replace(message, cache_boundaries=tuple(boundaries))
+        return placed
 
     @staticmethod
     def _get_config(provider: str) -> ProviderMessageConfig:

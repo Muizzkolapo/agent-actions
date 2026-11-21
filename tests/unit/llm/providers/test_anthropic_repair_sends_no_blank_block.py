@@ -10,6 +10,7 @@ import pytest
 
 from agent_actions.expectations.service import ExpectationService
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.providers.anthropic import message_params
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
 from agent_actions.processing.invocation.online import OnlineStrategy
 from agent_actions.processing.prepared_task import PreparedTask
@@ -146,15 +147,18 @@ class TestNoBlankBlock:
         shared = MessageBuilder.build("anthropic", STATIC, "{}", enable_prompt_caching=True)
 
         for envelope in (blank_tail, blank_prompt, shared):
-            assert _blank_blocks(envelope.to_dicts()) == []
-        assert repair._marked_texts(shared.to_dicts()) == [repair.SHARED]
+            assert _blank_blocks(message_params(envelope)) == []
+        assert repair._marked_texts(message_params(shared)) == [repair.SHARED]
 
     def test_the_marking_rule_marks_no_part_that_would_leave_a_blank_block(self):
         blank_tail = [LLMMessage(role="system", content=f"{STATIC}\n\n", static_len=len(STATIC))]
         blank_prompt = [LLMMessage(role="system", content="   ", static_len=3)]
 
         for messages in (blank_tail, blank_prompt):
-            assert MessageBuilder._mark_for_caching("anthropic", messages) == messages
+            placed = MessageBuilder._place_cache_boundaries(
+                messages, (), messages[0].static_len, at_prompt_end=True
+            )
+            assert placed == messages
 
     def test_the_blank_block_search_finds_a_blank_block(self):
         assert _blank_blocks(

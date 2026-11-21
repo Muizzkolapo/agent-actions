@@ -13,6 +13,7 @@ from jinja2 import meta
 
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathType
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +236,8 @@ class PromptLoader:
 def _refuse_unexpanded_load_prompt(prompt_name: str, text: str) -> None:
     outside_raw = _RAW_OR_LOAD_TAG.sub(lambda m: "" if m.group("raw") else m.group(0), text)
     try:
-        names = meta.find_undeclared_variables(jinja2.Environment().parse(outside_raw))
+        environment = jinja2.Environment(extensions=PROMPT_EXTENSIONS)
+        names = meta.find_undeclared_variables(environment.parse(outside_raw))
     except jinja2.TemplateSyntaxError:
         # The per-record render reports the prompt's syntax error.
         return
