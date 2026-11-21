@@ -103,6 +103,7 @@ def split_optional_observe(context_scope: Any) -> Any:
     if not isinstance(entries, list) or all(
         isinstance(entry, str) and _OPTIONAL_MARK not in entry for entry in entries
     ):
+        _refuse_dropped_optional(stated or {}, context_scope.get("drop"))
         return context_scope
 
     references: list[Any] = []
@@ -117,10 +118,24 @@ def split_optional_observe(context_scope: Any) -> Any:
         if reference not in references:
             references.append(reference)
 
+    _refuse_dropped_optional(optional, context_scope.get("drop"))
     split = {**context_scope, "observe": references}
     if optional:
         split[OPTIONAL_DIRECTIVE] = optional
     return split
+
+
+def _refuse_dropped_optional(optional: dict[str, Any], drop: Any) -> None:
+    """Drop runs before observe, so the field would never be read: only its default."""
+    dropped = [ref for ref in optional if isinstance(drop, list) and ref in drop]
+    if dropped:
+        ref = dropped[0]
+        raise ConfigurationError(
+            f"context_scope.observe entry '{ref}?' is optional, and the drop entry '{ref}' "
+            "removes the same field, so every record would get the default. Remove the drop "
+            "entry to read the field, or the observe entry to withhold it.",
+            context={"directive": "observe", "entry": f"{ref}?"},
+        )
 
 
 def hand_written_optional_error() -> ConfigurationError:
