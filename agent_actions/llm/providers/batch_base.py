@@ -537,10 +537,10 @@ class BaseBatchClient(ABC):
             target[key] = default
 
     def _answer_was_cut_off(self, _raw_response: Any) -> bool:
-        """Whether the output limit stopped the answer; its text is then kept unparsed.
+        """Whether the output limit or the provider stopped the answer; its text is kept unparsed.
 
         Parsing would guess the end of a half-written JSON. In JSON mode the unparsed
-        text becomes a parse error, as online refuses to read a cut-off answer.
+        text becomes a parse error, as online refuses to read such an answer.
         """
         return False
 
