@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
-from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
@@ -180,18 +180,24 @@ def _project(tmp_path: Path, finalize: str) -> Path:
     return root
 
 
-def _agac(project: Path, *args: str, code: int | None = None) -> str:
+def _agac(project: Path, *args: str, code: int) -> str:
     result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
     output = result.stdout + result.stderr
-    assert result.returncode in (RAN_TO_ITS_END if code is None else {code}), output
+    assert result.returncode == code, output
     return output
 
 
-def _run(project: Path, *args: str) -> str:
-    output = _agac(project, "run", "-a", WORKFLOW, *args)
-    if "run again" in output.lower():
-        output += _agac(project, "run", "-a", WORKFLOW)
-    return output
+def _run(project: Path, *args: str, ends_with: int) -> str:
+    """A run, and a second one when the first paused for a batch; the last exits *ends_with*."""
+    result = run_agac(
+        project, "run", "-a", WORKFLOW, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+    )
+    output = result.stdout + result.stderr
+    if "run again" not in output.lower():
+        assert result.returncode == ends_with, output
+        return output
+    assert result.returncode == EXIT_PAUSED, output
+    return output + _agac(project, "run", "-a", WORKFLOW, code=ends_with)
 
 
 def _rows(project: Path, action: str, path: str) -> list[dict]:
@@ -228,7 +234,7 @@ def _resumed(tmp_path: Path, finalize: str) -> tuple[Path, str, list[dict]]:
     """Fail alpha, stop the retry at side, then retry again with nothing in the way."""
     project = _project(tmp_path, finalize)
     (project / "FAIL_AT").write_text("flatten")
-    _run(project, "--fresh")
+    _run(project, "--fresh", ends_with=EXIT_RECORD_FAILURES)
     (project / "FAIL_AT").unlink()
     assert any(
         row.get("_state") == "cascade_skipped" for row in _rows(project, "finalize", "pages1.json")
@@ -246,9 +252,11 @@ def _resumed(tmp_path: Path, finalize: str) -> tuple[Path, str, list[dict]]:
         "Page beta. #2",
     ], stopped
 
-    output = _agac(project, "retry", "-a", WORKFLOW)
+    output = _agac(
+        project, "retry", "-a", WORKFLOW, code=EXIT_PAUSED if finalize == "batch" else EXIT_SUCCESS
+    )
     if finalize == "batch":
-        output += _run(project)
+        output += _run(project, ends_with=EXIT_SUCCESS)
     return project, output, untouched
 
 
@@ -279,7 +287,7 @@ class TestAResumedRetry:
         project, _, _ = _resumed(tmp_path, finalize)
         before = _rows(project, "finalize", "pages1.json")
 
-        output = _run(project)
+        output = _run(project, ends_with=EXIT_SUCCESS)
 
         assert output.count("already complete") == 4, output
         assert _rows(project, "finalize", "pages1.json") == before

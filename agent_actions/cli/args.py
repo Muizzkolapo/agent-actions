@@ -110,7 +110,7 @@ class RunCommandArgs(BaseModel):
     )
     wait: bool = Field(False, description="Run again while paused for a batch, until none is open")
     poll: float = Field(
-        DEFAULT_POLL_SECONDS, description="Seconds between two passes of --wait", ge=0
+        DEFAULT_POLL_SECONDS, description="Seconds between two passes of --wait", ge=1
     )
     wait_timeout: float | None = Field(
         None, description="Seconds after which --wait stops and leaves the batches open", ge=0

@@ -15,9 +15,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.cli.main import cli
-from tests._support.exit_codes import RAN_TO_ITS_END
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
 PAGES = {
@@ -151,13 +150,15 @@ class _Project:
         self.workflow = workflow
         self.passes = passes
 
-    def run(self, *args: str):
+    def run(self, *args: str, ends_with: int):
+        """Run the passes of a first run; each but the last pauses for a batch."""
         result = None
         for i in range(self.passes):
             result = CliRunner().invoke(
                 cli, ["run", "-a", self.workflow, *(args if i == 0 else ())]
             )
-            assert result.exit_code in RAN_TO_ITS_END, result.output
+            expected = ends_with if i == self.passes - 1 else EXIT_PAUSED
+            assert result.exit_code == expected, result.output
         return result
 
     def retry(self):
@@ -277,7 +278,7 @@ def _broken_pages(dispositions: dict[str, tuple[str, str | None]]) -> dict[str, 
 def test_the_file_it_raised_on_fails_its_records(project):
     project.breaks()
 
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
 
     dispositions = project.dispositions()
     assert _broken_pages(dispositions) == {
@@ -295,7 +296,7 @@ def test_the_file_it_raised_on_fails_its_records(project):
 
 def test_a_retry_runs_the_tool_on_that_file_again(project):
     project.breaks()
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
     project.breaks(on=False)
 
     result = project.retry()
@@ -310,13 +311,13 @@ def test_a_retry_runs_the_tool_on_that_file_again(project):
 
 def test_after_a_rerun_the_file_keeps_no_row_from_before_it(project):
     """`--rerun` of the action above the tool reopens it and the tool with it."""
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_SUCCESS)
     assert project.status() == "completed"
     assert all(len(rows) == 2 for rows in project.summaries().values())
     project.tag("v2")
     project.breaks()
 
-    project.run("--rerun", project.upstream)
+    project.run("--rerun", project.upstream, ends_with=EXIT_RECORD_FAILURES)
 
     stored = project.summaries()
     assert stored.get(BROKEN_FILE, []) == [], "a row from before the rerun"
@@ -331,7 +332,7 @@ def test_a_retry_the_tool_raises_under_fails_the_record_it_repaired(below_a_tool
     on its file. The repaired record is failed at the tool, so the next retry gets it."""
     project = below_a_tool
     project.breaks(flag=UPSTREAM_FLAG)
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
     assert project.dispositions()["Page alpha."][0] == "unprocessed"
     project.breaks(on=False, flag=UPSTREAM_FLAG)
     project.breaks()
@@ -359,7 +360,7 @@ def test_an_answer_its_schema_refuses_fails_only_the_record_it_answers(project):
     answer alone, which names page alpha. Page beta's answer is stored."""
     project.breaks(flag=MISSHAPE_FLAG)
 
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
 
     dispositions = project.dispositions()
     assert _broken_pages(dispositions) == {
@@ -386,12 +387,12 @@ def test_an_answer_its_schema_refuses_fails_only_the_record_it_answers(project):
 
 
 def test_after_a_rerun_a_refused_answer_keeps_no_row_from_before_it(project):
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_SUCCESS)
     assert project.status() == "completed"
     project.tag("v2")
     project.breaks(flag=MISSHAPE_FLAG)
 
-    project.run("--rerun", project.upstream)
+    project.run("--rerun", project.upstream, ends_with=EXIT_RECORD_FAILURES)
 
     stored = project.summaries()
     assert len(stored[BROKEN_FILE]) == 1, "a row from before the rerun, or none for page beta"
@@ -406,7 +407,7 @@ def test_a_refused_answer_naming_every_record_of_its_file_fails_them_all(project
     """One row answers both pages of the file, so the schema refusing it fails both."""
     project.breaks(flag=COLLAPSE_FLAG)
 
-    project.run("--fresh")
+    project.run("--fresh", ends_with=EXIT_RECORD_FAILURES)
 
     dispositions = project.dispositions()
     assert _broken_pages(dispositions) == {

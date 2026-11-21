@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
-from tests._support.exit_codes import RAN_TO_ITS_END
 from tests.helpers.store import stored_rows
 
 REPO = Path(__file__).resolve().parents[2]
@@ -169,18 +169,24 @@ def _project(tmp_path: Path, finalize: str) -> Path:
     return root
 
 
-def _agac(project: Path, *args: str) -> str:
+def _agac(project: Path, *args: str, exits: int) -> str:
     result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
     output = result.stdout + result.stderr
-    assert result.returncode in RAN_TO_ITS_END, output
+    assert result.returncode == exits, output
     return output
 
 
-def _run(project: Path, *args: str) -> str:
-    output = _agac(project, "run", "-a", WORKFLOW, *args)
-    if "run again" in output.lower():
-        output += _agac(project, "run", "-a", WORKFLOW)
-    return output
+def _run(project: Path, *args: str, ends_with: int) -> str:
+    """A run, and a second one when the first paused for a batch; the last exits *ends_with*."""
+    result = run_agac(
+        project, "run", "-a", WORKFLOW, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+    )
+    output = result.stdout + result.stderr
+    if "run again" not in output.lower():
+        assert result.returncode == ends_with, output
+        return output
+    assert result.returncode == EXIT_PAUSED, output
+    return output + _agac(project, "run", "-a", WORKFLOW, exits=ends_with)
 
 
 def _rows(project: Path, action: str, path: str) -> list[dict]:
@@ -231,16 +237,18 @@ def _retried(tmp_path: Path, finalize: str, fail_at: str) -> tuple[Path, str, li
     """A run that fails alpha at *fail_at*, then a retry once the fault is gone."""
     project = _project(tmp_path, finalize)
     (project / "FAIL_AT").write_text(fail_at)
-    _run(project, "--fresh")
+    _run(project, "--fresh", ends_with=EXIT_RECORD_FAILURES)
     assert any(
         row.get("_state") == "cascade_skipped" for row in _rows(project, "finalize", "pages1.json")
     ), "the failed run left no tombstone below the split"
     untouched = _rows(project, "finalize", "pages2.json")
     (project / "FAIL_AT").unlink()
     (project / "handed.log").unlink(missing_ok=True)
-    output = _agac(project, "retry", "-a", WORKFLOW)
+    output = _agac(
+        project, "retry", "-a", WORKFLOW, exits=EXIT_PAUSED if finalize == "batch" else EXIT_SUCCESS
+    )
     if finalize == "batch":
-        output += _run(project)
+        output += _run(project, ends_with=EXIT_SUCCESS)
     return project, output, untouched
 
 
@@ -272,7 +280,7 @@ class TestAToolBelowTheSplit:
         before = _rows(project, "finalize", "pages1.json")
         (project / "handed.log").unlink(missing_ok=True)
 
-        output = _run(project)
+        output = _run(project, ends_with=EXIT_SUCCESS)
 
         assert output.count("already complete") == 3, output
         assert _handed(project) == []
@@ -298,7 +306,7 @@ class TestAnLlmActionBelowTheSplit:
         project, _, _ = _retried(tmp_path, mode, "flatten")
         before = _rows(project, "finalize", "pages1.json")
 
-        output = _run(project)
+        output = _run(project, ends_with=EXIT_SUCCESS)
 
         assert output.count("already complete") == 3, output
         assert _rows(project, "finalize", "pages1.json") == before
