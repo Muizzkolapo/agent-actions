@@ -509,7 +509,7 @@ def test_the_run_that_collects_it_repairs_one_and_keeps_the_other(
     under_batch._set_disposition(root, reached, "failed")
     under_batch._set_disposition(root, LEGACY, "failed")
 
-    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW)
+    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW, ends_with=EXIT_RECORD_FAILURES)
 
     dispositions = under_batch._dispositions(root)
     assert (dispositions[reached], dispositions[LEGACY]) == ("success", "failed")
@@ -529,6 +529,6 @@ def test_a_failure_put_back_with_no_reason_is_collected_over(
     finally:
         backend.close()
 
-    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW)
+    under_batch._cycle(root, "retry", "-a", under_batch.WORKFLOW, ends_with=EXIT_RECORD_FAILURES)
 
     assert under_batch._dispositions(root)[LEGACY] == "failed"

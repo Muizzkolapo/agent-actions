@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from agent_actions.cli.exit_codes import EXIT_PAUSED
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from tests.integration.test_retry_selection_under_batch import (
@@ -216,7 +216,7 @@ def test_a_reader_behind_an_uncollected_batch_is_left_to_the_batch(
 
     # The retry stops at its own submission, and the run that collects it runs the
     # reader whole; the records the abandoned batch held are failures a retry reaches.
-    _cycle(project, "run", "-a", WORKFLOW)
-    _cycle(project, "retry", "-a", WORKFLOW)
+    _cycle(project, "run", "-a", WORKFLOW, ends_with=EXIT_RECORD_FAILURES)
+    _cycle(project, "retry", "-a", WORKFLOW, ends_with=EXIT_SUCCESS)
     assert len(_rows_at(project, ACTION)) == RECORDS
     assert _rows_at(project, "tagger") == _rows_at(project, ACTION)
