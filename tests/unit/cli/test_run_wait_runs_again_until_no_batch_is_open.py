@@ -198,20 +198,26 @@ def test_the_wait_timeout_counts_from_before_the_first_pass(tmp_path, capsys):
     assert "Stopped waiting after 70s:" in capsys.readouterr().out
 
 
-def test_the_printed_wait_is_whole_seconds(tmp_path, capsys):
+def test_the_printed_wait_is_the_time_slept_and_no_pass_runs_after_the_timeout(tmp_path, capsys):
     passes = Passes(tmp_path, OPEN, OPEN, OPEN)
     clock = _Clock(passes, each_pass=0.4)
 
     with patch("agent_actions.cli.run.time.monotonic", side_effect=lambda: clock.now):
-        passes.run(sleep=clock.sleep(passes), wait=True, poll=5, wait_timeout=7)
+        code = passes.run(sleep=clock.sleep(passes), wait=True, poll=5, wait_timeout=7)
 
     out = capsys.readouterr().out
-    assert passes.slept == [5, 2]
-    assert "Waiting 5s before" in out and "Waiting 2s before" in out
+    assert code == EXIT_PAUSED
+    assert passes.slept == [5, pytest.approx(1.2)]
+    assert clock.now == pytest.approx(1007)
+    assert len(passes.loads) == 2
+    assert "Waiting 5s before" in out and "Waiting 1.2s before" in out
+    assert "Stopped waiting after 7s:" in out
 
 
-@pytest.mark.parametrize("poll", ["0", "0.5"])
-def test_a_poll_below_one_second_is_refused(tmp_path, monkeypatch, poll):
+@pytest.mark.parametrize("poll", ["0", "0.5", "1.5"])
+def test_a_poll_that_is_not_a_whole_number_of_seconds_from_one_up_is_refused(
+    tmp_path, monkeypatch, poll
+):
     (tmp_path / "agent_actions.yml").write_text("project_name: p\n")
     monkeypatch.chdir(tmp_path)
 
