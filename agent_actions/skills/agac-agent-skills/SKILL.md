@@ -329,7 +329,7 @@ agac run -w {workflow} -u tools --fresh
 agac dispositions -w {workflow} -u tools
 
 # Model calls and tokens per action, with an estimated cost if agent_actions.yml has prices:
-agac usage -a {workflow}
+agac usage -w {workflow}
 ```
 
 Use `record_limit: N` on any action in the YAML to test cheaply on a subset of its records — on the first action to shrink the whole run, further down to shrink one step. To shrink a run without editing the YAML, pass `--record-limit N` or `--file-limit N` to `agac run`, or set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` — the first bounds records per input file, the second how many files are walked.

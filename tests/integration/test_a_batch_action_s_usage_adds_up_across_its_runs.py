@@ -120,7 +120,7 @@ def _runs(project: Path) -> list[dict]:
 
 
 def _usage(project: Path, *args: str):
-    return run_agac(project, "usage", "-a", WORKFLOW, *args, env={"COLUMNS": "200"})
+    return run_agac(project, "usage", "-w", WORKFLOW, *args, env={"COLUMNS": "200"})
 
 
 def _report(project: Path, *args: str) -> dict:

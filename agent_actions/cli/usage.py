@@ -14,7 +14,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project, workflow_option
 from agent_actions.cli.renderers.whole_table import print_whole
 from agent_actions.config.path_config import load_project_config, resolve_project_root
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -201,12 +201,7 @@ def _cost_cell(cost: float | None, rows: list[Row]) -> str:
 
 
 @click.command()
-@click.option(
-    "-a",
-    "--agent",
-    required=True,
-    help="Agent configuration file name without path or extension",
-)
+@workflow_option()
 @click.option(
     "--run",
     default=None,

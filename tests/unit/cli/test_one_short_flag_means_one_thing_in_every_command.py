@@ -60,6 +60,7 @@ def test_the_commands_that_take_a_workflow_are_the_ones_known():
         "schema",
         "status",
         "traces",
+        "usage",
         "validate-udfs",
     }
 
