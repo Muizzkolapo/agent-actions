@@ -130,7 +130,7 @@ function Dashboard() {
           <ThemeToggle />
         </header>
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-8 pb-14 pt-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-8 pb-14 pt-6 [container-type:inline-size]">
           {/* The reading measure lives here, not in each screen, so none of them
               can drift from the others, and it is centred — left-aligned, every
               screen hugs the sidebar with the gutter all on one side. It steps

@@ -283,7 +283,7 @@ function WorkflowDetail({
   ]
 
   return (
-    <div className="flex max-w-[1280px] animate-view-in flex-col gap-3.5">
+    <div className="flex animate-view-in flex-col gap-3.5">
       <div className="flex flex-wrap items-start gap-3.5">
         <BackButton onClick={onBack} title="Back to workflows" />
         <div className="min-w-[260px] flex-1">
@@ -333,9 +333,14 @@ function WorkflowDetail({
         </div>
       </div>
 
+      {/* A canvas, not prose: on the graph tab this row spans the whole content width
+          (main is the size container), not the page's reading measure. */}
       <div
         className="grid items-start gap-3.5"
-        style={{ gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,380px)" : "minmax(0,1fr)" }}
+        style={{
+          gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,380px)" : "minmax(0,1fr)",
+          ...(tab === "graph" ? { width: "100cqw", marginLeft: "calc(50% - 50cqw)" } : {}),
+        }}
       >
         <div className="min-w-0">
           {tab === "graph" && (
