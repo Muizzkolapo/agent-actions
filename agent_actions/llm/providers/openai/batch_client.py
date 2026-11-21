@@ -28,6 +28,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     # The SDK's batches.create: an input file holds up to 50,000 requests.
     max_batch_requests = 50_000
+    max_batch_bytes = 200_000_000
 
     # Every status of the SDK's Batch. One being cancelled has not ended yet. One that
     # ran out of its completion window has: the answers it finished are not read, so

@@ -108,6 +108,11 @@ class BatchResult:
     text: str | None = None
 
 
+def batch_task_bytes(task: Any) -> int:
+    """The bytes *task* takes in a batch: its JSON line, newline included."""
+    return len(json.dumps(task, default=str).encode("utf-8")) + 1
+
+
 def batch_request_cap(provider: BaseBatchClient) -> int:
     """The most requests one batch to *provider* may hold."""
     cap = batch_request_cap_from_environment()
@@ -137,6 +142,9 @@ class BaseBatchClient(ABC):
     # The most requests one batch may hold. A provider that documents no cap gets the
     # lowest cap another provider documents (OpenAI and Groq: 50,000).
     max_batch_requests: int = 50_000
+    # The most bytes one batch may hold. A provider that documents no limit gets the
+    # lowest limit another provider documents (Groq: 100 MB).
+    max_batch_bytes: int = 100_000_000
     # The vendor's errors for a provider that could not answer now. A status check
     # raises them as ConnectionError, which its callers take as "ask again later".
     _transient_errors: tuple[type[Exception], ...] = ()

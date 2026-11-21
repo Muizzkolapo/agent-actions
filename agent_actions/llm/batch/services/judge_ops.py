@@ -20,7 +20,11 @@ from agent_actions.expectations.judge import (
     tally_votes,
     verdict_from_reply,
 )
-from agent_actions.llm.providers.batch_base import RAW_USER_CONTENT_KEY, batch_request_cap
+from agent_actions.llm.providers.batch_base import (
+    RAW_USER_CONTENT_KEY,
+    batch_request_cap,
+    batch_task_bytes,
+)
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -123,9 +127,10 @@ def submit_judge_batch(
 ) -> JudgeSubmission:
     """Send one request per vote of each pending call, as ``<file>_judge_<attempt>``.
 
-    A batch takes one model and at most the provider's cap of requests, so only the
-    calls of the first model met go out, up to that cap; the rest are still uncached
-    when the step runs again, and go out in the next round.
+    A batch takes one model and at most the provider's cap of requests and of bytes, so
+    only the calls of the first model met go out, up to those caps; the rest are still
+    uncached when the step runs again, and go out in the next round. The first value
+    always goes, as a batch of nothing would stall the step.
     """
     model = next(iter(collection.pending.values())).model
     cap = batch_request_cap(provider)
@@ -140,18 +145,23 @@ def submit_judge_batch(
         held += request.votes
 
     rows: list[dict[str, Any]] = []
-    requests: dict[str, str] = {}
     for key, request in sent.items():
         prompt = request.prompt
         for vote in range(request.votes):
-            request_id = _request_id(key, vote)
-            requests[request_id] = key
-            rows.append({"target_id": request_id, "prompt": "", RAW_USER_CONTENT_KEY: prompt})
+            rows.append(
+                {"target_id": _request_id(key, vote), "prompt": "", RAW_USER_CONTENT_KEY: prompt}
+            )
 
     config = judge_request_config(agent_config, model)
     config.pop("compiled_schema", None)
     batch_name = f"{file_name}_judge_{attempt}"
     tasks = provider.prepare_tasks(rows, config)
+    sent, tasks = _within_byte_limit(provider, sent, tasks)
+    requests = {
+        _request_id(key, vote): key
+        for key, request in sent.items()
+        for vote in range(request.votes)
+    }
     batch_id, _status = provider.submit_batch(
         tasks=tasks, batch_name=batch_name, output_directory=output_directory
     )
@@ -168,6 +178,30 @@ def submit_judge_batch(
         requests=requests,
         budget_remaining=None if budget_before is None else budget_before - len(sent),
     )
+
+
+def _within_byte_limit(
+    provider: BaseBatchClient, sent: dict[str, JudgeRequest], tasks: list[Any]
+) -> tuple[dict[str, JudgeRequest], list[Any]]:
+    """The values of *sent*, in order, whose tasks fit the provider's bytes per batch.
+
+    *tasks* holds each value's votes in turn, one task per vote.
+    """
+    if len(tasks) != sum(request.votes for request in sent.values()):
+        return sent, tasks
+    limit = provider.max_batch_bytes
+    kept: dict[str, JudgeRequest] = {}
+    size = 0
+    start = 0
+    for key, request in sent.items():
+        group = tasks[start : start + request.votes]
+        group_size = sum(batch_task_bytes(task) for task in group)
+        if kept and size + group_size > limit:
+            break
+        kept[key] = request
+        size += group_size
+        start += request.votes
+    return kept, tasks[:start]
 
 
 def tally_judge_results(
