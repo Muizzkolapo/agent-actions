@@ -218,16 +218,18 @@ class TestTokenAccumulation:
         # Complete multiple agents with tokens
         for i, (name, tokens) in enumerate(
             [
-                ("agent1", {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}),
-                ("agent2", {"prompt_tokens": 200, "completion_tokens": 100, "total_tokens": 300}),
-                ("agent3", {"prompt_tokens": 300, "completion_tokens": 150, "total_tokens": 450}),
+                ("agent1", {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}),
+                ("agent2", {"input_tokens": 200, "output_tokens": 100, "total_tokens": 300}),
+                ("agent3", {"input_tokens": 300, "output_tokens": 150, "total_tokens": 450}),
             ]
         ):
             collector.handle(ActionCompleteEvent(action_name=name, action_index=i, tokens=tokens))
 
-        assert collector._total_tokens["prompt_tokens"] == 600
-        assert collector._total_tokens["completion_tokens"] == 300
-        assert collector._total_tokens["total_tokens"] == 900
+        assert collector._total_tokens == {
+            "input_tokens": 600,
+            "output_tokens": 300,
+            "total_tokens": 900,
+        }
 
 
 class TestFlushAndOutput:

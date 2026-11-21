@@ -262,8 +262,8 @@ Collects data about the workflow run and writes a `run_results.json` artifact.
       "output_folder": "/path/to/project/agent_workflow/support_resolution/agent_io/target/extract_raw_qa",
       "record_count": 100,
       "tokens": {
-        "prompt_tokens": 800,
-        "completion_tokens": 400,
+        "input_tokens": 800,
+        "output_tokens": 400,
         "total_tokens": 1200
       },
       "error_message": null,
@@ -277,8 +277,8 @@ Collects data about the workflow run and writes a `run_results.json` artifact.
   ],
   "elapsed_time": 119.456,
   "tokens": {
-    "prompt_tokens": 10000,
-    "completion_tokens": 2500,
+    "input_tokens": 10000,
+    "output_tokens": 2500,
     "total_tokens": 12500
   }
 }
@@ -531,7 +531,7 @@ Put data that a machine reads in the `data` dict:
 fire_event(ActionCompleteEvent(
     action_name="extract_data",
     execution_time=15.2,
-    tokens={"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
+    tokens={"input_tokens": 800, "output_tokens": 400, "total_tokens": 1200},
 ))
 ```
 
@@ -544,7 +544,7 @@ The event class builds the `message` and the `data` dict from its fields. The `d
   "execution_time": 15.2,
   "output_path": "",
   "record_count": 0,
-  "tokens": {"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
+  "tokens": {"input_tokens": 800, "output_tokens": 400, "total_tokens": 1200},
   "mode": "",
   "model_vendor": "",
   "model_name": "",

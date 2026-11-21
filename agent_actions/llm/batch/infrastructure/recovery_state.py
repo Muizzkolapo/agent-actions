@@ -81,6 +81,8 @@ class RecoveryState:
     # call it is a copy of.
     side_kind: str | None = None
     side_requests: dict[str, str] = field(default_factory=dict)
+    # The model that batch's calls name; None is the action's own.
+    side_model: str | None = None
     # What the side batches returned, as each kind's requester settled it: kind, then
     # call key, to its result.
     side_results: dict[str, dict[str, Any]] = field(default_factory=dict)

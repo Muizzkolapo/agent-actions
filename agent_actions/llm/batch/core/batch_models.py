@@ -9,6 +9,7 @@ from agent_actions.llm.batch.core.batch_constants import (
     RecoveryType,
     coerce_recovery_type,
 )
+from agent_actions.llm.providers.usage_tracker import MAIN, REPAIR
 
 
 @dataclass
@@ -74,6 +75,14 @@ class BatchJobEntry:
         if self.recovery_type is None:
             return None
         return self.side_kind or str(self.recovery_type)
+
+    @property
+    def usage_kind(self) -> str:
+        """What the calls of this batch are counted as: a side batch as its kind, a
+        repair round as ``repair``, and the first batch or a retry of it as ``main``."""
+        if self.side_kind:
+            return self.side_kind
+        return REPAIR if self.recovery_type == RecoveryType.REPAIR else MAIN
 
     @property
     def is_terminal(self) -> bool:

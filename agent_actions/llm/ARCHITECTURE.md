@@ -517,7 +517,7 @@ providers/
 ├── error_wrapper.py        ← Unified error classification
 ├── generation_params.py    ← Shared param extraction
 ├── mixins.py               ← JSON parsing, error handling mixins
-├── usage_tracker.py        ← Token usage storage (ContextVar)
+├── usage_tracker.py        ← Token usage accounting (per action, kind, pricing, model)
 ├── failure_injection.py    ← Test chaos injection
 │
 ├── openai/
@@ -1067,7 +1067,7 @@ Usage tracking per provider:
   Cohere:       response.usage.tokens.input_tokens
   Ollama:       response.prompt_eval_count / eval_count
 
-  Stored in ContextVar (async-safe) via set_last_usage()
+  Each call is added to its action's sum via usage_tracker.record_usage()
 
 Logging levels:
   DEBUG   → successful parse, internal state, cleanup

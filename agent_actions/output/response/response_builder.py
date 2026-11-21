@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any
 
 from agent_actions.llm.config.runtime_profiles import wire_vendor
-from agent_actions.llm.providers.usage_tracker import set_last_usage
+from agent_actions.llm.providers.usage_tracker import record_usage
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMResponseEvent
 from agent_actions.output.response.config_fields import get_default
@@ -66,6 +66,20 @@ class UsageResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    # Of ``prompt_tokens``, what the vendor read from and wrote to its prompt cache;
+    # 0 for a vendor that reports neither.
+    cache_read_tokens: int = 0
+    cache_creation_tokens: int = 0
+
+    def counted(self) -> dict[str, int]:
+        """The usage as the usage tracker sums it: the prompt split into its three parts."""
+        cached = self.cache_read_tokens + self.cache_creation_tokens
+        return {
+            "input_tokens": max(self.prompt_tokens - cached, 0),
+            "output_tokens": self.completion_tokens,
+            "cache_read_input_tokens": self.cache_read_tokens,
+            "cache_creation_input_tokens": self.cache_creation_tokens,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -171,21 +185,13 @@ class ResponseBuilder:
         latency_ms: float,
         request_id: str,
     ) -> UsageResult:
-        """Extract usage, store via ``set_last_usage``, and fire ``LLMResponseEvent``.
+        """Extract usage, count the call (``record_usage``), and fire ``LLMResponseEvent``.
 
         Returns the ``UsageResult`` so callers that need token counts
         (e.g. Anthropic's return tuple) can still access them.
         """
         usage = ResponseBuilder.extract_usage(response, provider)
-
-        if usage.prompt_tokens > 0 or usage.completion_tokens > 0:
-            set_last_usage(
-                {
-                    "input_tokens": usage.prompt_tokens,
-                    "output_tokens": usage.completion_tokens,
-                    "total_tokens": usage.total_tokens,
-                }
-            )
+        record_usage(usage.counted(), model=model)
 
         fire_event(
             LLMResponseEvent(
@@ -221,8 +227,17 @@ class ResponseBuilder:
         return usage.get(name) if isinstance(usage, dict) else getattr(usage, name, None)
 
     @staticmethod
+    def _count(value: Any) -> int:
+        """A token count a vendor may leave out; anything that is not a count is 0."""
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    @staticmethod
     def _openai_compat_usage(usage: Any) -> UsageResult:
-        """Counts from an OpenAI-shaped usage, an SDK object or a batch line's dict."""
+        """Counts from an OpenAI-shaped usage, an SDK object or a batch line's dict.
+
+        ``prompt_tokens`` counts the whole prompt; ``prompt_tokens_details.cached_tokens``
+        is the part of it read from the cache.
+        """
         field = ResponseBuilder._field
         prompt_tokens = field(usage, "prompt_tokens") or 0
         completion_tokens = field(usage, "completion_tokens") or 0
@@ -230,6 +245,9 @@ class ResponseBuilder:
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=field(usage, "total_tokens") or prompt_tokens + completion_tokens,
+            cache_read_tokens=ResponseBuilder._count(
+                field(field(usage, "prompt_tokens_details"), "cached_tokens")
+            ),
         )
 
     @staticmethod
@@ -240,16 +258,16 @@ class ResponseBuilder:
         tokens read from and written to the cache are the rest of the prompt.
         """
         field = ResponseBuilder._field
-        input_tokens = (
-            (field(usage, "input_tokens") or 0)
-            + (field(usage, "cache_read_input_tokens") or 0)
-            + (field(usage, "cache_creation_input_tokens") or 0)
-        )
+        cache_read = field(usage, "cache_read_input_tokens") or 0
+        cache_creation = field(usage, "cache_creation_input_tokens") or 0
+        input_tokens = (field(usage, "input_tokens") or 0) + cache_read + cache_creation
         output_tokens = field(usage, "output_tokens") or 0
         return UsageResult(
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
         )
 
     @staticmethod
@@ -271,6 +289,7 @@ class ResponseBuilder:
         """Gemini: ``response.usage_metadata.prompt_token_count`` etc.
 
         Thinking tokens are output: Gemini's total counts them, its candidates count does not.
+        The prompt count includes the tokens read from cached content.
         """
         if not hasattr(response, "usage_metadata") or not response.usage_metadata:
             return UsageResult()
@@ -280,6 +299,9 @@ class ResponseBuilder:
             prompt_tokens=usage.prompt_token_count or 0,
             completion_tokens=(usage.candidates_token_count or 0) + thoughts,
             total_tokens=usage.total_token_count or 0,
+            cache_read_tokens=ResponseBuilder._count(
+                getattr(usage, "cached_content_token_count", None)
+            ),
         )
 
     @staticmethod

@@ -222,11 +222,15 @@ class GeminiBatchClient(BaseBatchClient):
         completion = (
             None if candidates is None and thoughts is None else (candidates or 0) + (thoughts or 0)
         )
-        return {
+        usage = {
             "total_tokens": usage_metadata.get("totalTokenCount"),
             "prompt_tokens": usage_metadata.get("promptTokenCount"),
             "completion_tokens": completion,
         }
+        cached = usage_metadata.get("cachedContentTokenCount")
+        if cached:
+            usage["prompt_tokens_details"] = {"cached_tokens": cached}
+        return usage
 
     def _get_default_model(self) -> str:
         """Return Gemini's default model."""

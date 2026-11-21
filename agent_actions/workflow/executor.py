@@ -4,7 +4,8 @@ import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -27,7 +28,12 @@ from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.llm.providers.usage_tracker import clear_usage, get_last_usage
+from agent_actions.llm.providers.usage_tracker import (
+    UsageLedger,
+    accounting,
+    prompt_and_completion,
+    summarised,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
@@ -545,6 +551,54 @@ class ActionExecutor:
         self.console = console or Console()
         self.run_tracker: Any | None = None
         self.run_id: str | None = None
+        self._usage: dict[str, UsageLedger] = {}
+
+    def _ledger(self, action_name: str) -> UsageLedger:
+        """What the action's model calls used in this run, over every execution of it."""
+        ledger = self._usage.get(action_name)
+        if ledger is None:
+            ledger = self._usage[action_name] = UsageLedger(
+                action_name,
+                self.run_id,
+                getattr(self.deps.action_runner, "storage_backend", None),
+            )
+        return ledger
+
+    @contextmanager
+    def _counted(self, action_name: str) -> Iterator[RunCounts]:
+        """Count what one execution of the action collects and what its model calls use.
+
+        The usage is stored and put in the run history as the block ends, however it
+        ends: a failed or interrupted action has still paid for its calls.
+        """
+        ledger = self._ledger(action_name)
+        try:
+            with counting() as counts, accounting(ledger):
+                yield counts
+        finally:
+            self._save_usage(ledger)
+
+    def _save_usage(self, ledger: UsageLedger) -> None:
+        ledger.save()
+        rows = ledger.rows()
+        if not rows or self.run_tracker is None or self.run_id is None:
+            return
+        try:
+            self.run_tracker.record_action_usage(
+                run_id=self.run_id,
+                action_name=ledger.action_name,
+                usage=summarised(rows),
+                tokens=prompt_and_completion(rows),
+            )
+        except Exception as error:
+            logger.warning(
+                "Could not add the token usage of %s to the run history: %s",
+                ledger.action_name,
+                error,
+            )
+
+    def _tokens_used(self, action_name: str) -> dict[str, int] | None:
+        return prompt_and_completion(self._ledger(action_name).rows())
 
     def __eq__(self, other):
         if not isinstance(other, ActionExecutor):
@@ -1380,8 +1434,7 @@ class ActionExecutor:
             execution_time=duration,
             **self._completion_metadata(params.action_name, params.action_config),
         )
-        tokens = counts.tokens or get_last_usage()
-        self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
+        self._track_action_complete(params.action_name, duration, final_status)
 
         return ActionExecutionResult(
             success=True,
@@ -1389,7 +1442,7 @@ class ActionExecutor:
             status=final_status,
             metrics=ExecutionMetrics(
                 duration=duration,
-                tokens=tokens,
+                tokens=self._tokens_used(params.action_name),
                 model_vendor=params.action_config.get("model_vendor"),
                 model_name=params.action_config.get("model_name"),
                 files_processed=0,
@@ -1546,7 +1599,6 @@ class ActionExecutor:
         duration: float,
         status: ActionStatus,
         *,
-        tokens: dict[str, int] | None = None,
         skip_reason: str | None = None,
     ) -> None:
         """Record action completion in run_tracker if available."""
@@ -1565,7 +1617,6 @@ class ActionExecutor:
             action_name=action_name,
             status=tracker_status,
             duration_seconds=duration,
-            tokens=tokens,
             skip_reason=skip_reason,
             files_processed=0,
         )
@@ -2181,6 +2232,7 @@ class ActionExecutor:
             or raised_by_terminal_failure(error)
         ):
             self._write_failed_disposition(action_name, str(error))
+            self._track_failure(action_name, (datetime.now() - start_time).total_seconds(), error)
             raise error
         return self._handle_run_failure(
             ActionRunParams(
@@ -2204,11 +2256,16 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_before_the_check(
-            action_name, action_idx, action_config, start_time
+        params = ActionRunParams(
+            action_name=action_name,
+            action_idx=action_idx,
+            action_config=action_config,
+            is_last_action=False,
+            start_time=start_time,
         )
+        pre_run_count = self._count_before_the_check(params)
         try:
-            with counting() as counts:
+            with self._counted(action_name) as counts:
                 output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
                     action_name,
                     output_directory,
@@ -2243,11 +2300,16 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_before_the_check(
-            action_name, action_idx, action_config, start_time
+        params = ActionRunParams(
+            action_name=action_name,
+            action_idx=action_idx,
+            action_config=action_config,
+            is_last_action=False,
+            start_time=start_time,
         )
+        pre_run_count = self._count_before_the_check(params)
         try:
-            with counting() as counts:
+            with self._counted(action_name) as counts:
                 output_folder, batch_status = await asyncio.to_thread(
                     self.deps.batch_manager.handle_batch_agent,
                     action_name,
@@ -2272,29 +2334,16 @@ class ActionExecutor:
             counts,
         )
 
-    def _count_before_the_check(
-        self,
-        action_name: str,
-        action_idx: int,
-        action_config: ActionConfigDict,
-        start_time: datetime,
-    ) -> int:
-        """The action's row count before its batch is checked, as ``_begin`` counts it.
+    def _count_before_the_check(self, params: ActionRunParams) -> int:
+        """Track the check's start and return the action's row count before it, as ``_begin`` does.
 
-        An error here ends the run (see ``_record_store_failure``); the check never
-        tracked a start, so the failure is recorded with one.
+        An error here ends the run (see ``_record_store_failure``).
         """
         try:
-            return self._count_records_for_action(action_name)
+            self._track_action_start(params)
+            return self._count_records_for_action(params.action_name)
         except Exception as error:
-            params = ActionRunParams(
-                action_name=action_name,
-                action_idx=action_idx,
-                action_config=action_config,
-                is_last_action=False,
-                start_time=start_time,
-            )
-            self._record_store_failure(action_name, _elapsed(params), error, start=params)
+            self._record_store_failure(params.action_name, _elapsed(params), error, start=params)
             raise
 
     def _batch_output_directory(self, action_name: str) -> str:
@@ -2398,13 +2447,14 @@ class ActionExecutor:
             # per input file with the real ids and counts. The no_batches
             # passthrough branch reaches "completed" without it and is covered
             # by BatchPassthroughEvent and ActionCompleteEvent.
+            self._track_action_complete(action_name, wall_clock, final_status)
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
                 metrics=ExecutionMetrics(
                     duration=wall_clock,
-                    tokens=counts.tokens,
+                    tokens=self._tokens_used(action_name),
                     record_count=record_count,
                     guard_skipped=guard_skipped,
                     checks_failed=checks_failed,
@@ -2425,6 +2475,7 @@ class ActionExecutor:
         # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
+        self._track_action_complete(action_name, duration, ActionStatus.FAILED)
         # One event per job, matching the success path: finalize_batch_output
         # fires per input file, so an action with several files reports each of
         # them by id. Aggregating into one event would leave batch_id blank for
@@ -2503,8 +2554,6 @@ class ActionExecutor:
         An error here ends the run, since the store is not answering (see
         ``_record_store_failure``).
         """
-        # What a call before this action used must not be reported as this action's.
-        clear_usage()
         try:
             self._start_work(params)
         except Exception as error:
@@ -2559,6 +2608,17 @@ class ActionExecutor:
                 unrecorded,
                 error,
             )
+        self._track_failure(action_name, duration, error, start=start)
+
+    def _track_failure(
+        self,
+        action_name: str,
+        duration: float,
+        error: Exception,
+        *,
+        start: ActionRunParams | None = None,
+    ) -> None:
+        """Add the action's failure to the run history, never replacing *error* with another."""
         if self.run_tracker is None or self.run_id is None:
             return
         try:
@@ -2593,7 +2653,7 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-            with counting() as counts:
+            with self._counted(params.action_name) as counts:
                 output_folder = self.deps.action_runner.run_action(
                     params.action_config,
                     params.action_name,
@@ -2626,7 +2686,7 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-            with counting() as counts:
+            with self._counted(params.action_name) as counts:
                 output_folder = await asyncio.to_thread(
                     self.deps.action_runner.run_action,
                     params.action_config,

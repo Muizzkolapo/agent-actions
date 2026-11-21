@@ -46,6 +46,13 @@ endpoints:                  # OpenAI-compatible servers an action selects with m
     url: http://gpu-box:8000/v1
     auth: none
 
+prices:                     # per million tokens; `agac usage` estimates the cost from them
+  gpt-4o-mini:
+    input: 0.15
+    output: 0.60
+    cache_read: 0.075
+    batch_discount: 0.5
+
 logging:
   level: WARNING            # console level; the run log keeps every level
   module_levels:
@@ -63,6 +70,7 @@ logging:
 | `seed_data_path` | The directory for static reference data (default: `seed_data`) |
 | `seed_data_paths` | Shared seed folders, relative to the project root. Agent Actions searches them after the folder of the workflow and the folder of the project. See [Seed Data](../context/seed-data#shared-folders) |
 | `endpoints` | OpenAI-compatible servers with structured output. Each server has a `url`, an `auth` source and optional `headers`. An action selects one with `model_vendor: <name>`. See [Endpoints](./endpoints) |
+| `prices` | The price of one million tokens for each model. `input` and `output` are required. `cache_read`, `cache_write` and `batch_discount` are optional. `batch_discount` is the part, from 0 to 1, that the provider removes from the price of a batch call. Agent Actions has no built-in prices. [`agac usage`](../cli/usage#estimated-cost) reads this block to estimate a cost. A run does not read it. |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required, unless they are marked `optional: true`. When `false` (default), they are optional, unless they are marked `required: true`. This applies to the full project. A schema that declares its own `required_by_default` overrides it. |
 | `logging` | Logging for each command that runs in the project. `level` is the console level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, default `INFO`). `module_levels` maps Python logger names to levels. It is the only way to re-open a logger that the framework clamps (`httpx`, `openai`, ...), or to make another logger quiet. `file.max_bytes` and `file.backup_count` set the size and the rotation of the run log. The CLI loads this block when it boots, before any command runs. If an `AGENT_ACTIONS_*` variable is set, it overrides the matching key. `--debug` / `--verbose` / `--quiet` override both. A key under `logging:` that nothing reads (`file.path`, `file.enabled`, `file.level`, `file.format` and any other) configures nothing. The CLI reports such a key on stderr at boot. The run log always writes to `agent_io/logs/events.json` of the workflow. See [Logging](../architecture/logging). |
 
@@ -292,7 +300,7 @@ defaults:
 - The load refuses it on a tool or hitl action, and on an action that runs in `run_mode: batch`. If one of those actions inherits it from `defaults:`, the action ignores it.
 - An Ollama action in `run_mode: batch` sends its records from the Agent Actions process, and does not read `record_concurrency` either. Its setting is `batch_max_workers`. See [Ollama batch](../execution/run-modes.md#ollama-batch).
 - It does not change any answer. Thus a change to it keeps the answers that an action holds.
-- Above 1, the token usage that the run records for the action is not the usage of that action. It is empty, or it is the usage of the previous action. Also, a `judge_budget` can be spent two times on one value, when two records judge that value at the same moment.
+- Above 1, a `judge_budget` can be spent two times on one value, when two records judge that value at the same moment.
 
 :::note[Granularity Constraints]
 - **File granularity** is supported for tool and HITL actions (`kind: tool`, `kind: hitl`)

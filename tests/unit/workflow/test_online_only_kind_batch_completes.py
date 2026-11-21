@@ -72,12 +72,9 @@ def test_only_an_online_only_action_under_batch_records_its_execution_time(
 ):
     executor, state = _executor(_storage_with_passthrough())
 
-    with (
-        patch("agent_actions.workflow.executor.get_last_usage", return_value=None),
-        patch(
-            "agent_actions.llm.batch.infrastructure.registry.BatchRegistryManager.has_uncollected_jobs",
-            return_value=False,
-        ),
+    with patch(
+        "agent_actions.llm.batch.infrastructure.registry.BatchRegistryManager.has_uncollected_jobs",
+        return_value=False,
     ):
         executor.execute_action_sync(
             action,
