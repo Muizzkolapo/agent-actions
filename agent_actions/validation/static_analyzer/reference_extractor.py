@@ -11,6 +11,7 @@ from jinja2.exceptions import TemplateSyntaxError
 logger = logging.getLogger(__name__)
 
 from agent_actions.prompt.aliases import header_names, prompt_aliases
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
@@ -56,7 +57,7 @@ class ReferenceExtractor:
 
     def __init__(self) -> None:
         """Initialize with a Jinja2 environment for AST parsing."""
-        self._env = Environment()
+        self._env = Environment(extensions=PROMPT_EXTENSIONS)
 
     def _parse(self, template: str) -> nodes.Template:
         """Parse template after escaping Jinja syntax in inline code spans."""

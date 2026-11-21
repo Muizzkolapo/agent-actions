@@ -57,6 +57,7 @@ def _prepare(backend, *, source_guid="sg-1", run_id=None, attempt=None):
         llm_context={},
         passthrough_fields={},
         prompt_context={},
+        cache_points=(),
     )
     kwargs = {} if attempt is None else {"attempt": attempt}
     with (
@@ -295,7 +296,11 @@ class TestResponseUpdatesReachTheRecordsOwnPrompt:
             "agent_actions.prompt.service.PromptPreparationService."
             "prepare_prompt_with_field_context",
             return_value=SimpleNamespace(
-                formatted_prompt="p", llm_context={}, passthrough_fields={}, prompt_context={}
+                formatted_prompt="p",
+                llm_context={},
+                passthrough_fields={},
+                prompt_context={},
+                cache_points=(),
             ),
         ):
             strategy.process_record({"content": {"q": 1}, "source_guid": "g1"}, context)
@@ -463,7 +468,11 @@ class TestRunIdReachesTheWriter:
                 "agent_actions.prompt.service.PromptPreparationService."
                 "prepare_prompt_with_field_context",
                 return_value=SimpleNamespace(
-                    formatted_prompt="p", llm_context={}, passthrough_fields={}, prompt_context={}
+                    formatted_prompt="p",
+                    llm_context={},
+                    passthrough_fields={},
+                    prompt_context={},
+                    cache_points=(),
                 ),
             ),
         ):

@@ -33,7 +33,7 @@ from agent_actions.processing.task_preparer import (
     get_task_preparer,
     write_trace_row,
 )
-from agent_actions.prompt.cache_scope import repair_call_scope
+from agent_actions.prompt.cache_scope import CACHE_POINTS_KEY, repair_call_scope
 from agent_actions.record.elsewhere import sends_elsewhere
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP, SENT_ELSEWHERE
@@ -113,6 +113,24 @@ def _append_feedback(
         task.update(repair_call_scope(task["prompt"], prompt))
         changed.append(task)
     return changed
+
+
+def _side_by_side_per_source(
+    tasks: list[dict[str, Any]], context_map: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """*tasks* with the records of one source side by side, sources in the order they first appear.
+
+    A record split off a source keeps that source's guid as ``parent_source_guid``.
+    """
+
+    def source(task: dict[str, Any]) -> str:
+        row = context_map.get(task["target_id"], {})
+        return str(row.get("parent_source_guid") or row.get("source_guid") or task["target_id"])
+
+    first: dict[str, int] = {}
+    for task in tasks:
+        first.setdefault(source(task), len(first))
+    return sorted(tasks, key=lambda task: first[source(task)])
 
 
 class BatchTaskPreparator:
@@ -234,6 +252,13 @@ class BatchTaskPreparator:
                     e,
                     storage_backend=self.storage_backend,
                 )
+
+        # Requests that share the text before a cache point read each other's cache entry
+        # while it lives, so a client that marks it gets the records of one source together.
+        if any(CACHE_POINTS_KEY in task for task in tasks_builder) and (
+            provider.marks_cache_points() is True
+        ):
+            tasks_builder = _side_by_side_per_source(tasks_builder, context_map_builder)
 
         # Feedback must be applied here, before the provider converts each row
         # into its own wire format — the converted task keeps neither target_id
@@ -405,6 +430,8 @@ class BatchTaskPreparator:
             "content": prepared.llm_context,
             "prompt": prepared.formatted_prompt,
         }
+        if prepared.cache_points:
+            task[CACHE_POINTS_KEY] = prepared.cache_points
         if row_schema is not None:
             # A repair round's row carries the name its first round chose; it is used again.
             recorded = BatchContextMetadata.get_output_schema(row)

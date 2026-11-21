@@ -20,6 +20,7 @@ from anthropic.types import Message, RawMessageStreamEvent
 
 from agent_actions.llm.providers.anthropic import (
     PROMPT_CACHING_BETA_HEADER,
+    message_params,
     server_busy_errors,
 )
 from agent_actions.llm.providers.client_base import BaseClient
@@ -46,7 +47,11 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
 )
 from agent_actions.output.response.response_builder import ResponseBuilder
-from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY, prompt_is_shared
+from agent_actions.prompt.cache_scope import (
+    SHARED_PROMPT_LEN_KEY,
+    cache_points_of,
+    prompt_is_shared,
+)
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.json_parsing import parse_llm_json
@@ -272,8 +277,9 @@ class AnthropicClient(BaseClient):
             enable_prompt_caching=enable_caching and prompt_is_shared(agent_config),
             shared_prompt_len=agent_config.get(SHARED_PROMPT_LEN_KEY),
             model_name=model_name,
+            cache_points=cache_points_of(agent_config) if enable_caching else (),
         )
-        messages = envelope.to_dicts()
+        messages = message_params(envelope)
 
         api_args = AnthropicClient._build_api_args(
             model_name, messages, schema, agent_config, enable_prompt_caching=enable_caching

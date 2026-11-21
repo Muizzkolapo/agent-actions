@@ -7,7 +7,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
+from agent_actions.llm.providers.anthropic import (
+    PROMPT_CACHING_BETA_HEADER,
+    message_params,
+    server_busy_errors,
+)
 from agent_actions.llm.providers.error_wrapper import (
     NoAnswer,
     is_stopped_by_provider,
@@ -115,6 +119,9 @@ class AnthropicBatchClient(BaseBatchClient):
     def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
         return self.enable_prompt_caching and prompt_is_shared(agent_config)
 
+    def marks_cache_points(self) -> bool:
+        return self.enable_prompt_caching
+
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -144,8 +151,9 @@ class AnthropicBatchClient(BaseBatchClient):
             enable_prompt_caching=batch_task.cache_prompt,
             shared_prompt_len=batch_task.shared_prompt_len,
             model_name=model_name,
+            cache_points=batch_task.cache_points,
         )
-        params = {"model": model_name, "messages": envelope.to_dicts()}
+        params = {"model": model_name, "messages": message_params(envelope)}
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096

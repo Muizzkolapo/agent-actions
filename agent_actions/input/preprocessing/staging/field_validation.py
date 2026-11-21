@@ -215,11 +215,12 @@ def _source_fields_every_render_reads(template: str) -> set[str]:
     from jinja2 import Environment, nodes
     from jinja2.exceptions import TemplateSyntaxError
 
+    from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
     from agent_actions.utils.template_escape import escape_jinja_in_inline_code
     from agent_actions.validation.prompt_required_field_validator import _chain_root_and_field
 
     try:
-        ast = Environment().parse(escape_jinja_in_inline_code(template))
+        ast = Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError:
         return set()
 

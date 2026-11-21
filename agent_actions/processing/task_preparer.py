@@ -154,6 +154,7 @@ class TaskPreparer:
             source_guid=source_guid,
             formatted_prompt=prep_result.formatted_prompt,
             llm_context=prep_result.llm_context,
+            cache_points=prep_result.cache_points,
             passthrough_fields=prep_result.passthrough_fields,
             original_content=content,
             source_snapshot=source_snapshot,

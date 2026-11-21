@@ -10,6 +10,7 @@ from jinja2.exceptions import TemplateSyntaxError
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.prompt.aliases import prompt_aliases
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ _NON_ACTION_ROOTS = frozenset(
     {"loop", "range", "dict", "lipsum", "cycler", "joiner", "namespace", "true", "false", "none"}
 )
 
-_ENV = Environment()
+_ENV = Environment(extensions=PROMPT_EXTENSIONS)
 
 
 def _chain_root_and_field(node: nodes.Node) -> tuple[str, str] | None:

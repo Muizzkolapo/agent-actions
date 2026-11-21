@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,11 @@ from jinja2 import Environment, meta, nodes
 from agent_actions.config.path_config import resolve_seed_file, seed_search_folders
 from agent_actions.output.response.dispatch_injection import dispatch_calls_in
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.prompt.cache_point import (
+    CACHE_POINT_TAG_PATTERN,
+    PROMPT_EXTENSIONS,
+    is_cache_point,
+)
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.context.seed_entry import parse_seed_entry
@@ -25,6 +31,7 @@ from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 _DISPATCH_START = re.compile(r"dispatch_task\s*\(")
+_CACHE_POINT_TAG = CACHE_POINT_TAG_PATTERN
 
 REQUEST_VARIES_PER_RECORD_KEY = "_request_varies_per_record"
 """Set on one call's config when its prompt is not the action's rendered prompt: a repair
@@ -35,6 +42,21 @@ SHARED_PROMPT_LEN_KEY = "_shared_prompt_len"
 """Set on a repair call's config, and carried on a batch repair row: the length of the
 leading part of its prompt that is the action's rendered prompt. The record's feedback
 follows it, so a cache mark can sit only at its end."""
+
+CACHE_POINTS_KEY = "_cache_points"
+"""Set on one call's config, and carried on a batch row: the length of the rendered prompt
+before each `{% cache_point %}` its render reached."""
+
+
+def cache_points_of(call: Mapping[str, Any]) -> tuple[int, ...]:
+    """The cache points of a call's config or batch row that its request may mark.
+
+    None where the call's prompt is not the action's rendered prompt or its tools are
+    the record's own: the points were measured on that prompt, after the action's tools.
+    """
+    if call.get(REQUEST_VARIES_PER_RECORD_KEY):
+        return ()
+    return tuple(call.get(CACHE_POINTS_KEY) or ())
 
 
 def repair_call_scope(prompt: str, rendered_prompt: str) -> dict[str, Any]:
@@ -95,6 +117,39 @@ def schema_dispatches(agent_config: Mapping[str, Any]) -> tuple[str, ...]:
             agent_config[SCHEMA_NAME_KEY], project_root=Path(project_root) if project_root else None
         )
     return tuple(dict.fromkeys(f"dispatch_task('{name}')" for name in _dispatch_calls(schema)))
+
+
+@dataclass(frozen=True)
+class CachePointUse:
+    """The `{% cache_point %}` tags of an action's prompt template, and what is read before the last."""
+
+    count: int = 0
+    repeats: bool = False
+    """A tag sits in a loop, a macro, a call block or a block that captures its text, where
+    it can render more than once or be changed by a filter."""
+    changing: tuple[str, ...] = ()
+    """Read before the last tag and different on every render: no later request reads its entry."""
+    per_record: tuple[str, ...] = ()
+    """Read before the last tag and not `source` or data every record shares: an upstream
+    action's field or a per-record seed, which records of one source may or may not share."""
+
+
+def cache_point_use(agent_config: Mapping[str, Any]) -> CachePointUse:
+    """How the action's prompt template uses `{% cache_point %}`."""
+    template = PromptFormatter.get_raw_prompt(agent_config)
+    if not template or not any(is_cache_point(node) for node in _in_order(_parse(template))):
+        return CachePointUse()
+    version_context = agent_config.get("_version_context")
+    version_names = {"version"} | VersionNamespaceBuilder.promoted_names(
+        version_context if isinstance(version_context, dict) else None
+    )
+    seed_keys, per_record_keys = _seed_keys(agent_config)
+    return _cache_point_use(
+        template,
+        frozenset((FRAMEWORK_NAMESPACES - {"seed"}) | version_names | {"source"}),
+        seed_keys,
+        per_record_keys,
+    )
 
 
 def prompt_is_shared(agent_config: Mapping[str, Any]) -> bool:
@@ -192,11 +247,18 @@ def _chains(ast: nodes.Template) -> Iterator[tuple[nodes.Name, str, str | None]]
 
 @lru_cache(maxsize=256)
 def _parse(template: str) -> nodes.Template:
-    return Environment().parse(escape_jinja_in_inline_code(template))
+    return Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))
 
 
 def _unbound_names(template: str) -> set[str]:
     return meta.find_undeclared_variables(_parse(template))
+
+
+def _in_order(ast: nodes.Node) -> list[nodes.Node]:
+    return list(ast.find_all(nodes.Node))
+
+
+_CHANGING = ("| random", "lipsum()")
 
 
 @lru_cache(maxsize=256)
@@ -206,7 +268,51 @@ def _template_record_reads(
     seed_keys: frozenset[str],
     per_record_seed_keys: frozenset[str],
 ) -> tuple[str, ...]:
+    reads = _reads(_parse(template), None, static_names, seed_keys, per_record_seed_keys)
+    reads.update(f"dispatch_task('{name}')" for name in dispatch_calls_in(template))
+    return tuple(sorted(reads))
+
+
+@lru_cache(maxsize=256)
+def _cache_point_use(
+    template: str,
+    shared_names: frozenset[str],
+    seed_keys: frozenset[str],
+    per_record_seed_keys: frozenset[str],
+) -> CachePointUse:
     ast = _parse(template)
+    order = _in_order(ast)
+    points = [index for index, node in enumerate(order) if is_cache_point(node)]
+    repeating = (nodes.For, nodes.Macro, nodes.CallBlock, nodes.FilterBlock, nodes.AssignBlock)
+    repeats = any(
+        is_cache_point(node) for block in ast.find_all(repeating) for node in _in_order(block)
+    )
+    before = {id(node) for node in order[: points[-1]]}
+    reads = _reads(ast, before, shared_names, seed_keys, per_record_seed_keys)
+    changing = {read for read in reads if read in _CHANGING}
+    # A dispatch_task call is text until the run resolves it, so its place is the text's.
+    last_tag = max((match.end() for match in _CACHE_POINT_TAG.finditer(template)), default=0)
+    changing.update(f"dispatch_task('{name}')" for name in dispatch_calls_in(template[:last_tag]))
+    return CachePointUse(
+        count=len(points),
+        repeats=repeats,
+        changing=tuple(sorted(changing)),
+        per_record=tuple(sorted(reads - changing)),
+    )
+
+
+def _reads(
+    ast: nodes.Template,
+    within: set[int] | None,
+    static_names: frozenset[str],
+    seed_keys: frozenset[str],
+    per_record_seed_keys: frozenset[str],
+) -> set[str]:
+    """What *ast* reads that is not a static name; only at the nodes *within*, when given."""
+
+    def counted(node: nodes.Node) -> bool:
+        return within is None or id(node) in within
+
     unbound = meta.find_undeclared_variables(ast)
     record_roots = unbound - static_names - {"seed"}
     seed_varies = "seed" in unbound and bool(per_record_seed_keys)
@@ -215,6 +321,8 @@ def _template_record_reads(
     chained: set[int] = set()
     for root, path, key in _chains(ast):
         chained.add(id(root))
+        if not counted(root):
+            continue
         if root.name in record_roots:
             reads.add(path)
         elif (
@@ -224,13 +332,12 @@ def _template_record_reads(
         ):
             reads.add(path)
     for name in ast.find_all(nodes.Name):
-        if name.ctx != "load" or id(name) in chained:
+        if name.ctx != "load" or id(name) in chained or not counted(name):
             continue
         if name.name in record_roots or (name.name == "seed" and seed_varies):
             reads.add(name.name)
-    reads.update(f"dispatch_task('{name}')" for name in dispatch_calls_in(template))
-    if any(f.name == "random" for f in ast.find_all(nodes.Filter)):
+    if any(f.name == "random" and counted(f) for f in ast.find_all(nodes.Filter)):
         reads.add("| random")
-    if any(n.name == "lipsum" and n.ctx == "load" for n in ast.find_all(nodes.Name)):
+    if any(n.name == "lipsum" and n.ctx == "load" and counted(n) for n in ast.find_all(nodes.Name)):
         reads.add("lipsum()")
-    return tuple(sorted(reads))
+    return reads

@@ -13,9 +13,10 @@ from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, meta, nodes
 
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
-_ENV = Environment()
+_ENV = Environment(extensions=PROMPT_EXTENSIONS)
 
 
 def with_alias_header(prompt: str, names: Mapping[str, str]) -> str:

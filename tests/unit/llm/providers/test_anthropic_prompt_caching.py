@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.llm.providers.anthropic import message_params
 from agent_actions.prompt.message_builder import (
     LLMMessage,
     LLMMessageEnvelope,
@@ -57,22 +58,22 @@ class TestMessageBuilderCacheControl:
         envelope = MessageBuilder.build("anthropic", PROMPT, CONTEXT, enable_prompt_caching=True)
         assert len(envelope.messages) >= 1
         for msg in envelope.messages:
-            assert msg.cache_control == CACHE_CONTROL_MARKER
+            assert msg.cache_boundaries == (msg.static_len,)
 
     def test_anthropic_caching_disabled_no_cache_control(self):
         """Messages have no cache_control when caching is disabled."""
         envelope = MessageBuilder.build("anthropic", PROMPT, CONTEXT, enable_prompt_caching=False)
         for msg in envelope.messages:
-            assert msg.cache_control is None
+            assert msg.cache_boundaries == ()
 
     def test_anthropic_caching_default_no_cache_control(self):
         """Default (omitted) enable_prompt_caching does not inject markers."""
         envelope = MessageBuilder.build("anthropic", PROMPT, CONTEXT)
         for msg in envelope.messages:
-            assert msg.cache_control is None
+            assert msg.cache_boundaries == ()
 
     def test_non_anthropic_provider_caching_ignored(self):
-        """cache_control is NOT injected for non-Anthropic providers."""
+        """A provider with no cache marks is sent the messages it is sent without caching."""
         for provider in (
             "openai",
             "groq",
@@ -82,8 +83,9 @@ class TestMessageBuilderCacheControl:
             "gemini",
         ):
             envelope = MessageBuilder.build(provider, PROMPT, CONTEXT, enable_prompt_caching=True)
-            for msg in envelope.messages:
-                assert msg.cache_control is None, f"{provider} should not get cache_control"
+            plain = MessageBuilder.build(provider, PROMPT, CONTEXT)
+            assert envelope.to_dicts() == plain.to_dicts(), provider
+            assert envelope.prompt_body == plain.prompt_body, provider
 
     def test_caching_preserves_message_content(self):
         """cache_control injection doesn't alter role or content."""
@@ -105,16 +107,16 @@ class TestMessageBuilderCacheControl:
                 enable_prompt_caching=True,
             )
             for msg in envelope.messages:
-                assert msg.cache_control == CACHE_CONTROL_MARKER
+                assert msg.cache_boundaries == (msg.static_len,)
 
 
 # ---------------------------------------------------------------------------
-# LLMMessage / LLMMessageEnvelope — to_dicts() with cache_control
+# LLMMessage cache boundaries, as to_dicts() and Anthropic's message_params() send them
 # ---------------------------------------------------------------------------
 
 
 class TestToDictsWithCacheControl:
-    """to_dicts() formats structured content blocks when cache_control is set."""
+    """message_params() marks a text block up to each cache boundary; to_dicts() sends the text."""
 
     def test_no_cache_control_returns_simple_format(self):
         """Without cache_control, content is a plain string."""
@@ -124,11 +126,9 @@ class TestToDictsWithCacheControl:
 
     def test_cache_control_returns_structured_content_blocks(self):
         """With cache_control, content becomes a list of typed content blocks."""
-        msg = LLMMessage(
-            role="user", content="hello", cache_control={"type": "ephemeral"}, static_len=5
-        )
+        msg = LLMMessage(role="user", content="hello", cache_boundaries=(5,), static_len=5)
         env = LLMMessageEnvelope(messages=[msg])
-        dicts = env.to_dicts()
+        dicts = message_params(env)
         assert len(dicts) == 1
         assert dicts[0]["role"] == "user"
         content = dicts[0]["content"]
@@ -144,38 +144,29 @@ class TestToDictsWithCacheControl:
         """Messages with and without cache_control format correctly together."""
         env = LLMMessageEnvelope(
             messages=[
-                LLMMessage(
-                    role="system", content="sys", cache_control={"type": "ephemeral"}, static_len=3
-                ),
+                LLMMessage(role="system", content="sys", cache_boundaries=(3,), static_len=3),
                 LLMMessage(role="user", content="usr"),
             ]
         )
-        dicts = env.to_dicts()
+        dicts = message_params(env)
         # System message has structured content
         assert isinstance(dicts[0]["content"], list)
         assert dicts[0]["content"][0]["text"] == "sys"
         # User message has plain string
         assert dicts[1]["content"] == "usr"
 
-    def test_role_filter_preserves_cache_control(self):
-        """Filtering by role still returns structured content for cached messages."""
+    def test_to_dicts_sends_the_text_whatever_its_cache_boundaries(self):
         env = LLMMessageEnvelope(
             messages=[
                 LLMMessage(role="system", content="sys"),
-                LLMMessage(
-                    role="user", content="usr", cache_control={"type": "ephemeral"}, static_len=3
-                ),
+                LLMMessage(role="user", content="usr", cache_boundaries=(3,), static_len=3),
             ]
         )
-        user_dicts = env.to_dicts(role="user")
-        assert len(user_dicts) == 1
-        assert isinstance(user_dicts[0]["content"], list)
+        assert env.to_dicts(role="user") == [{"role": "user", "content": "usr"}]
 
     def test_a_mark_inside_the_text_splits_it_into_two_blocks(self):
-        msg = LLMMessage(
-            role="user", content="sharedrecord", cache_control={"type": "ephemeral"}, static_len=6
-        )
-        assert LLMMessageEnvelope(messages=[msg]).to_dicts() == [
+        msg = LLMMessage(role="user", content="sharedrecord", cache_boundaries=(6,), static_len=6)
+        assert message_params(LLMMessageEnvelope(messages=[msg])) == [
             {
                 "role": "user",
                 "content": [
@@ -186,9 +177,9 @@ class TestToDictsWithCacheControl:
         ]
 
     def test_a_mark_with_no_prompt_text_before_it_is_refused(self):
-        with pytest.raises(ValueError, match="static_len is 0"):
-            LLMMessage(role="user", content="record", cache_control={"type": "ephemeral"})
-        assert LLMMessage(role="user", content="record", static_len=0).cache_control is None
+        with pytest.raises(ValueError, match="must ascend within the prompt text"):
+            LLMMessage(role="user", content="record", cache_boundaries=(3,))
+        assert LLMMessage(role="user", content="record", static_len=0).cache_boundaries == ()
 
     def test_a_prompt_length_past_the_text_is_refused(self):
         with pytest.raises(ValueError, match="outside a content of length 6"):
@@ -388,7 +379,8 @@ class TestBatchClientNoRegression:
             envelope = MessageBuilder.build(
                 provider, PROMPT, CONTEXT, json_mode=False, enable_prompt_caching=True
             )
-            assert all(msg.cache_control is None for msg in envelope.messages), provider
+            plain = MessageBuilder.build(provider, PROMPT, CONTEXT, json_mode=False)
+            assert envelope.to_dicts() == plain.to_dicts(), provider
 
     def test_batch_line_has_no_cache_control_by_default(self):
         """Caching off by default: the message goes as plain text."""
@@ -400,7 +392,7 @@ class TestBatchClientNoRegression:
             envelope = MessageBuilder.build(
                 "anthropic", PROMPT, CONTEXT, json_mode=False, enable_prompt_caching=cache_prompt
             )
-            assert self._params(cache_prompt=cache_prompt)["messages"] == envelope.to_dicts()
+            assert self._params(cache_prompt=cache_prompt)["messages"] == message_params(envelope)
 
     def test_batch_line_carries_no_system_prompt(self):
         """The prompt is in the user message, as online sends it."""

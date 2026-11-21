@@ -350,14 +350,23 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
   |         a value rendered into it, or in the schema, no random filter
   |         or lipsum, not a judge call, not a repair call whose prompt
   |         does not begin with the rendered prompt); it fails closed
-  |     --> One cache_control: {type: "ephemeral"} at the end of the prompt
-  |         part (LLMMessage.static_len); none on the record content
+  |     --> One cache boundary at the end of the prompt part
+  |         (LLMMessage.static_len); none on the record content
+  |     --> One more at each cache point the template marked with
+  |         {% cache_point %} (lengths of leading prompt, handed in by
+  |         the Anthropic clients when enable_prompt_caching is on,
+  |         whatever prompt_is_shared says, unless the call is marked
+  |         _request_varies_per_record); at most 3 tags a template
+  |     --> anthropic.message_params ends a text block with
+  |         cache_control: {type: "ephemeral"} at each boundary; every
+  |         other client sends the content whole
   |     --> A repair call passes shared_prompt_len, the rendered prompt's
   |         length; its feedback follows the mark, unmarked, so the marked
   |         block is the one the first call sent
-  |     --> The user message is sent as two text blocks, the
-  |         opening tag and prompt (marked) then any feedback, the
-  |         closing tag and the record (unmarked); same text
+  |     --> With the one boundary, the user message is sent as two
+  |         text blocks, the opening tag and prompt (marked) then any
+  |         feedback, the closing tag and the record (unmarked); same
+  |         text
   |
   7. Token overflow pre-flight
   |     --> chars/4 heuristic vs _MODEL_CONTEXT_LIMITS

@@ -728,10 +728,6 @@ class TestSharedPromptLength:
             "anthropic", PROMPT, CONTEXT_STR, shared_prompt_len=5, enable_prompt_caching=True
         )
 
-        marked, rest = env.to_dicts()[0]["content"]
-        assert marked == {
-            "type": "text",
-            "text": "\n<|begin_of_user_instruction|>: " + PROMPT[:5],
-            "cache_control": {"type": "ephemeral"},
-        }
-        assert rest["text"].startswith(PROMPT[5:] + " :<|end_of_user_instruction|>")
+        (marked, cached), (rest, _) = env.messages[0].segments()
+        assert (marked, cached) == ("\n<|begin_of_user_instruction|>: " + PROMPT[:5], True)
+        assert rest.startswith(PROMPT[5:] + " :<|end_of_user_instruction|>")
