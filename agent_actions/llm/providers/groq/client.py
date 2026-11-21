@@ -26,10 +26,10 @@ from agent_actions.input.preprocessing.transformation.transformer import DataTra
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
-    cut_off_parse_error,
     empty_parse_error,
     empty_response_error,
     is_truncated,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -157,8 +157,8 @@ class GroqClient(BaseClient, JSONResponseMixin):
         finish_reason = llm.choices[0].finish_reason
         if response_temp is None:
             return [{"raw_response": "", "_parse_error": empty_parse_error(finish_reason)}]
-        if is_truncated(finish_reason):
-            parse_error = cut_off_parse_error(finish_reason)
+        parse_error = unfinished_parse_error(finish_reason)
+        if parse_error:
             logger.warning("%s (model=%s)", parse_error, model_name)
             return [{"raw_response": response_temp, "_parse_error": parse_error}]
         response_data = GroqClient.parse_json_response(

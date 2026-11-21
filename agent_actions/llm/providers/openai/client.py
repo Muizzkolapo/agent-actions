@@ -28,11 +28,11 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
-    cut_off_parse_error,
     empty_parse_error,
     empty_response_error,
     is_truncated,
     refusal_text,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -221,8 +221,8 @@ class OpenAIClient(BaseClient):
                 }
             ]
         finish_reason = response.choices[0].finish_reason
-        if is_truncated(finish_reason):
-            parse_error = cut_off_parse_error(finish_reason)
+        parse_error = unfinished_parse_error(finish_reason)
+        if parse_error:
             logger.warning("%s (model=%s)", parse_error, model_name)
             return [{"raw_response": response_content, "_parse_error": parse_error}]
         from agent_actions.utils.json_parsing import parse_llm_json

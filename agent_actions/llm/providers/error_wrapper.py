@@ -271,6 +271,21 @@ def is_truncated(reason: Any) -> bool:
     return name is not None and name.lower() in _TRUNCATED_STOP_REASONS
 
 
+# Stops the provider made, not the model: a content filter, a safety or recitation block, a refusal.
+_PROVIDER_STOP_REASONS = frozenset({"content_filter", "safety", "recitation", "refusal"})
+
+
+def is_stopped_by_provider(reason: Any) -> bool:
+    """Whether a filter or a block, not the model, ended the answer."""
+    name = stop_reason_name(reason)
+    return name is not None and name.lower() in _PROVIDER_STOP_REASONS
+
+
+def is_unfinished(reason: Any) -> bool:
+    """Whether the answer ended before the model finished it: cut off, or stopped by the provider."""
+    return is_truncated(reason) or is_stopped_by_provider(reason)
+
+
 def refusal_text(refusal: str) -> str:
     """The error for an answer the model declined to give, quoting its reason."""
     return f"The model refused to answer: {refusal}"
@@ -290,6 +305,23 @@ def cut_off_parse_error(stop_reason: Any) -> str:
         f"The answer was cut off at the output limit (stop_reason={stop_reason_name(stop_reason)})"
         "; raise max_tokens"
     )
+
+
+def stopped_parse_error(stop_reason: Any) -> str:
+    """The parse error for a JSON answer that a filter or a block stopped partway."""
+    return (
+        f"The provider stopped the answer before its end (stop_reason={stop_reason_name(stop_reason)})"
+        "; the answer is not complete"
+    )
+
+
+def unfinished_parse_error(stop_reason: Any) -> str | None:
+    """The parse error for a JSON answer that ended before the model finished it; None otherwise."""
+    if is_truncated(stop_reason):
+        return cut_off_parse_error(stop_reason)
+    if is_stopped_by_provider(stop_reason):
+        return stopped_parse_error(stop_reason)
+    return None
 
 
 @dataclass(frozen=True)
