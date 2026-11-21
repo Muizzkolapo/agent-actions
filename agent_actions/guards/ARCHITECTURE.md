@@ -253,13 +253,18 @@ DATA        A field referenced in the condition does not exist in this
             applies. Missing fields in namespaced content may be
             reclassified (see reclassify_missing_field_error).
 
-TIMEOUT     Evaluation exceeded the time limit (default 5 seconds).
-            Treated like a DATA error for passthrough_on_error purposes.
+TIMEOUT     Evaluation exceeded the time limit (default 5 seconds; the
+            guard's `timeout`, or `defaults: guard_timeout`). Counted from
+            the start of the evaluation, not from the submit. Bypasses
+            passthrough_on_error: a filter or skip guard raises
+            GuardNotEvaluatedError, so the record fails alone with the
+            clause and the reason; a warn guard runs the record. Fires
+            G001 with the record id and the action.
 ```
 
 ### passthrough_on_error
 
-A per-guard config flag (default: `true`). When `true`, DATA and TIMEOUT errors cause the record to pass through as if the guard matched. When `false`, the configured behavior (filter/skip/warn) applies on error.
+A per-guard config flag (default: `true`). When `true`, DATA errors cause the record to pass through as if the guard matched. When `false`, the configured behavior (filter/skip/warn) applies on error. A TIMEOUT does not read it: its result would depend on the machine's load.
 
 SEMANTIC errors **always bypass** `passthrough_on_error` — a broken condition is a config bug, not a data issue, and should not silently pass records through.
 
@@ -420,7 +425,7 @@ Two consequences worth stating:
 
 8. **Missing fields are reclassified, not failed.** `reclassify_missing_field_error()` in `evaluator.py` handles two cases: (a) a flat field reference that exists inside a namespace is reclassified as SEMANTIC (config error); (b) a genuinely missing field is treated as "condition not matched" rather than an error. This prevents `passthrough_on_error` from accidentally passing records that should be filtered.
 
-9. **GuardFilter uses a ThreadPoolExecutor for timeout protection.** Each evaluation runs in a thread with a configurable timeout (default 5 seconds). This prevents runaway AST evaluation from blocking the pipeline. The executor has 4 worker threads and is cleaned up via `atexit`.
+9. **GuardFilter uses a ThreadPoolExecutor for timeout protection.** Each evaluation runs in a thread with a configurable timeout (default 5 seconds; the guard's `timeout` key or `defaults: guard_timeout`). The time starts when a worker starts the evaluation, so the wait for one of the 4 shared workers does not count. The executor is cleaned up via `atexit`.
 
 10. **Legacy UDF path (conditional_clause) is separate from the guard dict path.** When a UDF guard is expanded, it sets `agent["conditional_clause"]` instead of `agent["guard"]`. The evaluator handles this in `_evaluate_conditional_clause()`, which swallows the UDF's exceptions and proceeds (never skips on UDF error), except a write the read-only view refused (11). The read-only view the UDF is handed is built before that handler, and a failure to build it is not a UDF error: it raises `GuardNotAppliedError`, because a record the UDF was never shown has not been judged and is not passed. The SQL guard path goes through `_evaluate_guard()` with full error classification.
 

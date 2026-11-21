@@ -57,6 +57,7 @@ class GuardConfigDict(TypedDict, total=False):
     on_false: str  # "skip" | "filter"
     passthrough_on_error: bool
     passthrough_on_empty: bool
+    timeout: float  # seconds the condition may take on one record; unset means 5
 
 
 class HitlConfigDict(TypedDict, total=False):

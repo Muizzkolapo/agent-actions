@@ -473,7 +473,7 @@ same string as `category`.
 | D | `data` | `DataParsingErrorEvent` (D001), `DataLoadingErrorEvent` (D002) |
 | V | `validation` | `ValidationStartEvent` (V001), `ValidationCompleteEvent` (V002), `ValidationErrorEvent` (V003), `ValidationWarningEvent` (V004) |
 | DV | `validation` | `DataValidationStartedEvent` (DV001), `DataValidationPassedEvent` (DV002), `DataValidationFailedEvent` (DV003) |
-| G | `guard` | `GuardEvaluationTimeoutEvent` (G001), `GuardEvaluationErrorEvent` (G002) |
+| G | `guard` | `GuardEvaluationTimeoutEvent` (G001: the condition, the time limit, the record and the action), `GuardEvaluationErrorEvent` (G002) |
 | R | `recovery` | `RetryExhaustedEvent` (R001) |
 | SO | `schema` | `SchemaConstructionStartedEvent` (SO001), `SchemaConstructionCompleteEvent` (SO002) |
 | FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006), `FileWriteFailedEvent` (FIO007), `LogFileCapReachedEvent` (FIO008) |

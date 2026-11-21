@@ -218,7 +218,7 @@ class ActionExpander:
         process_schema_config(agent, action, template_replacer)
 
         # Process guard configuration
-        process_guard_config(agent, action)
+        process_guard_config(agent, action, defaults)
 
         # Process prompt
         prompt = action.get("prompt")

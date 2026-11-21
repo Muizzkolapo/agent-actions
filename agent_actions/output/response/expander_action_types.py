@@ -13,10 +13,13 @@ from agent_actions.utils.constants import (
 logger = logging.getLogger(__name__)
 
 
-def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
+def process_guard_config(
+    agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any] | None = None
+) -> None:
     """Process guard configuration for an agent."""
     if not action.get("guard"):
         return
+    guard_timeout = defaults.get("guard_timeout") if defaults else None
 
     guard_data = action["guard"]
     if isinstance(guard_data, str):
@@ -26,6 +29,8 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
             agent["conditional_clause_passthrough_on_error"] = True
         else:
             agent["guard"] = {"clause": guard_expr.expression}
+            if guard_timeout is not None:
+                agent["guard"]["timeout"] = guard_timeout
     else:
         guard_config = parse_guard_config(guard_data)
         if guard_config.is_udf_condition():
@@ -48,6 +53,9 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
                 "behavior": guard_config.on_false.value,
                 "passthrough_on_error": guard_config.passthrough_on_error,
             }
+            timeout = guard_config.timeout if guard_config.timeout is not None else guard_timeout
+            if timeout is not None:
+                agent["guard"]["timeout"] = timeout
 
 
 def process_tool_action(agent: dict[str, Any], action: dict[str, Any]) -> None:
