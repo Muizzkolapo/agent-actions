@@ -142,7 +142,7 @@ export function applyDagreLayout<T extends Record<string, unknown>>(
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export const NODE_WIDTH = 240
-export const NODE_HEIGHT = 40
+export const NODE_HEIGHT = 56
 
 export function transformWorkflowToReactFlow(actions: Record<string, Action>, workflowId: string) {
   const { nodes, edges } = buildDAGNodesAndEdges(actions, workflowId)
@@ -184,3 +184,38 @@ export function initialViewport(nodes: Node[], width: number, height: number): V
   }
 }
 
+
+// ─── Lineage ────────────────────────────────────────────────────────────────
+
+export interface Lineage {
+  nodes: Set<string>
+  edges: Set<string>
+}
+
+// Every node upstream and downstream of `id`, and only the edges on a path through it.
+export function traceLineage(id: string, edges: Edge[]): Lineage {
+  const walk = (from: "source" | "target", to: "source" | "target") => {
+    const seen = new Set<string>([id])
+    const queue = [id]
+    while (queue.length > 0) {
+      const current = queue.pop()!
+      for (const e of edges) {
+        if (e[to] === current && !seen.has(e[from])) {
+          seen.add(e[from])
+          queue.push(e[from])
+        }
+      }
+    }
+    return seen
+  }
+  const up = walk("source", "target")
+  const down = walk("target", "source")
+
+  const onPath = new Set<string>()
+  for (const e of edges) {
+    const upstream = up.has(e.source) && up.has(e.target)
+    const downstream = down.has(e.source) && down.has(e.target)
+    if (upstream || downstream) onPath.add(e.id)
+  }
+  return { nodes: new Set([...up, ...down]), edges: onPath }
+}

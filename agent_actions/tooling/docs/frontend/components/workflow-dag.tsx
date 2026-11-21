@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef, type RefObject } from "react"
 import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   Handle,
   Position,
@@ -19,10 +20,11 @@ import {
   MarkerType,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { ChevronDown, ChevronRight } from "lucide-react"
+import { ChevronDown, ChevronRight, Maximize2, Minimize2 } from "lucide-react"
 import {
   transformWorkflowToReactFlow,
   initialViewport,
+  traceLineage,
   FIT_PADDING,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -51,24 +53,28 @@ function ExpandableDAGNode({ id, data, isConnectable, isLlm, selected }: { id: s
       style={{ width: NODE_WIDTH }}
       title={data.description ? `${data.label}\n${data.description}` : data.label}
       className={`overflow-hidden rounded-sm border bg-surface ${
-        selected ? "border-accent-a30 ring-1 ring-accent-a30" : "border-border-2"
+        selected ? "border-success ring-1 ring-success" : "border-border-2"
       }`}
     >
       <Handle type="target" position={Position.Left} isConnectable={isConnectable}
         className={`!h-1.5 !w-1.5 !min-w-0 !border-0 ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
 
-      {/* Header row — clicks bubble to React Flow's onNodeClick; only the chevron stops propagation */}
+      {/* Header row — clicks bubble to React Flow's node handlers; only the chevron stops propagation */}
       <div className="flex items-center" style={{ height: NODE_HEIGHT - 2 }}>
         <div className={`w-[3px] self-stretch ${isLlm ? "bg-llm" : "bg-tool"}`} />
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2">
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-foreground">{data.label}</span>
-          <span className={`shrink-0 font-mono text-[8.5px] font-semibold ${isLlm ? "text-llm-t" : "text-tool-t"}`}>{isLlm ? "LLM" : "TOOL"}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-mono text-[12px] font-medium text-foreground">{data.label}</div>
+            <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{isLlm ? data.model : data.impl}</div>
+          </div>
+          <span className={`shrink-0 font-mono text-[9px] font-semibold ${isLlm ? "text-llm-t" : "text-tool-t"}`}>{isLlm ? "LLM" : "TOOL"}</span>
           {hasFields && (
             <button
               type="button"
               aria-label={expanded ? "Collapse fields" : "Expand fields"}
               onClick={toggle}
+              onDoubleClick={(e) => e.stopPropagation()}
               className="shrink-0 rounded-sm p-0.5 hover:bg-hover"
             >
               {expanded
@@ -134,18 +140,49 @@ function ToolNode({ id, data, isConnectable, selected }: NodeProps<Node<DAGNodeD
   return <ExpandableDAGNode id={id} data={data} isConnectable={isConnectable ?? false} isLlm={false} selected={selected ?? false} />
 }
 
+const PATH_EDGE_STYLE = { stroke: "hsl(var(--success))", strokeWidth: 2 }
+const PATH_EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "hsl(var(--success))" }
+const FADED_EDGE_STYLE = { stroke: "hsl(var(--muted-2))", strokeWidth: 1, opacity: 0.15 }
+
+function FullscreenButton({ target }: { target: RefObject<HTMLDivElement | null> }) {
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    const sync = () => setIsFullscreen(document.fullscreenElement === target.current)
+    document.addEventListener("fullscreenchange", sync)
+    return () => document.removeEventListener("fullscreenchange", sync)
+  }, [target])
+
+  const toggle = () => {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void target.current?.requestFullscreen()
+  }
+
+  const label = isFullscreen ? "Exit full screen" : "Full screen"
+  return (
+    <ControlButton onClick={toggle} title={label} aria-label={label} className="react-flow__controls-fullscreen">
+      {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+    </ControlButton>
+  )
+}
+
 // ─── DAG Content ────────────────────────────────────────────────────────────
 
 function DAGContent({
   actions,
   workflowId,
-  onNodeClick,
+  selectedKey,
+  onNodeOpen,
+  fullscreenTarget,
 }: {
   actions: Record<string, Action>
   workflowId: string
-  onNodeClick?: (name: string) => void
+  selectedKey?: string | null
+  onNodeOpen?: (name: string) => void
+  fullscreenTarget: RefObject<HTMLDivElement | null>
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [tracedKey, setTracedKey] = useState<string | null>(null)
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const { fitView, setViewport } = useReactFlow()
   const store = useStoreApi()
@@ -163,6 +200,7 @@ function DAGContent({
 
     setNodes(transformed.nodes)
     setEdges(transformed.edges)
+    setTracedKey(null)
 
     setTimeout(() => {
       const { width, height } = store.getState()
@@ -172,21 +210,60 @@ function DAGContent({
     }, 100)
   }, [actions, workflowId, fitView, setViewport, store, setNodes, setEdges])
 
-  const handleNodeClick = useCallback(
+  // Moving to another action from the details panel traces that action too.
+  useEffect(() => {
+    if (selectedKey) setTracedKey(selectedKey)
+  }, [selectedKey])
+
+  const lineage = useMemo(
+    () => (tracedKey ? traceLineage(tracedKey, edges) : null),
+    [tracedKey, edges],
+  )
+
+  const shownNodes = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        selected: n.id === tracedKey,
+        style: { ...n.style, opacity: lineage && !lineage.nodes.has(n.id) ? 0.3 : 1 },
+      })),
+    [nodes, lineage, tracedKey],
+  )
+
+  const shownEdges = useMemo(
+    () =>
+      lineage
+        ? edges.map((e) =>
+            lineage.edges.has(e.id)
+              ? { ...e, zIndex: 1, style: PATH_EDGE_STYLE, markerEnd: PATH_EDGE_MARKER }
+              : { ...e, style: FADED_EDGE_STYLE },
+          )
+        : edges,
+    [edges, lineage],
+  )
+
+  // A double click fires two clicks first, so a click sets the trace rather than toggling it.
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => setTracedKey(node.id), [])
+  const handlePaneClick = useCallback(() => setTracedKey(null), [])
+  const handleNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      onNodeClick?.(node.id)
+      // The details panel sits outside the graph, so leave full screen to show it.
+      if (document.fullscreenElement) void document.exitFullscreen()
+      onNodeOpen?.(node.id)
     },
-    [onNodeClick],
+    [onNodeOpen],
   )
 
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
+      nodes={shownNodes}
+      edges={shownEdges}
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={handleNodeClick}
+      onNodeDoubleClick={handleNodeDoubleClick}
+      onPaneClick={handlePaneClick}
       minZoom={MIN_ZOOM}
       maxZoom={MAX_ZOOM}
       nodesDraggable
@@ -200,7 +277,9 @@ function DAGContent({
       className="rounded-card"
     >
       <Background gap={24} size={1} color="hsl(var(--grid))" className="!bg-well" />
-      <Controls className="!rounded-control !border-border !bg-surface !shadow-none" showInteractive={false} />
+      <Controls className="!rounded-control !border-border !bg-surface !shadow-none" showInteractive={false}>
+        <FullscreenButton target={fullscreenTarget} />
+      </Controls>
       <MiniMap
         nodeColor={(n) =>
           n.type === "modelNode" ? "hsl(var(--llm))"
@@ -219,17 +298,20 @@ function DAGContent({
 export function WorkflowDAGView({
   actions,
   workflowId,
-  onNodeClick,
+  selectedKey,
+  onNodeOpen,
 }: {
   actions: Record<string, Action>
   workflowId: string
-  onNodeClick?: (name: string) => void
+  selectedKey?: string | null
+  onNodeOpen?: (name: string) => void
 }) {
-  // 280px ≈ top header (48px) + workflow detail header/tabs (~120px) + outer padding (112px)
+  const containerRef = useRef<HTMLDivElement>(null)
+  // 320px = the graph's top edge on the workflow page (measured 304px) + a 16px bottom margin
   return (
-    <div className="w-full overflow-hidden rounded-card border border-border bg-well" style={{ height: 'clamp(300px, calc(100vh - 280px), 100vh)' }}>
+    <div ref={containerRef} className="w-full overflow-hidden rounded-card border border-border bg-well" style={{ height: 'clamp(300px, calc(100vh - 320px), 100vh)' }}>
       <ReactFlowProvider>
-        <DAGContent actions={actions} workflowId={workflowId} onNodeClick={onNodeClick} />
+        <DAGContent actions={actions} workflowId={workflowId} selectedKey={selectedKey} onNodeOpen={onNodeOpen} fullscreenTarget={containerRef} />
       </ReactFlowProvider>
     </div>
   )

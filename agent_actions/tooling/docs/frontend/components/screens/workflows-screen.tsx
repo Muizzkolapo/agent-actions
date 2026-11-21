@@ -329,7 +329,7 @@ function WorkflowDetail({
         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-llm" />LLM</span>
           <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-tool" />Tool</span>
-          <span className="font-mono text-[10.5px] text-muted-2">click a node to trace</span>
+          <span className="font-mono text-[10.5px] text-muted-2">click to trace · double-click for details</span>
         </div>
       </div>
 
@@ -342,7 +342,8 @@ function WorkflowDetail({
             <WorkflowDAGView
               actions={actions}
               workflowId={workflow.id}
-              onNodeClick={(n) => setSelectedKey((cur) => (cur === n ? null : n))}
+              selectedKey={selectedKey}
+              onNodeOpen={setSelectedKey}
             />
           )}
 
