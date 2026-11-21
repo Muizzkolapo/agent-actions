@@ -93,6 +93,27 @@ class BatchContextMetadata:
         name = record.get(ContextMetaKeys.OUTPUT_SCHEMA)
         return name if isinstance(name, str) else None
 
+    @staticmethod
+    def set_judge_context(record: dict[str, Any], context: dict[str, Any]) -> None:
+        """Keep the LLM context values the action's judged rules reference."""
+        record[ContextMetaKeys.JUDGE_CONTEXT] = context
+
+    @staticmethod
+    def get_judge_context(record: Any) -> dict[str, Any] | None:
+        """The context a judged rule's refs resolve against, or None where none was kept."""
+        context = record.get(ContextMetaKeys.JUDGE_CONTEXT) if isinstance(record, dict) else None
+        return context if isinstance(context, dict) else None
+
+    @staticmethod
+    def judge_contexts(context_map: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+        """Each record's kept judge context, by custom_id."""
+        kept = {}
+        for custom_id, record in (context_map or {}).items():
+            context = BatchContextMetadata.get_judge_context(record)
+            if context is not None:
+                kept[str(custom_id)] = context
+        return kept
+
     # =========================================================================
     # Utility Methods
     # =========================================================================

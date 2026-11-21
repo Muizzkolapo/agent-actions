@@ -61,16 +61,22 @@ def collect_judgements(
     *,
     verdicts: dict[str, Any],
     budget_remaining: int | None,
+    context_map: dict[str, Any] | None = None,
 ) -> JudgeCollection:
     """Run the suite over *results* as the next step will, holding back each judge call.
 
     A repair policy evaluates through the repair loop's strategy; ``repair: none``
     validates in the result writer, so its items are read the way the writer reads
     them. Only the judged rules run, so no other check is called twice, and on
-    copies: an evaluation may put a verdict on a result.
+    copies: an evaluation may put a verdict on a result. Each record is judged
+    against the context its *context_map* row kept, as the next step judges it.
     """
     from agent_actions.expectations.service import create_expectation_service_from_config
-    from agent_actions.llm.batch.processing.batch_result_strategy import validated_items
+    from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+    from agent_actions.llm.batch.processing.batch_result_strategy import (
+        dispatch_results,
+        validated_items,
+    )
     from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
     from agent_actions.output.response.config_fields import get_default
     from agent_actions.processing.evaluation import EvaluationLoop
@@ -93,7 +99,7 @@ def collect_judgements(
     copies = [copy.copy(result) for result in results]
     if service.repair != "none":
         # The loop's own split would log placeholder verdicts as failures.
-        strategy = ExpectationStrategy(service)
+        strategy = ExpectationStrategy(service, BatchContextMetadata.judge_contexts(context_map))
         loop = EvaluationLoop(strategy)
         for result in copies:
             if not loop._is_already_graduated(result):
@@ -104,10 +110,14 @@ def collect_judgements(
         for result in copies:
             if not BatchResultReconciler.is_answered(result):
                 continue
+            row = (context_map or {}).get(str(result.custom_id))
             for item in validated_items(
-                result.content, json_mode=json_mode, output_field=output_field
+                result.content,
+                json_mode=json_mode,
+                output_field=output_field,
+                dispatch=dispatch_results(agent_config, row),
             ):
-                service.validate(item)
+                service.validate(item, BatchContextMetadata.get_judge_context(row))
     return JudgeCollection(dict(service.pending_judgements), budget_before)
 
 

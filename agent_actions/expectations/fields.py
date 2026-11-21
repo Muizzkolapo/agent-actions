@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 WILDCARD_SUFFIX = "[*]"
@@ -61,6 +62,23 @@ def resolve_context(llm_context: dict[str, Any], refs: list[str]) -> dict[str, A
             raise FieldResolutionError(f"context reference '{ref}' is not present in llm_context")
         resolved[ref] = action_data[field_name]
     return resolved
+
+
+def narrow_context(llm_context: Any, refs: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """The part of ``llm_context`` that *refs* read, in its own shape.
+
+    ``resolve_context`` over the result resolves each ref, or fails on it, exactly as
+    over the whole context. A batch run keeps this per record in place of the context.
+    """
+    kept: dict[str, dict[str, Any]] = {}
+    if not isinstance(llm_context, dict):
+        return kept
+    for ref in refs:
+        action_name, sep, field_name = ref.partition(".")
+        action_data = llm_context.get(action_name)
+        if sep and isinstance(action_data, dict) and field_name in action_data:
+            kept.setdefault(action_name, {})[field_name] = action_data[field_name]
+    return kept
 
 
 def _lookup(record: dict[str, Any], name: str) -> Any:

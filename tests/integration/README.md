@@ -77,10 +77,10 @@ to do the thing they had already done.
 | `pair_and_pattern_rules` | A rule over two fields, and a pattern rule that negates | accepted |
 | `record_expression` | A cross-field condition that belongs to no single field | accepted |
 | `batch_field_rules` | Field-declared rules under `run_mode: batch`, nothing judged | accepted |
+| `judged_context_under_batch` | A judged rule reading another action, under `run_mode: batch` | accepted |
 | `tool_action` | An expect block on a `kind: tool` action | accepted |
 | `array_member_rule` | A whole-list rule on the field and a per-item rule under `items` | refused — a selector reaches top-level fields only |
 | `many_mistakes` | Five different mistakes in one block | refused — all five, each naming its own correction |
-| `judged_context_under_batch` | A judged rule reading another action, under `run_mode: batch` | refused — no context source exists in batch |
 | `old_flat_shape` | A whole file still written with flat arguments and `severity: fail` | refused — arguments under `params:`, and `fail` is not one of the levels |
 | `repair_auto_at_file_granularity` | `repair: auto` where one call produces the whole file | refused — one failing record would regenerate all of them |
 
