@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: 'The load refuses a tool that runs per record inside an include with `as:`. Its function would get the record keyed by the final names, not the short names of the branch, and the run stored empty values as a success. A tool at `granularity: file` is permitted.'
+time: 2026-11-21T13:10:00Z

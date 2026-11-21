@@ -320,7 +320,10 @@ TWIN_INCLUDE = {"include": "twin", "inputs": {"a": "a"}}
     [
         (
             ([A, {**INCLUDE, "as": "left_"}], None),
-            ([A, {**INCLUDE, "as": "left"}], None),
+            (
+                [A, {**INCLUDE, "as": "left"}],
+                {"pair": _pair([_with(B1, granularity="file"), _with(B2, granularity="file")])},
+            ),
             f"Include 'pair' in {WF}: 'as: left_': the name ends with '_'. "
             "Use letters, digits and single underscores, starting with a letter.",
         ),

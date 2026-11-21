@@ -135,6 +135,10 @@ A version of a branch action keeps its suffix: `vote_1` becomes `c2__vote_1`. An
 
 The prompts of the branch do not change, and they cannot read a branch action or an input by its short name. The load refuses such a read, because no action has that name.
 
+:::note
+A tool of an instance gets its records with the final names, for example `c2__write`, and not with the short names. Thus the load refuses a tool that runs per record in an include with `as:`. A tool at `granularity: file` is permitted. Its records have the final names.
+:::
+
 The workflow reads the outputs of an instance by their final names, for example `c2__review`. The store, the logs and `agac inspect` also use the final names.
 
 ### Inputs bind any action {/* #as-inputs */}
@@ -167,6 +171,7 @@ An input bound to an action of another instance must name an output of that bran
 | Two includes have the same instance name. An include without `as:` has the branch name as its instance name. | `Workflow 'quiz' (agent_config/quiz.yml) includes branch 'question_round' (branches/question_round.yml) twice with the instance name 'c'. Give each include its own instance name with 'as:'.` |
 | A branch action reads a short name that the branch does not define and that no input binds. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c2', action 'review': reads 'draft', which the branch does not define and no input of include 'c2' binds. Branch actions: write, review. Inputs: spec.` |
 | A short name of the branch is also the name of an action of the workflow. An input bound to the action of its own name is permitted. | `Include 'question_round' as 'c2' in agent_config/quiz.yml: the short name 'write' of branch 'question_round' (branches/question_round.yml) is also an action of workflow 'quiz'. Inside the include it means 'c2__write', so the branch could not tell the two apart. Rename one of them.` |
+| A tool of the branch runs per record. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c', action 'write': a tool that runs per record cannot be in an include with 'as:' yet. ...` |
 
 `agac inspect` loads the workflow in the same way, so it reports the same refusals.
 

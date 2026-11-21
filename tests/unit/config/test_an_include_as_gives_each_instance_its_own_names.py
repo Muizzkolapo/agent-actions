@@ -24,6 +24,7 @@ from tests.unit.config.test_a_workflow_includes_a_branch_file import (
 WRITE = {
     "name": "write",
     "kind": "tool",
+    "granularity": "file",
     "impl": "round_write",
     "schema": {"text": "string"},
     "intent": "write",
@@ -33,6 +34,7 @@ WRITE = {
 REVIEW = {
     "name": "review",
     "kind": "tool",
+    "granularity": "file",
     "impl": "round_review",
     "schema": {"text": "string"},
     "intent": "review",

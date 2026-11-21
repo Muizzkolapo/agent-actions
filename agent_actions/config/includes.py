@@ -35,6 +35,7 @@ from agent_actions.output.response.expander_merge import (
 )
 from agent_actions.output.response.expander_validation import (
     inherited_routing_kind,
+    is_file_granularity,
     resolved_granularity,
 )
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
@@ -223,6 +224,7 @@ def check_include_reads(
         levels = _Levels.load(data, project_root)
         if levels is None:
             return
+        _refuse_record_tools(data, inclusions, levels)
         if any(inclusion.removed for inclusion in inclusions):
             _refuse_removed_reads(data, inclusions, levels)
         _refuse_unknown_dependencies(data, inclusions)
@@ -389,6 +391,35 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                     f"Outputs of '{source.branch.name}': {_listed(source.outputs)}.",
                     context=_context(source, action_name=action["name"]),
                 )
+
+
+def _refuse_record_tools(
+    data: dict[str, Any], inclusions: Sequence[Inclusion], levels: _Levels
+) -> None:
+    """Refuse a tool that runs per record inside an ``as:`` include.
+
+    Its function would get each record keyed by the final names, not the short names
+    of the branch that it reads.
+    """
+    by_instance = {inclusion.instance: inclusion for inclusion in inclusions}
+    for action in data["actions"]:
+        origin = action.get(_ORIGIN_KEY) if isinstance(action, dict) else None
+        if not isinstance(origin, dict) or "names" not in origin:
+            continue
+        view = _repair_view(action, levels.of(action))
+        if view["kind"] != "tool" or is_file_granularity(view["granularity"]):
+            continue
+        reader = by_instance[origin["instance"]]
+        local = origin["local_name"]
+        where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
+        raise ConfigurationError(
+            f"{where}: a tool that runs per record cannot be in an include with 'as:' yet. "
+            "Its function would get the record keyed by the final names, for example "
+            f"'{reader.prefix}__{local}', not by the short names of the branch. "
+            "Short names for the input of a tool arrive with the next change. Until then, "
+            "include the branch without 'as:', or set 'granularity: file' on the tool.",
+            context=_context(reader, action_name=local),
+        )
 
 
 def _refuse_unknown_dependencies(data: dict[str, Any], inclusions: Sequence[Inclusion]) -> None:
