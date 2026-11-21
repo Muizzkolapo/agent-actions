@@ -1499,8 +1499,9 @@ def retry(
 
     \b
     Exit codes: 0 no failed or exhausted record is left, 1 an action failed,
-    3 a failed or exhausted record remains, 4 paused for a batch, 5 stopped by
-    a provider's quota or billing.
+    3 a failed or exhausted record remains, 4 paused: a batch is open, or the
+    retry stopped before every action ended, 5 stopped by a provider's quota
+    or billing.
     """
     if retry_all:
         for refused, flag, why in (

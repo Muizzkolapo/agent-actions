@@ -82,8 +82,9 @@ failed as a whole. The command stops in one of these cases:
   would retry the same records with the same result.
 - The command made `--max-passes` passes.
 - A pass submitted a batch. The records of that pass wait for the batch, and no retry runs on top of a batch
-  that is not collected. The exit code is `4`. Collect the batch with `agac run`, then run `retry --all` again.
-- A provider answered that its [quota is used up](./run.md#quota-stop). The exit code is `5`.
+  that is not collected. The exit code is `4`. Collect the batch with `agac run`. Then run `retry --all` again.
+- A pass stopped before every action ended, with no open batch. The exit code is `4`.
+- A provider answered that its [quota is at its limit](./run.md#quota-stop). The exit code is `5`.
 
 When failures are left, the exit code is `3`. It is `1` when an action failed as a whole in the last pass
 (see [Exit codes](./run.md#exit-codes)).
