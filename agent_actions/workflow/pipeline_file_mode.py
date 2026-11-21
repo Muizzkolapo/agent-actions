@@ -568,6 +568,7 @@ def prefilter_by_guard(
         get_guard_evaluator,
     )
     from agent_actions.processing.guard_context import build_guard_context
+    from agent_actions.record.elsewhere import sends_elsewhere
     from agent_actions.record.state import CASCADE_BLOCKING_VALUES
     from agent_actions.utils.content import get_existing_content
 
@@ -650,16 +651,18 @@ def prefilter_by_guard(
             # behavior == GuardBehavior.FILTER: use original for source_guid access.
             filtered.append(originals[idx])
 
+    sent = len(filtered) if sends_elsewhere(agent_config) else 0
     logger.info(
         "Guard pre-filter for '%s': %d passed, %d skipped, %d filtered, %d failed, "
-        "%d left unjudged for the cascade filter, of %d total",
+        "%d left unjudged for the cascade filter, of %d total%s",
         agent_name,
         len(passing) - blocked,
         len(skipped),
-        len(filtered),
+        len(filtered) - sent,
         len(failed),
         blocked,
         len(data),
+        f"; {sent} sent elsewhere" if sent else "",
     )
     for record, error in failed:
         logger.warning(

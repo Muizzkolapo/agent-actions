@@ -41,6 +41,13 @@ from agent_actions.workflow.managers.state import ActionStatus
 from agent_actions.workflow.runner import ActionRunner, FileProcessParams
 from agent_actions.workflow.runner_file_processing import process_files
 
+
+def _configured(runner: ActionRunner) -> ActionRunner:
+    """A runner as a run sets it up: it reads stored input only with its action configs."""
+    runner.action_configs = {}
+    return runner
+
+
 ACTION = "collect_questions"
 HALT_TEXT = "Retry exhausted for record r-2 after 2 attempts (on_exhausted=raise)"
 CONFIG_TEXT = "Schema 'rf_label' not found for action"
@@ -93,7 +100,8 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
-                ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+                _configured(ActionRunner(use_tools=True)),
+                _params(strategy, [str(source)], tmp_path / "out"),
             )
 
         assert raised_by_exhaustion_policy(exc_info.value), (
@@ -117,7 +125,8 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
-                ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+                _configured(ActionRunner(use_tools=True)),
+                _params(strategy, [str(source)], tmp_path / "out"),
             )
 
         assert any(link is fatal for link in get_error_chain(exc_info.value)), (
@@ -135,7 +144,8 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
-                ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+                _configured(ActionRunner(use_tools=True)),
+                _params(strategy, [str(source)], tmp_path / "out"),
             )
 
         assert sorted(calls) == ["bad.json", "good.json"]
@@ -152,7 +162,7 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
-                ActionRunner(use_tools=True, storage_backend=backend),
+                _configured(ActionRunner(use_tools=True, storage_backend=backend)),
                 _params(strategy, [str(tmp_path / "target" / "upstream")], tmp_path / "out"),
             )
 
@@ -168,7 +178,7 @@ class TestAnActionFatalErrorEscapesPartialSuccess:
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
-                ActionRunner(use_tools=True),
+                _configured(ActionRunner(use_tools=True)),
                 _params(strategy, [str(first), str(second)], tmp_path / "out"),
             )
 
@@ -196,7 +206,8 @@ class TestTheHaltIsTheCauseThatSurvives:
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(
-                ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+                _configured(ActionRunner(use_tools=True)),
+                _params(strategy, [str(source)], tmp_path / "out"),
             )
 
         assert raised_by_exhaustion_policy(exc_info.value), (
@@ -246,7 +257,8 @@ class TestUndeclaredFailuresStayTolerated:
         strategy, calls = _strategy_failing_on({"bad.json": error})
 
         process_files(
-            ActionRunner(use_tools=True), _params(strategy, [str(source)], tmp_path / "out")
+            _configured(ActionRunner(use_tools=True)),
+            _params(strategy, [str(source)], tmp_path / "out"),
         )
 
         assert sorted(calls) == ["bad.json", "good.json"]
@@ -261,7 +273,7 @@ class TestThePartialFailureIsRecorded:
         _write(source / "good.json")
         _write(source / "exhausted.json")
         strategy, _ = _strategy_failing_on({"exhausted.json": exhaustion_halt(HALT_TEXT)})
-        runner = ActionRunner(use_tools=True, storage_backend=backend)
+        runner = _configured(ActionRunner(use_tools=True, storage_backend=backend))
 
         with pytest.raises(DependencyError) as exc_info:
             process_files(runner, _params(strategy, [str(source)], tmp_path / "out"))
