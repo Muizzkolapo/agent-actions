@@ -98,7 +98,31 @@ def process_recovery_batch(
         and entry.recovery_type == RecoveryType.JUDGE
         and state.judge_attempt != entry.recovery_attempt
     )
-    if not state or judge_state_lost:
+    if judge_state_lost:
+        assert state is not None
+        logger.warning(
+            "Judge batch %s for %s was sent by a run that stopped before it saved the "
+            "state of the file. Its verdicts cannot be read, and the provider has billed "
+            "it. Dropping it so %s is processed again from its main batch",
+            entry.batch_id,
+            parent_file_name,
+            parent_file_name,
+        )
+        state.judge_attempt = entry.recovery_attempt or state.judge_attempt
+        state.judge_requests = {}
+        state.judge_results = []
+        state.judge_resumes = None
+        RecoveryStateManager.save(
+            service._storage_backend,  # type: ignore[arg-type]
+            effective_action_name,  # type: ignore[arg-type]
+            parent_file_name,
+            state,
+        )
+        manager.remove_batch_job(file_name)
+        if entry.batch_id:
+            release_local_batch_record(entry.batch_id)
+        return None
+    if not state:
         # Without state this entry can never be interpreted, and while it exists
         # it supersedes its parent — so leaving it registered wedges the action
         # on the same error every run. Dropping it hands the parent back to the

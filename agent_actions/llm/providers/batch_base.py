@@ -122,9 +122,15 @@ def raise_unsent(rows: list[dict[str, Any]]) -> None:
 
 def batch_request_cap(provider: BaseBatchClient) -> int:
     """The most requests one batch to *provider* may hold."""
+    cap = batch_request_cap_from_environment()
+    return provider.max_batch_requests if cap is None else cap
+
+
+def batch_request_cap_from_environment() -> int | None:
+    """The cap ``AGENT_ACTIONS_BATCH_MAX_REQUESTS`` sets, None when it is unset or blank."""
     raw = os.environ.get(BATCH_MAX_REQUESTS_ENV, "").strip()
     if not raw:
-        return provider.max_batch_requests
+        return None
     try:
         cap = int(raw)
     except ValueError:
