@@ -405,6 +405,8 @@ def _index_workflow_lines(
 
         # Tool reference
         impl_match = re.search(r"impl:\s*(\w+)", line)
+        if impl_match and re.match(r"agac\.(route|pick)\b", line[impl_match.start(1) :]):
+            impl_match = None
         if impl_match:
             current_action.impl_ref = impl_match.group(1)
             _add_reference(

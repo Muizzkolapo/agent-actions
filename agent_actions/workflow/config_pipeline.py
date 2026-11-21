@@ -9,6 +9,7 @@ from rich.console import Console
 from agent_actions.config.manager import ConfigManager
 from agent_actions.errors import UDFLoadError, enrich_exception_context
 from agent_actions.input.loaders.udf import discover_udfs
+from agent_actions.llm.providers.batch_base import batch_request_cap_from_environment
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import (
     UDFDiscoveryCompleteEvent,
@@ -78,6 +79,8 @@ def load_workflow_configs(
     )
 
     check_environment()
+    # Only judge batches read it, and they go out after the main batch is paid for.
+    batch_request_cap_from_environment()
 
     execution_order = manager.execution_order
     action_configs = manager.get_all_agent_configs_as_dicts()

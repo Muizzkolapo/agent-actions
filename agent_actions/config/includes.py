@@ -39,7 +39,7 @@ from agent_actions.output.response.expander_validation import (
     resolved_granularity,
 )
 from agent_actions.prompt.aliases import with_alias_header
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 INCLUDE_KEYS = ("include", "as", "inputs", "defaults", "override", "remove")
 BRANCH_KEYS = ("branch", "description", "inputs", "outputs", "actions")
@@ -496,6 +496,14 @@ def _refuse_unknown_short_name(
     """Refuse a read, inside an ``as:`` include, of a name nothing in the include gives."""
     local = action[_ORIGIN_KEY]["local_name"]
     where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
+    if name in reader.names and via:
+        # A prompt reads a short name through its alias header; a default does not.
+        raise ConfigurationError(
+            f"{where}: reads '{name}'{via}, a short name of the branch. A default outside the "
+            "include does not take the short names of an include with 'as:'. Write the final "
+            f"name '{reader.names[name]}'.",
+            context=_context(reader, action_name=local),
+        )
     actions = [branch_action["name"] for branch_action in reader.actions]
     raise ConfigurationError(
         f"{where}: reads '{name}'{via}, which the branch does not define and no input of "
@@ -585,9 +593,9 @@ def _refuse_removed_reads(
             if not found:
                 continue
             verb = "reads" if len(found) == 1 else "read"
-            named = ", ".join(f"'{reader}'{via}" for reader, via in found.items())
+            named = ", ".join(f"'{inclusion.local(reader)}'{via}" for reader, via in found.items())
             raise ConfigurationError(
-                f"Include '{inclusion.instance}' in {workflow_file}: remove names '{local}' of "
+                f"{inclusion.label}: remove names '{local}' of "
                 f"{inclusion.branch.label}, but {named} still {verb} it. "
                 f"{_removal_advice(list(found.values()))}",
                 context=_context(inclusion, action_name=local),
@@ -645,6 +653,12 @@ def parse_branch(name: str, source: Any, workflow_file: str) -> Branch:
     actions = source["actions"]
     if not isinstance(actions, list) or not actions:
         raise ConfigurationError(f"{label}: 'actions' must be a list of actions.")
+    if any(isinstance(a, dict) and ("route" in a or "join" in a) for a in actions):
+        raise ConfigurationError(
+            f"{label}: the branch contains a '- route:' or '- join:' entry. Write routes and "
+            "joins in the workflow, not in a branch file.",
+            context={"branch_file": file},
+        )
     if any(_is_include(action) for action in actions):
         raise ConfigurationError(
             f"{label}: the branch contains an include. A branch cannot include another branch.",
@@ -785,6 +799,16 @@ def _inclusion(
     if name not in parsed:
         parsed[name] = parse_branch(name, branches[name], workflow_file)
     branch = parsed[name]
+    for action in branch.actions:
+        if action["name"].strip().lower() in RESERVED_AGENT_NAMES:
+            named = _branch_where(branch.name, workflow_file, f"'{action['name']}'", prefix)
+            raise ConfigurationError(
+                f"{named}: Reserved action name '{action['name']}' cannot be used",
+                context={
+                    "action_name": action["name"],
+                    "reserved_names": sorted(RESERVED_AGENT_NAMES),
+                },
+            )
     bindings = entry.get("inputs") or {}
     if not isinstance(bindings, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in bindings.items()
@@ -1078,8 +1102,8 @@ def _reads(
     """Every name *action* reads, in the order its config states them.
 
     *scope* stands for its ``context_scope``, and *defaults* give its ``expect`` block.
-    Without *braces*, single-brace prompt text (``{name.field}``), which renders as
-    written, reads nothing.
+    Without *braces*, single-brace prompt text (``{name.field}``) is not taken as a read
+    here; the static checks report it as they do in a workflow without an include.
     """
     names: list[str] = []
     dependencies = action.get("dependencies") or []
@@ -1194,12 +1218,54 @@ def _bound(inclusion: Inclusion, suffixes: Mapping[str, list[str]]) -> Inclusion
     defaults = inclusion.defaults
     if defaults:
         defaults = _renamed_refs(dict(defaults), names)
-    return replace(
-        inclusion,
-        names=names,
-        actions=tuple(_renamed_refs(action, names) for action in inclusion.actions),
-        defaults=defaults,
-    )
+    actions = []
+    for action in inclusion.actions:
+        looked_up = _LookedUp(names)
+        actions.append(_renamed_refs(action, looked_up))
+        _refuse_bound_read_by_its_own_name(inclusion, action, looked_up.missed)
+    return replace(inclusion, names=names, actions=tuple(actions), defaults=defaults)
+
+
+class _LookedUp(dict[str, str]):
+    """A name map that keeps each name looked up in it and not found."""
+
+    def __init__(self, names: Mapping[str, str]) -> None:
+        super().__init__(names)
+        self.missed: list[str] = []
+
+    def __contains__(self, key: object) -> bool:
+        found = super().__contains__(key)
+        if not found and isinstance(key, str):
+            self.missed.append(key)
+        return found
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        if not super().__contains__(key) and isinstance(key, str):
+            self.missed.append(key)
+        return super().get(key, default)
+
+
+def _refuse_bound_read_by_its_own_name(
+    inclusion: Inclusion, action: dict[str, Any], missed: Sequence[str]
+) -> None:
+    """Refuse a branch action that reads a bound workflow action by its workflow name.
+
+    The branch would then depend on a name of the workflow; it reads the action through
+    the input that binds it.
+    """
+    for name in dict.fromkeys(missed):
+        keys = [key for key, target in inclusion.bindings.items() if target == name]
+        if not keys or name in keys:
+            continue
+        local = inclusion.local(action["name"])
+        where = _branch_where(
+            inclusion.branch.name, inclusion.workflow_file, f"'{local}'", inclusion.prefix
+        )
+        raise ConfigurationError(
+            f"{where}: reads '{name}', a workflow action, by its workflow name. Inside an "
+            f"include with 'as:', read it through its input: {', '.join(repr(k) for k in keys)}.",
+            context=_context(inclusion, action_name=local),
+        )
 
 
 def _renamed_refs(config: dict[str, Any], names: Mapping[str, str]) -> dict[str, Any]:

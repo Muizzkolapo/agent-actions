@@ -244,3 +244,28 @@ class TestRunLogFileHandler:
         assert result.exit_code == 0, f"output: {result.output}"
         logs_dir = single_workflow_project / "agent_workflow" / "solo" / "agent_io" / "logs"
         assert logs_dir.exists()
+
+
+def test_retrieve_goes_on_with_the_raw_answers_when_the_workflow_does_not_load(
+    single_workflow_project, monkeypatch
+):
+    """The batch is paid for: a config that does not load must not keep its results back."""
+    from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
+
+    handed: list = []
+
+    def retrieve(self, batch_id, target_dir):
+        handed.append(self._agent_config)
+        return "ok"
+
+    monkeypatch.setattr(BatchRetrievalService, "retrieve_results", retrieve)
+
+    result = CliRunner().invoke(
+        cli, ["batch", "retrieve", "--action", "solo_action", "--batch-id", "fake_solo_batch"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert handed == [None]
+    flat = " ".join(result.output.split())
+    assert "Warning: workflow 'solo' did not load" in flat, flat
+    assert "holds the raw answers of the provider" in flat, flat

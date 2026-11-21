@@ -11,8 +11,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from agent_actions.llm.providers.tools.builtin import runs_udf
-
 DAG_FIT_REMEDY = (
     "return the field from the tool on every path, or mark it optional in the tool's "
     "output schema — the tool's output is validated exactly as it returns it, so a "
@@ -38,7 +36,7 @@ def find_dag_schema_compatibility_gaps(
     synthesized = synthesized or {}
     gaps: dict[str, list[str]] = {}
     for name, config in action_configs.items():
-        if not runs_udf(config):
+        if config.get("kind") != "tool":
             continue
         if name in synthesized and synthesized[name] is None:
             continue

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The pre-flight warning about a tool that reads an unknown bus key gives each tool the keys of its own data. A tool of an include with `as:` is warned when it reads a final name such as `c2__write`, and a tool outside the include is warned when it reads a short name of the branch.'
+time: 2026-11-21T13:40:00Z

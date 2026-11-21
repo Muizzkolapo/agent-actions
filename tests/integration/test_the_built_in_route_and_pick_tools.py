@@ -218,3 +218,16 @@ def test_the_checks_before_a_run_accept_the_built_in_tools(tmp_path, command):
     output = " ".join((result.stdout + result.stderr).split())
     assert result.returncode == 0, output
     assert "not found" not in output, output
+    if command == "validate-udfs":
+        assert "3 Tools referenced" in output, output
+
+
+def test_an_edit_of_the_router_spec_is_named_as_an_edit(tmp_path):
+    root = _project(tmp_path)
+    _run(root)
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().replace("cases: [a, b]", "cases: [b, a]", 1))
+
+    output = _run(root)
+
+    assert "--rerun router" in output, output

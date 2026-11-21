@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A judge vote that the model refuses in a judge batch fails the judge call with `judge call failed: <refusal>`, as online. Before, the batch counted it as one failed vote, so the other votes could pass the rule.'
+time: 2026-11-21T12:30:00Z

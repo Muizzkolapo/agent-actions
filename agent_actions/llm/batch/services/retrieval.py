@@ -4,7 +4,7 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError, ExternalServiceError
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -39,6 +39,7 @@ class BatchRetrievalService:
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         storage_backend: "StorageBackend | None" = None,
         action_name: str | None = None,
+        agent_config: dict[str, Any] | None = None,
     ):
         """Initialize retrieval service with dependencies.
 
@@ -48,6 +49,7 @@ class BatchRetrievalService:
             registry_manager_factory: Factory function to create registry managers
             storage_backend: Storage backend for metadata persistence
             action_name: Action name for backend lookups (required)
+            agent_config: The action's config, so its answers are read as `agac run` reads them
         """
         if not action_name:
             raise ConfigurationError(
@@ -59,6 +61,7 @@ class BatchRetrievalService:
         self._registry_manager_factory = registry_manager_factory
         self._storage_backend = storage_backend
         self._action_name = action_name
+        self._agent_config = agent_config
 
     def retrieve_results(
         self,
@@ -102,6 +105,7 @@ class BatchRetrievalService:
                 context_map=context_map,
                 record_count=entry.record_count if entry else None,
                 file_name=file_name,
+                agent_config=self._agent_config,
             )
 
             output_path = Path(output_dir)

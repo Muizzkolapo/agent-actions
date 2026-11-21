@@ -229,3 +229,87 @@ def test_a_field_with_no_enum_is_not_checked():
     data = expand_routes(_workflow(), WF)
 
     finish_routes(data, WF)
+
+
+@pytest.mark.parametrize(
+    "declared",
+    [
+        {"id": "format", "type": "integer", "enum": [1, 2]},
+        {"id": "format", "type": "string", "enum": ["a", 2]},
+        {"id": "format", "type": "integer"},
+    ],
+    ids=["integer-enum", "mixed-enum", "integer-type"],
+)
+def test_a_router_on_a_field_that_holds_no_strings_is_refused_at_load(declared):
+    data = expand_routes(_workflow({"cases": {"1": ["on_a"], "2": ["on_b"]}}), WF)
+    _by_name(data)["classify"]["schema"] = {"name": "c", "fields": [declared]}
+
+    with pytest.raises(ConfigurationError, match="A router matches string values only"):
+        finish_routes(data, WF)
+
+
+def test_a_case_that_is_not_a_string_names_the_string_rule_and_no_quoting():
+    message = _refusal(_workflow({"cases": {1: ["on_a"]}}))
+
+    assert "A router matches string values only" in message
+    assert "quote" not in message
+
+
+def test_a_join_can_join_a_join_and_a_route_can_read_a_join():
+    data = _workflow(
+        actions=[
+            {"join": "inner", "of": ["after_a", "on_b"]},
+            {"route": "again", True: "inner.x", "cases": {"x": ["on_x"]}, "default": "filter"},
+            _action("on_x"),
+            {"join": "outer", "of": ["inner", "on_x"]},
+        ],
+        join=False,
+    )
+
+    actions = _by_name(expand_routes(data, WF))
+
+    assert actions["again"]["dependencies"] == ["inner"]
+    assert actions["outer"]["_builtin"]["of"] == ["inner", "on_x"]
+
+
+def test_a_join_of_a_versioned_action_is_refused():
+    data = _workflow(
+        actions=[_action("voted", dependencies=["on_b"], versions={"range": [1, 2]})],
+        join={"join": "joined", "of": ["after_a", "voted"]},
+    )
+
+    assert "names 'voted', which runs as versions" in _refusal(data)
+    assert "Join the action that merges the versions of 'voted'" in _refusal(data)
+
+
+def test_a_join_that_leaves_out_a_branch_of_a_router_is_warned_about(caplog):
+    with caplog.at_level("WARNING"):
+        expand_routes(_workflow(join={"join": "joined", "of": ["after_a"]}), WF)
+
+    assert "takes the branches of router 'router' for a but not for b" in caplog.text
+
+
+def test_a_join_of_every_branch_is_not_warned_about(caplog):
+    with caplog.at_level("WARNING"):
+        expand_routes(_workflow(), WF)
+
+    assert "takes the branches" not in caplog.text
+
+
+def test_a_route_or_a_join_in_a_branch_file_is_refused_in_one_sentence():
+    from agent_actions.config.includes import parse_branch
+
+    branch = {
+        "branch": "pair",
+        "description": "d",
+        "actions": [{"route": "r", "on": "x.y", "cases": {"a": ["b"]}, "default": "filter"}],
+    }
+
+    with pytest.raises(ConfigurationError) as caught:
+        parse_branch("pair", branch, WF)
+
+    assert str(caught.value) == (
+        f"Branch 'pair' (branches/pair.yml), included in {WF}: the branch contains a "
+        "'- route:' or '- join:' entry. Write routes and joins in the workflow, not in a "
+        "branch file."
+    )
