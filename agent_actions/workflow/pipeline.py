@@ -1,6 +1,5 @@
 """Module for orchestrating data processing pipelines through configured agents."""
 
-import json
 import logging
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -32,6 +31,7 @@ from agent_actions.processing.disposition_gate import (
 )
 from agent_actions.processing.helpers import replaces_its_file_whole
 from agent_actions.processing.repair_lineage import (
+    actions_below,
     drop_rows_built_on_rows_gone_above,
     note_rewritten_by_repair,
     written_above,
@@ -136,27 +136,6 @@ def _identities_named(rows: Any) -> set[str]:
                 if guid
             )
     return named
-
-
-def _actions_below(storage_backend: "StorageBackend", action_name: str) -> list[str]:
-    """Every action whose input derives from *action_name*'s output, per the stored graph."""
-    raw = storage_backend.load_metadata("dependency_graph")
-    try:
-        graph = json.loads(raw) if raw else None
-    except (TypeError, ValueError):
-        graph = None
-    if not isinstance(graph, dict):
-        logger.warning(
-            "Action '%s': no dependency graph is stored, so the actions reading it keep "
-            "what they hold for a file it replaced whole",
-            action_name,
-        )
-        return []
-    return [
-        name
-        for name, upstream in graph.items()
-        if isinstance(upstream, list) and action_name in upstream
-    ]
 
 
 def _whole_file_readers(below: list[str], action_configs: dict[str, Any] | None) -> frozenset[str]:
@@ -898,7 +877,7 @@ class ProcessingPipeline:
             and context.target_relative_path
             and self.config.storage_backend is not None
         ):
-            below = _actions_below(self.config.storage_backend, self.config.action_name)
+            below = actions_below(self.config.storage_backend, self.config.action_name)
             if below:
                 _forget_answers_below(
                     self.config.storage_backend,
@@ -939,7 +918,7 @@ class ProcessingPipeline:
         ):
             note_rewritten_by_repair(
                 self.config.storage_backend,
-                below or _actions_below(self.config.storage_backend, self.config.action_name),
+                below or actions_below(self.config.storage_backend, self.config.action_name),
                 stored_before,
                 _stored_rows(
                     self.config.storage_backend,

@@ -28,7 +28,12 @@ from agent_actions.processing.disposition_gate import (
     found_by_repair,
     note_cleared_by_repair,
 )
-from agent_actions.processing.repair_lineage import keep_notes_at, notes_kept_at, resume_notes
+from agent_actions.processing.repair_lineage import (
+    actions_below,
+    keep_notes_at,
+    notes_kept_at,
+    resume_notes,
+)
 from agent_actions.record.reasons import BATCH_ABANDONED, HALTED_ON_EXHAUSTED
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
@@ -42,7 +47,6 @@ from agent_actions.storage.backend import (
 from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.workflow.pipeline import _actions_below
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +285,7 @@ class RetryCommand:
         self._note_file_tools(
             downstream_actions,
             workflow.services.core.action_runner.action_configs or {},
-            lambda action: _actions_below(backend, action),
+            lambda action: actions_below(backend, action),
         )
         record_ids = {r["record_id"] for r in target_records}
         repairing = self._records_this_repair_may_process(record_ids, downstream_actions, failures)

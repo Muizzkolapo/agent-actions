@@ -17,6 +17,7 @@ from rich.markup import escape
 
 from agent_actions.cli.cli_decorators import _format_project_root_display, handles_user_errors
 from agent_actions.cli.inspect_base import branch_of, render_title_row
+from agent_actions.config.loops import is_loop_pick, loop_of
 from agent_actions.llm.providers.tools.builtin import PICK, ROUTE, builtin_tool
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
@@ -36,7 +37,12 @@ class InspectCommand(BaseInspectCommand):
         # `get_levels()` includes non-operational actions that ConfigManager
         # filters out of `execution_order`. Sort within each level so
         # version siblings render `foo_1, foo_2, foo_3` (runtime order is reversed).
-        order = [name for level in inspector.get_levels() for name in sorted(level)]
+        order = [
+            name
+            for level in inspector.get_levels()
+            for name in sorted(level)
+            if not _in_loop(inspector.action_configs.get(name, {}))
+        ]
         n = len(order)
 
         self.console.print()
@@ -60,9 +66,20 @@ class InspectCommand(BaseInspectCommand):
                 )
 
 
+def _in_loop(config: dict[str, Any]) -> bool:
+    """Whether *config* is an action of one iteration of a loop, shown as the loop."""
+    return loop_of(config) is not None and not is_loop_pick(config)
+
+
 def _note(config: dict[str, Any]) -> str | None:
     """What an action is beyond its name: its branch, or the router or join it was written as."""
     spec = builtin_tool(config)
+    loop = loop_of(config) if is_loop_pick(config) else None
+    if loop is not None:
+        return (
+            f"loop ×{loop['max_iterations']} max, until {loop['until']} "
+            f"(branch {loop['branch']}, result {loop['result']})"
+        )
     if spec is not None and spec["tool"] == ROUTE:
         cases = " · ".join(
             f"{case} → {members if isinstance(members, str) else ', '.join(members)}"

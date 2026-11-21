@@ -49,6 +49,8 @@ _JINJA_MARKERS = ("{{", "{%", "{#")
 _NAME_CHARS = re.compile(r"[A-Za-z0-9_]+\Z")
 _NAME_RULE = "Use letters, digits and single underscores, starting with a letter."
 _ORIGIN_KEY = "_include"
+# The internal key a loop puts on each include entry it unrolls into.
+_LOOP_KEY = "_loop"
 _OVERRIDE_KEYS = tuple(
     sorted(
         (
@@ -95,6 +97,7 @@ class Inclusion:
     defaults: Mapping[str, Any] | None = None
     prefix: str | None = None
     names: Mapping[str, str] = field(default_factory=dict)
+    loop: Mapping[str, Any] | None = None
 
     @property
     def outputs(self) -> tuple[str, ...]:
@@ -180,6 +183,11 @@ def expand_workflow_includes(
     _refuse_written_origin(actions, workflow_file)
     if not has_include(data):
         return data, []
+    # Imported here: loops reads branch files with this module.
+    from agent_actions.config.loops import unroll_loops
+
+    data = unroll_loops(data, workflow_file, branches, available)
+    actions = data["actions"]
     workflow = str(data.get("name"))
     parsed: dict[str, Branch] = {}
     inclusions: list[Inclusion] = []
@@ -414,7 +422,7 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                     _refuse_unknown_short_name(action, name, reader, via)
                 continue
             source = owner.get(name)
-            if name in routers:
+            if name in routers or _same_loop(reader, source):
                 continue
             if reader is not None:
                 inputs = set(reader.bindings.values())
@@ -437,6 +445,30 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                     f"Outputs of '{source.branch.name}': {_listed(source.outputs)}.",
                     context=_context(source, action_name=action["name"]),
                 )
+
+
+def _same_loop(reader: Inclusion | None, source: Inclusion | None) -> bool:
+    """Whether *reader* and *source* are iterations of one loop, which read each other."""
+    if reader is None or source is None or reader.loop is None or source.loop is None:
+        return False
+    return bool(reader.loop["name"] == source.loop["name"])
+
+
+def inherited_granularities(data: Any, project_root: Path | None = None) -> dict[str, Any]:
+    """The granularity each action of *data* runs at once it inherits the defaults.
+
+    Empty when the load refuses the defaults: it reports them itself.
+    """
+    levels = _Levels.load(data, project_root)
+    if levels is None:
+        return {}
+    found: dict[str, Any] = {}
+    for action in data.get("actions") or []:
+        if isinstance(action, dict) and isinstance(action.get("name"), str):
+            defaults = levels.of(action)
+            kind = inherited_routing_kind(action, defaults)
+            found[action["name"]] = resolved_granularity(kind, action, defaults)[0]
+    return found
 
 
 def _refuse_unknown_dependencies(data: dict[str, Any], inclusions: Sequence[Inclusion]) -> None:
@@ -735,7 +767,7 @@ def _inclusion(
         )
     where = f"Include '{name}' in {workflow_file}"
     for key in entry:
-        if key in INCLUDE_KEYS:
+        if key in INCLUDE_KEYS or key == _LOOP_KEY:
             continue
         raise ConfigurationError(
             f"{where}: key '{key}' is not an include key."
@@ -792,6 +824,7 @@ def _inclusion(
         defaults=_instance_defaults(entry.get("defaults"), where),
         prefix=prefix,
         names=names,
+        loop=entry.get(_LOOP_KEY),
     )
 
 
@@ -1133,6 +1166,8 @@ def _with_origin(action: dict[str, Any], inclusion: Inclusion) -> dict[str, Any]
         origin["defaults"] = copy.deepcopy(dict(inclusion.defaults))
     if inclusion.prefix is not None:
         origin["names"] = dict(inclusion.names)
+    if inclusion.loop is not None:
+        origin["loop"] = copy.deepcopy(dict(inclusion.loop))
     return {**copy.deepcopy(action), _ORIGIN_KEY: origin}
 
 
@@ -1359,6 +1394,7 @@ __all__ = [
     "expand_workflow_includes",
     "has_include",
     "has_written_origin",
+    "inherited_granularities",
     "instance_names",
     "parse_branch",
     "rename_judge_contexts",

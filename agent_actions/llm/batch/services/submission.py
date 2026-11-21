@@ -42,6 +42,7 @@ from agent_actions.logging.events.batch_events import (
     BatchStatusCheckFailedEvent,
     BatchSubmissionFailedEvent,
 )
+from agent_actions.processing.repair_lineage import actions_below, note_rewritten_by_repair
 from agent_actions.processing.result_collector import (
     _safe_set_disposition,
     write_node_level_disposition,
@@ -452,15 +453,27 @@ class BatchSubmissionService:
             output_directory=output_directory,
             file_name=batch_name,
         )
+        stored_name = batch_output_name(batch_name)
+        repairing = self._disposition_gate is not None and bool(self._disposition_gate.repairing)
+        stored_before = self._stored_rows(action_name, stored_name) if repairing else []
         write_batch_file(
             self._storage_backend,
             action_name,
             rows,
             output_root=output_directory,
-            stored_name=batch_output_name(batch_name),
+            stored_name=stored_name,
             batch_inputs=run_input_guids or (),
             filtered=filtered_inputs(context_map),
         )
+        if repairing and self._storage_backend is not None:
+            # As online notes it: a row the repair took out here, say of a record its
+            # guard now sends elsewhere, is taken out of what the actions below built on it.
+            note_rewritten_by_repair(
+                self._storage_backend,
+                actions_below(self._storage_backend, action_name),
+                stored_before,
+                self._stored_rows(action_name, stored_name),
+            )
         # A file whose every record went to another branch is not the action's skip: it
         # completes on no records, as online does.
         if not _all_sent_elsewhere(context_map):
@@ -474,6 +487,17 @@ class BatchSubmissionService:
         if halt is not None:
             raise halt
         return SubmissionResult(passthrough={"type": "written"})
+
+    def _stored_rows(self, action_name: str, stored_name: str) -> list[dict[str, Any]]:
+        if self._storage_backend is None:
+            return []
+        try:
+            rows: list[dict[str, Any]] = self._storage_backend.read_target_for_rewrite(
+                action_name, stored_name
+            )
+        except FileNotFoundError:
+            return []
+        return rows
 
     def _write_for_inputs_carried(
         self,

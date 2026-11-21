@@ -19,6 +19,7 @@ from agent_actions.input.context.normalizer import (
 )
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.expander_validation import routing_kind
+from agent_actions.record.elsewhere import gathers, sends_elsewhere
 from agent_actions.utils.constants import (
     DEFAULT_ACTION_KIND,
     JSON_MODE_KEY,
@@ -1301,8 +1302,10 @@ class WorkflowStaticAnalyzer:
         warnings: list[StaticTypeWarning] = []
         actions = self.workflow_config.get("actions", [])
 
-        # Step 1: Identify filter-guarded actions.
+        # Step 1: Identify filter-guarded actions. A record one that sends elsewhere
+        # filtered stays out of a fan-in below it, except at an action that gathers.
         filter_guarded: set[str] = set()
+        elsewhere: set[str] = set()
         for action in actions:
             if not isinstance(action, dict):
                 continue
@@ -1312,6 +1315,8 @@ class WorkflowStaticAnalyzer:
                 continue
             if read[1] == GuardBehavior.FILTER:
                 filter_guarded.add(name)
+                if sends_elsewhere(action):
+                    elsewhere.add(name)
 
         if not filter_guarded:
             return warnings
@@ -1384,6 +1389,8 @@ class WorkflowStaticAnalyzer:
                 if source_name not in filter_guarded:
                     continue
                 if source_name not in deps:
+                    continue
+                if source_name in elsewhere and not gathers(action):
                     continue
                 hazard_sources.setdefault(source_name, []).append(ref)
 

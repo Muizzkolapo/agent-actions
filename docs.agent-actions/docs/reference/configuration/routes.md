@@ -91,4 +91,4 @@ The load, and so `agac inspect` and `agac run`, refuse:
 
 ## Guards or a Router {/* #guards-or-router */}
 
-Guards with `on_false: filter` on parallel actions also send records down different paths, and a record may pass more than one of them. But a record that one guard filters stays out wherever the branches meet again ([Guards](../execution/guards.md#filtered-records-leave-only-what-is-below-the-filter)), so such branches cannot be joined. Use a router when each record enters exactly one branch and the branches meet again.
+Guards with `on_false: filter` on parallel actions also send records down different paths, and a record may pass more than one of them. But a record that one guard filters stays out wherever the branches meet again ([Guards](../execution/guards.md#filtered-records-leave-only-what-is-below-the-filter)), so such branches cannot be joined. Use a router when each record enters exactly one branch and the branches meet again. To run one branch again for the records that failed its check, use a [loop](./loops.md).

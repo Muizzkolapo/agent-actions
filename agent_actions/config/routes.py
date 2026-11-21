@@ -112,7 +112,7 @@ def _router(
     instances: Mapping[str, Inclusion],
     taken: set[str],
 ) -> dict[str, Any]:
-    name = _entry_name(entry, "route", workflow_file, taken)
+    name = entry_name(entry, "route", workflow_file, taken)
     where = f"Route '{name}' in {workflow_file}"
     # YAML 1.1 reads a bare `on` key as the boolean true.
     keys = {"on" if key is True else key for key in entry}
@@ -412,7 +412,7 @@ def _join(
     instances: Mapping[str, Inclusion],
     taken: set[str],
 ) -> dict[str, Any]:
-    name = _entry_name(entry, "join", workflow_file, taken)
+    name = entry_name(entry, "join", workflow_file, taken)
     where = f"Join '{name}' in {workflow_file}"
     _refuse_unknown_keys(set(entry), JOIN_KEYS, where)
     raw = entry.get("of")
@@ -487,7 +487,7 @@ def _joined_schema(
 # -- shared ------------------------------------------------------------------
 
 
-def _entry_name(entry: dict[str, Any], key: str, workflow_file: str, taken: set[str]) -> str:
+def entry_name(entry: dict[str, Any], key: str, workflow_file: str, taken: set[str]) -> str:
     name = entry.get(key)
     label = f"'- {key}: {name}' in {workflow_file}"
     if not isinstance(name, str) or not _NAME.match(name):

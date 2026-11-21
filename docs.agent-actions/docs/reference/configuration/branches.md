@@ -11,6 +11,8 @@ Use a branch when more than one workflow runs the same steps, or when one workfl
 
 To send each record to one of several instances by the value of a field, and to gather the instances again, see [Routes and Joins](./routes.md). A case of a router can name an instance, and a join can name an instance with one output.
 
+To run a branch again for each record whose check failed, up to a fixed number of times, see [Loops](./loops.md).
+
 ## The Branch File {/* #branch-file */}
 
 The load reads a branch file only from the `branches/` folder at the project root.

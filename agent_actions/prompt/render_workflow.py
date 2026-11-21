@@ -18,6 +18,7 @@ from agent_actions.config.includes import (
     rename_schema_judge_contexts,
     workflow_label,
 )
+from agent_actions.config.loops import expand_loops, finish_loops
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.routes import expand_routes, finish_routes
 from agent_actions.config.schema import validate_version_block
@@ -711,6 +712,7 @@ def render_pipeline_with_templates(
     # Step 2a: Put the actions of each included branch file in place of its include entry
     data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
     workflow_file = workflow_label(yaml_path, project_root)
+    data = expand_loops(data)
     data = _with_file(workflow_file, expand_routes, data, workflow_file, inclusions)
 
     # Step 3: Resolve prompt references
@@ -743,6 +745,7 @@ def render_pipeline_with_templates(
         _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
     rename_schema_judge_contexts(data)
     _with_file(workflow_file, finish_routes, data, workflow_file)
+    _with_file(workflow_file, finish_loops, data, workflow_file, project_root)
 
     # Step 6: Every name an action reads is final here, so the branch boundary is checked now
     check_include_reads(data, inclusions, project_root=project_root)

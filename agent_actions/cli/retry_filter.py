@@ -12,6 +12,7 @@ from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import RetryCommand, _manifest_path, _read_manifest
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
+from agent_actions.processing.repair_lineage import actions_below
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     DISPOSITION_FILTERED,
@@ -22,7 +23,6 @@ from agent_actions.storage.backend import (
 )
 from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.utils.atomic_write import atomic_json_write
-from agent_actions.workflow.pipeline import _actions_below
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +213,7 @@ class RetryFilterCommand:
         found: list[str] = []
         frontier = [action]
         while frontier:
-            for reader in _actions_below(backend, frontier.pop()):
+            for reader in actions_below(backend, frontier.pop()):
                 if reader not in found and reader != action:
                     found.append(reader)
                     frontier.append(reader)
