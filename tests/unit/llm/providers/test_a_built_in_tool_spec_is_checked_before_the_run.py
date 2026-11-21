@@ -97,7 +97,7 @@ def test_a_built_in_tool_per_file_is_refused_in_pre_flight():
         _preflight(config)
 
 
-@pytest.mark.parametrize("observed", [["source.id"], []])
+@pytest.mark.parametrize("observed", [["source.id"], [], ["source"]])
 def test_a_router_on_a_field_it_does_not_observe_is_refused_in_pre_flight(observed):
     config = {"_builtin": ROUTE, "context_scope": {"observe": observed}}
 
@@ -105,9 +105,25 @@ def test_a_router_on_a_field_it_does_not_observe_is_refused_in_pre_flight(observ
         _preflight(config)
 
 
-@pytest.mark.parametrize("observed", ["source.kind", "source.*", "source"])
+@pytest.mark.parametrize("observed", ["source.kind", "source.*"])
 def test_a_router_that_observes_its_field_passes_pre_flight(observed):
     _preflight({"_builtin": ROUTE, "context_scope": {"observe": [observed]}})
+
+
+NESTED = {**ROUTE, "field": "source.meta.kind"}
+
+
+@pytest.mark.parametrize("observed", ["source.meta", "source.*"])
+def test_a_router_on_a_nested_field_passes_when_it_observes_the_top_field(observed):
+    _preflight({"_builtin": NESTED, "context_scope": {"observe": [observed]}})
+
+
+@pytest.mark.parametrize("observed", ["source.meta.kind", "source"])
+def test_a_router_on_a_nested_field_is_refused_for_an_observe_the_run_does_not_give(observed):
+    config = {"_builtin": NESTED, "context_scope": {"observe": [observed]}}
+
+    with pytest.raises(PreFlightValidationError, match="routes on 'source.meta.kind'"):
+        _preflight(config)
 
 
 def test_route_refuses_a_record_that_holds_no_value_at_its_field():

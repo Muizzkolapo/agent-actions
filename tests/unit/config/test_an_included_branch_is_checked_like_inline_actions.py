@@ -76,10 +76,11 @@ def _declaring_z(actions) -> dict:
     return _pair(actions, inputs={"a": "Holds the text", "z": "Holds more"})
 
 
-def _branch_reads_z(name: str) -> str:
+def _branch_reads_z(name: str, level: str = "") -> str:
+    via = f" (from 'expect' under {level})" if level else ""
     return (
-        f"Branch 'pair' (branches/pair.yml), included in {WF}, action '{name}': reads 'z', which is not a "
-        "branch action or a declared input. Declare it under 'inputs:'."
+        f"Branch 'pair' (branches/pair.yml), included in {WF}, action '{name}': reads 'z'{via}, "
+        "which is not a branch action or a declared input. Declare it under 'inputs:'."
     )
 
 
@@ -100,7 +101,7 @@ class TestAnInheritedExpectCountsAsARead:
         with pytest.raises(ConfigurationError) as caught:
             _with_defaults(tmp_path / "bad", [A, Z, INCLUDE], None, _judged("z.text"))
 
-        assert str(caught.value) == _branch_reads_z("b1")
+        assert str(caught.value) == _branch_reads_z("b1", "the workflow's 'defaults:'")
         rendered = _with_defaults(
             tmp_path / "good", [A, Z, WITH_Z], {"pair": _declaring_z([B1, B2])}, _judged("z.text")
         )
@@ -111,7 +112,8 @@ class TestAnInheritedExpectCountsAsARead:
             _with_defaults(tmp_path / "bad", [A, INCLUDE], None, _judged("b1.text"))
 
         assert str(caught.value) == (
-            f"Action 'a' in {WF} reads 'b1', which branch 'pair' (branches/pair.yml) does not list under outputs. "
+            f"Action 'a' in {WF} reads 'b1' (from 'expect' under the workflow's 'defaults:'), "
+            "which branch 'pair' (branches/pair.yml) does not list under outputs. "
             "Outputs of 'pair': b2."
         )
         rendered = _with_defaults(tmp_path / "good", [A, INCLUDE], None, _judged("b2.text"))
@@ -133,7 +135,9 @@ class TestAnInheritedExpectCountsAsARead:
                 project_root=tmp_path / "bad",
             )
 
-        assert str(caught.value) == _branch_reads_z("b1")
+        assert str(caught.value) == _branch_reads_z(
+            "b1", "'default_agent_config:' in agent_actions.yml"
+        )
 
     def test_an_action_expect_is_still_read(self, tmp_path):
         reader = _with(B2, expect=_judged("z.text"))

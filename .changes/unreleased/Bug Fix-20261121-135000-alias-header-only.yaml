@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: 'The static prompt checks follow a top-level `{% set a = b %}` only when it is the alias header of an include with `as:` (the action''s name map gives `a` the final name `b`). A `{% set %}` that a prompt writes itself is read as before.'
-time: 2026-11-21T13:50:00Z

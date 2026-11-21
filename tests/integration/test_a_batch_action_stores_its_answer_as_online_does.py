@@ -199,3 +199,20 @@ def test_batch_retrieve_warns_when_the_workflow_has_no_such_action(project, caps
     assert _action_config(context) is None
     assert "has no action 'renamed_away'" in capsys.readouterr().err
     assert _action_config(replace(context, action_name="summarize")) is not None
+
+
+def test_batch_retrieve_warns_and_writes_raw_answers_when_a_limit_variable_is_bad(
+    project, model_writes_the_reply, monkeypatch
+):
+    batch_id = _submit(project, json_mode=False)
+    monkeypatch.setenv("AGAC_RECORD_LIMIT", "abc")
+
+    result = CliRunner().invoke(
+        cli, ["batch", "retrieve", "-a", WORKFLOW, "--action", "summarize", "--batch-id", batch_id]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert f"Warning: workflow '{WORKFLOW}' did not load" in result.output
+    assert "AGAC_RECORD_LIMIT" in result.output
+    results_file = Path(result.output.strip().splitlines()[-1])
+    assert results_file.is_file()

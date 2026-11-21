@@ -124,13 +124,18 @@ def _per_action(
 
 
 def _observes(config: dict[str, Any], path: str) -> bool:
-    """Whether *config* observes the field *path*, by name, by its namespace or with ``*``."""
+    """Whether the run gives *config* the field *path* (``<action>.<field>[.<field>...]``).
+
+    An observe gives a tool the top field it names, or every field with ``*``; a bare
+    action name or a deeper path gives it nothing it can read at *path*.
+    """
     scope = config.get("context_scope")
     observed = scope.get("observe") if isinstance(scope, dict) else None
     if not isinstance(observed, list):
         return False
-    root = path.split(".", 1)[0]
-    return any(ref in (path, root, f"{root}.*") for ref in observed if isinstance(ref, str))
+    root, _, rest = path.partition(".")
+    top = rest.split(".", 1)[0]
+    return any(ref in (f"{root}.{top}", f"{root}.*") for ref in observed if isinstance(ref, str))
 
 
 class PreflightService:
@@ -284,14 +289,7 @@ class PreflightService:
         )
 
         # 6. Cross-check prompt refs against each producer's required set
-        self._warn_findings(
-            "prompt-contract",
-            find_unguarded_required_refs(
-                self._collect_prompts(),
-                self._collect_producing_schemas(),
-                {name: header_names(config) for name, config in self.action_configs.items()},
-            ),
-        )
+        self._warn_unguarded_prompt_refs()
 
         # 7. Cross-check kind:tool passthrough UDFs against strict output schemas
         self._warn_tool_passthrough_risks()
@@ -342,6 +340,16 @@ class PreflightService:
                 action_names,
                 promoted_version_names(self.action_configs),
                 tool_namespaces,
+            ),
+        )
+
+    def _warn_unguarded_prompt_refs(self) -> None:
+        self._warn_findings(
+            "prompt-contract",
+            find_unguarded_required_refs(
+                self._collect_prompts(),
+                self._collect_producing_schemas(),
+                {name: header_names(config) for name, config in self.action_configs.items()},
             ),
         )
 

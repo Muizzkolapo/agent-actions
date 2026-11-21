@@ -1166,11 +1166,16 @@ def process_from_storage_backend(
 
     # A guard `filter` anywhere upstream makes those records dead — they must not
     # re-enter here through an unfiltered sibling dependency.
+    if runner.action_configs is None:
+        raise RuntimeError(
+            "The runner reads stored input before its action configs are set, so it cannot "
+            "tell which upstream actions send records elsewhere or gather them."
+        )
     dead_above = _collect_upstream_filtered_guids(
         runner.storage_backend,
         params.action_name,
         params.upstream_data_dirs,
-        runner.action_configs or {},
+        runner.action_configs,
     )
 
     for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):

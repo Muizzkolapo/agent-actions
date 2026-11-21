@@ -289,7 +289,7 @@ INPUT_AT_START = "staged_input_at_start"
 
 
 MODEL_EDIT = "model"
-CONFIG_EDIT = "action config (prompt/schema/guard)"
+CONFIG_EDIT = "action config (prompt/schema/guard/routing)"
 
 
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:

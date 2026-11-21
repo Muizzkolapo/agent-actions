@@ -284,6 +284,7 @@ class _Levels:
     defaults: dict[str, Any]
     agent: dict[str, Any]
     workflow_scope: Any
+    workflow_expect: Any = None
 
     @classmethod
     def load(cls, data: dict[str, Any], project_root: Path | None) -> _Levels | None:
@@ -303,7 +304,8 @@ class _Levels:
         except (ValidationError, ConfigValidationError, ConfigurationError):
             return None
         scope = written.get("context_scope") if isinstance(written, dict) else None
-        return cls(defaults=defaults, agent=agent, workflow_scope=scope)
+        expect = written.get("expect") if isinstance(written, dict) else None
+        return cls(defaults=defaults, agent=agent, workflow_scope=scope, workflow_expect=expect)
 
     def of(self, action: dict[str, Any]) -> dict[str, Any]:
         """The defaults the expander gives *action*."""
@@ -489,25 +491,32 @@ def _scope_origin(
     workflow_file: str,
     levels: _Levels,
 ) -> str:
-    """Which defaults level gives *action* its read of *name* through ``context_scope``.
+    """Which defaults level gives *action* its read of *name*, through ``context_scope``
+    or an inherited ``expect`` block.
 
-    Empty when the action's own config reads it; else the most specific level whose
-    ``context_scope`` reads it.
+    Empty when the action's own config reads it; else the most specific level that reads it.
     """
     own = _normalised_reads(action.get("context_scope")) or {}
-    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
+    if name in _reads(action, extractor, workflow_file, {}, own):
         return ""
     found = action.get(_ORIGIN_KEY)
     origin: dict[str, Any] = found if isinstance(found, dict) else {}
     instance = origin.get("defaults")
     instance_scope = instance.get("context_scope") if isinstance(instance, dict) else None
+    agent_level = "'default_agent_config:' in agent_actions.yml"
     if name in _scope_reads(instance_scope, extractor):
-        level = f"'defaults:' of include '{origin['instance']}'"
-    elif name in _scope_reads(levels.workflow_scope, extractor):
-        level = "the workflow's 'defaults:'"
-    else:
-        level = "'default_agent_config:' in agent_actions.yml"
-    return f" (from 'context_scope' under {level})"
+        return f" (from 'context_scope' under 'defaults:' of include '{origin['instance']}')"
+    if name in _scope_reads(levels.workflow_scope, extractor):
+        return " (from 'context_scope' under the workflow's 'defaults:')"
+    instance_expect = {"expect": instance.get("expect") if isinstance(instance, dict) else None}
+    if name in _reads(action, extractor, workflow_file, instance_expect, own):
+        return f" (from 'expect' under 'defaults:' of include '{origin['instance']}')"
+    workflow_expect = {"expect": levels.workflow_expect}
+    if name in _reads(action, extractor, workflow_file, workflow_expect, own):
+        return " (from 'expect' under the workflow's 'defaults:')"
+    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
+        return f" (from 'expect' under {agent_level})"
+    return f" (from 'context_scope' under {agent_level})"
 
 
 def _scope_reads(scope: Any, extractor: Any) -> set[str]:
