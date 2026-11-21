@@ -21,13 +21,17 @@ logger = logging.getLogger(__name__)
 
 _NAME_LINE = re.compile(r"^\s*(?:-\s+)?name:[ \t]*(?=\S)")
 _NAME_MARK = re.compile(r"  # @src (\S+?):(\d+):(\d+)")
-_LINE_MARK = re.compile(r"  # @at (\S+?):(\d+)")
+_LINE_MARK = re.compile(r"  # @(?:src|at) (\S+?):(\d+)")
+# The name a `name:` line writes, when it writes one with no tag.
+_LITERAL_NAME = re.compile(r"^\s*(?:-\s+)?name:\s*['\"]?([^'\"#{}]+?)['\"]?\s*$")
 _MARK_TEXT = re.compile(r"  # @(?:src|at) \S+?:\d+(?::\d+)?")
 # The line breaks PyYAML counts in a node's line number.
 _LINE_BREAK = re.compile(r"\r\n|[\r\n\x85\u2028\u2029]")
 # A tag that strips the whitespace after it would strip nothing once a mark follows it.
 _STRIPS_AFTER = ("-}}", "-%}", "-#}")
 _CONTROL_OPENERS = ("{%", "{#")
+# A file with none of these renders each line as written.
+_JINJA_OPENERS = ("{{", *_CONTROL_OPENERS)
 _BLOCK_TAG = re.compile(r"\{%[-+]?\s*(end)?(set|filter|macro)\b")
 # A `set` block holds its body as a value; a `filter` block changes its body before output.
 # A mark in either body would change the text, so neither body gets a mark.
@@ -48,9 +52,9 @@ class RenderedWorkflow:
     """The render of a workflow file.
 
     `action_lines` holds the workflow-file lines that define a parsed action. `live_lines`
-    holds the workflow-file lines that the render output as written; it is None when no
-    tag can remove a line. When the marks cannot be trusted, both are empty for a file a tag
-    can remove a line from, so nothing is read from its lines. `line_owners` maps a
+    holds the workflow-file lines that the render output as written; it is None for a file
+    with no Jinja tag. When the marks cannot be trusted, both are empty for a file with a
+    Jinja tag, so nothing is read from its lines. `line_owners` maps a
     workflow-file line to the action whose text it became, or None when it became text of
     no action or of more than one.
     """
@@ -187,7 +191,7 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
     )
     written = _lines_as_written(marked_lines, source_lines, yaml_file.name)
     live_lines = None
-    if any(opener in source for opener in _CONTROL_OPENERS):
+    if any(opener in source for opener in _JINJA_OPENERS):
         live_lines = frozenset({line for _, line in written} | action_lines)
     return RenderedWorkflow(
         text=text,
@@ -200,8 +204,8 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
 
 
 def _unmapped(text: str, data: dict, source: str) -> RenderedWorkflow:
-    """The render with no source map; no line is read where a tag can remove one."""
-    if any(opener in source for opener in _CONTROL_OPENERS):
+    """The render with no source map; no line is read where a tag can change one."""
+    if any(opener in source for opener in _JINJA_OPENERS):
         return RenderedWorkflow(text, data, {}, action_lines=frozenset(), live_lines=frozenset())
     return RenderedWorkflow(text, data, {})
 
@@ -295,7 +299,7 @@ def _yaml_error(error: yaml.YAMLError, source: str) -> WorkflowRenderError:
     problem = getattr(error, "problem", None) or str(error)
     if mark is None:
         return WorkflowRenderError(problem, 0)
-    if any(opener in source for opener in ("{{", *_CONTROL_OPENERS)):
+    if any(opener in source for opener in _JINJA_OPENERS):
         # Rendered lines do not match the file once a tag has rendered.
         return WorkflowRenderError(f"{problem} (line {mark.line + 1} of the rendered workflow)", 0)
     return WorkflowRenderError(problem, mark.line)
@@ -318,7 +322,7 @@ def _action_sources(
     seen_on_line: dict[int, int] = {}
     file_lines: dict[str, list[str] | None] = {yaml_file.name: source_lines}
 
-    def is_name_line(origin: str, line: int) -> bool:
+    def names_action(origin: str, line: int, name: str) -> bool:
         if origin not in file_lines:
             path = project_root / origin
             file_lines[origin] = (
@@ -327,18 +331,25 @@ def _action_sources(
                 else None
             )
         lines = file_lines[origin]
-        return lines is not None and line < len(lines) and bool(_NAME_LINE.match(lines[line]))
+        if lines is None or line >= len(lines) or not _NAME_LINE.match(lines[line]):
+            return False
+        literal = _LITERAL_NAME.match(lines[line])
+        return literal is None or literal.group(1) == name
 
     for node in nodes:
         name, line_no = node.name, node.name_line
-        marks = _NAME_MARK.findall(marked_lines[line_no])
+        marked = marked_lines[line_no]
+        marks = list(_NAME_MARK.finditer(marked))
         nth = seen_on_line.get(line_no, 0)
         seen_on_line[line_no] = nth + 1
         if nth >= len(marks):
             continue
-        origin, src_line, column = marks[nth]
+        origin, src_line, column = marks[nth].groups()
         line, col = int(src_line), int(column)
-        if not is_name_line(origin, line):
+        if _MARK_TEXT.sub("", marked[marks[nth].end() :]).strip():
+            # A tag pulled the next line up after the mark, so the name went on past it.
+            continue
+        if not names_action(origin, line, name):
             continue
         in_workflow = origin == yaml_file.name
         if in_workflow:

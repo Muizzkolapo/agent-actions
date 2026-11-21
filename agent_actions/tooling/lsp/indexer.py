@@ -165,7 +165,13 @@ def _index_workflow_file(
             line_owners=rendered.line_owners,
         )
         _backfill_unseen_actions(
-            index, yaml_file, lines, action_data_map, default_output_field, rendered.action_sources
+            index,
+            yaml_file,
+            lines,
+            action_data_map,
+            default_output_field,
+            rendered.action_sources,
+            rendered.live_lines,
         )
         _drop_jinja_line_references(index, yaml_file, lines)
         index.duplicate_actions_by_file[yaml_file].update(_repeated_names(actions))
@@ -175,6 +181,7 @@ def _index_workflow_file(
 
 
 _TAGS_ONLY = re.compile(r"\s*(?:(?:\{%.*?%\}|\{#.*?#\})\s*)+")
+_MAY_OUTPUT = re.compile(r"\{\{|\{%[-+]?\s*(?:include|call)\b")
 
 
 def _defines_action(
@@ -209,6 +216,7 @@ def _backfill_unseen_actions(
     action_data_map: dict,
     default_output_field: str | None,
     action_sources: dict[str, Location],
+    live_lines: frozenset[int] | None = None,
 ) -> None:
     """Index an action the line pass could not see, so the index matches the document.
 
@@ -223,7 +231,7 @@ def _backfill_unseen_actions(
         if action_name in known:
             continue
         location = action_sources.get(action_name) or _raw_name_location(
-            yaml_file, lines, action_name
+            yaml_file, lines, action_name, live_lines
         )
         meta = ActionMetadata(name=action_name, location=location)
         _populate_versions_summary(meta, action_data)
@@ -235,9 +243,15 @@ def _backfill_unseen_actions(
             index.workflow_actions.setdefault(workflow_name, {})[action_name] = meta.location
 
 
-def _raw_name_location(yaml_file: Path, lines: list[str], action_name: str) -> Location:
+def _raw_name_location(
+    yaml_file: Path, lines: list[str], action_name: str, live_lines: frozenset[int] | None = None
+) -> Location:
     line_no, column = 0, 0
     for i, line in enumerate(lines):
+        # An empty set means the source map was not trusted; the first written name is
+        # then the best guess.
+        if live_lines and i not in live_lines:
+            continue
         match = re.match(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$", line)
         if match:
             line_no, column = i, line.index(action_name)
@@ -301,7 +315,20 @@ def _index_workflow_lines(
                 current_action_indent = None
             continue
         if (live_lines is not None and i not in live_lines) or _TAGS_ONLY.fullmatch(line):
-            # A dropped line, or a line of `{% %}` / `{# #}` tags that outputs no YAML.
+            # A dropped line, or a line of `{% %}` / `{# #}` tags. A line that can output
+            # text can open a key, so it closes each nested block it is not inside; the
+            # action itself ends where `line_owners` says.
+            if _MAY_OUTPUT.search(line):
+                indent = len(line) - len(line.lstrip())
+                if dependencies_indent is not None and indent <= dependencies_indent:
+                    dependencies_indent = None
+                if context_scope_indent is not None and indent <= context_scope_indent:
+                    context_scope_indent = None
+                    context_list_indent = None
+                    current_context_list = None
+                if context_list_indent is not None and indent <= context_list_indent:
+                    context_list_indent = None
+                    current_context_list = None
             continue
         if action_match:
             action_name = action_match.group(2)
