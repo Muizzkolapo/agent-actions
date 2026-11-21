@@ -654,6 +654,12 @@ class ActionConfig(_RetryValidators):
         allow_inf_nan=False,
         description="Seconds one LLM request may take before it fails as a retriable error",
     )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Tokens of prompt the model reads; outranks agac's table of models",
+    )
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
     )
@@ -836,6 +842,12 @@ class DefaultsConfig(_RetryValidators):
         gt=0,
         allow_inf_nan=False,
         description="Default seconds one LLM request may take before it fails",
+    )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Default tokens of prompt the model reads; outranks agac's table of models",
     )
     top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
     frequency_penalty: float | None = Field(

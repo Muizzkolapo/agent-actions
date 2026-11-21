@@ -54,21 +54,44 @@ _MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "o3": 200_000,
     "o3-mini": 200_000,
     "o4-mini": 200_000,
-    # Anthropic
+    # Anthropic, as its model overview documents them
     "claude-3-haiku-20240307": 200_000,
     "claude-3-sonnet-20240229": 200_000,
     "claude-3-opus-20240229": 200_000,
     "claude-3-5-sonnet-20241022": 200_000,
-    "claude-sonnet-4-6": 200_000,
     "claude-sonnet-4-20250514": 200_000,
-    "claude-opus-4-6": 200_000,
     "claude-opus-4-20250514": 200_000,
+    "claude-haiku-4-5": 200_000,
+    "claude-haiku-4-5-20251001": 200_000,
+    "claude-opus-4-6": 1_000_000,
+    "claude-opus-4-7": 1_000_000,
+    "claude-opus-4-8": 1_000_000,
+    "claude-opus-5": 1_000_000,
+    "claude-opus-5-5": 1_000_000,
+    "claude-sonnet-4-6": 1_000_000,
+    "claude-sonnet-5": 1_000_000,
+    "claude-sonnet-5-5": 1_000_000,
+    "claude-haiku-5-5": 1_000_000,
+    "claude-fable-5": 1_000_000,
+    "claude-fable-5-1": 1_000_000,
+    "claude-fable-5-2": 1_000_000,
+    "claude-mythos-5": 1_000_000,
+    "claude-mythos-5-1": 1_000_000,
+    "claude-mythos-5-2": 1_000_000,
     # Groq
     "llama-3.3-70b-versatile": 128_000,
     "llama-3.1-8b-instant": 128_000,
     "mixtral-8x7b-32768": 32_768,
     "gemma2-9b-it": 8_192,
 }
+
+
+def _context_limit(model_name: str | None, context_window: int | None) -> int:
+    if context_window is not None:
+        return context_window
+    if model_name is None:
+        return _DEFAULT_CONTEXT_LIMIT
+    return _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +322,7 @@ class MessageBuilder:
         shared_prompt_len: int | None = None,
         model_name: str | None = None,
         cache_points: Sequence[int] = (),
+        context_window: int | None = None,
     ) -> LLMMessageEnvelope:
         """Build the message envelope of one provider request, online or a batch line.
 
@@ -306,6 +330,7 @@ class MessageBuilder:
         record is sent; None means all of it. ``enable_prompt_caching`` puts a cache
         boundary at its end. ``cache_points`` are lengths of leading ``prompt_config``
         the template marked as shared by some records; each is a cache boundary.
+        ``context_window`` is the action's setting; it outranks the model table.
         """
         MessageBuilder._check_shared_len(shared_prompt_len, prompt_config)
         MessageBuilder._check_cache_points(
@@ -365,18 +390,13 @@ class MessageBuilder:
                 at_prompt_end=enable_prompt_caching,
             )
 
-        # Token overflow pre-flight guard — always runs.
-        # When model_name is unknown, falls back to _DEFAULT_CONTEXT_LIMIT.
         estimated_tokens = sum(len(m.content) for m in messages) // 4
-        model_limit = (
-            _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
-            if model_name is not None
-            else _DEFAULT_CONTEXT_LIMIT
-        )
+        model_limit = _context_limit(model_name, context_window)
         if estimated_tokens > model_limit:
             raise PromptTooLargeError(
                 f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
-                f"model context window ({model_limit} tokens)",
+                f"model context window ({model_limit} tokens). If the model reads more, "
+                "set context_window on the action or in defaults",
                 context={
                     "estimated_tokens": estimated_tokens,
                     "model_limit": model_limit,

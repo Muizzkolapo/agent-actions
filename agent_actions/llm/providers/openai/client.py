@@ -181,6 +181,7 @@ class OpenAIClient(BaseClient):
             schema=schema,
             json_mode=True,
             model_name=model_name,
+            context_window=agent_config.get("context_window"),
         )
         messages: list[ChatCompletionSystemMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
 
@@ -300,7 +301,13 @@ class OpenAIClient(BaseClient):
             cls.VENDOR,
         )
         model_name: str = agent_config[MODEL_NAME_KEY]
-        envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
+        envelope = MessageBuilder.build(
+            "openai",
+            prompt_config,
+            context_data,
+            json_mode=False,
+            context_window=agent_config.get("context_window"),
+        )
         messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
 
         # Generate request ID for correlation

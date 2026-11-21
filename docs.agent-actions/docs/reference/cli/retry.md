@@ -124,7 +124,9 @@ agac retry -w my_workflow --from extract_facts --record 3f9a1c2e-...
 ## Exclude a record permanently {/* #keep-a-record-out-for-good */}
 
 Some records fail in the same way on each attempt. Examples are a prompt that is too large
-for the context window of the model, and a source record with nothing to extract. Each
+for the context window of the model, and a source record with nothing to extract. (If the
+model reads more than Agent Actions assumes, set
+[`context_window`](../configuration/index.md#context-window) instead.) Each
 `retry` selects such a record again. `--filter` removes the record from the workflow in
 place of a retry. `--filter` does not change the other records:
 

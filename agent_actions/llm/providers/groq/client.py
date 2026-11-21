@@ -97,7 +97,12 @@ class GroqClient(BaseClient, JSONResponseMixin):
         client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
-            "groq", prompt_config, context_data, schema=schema, json_mode=True
+            "groq",
+            prompt_config,
+            context_data,
+            schema=schema,
+            json_mode=True,
+            context_window=agent_config.get("context_window"),
         )
 
         # Generate request ID for correlation
@@ -181,7 +186,13 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
-        envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
+        envelope = MessageBuilder.build(
+            "groq",
+            prompt_config,
+            context_data,
+            json_mode=False,
+            context_window=agent_config.get("context_window"),
+        )
         completion_kwargs = {
             "messages": envelope.to_dicts(),
             "model": model_name,

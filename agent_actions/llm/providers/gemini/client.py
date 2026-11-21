@@ -161,7 +161,12 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 )
             )
             envelope = MessageBuilder.build(
-                "gemini", prompt_config, context_data, schema=schema, json_mode=True
+                "gemini",
+                prompt_config,
+                context_data,
+                schema=schema,
+                json_mode=True,
+                context_window=agent_config.get("context_window"),
             )
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config
@@ -237,7 +242,13 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     {**gen_params, **_timeout_options(agent_config)}, agent_config
                 )
             )
-            envelope = MessageBuilder.build("gemini", prompt_config, context_data, json_mode=False)
+            envelope = MessageBuilder.build(
+                "gemini",
+                prompt_config,
+                context_data,
+                json_mode=False,
+                context_window=agent_config.get("context_window"),
+            )
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config
             )

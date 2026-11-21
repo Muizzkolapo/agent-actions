@@ -117,7 +117,12 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         try:
             co = cohere.ClientV2(api_key=api_key, **request_timeout_kwargs(agent_config))
             envelope = MessageBuilder.build(
-                "cohere", prompt_config, context_data, schema=schema, json_mode=True
+                "cohere",
+                prompt_config,
+                context_data,
+                schema=schema,
+                json_mode=True,
+                context_window=agent_config.get("context_window"),
             )
             messages = envelope.to_dicts()
             chat_kwargs = {
@@ -200,7 +205,13 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = time.perf_counter()
         try:
             co = cohere.ClientV2(api_key=api_key, **request_timeout_kwargs(agent_config))
-            envelope = MessageBuilder.build("cohere", prompt_config, context_data, json_mode=False)
+            envelope = MessageBuilder.build(
+                "cohere",
+                prompt_config,
+                context_data,
+                json_mode=False,
+                context_window=agent_config.get("context_window"),
+            )
             messages = envelope.to_dicts()
             non_json_kwargs = {
                 "model": model_name,
