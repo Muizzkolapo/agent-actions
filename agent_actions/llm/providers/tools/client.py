@@ -8,6 +8,7 @@ functions (UDFs) as part of the agent-actions LLM invocation pipeline.
 import json
 from typing import Any, ClassVar
 
+from agent_actions.llm.providers.tools.builtin import builtin_tool, run_builtin
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
@@ -110,6 +111,11 @@ class ToolClient:
         """
         Invoke a user-defined function (UDF) specified in the configuration.
         """
+        builtin = builtin_tool(agent_config)
+        if builtin is not None:
+            data = ToolClient._strip_internal_fields(context_data)
+            return run_builtin(builtin, json.loads(data) if isinstance(data, str) else data)
+
         model_name = agent_config.get(MODEL_NAME_KEY)
         if not model_name:
             from agent_actions.errors import ConfigurationError

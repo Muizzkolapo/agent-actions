@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Tool Actions
 
-A tool action runs your own Python function in a workflow, beside the LLM actions. Use a tool for logic that an LLM cannot perform. Examples are to deduplicate records, call an external API or apply deterministic business rules. These tasks need deterministic logic, not prompts.
+A tool action runs a Python function in a workflow, beside the LLM actions. Usually the function is your own. Agent Actions also has built-in tools (`agac.route` and `agac.pick`), which a router and a join use. Use a tool for logic that an LLM cannot perform. Examples are to deduplicate records, call an external API or apply deterministic business rules. These tasks need deterministic logic, not prompts.
 
 When you need guaranteed, repeatable behavior, use a tool.
 

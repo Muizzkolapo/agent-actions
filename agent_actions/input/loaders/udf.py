@@ -9,6 +9,7 @@ from typing import Any
 
 from agent_actions.errors import DuplicateFunctionError, UDFLoadError, ValidationError
 from agent_actions.guards.guard_parser import GuardParser, GuardType
+from agent_actions.llm.providers.tools.builtin import BUILTIN_KEY
 from agent_actions.utils.file_utils import read_python_source
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
@@ -220,7 +221,8 @@ def validate_udf_references(config: dict[str, Any]) -> None:
             for key, value in obj.items():
                 current_path = f"{path}.{key}" if path else key
                 if key == "impl" and isinstance(value, str):
-                    references.append(value)
+                    if BUILTIN_KEY not in obj:
+                        references.append(value)
                 elif key == "guard" and (name := guard_udf_name(value)):
                     references.append(name)
                 else:

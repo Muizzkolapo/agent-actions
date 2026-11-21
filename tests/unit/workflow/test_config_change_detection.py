@@ -128,7 +128,7 @@ class TestConfigChangeInvalidation:
             )
         assert result == ActionStatus.COMPLETED
         assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
-            "action_a was edited since it completed (action config (prompt/schema/guard)): "
+            "action_a was edited since it completed (action config (prompt/schema/guard/routing)): "
             "its answers stand, and only records it has not answered use the edit. Run again "
             "with --rerun action_a to answer every record under the edit"
         ]
@@ -626,7 +626,7 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
         assert status == ActionStatus.COMPLETED
         assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
-            "split was edited since it completed (action config (prompt/schema/guard)). A retry "
+            "split was edited since it completed (action config (prompt/schema/guard/routing)). A retry "
             "answers only the records it names and leaves the rest as they are: run again with "
             "--rerun split to answer every record under the edit"
         ]
