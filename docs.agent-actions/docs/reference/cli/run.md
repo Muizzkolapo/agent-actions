@@ -57,7 +57,7 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Give the flag more than one time to run more than one action again in the same run (`--rerun classify --rerun summarize`). Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have a name, the run stops before it starts, and names each name that it does not have |
 | `--verify-keys` | Verify the API keys before execution. The command probes each vendor one time for each endpoint. For an `openai` action with `base_url`, the probe uses `models.list()` at that URL. For an action without `base_url`, the probe uses the OpenAI endpoint. If a server does not answer, the command logs a warning and the run continues. A local server may serve `/v1/models` without a check of the key (llamafile 0.10.6 does this). Thus a passing probe there shows that the server is reachable, not that the key is correct. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) that the workflow uses also gets one structured-output request. For that request, three conditions are errors. They are a refused credential, a server that cannot be reached, and a reply that does not match the schema of the probe |
 | `--wait` | While the run is paused for a batch, wait and run the workflow again until no batch is open. Then exit with the code of the final status. See [Wait for batch jobs](#wait-for-batch-jobs) |
-| `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs. The minimum is 1 (default: 60) |
+| `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs, in whole seconds. The minimum is 1 (default: 60) |
 | `--wait-timeout SECONDS` | With `--wait`: stop the wait when this time after the start of the run is over, and exit 4. The batch jobs stay open for the next run (default: no limit) |
 
 ## Exit Codes {/* #exit-codes */}
@@ -101,7 +101,7 @@ of the final status: `0`, `1` or `3`.
 
 `--fresh`, `--rerun` and `--verify-keys` apply to the first pass only. The later passes clear nothing.
 
-The `--wait-timeout` time starts before the first pass. When this time is over and a batch is still open, the command stops, names the actions
+The `--wait-timeout` time starts before the first pass. If less than the `--poll` time stays before the timeout, the command sleeps only until the timeout. Each wait line gives the time that the command sleeps. No pass starts after the timeout. When this time is over and a batch is still open, the command stops, names the actions
 that wait, and exits `4`. The message gives the time that the command waited, in whole seconds. The batch jobs stay at the provider. To continue, run the command again:
 
 ```

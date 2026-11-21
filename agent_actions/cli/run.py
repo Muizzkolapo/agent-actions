@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
 import traceback
 from collections.abc import Callable
@@ -108,25 +107,31 @@ class RunCommand:
         timeout = self.args.wait_timeout
         deadline = None if timeout is None else started + timeout
         while outcome is RunOutcome.PAUSED_FOR_BATCH:
-            pause = self.args.poll
+            pause: float = self.args.poll
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    click.echo(
-                        f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
-                        f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
-                        f"to check them and continue: agac run -w {self.args.agent} --wait"
-                    )
+                    self._stop_waiting(started)
                     break
-                pause = min(pause, math.ceil(remaining))
-            click.echo(f"Waiting {pause:.0f}s before checking the batch job(s) again...")
+                pause = min(pause, remaining)
+            click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
             self._sleep(pause)
+            if deadline is not None and time.monotonic() >= deadline:
+                self._stop_waiting(started)
+                break
             outcome = self._run_holding_the_lock(paths, project_root, resuming=True)
         if outcome is RunOutcome.PAUSED:
             click.echo(
                 "--wait has no batch to wait for: the run stopped before every action ended."
             )
         return outcome
+
+    def _stop_waiting(self, started: float) -> None:
+        click.echo(
+            f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
+            f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
+            f"to check them and continue: agac run -w {self.args.agent} --wait"
+        )
 
     def _run_holding_the_lock(
         self, paths: ProjectPaths, project_root: Path | None, *, resuming: bool = False
@@ -330,12 +335,12 @@ class RunCommand:
 )
 @click.option(
     "--poll",
-    type=click.FloatRange(min=1),
+    type=click.IntRange(min=1),
     default=None,
     metavar="SECONDS",
     help=(
-        "With --wait: seconds between two checks of the batch job(s), at least 1 "
-        f"(default: {DEFAULT_POLL_SECONDS:g})"
+        "With --wait: whole seconds between two checks of the batch job(s), at least 1 "
+        f"(default: {DEFAULT_POLL_SECONDS})"
     ),
 )
 @click.option(
@@ -362,7 +367,7 @@ def run(
     rerun: tuple[str, ...] = (),
     verify_keys: bool = False,
     wait: bool = False,
-    poll: float | None = None,
+    poll: int | None = None,
     wait_timeout: float | None = None,
     project_root: Path | None = None,
 ) -> None:
