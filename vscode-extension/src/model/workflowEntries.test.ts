@@ -30,6 +30,7 @@ const CONTENT = `actions:
     on: classify.format
   - join: bank
     of: [classify]
+  - loop: round
 `;
 
 function nodes(entries: unknown[], branches: Record<string, unknown> = { round: ROUND }) {
@@ -113,9 +114,66 @@ describe('parseEntries', () => {
     });
 });
 
+describe('a loop entry', () => {
+    const REVIEWED = {
+        branch: 'round',
+        inputs: { spec: 'Holds the specification', prior: 'The previous review' },
+        outputs: ['check'],
+        actions: [
+            { name: 'write', dependencies: ['spec', 'prior'] },
+            { name: 'check', dependencies: ['write'] },
+        ],
+    };
+    const LOOP = {
+        loop: 'round',
+        include: 'round',
+        max_iterations: 3,
+        inputs: { spec: 'a' },
+        feedback: { prior: 'check' },
+        until: 'check.passed == true',
+        result: 'check',
+    };
+
+    it('unrolls into its iterations and a node named after it that takes each result', () => {
+        const parsed = nodes([{ name: 'a' }, LOOP, { name: 'after', dependencies: ['round'] }], {
+            round: REVIEWED,
+        });
+
+        assert.deepEqual(
+            [...parsed.keys()],
+            [
+                'a',
+                'round_iter1__write',
+                'round_iter1__check',
+                'round_iter2__write',
+                'round_iter2__check',
+                'round_iter3__write',
+                'round_iter3__check',
+                'round',
+                'after',
+            ]
+        );
+        assert.deepEqual(parsed.get('round')?.dependencies, [
+            'round_iter1__check',
+            'round_iter2__check',
+            'round_iter3__check',
+        ]);
+        assert.equal(parsed.get('round')?.type, 'loop');
+    });
+
+    it('feeds nothing back into the first iteration, and the previous result into the next', () => {
+        const parsed = nodes([{ name: 'a' }, LOOP], { round: REVIEWED });
+
+        assert.deepEqual(parsed.get('round_iter1__write')?.dependencies, ['a']);
+        assert.deepEqual(parsed.get('round_iter2__write')?.dependencies, ['round_iter1__check']);
+        assert.deepEqual(parsed.get('round_iter3__check')?.dependencies, ['round_iter3__write']);
+    });
+});
+
 describe('branchNames', () => {
-    it('lists each branch file an include reads, once', () => {
+    it('lists each branch file an include or a loop reads, once', () => {
         assert.deepEqual(branchNames([...ENTRIES, { include: 'round', as: 'n' }]), ['round']);
+        assert.deepEqual(branchNames([{ loop: 'l', include: 'other' }]), ['other']);
     });
 });
 
@@ -126,5 +184,6 @@ describe('extractActionLocations', () => {
         assert.equal(locations.get('classify'), 1);
         assert.equal(locations.get('router'), 2);
         assert.equal(locations.get('bank'), 4);
+        assert.equal(locations.get('round'), 6);
     });
 });

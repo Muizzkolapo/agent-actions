@@ -86,6 +86,7 @@ const sidebars: SidebarsConfig = {
             'reference/configuration/templates',
             'reference/configuration/branches',
             'reference/configuration/routes',
+            'reference/configuration/loops',
             'reference/configuration/defaults',
             'reference/configuration/endpoints',
           ],

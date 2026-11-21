@@ -27,8 +27,10 @@ export function branchNames(entries: unknown): string[] {
 
 /**
  * The actions of *entries* in order: plain actions (versions expanded), the actions of each
- * `- include:` (renamed `<as>__<name>` under `as:`), and a node for each `- route:` and
- * `- join:`. The entry actions of each branch of a router depend on the router.
+ * `- include:` (renamed `<as>__<name>` under `as:`), a node for each `- route:` and
+ * `- join:`, and for each `- loop:` its iterations (`<loop>_iter<k>__<name>`) and a node
+ * named after the loop that takes their result. The entry actions of each branch of a
+ * router depend on the router.
  */
 export function parseEntries(entries: unknown[], branches: BranchLookup): ParsedAction[] {
     const actions: ParsedAction[] = [];
@@ -39,7 +41,9 @@ export function parseEntries(entries: unknown[], branches: BranchLookup): Parsed
         if (!record) {
             continue;
         }
-        if (typeof record.include === 'string') {
+        if (typeof record.loop === 'string') {
+            actions.push(...loopActions(record, branches));
+        } else if (typeof record.include === 'string') {
             const instance = includeInstance(record, branches);
             if (instance) {
                 actions.push(...instance.actions);
@@ -97,6 +101,48 @@ interface Instance {
     outputs: string[];
 }
 
+/**
+ * The iterations of a `- loop:` entry and the node that takes its result.
+ *
+ * From iteration 2, each entry action reads the previous iteration's result only, and
+ * a `feedback:` input reads the previous iteration's action; in iteration 1 it reads nothing.
+ */
+function loopActions(record: Record<string, unknown>, branches: BranchLookup): ParsedAction[] {
+    const loop = record.loop as string;
+    const count = typeof record.max_iterations === 'number' ? record.max_iterations : 0;
+    const result = typeof record.result === 'string' ? record.result : '';
+    const inputs = asRecord(record.inputs) ?? {};
+    const feedback = asRecord(record.feedback) ?? {};
+    const actions: ParsedAction[] = [];
+    const results: string[] = [];
+    for (let k = 1; k <= count; k++) {
+        const previous = `${loop}_iter${k - 1}`;
+        const bound: Record<string, unknown> = { ...inputs };
+        for (const [input, action] of Object.entries(feedback)) {
+            bound[input] = k === 1 ? null : `${previous}__${String(action)}`;
+        }
+        const instance = includeInstance(
+            { include: record.include, as: `${loop}_iter${k}`, inputs: bound },
+            branches
+        );
+        if (!instance) {
+            return [];
+        }
+        if (k > 1) {
+            const own = new Set(instance.names.values());
+            for (const action of instance.actions) {
+                if (!action.dependencies.some((dep) => own.has(dep))) {
+                    action.dependencies = [`${previous}__${result}`];
+                }
+            }
+        }
+        actions.push(...instance.actions);
+        results.push(instance.names.get(result) ?? `${loop}_iter${k}__${result}`);
+    }
+    actions.push({ name: loop, dependencies: results, type: 'loop', outputFields: [] });
+    return actions;
+}
+
 function includeInstance(record: Record<string, unknown>, branches: BranchLookup): Instance | null {
     const branchName = record.include as string;
     const branch = asRecord(branches(branchName));
@@ -115,10 +161,14 @@ function includeInstance(record: Record<string, unknown>, branches: BranchLookup
         const local = action.name as string;
         names.set(local, prefix ? `${prefix}__${local}` : local);
     }
-    const rename = (name: string): string => {
+    // An input bound to null (a loop's feedback in its first iteration) reads nothing.
+    const rename = (name: string): string | null => {
         const bound = inputs[name];
         if (typeof bound === 'string') {
             return bound;
+        }
+        if (bound === null) {
+            return null;
         }
         return names.get(name) ?? name;
     };
@@ -131,7 +181,9 @@ function includeInstance(record: Record<string, unknown>, branches: BranchLookup
                 ...parsed,
                 name: parsed.version === undefined ? final : `${final}_${parsed.version}`,
                 baseName: parsed.baseName === undefined ? undefined : final,
-                dependencies: parsed.dependencies.map(rename),
+                dependencies: parsed.dependencies
+                    .map(rename)
+                    .filter((dep): dep is string => dep !== null),
             });
         }
     }
