@@ -625,3 +625,201 @@ def test_a_template_name_line_does_not_make_a_workflow_prompt_line_an_action(tmp
 
     assert location.file_path == tmp_path / "templates" / "m.jinja2"
     assert location.line == 5
+
+
+def test_a_filter_body_with_a_dropped_line_gives_no_reference_from_it(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+        {% filter indent(2) %}
+        - name: a
+          kind: tool
+        {% if false %}
+          dependencies:
+            - ghost
+        {% endif %}
+        {% endfilter %}
+          - name: b
+            kind: tool
+            dependencies: [missing]
+        """,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_a_filter_block_in_a_dropped_branch_gives_no_reference(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+            dependencies: [missing]
+        {% if false %}
+        {% filter trim %}
+          - name: z
+            kind: tool
+            dependencies: [ghost]
+        {% endfilter %}
+        {% endif %}
+        """,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+@pytest.mark.parametrize(
+    ("emitter", "templates"),
+    [
+        pytest.param(
+            "{% call act('b') %}\n    impl: t2\n    dependencies: [a]\n{% endcall %}\n",
+            {},
+            id="call",
+        ),
+        pytest.param(
+            "{% include 'b.jinja2' %}\n    impl: t2\n    dependencies: [a]\n",
+            {"b.jinja2": "  - name: b\n    kind: tool\n"},
+            id="include",
+        ),
+    ],
+)
+def test_lines_under_a_tag_that_outputs_an_action_are_not_the_action_above(
+    tmp_path, emitter, templates
+):
+    wf = _project(
+        tmp_path,
+        "{% macro act(n) %}\n  - name: {{ n }}\n    kind: tool\n{{ caller() }}\n{%- endmacro %}\n"
+        "name: wf\nactions:\n  - name: a\n    kind: tool\n    impl: t1\n" + emitter,
+        templates,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert {
+        a["name"]: a.get("impl") for a in render_workflow_source(wf, tmp_path).data["actions"]
+    } == {
+        "a": "t1",
+        "b": "t2",
+    }
+    assert idx.file_actions[wf]["a"].impl_ref == "t1"
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `t1`."]
+
+
+def test_a_workflow_whose_marks_change_the_render_reads_no_dropped_line(tmp_path):
+    # The macro output is held and tested, so the marks take the other branch, which has
+    # one more line; no line of the file can then be read as live.
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro m() %}
+        - name: q
+        {% endmacro %}
+        {% set x = m() %}
+        name: wf
+        actions:
+        {% if x | trim == '- name: q' %}
+          - name: shown
+            kind: tool
+            impl: live_tool
+        {% else %}
+          - name: shown
+            kind: tool
+            impl: dead_tool
+            description: only in the branch that does not render
+        {% endif %}
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert [a["impl"] for a in render_workflow_source(wf, tmp_path).data["actions"]] == [
+        "live_tool"
+    ]
+    assert set(idx.file_actions[wf]) == {"shown"}
+    assert idx.file_actions[wf]["shown"].location.line == 7
+    assert idx.duplicate_actions_by_file[wf] == set()
+    assert not any("dead_tool" in m for m in _messages(wf, tmp_path))
+
+
+def test_a_name_written_as_a_multiline_tag_maps_to_its_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set prefix = "pre" %}
+        name: wf
+        actions:
+          - name: {{ prefix ~
+              "_x" }}
+            kind: tool
+        """,
+    )
+
+    assert render_workflow_source(wf, tmp_path).action_sources["pre_x"].line == 3
+    assert build_index(tmp_path).file_actions[wf]["pre_x"].location.line == 3
+
+
+def test_a_set_block_spelling_keeps_dropped_lines_out_of_the_index(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set v = 1 %}
+        {% set mode %}
+        fast
+        {%- endset %}
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+        {% if mode | trim != 'fast' %}
+            dependencies: [ghost]
+        {% endif %}
+          - name: b
+            kind: tool
+            dependencies: [missing]
+        """,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert {name: loc.line for name, loc in r.action_sources.items()} == {"a": 6, "b": 11}
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_a_prompt_store_workflow_puts_its_actions_on_the_one_line_of_the_file(tmp_path):
+    wf = _project(tmp_path, "$wfbody.main\n")
+    (tmp_path / "prompt_store").mkdir()
+    (tmp_path / "prompt_store" / "wfbody.md").write_text(
+        "{prompt main}\nname: wf\nactions:\n  - name: a\n    kind: tool\n{end_prompt}\n"
+    )
+
+    assert build_index(tmp_path).file_actions[wf]["a"].location.line == 0
+
+
+def test_a_loop_after_an_action_gives_its_lines_to_no_literal_action(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set ps = ['p1'] %}
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+        {% for p in ps %}
+          - name: {{ p }}_step
+            kind: tool
+            impl: tool_x
+        {% endfor %}
+          - name: c
+            kind: tool
+            impl: tool_c
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert idx.file_actions[wf]["a"].impl_ref is None
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_c`."]
