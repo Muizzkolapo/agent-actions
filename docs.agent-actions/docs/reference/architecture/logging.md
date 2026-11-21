@@ -170,6 +170,12 @@ does not show this text when there are no skipped records:
   ✓ repaired  4 records in 0.2s (agac-provider/mock) — 1 skipped by guard
 ```
 
+The line of a built-in router ends with the number of records of each case, in the order of the cases. A case with no record shows 0:
+
+```
+  ✓ router  6 records in 0.0s — a 2, b 3, default 1
+```
+
 Some actions ship records with a failing [expectations](../validation/expectations.md) verdict
 (`on_exhausted: return_last`, `repair: none`). The line of such an action turns to `⚠` (`WARN` without color). The line also gives
 the number of these records. The workflow line counts every such record that the actions of the workflow hold. It reads the count from the

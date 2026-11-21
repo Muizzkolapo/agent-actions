@@ -29,7 +29,7 @@ class TestContextMapIntegrity:
             "preparator": batch_preparator,
             "context_map": {},
             "stats": BatchTaskPreparationStats(),
-            "prep_context": MagicMock(spec=PreparationContext),
+            "prep_context": MagicMock(spec=PreparationContext, agent_config={}),
         }
 
     def _run(self, prep_harness, row, task_preparer):

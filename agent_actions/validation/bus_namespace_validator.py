@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import inspect
 import textwrap
+from collections.abc import Mapping
 from typing import Any
 
 from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
@@ -162,15 +163,20 @@ def bus_namespace_warnings(
     guard_refs: set[str],
     action_names: set[str],
     loop_params: set[str] | None = None,
+    tool_namespaces: Mapping[str, set[str]] | None = None,
 ) -> list[str]:
     """Reads of an unknown bus namespace by each referenced tool and guard UDF.
 
     Each UDF's own body is scanned, not its file: a shared tools/ dir holds UDFs for many
     workflows, and helpers often receive a plain record rather than the bus. Guards are
     scanned against their wider set apart from tools, which merging would widen too.
+    *tool_namespaces* gives a tool the names its own bus is keyed by, in place of
+    *action_names*: a tool of an ``as:`` include reads its instance's short names.
     """
-    return find_unknown_bus_namespaces(
-        udf_sources(registry, impl_refs), action_names | RUNTIME_BUS_NAMESPACES
-    ) + find_unknown_bus_namespaces(
+    tool_findings: list[str] = []
+    for ref, source in udf_sources(registry, impl_refs).items():
+        names = (tool_namespaces or {}).get(ref, action_names)
+        tool_findings += find_unknown_bus_namespaces({ref: source}, names | RUNTIME_BUS_NAMESPACES)
+    return tool_findings + find_unknown_bus_namespaces(
         udf_sources(registry, guard_refs), guard_valid_namespaces(action_names, loop_params)
     )

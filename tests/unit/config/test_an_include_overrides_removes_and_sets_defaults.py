@@ -112,20 +112,12 @@ def _without_origin(agent: dict) -> dict:
 
 
 class TestTheIncludeKeys:
-    def test_as_is_refused_as_not_supported_yet(self, tmp_path):
-        message = _refusal(tmp_path, [A, _include(**{"as": "left"})])
-
-        assert message == (
-            f"Include 'pair' in {WF}: key 'as' is not supported yet. "
-            "Include keys: include, inputs, defaults, override, remove."
-        )
-
     def test_a_misspelt_key_names_the_nearest_include_key(self, tmp_path):
         message = _refusal(tmp_path / "bad", [A, _include(overide={"b1": {"intent": "x"}})])
 
         assert message == (
             f"Include 'pair' in {WF}: key 'overide' is not an include key. Did you mean "
-            "'override'? Include keys: include, inputs, defaults, override, remove."
+            "'override'? Include keys: include, as, inputs, defaults, override, remove."
         )
         rendered = _render(tmp_path / "good", [A, _include(override={"b1": {"intent": "x"}})])
         assert _by_name(rendered)["b1"]["intent"] == "x"
@@ -594,8 +586,9 @@ class TestEachInheritedKeyFollowsTheExpanderRule:
         )
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': reads 'z', "
-            "which is not a branch action or a declared input. Declare it under 'inputs:'."
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': reads 'z' "
+            "(from 'expect' under 'defaults:' of include 'pair'), which is not a branch action "
+            "or a declared input. Declare it under 'inputs:'."
         )
         declared = _pair([NOTE, B2], inputs={"a": "Holds the text", "z": "Holds more"})
         agents = _loaded(

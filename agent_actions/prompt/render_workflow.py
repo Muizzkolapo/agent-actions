@@ -11,10 +11,19 @@ from typing import Any
 import jinja2
 import yaml
 
-from agent_actions.config.includes import check_include_reads, expand_includes
+from agent_actions.config.includes import (
+    alias_prompts,
+    check_include_reads,
+    expand_includes,
+    rename_schema_judge_contexts,
+    workflow_label,
+)
+from agent_actions.config.loops import expand_loops, finish_loops
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.config.routes import expand_routes, finish_routes
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
+from agent_actions.errors.base import enrich_exception_context
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
@@ -161,6 +170,15 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     with open(failed_render_path, "w", encoding="utf-8") as f:
         f.write(rendered_yaml_content)
     return f"\nRendered output saved to: {failed_render_path}"
+
+
+def _with_file(workflow_file: str, step: Any, *args: Any) -> Any:
+    """Run a load step whose refusal must name the workflow file, as the CLI shows it."""
+    try:
+        return step(*args)
+    except ConfigurationError as e:
+        enrich_exception_context(e, file_path=workflow_file)
+        raise
 
 
 def _resolve_prompt_fields(
@@ -693,6 +711,9 @@ def render_pipeline_with_templates(
 
     # Step 2a: Put the actions of each included branch file in place of its include entry
     data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
+    workflow_file = workflow_label(yaml_path, project_root)
+    data = expand_loops(data)
+    data = _with_file(workflow_file, expand_routes, data, workflow_file, inclusions)
 
     # Step 3: Resolve prompt references
     data = load.fill_loaded(data)
@@ -703,6 +724,8 @@ def render_pipeline_with_templates(
         project_root=project_root,
         fill=lambda text, name: load.fill_store_prompt(text, f"store prompt {name}", folder_names),
     )
+    # Step 3a: A prompt of an `as:` include reads a short name through an alias header
+    alias_prompts(data)
 
     # Step 4: Expand versioned actions
     if data:
@@ -720,6 +743,9 @@ def render_pipeline_with_templates(
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
         _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
+    rename_schema_judge_contexts(data)
+    _with_file(workflow_file, finish_routes, data, workflow_file)
+    _with_file(workflow_file, finish_loops, data, workflow_file, project_root)
 
     # Step 6: Every name an action reads is final here, so the branch boundary is checked now
     check_include_reads(data, inclusions, project_root=project_root)

@@ -168,6 +168,7 @@ class WorkflowEventLogger:
             record_count = metrics.record_count if metrics is not None else 0
             guard_skipped = metrics.guard_skipped if metrics is not None else 0
             checks_failed = metrics.checks_failed if metrics is not None else 0
+            cases = (metrics.cases if metrics is not None else None) or {}
             config = params.action_config or {}
             fire_event(
                 ActionCompleteEvent(
@@ -179,6 +180,7 @@ class WorkflowEventLogger:
                     record_count=record_count,
                     guard_skipped=guard_skipped,
                     checks_failed=checks_failed,
+                    cases=cases,
                     tokens=tokens,
                     mode=params.run_mode,
                     model_vendor=config.get("model_vendor") or "",

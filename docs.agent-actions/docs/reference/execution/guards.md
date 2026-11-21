@@ -27,7 +27,7 @@ A guard examines a condition for each record. The result decides if the action r
 | Value | Description |
 |----------|-------------|
 | `skip` | The action does not run. The record continues to the downstream actions, with its original content. |
-| `filter` | The framework removes the record from the action output fully. The downstream actions never see it. |
+| `filter` | The framework removes the record from the action output fully. The downstream actions do not see it. The exception is the first action of a branch of a [router](../configuration/routes.md): a record that it sends elsewhere returns at the join. |
 | `warn` | The record continues to LLM processing as usual. The framework logs a warning. |
 
 ## Condition Expressions
@@ -252,9 +252,9 @@ This table shows how guard results change the downstream actions in a workflow t
 | on_false | Output record | Downstream actions |
 |----------|--------------|-------------------|
 | `skip` | The original content stays, `metadata.reason: "guard_skip"` | **Process as usual** — each action examines its own guard independently |
-| `filter` | The framework removes the record from the output | **Never see the record** — the framework removes the record from each action downstream of the filter |
+| `filter` | The framework removes the record from the output | **Do not see the record** — the framework removes the record from each action downstream of the filter. A record that the first action of a router branch sends elsewhere returns at the join. |
 
-If a guard filters all of the records of its action, the action holds no record. The framework skips that action and each action that depends on it. With several input files, a filter on all records of one file is not sufficient. These results occur in the two run modes:
+If a guard filters all of the records of its action, the action holds no record. The framework skips that action and each action that depends on it. The exception is a branch of a router: a branch that takes no record completes with 0 records, and the join still runs. With several input files, a filter on all records of one file is not sufficient. These results occur in the two run modes:
 
 - An action that keeps records from another file completes.
 - The actions that depend on it run on the records that it kept. They hold nothing for the file that it filtered.
@@ -286,8 +286,8 @@ On a skipped record, the namespace of the action that skipped it is null. A prom
 When an action filters a record, the record is removed from that action. It is also removed from each action that depends on
 that action, directly or through other actions. An action on another branch still receives the record, if it does not depend on
 the action that filters. An action under another start node also receives the record.
-The branches can meet again in an action that depends on the two branches. In that action, the record stays out. It
-does not come back through the branch that kept it.
+The branches can meet again in an action that depends on the two branches. In that action, the record is not present. It
+does not return through the branch that kept it. To send each record to one branch, use a router and a join ([Routes and Joins](../configuration/routes.md)). A record that a branch did not take returns at the join.
 
 ### Upstream failures are short-circuited
 

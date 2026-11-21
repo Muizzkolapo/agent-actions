@@ -9,6 +9,7 @@ from typing import Any
 from ruamel.yaml import YAML, YAMLError
 
 from agent_actions.config.includes import branch_file
+from agent_actions.config.loops import is_loop
 from agent_actions.config.path_config import get_tool_dirs, load_project_config
 from agent_actions.config.schema import version_variant_names
 from agent_actions.errors import ConfigValidationError
@@ -154,6 +155,7 @@ def _index_workflow_file(
         _index_workflow_lines(index, yaml_file, lines, action_data_map, default_output_field)
         _backfill_unseen_actions(index, yaml_file, lines, action_data_map, default_output_field)
         _index_included_outputs(index, yaml_file, actions, yaml, default_output_field)
+        _index_entry_actions(index, yaml_file, lines, actions)
 
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
@@ -190,11 +192,15 @@ def _backfill_unseen_actions(
             index.workflow_actions.setdefault(workflow_name, {})[action_name] = meta.location
 
 
-def _name_location(file_path: Path, lines: list[str], action_name: str) -> Location:
-    """Where `name: <action_name>` is written in *lines*; the file's start if nowhere."""
+def _name_location(
+    file_path: Path, lines: list[str], action_name: str, key: str = "name"
+) -> Location:
+    """Where `<key>: <action_name>` is written in *lines*; the file's start if nowhere."""
     line_no, column = 0, 0
     for i, line in enumerate(lines):
-        match = re.match(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$", line)
+        match = re.match(
+            rf"^\s*-?\s*{key}:\s*['\"]?{re.escape(action_name)}['\"]?\s*(?:#.*)?$", line
+        )
         if match:
             line_no, column = i, line.index(action_name)
             break
@@ -216,13 +222,17 @@ def _index_included_outputs(
 ) -> None:
     """Index the outputs of each branch the workflow includes as actions of the workflow.
 
-    The load puts a branch's actions into the workflow under their own names, and the
-    workflow may read only the ones the branch lists under `outputs`.
+    The load puts a branch's actions into the workflow under their own names, or under
+    `<as>__<name>` for an include with `as:`, and the workflow may read only the ones the
+    branch lists under `outputs`.
     """
     known = index.file_actions.setdefault(yaml_file, {})
     workflow_name = index.file_to_workflow.get(yaml_file)
     for entry in actions:
         if not isinstance(entry, dict) or not isinstance(entry.get("include"), str):
+            continue
+        # Outside a loop only its name is read; `_index_entry_actions` indexes it.
+        if is_loop(entry):
             continue
         branch_path = index.root / branch_file(entry["include"])
         try:
@@ -236,17 +246,64 @@ def _index_included_outputs(
         if not isinstance(outputs, list) or not isinstance(branch_actions, list):
             continue
         lines = content.split("\n")
+        prefix = entry.get("as") if isinstance(entry.get("as"), str) else None
         for action_data in branch_actions:
-            name = action_data.get("name") if isinstance(action_data, dict) else None
-            if not isinstance(name, str) or name not in outputs or name in known:
+            local = action_data.get("name") if isinstance(action_data, dict) else None
+            if not isinstance(local, str) or local not in outputs:
                 continue
-            meta = ActionMetadata(name=name, location=_name_location(branch_path, lines, name))
+            name = f"{prefix}__{local}" if prefix else local
+            if name in known:
+                continue
+            meta = ActionMetadata(name=name, location=_name_location(branch_path, lines, local))
             _populate_versions_summary(meta, action_data)
             _populate_from_parsed(meta, action_data, default_output_field)
             known[name] = meta
             index.actions[name] = meta.location
             if workflow_name:
                 index.workflow_actions.setdefault(workflow_name, {})[name] = meta.location
+
+
+_ENTRY_KEYS = ("route", "join", "loop")
+
+
+def _index_entry_actions(
+    index: ProjectIndex, yaml_file: Path, lines: list[str], actions: list
+) -> None:
+    """Index the action each `- route:`, `- join:` and `- loop:` entry becomes, by its name.
+
+    The load writes the router, the join and the loop's result action under the entry's
+    name, so the workflow reads that name as an action's.
+    """
+    known = index.file_actions.setdefault(yaml_file, {})
+    workflow_name = index.file_to_workflow.get(yaml_file)
+    for entry in actions:
+        if not isinstance(entry, dict) or "name" in entry:
+            continue
+        key = next((k for k in _ENTRY_KEYS if isinstance(entry.get(k), str)), None)
+        if key is None or entry[key] in known:
+            continue
+        name = entry[key]
+        meta = ActionMetadata(name=name, location=_name_location(yaml_file, lines, name, key))
+        meta.dependencies.extend(_entry_reads(key, entry))
+        known[name] = meta
+        index.actions[name] = meta.location
+        if workflow_name:
+            index.workflow_actions.setdefault(workflow_name, {})[name] = meta.location
+
+
+def _entry_reads(key: str, entry: dict) -> list[str]:
+    """The workflow actions a route, join or loop entry reads."""
+    if key == "route":
+        # YAML 1.1 reads a bare `on` key as the boolean true.
+        on = entry.get("on", entry.get(True))
+        return [on.split(".", 1)[0]] if isinstance(on, str) else []
+    if key == "join":
+        of = entry.get("of")
+        return [str(name) for name in of if isinstance(name, str)] if isinstance(of, list) else []
+    inputs = entry.get("inputs")
+    return (
+        [str(v) for v in inputs.values() if isinstance(v, str)] if isinstance(inputs, dict) else []
+    )
 
 
 def _build_action_data_map(actions: list) -> dict:
@@ -349,6 +406,8 @@ def _index_workflow_lines(
 
         # Tool reference
         impl_match = re.search(r"impl:\s*(\w+)", line)
+        if impl_match and re.match(r"agac\.(route|pick)\b", line[impl_match.start(1) :]):
+            impl_match = None
         if impl_match:
             current_action.impl_ref = impl_match.group(1)
             _add_reference(

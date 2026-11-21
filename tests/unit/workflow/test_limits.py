@@ -1225,7 +1225,7 @@ class TestAFileLimitMeetingAConfigChange:
             pytest.param(
                 {"file_limit": 1, "prompt": "new"},
                 {"record_limit": None, "file_limit": 1, "config_hash": "stale"},
-                "action config (prompt/schema/guard)",
+                "action config (prompt/schema/guard/routing)",
                 id="config_change",
             ),
             pytest.param(
