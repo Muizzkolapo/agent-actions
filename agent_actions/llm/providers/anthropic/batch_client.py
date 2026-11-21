@@ -63,6 +63,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
     # Message Batches API: up to 100,000 requests or 256 MB in one batch.
     max_batch_requests = 100_000
+    max_batch_bytes = 256_000_000
 
     def __init__(
         self,
