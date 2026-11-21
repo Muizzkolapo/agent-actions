@@ -54,7 +54,7 @@
 | `InitCommand` | Class | Implementation of the init command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
 | `init` | Function | Initialize a new Agent Actions project. | - |
-| `inspect.py` | Module | Inspect command group for the Agent Actions CLI. The workflow view counts actions, not include entries, and marks each included action `from branch <name>` (`from branch <name> as <instance>` for an include with `as:`); a host action prints as before. | `cli` |
+| `inspect.py` | Module | Inspect command group for the Agent Actions CLI. The workflow view counts actions, not include entries, and marks each included action `from branch <name>` (`from branch <name> as <instance>` for an include with `as:`); a host action prints as before. The workflow list shows a router as `route on <field>: <case> → <entries> · ... · default → <entries or filter>` and a join as `join of <actions>` (from `_builtin`). | `cli` |
 | `inspect` | Function | Inspect workflow structure and data flow (command group). | - |
 | `inspect_base.py` | Module | Shared base class for all inspect subcommands. `branch_of` reads the branch name and branch file of an included action from its `_include` origin, and for an include with `as:` its `instance` and short-name map `names`; None for a host action. `observe_as_written` shows an optional observe reference with its `?` in the `context_scope` that `inspect action` and `inspect context` print. | `cli`, `orchestration`, `validation` |
 | `BaseInspectCommand` | Class | Base class for inspect commands with common functionality. | - |

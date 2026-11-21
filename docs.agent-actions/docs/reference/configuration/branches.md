@@ -10,6 +10,8 @@ A branch file holds a group of actions that you write one time and include in a 
 
 Use a branch when more than one workflow runs the same actions. Also use a branch when one workflow runs the same actions more than one time. To include one branch more than one time, give each include an instance name with `as:` (see [One Branch, Several Instances](#as)).
 
+To send each record to one of several instances by the value of a field, and to gather the instances again, see [Routes and Joins](./routes.md). A case of a router can name an instance, and a join can name an instance with one output.
+
 ## The Branch File {/* #branch-file */}
 
 The load reads a branch file only from the `branches/` folder at the project root.
