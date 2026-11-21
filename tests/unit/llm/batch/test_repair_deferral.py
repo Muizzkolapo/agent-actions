@@ -23,6 +23,7 @@ from agent_actions.llm.batch.core.batch_models import (
 from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryState
 from agent_actions.llm.batch.services import processing_recovery as pr
 from agent_actions.llm.providers.batch_base import BatchResult
+from tests.unit.expectations.judging import SIDE_CALL, voted
 
 from .recording_provider import RecordingProvider
 
@@ -475,10 +476,7 @@ class TestTheLoadedStateIsTrustedWhole:
         passing = BatchResult(custom_id="r1", content=PASSING, success=True)
         with (
             patch.object(repair_ops, "build_repair_strategy", spy),
-            patch(
-                "agent_actions.expectations.judge.invoke_judge_with_votes",
-                return_value=(True, "ok"),
-            ),
+            patch(SIDE_CALL, return_value=voted((True, "ok"))),
         ):
             pr.check_and_submit_repair(
                 _context(RecordingProvider(), backend, self._judged_config()),

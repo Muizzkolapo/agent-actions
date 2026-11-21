@@ -10,13 +10,13 @@ from unittest.mock import MagicMock, patch
 import anthropic
 import pytest
 
-from agent_actions.expectations.judge import invoke_judge
 from agent_actions.llm.providers.anthropic.client import AnthropicClient
 from agent_actions.processing.invocation.online import OnlineStrategy
 from agent_actions.processing.prepared_task import PreparedTask
 from agent_actions.prompt.service import PromptPreparationService
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import analyze_workflow
 from tests._support.sdk_http import http_library
+from tests.unit.expectations.judging import invoke_judge
 
 # The HTTP library the installed anthropic SDK runs on: httpx, or httpx2 on 1.x.
 httpx = http_library(anthropic)

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An OpenAI batch answer that is a refusal and also stopped at the output limit ends its record as an online call ends it. In text mode it fails with the refusal and a `retry:` no longer resends it; batch resent it until `max_attempts` was spent. In JSON mode, one stopped at an empty string is stored as the cut-off parse error online stores, where batch stored the refusal text.'
+time: 2026-11-18T20:10:00Z

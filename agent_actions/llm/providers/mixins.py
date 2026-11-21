@@ -11,12 +11,9 @@ from typing import Any
 from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.error_wrapper import (
     NoAnswer,
-    cut_off_parse_error,
-    empty_parse_error,
-    empty_response_error,
-    is_truncated,
+    chat_no_answer,
     is_unfinished,
-    refusal_text,
+    unparsed_json_record,
 )
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
@@ -95,12 +92,7 @@ class JSONResponseMixin:
                 error="Failed to parse JSON after all strategies",
             )
         )
-        return [
-            {
-                "raw_response": response_content,
-                "_parse_error": "Failed to parse JSON from LLM response",
-            }
-        ]
+        return [unparsed_json_record(response_content)]
 
 
 class GenericErrorHandlerMixin:
@@ -172,35 +164,17 @@ class OpenAICompatibleResponseMixin:
         return (body.get("choices") or [{}])[0] or {}
 
     def _no_answer(self, raw_response: dict[str, Any]) -> NoAnswer | None:
-        """A refusal, or a message with no content, as the OpenAI online client ends each.
-
-        Content the output limit stopped before its first character is no content either.
-        """
+        """A refusal, or a message with no content, ended by the online client's ``chat_no_answer``."""
         choice = self._first_choice(raw_response)
         message = choice.get("message") or {}
-        content = message.get("content")
-        finish_reason = choice.get("finish_reason")
-        cut_off_at_once = content == "" and is_truncated(finish_reason)
-        if content is not None and not cut_off_at_once:
-            return None
-        refusal = message.get("refusal")
-        if refusal:
-            reason = refusal_text(refusal)
-            return NoAnswer(parse_error=reason, error=VendorAPIError(reason))
         body = (raw_response.get("response") or {}).get("body") or {}
-        return NoAnswer(
-            parse_error=(
-                cut_off_parse_error(finish_reason)
-                if cut_off_at_once
-                else empty_parse_error(finish_reason)
-            ),
-            error=empty_response_error(
-                self._vendor_label,
-                finish_reason,
-                model_name=body.get("model") or "",
-                vendor=self._vendor_label.lower(),
-                operation="chat.completions.create",
-            ),
+        return chat_no_answer(
+            message.get("content"),
+            choice.get("finish_reason"),
+            message.get("refusal"),
+            vendor_label=self._vendor_label,
+            model_name=body.get("model") or "",
+            vendor=self._vendor_label.lower(),
         )
 
     def _answer_was_cut_off(self, raw_response: dict[str, Any]) -> bool:

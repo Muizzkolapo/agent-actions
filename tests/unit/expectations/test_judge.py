@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from agent_actions.expectations import registry
-from agent_actions.expectations.judge import build_judge_prompt, invoke_judge
+from agent_actions.expectations.judge import build_judge_prompt
+from tests.unit.expectations.judging import SIDE_CALL, invoke_judge, voted
 
 INVOKE = "agent_actions.llm.realtime.services.invocation.ClientInvocationService.invoke_client"
 
@@ -145,15 +146,13 @@ class TestTheVerdictDialectsAccepted:
 
     def test_votes_are_tallied_across_dialects(self):
         """The majority runs on read verdicts, so a dialect no longer costs a vote."""
-        from agent_actions.expectations.judge import invoke_judge_with_votes
-
         replies = [
             _raw_result(self.PYTHON_LITERAL_PASS),
             _raw_result(self.FENCED),
             _raw_result("I am not going to answer that."),
         ]
         with patch(INVOKE, side_effect=replies):
-            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
+            passed, detail = invoke_judge(_agent_config(), "rule", "value", votes=3)
         assert passed is True
         assert detail == "2/3 judge votes passed"
 
@@ -281,61 +280,47 @@ class TestRegistration:
 
 
 class TestInvokeJudgeWithVotes:
-    def test_votes_one_delegates_directly(self):
-        from agent_actions.expectations.judge import invoke_judge_with_votes
+    """One model request per vote, and the majority of what they reply."""
 
-        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
-            mock_judge.return_value = (True, "fine")
-            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=1)
+    def test_votes_one_is_one_request_and_its_verdict(self):
+        with patch(INVOKE, return_value=_client_result(True, "fine")) as mock_invoke:
+            passed, detail = invoke_judge(_agent_config(), "rule", "value", votes=1)
         assert passed is True
         assert detail == "fine"
-        mock_judge.assert_called_once()
+        mock_invoke.assert_called_once()
 
     def test_votes_defaults_to_one(self):
-        from agent_actions.expectations.judge import invoke_judge_with_votes
-
-        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
-            mock_judge.return_value = (True, "fine")
-            invoke_judge_with_votes(_agent_config(), "rule", "value")
-        mock_judge.assert_called_once()
+        with patch(INVOKE, return_value=_client_result(True, "fine")) as mock_invoke:
+            invoke_judge(_agent_config(), "rule", "value")
+        mock_invoke.assert_called_once()
 
     def test_majority_pass_wins(self):
-        from agent_actions.expectations.judge import invoke_judge_with_votes
-
-        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
-            mock_judge.side_effect = [(True, "ok"), (True, "ok"), (False, "too vague")]
-            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
+        replies = [_client_result(True), _client_result(True), _client_result(False, "too vague")]
+        with patch(INVOKE, side_effect=replies):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value", votes=3)
         assert passed is True
         assert "2/3" in detail
 
     def test_majority_fail_wins_and_reports_dissenting_reasons(self):
-        from agent_actions.expectations.judge import invoke_judge_with_votes
-
-        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
-            mock_judge.side_effect = [
-                (True, "ok"),
-                (False, "too vague"),
-                (False, "not falsifiable"),
-            ]
-            passed, detail = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=3)
+        replies = [
+            _client_result(True),
+            _client_result(False, "too vague"),
+            _client_result(False, "not falsifiable"),
+        ]
+        with patch(INVOKE, side_effect=replies):
+            passed, detail = invoke_judge(_agent_config(), "rule", "value", votes=3)
         assert passed is False
         assert "too vague" in detail
         assert "not falsifiable" in detail
 
     def test_exact_tie_fails_closed(self):
-        from agent_actions.expectations.judge import invoke_judge_with_votes
-
-        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
-            mock_judge.side_effect = [(True, "ok"), (False, "no")]
-            passed, _ = invoke_judge_with_votes(_agent_config(), "rule", "value", votes=2)
+        with patch(INVOKE, side_effect=[_client_result(True), _client_result(False, "no")]):
+            passed, _ = invoke_judge(_agent_config(), "rule", "value", votes=2)
         assert passed is False
 
-    def test_every_vote_receives_identical_arguments(self):
-        from agent_actions.expectations.judge import invoke_judge_with_votes
-
-        with patch("agent_actions.expectations.judge.invoke_judge") as mock_judge:
-            mock_judge.return_value = (True, "ok")
-            invoke_judge_with_votes(
+    def test_every_vote_sends_the_identical_request(self):
+        with patch(INVOKE, return_value=_client_result(True)) as mock_invoke:
+            invoke_judge(
                 _agent_config(),
                 "rule text",
                 "value",
@@ -343,11 +328,11 @@ class TestInvokeJudgeWithVotes:
                 context={"a": "b"},
                 model="claude-opus-5",
             )
-        assert mock_judge.call_count == 3
-        for call in mock_judge.call_args_list:
-            assert call.args == (_agent_config(), "rule text", "value")
-            assert call.kwargs["context"] == {"a": "b"}
-            assert call.kwargs["model"] == "claude-opus-5"
+        assert mock_invoke.call_count == 3
+        first, *rest = mock_invoke.call_args_list
+        assert all(call == first for call in rest)
+        assert first.kwargs["prompt_config"] == build_judge_prompt("rule text", "value", {"a": "b"})
+        assert first.kwargs["agent_config"]["model_name"] == "claude-opus-5"
 
 
 class TestVotesRegistration:
@@ -412,21 +397,18 @@ class TestCachedJudge:
         from agent_actions.expectations.judge import CachedJudge
 
         judge = CachedJudge(_agent_config())
-        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
-            mock_invoke.return_value = (True, "meets the rule")
+        with patch(SIDE_CALL) as mock_run:
+            mock_run.return_value = voted((True, "meets the rule"))
             passed, detail = judge.call_and_cache(_judged_expectation(), "value")
         assert (passed, detail) == (True, "meets the rule")
-        mock_invoke.assert_called_once()
+        mock_run.assert_called_once()
 
     def test_lookup_returns_the_cached_verdict_after_call_and_cache(self):
         from agent_actions.expectations.judge import CachedJudge
 
         judge = CachedJudge(_agent_config())
         exp = _judged_expectation()
-        with patch(
-            "agent_actions.expectations.judge.invoke_judge_with_votes",
-            return_value=(False, "too vague"),
-        ):
+        with patch(SIDE_CALL, return_value=voted((False, "too vague"))):
             judge.call_and_cache(exp, "value")
         assert judge.lookup(exp, "value") == (False, "too vague")
 
@@ -435,29 +417,31 @@ class TestCachedJudge:
 
         judge = CachedJudge(_agent_config())
         exp = _judged_expectation()
-        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
-            mock_invoke.side_effect = [(True, "first"), (False, "second")]
+        with patch(SIDE_CALL) as mock_run:
+            mock_run.side_effect = [voted((True, "first")), voted((False, "second"))]
             judge.call_and_cache(exp, "value")
             judge.call_and_cache(exp, "value")
-        assert mock_invoke.call_count == 2
+        assert mock_run.call_count == 2
         assert judge.lookup(exp, "value") == (False, "second")
 
     def test_call_and_cache_passes_rule_votes_model_and_context_through(self):
-        from agent_actions.expectations.judge import CachedJudge
+        from agent_actions.expectations.judge import CachedJudge, cache_key, verdict_key
+        from agent_actions.llm.side_calls import SideCall
 
-        judge = CachedJudge(_agent_config(), action_name="write_q")
         exp = _judged_expectation(votes=3, model="claude-opus-5")
-        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
-            mock_invoke.return_value = (True, "ok")
+        with patch("agent_actions.expectations.judge.OnlineSideCalls") as executor:
+            executor.return_value.run.return_value = voted((True, "ok"))
+            judge = CachedJudge(_agent_config(), action_name="write_q")
             judge.call_and_cache(exp, "value", context={"source_context": "docs say X"})
-        mock_invoke.assert_called_once_with(
-            _agent_config(),
-            "be specific",
-            "value",
-            votes=3,
-            context={"source_context": "docs say X"},
-            model="claude-opus-5",
-            action_name="write_q",
+        executor.assert_called_once_with(_agent_config(), "write_q")
+        executor.return_value.run.assert_called_once_with(
+            SideCall(
+                kind="judge",
+                key=verdict_key(cache_key(exp, "value")),
+                prompt=build_judge_prompt("be specific", "value", {"source_context": "docs say X"}),
+                model="claude-opus-5",
+                copies=3,
+            )
         )
 
     def test_distinct_values_cache_independently(self):
@@ -465,12 +449,28 @@ class TestCachedJudge:
 
         judge = CachedJudge(_agent_config())
         exp = _judged_expectation()
-        with patch("agent_actions.expectations.judge.invoke_judge_with_votes") as mock_invoke:
-            mock_invoke.side_effect = [(True, "a passes"), (False, "b fails")]
+        with patch(SIDE_CALL) as mock_run:
+            mock_run.side_effect = [voted((True, "a passes")), voted((False, "b fails"))]
             judge.call_and_cache(exp, "value a")
             judge.call_and_cache(exp, "value b")
         assert judge.lookup(exp, "value a") == (True, "a passes")
         assert judge.lookup(exp, "value b") == (False, "b fails")
+
+    def test_a_call_its_executor_holds_back_reads_as_awaiting_from_then_on(self):
+        from agent_actions.expectations.judge import CachedJudge
+        from agent_actions.llm.side_calls import HeldSideCalls
+
+        held = HeldSideCalls()
+        judge = CachedJudge(_agent_config(), calls=held)
+        exp = _judged_expectation()
+
+        first = judge.call_and_cache(exp, "value")
+
+        assert first == (False, "awaiting the judge batch")
+        assert judge.lookup(exp, "value") == first
+        assert [call.prompt for call in held.pending.values()] == [
+            build_judge_prompt("be specific", "value", None)
+        ]
 
 
 class TestJudgeBudget:

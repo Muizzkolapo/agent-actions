@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The error text of a failed Ollama batch record no longer holds the internal `retriable` flag. The decision to send the record again does not change.'
+time: 2026-11-21T12:50:00Z

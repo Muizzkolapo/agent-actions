@@ -34,13 +34,11 @@ def retrieve_and_reconcile(
     and an ``add_dispatch`` action's answers hold the schema each record's dispatch chose.
     Every later step (a rule, a repair prompt, the stored record) reads that answer.
     """
-    from agent_actions.llm.batch.processing.batch_result_strategy import (
-        dispatch_results,
-        with_dispatch_results,
-    )
+    from agent_actions.llm.batch.processing.batch_result_strategy import dispatch_results
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,
     )
+    from agent_actions.processing.helpers import with_dispatch_results
 
     batch_results = provider.retrieve_results(batch_id, output_directory)
     if agent_config is not None:
@@ -89,6 +87,7 @@ def settle_unanswered(batch_results: list[BatchResult], *, json_mode: bool) -> N
         if json_mode:
             result.content = {"raw_response": result.text or "", "_parse_error": result.parse_error}
             result.error = None
+            result.retriable = None
         elif result.content is None and result.error is None:
             result.content = []
         result.parse_error = None

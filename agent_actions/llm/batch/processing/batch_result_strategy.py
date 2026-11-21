@@ -7,7 +7,7 @@ that can flow through the shared enrich/collect pipeline.
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
@@ -17,7 +17,7 @@ from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.llm.providers.error_wrapper import stop_reason_name
+from agent_actions.llm.providers.error_wrapper import stop_reason_name, unparsed_json_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.output.response.config_fields import get_default
@@ -28,6 +28,7 @@ from agent_actions.processing.helpers import (
     _empty_warn_reason,
     _is_empty_output,
     warn_on_schema_mismatch,
+    with_dispatch_results,
 )
 from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
@@ -87,17 +88,6 @@ def dispatch_results(agent_config: dict[str, Any] | None, row: Any) -> dict[str,
     return {function: chosen} if function and chosen else {}
 
 
-def with_dispatch_results(content: Any, results: dict[str, Any]) -> Any:
-    """*content* with *results* on each object it holds, as ``run_dynamic_agent`` merges them."""
-    if not results:
-        return content
-    if isinstance(content, dict):
-        return {**content, **results}
-    if isinstance(content, list):
-        return [{**item, **results} if isinstance(item, dict) else item for item in content]
-    return content
-
-
 def _response_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
     """What a row keeps of a provider's own metadata: why the model stopped.
 
@@ -107,27 +97,50 @@ def _response_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
     return {"finish_reason": stop_reason_name(reason)} if reason else {}
 
 
+class WrittenAnswer(NamedTuple):
+    """One answered result's content as the writer goes on to validate and store it."""
+
+    content: Any
+    # A JSON-mode answer no parse could read, now a ``_parse_error`` record.
+    unparsed: bool
+    # The model returned its schema in place of an answer, now a ``_parse_error`` record.
+    schema_echo: bool
+
+    @property
+    def empty(self) -> bool:
+        return _is_empty_output(self.content)
+
+    @property
+    def items(self) -> list[Any]:
+        """What the writer validates: nothing of an empty answer."""
+        return [] if self.empty else list(DataTransformer.ensure_list(self.content))
+
+
+def written_answer(
+    content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
+) -> WrittenAnswer:
+    """Read one answered result's *content* as the writer does; *dispatch* is its ``dispatch_results``."""
+    unparsed = isinstance(content, str) and json_mode
+    if isinstance(content, str):
+        content = unparsed_json_record(content) if json_mode else {output_field: content}
+    # Already on an answer read from the provider; a text answer is an object only now.
+    content = with_dispatch_results(content, dispatch or {})
+    schema_echo = _is_schema_echo(content)
+    if schema_echo:
+        content = _make_schema_echo_error(content)
+    return WrittenAnswer(content, unparsed, schema_echo)
+
+
 def validated_items(
     content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
 ) -> list[Any]:
     """What the writer runs a ``repair: none`` suite over, for one answered result.
 
-    Mirrors ``_process_successful_result`` up to its validation, so a judge batch
-    can be sent for these values before the writer reads them. *dispatch* is the
-    record's ``dispatch_results``.
+    Lets a step ahead of the writer see the values it will validate.
     """
-    if isinstance(content, str):
-        content = (
-            {"raw_response": content, "_parse_error": "Failed to parse JSON from LLM response"}
-            if json_mode
-            else {output_field: content}
-        )
-    content = with_dispatch_results(content, dispatch or {})
-    if _is_schema_echo(content):
-        content = _make_schema_echo_error(content)
-    if _is_empty_output(content):
-        return []
-    return list(DataTransformer.ensure_list(content))
+    return written_answer(
+        content, json_mode=json_mode, output_field=output_field, dispatch=dispatch
+    ).items
 
 
 def _dispatched_schema(agent_config: dict[str, Any], name: str) -> dict[str, Any] | None:
@@ -480,43 +493,32 @@ class BatchResultStrategy:
         custom_id: str,
     ) -> ProcessingResult:
         """Parse a successful batch result into a ProcessingResult."""
-        generated_obj = batch_result.content
-        if isinstance(generated_obj, str):
-            if ctx.json_mode:
-                # JSON mode but content is still a string — parsing failed.
-                # Wrap in _parse_error dict so the repair loop can detect and
-                # retry, matching the online-path convention.
-                logger.warning(
-                    "Batch result for %s is unparsed string in json_mode; "
-                    "wrapping as _parse_error for repair",
-                    custom_id,
-                )
-                generated_obj = {
-                    "raw_response": generated_obj,
-                    "_parse_error": "Failed to parse JSON from LLM response",
-                }
-            else:
-                generated_obj = {ctx.output_field: generated_obj}
-
-        # Already on an answer read from the provider; a text answer is an object only now.
-        generated_obj = with_dispatch_results(
-            generated_obj, dispatch_results(ctx.agent_config, ctx.context_map.get(custom_id))
+        answer = written_answer(
+            batch_result.content,
+            json_mode=ctx.json_mode,
+            output_field=ctx.output_field,
+            dispatch=dispatch_results(ctx.agent_config, ctx.context_map.get(custom_id)),
         )
-
-        # Schema-echo guard: replace with _parse_error so the repair loop can regenerate
-        if _is_schema_echo(generated_obj):
+        if answer.unparsed:
+            # Wrapped as a _parse_error record so the repair loop can detect and retry it,
+            # matching the online-path convention.
+            logger.warning(
+                "Batch result for %s is unparsed string in json_mode; "
+                "wrapping as _parse_error for repair",
+                custom_id,
+            )
+        if answer.schema_echo:
             logger.warning(
                 "[%s] Schema-echo detected in batch result — replacing with "
                 "_parse_error for custom_id=%s.",
                 ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown",
                 custom_id,
             )
-            generated_obj = _make_schema_echo_error(generated_obj)
 
-        if _is_empty_output(generated_obj):
-            return self._empty_answer(ctx, batch_result, custom_id, generated_obj)
+        if answer.empty:
+            return self._empty_answer(ctx, batch_result, custom_id, answer.content)
 
-        generated_list = DataTransformer.ensure_list(generated_obj)
+        generated_list = answer.items
         self._warn_on_schema_mismatch(ctx, custom_id, generated_list)
 
         original_row = ctx.reconciler.get_record_by_id(custom_id)

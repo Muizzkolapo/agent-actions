@@ -46,7 +46,7 @@ def test_the_verdicts_are_kept_while_the_step_waits_on_another_batch():
     """Read from the store, not from memory: a resume is a new process."""
     run, _provider = _sent()
     state = run.state()
-    assert state is not None and state.judge_requests and state.judge_results
+    assert state is not None and state.side_requests and state.side_waiting
 
 
 def test_a_judge_batch_the_provider_failed_fails_its_judgements_closed():
@@ -85,7 +85,8 @@ def test_a_failed_judge_batch_still_holds_its_main_batch():
             "f.json_judge_1",
             BatchStatus.FAILED,
             parent_file_name="f.json",
-            recovery_type="judge",
+            recovery_type="side",
+            side_kind="judge",
             recovery_attempt=1,
         ),
     }

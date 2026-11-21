@@ -51,8 +51,8 @@ def test_the_window_leaves_the_judge_batch_registered_over_the_state_of_the_roun
 
     assert [name for name, _n in provider.batches][-1] == "f.json_judge_2"
     entry = run.live_entry()
-    assert (entry.recovery_type, entry.recovery_attempt) == ("judge", 2)
-    assert run.state().judge_attempt == 1
+    assert (entry.recovery_type, entry.side_kind, entry.recovery_attempt) == ("side", "judge", 2)
+    assert run.state().side_attempts["judge"] == 1
 
 
 def test_the_next_run_does_not_write_the_file_from_the_old_state():
@@ -65,8 +65,8 @@ def test_the_next_run_does_not_write_the_file_from_the_old_state():
     assert judge_2 not in provider.read, "the batch was read against the wrong state"
 
 
-def _with_a_judge_round_in_the_state(run: Run) -> None:
-    """The stale state still names a judge round, as one stopped mid-round would."""
+def _with_a_side_round_in_the_state(run: Run) -> None:
+    """The stale state still names a side round, as one stopped mid-round would."""
     import json
 
     from .judge_batch_world import ACTION, FILE
@@ -74,16 +74,17 @@ def _with_a_judge_round_in_the_state(run: Run) -> None:
     key = f"recovery_state:{ACTION}:{FILE}"
     stored = json.loads(run.backend.meta[key])
     stored.update(
-        judge_requests={"j_old_0": "old"},
-        judge_results=[{"custom_id": "r1"}],
-        judge_resumes="repair",
+        side_kind="judge",
+        side_requests={"j_old_0": "old"},
+        side_waiting=[{"custom_id": "r1"}],
+        side_resumes="repair",
     )
     run.backend.meta[key] = json.dumps(stored)
 
 
-def test_the_drop_says_what_happened_and_resets_the_judge_round_of_the_state(caplog):
+def test_the_drop_says_what_happened_and_resets_the_side_round_of_the_state(caplog):
     run, _provider = _stopped_after_registering_judge_2()
-    _with_a_judge_round_in_the_state(run)
+    _with_a_side_round_in_the_state(run)
     judge_2 = run.live_entry().batch_id
 
     with caplog.at_level("WARNING"):
@@ -96,8 +97,8 @@ def test_the_drop_says_what_happened_and_resets_the_judge_round_of_the_state(cap
     assert "billed" in message
     state = run.state()
     assert state is not None
-    assert (state.judge_attempt, state.judge_requests, state.judge_results) == (2, {}, [])
-    assert state.judge_resumes is None
+    assert (state.side_attempts["judge"], state.side_requests, state.side_waiting) == (2, {}, [])
+    assert (state.side_kind, state.side_resumes) == (None, None)
 
 
 def test_the_file_processed_again_from_its_main_batch_keeps_every_record():
