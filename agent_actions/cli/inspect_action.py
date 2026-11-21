@@ -8,12 +8,16 @@ from typing import Any
 import click
 from rich.text import Text
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
-from .inspect_base import BaseInspectCommand, branch_of
+from .inspect_base import BaseInspectCommand, branch_of, observe_as_written
 from .workflow_loader import validate_action_exists
 
 logger = logging.getLogger(__name__)
@@ -363,7 +367,7 @@ class ActionCommand(BaseInspectCommand):
 
 
 @click.command(name="action")
-@click.option("-a", "--agent", required=True, help="Workflow name")
+@workflow_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.argument("action_name", metavar="ACTION_NAME")
@@ -472,7 +476,7 @@ class ContextCommand(BaseInspectCommand):
             **({"branch": branch} if branch is not None else {}),
             "namespaces": namespaces,
             "context_scope": {
-                "observe": context_scope.get("observe", []),
+                "observe": observe_as_written(context_scope),
                 "passthrough": context_scope.get("passthrough", []),
                 "drop": context_scope.get("drop", []),
             },
@@ -720,7 +724,7 @@ class ContextCommand(BaseInspectCommand):
 
 
 @click.command(name="context")
-@click.option("-a", "--agent", required=True, help="Workflow name")
+@workflow_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.argument("action_name", metavar="ACTION_NAME")

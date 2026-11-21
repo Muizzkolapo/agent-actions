@@ -24,7 +24,7 @@ Agent Actions finds these errors with multiple validation layers. The layers sta
 To analyze the field dependencies of your workflow before you run it, use the `schema` command:
 
 ```bash
-agac schema -a workflow
+agac schema -w workflow
 ```
 
 The command shows the input schema and the output schema of each action. Thus you can find field reference errors before the workflow sends API calls.

@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import REPO, run_agac
 
 WORKFLOW = "w"
@@ -118,7 +119,7 @@ def _run_to_the_end(project: Path) -> str:
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode == 0, "\n".join(outputs)
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
         if "run again" not in output:
             return "\n".join(outputs)
         args = ["run", "-a", WORKFLOW]

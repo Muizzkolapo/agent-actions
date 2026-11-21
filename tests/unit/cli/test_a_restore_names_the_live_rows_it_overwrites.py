@@ -73,6 +73,7 @@ def test_a_restore_names_each_live_row_it_overwrites(tmp_path: Path, dry_run: bo
     }
     state_mgr.get_status.return_value = ActionStatus.INTERRUPTED
     state_mgr.get_failed_actions.return_value = []
+    state_mgr.is_completed_with_failures.return_value = False
 
     with (
         patch("agent_actions.cli.retry.get_storage_backend", return_value=backend),

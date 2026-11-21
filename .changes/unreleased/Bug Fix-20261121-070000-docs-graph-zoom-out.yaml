@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "The `agac docs` Graph tab now fits a large workflow. The graph would not zoom out past 0.1, but a workflow of 40 or more actions needs about 0.05 to fit. So the graph was clipped at both edges, and wheel zoom-out and the fit button did nothing. The zoom floor is now 0.02."
+time: 2026-11-21T07:00:00Z

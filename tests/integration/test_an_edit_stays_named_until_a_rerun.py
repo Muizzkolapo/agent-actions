@@ -11,6 +11,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.agac.client import AgacClient
@@ -88,7 +89,7 @@ def test_a_retried_record_is_traced_under_the_edit_while_the_stamp_names_the_old
     with monkeypatch.context() as patched:
         patched.setattr(AgacClient, "call_json", staticmethod(beta_empty))
         result = _run("--fresh")
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _status(online) == "completed_with_failures"
     assert _trace_models(online) == {page: [MODEL] for page in EVERY_PAGE}
 
@@ -250,7 +251,7 @@ def test_an_edit_reverted_after_a_resume_still_says_the_answers_come_from_two_co
 
 def test_an_edit_while_the_batch_is_out_is_named_by_the_run_that_collects_it(project):  # noqa: F811
     result = _run("--fresh")
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_PAUSED, result.output
     assert _status(project) == "batch_submitted"
     _edit_model(project, EDITED_MODEL)
 
@@ -324,13 +325,13 @@ def test_a_reset_under_a_file_limit_with_no_edit_names_no_mix(online):  # noqa: 
 
 
 def test_a_rerun_of_an_action_whose_batch_is_out_does_not_say_it_is_collected(project):  # noqa: F811
-    assert _run("--fresh").exit_code == 0
+    assert _run("--fresh").exit_code == EXIT_PAUSED
     assert _status(project) == "batch_submitted"
     _edit_model(project, EDITED_MODEL)
 
     result = _run("--rerun", ACTION)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_PAUSED, result.output
     assert "collected as it was sent" not in _printed(result)
     assert f"--rerun: {ACTION}" in _printed(result)
 
@@ -375,7 +376,7 @@ def test_a_retry_under_an_edit_then_reverted_still_names_the_mix(online, monkeyp
 
     with monkeypatch.context() as patched:
         patched.setattr(AgacClient, "call_json", staticmethod(beta_empty))
-        assert _run("--fresh").exit_code == 0
+        assert _run("--fresh").exit_code == EXIT_RECORD_FAILURES
     _set_model(online, EDITED_MODEL)
     assert CliRunner().invoke(cli, ["retry", "-a", WORKFLOW]).exit_code == 0
     _set_model(online, MODEL)
@@ -393,7 +394,7 @@ def test_a_batch_sent_under_the_edit_is_not_said_to_be_sent_before_it(online, pr
     _set_model(online, EDITED_MODEL)
     config = online / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(config.read_text().replace("run_mode: online", "run_mode: batch"))
-    assert _run().exit_code == 0
+    assert _run().exit_code == EXIT_PAUSED
     assert _status(online) == "batch_submitted"
 
     result = _run()
@@ -467,7 +468,7 @@ def test_an_edit_while_a_batch_nothing_was_collected_from_is_out_stays_named(pro
     """Collecting stopped before anything was stored: the batch is all the action holds, and
     every answer it gives was sent under the old config. ``killed`` stands for a process
     killed while collecting, which leaves the status as it was."""
-    assert _run("--fresh").exit_code == 0
+    assert _run("--fresh").exit_code == EXIT_PAUSED
 
     def provider_dropped(self, **kwargs):
         raise RuntimeError("the provider dropped the connection")
@@ -486,7 +487,7 @@ def test_an_edit_while_a_batch_nothing_was_collected_from_is_out_stays_named(pro
     before = _sent(project)
 
     for _ in range(3):
-        assert _run().exit_code == 0
+        assert _run().exit_code in (EXIT_SUCCESS, EXIT_PAUSED)
         if _status(project) == "completed":
             break
     assert _status(project) == "completed"

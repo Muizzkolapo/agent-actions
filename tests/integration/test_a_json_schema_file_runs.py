@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -141,7 +142,7 @@ def test_a_schema_file_in_json_schema_form_is_not_read_as_inline_shorthand(
 
     assert "Inline schema field" not in output, output
     assert "inline shorthand" not in output.lower(), output
-    assert code == 0, output
+    assert code in (EXIT_SUCCESS, EXIT_PAUSED), output
     assert _node_disposition(root) != "failed"
 
 

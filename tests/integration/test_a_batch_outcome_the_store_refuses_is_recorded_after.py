@@ -20,6 +20,7 @@ import json
 import sqlite3
 from pathlib import Path
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_retry_answers_what_a_split_writes_below_it import (
     WORKFLOW,
@@ -119,15 +120,16 @@ def _dispositions(project: Path) -> list[tuple[str, str | None, str | None]]:
         con.close()
 
 
-def _collect_everything(project: Path) -> str:
-    """Run until no batch of `finalize` is left to collect."""
+def _collect_everything(project: Path, ends_with: int) -> str:
+    """Run until no batch of `finalize` is left to collect; the last run exits *ends_with*."""
     code, output = _agac(project, "run", "-a", WORKFLOW, "--fresh")
     for _ in range(5):
-        assert code == 0, output
         if _status(project) != "batch_submitted":
             break
+        assert code == EXIT_PAUSED, output
         code, output = _agac(project, "run", "-a", WORKFLOW)
     assert _status(project) != "batch_submitted", output
+    assert code == ends_with, output
     return output
 
 
@@ -135,7 +137,7 @@ class TestARecordTheGuardFiltered:
     def test_it_reads_filtered_though_the_collect_pass_could_not_write(self, tmp_path):
         project = _batch_project(tmp_path, GUARD)
         code, output = _agac(project, "run", "-a", WORKFLOW, "--fresh")
-        assert code == 0 and _status(project) == "batch_submitted", output
+        assert code == EXIT_PAUSED and _status(project) == "batch_submitted", output
 
         (project / FAULT).write_text("")
         code, output = _agac(project, "run", "-a", WORKFLOW)
@@ -152,7 +154,7 @@ class TestARecordThatExhaustedItsRetries:
     def test_settled_it_reads_as_collection_would_have_written_it(self, tmp_path):
         reference = _batch_project(tmp_path / "reference", RETRIES)
         (reference / DROPPED).write_text("")
-        _collect_everything(reference)
+        _collect_everything(reference, EXIT_RECORD_FAILURES)
         written = _dispositions(reference)
         (exhausted,) = [row for row in written if row[0] == "exhausted"]
         assert exhausted[1] == "exhausted_after_2_attempts", written
@@ -161,12 +163,12 @@ class TestARecordThatExhaustedItsRetries:
         project = _batch_project(tmp_path / "refused", RETRIES)
         (project / DROPPED).write_text("")
         (project / FAULT).write_text("")
-        _collect_everything(project)
+        _collect_everything(project, EXIT_SUCCESS)
         (project / FAULT).unlink()
         assert {row[0] for row in _dispositions(project)} == {"deferred"}
 
         code, output = _agac(project, "run", "-a", WORKFLOW)
 
-        assert code == 0, output
+        assert code == EXIT_RECORD_FAILURES, output
         assert _dispositions(project) == written, output
         assert _status(project) == "completed_with_failures", output

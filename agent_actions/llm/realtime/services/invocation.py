@@ -8,6 +8,7 @@ import logging
 import time
 from typing import Any
 
+from agent_actions.errors import ProviderQuotaStop, QuotaExceededError
 from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.runtime_profiles import RUNTIME_PROFILES, wire_vendor
 from agent_actions.llm.providers.agac.client import AgacClient
@@ -131,6 +132,7 @@ class ClientInvocationService:
         Raises:
             ConfigurationError: If client is not supported
             DependencyError: If the provider's SDK package is not installed
+            ProviderQuotaStop: If the provider answers that its quota is used up
         """
         if model_vendor not in CLIENT_REGISTRY and project_endpoint(model_vendor) is None:
             from agent_actions.errors import ConfigurationError
@@ -161,7 +163,13 @@ class ClientInvocationService:
             ]
         else:
             # Standard client invocation (all providers, including Groq)
-            result = client.invoke(agent_config, prompt_config, context_data, schema)
+            try:
+                result = client.invoke(agent_config, prompt_config, context_data, schema)
+            except QuotaExceededError as quota:
+                # Every record still to send would get the same answer, so the run stops
+                # here rather than failing this record and going on to the next.
+                provider = str(quota.context.get("vendor") or model_vendor)
+                raise ProviderQuotaStop(provider, quota.provider_message) from quota
 
         elapsed = time.perf_counter() - start
         logger.info(

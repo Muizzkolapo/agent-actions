@@ -356,7 +356,7 @@ export GROQ_API_KEY=...
 Run the workflow:
 
 ```bash
-agac run -a incident_triage
+agac run -w incident_triage
 ```
 
 By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.
