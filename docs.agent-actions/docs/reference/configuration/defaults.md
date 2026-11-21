@@ -354,7 +354,7 @@ defaults:
 To make a run smaller without a change to the project, pass [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) or [`--file-limit`](../cli/run#running-a-project-smaller-than-it-is) to `agac run`. Alternatively, set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` where a variable is more suitable. If both are set, the flag wins. Each one limits the same axis as its config key: records for each input file, and input files for each action. Both apply to each action, including the actions that configure no limit. Thus you can use them on a project that you do not own:
 
 ```bash
-AGAC_RECORD_LIMIT=2 AGAC_FILE_LIMIT=1 agac run -a my_workflow
+AGAC_RECORD_LIMIT=2 AGAC_FILE_LIMIT=1 agac run -w my_workflow
 ```
 
 `record_limit` applies at any action: start actions, actions in the middle of the workflow, or leaf actions. Use it to test a single downstream action without a new run of the full workflow. `file_limit` applies at all stages.
@@ -417,7 +417,7 @@ defaults.granularity
   Input should be 'record' or 'file' [type=enum, input_value='invalid', input_type=str]
 ```
 
-To validate and run your workflow, run `agac run -a my_workflow`. The command catches configuration errors automatically, before any LLM calls.
+To validate and run your workflow, run `agac run -w my_workflow`. The command catches configuration errors automatically, before any LLM calls.
 
 ## See Also
 

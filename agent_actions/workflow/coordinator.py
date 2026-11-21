@@ -122,10 +122,11 @@ class AgentWorkflow:
 
     def _prepare_state(self, *, read_only: bool) -> None:
         """Reset persisted state for the coming run; a read-only load mutates nothing."""
-        if read_only:
-            return
-        if self.config.fresh:
+        if self.config.fresh and not read_only:
             self._clear_for_fresh_run()
+            return
+        self.services.core.state_manager.refuse_an_entry_that_is_not_an_object()
+        if read_only:
             return
         if not self.config.rerun:
             self._reset_retryable_actions()

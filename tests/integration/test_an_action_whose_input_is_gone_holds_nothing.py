@@ -10,6 +10,7 @@ import json
 
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -63,7 +64,7 @@ def test_preview_no_longer_serves_the_reader_rows(chained):  # noqa: F811
     _add_guard_to(chained, ACTION, RESET_ONLY)
     _run()
 
-    result = CliRunner().invoke(cli, ["preview", "-w", WORKFLOW, "-a", SECOND])
+    result = CliRunner().invoke(cli, ["preview", "-w", WORKFLOW, "-A", SECOND])
 
     assert f"No data found for action '{SECOND}'" in result.output, result.output
 
@@ -116,7 +117,7 @@ def test_a_retry_of_a_record_whose_input_is_gone_keeps_the_rows(chained):  # noq
 
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", named])
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _status(chained, ACTION) == "completed_with_failures"
     assert _rows(chained, ACTION) == RECORDS
     assert _rows(chained, SECOND) == RECORDS

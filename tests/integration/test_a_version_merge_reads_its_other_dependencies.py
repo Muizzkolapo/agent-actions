@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests._support.agac_cli import run_agac
 from tests.helpers.trace_store import trace_rows
@@ -172,7 +173,7 @@ def _agac(root: Path, *args: str) -> str:
         env={"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
     output = result.stdout + result.stderr
-    assert result.returncode == 0, output
+    assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
     return output
 
 

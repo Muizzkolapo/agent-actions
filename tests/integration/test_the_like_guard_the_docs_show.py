@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import REPO, run_agac
 from tests.helpers.trace_store import trace_rows
 
@@ -95,7 +96,7 @@ def _sent(run_mode: str, condition: str, base: Path) -> list[str]:
     for _ in range(6):
         result = run_agac(root, *args, env=env)
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
         if "run again" not in output:
             break
         args = ["run", "-a", WORKFLOW]

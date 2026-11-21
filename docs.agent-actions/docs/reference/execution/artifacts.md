@@ -555,11 +555,11 @@ SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
 SELECT action_name, disposition, COUNT(*) FROM record_disposition GROUP BY action_name, disposition;
 ```
 
-The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -a extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
+The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -A extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
 
 ```bash
 agac preview -w my_workflow
-agac preview -w my_workflow -a extract_data -f json
+agac preview -w my_workflow -A extract_data -f json
 agac preview -w my_workflow --stats
 ```
 
@@ -622,10 +622,10 @@ For the full interface that you can browse, see [Documentation Site](../document
 
 ```bash
 # Set log level via environment variable
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 
 # Or use the --debug flag, which goes before the command
-agac --debug run -a my_workflow
+agac --debug run -w my_workflow
 ```
 
 The framework writes the events of each run to `agent_io/logs/events.json` and `errors.json` in the workflow folder (see above).
@@ -650,10 +650,10 @@ for k, v in counts.most_common():
 "
 
 # Preview action output via CLI
-agac preview -w my_workflow -a extract_data
+agac preview -w my_workflow -A extract_data
 
 # Check workflow status
-agac status -a my_workflow
+agac status -w my_workflow
 ```
 
 ## See Also

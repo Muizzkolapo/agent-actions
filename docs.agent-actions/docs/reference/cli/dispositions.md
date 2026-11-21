@@ -9,16 +9,23 @@ sidebar_position: 8
 The `dispositions` command shows, for each action, what occurred to each record that a workflow processed. The command reads the `record_disposition` table in the durable store. Use it to see quickly where records succeeded, failed or left the stream. Use it before you use [`retry`](./retry).
 
 ```bash
-agac dispositions -a <workflow-name> [options]
+agac dispositions -w <workflow-name> [options]
 ```
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The name of the agent configuration file, with no path or extension (required) |
-| `--action TEXT` | Show the dispositions for only the specified action |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
+| `-A, --action TEXT` | Show the dispositions for only the specified action |
 | `--quarantined` | Show only the failed, exhausted and unprocessed records, with details |
+| `--json` | Print the counts as one JSON document, for a script. See [JSON Output](#json-output). `--json` does not take `--quarantined`. If you give the two flags together, the command stops with exit code 2. See the error below this table |
+
+This is the error for `--json` with `--quarantined`:
+
+```text
+Error: --json prints the counts, so it takes no --quarantined. 'agac records --snapshots' prints the failed and exhausted records as JSON.
+```
 
 ## Output
 
@@ -91,18 +98,72 @@ An action with an action-level row shows in a second table, with the title `Acti
 After the table, a hint tells you that `agac run` does not run a halted action again.
 To resume a halted action, use `agac retry`. To start it again from the beginning, use `agac run --fresh`.
 
+## JSON Output
+
+`--json` prints one JSON document on stdout, and nothing else. Warnings and progress lines go to stderr. Read the counts from this document. Do not read them from the lines of the table: the columns and the box characters of the table can change.
+
+```bash
+agac dispositions -w my_workflow --json
+```
+
+```json
+{
+  "workflow": "my_workflow",
+  "actions": [
+    {
+      "name": "extract",
+      "counts": {
+        "success": 120,
+        "failed_checks": 0,
+        "failed": 2,
+        "exhausted": 1,
+        "guard_skipped": 0,
+        "unprocessed": 0,
+        "passthrough": 0,
+        "filtered": 0,
+        "skipped": 0,
+        "deferred": 0
+      },
+      "total": 123,
+      "records": 123,
+      "action_level": []
+    }
+  ]
+}
+```
+
+The shape is stable. A later release can add a key, but it does not rename or remove one.
+
+| Key | Value |
+|-----|-------|
+| `workflow` | The workflow name |
+| `actions` | One object for each action, in execution order. The list has each action of the workflow, also an action with no disposition. With `--action`, the list has only that action |
+| `actions[].name` | The action name |
+| `actions[].counts` | The number of records for each count. The object always has each of the ten keys, with `0` for a count that has no record. The first eight keys are the columns of the table, in snake_case, with the same numbers. `skipped` and `deferred` are the two other dispositions that the store can keep for a record. The table has no column for them, but **Total** counts them. A `deferred` record waits for the result of a batch or for a review |
+| `actions[].total` | The **Total** column. It is the sum of the ten counts |
+| `actions[].records` | The **Records** column. It is `null` where the table shows `?` |
+| `actions[].action_level` | The rows of the `Action-level state` table for this action, or an empty list. Each row has `state` (the disposition, for example `failed`), `halted` (`true` when the action halted after it used all its retries) and `reason` |
+
+For an action, the sum of `failed` and `exhausted` is the `Records to retry` value of [`agac retry --dry-run`](./retry). This is true when the retry starts from that action and has no `--record`. There is one exception. If a retry stopped before its end, the dry run also counts the failures that the next retry restores. The store does not hold those failures yet. A failure in `action_level` is a failure of the action as a whole, not of a record. Thus the counts do not include it. `agac retry --dry-run` shows it on its `Action status` line.
+
+This example counts the open failures of a workflow:
+
+```bash
+agac dispositions -w my_workflow --json | jq '[.actions[].counts | .failed + .exhausted] | add'
+```
+
 ## Examples
 
 ### Full Workflow Overview
 
 ```bash
-agac dispositions -a my_workflow
+agac dispositions -w my_workflow
 ```
 
 ### One Action Only
 
 ```bash
-agac dispositions -a my_workflow --action extract_facts
+agac dispositions -w my_workflow --action extract_facts
 ```
 
 ### Inspect Stuck Records
@@ -110,7 +171,7 @@ agac dispositions -a my_workflow --action extract_facts
 `--quarantined` lists each failed, exhausted or unprocessed record. For each record, it gives the action, the record ID, the disposition and the reason. Use this list to decide what to [`retry`](./retry):
 
 ```bash
-agac dispositions -a my_workflow --quarantined
+agac dispositions -w my_workflow --quarantined
 ```
 
 `retry` operates on the failed and exhausted records. The list gives each unprocessed record with the

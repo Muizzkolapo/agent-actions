@@ -23,8 +23,8 @@ is what the check is really for.
 ## Run it
 
 ```bash
-agac inspect -a map_reduce_fanin_check -u tools
-agac run -a map_reduce_fanin_check -u tools --fresh
+agac inspect -w map_reduce_fanin_check -u tools
+agac run -w map_reduce_fanin_check -u tools --fresh
 ```
 
 No API key is needed — the `.env` placeholder exists only because `agent_actions.yml`

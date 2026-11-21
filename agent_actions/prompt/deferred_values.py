@@ -43,6 +43,7 @@ from jinja2.runtime import Context, LoopContext, Macro
 from jinja2.utils import Namespace, missing
 
 from agent_actions.errors import TemplateRenderingError
+from agent_actions.input.context.normalizer import observe_entry_reference
 from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS, KeptCachePointExtension
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
@@ -433,8 +434,9 @@ class LoadRender:
             scope = action.get("context_scope")
             for refs in scope.values() if isinstance(scope, dict) else []:
                 for ref in refs if isinstance(refs, list) else []:
-                    if isinstance(ref, str):
-                        later.add(ref.split(".", 1)[0])
+                    reference = observe_entry_reference(ref)
+                    if reference:
+                        later.add(reference.split(".", 1)[0])
         missed = [name for name in dict.fromkeys(self._missed) if name in later]
         if missed:
             quoted = ", ".join(repr(name) for name in missed)

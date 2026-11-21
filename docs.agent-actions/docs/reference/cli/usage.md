@@ -9,7 +9,7 @@ sidebar_position: 8
 The `usage` command shows, for each action, the model calls that the action made and the tokens that the calls used. With a price table, the command also shows an estimated cost.
 
 ```bash
-agac usage -a <workflow-name> [options]
+agac usage -w <workflow-name> [options]
 ```
 
 The command reads the sums that each run keeps in the durable store. It opens the store read-only, so you can use it while a run is in progress. A run writes the sum of an action when the action stops. While the action runs, the run writes the sum again after about 10 seconds, at the next model call.
@@ -18,7 +18,7 @@ The command reads the sums that each run keeps in the durable store. It opens th
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The name of the agent configuration file, with no path or extension (required) |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
 | `--run TEXT` | Show one run only. The value is the `id` of the run in `artefact/runs.json`. If you omit it, the command adds all the runs. |
 | `--json` | Print the report as JSON |
 
@@ -156,13 +156,13 @@ Without a `prices:` block, the command shows the tokens only. It tells you that 
 
 ```bash
 # Every run of the workflow
-agac usage -a my_workflow
+agac usage -w my_workflow
 
 # One run
-agac usage -a my_workflow --run run_my_workflow_1a2b3c4d
+agac usage -w my_workflow --run run_my_workflow_1a2b3c4d
 
 # For a script
-agac usage -a my_workflow --json
+agac usage -w my_workflow --json
 ```
 
 ## Errors

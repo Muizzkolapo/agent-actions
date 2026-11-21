@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from tests.integration.test_retry_selection_under_batch import (
@@ -70,7 +71,7 @@ def _submit_and_finish(root):
         json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
     )
     code, output = _agac(root, "run", "-a", WORKFLOW, "--fresh")
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     assert "run again" in output
     backend = _backend(root)
     try:
@@ -144,7 +145,7 @@ def test_a_repair_batch_is_owed_though_its_record_still_has_its_old_row(
     first, second = sorted(_dispositions(project))[:2]
     _set_disposition(project, first, "failed")
     code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", first)
-    assert code == 0 and "run again" in output, output
+    assert code == EXIT_PAUSED and "run again" in output, output
     backend = _backend(project)
     try:
         registry = BatchRegistryManager(backend, ACTION)
@@ -172,7 +173,7 @@ def test_abandoning_gets_past_an_action_left_collecting_or_failed(finished_not_c
 
     code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
 
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     assert "Abandoning" in _unwrapped(output), output
 
 
@@ -211,11 +212,11 @@ def test_a_reader_behind_an_uncollected_batch_is_left_to_the_batch(
     assert "finished, not collected" in _unwrapped(output), output
 
     code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
 
     # The retry stops at its own submission, and the run that collects it runs the
     # reader whole; the records the abandoned batch held are failures a retry reaches.
-    _cycle(project, "run", "-a", WORKFLOW)
-    _cycle(project, "retry", "-a", WORKFLOW)
+    _cycle(project, "run", "-a", WORKFLOW, ends_with=EXIT_RECORD_FAILURES)
+    _cycle(project, "retry", "-a", WORKFLOW, ends_with=EXIT_SUCCESS)
     assert len(_rows_at(project, ACTION)) == RECORDS
     assert _rows_at(project, "tagger") == _rows_at(project, ACTION)

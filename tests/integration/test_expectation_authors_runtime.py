@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -219,7 +220,7 @@ def test_the_batch_author_submits_and_is_collected(run):
     this fixture was skipped for it.
     """
     first = run(BATCH_ONLY)
-    assert first.returncode == 0, first.output
+    assert first.returncode == EXIT_PAUSED, first.output
     assert "run again" in first.output, "the fixture did not pause on submission"
 
     second = run(BATCH_ONLY, again=True)
@@ -260,13 +261,15 @@ def test_the_batch_judge_is_sent_the_field_its_rule_references(run):
     state_dir = result.project / ".agac" / "batch_state"
     judge_requests: dict[str, str] = {}
     for _ in range(8):
-        assert result.returncode == 0, result.output
         for state in state_dir.glob("*.json"):
             for task in json.loads(state.read_text())["tasks"]:
                 if task["custom_id"].startswith("j_"):
                     judge_requests[task["custom_id"]] = task["prompt"]
-        if "run again" not in result.output:
+        if result.returncode != EXIT_PAUSED:
+            assert result.returncode == 0, result.output
+            assert "run again" not in result.output, result.output
             break
+        assert "run again" in result.output, result.output
         result = run(BATCH_JUDGED, again=True)
     else:
         pytest.fail(f"the workflow never stopped asking to be run again:\n{result.output}")
