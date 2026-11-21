@@ -4,17 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
 import click
 
-from agent_actions.cli.args import RunCommandArgs
+from agent_actions.cli.args import DEFAULT_POLL_SECONDS, RunCommandArgs
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
     workflow_option,
+)
+from agent_actions.cli.exit_codes import (
+    EXIT_CODES,
+    EXIT_SUCCESS,
+    TRACKER_STATUSES,
+    RunOutcome,
+    actions_with_record_failures,
+    classify_outcome,
 )
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
@@ -31,9 +41,11 @@ logger = logging.getLogger(__name__)
 
 
 class RunCommand:
-    def __init__(self, args: RunCommandArgs):
+    def __init__(self, args: RunCommandArgs, sleep: Callable[[float], None] = time.sleep):
         self.args = args
         self.agent_name = Path(args.agent).stem
+        self._sleep = sleep
+        self._open_batches: list[str] = []
 
     def _determine_execution_mode(self, workflow: AgentWorkflow) -> bool:
         mode = getattr(self.args, "execution_mode", "auto")
@@ -59,9 +71,6 @@ class RunCommand:
             workflow.run()
 
     def execute(self, project_root: Path | None = None) -> None:
-        self._execute_single(project_root)
-
-    def _execute_single(self, project_root: Path | None = None) -> str:
         click.echo(f"Starting agent run for: {self.args.agent}")
 
         if project_root is not None:
@@ -76,9 +85,58 @@ class RunCommand:
         # Before anything loads, clears or submits: `--fresh` clears the store inside
         # load_workflow, so a later lock would wipe a run in progress before refusing.
         with hold_run_lock(paths.io_dir, self.agent_name):
-            return self._run_holding_the_lock(paths, project_root)
+            started = time.monotonic()
+            outcome = self._run_holding_the_lock(paths, project_root)
+            if self.args.wait:
+                outcome = self._wait_for_batches(outcome, paths, project_root, started)
 
-    def _run_holding_the_lock(self, paths: ProjectPaths, project_root: Path | None) -> str:
+        if EXIT_CODES[outcome] != EXIT_SUCCESS:
+            raise SystemExit(EXIT_CODES[outcome])
+
+    def _wait_for_batches(
+        self,
+        outcome: RunOutcome,
+        paths: ProjectPaths,
+        project_root: Path | None,
+        started: float,
+    ) -> RunOutcome:
+        """Run again, as a second `agac run` does, until no batch is open or the time is up.
+
+        The time limit counts from *started*, before the first pass.
+        """
+        timeout = self.args.wait_timeout
+        deadline = None if timeout is None else started + timeout
+        while outcome is RunOutcome.PAUSED_FOR_BATCH:
+            pause: float = self.args.poll
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._stop_waiting(started)
+                    break
+                pause = min(pause, remaining)
+            click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
+            self._sleep(pause)
+            if deadline is not None and time.monotonic() >= deadline:
+                self._stop_waiting(started)
+                break
+            outcome = self._run_holding_the_lock(paths, project_root, resuming=True)
+        if outcome is RunOutcome.PAUSED:
+            click.echo(
+                "--wait has no batch to wait for: the run stopped before every action ended."
+            )
+        return outcome
+
+    def _stop_waiting(self, started: float) -> None:
+        click.echo(
+            f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
+            f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
+            f"to check them and continue: agac run -w {self.args.agent} --wait"
+        )
+
+    def _run_holding_the_lock(
+        self, paths: ProjectPaths, project_root: Path | None, *, resuming: bool = False
+    ) -> RunOutcome:
+        """One pass over the workflow; *resuming* is a later pass, which clears nothing."""
         with PromptLoader.record_loads() as prompt_files:
             try:
                 workflow = load_workflow(
@@ -88,9 +146,9 @@ class RunCommand:
                     sends_requests=True,
                     user_code_path=str(self.args.user_code) if self.args.user_code else None,
                     use_tools=self.args.use_tools,
-                    fresh=self.args.fresh,
-                    rerun=self.args.rerun,
-                    verify_keys=self.args.verify_keys,
+                    fresh=self.args.fresh and not resuming,
+                    rerun=() if resuming else self.args.rerun,
+                    verify_keys=self.args.verify_keys and not resuming,
                     record_limit=self.args.record_limit,
                     file_limit=self.args.file_limit,
                 )
@@ -123,65 +181,26 @@ class RunCommand:
             new_run=True,
         )
 
-        status = "FAILED"
+        outcome = RunOutcome.FAILED
         error_message = None
 
         try:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
-
             state_mgr = workflow.services.core.state_manager
-            execution_order = workflow.execution_order
-
-            if state_mgr.is_workflow_complete():
-                status = "SUCCESS"
-
-            elif state_mgr.is_workflow_done():
-                # All actions terminal — check if any actually failed
-                if state_mgr.has_any_failed():
-                    status = "FAILED"
-                    failed = state_mgr.get_failed_actions(execution_order)
-                    skipped = state_mgr.get_skipped_actions(execution_order)
-                    parts = [f"Workflow finished with failures for: {self.args.agent}"]
-                    parts.append(f"  Failed actions: {', '.join(failed)}")
-                    if skipped:
-                        parts.append(f"  Skipped actions: {', '.join(skipped)}")
-                    click.echo("\n".join(parts))
-                else:
-                    # All terminal, none failed (some may be skipped by guards)
-                    status = "SUCCESS"
-                    click.echo(f"Successfully completed agent run for: {self.args.agent}")
-
-            else:
-                # Not all terminal — check for actual batch jobs
-                batch_actions = state_mgr.get_batch_submitted_actions(execution_order)
-                if batch_actions:
-                    status = "PAUSED"
-                    summary = state_mgr.get_summary()
-                    status_parts = ", ".join(f"{k}: {v}" for k, v in summary.items())
-                    click.echo(
-                        f"Workflow paused - batch job(s) submitted for: "
-                        f"{', '.join(batch_actions)} ({status_parts}). "
-                        f"Run again to check status and continue."
-                    )
-                else:
-                    status = "PAUSED"
-                    summary = state_mgr.get_summary()
-                    status_parts = ", ".join(f"{k}: {v}" for k, v in summary.items())
-                    click.echo(
-                        f"Workflow paused for: {self.args.agent} ({status_parts}). "
-                        f"Run again to continue."
-                    )
+            outcome = classify_outcome(state_mgr, workflow.execution_order)
+            self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
+            self._report(outcome, workflow)
 
         except Exception:
-            status = "FAILED"
+            outcome = RunOutcome.FAILED
             error_message = traceback.format_exc()
             raise
 
         finally:
             try:
                 tracker.finalize_workflow_run(
-                    run_id=run_id, status=status, error_message=error_message
+                    run_id=run_id, status=TRACKER_STATUSES[outcome], error_message=error_message
                 )
             except Exception as track_error:
                 logger.warning(
@@ -198,10 +217,47 @@ class RunCommand:
             except Exception as e:
                 logger.debug("Failed to flush event handlers: %s", e, exc_info=True)
 
-        if status == "FAILED":
-            raise SystemExit(1)
+        return outcome
 
-        return status
+    def _report(self, outcome: RunOutcome, workflow: AgentWorkflow) -> None:
+        """Print the sentence for *outcome*; the exit code is read from the outcome alone."""
+        state_mgr = workflow.services.core.state_manager
+        execution_order = workflow.execution_order
+
+        if outcome is RunOutcome.FAILED:
+            failed = state_mgr.get_failed_actions(execution_order)
+            skipped = state_mgr.get_skipped_actions(execution_order)
+            parts = [f"Workflow finished with failures for: {self.args.agent}"]
+            parts.append(f"  Failed actions: {', '.join(failed)}")
+            if skipped:
+                parts.append(f"  Skipped actions: {', '.join(skipped)}")
+            click.echo("\n".join(parts))
+        elif outcome is RunOutcome.RECORD_FAILURES:
+            partial = actions_with_record_failures(state_mgr, execution_order)
+            click.echo(
+                f"Workflow finished with failed or exhausted records in: {', '.join(partial)}. "
+                f"See them with agac dispositions -w {self.args.agent} --quarantined; "
+                f"repair them with agac retry -w {self.args.agent}."
+            )
+        elif outcome is RunOutcome.SUCCESS:
+            # All complete prints nothing more; guard-skipped actions get the sentence.
+            if not state_mgr.is_workflow_complete():
+                click.echo(f"Successfully completed agent run for: {self.args.agent}")
+        else:
+            summary = state_mgr.get_summary()
+            status_parts = ", ".join(f"{k}: {v}" for k, v in summary.items())
+            if outcome is RunOutcome.PAUSED_FOR_BATCH:
+                batch_actions = state_mgr.get_batch_submitted_actions(execution_order)
+                click.echo(
+                    f"Workflow paused - batch job(s) submitted for: "
+                    f"{', '.join(batch_actions)} ({status_parts}). "
+                    f"Run again to check status and continue."
+                )
+            else:
+                click.echo(
+                    f"Workflow paused for: {self.args.agent} ({status_parts}). "
+                    f"Run again to continue."
+                )
 
 
 @click.command()
@@ -268,6 +324,35 @@ class RunCommand:
     default=False,
     help="Verify API keys by probing vendor endpoints, and declared endpoints with one structured-output request, before execution",
 )
+@click.option(
+    "--wait",
+    is_flag=True,
+    default=False,
+    help=(
+        "While the run is paused for a batch, wait and run again until no batch is open, "
+        "then exit with the code of the final status"
+    ),
+)
+@click.option(
+    "--poll",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="SECONDS",
+    help=(
+        "With --wait: whole seconds between two checks of the batch job(s), at least 1 "
+        f"(default: {DEFAULT_POLL_SECONDS})"
+    ),
+)
+@click.option(
+    "--wait-timeout",
+    type=click.FloatRange(min=0),
+    default=None,
+    metavar="SECONDS",
+    help=(
+        "With --wait: stop waiting this many seconds after the run started and exit 4, "
+        "leaving the batch job(s) open for the next run (default: no limit)"
+    ),
+)
 @handles_user_errors("run")
 @requires_project
 def run(
@@ -281,9 +366,17 @@ def run(
     fresh: bool = False,
     rerun: tuple[str, ...] = (),
     verify_keys: bool = False,
+    wait: bool = False,
+    poll: int | None = None,
+    wait_timeout: float | None = None,
     project_root: Path | None = None,
 ) -> None:
     """Run agents with a specified agent configuration.
+
+    \b
+    Exit codes: 0 success, 1 failed, 3 finished with failed or exhausted
+    records, 4 paused: a batch is open, or the run stopped before every
+    action ended.
 
     \b
     Examples:
@@ -293,7 +386,12 @@ def run(
         agac run -a my_agent --rerun classify
         agac run -a my_agent --rerun classify --rerun summarize
         agac run -a my_agent --record-limit 2 --file-limit 1
+        agac run -a my_agent --wait --poll 60 --wait-timeout 86400
     """
+    if not wait:
+        for given, flag in ((poll, "--poll"), (wait_timeout, "--wait-timeout")):
+            if given is not None:
+                raise click.UsageError(f"{flag} sets how --wait waits, and --wait was not given.")
     args = RunCommandArgs(
         agent=agent,
         user_code=Path(user_code) if user_code else None,
@@ -305,6 +403,9 @@ def run(
         fresh=fresh,
         rerun=rerun,
         verify_keys=verify_keys,
+        wait=wait,
+        poll=DEFAULT_POLL_SECONDS if poll is None else poll,
+        wait_timeout=wait_timeout,
     )
     command = RunCommand(args)
     command.execute(project_root=project_root)

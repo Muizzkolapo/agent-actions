@@ -14,7 +14,7 @@ from agent_actions.cli.cli_decorators import (
     requires_project,
     workflow_option,
 )
-from agent_actions.cli.retry import _classify_outcome
+from agent_actions.cli.exit_codes import run_status as status_of_the_run
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.workflow.managers.state import (
     COMPLETED_STATUSES,
@@ -26,7 +26,7 @@ _KNOWN_STATUSES = {status.value for status in ActionStatus}
 
 
 class _StoredStatuses:
-    """The stored statuses, answering what ``_classify_outcome`` asks of a state manager."""
+    """The stored statuses, answering what ``exit_codes.run_status`` asks of a state manager."""
 
     def __init__(self, statuses: list[Any]):
         self._statuses = statuses
@@ -81,7 +81,7 @@ def status_report(agent: str, project_root: Path | None = None) -> dict[str, Any
                 f"Action '{action['name']}' has an unknown status: {status!r}"
             )
     run_status = (
-        _classify_outcome(_StoredStatuses([action["status"] for action in actions]))
+        status_of_the_run(_StoredStatuses([action["status"] for action in actions]))
         if actions
         else None
     )

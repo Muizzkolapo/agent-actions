@@ -274,6 +274,8 @@ The shape is stable. A later release can add a key, but it does not rename or re
 - `FAILED`: Each action ended, and one or more actions failed.
 - `PAUSED`: One or more actions did not end. The run is in progress, or it waits for a batch, or it stopped early.
 
+The [exit code](./run.md#exit-codes) of `agac run` and of `agac retry` tells more than `run_status`. A run with the status `SUCCESS` exits `3`, not `0`, when an action holds failed or exhausted records. A run that waits for a batch exits `4`.
+
 `run_status` is `PAUSED` also while a run is in progress. Thus `run_status` cannot tell a running workflow from a paused one. A monitor must read `actions[].status` for this, for example to find an action with the status `running`.
 
 If the status file holds no action status, the command prints this message and stops with exit code 0. An empty status file (`{}`) gives the same message. With `--json`, the message goes to stderr, and stdout has the document with `run_status` set to `null`. Without `--json`, the message goes to stdout:

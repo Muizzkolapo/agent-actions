@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_batch_the_provider_ends_without_results import _dispositions
@@ -290,7 +291,7 @@ class TestAnOpenAIBatchThatExpiredBesideOneThatFinished:
         )
 
     def test_the_run_that_finds_it_collects_the_file_beside_it(self, runs):
-        assert runs.ended.code == 0, runs.ended.output
+        assert runs.ended.code == EXIT_RECORD_FAILURES, runs.ended.output
         assert runs.ended.status == "completed_with_failures", runs.ended.output
         assert runs.stored == _answered("a")
 
@@ -310,7 +311,7 @@ class TestAnOpenAIBatchThatExpiredBesideOneThatFinished:
         )
 
     def test_agac_retry_sends_only_its_file_and_every_record_ends_answered(self, runs):
-        assert runs.retried.code == 0, runs.retried.output
+        assert runs.retried.code == EXIT_PAUSED, runs.retried.output
         assert list(runs.resent) == ["b_pages.json"], runs.retried.output
         assert runs.collected.status == "completed", runs.collected.output
         assert _stored_rows(runs.project.root) == _answered("a", "b")
@@ -357,13 +358,13 @@ class TestAnOpenAIBatchTheProviderHasNotEndedBesideOneThatFinished:
         )
 
     def test_the_run_that_finds_it_waits_for_it(self, runs):
-        assert runs.waiting.code == 0, runs.waiting.output
+        assert runs.waiting.code == EXIT_PAUSED, runs.waiting.output
         assert runs.waiting.status == "batch_submitted", runs.waiting.output
         assert runs.recorded in IN_FLIGHT
 
     def test_the_run_after_asks_the_provider_and_finishes_the_action(self, runs):
         assert runs.sent["b_pages.json"] in {call["id"] for call in runs.asked}
-        assert runs.ended.code == 0, runs.ended.output
+        assert runs.ended.code in (EXIT_SUCCESS, EXIT_RECORD_FAILURES), runs.ended.output
         assert runs.ended.status == runs.finishes_as, runs.ended.output
         assert _stored_rows(runs.project.root) == _answered(*runs.answered)
 

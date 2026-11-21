@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests.integration import test_a_guard_never_judges_a_record_its_upstream_failed as upstream
 from tests.integration.test_a_guard_never_judges_a_record_its_upstream_failed import (
     FILE_TOOL_PUBLISH,
@@ -60,7 +61,7 @@ def _failed_alpha(tmp_path: Path, run_mode: str, publish: str, archive: str = _L
     assert _LLM_ARCHIVE in text
     config.write_text(text.replace(_LLM_ARCHIVE, archive))
     project.alpha_fails()
-    project.run_to_the_end("--fresh")
+    project.run_to_the_end("--fresh", ends_with=EXIT_RECORD_FAILURES)
     return project
 
 
@@ -115,7 +116,7 @@ def test_the_retry_answers_it_at_every_action_once_the_fault_is_gone(tmp_path, r
     alpha = project.alpha()
     project.alpha_fails(on=False)
 
-    project.retry_to_the_end()
+    project.retry_to_the_end(ends_with=EXIT_SUCCESS)
 
     for action in ("summarize", *BELOW):
         assert project.dispositions(action)[alpha] == ("success", None), action

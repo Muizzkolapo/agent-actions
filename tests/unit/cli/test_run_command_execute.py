@@ -38,6 +38,7 @@ class TestRunCommandProjectRootWiring:
         wf_mock = MagicMock()
         wf_mock.execution_order = ["a1"]
         wf_mock.action_configs = {"a1": {}}
+        wf_mock.services.core.state_manager.is_completed_with_failures.return_value = False
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
@@ -69,6 +70,7 @@ class TestRunCommandProjectRootWiring:
         wf_mock = MagicMock()
         wf_mock.execution_order = ["a1"]
         wf_mock.action_configs = {"a1": {}}
+        wf_mock.services.core.state_manager.is_completed_with_failures.return_value = False
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
@@ -109,6 +111,7 @@ def _build_workflow_mock(tmp_path, state_overrides=None):
     sm.is_workflow_complete.return_value = False
     sm.is_workflow_done.return_value = False
     sm.has_any_failed.return_value = False
+    sm.is_completed_with_failures.return_value = False
     sm.get_failed_actions.return_value = []
     sm.get_skipped_actions.return_value = []
     sm.get_batch_submitted_actions.return_value = []
@@ -130,8 +133,11 @@ class TestRunCommandStatusMessages:
         yield
         reset_path_manager()
 
-    def _execute(self, tmp_path, state_overrides):
-        """Run execute() with a mocked workflow. Returns the tracker mock."""
+    def _execute(self, tmp_path, state_overrides, exits=None):
+        """Run execute() with a mocked workflow. Returns the tracker mock.
+
+        *exits* is the exit code the run must end with, for the outcomes that have one.
+        """
         cmd = RunCommand(_make_args())
         wf_mock = _build_workflow_mock(tmp_path, state_overrides)
 
@@ -154,7 +160,12 @@ class TestRunCommandStatusMessages:
             tracker_inst.start_workflow_run.return_value = "run-123"
             mock_tracker.return_value = tracker_inst
 
-            cmd.execute(project_root=tmp_path)
+            if exits is None:
+                cmd.execute(project_root=tmp_path)
+            else:
+                with pytest.raises(SystemExit) as stopped:
+                    cmd.execute(project_root=tmp_path)
+                assert stopped.value.code == exits
 
             return tracker_inst
 
@@ -261,6 +272,7 @@ class TestRunCommandStatusMessages:
                 "is_workflow_done": False,
                 "get_batch_submitted_actions": ["action_b"],
             },
+            exits=4,
         )
         out = capsys.readouterr().out
         assert "batch job(s) submitted for: action_b" in out
@@ -277,6 +289,7 @@ class TestRunCommandStatusMessages:
                 "get_batch_submitted_actions": ["action_b"],
                 "get_summary": {"completed": 1, "batch_submitted": 1, "pending": 2},
             },
+            exits=4,
         )
         out = capsys.readouterr().out
         assert "completed: 1" in out, "a paused run reports no progress totals at all"
@@ -292,6 +305,7 @@ class TestRunCommandStatusMessages:
                 "get_batch_submitted_actions": [],
                 "get_summary": {"pending": 2, "completed": 1},
             },
+            exits=4,
         )
         out = capsys.readouterr().out
         assert "Workflow paused for:" in out
@@ -325,6 +339,7 @@ class TestLoadWorkflowKwargsPassthrough:
         )
         wf_mock = MagicMock()
         wf_mock.execution_order = ["a1"]
+        wf_mock.services.core.state_manager.is_completed_with_failures.return_value = False
 
         with (
             patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,

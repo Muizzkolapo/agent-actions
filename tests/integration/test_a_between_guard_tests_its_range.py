@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -117,7 +118,7 @@ class Project:
         for _ in range(6):
             result = self.agac(*args)
             output = result.stdout + result.stderr
-            assert result.returncode == 0, output
+            assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
             if "run again" not in output:
                 return
             args = ["run", "-a", WORKFLOW]
