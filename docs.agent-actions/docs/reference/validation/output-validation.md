@@ -541,7 +541,7 @@ Guards prevent downstream work. Put guards as early as possible in your workflow
 ### Check Schema Validation Errors
 
 ```bash
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w workflow
 ```
 
 Find these lines in the log:
@@ -553,7 +553,7 @@ Schema validation warning for 'extract_data': Field 'status': 'invalid' is not o
 ### Check Guard Evaluation
 
 ```bash
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w workflow
 ```
 
 Find these lines in the log:
@@ -568,11 +568,11 @@ Guard pre-filter for 'generate_output': 0 passed, 0 skipped, 1 filtered, 0 faile
 the schemas that the workflow refers to. If a schema is malformed, the command shows an error that gives the path. The command exits with a non-zero code before the workflow makes any LLM call:
 
 ```bash
-agac inspect -a workflow_name
+agac inspect -w workflow_name
 ```
 
 ### Analyze Schema Structure
 
 ```bash
-agac schema -a workflow
+agac schema -w workflow
 ```

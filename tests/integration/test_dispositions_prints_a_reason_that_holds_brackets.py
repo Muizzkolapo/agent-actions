@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
@@ -49,7 +50,7 @@ def project(tmp_path, monkeypatch):
     monkeypatch.chdir(root)
     monkeypatch.setenv("COLUMNS", "240")
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     return root
 
 

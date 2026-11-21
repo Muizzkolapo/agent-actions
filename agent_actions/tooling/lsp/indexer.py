@@ -12,6 +12,7 @@ from agent_actions.config.includes import branch_file
 from agent_actions.config.path_config import get_tool_dirs, load_project_config
 from agent_actions.config.schema import version_variant_names
 from agent_actions.errors import ConfigValidationError
+from agent_actions.input.context.normalizer import observe_entry_reference
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.output.response.expander_validation import routing_kind
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
@@ -452,21 +453,25 @@ def _index_workflow_lines(
                     if not item_match and line.strip() and line_indent <= context_list_indent:
                         # A non-list-item at or before list indent means we've exited the list
                         current_context_list = None
-                    elif item_match:
+                    else:
                         # Only the reference range is taken here. The quotes are YAML's:
                         # left on, `- 'up.title'` resolves as the action `'up` and is
                         # reported unresolvable at Error severity.
-                        value, offset = _unquoted(item_match.group(1).strip())
-                        _add_reference(
-                            index,
-                            yaml_file,
-                            ReferenceType.CONTEXT_FIELD,
-                            value,
-                            i,
-                            item_match.start(1) + offset,
-                            item_match.start(1) + offset + len(value),
-                            value,
+                        found = _context_item_reference(
+                            line, item_match, optional_forms=current_context_list == "observe"
                         )
+                        if found:
+                            value, start = found
+                            _add_reference(
+                                index,
+                                yaml_file,
+                                ReferenceType.CONTEXT_FIELD,
+                                value,
+                                i,
+                                start,
+                                start + len(value),
+                                value,
+                            )
 
         # Only the anchor line is taken here -- both spellings, inline and block, and either
         # may carry a trailing comment. The condition itself comes from the parsed document.
@@ -615,6 +620,32 @@ def _dispatches_schema(value: str) -> bool:
     return schema_dispatch_function(value.split(" #", 1)[0].strip()) is not None
 
 
+# The `field:` key of an observe entry written as a mapping, block or flow.
+_MAPPING_FIELD = re.compile(r"(?:^\s*(?:-\s*)?|[{,]\s*)field:\s*([^\s#,}]+)")
+
+
+def _context_item_reference(
+    line: str, item_match: re.Match[str] | None, *, optional_forms: bool
+) -> tuple[str, int] | None:
+    """The reference a context_scope list line names, and the column it starts at.
+
+    An observe entry may be optional: `- a.b?`, or a mapping whose `field:` names it.
+    """
+    mapping = optional_forms and (
+        item_match is None or item_match.group(1).endswith(":") or item_match.group(1)[0] == "{"
+    )
+    if item_match and not mapping:
+        raw, start = item_match.group(1).strip(), item_match.start(1)
+    elif mapping and (field := _MAPPING_FIELD.search(line)):
+        raw, start = field.group(1), field.start(1)
+    else:
+        return None
+    value, offset = _unquoted(raw)
+    if optional_forms:
+        value = value.removesuffix("?")
+    return value, start + offset
+
+
 def _unquoted(raw: str) -> tuple[str, int]:
     """Strip YAML's surrounding quotes, returning the value and how far the start moved."""
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
@@ -671,6 +702,8 @@ def _populate_from_parsed(
             if isinstance(refs, str):
                 refs = [refs]
             if isinstance(refs, list):
+                if directive == "observe":
+                    refs = [observe_entry_reference(ref) or ref for ref in refs]
                 target.extend(str(ref) for ref in refs if isinstance(ref, str | int | float))
 
     # The one shape that inverts namespacing. Same three conditions the framework's own

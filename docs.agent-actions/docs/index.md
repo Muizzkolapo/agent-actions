@@ -26,7 +26,7 @@ pip install agent-actions
 
 ```bash
 cd your-project
-agac run -a my_workflow
+agac run -w my_workflow
 ```
 
 Then continue with the [Quickstart](./tutorials/) →
@@ -88,7 +88,7 @@ In this example, `facts_schema` is a schema file that defines a `facts` field. T
 Run the workflow:
 
 ```bash
-agac run -a fact_summary
+agac run -w fact_summary
 ```
 
 ## Next steps

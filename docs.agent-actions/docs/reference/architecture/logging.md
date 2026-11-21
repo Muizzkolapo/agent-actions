@@ -469,16 +469,16 @@ You can control the verbosity of the console:
 
 ```bash
 # Default: INFO level, workflow/action/batch categories
-agac run -a my_workflow
+agac run -w my_workflow
 
 # Verbose: all categories, diagnostic events included
-agac --verbose run -a my_workflow
+agac --verbose run -w my_workflow
 
 # DEBUG level, same categories as the default
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 
 # Quiet: warnings and errors only
-agac --quiet run -a my_workflow
+agac --quiet run -w my_workflow
 ```
 
 ### File Handler

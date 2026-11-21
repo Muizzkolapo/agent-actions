@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
@@ -72,7 +73,7 @@ def _submit(root: Path) -> list[dict]:
         "--fresh",
         env={"OLLAMA_API_KEY": "not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == EXIT_PAUSED, result.stdout + result.stderr
     log = root / "agent_workflow" / WORKFLOW / "agent_io" / "logs" / "events.json"
     return [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
 

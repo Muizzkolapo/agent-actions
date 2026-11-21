@@ -140,7 +140,7 @@ The `data` column is compressed in the store. Thus you read the records themselv
 
 ```bash
 # The records extract_facts produced
-agac records -w <workflow> -a extract_facts
+agac records -w <workflow> -A extract_facts
 ```
 
 ### Benefits

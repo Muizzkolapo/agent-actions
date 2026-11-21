@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 
-from agent_actions.errors import get_error_detail
+from agent_actions.errors import ProviderQuotaStop, get_error_detail
 from agent_actions.llm.config.vendor import effective_run_mode
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.events import (
@@ -311,8 +311,14 @@ class WorkflowEventLogger:
     def handle_workflow_interrupt(
         self, interrupt: BaseException, elapsed_time: float = 0.0, failed_action: str = ""
     ):
-        """Record terminal state for a run killed by Ctrl-C, SIGTERM or cancellation."""
-        reason = f"Run interrupted ({type(interrupt).__name__})"
+        """Record terminal state for a run killed by Ctrl-C, SIGTERM or cancellation, or
+        stopped by a provider's quota: its actions read interrupted, which a run resumes."""
+        if isinstance(interrupt, ProviderQuotaStop):
+            reason = str(interrupt)
+            # The CLI reads this, as it does on an error, and prints nothing more.
+            interrupt._already_displayed = True  # type: ignore[attr-defined]
+        else:
+            reason = f"Run interrupted ({type(interrupt).__name__})"
 
         self._mark_run_terminal(
             reason,

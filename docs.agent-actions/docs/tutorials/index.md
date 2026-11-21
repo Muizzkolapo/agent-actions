@@ -197,7 +197,7 @@ default_agent_config:
 ## 6. Run Your Workflow {/* #6-run-your-agentic-workflow */}
 
 ```bash
-agac run -a product_pipeline
+agac run -w product_pipeline
 ```
 
 The output is similar to this:
@@ -217,7 +217,7 @@ Step 2/2 generate_content
 Print the content that `generate_content` stored for each record. The content holds one entry for each namespace that the record carries. The store keeps the records compressed. Thus, read the records with the CLI, not with sqlite3:
 
 ```bash
-agac records -w product_pipeline -a generate_content --field content
+agac records -w product_pipeline -A generate_content --field content
 ```
 
 ```json

@@ -78,7 +78,7 @@ def _records(*args):
 
 
 def test_an_actions_records_print_as_json(project):
-    result = _records("-a", ACTION)
+    result = _records("-A", ACTION)
 
     assert result.exit_code == 0, result.output
     records = json.loads(result.output)
@@ -111,7 +111,7 @@ def test_a_source_guid_selects_that_record_in_every_action(project):
 
 
 def test_a_file_selects_that_files_records(project):
-    result = _records("-a", ACTION, "--file", "b.json")
+    result = _records("-A", ACTION, "--file", "b.json")
 
     assert result.exit_code == 0, result.output
     assert [r["source_guid"] for r in json.loads(result.output)] == ["guid-2"]
@@ -126,13 +126,13 @@ def test_a_file_without_an_action_reads_it_wherever_it_is_stored(project):
         (ACTION, "guid-2")
     ]
 
-    missing = _records("-a", "classify", "--file", "b.json")
+    missing = _records("-A", "classify", "--file", "b.json")
     assert missing.exit_code != 0
     assert "File 'b.json' not found for node 'classify'" in missing.output
 
 
 def test_a_field_prints_one_value_per_record(project):
-    result = _records("-a", ACTION, "--field", f"content.{ACTION}.summary")
+    result = _records("-A", ACTION, "--field", f"content.{ACTION}.summary")
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == [
@@ -144,7 +144,7 @@ def test_a_field_prints_one_value_per_record(project):
     actions = _records("--source-guid", "guid-0", "--field", "_action")
     assert sorted(json.loads(actions.output)) == ["classify", ACTION]
 
-    missing = _records("-a", ACTION, "--field", "content.nothing.here")
+    missing = _records("-A", ACTION, "--field", "content.nothing.here")
     assert json.loads(missing.output) == [None, None, None]
 
 
@@ -176,7 +176,7 @@ def test_snapshots_narrow_to_a_file_or_a_record(project):
     by_record = _records("--snapshots", "--source-guid", "guid-9")
     assert [s["record_id"] for s in json.loads(by_record.output)] == ["guid-9"]
 
-    by_action = _records("--snapshots", "-a", "classify")
+    by_action = _records("--snapshots", "-A", "classify")
     assert [s["record_id"] for s in json.loads(by_action.output)] == ["guid-7"]
 
     none = _records("--snapshots", "--file", "nowhere.json")
@@ -185,7 +185,7 @@ def test_snapshots_narrow_to_a_file_or_a_record(project):
 
 
 def test_an_action_with_no_records_says_so(project):
-    result = _records("-a", "nothing")
+    result = _records("-A", "nothing")
 
     assert result.exit_code != 0
     assert "No stored records for action 'nothing'" in result.output
@@ -217,7 +217,7 @@ def test_every_record_past_the_first_thousand_prints(tmp_path, monkeypatch):
     backend.close()
     monkeypatch.chdir(tmp_path)
 
-    result = _records("-a", ACTION)
+    result = _records("-A", ACTION)
 
     assert result.exit_code == 0, result.output
     records = json.loads(result.output)

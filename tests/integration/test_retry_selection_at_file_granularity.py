@@ -14,6 +14,7 @@ reaching the file decides every record of it again, as a run would.
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -144,6 +145,6 @@ class TestAFileToolDecidesEveryRecordOfTheFileAgain:
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", selected])
 
-        assert retry.exit_code == 0, retry.output
+        assert retry.exit_code == EXIT_RECORD_FAILURES, retry.output
         assert _disposition(project, unnamed, SECOND) == "failed"
         assert _disposition(project, selected, SECOND) == "success"

@@ -11,6 +11,7 @@ from agent_actions.errors import (
     ConfigurationError,
     ConfigValidationError,
     ExternalServiceError,
+    ProviderQuotaStop,
     mark_action_fatal,
     mark_submission_refused,
 )
@@ -35,6 +36,7 @@ from agent_actions.llm.batch.services.collect import (
     store_batch_file,
     write_batch_file,
 )
+from agent_actions.llm.providers.error_wrapper import find_quota_error
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import BatchSubmittedEvent
@@ -713,6 +715,10 @@ class BatchSubmissionService:
         except ConfigValidationError:
             raise
         except Exception as e:
+            quota = None if taken else find_quota_error(e, provider_type)
+            if quota is not None:
+                # Nothing was sent or stored for this file, so the next run sends it.
+                raise ProviderQuotaStop(provider_type, quota.provider_message) from e
             fire_event(
                 BatchSubmissionFailedEvent(
                     batch_id=batch_id,
