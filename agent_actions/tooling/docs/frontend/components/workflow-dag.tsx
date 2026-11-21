@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo, useRef, type RefObject } from "react"
+import { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react"
 import {
   ReactFlow,
   Background,
@@ -25,6 +25,7 @@ import {
   transformWorkflowToReactFlow,
   initialViewport,
   traceLineage,
+  FIT_MAX_ZOOM,
   FIT_PADDING,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -35,6 +36,9 @@ import {
 import type { Action } from "@/lib/mock-data"
 
 // ─── DAG Node (expandable to show fields) ────────────────────────
+
+// On the header row, not the node's centre, so an expanded node keeps its edges in place.
+const HANDLE_STYLE = { top: NODE_HEIGHT / 2 }
 
 function ExpandableDAGNode({ id, data, isConnectable, isLlm, selected }: { id: string; data: DAGNodeData; isConnectable: boolean; isLlm: boolean; selected: boolean }) {
   const [expanded, setExpanded] = useState(false)
@@ -56,7 +60,7 @@ function ExpandableDAGNode({ id, data, isConnectable, isLlm, selected }: { id: s
         selected ? "border-success ring-1 ring-success" : "border-border-2"
       }`}
     >
-      <Handle type="target" position={Position.Left} isConnectable={isConnectable}
+      <Handle type="target" position={Position.Left} isConnectable={isConnectable} style={HANDLE_STYLE}
         className={`!h-1.5 !w-1.5 !min-w-0 !border-0 ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
 
@@ -125,7 +129,7 @@ function ExpandableDAGNode({ id, data, isConnectable, isLlm, selected }: { id: s
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} isConnectable={isConnectable}
+      <Handle type="source" position={Position.Right} isConnectable={isConnectable} style={HANDLE_STYLE}
         className={`!h-1.5 !w-1.5 !min-w-0 !border-0 ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
     </div>
@@ -140,6 +144,7 @@ function ToolNode({ id, data, isConnectable, selected }: NodeProps<Node<DAGNodeD
   return <ExpandableDAGNode id={id} data={data} isConnectable={isConnectable ?? false} isLlm={false} selected={selected ?? false} />
 }
 
+const FIT_OPTIONS = { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM }
 const PATH_EDGE_STYLE = { stroke: "hsl(var(--success))", strokeWidth: 2 }
 const PATH_EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "hsl(var(--success))" }
 const FADED_EDGE_STYLE = { stroke: "hsl(var(--muted-2))", strokeWidth: 1, opacity: 0.15 }
@@ -205,7 +210,7 @@ function DAGContent({
     setTimeout(() => {
       const { width, height } = store.getState()
       const view = initialViewport(transformed.nodes, width, height)
-      if (view === "fit") fitView({ padding: FIT_PADDING, duration: 500 })
+      if (view === "fit") fitView({ ...FIT_OPTIONS, duration: 500 })
       else setViewport(view, { duration: 500 })
     }, 100)
   }, [actions, workflowId, fitView, setViewport, store, setNodes, setEdges])
@@ -277,7 +282,7 @@ function DAGContent({
       className="rounded-card"
     >
       <Background gap={24} size={1} color="hsl(var(--grid))" className="!bg-well" />
-      <Controls className="!rounded-control !border-border !bg-surface !shadow-none" showInteractive={false}>
+      <Controls className="!rounded-control !border-border !bg-surface !shadow-none" showInteractive={false} fitViewOptions={FIT_OPTIONS}>
         <FullscreenButton target={fullscreenTarget} />
       </Controls>
       <MiniMap
@@ -291,6 +296,40 @@ function DAGContent({
       />
     </ReactFlow>
   )
+}
+
+// ─── Height ─────────────────────────────────────────────────────────────────
+
+const MIN_GRAPH_HEIGHT = 300
+
+// Fill from the graph's top edge down to main's bottom padding, so the page does not
+// scroll. The header above varies with the description and the window width: measure it.
+function useHeightToBottomOfMain(ref: RefObject<HTMLDivElement | null>) {
+  const [height, setHeight] = useState(MIN_GRAPH_HEIGHT)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    const main = el?.closest("main")
+    if (!el || !main) return
+    const fit = () => {
+      const top = el.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop
+      const bottomPadding = parseFloat(getComputedStyle(main).paddingBottom)
+      setHeight(Math.max(MIN_GRAPH_HEIGHT, Math.floor(main.clientHeight - top - bottomPadding)))
+    }
+    fit()
+    // main resizes with the window; its first child resizes when the header above wraps.
+    const observer = new ResizeObserver(fit)
+    observer.observe(main)
+    if (main.firstElementChild) observer.observe(main.firstElementChild)
+    // The screen slides in, so the first reading of its top edge is a few px low.
+    main.addEventListener("animationend", fit)
+    return () => {
+      observer.disconnect()
+      main.removeEventListener("animationend", fit)
+    }
+  }, [ref])
+
+  return height
 }
 
 // ─── Exported Component ─────────────────────────────────────────────────────
@@ -307,9 +346,9 @@ export function WorkflowDAGView({
   onNodeOpen?: (name: string) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  // 320px = the graph's top edge on the workflow page (measured 304px) + a 16px bottom margin
+  const height = useHeightToBottomOfMain(containerRef)
   return (
-    <div ref={containerRef} className="w-full overflow-hidden rounded-card border border-border bg-well" style={{ height: 'clamp(300px, calc(100vh - 320px), 100vh)' }}>
+    <div ref={containerRef} className="w-full overflow-hidden rounded-card border border-border bg-well" style={{ height }}>
       <ReactFlowProvider>
         <DAGContent actions={actions} workflowId={workflowId} selectedKey={selectedKey} onNodeOpen={onNodeOpen} fullscreenTarget={containerRef} />
       </ReactFlowProvider>

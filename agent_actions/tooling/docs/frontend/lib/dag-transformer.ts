@@ -154,6 +154,8 @@ export function transformWorkflowToReactFlow(actions: Record<string, Action>, wo
 export const MIN_ZOOM = 0.02
 export const MAX_ZOOM = 1.5
 export const FIT_PADDING = 0.1
+// A small workflow fits at full size; scaling it past 1 only makes the boxes big.
+export const FIT_MAX_ZOOM = 1
 // Below this fit zoom the labels cannot be read, so open on the first stage instead.
 export const MIN_READABLE_ZOOM = 0.5
 export const READABLE_ZOOM = 0.8
@@ -172,7 +174,7 @@ export function initialViewport(nodes: Node[], width: number, height: number): V
     width: Math.max(...xs) + NODE_WIDTH - minX,
     height: Math.max(...ys) + NODE_HEIGHT - minY,
   }
-  const fit = getViewportForBounds(bounds, width, height, MIN_ZOOM, MAX_ZOOM, FIT_PADDING)
+  const fit = getViewportForBounds(bounds, width, height, MIN_ZOOM, FIT_MAX_ZOOM, FIT_PADDING)
   if (fit.zoom >= MIN_READABLE_ZOOM) return "fit"
 
   const firstStage = nodes.filter((n) => n.position.x < minX + 1).map((n) => n.position.y)
