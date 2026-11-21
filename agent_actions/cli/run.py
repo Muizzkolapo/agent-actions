@@ -106,7 +106,7 @@ class RunCommand:
                     click.echo(
                         f"Stopped waiting after {timeout:g}s: batch job(s) still open for: "
                         f"{', '.join(self._open_batches)}. Run again to check them and "
-                        f"continue: agac run -a {self.args.agent} --wait"
+                        f"continue: agac run -w {self.args.agent} --wait"
                     )
                     break
                 pause = min(pause, remaining)
@@ -218,8 +218,8 @@ class RunCommand:
             partial = actions_with_record_failures(state_mgr, execution_order)
             click.echo(
                 f"Workflow finished with failed or exhausted records in: {', '.join(partial)}. "
-                f"See them with agac dispositions -a {self.args.agent} --quarantined; "
-                f"repair them with agac retry -a {self.args.agent}."
+                f"See them with agac dispositions -w {self.args.agent} --quarantined; "
+                f"repair them with agac retry -w {self.args.agent}."
             )
         elif outcome is RunOutcome.SUCCESS:
             # All complete prints nothing more; guard-skipped actions get the sentence.

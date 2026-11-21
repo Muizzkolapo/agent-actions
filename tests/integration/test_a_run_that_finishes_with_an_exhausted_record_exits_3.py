@@ -107,6 +107,8 @@ def test_a_run_with_one_exhausted_record_exits_3(tmp_path, provider):
     assert _dispositions(root) == ["exhausted", "success", "success"], output
     assert code == RECORD_FAILURES, output
     assert "failed or exhausted records in: classify" in output, output
+    assert f"agac dispositions -w {WORKFLOW} --quarantined" in output, output
+    assert f"agac retry -w {WORKFLOW}." in output, output
 
 
 def test_the_same_run_with_every_record_answered_exits_0(tmp_path, provider):

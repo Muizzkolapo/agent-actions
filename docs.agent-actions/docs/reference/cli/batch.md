@@ -28,7 +28,7 @@ A paused run exits with code `4` (see [Exit codes](./run.md#exit-codes)). Run th
 To do all of this with one command, use [`agac run --wait`](./run.md#wait-for-batch-jobs):
 
 ```bash
-agac run -a my_workflow --wait
+agac run -w my_workflow --wait
 ```
 
 ```bash

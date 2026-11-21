@@ -91,7 +91,7 @@ A run that submits a batch job pauses and exits `4`. The next `agac run` checks 
 collects the results when they are ready, and continues with the next actions. With `--wait`, one command does all of this:
 
 ```bash
-agac run -a my_workflow --wait --poll 60 --wait-timeout 86400
+agac run -w my_workflow --wait --poll 60 --wait-timeout 86400
 ```
 
 While the run is paused for a batch, `--wait` sleeps for the `--poll` time. Then it runs the workflow again,
@@ -104,7 +104,7 @@ When the `--wait-timeout` time is over and a batch is still open, the command st
 that wait, and exits `4`. The batch jobs stay at the provider. To continue, run the command again:
 
 ```
-Stopped waiting after 86400s: batch job(s) still open for: classify. Run again to check them and continue: agac run -a my_workflow --wait
+Stopped waiting after 86400s: batch job(s) still open for: classify. Run again to check them and continue: agac run -w my_workflow --wait
 ```
 
 The command holds the [run lock](#concurrent-runs) from the first pass to the last pass. Thus no other
