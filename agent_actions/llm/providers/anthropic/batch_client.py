@@ -52,6 +52,10 @@ class AnthropicBatchClient(BaseBatchClient):
     - Support for prompt caching (when enabled)
     """
 
+    # Message Batches API: up to 100,000 requests or 256 MB in one batch.
+    max_batch_requests = 100_000
+    max_batch_bytes = 256_000_000
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -223,6 +227,17 @@ class AnthropicBatchClient(BaseBatchClient):
             if text is not None:
                 return text
         return self._parse_content_list(content_list)
+
+    def _answer_text(self, raw_response: Any) -> str | None:
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if (
+            not isinstance(content_list, list)
+            or self._extract_tool_use_content(content_list) is not None
+        ):
+            return None
+        return self._extract_text_content(content_list)
 
     def _parse_content_list(self, content_list: Any) -> Any:
         """

@@ -87,6 +87,7 @@ The example above uses observe mode. Observe mode runs the checks, attaches the 
 | `max_iterations` | integer 1–10 | `3` | The total number of generations for each record, including the first. If you set it explicitly with `repair: none`, it is a configuration error, not a setting that does nothing |
 | `on_exhausted` | string | `return_last` | The result when no iterations remain: `return_last`, `fail`, or `raise`. The same rule applies: do not set it under `repair: none` |
 | `judge_budget` | integer ≥ 1 | no limit | The maximum number of real `llm_judge` LLM calls that the suite of this action may make in the full run |
+| `judge_mode` | string | the run mode of the action | How Agent Actions sends the `llm_judge` calls of the action: `batch` (as batches of their own, see [Judging in batch](#judging-in-batch)) or `online`. Set `online` to keep the judge calls of a batch action online. `batch` on an online action is a preflight defect |
 
 Each entry in `expectations:` (or in a suite file) has this shape:
 
@@ -242,7 +243,7 @@ Preflight also rejects a constant condition that refers to no record fields, bec
 
 ### Testing a judge offline
 
-On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you can test a judged rule with no network and no key. The mock selects `passed: true` or `passed: false` with its seeded generator. It writes a generated sentence as the `reason`. The same rule and value give the same verdict on each run. Different values get the two verdicts, so the pass path and the fail path both run. The verdict does not judge the value. It tests the connections, not the rule.
+On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you can test a judged rule with no network and no key. The mock selects `passed: true` or `passed: false` with its seeded generator. It writes a generated sentence as the `reason`. The same rule and value give the same verdict on each run. Different values get the two verdicts, so the pass path and the fail path both run. The verdict does not judge the value. It tests the connections, not the rule. Under `run_mode: batch`, the mock batch provider answers each judge request of a [judge batch](#judging-in-batch) in the same way. Its seed is not the seed of the online mock, so one value can get a different verdict in the two run modes.
 
 ### `context:` auto-injection
 
@@ -253,6 +254,20 @@ At load time, Agent Actions automatically adds each reference in `context:` to t
 - **Cache:** The key of a judge call is `(expectation, resolved value)`. Two records (or two rules) can produce byte-identical content for the same rule. Then Agent Actions gets the second result from the cache, and does not make another real LLM call.
 - **Budget:** `judge_budget` on the `expect:` block sets the maximum number of real judge calls for all the records that the action processes in one run. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
 - **Failure isolation:** If the LLM call of the judge has an error (network, authentication, rate limit), only that outcome fails. The outcome has the error in its `detail`. The error does not stop the processing of the record. A quota or billing stop at a judge call stops the run (see [quota stop](../cli/run.md#quota-stop)).
+
+### Judging in batch
+
+On a `run_mode: batch` action, Agent Actions also sends the judge calls as a batch. When a batch of the action returns, Agent Actions does not call the judge for each record. Agent Actions sends all the judge calls of the batch as one batch of their own, named `<file>_judge_<n>`. Then the run asks to be run again, as for a repair round. When that batch returns, Agent Actions reads the verdicts and continues: it attaches each verdict, or sends a repair round for the records that failed. The next judge batch judges the records that a repair round returns. This applies with `repair: none` too. See [Judge rounds](../execution/batch-recovery.md#judge-rounds).
+
+- **Same verdicts.** Each vote is one request. Agent Actions reads each reply as it reads an online reply, and takes the majority in the same way: a tie fails closed. A request that fails at the provider fails the judge call, as an online call that has an error does. A judge batch that the provider fails or cancels fails each judge call that it held. Agent Actions keeps the failed verdict for the file in this run. It does not send the same value of that file to the judge again. Online, Agent Actions does not keep a failed verdict.
+- **Cache.** Agent Actions judges a value one time in each file. Online, Agent Actions judges a value one time in each run.
+- **Budget.** A judge batch counts one unit of `judge_budget` for each value. The `votes` setting does not change the count. The budget applies to all the judge batches of the run.
+- **Resume.** A run that stops while the provider processes a judge batch reads that batch on the next run. Agent Actions never sends a judge batch again. A run can stop after Agent Actions sends a judge batch and before it saves the state of the file. Then the next run cannot read that batch. Agent Actions then processes the file again from its main batch. The provider bills the batch that the next run cannot read, and the run pays for those judge calls again.
+- **One model for each batch.** Agent Actions judges a rule with its own `model` in a separate judge batch.
+- **Size of a batch.** A judge batch holds at most the number of requests that the provider accepts in one batch: 100,000 for Anthropic, 50,000 for OpenAI and Groq. For a provider that states no limit, the limit is 50,000. The environment variable `AGENT_ACTIONS_BATCH_MAX_REQUESTS` replaces the limit of each provider. A judge batch also holds at most the bytes that the provider accepts in one batch: 256 MB for Anthropic, 200 MB for OpenAI and 100 MB for Groq. For a provider that states no limit, the limit is 100 MB. Agent Actions counts the bytes of each request as a line of JSON. The values that do not fit in either limit go in the next judge batch. A value goes out alone when its requests alone pass a limit. Then the provider can refuse that batch.
+- **Token usage.** A run can stop after Agent Actions reads a judge batch and before it saves the state of the file. Then the next run reads that batch again. The run report then counts the tokens of that judge batch two times.
+
+Set `judge_mode: online` on the `expect:` block to call the judge online, one record at a time, after each batch returns.
 
 ## Severity
 

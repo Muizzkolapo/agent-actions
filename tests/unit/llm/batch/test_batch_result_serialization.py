@@ -16,6 +16,10 @@ from agent_actions.llm.batch.services.retry_serialization import (
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
+# Read only in the pass that retrieved the result: a judge batch's reply text is
+# tallied there, and persisting every record's text would double the stored state.
+NOT_PERSISTED = {"text"}
+
 
 def _full_record() -> BatchResult:
     return BatchResult(
@@ -38,7 +42,7 @@ class TestEveryFieldSurvivesTheRoundTrip:
         """Names the fields, so adding one to BatchResult fails here first."""
         serialized = serialize_results([_full_record()])[0]
         declared = {f.name for f in dataclasses.fields(BatchResult)}
-        missing = declared - set(serialized)
+        missing = declared - set(serialized) - NOT_PERSISTED
         assert not missing, (
             f"{sorted(missing)} never reach the persisted state, so they are gone by the time a "
             "deferred round finishes"

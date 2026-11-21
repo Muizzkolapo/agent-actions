@@ -118,6 +118,11 @@ def _repair_mode_defects(
                     "the judge would fail every record on a missing context source; "
                     "drop context: or run the action online"
                 )
+    if expect.get("judge_mode") == "batch" and not runs_in_batch(action):
+        messages.append(
+            "judge_mode: batch needs run_mode: batch — an online action sends no batch "
+            "to put its judge calls in; drop judge_mode or run the action in batch"
+        )
     repair = expect.get("repair", "auto")
     if repair == "none":
         if expect.get("structural", "retry") != "retry":

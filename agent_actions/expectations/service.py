@@ -166,6 +166,7 @@ class ExpectationService:
         # Set by the factory when the suite judges; the deferred batch path
         # reads what is left so the budget bounds the run, not one round.
         self._judge_budget: Any = None
+        self._cached_judge: Any = None
 
     def execute(
         self,
@@ -267,6 +268,11 @@ class ExpectationService:
         than each round.
         """
         return self._judge_budget.remaining if self._judge_budget is not None else None
+
+    @property
+    def pending_judgements(self) -> dict[str, Any]:
+        """The judge calls a collecting service held back, by verdict key."""
+        return self._cached_judge.pending if self._cached_judge is not None else {}
 
     @property
     def max_iterations(self) -> int:
@@ -504,12 +510,18 @@ def create_expectation_service_from_config(
     agent_config: dict[str, Any] | None = None,
     project_root: Path | None = None,
     judge_budget_remaining: int | None = None,
+    judge_verdicts: dict[str, Any] | None = None,
+    collect_judgements: bool = False,
 ) -> ExpectationService | None:
     """Build a service from an action's ``expect:`` block, or None if absent.
 
     ``judge_budget_remaining`` replaces the configured budget for this
     construction. A deferred batch rebuilds the service each pass, so the caller
     carries the balance rather than letting every round start from full.
+
+    ``judge_verdicts`` seeds the judge cache with what a judge batch returned;
+    ``collect_judgements`` holds each judge call back for a batch instead of
+    sending it (see ``ExpectationService.pending_judgements``).
     """
     if expect_config is None:
         return None
@@ -589,7 +601,9 @@ def create_expectation_service_from_config(
     if any(expectation.type == "llm_judge" for expectation in suite.expectations):
         from agent_actions.expectations.judge import CachedJudge, JudgeBudget
 
-        cached_judge = CachedJudge(config, action_name=action_name)
+        cached_judge = CachedJudge(
+            config, action_name=action_name, verdicts=judge_verdicts, collect=collect_judgements
+        )
         # judge_budget bounds the whole run, not one construction of the
         # service. A deferred batch rebuilds the service on each pass, so the
         # caller carries what is left and hands it back here.
@@ -628,5 +642,7 @@ def create_expectation_service_from_config(
         on_exhausted=expect_config.get("on_exhausted", "return_last"),
         structural=expect_config.get("structural", "retry"),
     )
-    service._judge_budget = budget if judge_dispatch is not None else None
+    if judge_dispatch is not None:
+        service._judge_budget = budget
+        service._cached_judge = cached_judge
     return service

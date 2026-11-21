@@ -15,6 +15,7 @@ import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 from agent_actions.expectations.types import Expectation
@@ -22,6 +23,10 @@ from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.utils.json_parsing import strip_code_fences
 
 logger = logging.getLogger(__name__)
+
+# Where a batch run hands the result writer what its judge batches left: the verdicts
+# they returned ("verdicts") and the judge budget still unspent ("budget_remaining").
+BATCH_JUDGE_KEY = "_batch_judge"
 
 JUDGE_PROMPT_TEMPLATE = """Judge whether the value below satisfies the rule. Read the rule \
 carefully — it defines exactly what counts as passing.
@@ -66,6 +71,30 @@ def _read_verdict(text: str) -> dict[str, Any] | None:
     return None
 
 
+def judge_request_config(agent_config: dict[str, Any], model: str | None) -> dict[str, Any]:
+    """The action's config as one judge call sends it, online or in a batch."""
+    from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
+
+    # json_mode False: `_read_verdict` reads the model's own text, not a best-effort parse.
+    # The prompt holds this record's output, so it gets no prompt-cache mark.
+    effective_config = {**agent_config, "json_mode": False, REQUEST_VARIES_PER_RECORD_KEY: True}
+    if model is not None:
+        effective_config["model_name"] = model
+    return effective_config
+
+
+def verdict_from_reply(payload: Any) -> tuple[bool, str]:
+    """One judge reply read as a verdict; a reply that is not one is always a failure."""
+    parsed = payload if isinstance(payload, dict) else _read_verdict(str(payload))
+    if parsed is None:
+        return False, f"judge response was not a verdict object: {str(payload)[:200]!r}"
+
+    if not isinstance(parsed.get("passed"), bool):
+        return False, f"judge response missing a boolean 'passed' key: {str(payload)[:200]!r}"
+
+    return parsed["passed"], str(parsed.get("reason", ""))
+
+
 def invoke_judge(
     agent_config: dict[str, Any],
     rule: str,
@@ -84,17 +113,12 @@ def invoke_judge(
     failure, never a silent pass.
     """
     from agent_actions.llm.realtime.services.invocation import ClientInvocationService
-    from agent_actions.prompt.cache_scope import REQUEST_VARIES_PER_RECORD_KEY
 
     model_vendor = agent_config.get("model_vendor")
     if not model_vendor:
         raise ValueError("agent_config missing required 'model_vendor' for judge LLM call")
 
-    # json_mode False: `_read_verdict` reads the model's own text, not a best-effort parse.
-    # The prompt holds this record's output, so it gets no prompt-cache mark.
-    effective_config = {**agent_config, "json_mode": False, REQUEST_VARIES_PER_RECORD_KEY: True}
-    if model is not None:
-        effective_config["model_name"] = model
+    effective_config = judge_request_config(agent_config, model)
     prompt = build_judge_prompt(rule, value, context)
 
     result = ClientInvocationService.invoke_client(
@@ -109,15 +133,7 @@ def invoke_judge(
     if not result:
         return False, "judge call returned an empty response"
 
-    payload = ResponseBuilder.unwrap(result, effective_config)
-    parsed = payload if isinstance(payload, dict) else _read_verdict(str(payload))
-    if parsed is None:
-        return False, f"judge response was not a verdict object: {str(payload)[:200]!r}"
-
-    if not isinstance(parsed.get("passed"), bool):
-        return False, f"judge response missing a boolean 'passed' key: {str(payload)[:200]!r}"
-
-    return parsed["passed"], str(parsed.get("reason", ""))
+    return verdict_from_reply(ResponseBuilder.unwrap(result, effective_config))
 
 
 def invoke_judge_with_votes(
@@ -151,6 +167,17 @@ def invoke_judge_with_votes(
         futures = [pool.submit(contextvars.copy_context().run, one_vote, i) for i in range(votes)]
         results = [future.result() for future in futures]
 
+    return tally_votes(results)
+
+
+def tally_votes(results: list[tuple[bool, str]]) -> tuple[bool, str]:
+    """The verdict of independent votes on one value: a strict majority passes.
+
+    A single vote is its own verdict.
+    """
+    if len(results) == 1:
+        return results[0]
+    votes = len(results)
     passed_count = sum(1 for passed, _ in results if passed)
     majority = passed_count * 2 > votes
     if majority:
@@ -165,7 +192,10 @@ def _content_hash(value: Any) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
-def cache_key(expectation: Expectation, value: Any) -> tuple[str, str, str, str | None]:
+CacheKey = tuple[str, str, str, str | None]
+
+
+def cache_key(expectation: Expectation, value: Any) -> CacheKey:
     """The `(id, definition hash, field content hash, model)` verdict-cache key."""
     return (
         expectation.resolved_id,
@@ -175,24 +205,77 @@ def cache_key(expectation: Expectation, value: Any) -> tuple[str, str, str, str 
     )
 
 
+def verdict_key(key: CacheKey) -> str:
+    """A cache key as text, the form a batch run persists a verdict under between passes."""
+    return json.dumps(list(key))
+
+
+@dataclass(frozen=True)
+class JudgeRequest:
+    """A judge call held back to go out in a batch instead of online."""
+
+    expectation: Expectation
+    value: Any
+    context: dict[str, Any] | None
+
+    @property
+    def prompt(self) -> str:
+        return build_judge_prompt(self.expectation.params["rule"], self.value, self.context)
+
+    @property
+    def votes(self) -> int:
+        return max(int(self.expectation.params.get("votes", 1)), 1)
+
+    @property
+    def model(self) -> str | None:
+        return self.expectation.params.get("model")
+
+
+# What a held-back call answers until its batch returns; the pass that sees it defers.
+_AWAITING_BATCH = (False, "awaiting the judge batch")
+
+
 class CachedJudge:
     """Caches judge verdicts for one action across every record it processes.
 
     `lookup` and `call_and_cache` are separate on purpose — the budget check
     (a later task) has to run between a cache miss and the LLM call that follows it.
+
+    A batch run seeds the cache with the verdicts its judge batches returned. With
+    ``collect``, a miss is held in ``pending`` instead of being sent online, and a
+    second miss on the same key reads as a hit, as it would once cached.
     """
 
-    def __init__(self, agent_config: dict[str, Any], action_name: str = "unknown") -> None:
+    def __init__(
+        self,
+        agent_config: dict[str, Any],
+        action_name: str = "unknown",
+        *,
+        verdicts: dict[str, Any] | None = None,
+        collect: bool = False,
+    ) -> None:
         self._agent_config = agent_config
         self._action_name = action_name
-        self._cache: dict[tuple[str, str, str, str | None], tuple[bool, str]] = {}
+        self._cache: dict[CacheKey, tuple[bool, str]] = {
+            tuple(json.loads(key)): (bool(verdict[0]), str(verdict[1]))
+            for key, verdict in (verdicts or {}).items()
+        }
+        self._collect = collect
+        self.pending: dict[str, JudgeRequest] = {}
 
     def lookup(self, expectation: Expectation, value: Any) -> tuple[bool, str] | None:
-        return self._cache.get(cache_key(expectation, value))
+        key = cache_key(expectation, value)
+        if verdict_key(key) in self.pending:
+            return _AWAITING_BATCH
+        return self._cache.get(key)
 
     def call_and_cache(
         self, expectation: Expectation, value: Any, context: dict[str, Any] | None = None
     ) -> tuple[bool, str]:
+        if self._collect:
+            request = JudgeRequest(expectation, value, context)
+            self.pending[verdict_key(cache_key(expectation, value))] = request
+            return _AWAITING_BATCH
         params = expectation.params
         verdict = invoke_judge_with_votes(
             self._agent_config,

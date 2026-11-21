@@ -515,6 +515,11 @@ class ExpectConfig(BaseModel):
         description="Max real judge LLM calls this action's suite may make across the run; "
         "None is uncapped",
     )
+    judge_mode: Literal["batch", "online"] | None = Field(
+        default=None,
+        description="How llm_judge calls are sent: batch (as batches of their own) or online; "
+        "omitted, as the action runs. batch needs run_mode: batch",
+    )
 
     @field_validator("repair", "structural")
     @classmethod
