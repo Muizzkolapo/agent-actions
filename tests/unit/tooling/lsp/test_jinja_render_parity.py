@@ -1641,3 +1641,95 @@ def test_a_value_that_reads_a_version_variable_shows_its_written_text(
         assert judge.guard_condition == "up.score > {{ i }}"
     else:
         assert judge.output_field == "out_{{ i }}"
+
+
+def _second_workflow(tmp_path: Path, workflow: str) -> Path:
+    config = tmp_path / "agent_workflow" / "wf2" / "agent_config"
+    config.mkdir(parents=True)
+    wf = config / "wf2.yml"
+    wf.write_text(textwrap.dedent(workflow))
+    return wf
+
+
+_BROKEN_TEMPLATES = {"bad.jinja2": "{% macro m( %}\n{% endmacro %}\n"}
+
+
+def test_a_workflow_with_no_tag_is_read_as_yaml_when_the_templates_do_not_load(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+          - name: b
+            kind: tool
+            dependencies: [a, missing]
+        """,
+        _BROKEN_TEMPLATES,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert wf not in idx.parse_errors
+    assert set(idx.file_actions[wf]) == {"a", "b"}
+    assert idx.file_actions[wf]["b"].location.line == 4
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+@pytest.mark.parametrize(
+    "tag_line",
+    [
+        pytest.param("description: {{ 'x' }}", id="expression"),
+        pytest.param("{% set k = 'x' %}", id="statement"),
+        pytest.param("{# a note #}", id="comment"),
+    ],
+)
+def test_a_workflow_with_a_tag_does_not_render_when_the_templates_do_not_load(tmp_path, tag_line):
+    _project(tmp_path, "name: wf\nactions:\n  - name: a\n    kind: tool\n", _BROKEN_TEMPLATES)
+    wf = _second_workflow(tmp_path, f"{tag_line}\nactions:\n  - name: c\n    kind: tool\n")
+
+    idx = build_index(tmp_path)
+
+    assert wf in idx.parse_errors
+    assert idx.file_actions[wf] == {}
+    messages = _messages(wf, tmp_path)
+    assert len(messages) == 1
+    assert messages[0].startswith("Workflow does not render: ")
+
+
+def test_the_editor_reads_the_actions_that_agac_loads(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% from 'steps.jinja2' import step %}
+        {% set fast = true %}
+        {% set kind = 'tool' %}
+        name: wf
+        actions:
+          {{ step('extract') | indent(2) }}
+        {% if fast %}
+          - name: summarize
+            kind: {{ kind }}
+            dependencies: [extract]
+        {% else %}
+          - name: slow
+            kind: tool
+        {% endif %}
+          - name: publish
+            kind: tool
+            dependencies: [summarize]
+        """,
+        {"steps.jinja2": "{% macro step(n) %}\n- name: {{ n }}\n  kind: tool\n{% endmacro %}\n"},
+    )
+
+    rendered = render_workflow_source(wf, tmp_path)
+    loaded = yaml.safe_load(
+        render_pipeline_with_templates(
+            wf, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+        )
+    )
+
+    names = [action["name"] for action in rendered.data["actions"]]
+    assert names == [action["name"] for action in loaded["actions"]]
+    assert names == ["extract", "summarize", "publish"]
