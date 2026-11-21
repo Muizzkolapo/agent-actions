@@ -146,6 +146,23 @@ def test_an_unknown_stored_status_stops_the_command_as_a_corrupted_file_does(
     assert f"Action 'a' has an unknown status: {stored!r}" in result.stderr
 
 
+@pytest.mark.parametrize("as_json", [True, False], ids=["json", "table"])
+@pytest.mark.parametrize(
+    "entry", ["completed", None, ["completed"], 3], ids=["a string", "null", "a list", "a number"]
+)
+def test_an_action_entry_that_is_not_an_object_stops_the_command_as_a_corrupted_file_does(
+    project, as_json, entry
+):
+    _store(project, {"a": {"status": None}, "b": entry})
+
+    result = CliRunner().invoke(cli, ["status", "-w", WORKFLOW, *(["--json"] if as_json else [])])
+
+    assert result.exit_code == 1, result.output
+    assert result.stdout == ""
+    assert "Status file is corrupted:" in result.stderr
+    assert f"Action 'b' is not an object: {entry!r}" in result.stderr
+
+
 def test_an_action_with_no_stored_status_is_not_refused(project):
     _store(project, {"extract": {"status": "completed"}, "summarize": {}})
 

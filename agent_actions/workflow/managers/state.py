@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from agent_actions.errors import FileLoadError
 from agent_actions.utils.atomic_write import atomic_json_write
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,15 @@ class ActionStateManager:
                 self._initialize_default_status()
         else:
             self._initialize_default_status()
+
+    def refuse_an_entry_that_is_not_an_object(self) -> None:
+        """Raise if a hand-edited status file holds an action entry that is not an object."""
+        for name, details in self.action_status.items():
+            if not isinstance(details, dict):
+                raise FileLoadError(
+                    f"Status file is corrupted: {self.status_file}\n"
+                    f"Action '{name}' is not an object: {details!r}"
+                )
 
     def reset(self) -> None:
         """Reset all actions to 'pending' status and persist."""
