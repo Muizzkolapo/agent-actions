@@ -101,7 +101,35 @@ def process_recovery_batch(
             or state.side_attempts.get(entry.side_kind or "", 0) != entry.recovery_attempt
         )
     )
-    if not state or side_state_lost:
+    if side_state_lost:
+        assert state is not None
+        kind = entry.side_kind or ""
+        logger.warning(
+            "%s batch %s for %s was sent by a run that stopped before it saved the "
+            "state of the file. Its replies cannot be read, and the provider has billed "
+            "it. Dropping it so %s is processed again from its main batch",
+            kind.capitalize() or "Side",
+            entry.batch_id,
+            parent_file_name,
+            parent_file_name,
+        )
+        if entry.recovery_attempt:
+            state.side_attempts[kind] = entry.recovery_attempt
+        state.side_kind = None
+        state.side_requests = {}
+        state.side_waiting = []
+        state.side_resumes = None
+        RecoveryStateManager.save(
+            service._storage_backend,  # type: ignore[arg-type]
+            effective_action_name,  # type: ignore[arg-type]
+            parent_file_name,
+            state,
+        )
+        manager.remove_batch_job(file_name)
+        if entry.batch_id:
+            release_local_batch_record(entry.batch_id)
+        return None
+    if not state:
         # Without state this entry can never be interpreted, and while it exists
         # it supersedes its parent — so leaving it registered wedges the action
         # on the same error every run. Dropping it hands the parent back to the
