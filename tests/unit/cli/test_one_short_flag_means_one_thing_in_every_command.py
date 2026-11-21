@@ -196,3 +196,19 @@ def test_an_action_given_both_ways_is_refused(project):
 
     assert result.exit_code == 2
     assert "-a" in result.stderr and "-A" in result.stderr
+
+
+def test_the_warning_is_printed_before_an_error_in_an_option_typed_earlier(project):
+    """Only an eager -a is processed before the bad -n that comes first on the line."""
+    result = _run("preview", "-w", WORKFLOW, "-n", "abc", "-a", ACTION)
+
+    assert result.exit_code == 2
+    assert "-a is deprecated" in result.stderr
+    assert result.stderr.index("-a is deprecated") < result.stderr.index("Invalid value")
+
+
+def test_the_warning_is_printed_with_help(project):
+    result = _run("traces", "-a", ACTION, "--help")
+
+    assert result.exit_code == 0
+    assert "-a is deprecated" in result.stderr
