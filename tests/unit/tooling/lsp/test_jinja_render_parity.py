@@ -1599,3 +1599,45 @@ def test_raw_text_with_braces_sets_no_prompt_schema_or_seed_value(tmp_path):
     assert meta.prompt_ref != "wf.p"
     assert meta.schema_ref != "verdict"
     assert _ref_pairs(wf, tmp_path) == {("tool", "tool_c")}
+
+
+_VERSIONED = """\
+actions:
+  - name: up
+    kind: tool
+    prompt: "Say {{ source.text }}"
+  - name: judge
+    kind: tool
+    dependencies: [up]
+    versions: {param: i, range: [1, 3]}
+"""
+
+
+@pytest.mark.parametrize(
+    "line, key, expected",
+    [
+        pytest.param(
+            "guard: {condition: 'up.score > {{ i }}'}",
+            "guard",
+            {"condition": "up.score > {{ i }}"},
+            id="guard",
+        ),
+        pytest.param(
+            'output_field: "out_{{ i }}"', "output_field", "out_{{ i }}", id="output-field"
+        ),
+    ],
+)
+def test_a_value_that_reads_a_version_variable_shows_its_written_text(
+    tmp_path, line, key, expected
+):
+    wf = _project(tmp_path, f"{_VERSIONED}    {line}\n")
+
+    rendered = render_workflow_source(wf, tmp_path)
+
+    assert rendered.data["actions"][1][key] == expected
+    assert not [c for c in repr(rendered.data) if "" <= c <= ""]
+    judge = build_index(tmp_path).file_actions[wf]["judge"]
+    if key == "guard":
+        assert judge.guard_condition == "up.score > {{ i }}"
+    else:
+        assert judge.output_field == "out_{{ i }}"
