@@ -27,7 +27,9 @@ from agent_actions.llm.providers.error_wrapper import (
     NoAnswer,
     VendorErrorMapping,
     empty_response_error,
+    is_stopped_by_provider,
     is_truncated,
+    stopped_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -327,6 +329,10 @@ class AnthropicClient(BaseClient):
         # Offered the tool, a model can answer in text instead, often in a ```json fence.
         # A finished answer is read like every other client's; a cut-off one could only be
         # read by guessing its end.
+        if text and is_stopped_by_provider(stop_reason):
+            parse_error = stopped_parse_error(stop_reason)
+            logger.warning("Anthropic model=%s: %s", model_name, parse_error)
+            return [{"raw_response": text, "_parse_error": parse_error}]
         if text and not is_truncated(stop_reason):
             answer = json_answer_in(text)
             if answer is not None:

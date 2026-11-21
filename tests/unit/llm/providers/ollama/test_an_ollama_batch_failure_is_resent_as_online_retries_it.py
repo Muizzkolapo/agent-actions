@@ -7,6 +7,7 @@ was spent, where online fails it at its first attempt.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -79,3 +80,33 @@ def test_a_model_that_is_not_pulled_is_failed_at_once_with_its_status():
 @pytest.mark.parametrize("case", ["rate limited", "server error", "connection refused"])
 def test_a_transient_failure_is_still_resent(case):
     assert BatchResultReconciler.is_retriable(_batch(FAILURES[case])) is True
+
+
+@pytest.mark.parametrize("case", ["not a request failure", "connection refused", "bad request"])
+def test_the_stored_error_text_holds_no_retry_flag(case):
+    failure = FAILURES[case]
+    status = 400 if case == "bad request" else None
+
+    assert _batch(failure).error == str(
+        {
+            "message": str(failure),
+            "type": "ollama_local_error",
+            "code": "inference_error",
+            "status": status,
+        }
+    )
+
+
+@pytest.mark.parametrize("case", sorted(FAILURES))
+def test_the_retry_decision_survives_a_round_trip_through_the_results_file(case):
+    client = OllamaBatchClient(base_url="http://localhost:11434")
+    client.client = MagicMock()
+    client.client.chat.side_effect = FAILURES[case]
+    (task,) = client.prepare_tasks(
+        [{"target_id": "r1", "content": {"t": "x"}, "prompt": "p"}], CONFIG
+    )
+    line = json.loads(json.dumps(client._process_single_task(task, 0, 1)))
+
+    result = client.parse_provider_response(line)
+
+    assert BatchResultReconciler.is_retriable(result) is is_retriable_error(_online(FAILURES[case]))

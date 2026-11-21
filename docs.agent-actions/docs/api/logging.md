@@ -557,6 +557,7 @@ fire_event(ActionCompleteEvent(
 - `mode` (str): `"online"` or `"batch"`
 - `model_vendor` / `model_name` (str): The model that ran the action. Empty for a tool action or a HITL action
 - `kind` (str): `"llm"`, `"tool"`, `"hitl"`, … — consumers use it to decide if a model is meaningful
+- `cases` (Dict[str, int] | None): For a built-in router, the number of records of each case in this execution, in the order of the cases of the router, `default` last. None for every other action. The completion line ends with these counts, for example `— a 2, b 3, default 1`.
 
 ---
 

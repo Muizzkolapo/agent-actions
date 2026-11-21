@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping
+from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, meta, nodes
 
@@ -40,10 +41,19 @@ def with_alias_header(prompt: str, names: Mapping[str, str]) -> str:
     return header + ('{{ "" }}' if prompt.startswith(("\n", "\r")) else "") + prompt
 
 
-def prompt_aliases(ast: nodes.Template) -> dict[str, str]:
-    """Each name a top-level ``{% set a = b %}`` binds to the bare name ``b``, mapped to ``b``.
+def header_names(action: Any) -> dict[str, str]:
+    """The names the alias header of *action* may bind: the map of its ``as:`` include."""
+    origin = action.get("_include") if isinstance(action, Mapping) else None
+    names = origin.get("names") if isinstance(origin, Mapping) else None
+    return dict(names) if isinstance(names, Mapping) else {}
 
-    A name set more than once at the top level is left out, as it means different things.
+
+def prompt_aliases(ast: nodes.Template, names: Mapping[str, str]) -> dict[str, str]:
+    """Each name a top-level ``{% set a = b %}`` of the alias header binds, mapped to ``b``.
+
+    Only a tag that *names* (the action's ``as:`` map) agrees with is followed, so a
+    ``{% set %}`` the prompt writes itself is read as before. A name set more than once at
+    the top level is left out, as it means different things.
     """
     aliases: dict[str, str] = {}
     assigned: Counter[str] = Counter()
@@ -56,4 +66,8 @@ def prompt_aliases(ast: nodes.Template) -> dict[str, str]:
         if isinstance(node, nodes.Assign) and isinstance(target, nodes.Name):
             if isinstance(node.node, nodes.Name):
                 aliases[target.name] = node.node.name
-    return {name: value for name, value in aliases.items() if assigned[name] == 1}
+    return {
+        name: value
+        for name, value in aliases.items()
+        if assigned[name] == 1 and names.get(name) == value
+    }

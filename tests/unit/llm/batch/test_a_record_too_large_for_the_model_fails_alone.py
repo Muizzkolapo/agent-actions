@@ -86,22 +86,52 @@ def test_the_record_fails_with_the_error_online_raises_for_it(tmp_path):
     )
 
 
-def test_a_judge_request_too_large_for_the_model_is_raised_not_dropped(tmp_path):
+@pytest.mark.parametrize("kind", ["judge", "probe"])
+def test_a_side_request_too_large_for_the_model_fails_its_call_and_the_rest_go_out(kind, tmp_path):
     client = OpenAIBatchClient(api_key="k")
     client.submit_batch = MagicMock(return_value=("b1", "submitted"))
     # A judge call is a text call, measured against the default window of 128,000 tokens.
-    call = SideCall(kind="judge", key="key", prompt="x" * 600_000)
+    large = SideCall(kind=kind, key="large", prompt="x" * 600_000)
+    small = SideCall(kind=kind, key="small", prompt="Is it on topic?")
 
-    with pytest.raises(PromptTooLargeError, match="exceeds model context window"):
-        submit_side_batch(
-            client,
-            call.kind,
-            {call.key: call},
-            CONFIG,
-            file_name="f",
-            attempt=1,
-            output_directory=str(tmp_path),
-        )
+    submission = submit_side_batch(
+        client,
+        kind,
+        {"large": large, "small": small},
+        CONFIG,
+        file_name="f",
+        attempt=1,
+        output_directory=str(tmp_path),
+    )
+
+    (error,) = submission.unsent.values()
+    assert list(submission.unsent) == ["large"]
+    assert error.startswith("Estimated prompt size")
+    assert "exceeds model context window (128000 tokens)" in error
+    assert set(submission.requests.values()) == {"small"}
+    assert set(submission.sent) == {"large", "small"}
+    (sent,) = client.submit_batch.call_args.kwargs["tasks"]
+    assert "Is it on topic?" in str(sent["body"]["messages"])
+
+
+def test_a_side_batch_where_no_request_fits_is_not_submitted(tmp_path):
+    client = OpenAIBatchClient(api_key="k")
+    client.submit_batch = MagicMock(return_value=("b1", "submitted"))
+    call = SideCall(kind="judge", key="large", prompt="x" * 600_000)
+
+    submission = submit_side_batch(
+        client,
+        "judge",
+        {"large": call},
+        CONFIG,
+        file_name="f",
+        attempt=1,
+        output_directory=str(tmp_path),
+    )
+
+    assert submission.batch_id is None
+    assert submission.requests == {}
+    assert list(submission.unsent) == ["large"]
     client.submit_batch.assert_not_called()
 
 

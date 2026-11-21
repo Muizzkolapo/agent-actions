@@ -359,9 +359,9 @@ class TestTheAsEntryIsRefused:
         message = _refusal(tmp_path, [A, include], {"round": _round()})
 
         assert message == (
-            f"Include 'c2' in {WF}: remove names 'write' of branch 'round' (branches/round.yml), "
-            "but 'c2__review' still reads it. Remove the readers too, or override them so that "
-            "they do not read it."
+            f"Include 'round' as 'c2' in {WF}: remove names 'write' of branch 'round' "
+            "(branches/round.yml), but 'review' still reads it. Remove the readers too, or "
+            "override them so that they do not read it."
         )
 
 

@@ -119,6 +119,20 @@ class TestARefusal:
 
         assert batch_end("openai", body, json_mode=False) == End(error=REFUSED, resent=False)
 
+    @pytest.mark.parametrize("path", [online_end, batch_end], ids=["online", "batch"])
+    def test_cut_off_at_an_empty_string_in_json_mode_it_is_the_cut_off_parse_error(self, path):
+        body = chat_completion("", "length", refusal=REFUSAL)
+
+        assert path("openai", body, json_mode=True) == End(
+            stored=[
+                {
+                    "raw_response": "",
+                    "_parse_error": "The answer was cut off at the output limit "
+                    "(stop_reason=length); raise max_tokens",
+                }
+            ]
+        )
+
     def test_its_tokens_are_kept(self):
         """Online counts a refused call's tokens; a failed line reported none."""
         line = batch_line("openai", chat_completion(None, refusal=REFUSAL))
