@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests.integration import test_a_guard_never_judges_a_record_its_upstream_failed as upstream
 from tests.integration.test_a_guard_never_judges_a_record_its_upstream_failed import (
     FILE_TOOL_PUBLISH,
@@ -34,7 +35,7 @@ def _failed_alpha(tmp_path: Path, run_mode: str, publish: str):
     config = project.root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(re.sub(r"    guard: \{[^\n]*\}\n", "", config.read_text()))
     project.alpha_fails()
-    project.run_to_the_end("--fresh")
+    project.run_to_the_end("--fresh", ends_with=EXIT_RECORD_FAILURES)
     return project
 
 
@@ -73,7 +74,7 @@ def test_the_cause_is_gone_once_a_retry_answers_the_record(tmp_path, run_mode):
     alpha = project.alpha()
     project.alpha_fails(on=False)
 
-    project.retry_to_the_end()
+    project.retry_to_the_end(ends_with=EXIT_SUCCESS)
 
     for action in BELOW:
         assert project.dispositions(action)[alpha] == ("success", None), action
