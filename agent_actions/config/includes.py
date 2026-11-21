@@ -413,11 +413,10 @@ def _refuse_record_tools(
         local = origin["local_name"]
         where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
         raise ConfigurationError(
-            f"{where}: a tool that runs per record cannot be in an include with 'as:' yet. "
-            "Its function would get the record keyed by the final names, for example "
-            f"'{reader.prefix}__{local}', not by the short names of the branch. "
-            "Short names for the input of a tool arrive with the next change. Until then, "
-            "include the branch without 'as:', or set 'granularity: file' on the tool.",
+            f"{where}: a tool that runs per record cannot be in an include with 'as:'. "
+            "Its function would get the record keyed by the final names of the instance, "
+            "not by the short names of the branch. Include the branch without 'as:', or set "
+            "'granularity: file' on the tool.",
             context=_context(reader, action_name=local),
         )
 
@@ -448,10 +447,14 @@ def _refuse_unknown_short_name(
     local = action[_ORIGIN_KEY]["local_name"]
     where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
     if name in reader.names:
+        why = (
+            "A default outside the include does not take the short names of an include with 'as:'."
+            if via
+            else "In an include with 'as:', a prompt cannot read a short name yet."
+        )
         raise ConfigurationError(
-            f"{where}: reads '{name}'{via}, a short name of the branch. In an include with "
-            "'as:', a prompt cannot read a short name yet. Write the final name "
-            f"'{reader.names[name]}'.",
+            f"{where}: reads '{name}'{via}, a short name of the branch. {why} Write the final "
+            f"name '{reader.names[name]}'.",
             context=_context(reader, action_name=local),
         )
     actions = [branch_action["name"] for branch_action in reader.actions]
@@ -666,12 +669,6 @@ def _checked_action(branch: str, workflow_file: str, index: int, action: Any) ->
             f"{named}: the name {reason} {_NAME_RULE}",
             context={"action_name": name},
         )
-    if name.strip().lower() in RESERVED_AGENT_NAMES:
-        named = _branch_where(branch, workflow_file, f"'{name}'")
-        raise ConfigurationError(
-            f"{named}: Reserved action name '{name}' cannot be used",
-            context={"action_name": name, "reserved_names": sorted(RESERVED_AGENT_NAMES)},
-        )
     prompt = action.get("prompt")
     if isinstance(prompt, str) and not prompt.strip().startswith("$"):
         raise ConfigurationError(
@@ -749,6 +746,16 @@ def _inclusion(
     if name not in parsed:
         parsed[name] = parse_branch(name, branches[name], workflow_file)
     branch = parsed[name]
+    for action in branch.actions:
+        if action["name"].strip().lower() in RESERVED_AGENT_NAMES:
+            named = _branch_where(branch.name, workflow_file, f"'{action['name']}'", prefix)
+            raise ConfigurationError(
+                f"{named}: Reserved action name '{action['name']}' cannot be used",
+                context={
+                    "action_name": action["name"],
+                    "reserved_names": sorted(RESERVED_AGENT_NAMES),
+                },
+            )
     bindings = entry.get("inputs") or {}
     if not isinstance(bindings, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in bindings.items()
@@ -1163,7 +1170,7 @@ def _bound(inclusion: Inclusion, suffixes: Mapping[str, list[str]]) -> Inclusion
     return replace(inclusion, names=names, actions=tuple(actions), defaults=defaults)
 
 
-class _LookedUp(dict):  # type: ignore[type-arg]
+class _LookedUp(dict[str, str]):
     """A name map that keeps each name looked up in it and not found."""
 
     def __init__(self, names: Mapping[str, str]) -> None:

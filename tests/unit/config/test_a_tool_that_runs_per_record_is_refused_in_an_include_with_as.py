@@ -28,11 +28,9 @@ def test_a_record_tool_in_an_as_include_is_refused_with_the_reason(tmp_path):
 
     assert message == (
         f"Branch 'round' (branches/round.yml), included in {WF} as 'c', action 'write': "
-        "a tool that runs per record cannot be in an include with 'as:' yet. Its function "
-        "would get the record keyed by the final names, for example 'c__write', not by the "
-        "short names of the branch. Short names for the input of a tool arrive with the next "
-        "change. Until then, include the branch without 'as:', or set 'granularity: file' on "
-        "the tool."
+        "a tool that runs per record cannot be in an include with 'as:'. Its function would "
+        "get the record keyed by the final names of the instance, not by the short names of "
+        "the branch. Include the branch without 'as:', or set 'granularity: file' on the tool."
     )
 
 

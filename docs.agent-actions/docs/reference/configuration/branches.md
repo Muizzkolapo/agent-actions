@@ -83,8 +83,8 @@ Without `as:`, an input must be bound to an action of the same name, because the
 The load checks each read after it expands the includes:
 
 - An action of the workflow reads only the `outputs` of a branch.
-- A branch action reads only the actions of its include and the actions that its inputs bind. It can also read the framework namespaces: `source`, `seed`, `version`, `workflow`, `prompt`, `schema` and `action`.
-- Inside an include with `as:`, a branch action reads a bound action only through its input. A read of the bound action by its workflow name is refused.
+- A branch action reads only the actions of its include and the actions that its inputs bind. It can also read the framework namespaces `source`, `seed`, `version` and `workflow`. The include check does not refuse a read of `prompt`, `schema` or `action`, but pre-flight refuses it.
+- Inside an include with `as:`, a branch action reads a bound action only through its input. The load refuses a read of the bound action by its workflow name.
 
 A dependency, a `context_scope` entry, a guard clause, a prompt, the source of `version_consumption` and the `context` of an `llm_judge` rule are reads. A read that the action inherits from `defaults:` is also a read.
 
@@ -174,7 +174,7 @@ An input bound to an action of another instance must name an output of that bran
 | Two includes have the same instance name. An include without `as:` has the branch name as its instance name. | `Workflow 'quiz' (agent_config/quiz.yml) includes branch 'question_round' (branches/question_round.yml) twice with the instance name 'c'. Give each include its own instance name with 'as:'.` |
 | A branch action reads a short name that the branch does not define and that no input binds. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c2', action 'review': reads 'draft', which the branch does not define and no input of include 'c2' binds. Branch actions: write, review. Inputs: spec.` |
 | A short name of the branch is also the name of an action of the workflow. An input bound to the action of its own name is permitted. | `Include 'question_round' as 'c2' in agent_config/quiz.yml: the short name 'write' of branch 'question_round' (branches/question_round.yml) is also an action of workflow 'quiz'. Inside the include it means 'c2__write', so the branch could not tell the two apart. Rename one of them.` |
-| A tool of the branch runs per record. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c', action 'write': a tool that runs per record cannot be in an include with 'as:' yet. ...` |
+| A tool of the branch runs per record. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c', action 'write': a tool that runs per record cannot be in an include with 'as:'. ...` |
 
 One branch cannot have an include without `as:` and an include with `as:` in the same workflow. The load refuses this with the message for a short name that is also a workflow action.
 
