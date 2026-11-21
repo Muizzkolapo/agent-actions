@@ -186,17 +186,33 @@ def _prepare_batch_context(
 
 
 def _action_config(ctx: _BatchContext) -> dict[str, Any] | None:
-    """The action's config as `agac run` builds it, or None when the workflow has no such action."""
+    """The action's config as `agac run` builds it, or None when it cannot be had.
+
+    The batch is already paid for, so a workflow that does not load, or that has no such
+    action, does not stop the command: it warns that the file holds the raw answers.
+    """
     from agent_actions.cli.workflow_loader import load_workflow
     from agent_actions.config.project_paths import ProjectPathsFactory
+    from agent_actions.errors.base import AgentActionsError
 
-    paths = ProjectPathsFactory.create_project_paths(
-        ctx.workflow_name, ctx.workflow_name, auto_create=False, project_root=ctx.project_root
-    )
-    workflow = load_workflow(
-        ctx.workflow_name, paths, ctx.project_root, sends_requests=False, read_only=True
-    )
-    return workflow.action_configs.get(ctx.action_name)
+    raw = "The results file holds the raw answers of the provider, not the stored records."
+    try:
+        paths = ProjectPathsFactory.create_project_paths(
+            ctx.workflow_name, ctx.workflow_name, auto_create=False, project_root=ctx.project_root
+        )
+        workflow = load_workflow(
+            ctx.workflow_name, paths, ctx.project_root, sends_requests=False, read_only=True
+        )
+    except (AgentActionsError, OSError) as e:
+        click.echo(f"Warning: workflow '{ctx.workflow_name}' did not load ({e}). {raw}", err=True)
+        return None
+    config = workflow.action_configs.get(ctx.action_name)
+    if config is None:
+        click.echo(
+            f"Warning: workflow '{ctx.workflow_name}' has no action '{ctx.action_name}'. {raw}",
+            err=True,
+        )
+    return config
 
 
 def _workflow_action_options(f):
