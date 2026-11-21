@@ -19,6 +19,7 @@ from agent_actions.llm.providers.local_batch_records import (
     discard_partial_batch_records,
     release_local_batch_record,
 )
+from agent_actions.llm.providers.usage_tracker import forget_usage
 from agent_actions.logging.core.handlers.json_file import RUN_LOG_NAMES
 from agent_actions.logging.core.manager import get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
@@ -224,6 +225,12 @@ class AgentWorkflow:
             self.storage_backend.clear_source_data()
         except Exception as e:
             logger.warning("Failed to clear source data: %s", e)
+
+        # What the cleared results cost goes with them; artefact/runs.json keeps each run's.
+        try:
+            forget_usage(self.storage_backend)
+        except Exception as e:
+            logger.warning("Failed to clear the stored token usage: %s", e)
 
         self.services.core.state_manager.reset()
 

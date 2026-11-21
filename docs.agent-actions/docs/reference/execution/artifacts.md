@@ -297,7 +297,7 @@ This file is a summary of the workflow execution, with the metrics of each actio
       "execution_time": 4.2,
       "output_folder": "/path/to/agent_workflow/product_pipeline/agent_io/target/extract_data",
       "record_count": 10,
-      "tokens": {"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500},
+      "tokens": {"input_tokens": 1000, "output_tokens": 500, "total_tokens": 1500},
       "error_message": null,
       "skip_reason": null,
       "empty_output_records": 0,
@@ -308,7 +308,7 @@ This file is a summary of the workflow execution, with the metrics of each actio
     }
   ],
   "elapsed_time": 12.5,
-  "tokens": {"prompt_tokens": 3000, "completion_tokens": 1500, "total_tokens": 4500}
+  "tokens": {"input_tokens": 3000, "output_tokens": 1500, "total_tokens": 4500}
 }
 ```
 
@@ -343,7 +343,14 @@ An action that has a guard also carries a `guard_stats` object. The object holds
       "successful_actions": 5,
       "failed_actions": 0,
       "skipped_actions": 0,
-      "total_tokens": 0,
+      "total_tokens": 9360,
+      "usage": {
+        "calls": 12,
+        "input_tokens": 1560,
+        "output_tokens": 1800,
+        "cache_read_input_tokens": 6000,
+        "cache_creation_input_tokens": 0
+      },
       "error_message": null,
       "actions": {
         "extract_data": {
@@ -353,6 +360,45 @@ An action that has a guard also carries a `guard_stats` object. The object holds
           "duration_seconds": 74.0,
           "type": "tool",
           "impl": "extract_data"
+        },
+        "summarize": {
+          "status": "success",
+          "started_at": "2026-03-24T10:01:15+00:00",
+          "ended_at": "2026-03-24T10:02:29+00:00",
+          "duration_seconds": 74.0,
+          "type": "llm",
+          "vendor": "anthropic",
+          "model": "claude-haiku-5-5",
+          "tokens": {"input_tokens": 7560, "output_tokens": 1800, "total_tokens": 9360},
+          "usage": {
+            "calls": 12,
+            "input_tokens": 1560,
+            "output_tokens": 1800,
+            "cache_read_input_tokens": 6000,
+            "cache_creation_input_tokens": 0,
+            "by_kind": [
+              {
+                "kind": "main",
+                "batch": false,
+                "model": "claude-haiku-5-5",
+                "calls": 2,
+                "input_tokens": 360,
+                "output_tokens": 800,
+                "cache_read_input_tokens": 6000,
+                "cache_creation_input_tokens": 0
+              },
+              {
+                "kind": "judge",
+                "batch": false,
+                "model": "claude-haiku-5-5",
+                "calls": 10,
+                "input_tokens": 1200,
+                "output_tokens": 1000,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            ]
+          }
         }
       }
     }
@@ -362,13 +408,17 @@ An action that has a guard also carries a `guard_stats` object. The object holds
       "total_runs": 8,
       "successful_runs": 7,
       "failed_runs": 1,
-      "total_tokens": 0,
+      "total_tokens": 74880,
       "success_rate": 0.875,
       "avg_duration_seconds": 142.3
     }
   }
 }
 ```
+
+An action that made model calls in the run has a `usage` object. The object holds the number of `calls` and the four token counts of all the calls. `by_kind` has one entry for each kind of call (`main`, `repair`, `judge`), pricing and model. `batch` is `true` for a call that a provider batch answered. `input_tokens` in `usage` does not include the cached tokens. The `usage` of the execution is the sum over its actions. `tokens` and `total_tokens` keep their meaning. `tokens.input_tokens` is the full prompt, cached or not. `total_tokens` is the prompt and the output of all the actions.
+
+A run that only submits a batch reads no result, so it has no usage for that action. The run that reads the batch holds its usage. [`agac usage`](../cli/usage) adds the runs.
 
 The file keeps the 100 most recent executions. When new runs occur, the framework removes the oldest entries. The authoritative summary of each run is still `agent_io/logs/run_results.json`. That file holds the full data of each action for the one run that made it.
 

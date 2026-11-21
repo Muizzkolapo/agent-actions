@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -66,8 +66,7 @@ class TestParallelCorrelationIsolation:
             start_time=datetime.now(),
         )
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            executor._execute_action_run(params)
+        executor._execute_action_run(params)
 
         mock_deps.action_runner.run_action.assert_called_once_with(
             params.action_config,
@@ -102,9 +101,8 @@ class TestParallelCorrelationIsolation:
             start_time=datetime.now(),
         )
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            executor._execute_action_run(consumer_params)
-            executor._execute_action_run(non_consumer_params)
+        executor._execute_action_run(consumer_params)
+        executor._execute_action_run(non_consumer_params)
 
         calls = mock_deps.action_runner.run_action.call_args_list
         assert calls[0].kwargs["correlated_input"] == _MERGED
@@ -136,11 +134,10 @@ class TestParallelCorrelationIsolation:
             start_time=datetime.now(),
         )
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            await asyncio.gather(
-                executor._execute_action_run_async(consumer_params),
-                executor._execute_action_run_async(non_consumer_params),
-            )
+        await asyncio.gather(
+            executor._execute_action_run_async(consumer_params),
+            executor._execute_action_run_async(non_consumer_params),
+        )
 
         calls = mock_deps.action_runner.run_action.call_args_list
         overrides = [c.kwargs["correlated_input"] for c in calls]

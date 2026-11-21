@@ -68,6 +68,7 @@ const sidebars: SidebarsConfig = {
             'reference/cli/tools',
             'reference/cli/schema',
             'reference/cli/expect',
+            'reference/cli/usage',
             'reference/cli/skills',
             'reference/cli/troubleshooting',
           ],

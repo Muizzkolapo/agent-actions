@@ -162,7 +162,7 @@ class TestGeminiNonJsonResponseTextGuard:
     """response_temp.text=None doesn't propagate as None to the output."""
 
     # Patch targets:
-    # - set_last_usage and fire_event (LLMResponseEvent) now live in response_builder
+    # - record_usage and fire_event (LLMResponseEvent) are called from response_builder
     # - fire_event (LLMRequestEvent/LLMErrorEvent) still in gemini.client
     _RB = "agent_actions.output.response.response_builder"
     _GC = "agent_actions.llm.providers.gemini.client"
@@ -187,7 +187,7 @@ class TestGeminiNonJsonResponseTextGuard:
                 return_value=mock_client,
             ),
             patch(f"{self._GC}.fire_event"),
-            patch(f"{self._RB}.set_last_usage"),
+            patch(f"{self._RB}.record_usage"),
             patch(f"{self._RB}.fire_event"),
         ):
             return GeminiClient.call_non_json(
@@ -221,7 +221,7 @@ class TestGeminiNonJsonResponseTextGuard:
                 return_value=mock_client,
             ),
             patch(f"{self._GC}.fire_event"),
-            patch(f"{self._RB}.set_last_usage"),
+            patch(f"{self._RB}.record_usage"),
             patch(f"{self._RB}.fire_event"),
         ):
             (record,) = GeminiClient.call_json(

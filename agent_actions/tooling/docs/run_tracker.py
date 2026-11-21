@@ -17,6 +17,7 @@ from agent_actions.config.path_config import resolve_project_root
 logger = logging.getLogger(__name__)
 
 from agent_actions.config.defaults import LockDefaults
+from agent_actions.llm.providers.usage_tracker import USAGE_FIELDS, totals
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 
@@ -83,7 +84,6 @@ class ActionCompleteConfig:
     action_name: str
     status: str
     duration_seconds: float
-    tokens: dict[str, int] | None = None
     files_processed: int = 0
     skip_reason: str | None = None
     error: str | None = None
@@ -247,6 +247,7 @@ class RunTracker:
                     "failed_actions": 0,
                     "skipped_actions": 0,
                     "total_tokens": 0,
+                    "usage": dict.fromkeys(USAGE_FIELDS, 0),
                     "error_message": None,
                     "actions": {},
                 }
@@ -351,12 +352,6 @@ class RunTracker:
         action_entry["ended_at"] = datetime.now(UTC).isoformat()
         action_entry["duration_seconds"] = config.duration_seconds
 
-        if config.tokens:
-            action_entry["tokens"] = config.tokens
-            current_total = run.get("total_tokens", 0)
-            token_total = config.tokens.get("total_tokens", 0)
-            run["total_tokens"] = current_total + token_total
-
         if config.files_processed > 0:
             action_entry["files_processed"] = config.files_processed
 
@@ -365,6 +360,49 @@ class RunTracker:
 
         if config.error:
             action_entry["error"] = config.error
+
+    @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
+    def record_action_usage(
+        self,
+        *,
+        run_id: str,
+        action_name: str,
+        usage: dict[str, Any],
+        tokens: dict[str, int] | None,
+    ) -> None:
+        """Set what the action's model calls used in the run, and the run's totals from every action's.
+
+        *usage* replaces what the run held for the action, so the caller passes the
+        action's whole sum each time. ``total_tokens`` and the run's ``usage`` are
+        recomputed from the actions rather than added to.
+        """
+        self.artefact_dir.mkdir(parents=True, exist_ok=True)
+        self.runs_file.touch(exist_ok=True)
+        with portalocker.Lock(
+            self.runs_file,
+            "r+",
+            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+        ) as f:
+            runs_data = self._load_or_repair(f, context=f"cannot record the usage of {action_name}")
+
+            for run in runs_data["executions"]:
+                if run["id"] != run_id or action_name not in run.get("actions", {}):
+                    continue
+                action_entry = run["actions"][action_name]
+                action_entry["usage"] = usage
+                if tokens:
+                    action_entry["tokens"] = tokens
+                entries = list(run["actions"].values())
+                run["usage"] = totals(entry.get("usage") or {} for entry in entries)
+                run["total_tokens"] = sum(
+                    (entry.get("tokens") or {}).get("total_tokens", 0) for entry in entries
+                )
+
+                f.seek(0)
+                f.truncate()
+                json.dump(runs_data, f, indent=2)
+                return
 
     def _update_workflow_counters(self, run: dict[str, Any], status: str) -> None:
         """Update workflow-level counters."""

@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from agent_actions.llm.providers.usage_tracker import counted_as
 from agent_actions.output.response.response_builder import ResponseBuilder
 
 
@@ -72,16 +73,18 @@ class OnlineSideCalls:
 
     def run(self, call: SideCall) -> SideReplies:
         """Raises whatever `ClientInvocationService.invoke_client` raises for any copy."""
-        if call.copies <= 1:
-            return SideReplies((self._one_copy(call),))
-        # Each copy runs in a copy of this context, so its model call is logged
-        # against the action that asked for it.
-        with ThreadPoolExecutor(max_workers=call.copies) as pool:
-            futures = [
-                pool.submit(contextvars.copy_context().run, self._one_copy, call)
-                for _ in range(call.copies)
-            ]
-            return SideReplies(tuple(future.result() for future in futures))
+        # The copies' usage is counted under the call's kind, not as the action's main call.
+        with counted_as(call.kind):
+            if call.copies <= 1:
+                return SideReplies((self._one_copy(call),))
+            # Each copy runs in a copy of this context, so its model call is logged
+            # against the action that asked for it.
+            with ThreadPoolExecutor(max_workers=call.copies) as pool:
+                futures = [
+                    pool.submit(contextvars.copy_context().run, self._one_copy, call)
+                    for _ in range(call.copies)
+                ]
+                return SideReplies(tuple(future.result() for future in futures))
 
     def _one_copy(self, call: SideCall) -> Any:
         from agent_actions.llm.realtime.services.invocation import ClientInvocationService

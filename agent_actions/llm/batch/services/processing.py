@@ -714,6 +714,7 @@ class BatchProcessingService:
             record_count=entry.record_count,
             file_name=file_name,
             agent_config=agent_config or {},
+            usage_kind=entry.usage_kind,
         )
 
         retry_config = (agent_config or {}).get("retry")

@@ -74,8 +74,7 @@ class TestExecuteActionRunReportsPerExecutionDelta:
         deps.action_runner.run_action.return_value = "/out"
         executor = ActionExecutor(deps)
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor._execute_action_run(_run_params())
+        result = executor._execute_action_run(_run_params())
 
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
