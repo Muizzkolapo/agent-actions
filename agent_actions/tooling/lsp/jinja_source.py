@@ -56,7 +56,8 @@ class RenderedWorkflow:
     with no Jinja tag. When the marks cannot be trusted, both are empty for a file with a
     Jinja tag, so nothing is read from its lines. `line_owners` maps a
     workflow-file line to the action whose text it became, or None when it became text of
-    no action or of more than one.
+    no action or of more than one. `line_paths` maps the same lines to the keys that hold
+    their text in the render (`-` for a list item), or None.
     """
 
     text: str
@@ -65,6 +66,7 @@ class RenderedWorkflow:
     action_lines: frozenset[int] | None = None
     live_lines: frozenset[int] | None = None
     line_owners: dict[int, str | None] | None = None
+    line_paths: dict[int, tuple[str, ...] | None] | None = None
 
 
 class _ActionNode(NamedTuple):
@@ -169,7 +171,7 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
     except ConfigurationError as e:
         raise WorkflowRenderError(f"{e} ({raw.strip()})", 0) from e
     text, _ = _render(LoadRender, source, yaml_file, project_root)
-    data, nodes = _parse(text, source)
+    data, nodes, rendered_paths = _parse(text, source)
     if source != raw:
         # The workflow is a prompt store entry; its lines are not the lines of this file.
         return RenderedWorkflow(text=text, data=data, action_sources={})
@@ -200,6 +202,7 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         action_lines=frozenset(action_lines),
         live_lines=live_lines,
         line_owners=_line_owners(nodes, written),
+        line_paths=_line_paths(rendered_paths, written),
     )
 
 
@@ -245,6 +248,40 @@ def _line_owners(nodes: list[_ActionNode], written: list[tuple[int, int]]) -> di
     return owners
 
 
+def _line_paths(
+    rendered_paths: dict[int, tuple[str, ...]], written: list[tuple[int, int]]
+) -> dict[int, tuple[str, ...] | None]:
+    """Each workflow line output as written, and the keys that hold its text in the render."""
+    paths: dict[int, tuple[str, ...] | None] = {}
+    for rendered_line, line in written:
+        path = rendered_paths.get(rendered_line)
+        paths[line] = path if paths.get(line, path) == path else None
+    return paths
+
+
+def _rendered_paths(root: Any) -> dict[int, tuple[str, ...]]:
+    """Each rendered line, and the innermost keys whose node holds it."""
+    paths: dict[int, tuple[str, ...]] = {}
+
+    def walk(node: Any, path: tuple[str, ...]) -> None:
+        if isinstance(node, yaml.MappingNode):
+            for key, value in node.value:
+                key_path = (*path, str(key.value) if isinstance(key, yaml.ScalarNode) else "?")
+                paths[key.start_mark.line] = key_path
+                walk(value, key_path)
+        elif isinstance(node, yaml.SequenceNode):
+            for item in node.value:
+                paths[item.start_mark.line] = (*path, "-")
+                walk(item, (*path, "-"))
+        else:
+            last = node.end_mark.line - (1 if node.end_mark.column == 0 else 0)
+            for line in range(node.start_mark.line, max(last, node.start_mark.line) + 1):
+                paths[line] = path
+
+    walk(root, ())
+    return paths
+
+
 def _same_text(marked_lines: list[str], lines: list[str]) -> bool:
     """True when the marked render, without its marks, is the plain render."""
     return len(marked_lines) == len(lines) and all(
@@ -277,7 +314,7 @@ def _render(
         raise WorkflowRenderError(f"{type(e).__name__}: {e}", 0) from e
 
 
-def _parse(text: str, source: str) -> tuple[dict, list[_ActionNode]]:
+def _parse(text: str, source: str) -> tuple[dict, list[_ActionNode], dict[int, tuple[str, ...]]]:
     """The data of *text*, read with the loader `agac` uses, and where each action sits in it."""
     loader = yaml.SafeLoader(text)
     try:
@@ -288,10 +325,10 @@ def _parse(text: str, source: str) -> tuple[dict, list[_ActionNode]]:
     finally:
         loader.dispose()
     if data is None:
-        return {}, []
+        return {}, [], {}
     if not isinstance(data, dict):
         raise WorkflowRenderError("Workflow is not a mapping", 0)
-    return data, _action_nodes(root)
+    return data, _action_nodes(root), _rendered_paths(root)
 
 
 def _yaml_error(error: yaml.YAMLError, source: str) -> WorkflowRenderError:
@@ -387,9 +424,11 @@ def _action_nodes(root: Any) -> list[_ActionNode]:
 
 
 def _value(node: Any, key: str) -> Any:
+    """The value of the last *key* in *node*: PyYAML keeps the last of a repeated key."""
     if not isinstance(node, yaml.MappingNode):
         return None
+    found = None
     for k, v in node.value:
         if isinstance(k, yaml.ScalarNode) and k.value == key:
-            return v
-    return None
+            found = v
+    return found

@@ -163,6 +163,7 @@ def _index_workflow_file(
             action_lines=rendered.action_lines,
             live_lines=rendered.live_lines,
             line_owners=rendered.line_owners,
+            line_paths=rendered.line_paths,
         )
         _backfill_unseen_actions(
             index,
@@ -248,10 +249,11 @@ def _raw_name_location(
 ) -> Location:
     line_no, column = 0, 0
     for i, line in enumerate(lines):
-        # An empty set means the source map was not trusted; the first written name is
-        # then the best guess.
-        if live_lines and i not in live_lines:
-            continue
+        # A mapped Jinja file marks each name line it defines an action on, so a name with no
+        # mark has no line to find. An empty set means the map was not trusted; the first
+        # written name is then the best guess.
+        if live_lines:
+            break
         match = re.match(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$", line)
         if match:
             line_no, column = i, line.index(action_name)
@@ -284,14 +286,23 @@ def _index_workflow_lines(
     action_lines: frozenset[int] | None = None,
     live_lines: frozenset[int] | None = None,
     line_owners: dict[int, str | None] | None = None,
+    line_paths: dict[int, tuple[str, ...] | None] | None = None,
 ) -> None:
     """Index action metadata and references from workflow lines.
 
     `default_output_field` comes from the parsed `defaults:`, which may follow `actions:`.
     The lines are the file as written: `live_lines` skips what the render drops,
     `action_lines` says which `- name:` lines define an action, and `line_owners` says
-    which action the render puts each line in.
+    which action the render puts each line in. A reference is taken only where
+    `line_paths` puts its line under the key its type reads.
     """
+
+    def under(line_no: int, *keys: str | None) -> bool:
+        if line_paths is None or line_no not in line_paths:
+            return True
+        path = line_paths[line_no]
+        return path is not None and all(key in path for key in keys)
+
     workflow_name = index.workflow_for_file(yaml_file)
     if workflow_name:
         index.file_to_workflow[yaml_file] = workflow_name
@@ -384,9 +395,12 @@ def _index_workflow_lines(
             # line with no mark (a `filter` body) is output where it is written.
             continue
 
+        # A tag on the line renders to words the line does not show.
+        holds_tag = any(opener in line for opener in ("{{", "{%", "{#"))
+
         # Prompt reference
         prompt_match = re.search(r"prompt:\s*\$(\w+)\.(\w+)", line)
-        if prompt_match:
+        if prompt_match and not holds_tag and under(i, "prompt"):
             full_ref = f"{prompt_match.group(1)}.{prompt_match.group(2)}"
             current_action.prompt_ref = full_ref
             _add_reference(
@@ -402,7 +416,7 @@ def _index_workflow_lines(
 
         # Tool reference
         impl_match = re.search(r"impl:\s*(\w+)", line)
-        if impl_match:
+        if impl_match and not holds_tag and under(i, "impl"):
             current_action.impl_ref = impl_match.group(1)
             _add_reference(
                 index,
@@ -417,7 +431,12 @@ def _index_workflow_lines(
 
         # Schema reference
         schema_match = re.search(r"schema:\s*(\w+)", line)
-        if schema_match and not _dispatches_schema(line[schema_match.start(1) :]):
+        if (
+            schema_match
+            and not holds_tag
+            and under(i, "schema")
+            and not _dispatches_schema(line[schema_match.start(1) :])
+        ):
             current_action.schema_ref = schema_match.group(1)
             _add_reference(
                 index,
@@ -440,7 +459,7 @@ def _index_workflow_lines(
                 dependencies_indent = None
             else:
                 dep_match = re.match(r"^\s*-\s*([^\s#]+)", line)
-                if dep_match:
+                if dep_match and under(i, "dependencies"):
                     dep_name, _ = _unquoted(dep_match.group(1).strip().strip(","))
                     _add_reference(
                         index,
@@ -454,7 +473,7 @@ def _index_workflow_lines(
                     )
 
         deps_list_match = re.search(r"dependencies:\s*\[([^\]]+)\]", line)
-        if deps_list_match:
+        if deps_list_match and under(i, "dependencies"):
             list_content = deps_list_match.group(1)
             list_start = deps_list_match.start(1)
             for action_match in re.finditer(r"(\w+)", list_content):
@@ -499,7 +518,7 @@ def _index_workflow_lines(
                     if not item_match and line.strip() and line_indent <= context_list_indent:
                         # A non-list-item at or before list indent means we've exited the list
                         current_context_list = None
-                    elif item_match:
+                    elif item_match and under(i, "context_scope", current_context_list):
                         # Only the reference range is taken here. The quotes are YAML's:
                         # left on, `- 'up.title'` resolves as the action `'up` and is
                         # reported unresolvable at Error severity.
