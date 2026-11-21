@@ -22,6 +22,8 @@ from agent_actions.workflow.managers.state import (
     ActionStatus,
 )
 
+_KNOWN_STATUSES = {status.value for status in ActionStatus}
+
 
 class _StoredStatuses:
     """The stored statuses, answering what ``exit_codes.run_status`` asks of a state manager."""
@@ -69,6 +71,13 @@ def status_report(agent: str, project_root: Path | None = None) -> dict[str, Any
         }
         for name, details in status_data.items()
     ]
+    for action in actions:
+        status = action["status"]
+        if status is not None and (not isinstance(status, str) or status not in _KNOWN_STATUSES):
+            raise click.ClickException(
+                f"Status file is corrupted: {status_file}\n"
+                f"Action '{action['name']}' has an unknown status: {status!r}"
+            )
     run_status = (
         status_of_the_run(_StoredStatuses([action["status"] for action in actions]))
         if actions

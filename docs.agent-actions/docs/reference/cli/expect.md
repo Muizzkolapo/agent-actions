@@ -9,7 +9,7 @@ sidebar_position: 9
 The `expect` commands show the [expectations engine](../validation/expectations.md) from outside a run. Rules get to an action by three different routes. Until you run the workflow, there is no way to see which rules an action will actually execute.
 
 ```bash
-agac expect list -a <workflow-name> [options]
+agac expect list -w <workflow-name> [options]
 ```
 
 ## `expect list`
@@ -17,7 +17,7 @@ agac expect list -a <workflow-name> [options]
 Print the rules that each action would run.
 
 ```bash
-agac expect list -a my_workflow
+agac expect list -w my_workflow
 ```
 
 ```
@@ -74,7 +74,7 @@ In `--json`, the same entry contains `"executes": false` and an `"inert_because"
 `expect list` runs the same preflight checks as `agac run`. If the preflight checks refuse a workflow, the command reports the refusal and names the correction. It does not print an empty list:
 
 ```bash
-agac expect list -a my_workflow
+agac expect list -w my_workflow
 # Problem: PreFlightValidationError: summarize: unknown_type: unknown type 'vibe_check'. Known types: ...
 ```
 
@@ -83,7 +83,7 @@ agac expect list -a my_workflow
 `--json` writes the listing to stdout. Diagnostics go to stderr. Thus the stdout stream stays parseable.
 
 ```bash
-agac expect list -a my_workflow --json | jq '.actions[] | {action, rules: [.rules[].id]}'
+agac expect list -w my_workflow --json | jq '.actions[] | {action, rules: [.rules[].id]}'
 ```
 
 ```json
@@ -118,7 +118,7 @@ If a rule has no authored `id:`, the listing uses the ID that the engine derives
 Read the verdicts that a run stored. Each run writes one verdict for each record. Without this command, you can get the verdicts only if you open the store.
 
 ```bash
-agac expect report -a my_workflow
+agac expect report -w my_workflow
 ```
 
 ```
@@ -166,7 +166,7 @@ The report does not run the preflight checks. It reads the results of earlier ru
 ### JSON Output {/* #json-output-1 */}
 
 ```bash
-agac expect report -a my_workflow --json | jq '.actions[] | {action, pass_rate}'
+agac expect report -w my_workflow --json | jq '.actions[] | {action, pass_rate}'
 ```
 
 Each action has `records`, `records_passed`, `records_total`, `unverified` and `pass_rate`. Each rule has its `passed` / `failed` / `skipped` counts.
@@ -176,7 +176,7 @@ Each action has `records`, `records_passed`, `records_total`, `unverified` and `
 Without a threshold, the report only adds annotations. With a threshold, the report is a gate:
 
 ```bash
-agac expect report -a my_workflow --fail-under 95
+agac expect report -w my_workflow --fail-under 95
 ```
 
 ```
@@ -224,7 +224,7 @@ In CI:
 
 ```yaml
 - name: Check output quality
-  run: agac expect report -a my_workflow --fail-under 95
+  run: agac expect report -w my_workflow --fail-under 95
 ```
 
 The report still prints (or writes JSON) before the gate fails. Thus the failed run keeps the details in the log.

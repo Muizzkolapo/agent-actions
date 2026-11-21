@@ -285,12 +285,12 @@ context_scope:
 
 ## Debugging
 
-`agac inspect -a workflow_name` lists each variant by name (`foo_1`, `foo_2`,
+`agac inspect -w workflow_name` lists each variant by name (`foo_1`, `foo_2`,
 `foo_3`). The `Used by` line of `agac inspect action` shows a versioned consumer
 as `foo (×3)`. To see how one variant is configured, inspect that variant:
 
 ```bash
-agac inspect action -a workflow_name foo_1     # full config and prompt text for variant 1
+agac inspect action -w workflow_name foo_1     # full config and prompt text for variant 1
 ```
 
 To see the rendered prompts of each iteration, enable prompt debug:

@@ -178,7 +178,7 @@ agac batch status --batch-id batch_abc123
 agac batch retrieve --batch-id batch_abc123
 
 # Retry failed records
-agac retry -a my_workflow
+agac retry -w my_workflow
 ```
 
 For the complete CLI reference, see [batch Commands](../cli/batch).

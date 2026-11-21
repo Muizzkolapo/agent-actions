@@ -74,7 +74,7 @@ def test_at_the_wait_timeout_it_exits_4_and_a_later_run_collects_the_batch(proje
 
     assert code == PAUSED, output
     assert "still open for: summarize" in output, output
-    assert f"agac run -a {WORKFLOW}" in output, output
+    assert f"agac run -w {WORKFLOW} --wait" in output, output
 
     code, output = _run(project, *WAIT, checks_until_complete=2)
 

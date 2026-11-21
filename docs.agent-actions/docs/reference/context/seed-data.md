@@ -156,7 +156,7 @@ Rules:
 Seed 'syllabus' in action 'generate_question': record value 'snowflak' for 'source.exam' is not in the file map. Known values: dbt, snowflake. (staging/pages.json, record 3)
 ```
 
-For a record, a guard reads the same file as the prompt. Thus `seed.syllabus.domains` in a guard clause is the syllabus of that record. There is no default file. A value that the map does not name is an error, never a silent fallback. `agac inspect context -a <workflow> <action>` shows the file that each value gets.
+For a record, a guard reads the same file as the prompt. Thus `seed.syllabus.domains` in a guard clause is the syllabus of that record. There is no default file. A value that the map does not name is an error, never a silent fallback. `agac inspect context -w <workflow> <action>` shows the file that each value gets.
 
 ## Seed Data vs Source Data
 

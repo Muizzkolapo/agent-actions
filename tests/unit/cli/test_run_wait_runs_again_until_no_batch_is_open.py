@@ -117,7 +117,7 @@ def test_at_the_timeout_it_exits_4_and_says_how_to_resume(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "still open" in out
     assert "classify" in out
-    assert "agac run -a wf" in out
+    assert "agac run -w wf --wait" in out
 
 
 def test_it_never_sleeps_past_the_timeout(tmp_path, capsys):
