@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A judge request in a judge batch that is too large for the model fails only its judge call, with `judge call failed: <error>`, as online. The other judge requests still go out. Before, the error failed every record of the file.'
+time: 2026-11-21T12:20:00Z

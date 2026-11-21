@@ -1,6 +1,7 @@
 """Field reference parsing and action name extraction utilities."""
 
 import logging
+from collections.abc import Mapping
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
@@ -129,13 +130,16 @@ def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
     return referenced_actions
 
 
-def extract_action_names_from_template(template: str | None) -> set:
+def extract_action_names_from_template(
+    template: str | None, names: Mapping[str, str] | None = None
+) -> set:
     """
     Extract unique action names referenced in a Jinja2 template.
 
     Parses template AST to extract namespace names, excluding variables scoped
     by {% for %}, {% set %}, and {% macro %} constructs. A name a top-level
-    {% set a = b %} binds to the bare name b reads b. Logs a warning and
+    {% set a = b %} of the alias header binds to b, as *names* (the action's ``as:``
+    map) agrees, reads b. Logs a warning and
     returns empty set on Jinja2 syntax errors (syntax errors are caught at
     render time; this function is a best-effort dependency extractor).
 
@@ -174,7 +178,7 @@ def extract_action_names_from_template(template: str | None) -> set:
         raise
 
     referenced_actions: set[str] = set()
-    aliases = prompt_aliases(ast)
+    aliases = prompt_aliases(ast, names or {})
 
     def _walk(node: nodes.Node, local_vars: set[str]) -> None:
         # {% for %} and {% macro %} create child scopes — copy the set
