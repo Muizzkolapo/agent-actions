@@ -52,6 +52,9 @@ class AnthropicBatchClient(BaseBatchClient):
     - Support for prompt caching (when enabled)
     """
 
+    # Message Batches API: up to 100,000 requests or 256 MB in one batch.
+    max_batch_requests = 100_000
+
     def __init__(
         self,
         api_key: str | None = None,
