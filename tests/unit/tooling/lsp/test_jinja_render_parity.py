@@ -1270,3 +1270,175 @@ def test_the_fallback_location_of_an_action_is_not_in_a_dropped_branch(tmp_path)
 
     assert set(idx.file_actions[wf]) == {"a"}
     assert idx.file_actions[wf]["a"].location.line != 2
+
+
+_UP_THEN_A = "name: wf\nactions:\n  - name: up\n    impl: t\n  - name: a\n"
+
+
+@pytest.mark.parametrize(
+    ("body", "templates", "value", "kind"),
+    [
+        pytest.param(
+            "    dependencies:\n      - up\n    context_scope:  {# fields the model reads #}\n"
+            "      observe:\n        - up.title\n",
+            {},
+            "up.title",
+            ReferenceType.CONTEXT_FIELD,
+            id="comment-on-context-scope",
+        ),
+        pytest.param(
+            "    context_scope:\n      observe:\n        - up.title\n"
+            "    dependencies:  {# upstream actions #}\n      - up\n",
+            {},
+            "up",
+            ReferenceType.ACTION,
+            id="comment-on-dependencies",
+        ),
+        pytest.param(
+            "    dependencies:\n      - up\n{% filter indent(4, first=True) %}\ncontext_scope:\n"
+            "  observe:\n{% endfilter %}\n      - up.field\n",
+            {},
+            "up.field",
+            ReferenceType.CONTEXT_FIELD,
+            id="filter-outputs-keys",
+        ),
+        pytest.param(
+            "    dependencies:\n      - up\n      {% call under() %}\n      - up.field\n"
+            "      {% endcall %}\n",
+            {
+                "w.jinja2": "{% macro under() %}\n    context_scope:\n      observe:\n"
+                "{{ caller() }}{% endmacro %}\n"
+            },
+            "up.field",
+            ReferenceType.CONTEXT_FIELD,
+            id="deep-call-outputs-keys",
+        ),
+    ],
+)
+def test_a_reference_has_the_type_of_the_key_the_render_puts_it_under(
+    tmp_path, body, templates, value, kind
+):
+    head = "{% from 'w.jinja2' import under %}\n" if templates else ""
+    wf = _project(tmp_path, head + _UP_THEN_A + body, templates)
+
+    refs = build_index(tmp_path).references_by_file[wf]
+
+    assert [r.type for r in refs if r.value == value] in ([], [kind])
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `t`."]
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        pytest.param(
+            "    {{ 'notes' }}:\n      observe:\n        - ghost.y\n", id="at-scope-indent"
+        ),
+        pytest.param("      {{ 'notes' }}:\n        - ghost.y\n", id="at-list-indent"),
+    ],
+)
+def test_an_expression_that_opens_a_key_ends_the_context_list(tmp_path, tail):
+    wf = _project(
+        tmp_path,
+        _UP_THEN_A + "    context_scope:\n      observe:\n        - up.x\n" + tail,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `t`."]
+
+
+def test_the_last_of_a_repeated_actions_key_is_read(tmp_path):
+    wf = _project(
+        tmp_path,
+        "name: wf\nactions:\n  - name: a\n    impl: old_tool\nactions:\n  - name: a\n    impl: new_tool\n",
+    )
+
+    assert build_index(tmp_path).file_actions[wf]["a"].impl_ref == "new_tool"
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `new_tool`."]
+
+
+def test_an_action_with_no_mark_is_not_placed_on_a_schema_field_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set gen %}
+          - name: summary
+            impl: t_s
+        {% endset %}
+        name: wf
+        actions:
+          - name: other
+            schema:
+              fields:
+                - name: summary
+                  type: string
+        {{ gen }}
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert "summary" in idx.file_actions[wf]
+    assert idx.file_actions[wf]["summary"].location.line != 9
+
+
+def test_raw_text_with_braces_sets_no_value_from_its_words(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+        {% raw %}
+            impl: tool_{{ x }}
+        {% endraw %}
+          - name: c
+            kind: tool
+            impl: tool_c
+        """,
+    )
+
+    assert render_workflow_source(wf, tmp_path).data["actions"][0]["impl"] == "tool_{{ x }}"
+    assert build_index(tmp_path).file_actions[wf]["a"].impl_ref != "tool_"
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_c`."]
+
+
+def test_a_name_line_a_filter_renames_does_not_define_its_written_name(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro rename(old, new) %}{{ caller() | replace(old, new) }}{% endmacro %}
+        name: wf
+        actions:
+          - name: old_name
+            kind: tool
+        {% call rename('old_name', 'new_name') %}
+          - name: old_name
+            kind: tool
+        {% endcall %}
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert [a["name"] for a in render_workflow_source(wf, tmp_path).data["actions"]] == [
+        "old_name",
+        "new_name",
+    ]
+    assert idx.duplicate_actions_by_file[wf] == set()
+    assert idx.file_actions[wf]["old_name"].location.line == 3
+
+
+def test_a_name_mark_moved_to_a_line_that_is_not_a_name_gives_no_source(tmp_path):
+    wf = _project(
+        tmp_path,
+        "{% from 'my_steps.jinja2' import step %}\nname: wf\nactions:\n"
+        "{{ step('x') | replace(':1:', ':3:') }}\n{{ step('ok') }}\n",
+        {
+            "my_steps.jinja2": "{% macro step(n) -%}\n- name: {{ n }}\n  kind: tool\n  impl: t\n{%- endmacro %}\n"
+        },
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["x", "ok"]
+    assert {name: loc.line for name, loc in r.action_sources.items()} == {"ok": 1}
