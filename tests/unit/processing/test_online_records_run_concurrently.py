@@ -316,6 +316,7 @@ def test_an_interrupt_while_an_answer_is_checkpointed_still_keeps_that_answer():
 def test_an_interrupt_the_moment_a_record_is_submitted_still_keeps_its_answer(monkeypatch):
     """The SIGINT handler runs at the first bytecode after submit returns, before the
     caller stores anything: a record already handed to a worker must still be kept."""
+    answering = {n: threading.Event() for n in range(12)}
 
     class _InterruptedAfterSubmit(online_llm.ThreadPoolExecutor):
         submitted = 0
@@ -324,6 +325,9 @@ def test_an_interrupt_the_moment_a_record_is_submitted_still_keeps_its_answer(mo
             future = super().submit(*args, **kwargs)
             type(self).submitted += 1
             if type(self).submitted == 5:
+                # Records 3 and 4 were just submitted; a worker that has not picked one
+                # up yet would see it cancelled, so wait until both are being answered.
+                assert answering[3].wait(timeout=5) and answering[4].wait(timeout=5)
                 raise KeyboardInterrupt
             return future
 
@@ -331,6 +335,7 @@ def test_an_interrupt_the_moment_a_record_is_submitted_still_keeps_its_answer(mo
     backend = _Backend()
 
     def answer(item: dict[str, Any]) -> ProcessingResult:
+        answering[item["n"]].set()
         time.sleep(0.05)
         return _ok(item)
 

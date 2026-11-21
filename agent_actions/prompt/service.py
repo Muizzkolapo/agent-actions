@@ -497,7 +497,14 @@ class PromptPreparationService:
             # text is the detail.
             attribute_read = False
             detail: str | None = None
-            if isinstance(e, MissingFieldError):
+            if isinstance(e, MissingFieldError) and isinstance(
+                prompt_context.get(e.place), NullNamespace
+            ):
+                # A null namespace answers only for its optional fields; a read of any
+                # other is the read off a null namespace it was without them.
+                missing.append(e.field)
+                attribute_read = True
+            elif isinstance(e, MissingFieldError):
                 missing.append(f"{e.place}.{e.field}")
                 detail = error_str
             elif "has no attribute" in error_str or "is undefined" in error_str:
@@ -617,9 +624,10 @@ class PromptPreparationService:
                                 f" Other namespaces present: "
                                 f"{', '.join(sorted(other_ns)) if other_ns else '(none)'}."
                                 f" Consider adding a guard to '{agent_name}' to "
-                                f"exclude these records, or using "
+                                f"exclude these records, using "
                                 f"'{blamed_ns}.*' (null-safe) instead of "
-                                f"specific fields."
+                                f"specific fields, or observing the field as optional "
+                                f"('{blamed_ns}.{attribute_name}?')."
                             )
                         null_namespace_hints[blamed_ns] = {
                             "alternate_deps": other_ns,

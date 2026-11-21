@@ -11,6 +11,7 @@ import json
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_retry_runs_a_file_tool_over_its_whole_file import (
     _FILE_TOOL_HEAD,
@@ -95,7 +96,7 @@ def test_a_file_that_fails_during_the_resume_is_named_not_fresh(halted):
 
     code, output = _agac(project, "retry")
 
-    assert code == 0, output
+    assert code == EXIT_RECORD_FAILURES, output
     # The run failed it itself, over the file's error; nothing is put back and
     # nothing says the record was not in its input.
     assert _disposition(project, failed_before) == "failed"

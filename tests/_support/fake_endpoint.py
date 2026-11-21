@@ -57,6 +57,9 @@ class FakeEndpoint:
         self.finish_reason = "stop"
         # The Retry-After header every 429 reply carries.
         self.retry_after = "0"
+        # When False, every error reply tells the SDK not to retry on its own, so each
+        # error is one attempt of agac's.
+        self.sdk_retries = True
         # Seconds every request is held before its reply, and the most held at once.
         self.delay = 0.0
         self.peak_in_flight = 0
@@ -188,6 +191,8 @@ def _handler_for(endpoint: FakeEndpoint) -> type[BaseHTTPRequestHandler]:
             self.send_header("content-type", "application/json")
             if status == 429:
                 self.send_header("retry-after", endpoint.retry_after)
+            if status != 200 and not endpoint.sdk_retries:
+                self.send_header("x-should-retry", "false")
             self.send_header("content-length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

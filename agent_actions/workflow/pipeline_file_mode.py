@@ -327,7 +327,9 @@ def extract_tool_input(record: dict, context_scope: Mapping[str, Any]) -> dict:
     resolved, qualify_wildcards = _resolve_observe_refs_for_flat_keys(
         context_scope["observe"], emit_diagnostics=False
     )
-    flat, _ = plan_flat_observed_keys(content, resolved, qualify_wildcards)
+    flat, _ = plan_flat_observed_keys(
+        content, resolved, qualify_wildcards, optional=context_scope.get("optional")
+    )
     return flat
 
 

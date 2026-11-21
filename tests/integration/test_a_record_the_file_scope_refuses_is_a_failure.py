@@ -9,6 +9,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     RECORDS,
@@ -135,7 +136,7 @@ def _page(project, n):  # noqa: F811
 def one_lacking_two(project):  # noqa: F811
     _declare(project, "prepare.summary, prepare.region, prepare.zone")
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     return project, result
 
 
@@ -190,7 +191,7 @@ class TestARecordWhoseUpstreamFailedIsNotARefusal:
 
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         page_4 = _page(project, 4)
         assert _disposition(project, page_4, "counted") == "unprocessed"
         assert _reasons(project, "counted")[page_4] == "upstream_unprocessed"
@@ -212,7 +213,7 @@ class TestAGuardCannotReadARefusedRecord:
 
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         page_2 = _page(project, 2)
         assert _disposition(project, page_2, "counted") == "failed"
         assert _reasons(project, "counted")[page_2] == MISSING_TWO

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.trace_store import trace_rows
 
@@ -138,7 +139,7 @@ def _run_to_the_end(project: Path) -> str:
         result = _run(project, *args)
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode == 0, "\n".join(outputs)
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
         if "run again" not in output:
             return "\n".join(outputs)
         args = ()

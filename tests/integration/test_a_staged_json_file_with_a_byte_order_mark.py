@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 from tests.helpers.trace_store import trace_rows
@@ -83,7 +84,7 @@ actions:
 def _run(root: Path, run_mode: str):
     env = {"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
     result = run_agac(root, "run", "-a", WORKFLOW, "--fresh", env=env)
-    if run_mode == "batch" and result.returncode == 0:
+    if run_mode == "batch" and result.returncode == EXIT_PAUSED:
         # The first run submits the batch; the next collects it.
         result = run_agac(root, "run", "-a", WORKFLOW, env=env)
     return result

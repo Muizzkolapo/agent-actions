@@ -171,6 +171,7 @@ class DependencyNamespaceBuilder:
                 allowed_fields_map = _extract_allowed_fields_per_dependency(
                     all_deps, context_scope, agent_name
                 )
+                optional_refs = (context_scope or {}).get("optional") or {}
 
                 for dep_name in all_deps:
                     if dep_name in SPECIAL_NAMESPACES:
@@ -205,12 +206,23 @@ class DependencyNamespaceBuilder:
                         continue
 
                     allowed_fields = allowed_fields_map.get(dep_name)
+                    optional_fields = {
+                        field
+                        for field in allowed_fields or ()
+                        if f"{dep_name}.{field}" in optional_refs
+                    }
 
                     # Zero-overlap guard: if specific fields are declared but
                     # none of them exist in the namespace, the content is
                     # corrupted (e.g. schema-echo, wrong action output).
                     # Wrap as a null namespace to prevent RecordContextError.
-                    if allowed_fields and not set(dep_data.keys()) & set(allowed_fields):
+                    # Not when every declared field is optional: an output without
+                    # them is then what the action said to expect.
+                    if (
+                        allowed_fields
+                        and len(optional_fields) < len(set(allowed_fields))
+                        and not set(dep_data.keys()) & set(allowed_fields)
+                    ):
                         logger.warning(
                             "[OBSERVE NULL-SAFE] '%s': namespace has zero overlap "
                             "with declared fields %s (actual keys: %s) — "
@@ -233,6 +245,7 @@ class DependencyNamespaceBuilder:
                         source_type="RECORD NAMESPACE",
                         fail_on_missing=True,
                         metadata_collector=metadata_collector,
+                        optional_fields=optional_fields,
                     )
 
         else:

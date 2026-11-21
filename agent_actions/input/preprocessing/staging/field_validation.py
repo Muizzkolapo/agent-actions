@@ -182,12 +182,21 @@ def _source_reads(config: Mapping[str, Any]) -> list[tuple[str, str]]:
         return []  # Pre-flight reports the template.
     prompt = resolved.get("prompt")
     always = _source_fields_every_render_reads(prompt) if isinstance(prompt, str) else set()
+    scope = config.get("context_scope")
+    # Observed as optional: a record without it gets the default, in the prompt too.
+    optional = {
+        ref.removeprefix("source.")
+        for ref in (scope.get("optional") or {} if isinstance(scope, Mapping) else {})
+        if ref.startswith("source.")
+    }
     reads: list[tuple[str, str]] = []
     for requirement in requirements:
         field = requirement.field_path.split(".", 1)[0]
         if requirement.source_agent != "source" or not field or "*" in field:
             continue
         location = requirement.location
+        if requirement.field_path in optional and not location.startswith("guard"):
+            continue
         if location == "prompt" and field not in always:
             location = "prompt.conditional"
         if location in _READS_EVERY_RECORD_NEEDS.keys() | _READS_A_RECORD_MAY_LACK:

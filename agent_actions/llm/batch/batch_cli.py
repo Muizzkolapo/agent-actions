@@ -6,7 +6,11 @@ from typing import Any
 
 import click
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
@@ -217,16 +221,15 @@ def _action_config(ctx: _BatchContext) -> dict[str, Any] | None:
 
 
 def _workflow_action_options(f):
-    """Add -a/--agent and --action options to a batch subcommand."""
+    """Add the workflow and ``-A/--action`` options to a batch subcommand."""
     f = click.option(
+        "-A",
         "--action",
         "action_name",
         required=False,
         help="Action name (required when a workflow has multiple batch actions).",
     )(f)
-    f = click.option(
-        "-a",
-        "--agent",
+    f = workflow_option(
         "agent_name",
         required=False,
         help="Workflow name (required in multi-workflow projects).",
