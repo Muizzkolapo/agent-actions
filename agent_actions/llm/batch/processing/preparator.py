@@ -1,7 +1,7 @@
 """Batch task preparation from raw data using shared TaskPreparer logic."""
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -15,12 +15,15 @@ from agent_actions.errors import (
     is_action_fatal,
     mark_action_fatal,
 )
+from agent_actions.expectations.fields import narrow_context
+from agent_actions.expectations.service import judged_context_refs
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import (
     BatchTaskPreparationStats,
     PreparedBatchTasks,
 )
+from agent_actions.llm.providers.batch_base import UNSENT_ERROR_KEY
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.record_helpers import quarantine_reason
@@ -30,12 +33,13 @@ from agent_actions.processing.task_preparer import (
     get_task_preparer,
     write_trace_row,
 )
-from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
+from agent_actions.prompt.cache_scope import CACHE_POINTS_KEY, repair_call_scope
+from agent_actions.record.elsewhere import sends_elsewhere
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.reasons import GUARD_SKIP
+from agent_actions.record.reasons import GUARD_SKIP, SENT_ELSEWHERE
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
-from agent_actions.utils.constants import JSON_MODE_KEY, SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
@@ -80,14 +84,13 @@ def _append_feedback(
 ) -> list[dict[str, Any]]:
     """Append each record's validation feedback to the prompt it will be sent with.
 
-    Called on the pre-provider rows, whose ``prompt`` becomes the provider's
-    system message, and records how much of it every record shares. Blank feedback,
-    as ``repair: retry`` gives, leaves the prompt untouched. A function (a
-    ``repair: {prompt: ...}`` template) builds the whole prompt from the one this
-    round sends; the shared length is recorded only when its result still starts
-    with that prompt. A record with no entry is left alone too, but that is an
-    invariant violation worth seeing: feedback is built from the same failed set
-    these rows come from. Returns the rows whose prompt changed.
+    Called on the pre-provider rows, and records on each what an online repair call's
+    config says of its prompt (``repair_call_scope``): how much of it every record
+    shares, or that none is. Blank feedback, as ``repair: retry`` gives, leaves the
+    prompt untouched. A function (a ``repair: {prompt: ...}`` template) builds the
+    whole prompt from the one this round sends. A record with no entry is left alone
+    too, but that is an invariant violation worth seeing: feedback is built from the
+    same failed set these rows come from. Returns the rows whose prompt changed.
     """
     changed: list[dict[str, Any]] = []
     for task in tasks:
@@ -103,16 +106,31 @@ def _append_feedback(
         prompt = task.get("prompt", "")
         if callable(feedback):
             task["prompt"] = feedback(prompt)
-            if prompt and task["prompt"].startswith(prompt):
-                task[SHARED_PROMPT_LEN_KEY] = len(prompt)
-            changed.append(task)
+        elif feedback.strip():
+            task["prompt"] = f"{prompt}\n\n{feedback}"
+        else:
             continue
-        if not feedback.strip():
-            continue
-        task["prompt"] = f"{prompt}\n\n{feedback}"
-        task[SHARED_PROMPT_LEN_KEY] = len(prompt)
+        task.update(repair_call_scope(task["prompt"], prompt))
         changed.append(task)
     return changed
+
+
+def _side_by_side_per_source(
+    tasks: list[dict[str, Any]], context_map: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """*tasks* with the records of one source side by side, sources in the order they first appear.
+
+    A record split off a source keeps that source's guid as ``parent_source_guid``.
+    """
+
+    def source(task: dict[str, Any]) -> str:
+        row = context_map.get(task["target_id"], {})
+        return str(row.get("parent_source_guid") or row.get("source_guid") or task["target_id"])
+
+    first: dict[str, int] = {}
+    for task in tasks:
+        first.setdefault(source(task), len(first))
+    return sorted(tasks, key=lambda task: first[source(task)])
 
 
 class BatchTaskPreparator:
@@ -180,6 +198,7 @@ class BatchTaskPreparator:
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
         dispatched = schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is not None
+        judge_refs = judged_context_refs(agent_config)
 
         context_map_builder: dict[str, Any] = {}
         tasks_builder: list[dict[str, Any]] = []
@@ -210,6 +229,7 @@ class BatchTaskPreparator:
                         if dispatched
                         else None
                     ),
+                    judge_refs=judge_refs,
                 )
 
                 if result:
@@ -233,6 +253,13 @@ class BatchTaskPreparator:
                     storage_backend=self.storage_backend,
                 )
 
+        # Requests that share the text before a cache point read each other's cache entry
+        # while it lives, so a client that marks it gets the records of one source together.
+        if any(CACHE_POINTS_KEY in task for task in tasks_builder) and (
+            provider.marks_cache_points() is True
+        ):
+            tasks_builder = _side_by_side_per_source(tasks_builder, context_map_builder)
+
         # Feedback must be applied here, before the provider converts each row
         # into its own wire format — the converted task keeps neither target_id
         # nor prompt, so there is nothing left to attach it to afterwards.
@@ -249,10 +276,28 @@ class BatchTaskPreparator:
                     attempt=attempt,
                 )
 
+        if agent_config.get("prompt_debug"):
+            self._debug_print_prompts(agent_config, tasks_builder, schema)
+
         # Finalize tasks with provider
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
+        for task in tasks_builder:
+            error = task.pop(UNSENT_ERROR_KEY, None)
+            if error is None:
+                continue
+            # A prompt too large for the model: online fails that record's call alone.
+            logger.warning("Record %s was not sent: %s", task["target_id"], error)
+            stats.included_items -= 1
+            stats.error_items += 1
+            self._mark_prep_failed(
+                context_map_builder[task["target_id"]],
+                context_map_builder,
+                prep_context.agent_name,
+                error,
+                storage_backend=self.storage_backend,
+            )
 
         # Return immutable result
         return PreparedBatchTasks(
@@ -261,6 +306,21 @@ class BatchTaskPreparator:
             stats=stats,
             config=agent_config,
         )
+
+    @staticmethod
+    def _debug_print_prompts(
+        agent_config: dict[str, Any], tasks: list[dict[str, Any]], schema: dict[str, Any] | None
+    ) -> None:
+        """Print each task's prompt, context and schema, as an online call prints its own."""
+        from agent_actions.llm.realtime.services import ContextService, PromptService
+
+        for task in tasks:
+            PromptService.debug_print_prompt(
+                agent_config,
+                task["prompt"],
+                str(ContextService.prepare_context_data(task["content"], is_tool=False)),
+                task.get("compiled_schema", schema),
+            )
 
     def turned_away(
         self,
@@ -296,13 +356,15 @@ class BatchTaskPreparator:
         stats: BatchTaskPreparationStats,
         attempt: int = 0,
         row_schema: Callable[[Any, str | None], tuple[dict[str, Any] | None, str]] | None = None,
+        judge_refs: Sequence[str] = (),
     ) -> dict[str, Any] | None:
         """Process a single data item using TaskPreparer.
 
         Return prepared task if item should be included, None otherwise.
         Update context_map_builder and stats as side effects. ``row_schema`` compiles
         the schema of an action whose schema is chosen per record, from the record's
-        context; the task then carries it.
+        context; the task then carries it. ``judge_refs`` are the ``context:`` refs of
+        the action's judged rules; the values they read are kept on the context-map row.
         """
         # 1. Generate target_id if missing
         custom_id = row.get("target_id")
@@ -344,7 +406,11 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.FILTERED
             )
-            stats.filtered_items += 1
+            if sends_elsewhere(prep_context.agent_config):
+                BatchContextMetadata.set_skip_reason(context_map_builder[custom_id], SENT_ELSEWHERE)
+                stats.sent_elsewhere_items += 1
+            else:
+                stats.filtered_items += 1
             logger.debug("Guard filtered item %s", custom_id)
             return None
 
@@ -364,11 +430,20 @@ class BatchTaskPreparator:
             "content": prepared.llm_context,
             "prompt": prepared.formatted_prompt,
         }
+        if prepared.cache_points:
+            task[CACHE_POINTS_KEY] = prepared.cache_points
         if row_schema is not None:
             # A repair round's row carries the name its first round chose; it is used again.
             recorded = BatchContextMetadata.get_output_schema(row)
             task["compiled_schema"], chosen = row_schema(prepared.llm_context, recorded)
             BatchContextMetadata.set_output_schema(context_map_builder[custom_id], chosen)
+
+        # The verdict passes run once the answers are back, when this context is gone.
+        # Only what the judged rules read of it is kept: the map is stored with the batch.
+        if judge_refs:
+            BatchContextMetadata.set_judge_context(
+                context_map_builder[custom_id], narrow_context(prepared.llm_context, judge_refs)
+            )
 
         # 8. Mark INCLUDED only now — prepare() succeeded and guard passed
         BatchContextMetadata.set_filter_status(
@@ -428,22 +503,7 @@ class BatchTaskPreparator:
         """
         if schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is not None:
             return None
-        schema = self._prepare_schema(agent_config, provider, resolve_tools_path(agent_config))
-        self._require_schema(agent_config, schema)
-        return schema
-
-    @staticmethod
-    def _require_schema(agent_config: dict[str, Any], schema: dict[str, Any] | None) -> None:
-        json_mode = agent_config.get(JSON_MODE_KEY, True)
-        if not schema and json_mode:
-            raise ConfigurationError(
-                "Schema is required for batch processing when json_mode is enabled",
-                context={
-                    "agent_config": agent_config["agent_type"],
-                    "json_mode": json_mode,
-                    "hint": "Either provide a schema or set json_mode: false",
-                },
-            )
+        return self._prepare_schema(agent_config, provider, resolve_tools_path(agent_config))
 
     def _compile_row_schema(
         self,
@@ -486,7 +546,6 @@ class BatchTaskPreparator:
             Path(_pr) if _pr else None,
         )
         schema = self._prepare_schema({**agent_config, SCHEMA_KEY: loaded}, provider, tools_path)
-        self._require_schema(agent_config, schema)
         return schema, chosen
 
     def _prepare_schema(

@@ -290,7 +290,7 @@ class TestTheIncludeEntryIsRefused:
 
         assert message == (
             f"Include 'pair' in {WF}: {expected} "
-            "Include keys: include, inputs, defaults, override, remove."
+            "Include keys: include, as, inputs, defaults, override, remove."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
 
@@ -373,7 +373,7 @@ class TestTheIncludeEntryIsRefused:
 
         assert message == (
             f"Workflow 'wf' ({WF}) includes branch 'pair' (branches/pair.yml) twice with the instance name "
-            "'pair'. Include the branch once; 'as:' is not supported yet."
+            "'pair'. Give each include its own instance name with 'as:'."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
 

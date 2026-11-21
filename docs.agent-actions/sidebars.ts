@@ -68,6 +68,7 @@ const sidebars: SidebarsConfig = {
             'reference/cli/tools',
             'reference/cli/schema',
             'reference/cli/expect',
+            'reference/cli/usage',
             'reference/cli/skills',
             'reference/cli/troubleshooting',
           ],
@@ -84,6 +85,9 @@ const sidebars: SidebarsConfig = {
           },
           items: [
             'reference/configuration/templates',
+            'reference/configuration/branches',
+            'reference/configuration/routes',
+            'reference/configuration/loops',
             'reference/configuration/defaults',
             'reference/configuration/endpoints',
           ],
@@ -134,6 +138,7 @@ const sidebars: SidebarsConfig = {
           items: [
             'reference/prompts/prompt-store',
             'reference/prompts/dispatch',
+            'reference/prompts/prompt-caching',
           ],
         },
         'reference/schemas/index',

@@ -515,6 +515,11 @@ class ExpectConfig(BaseModel):
         description="Max real judge LLM calls this action's suite may make across the run; "
         "None is uncapped",
     )
+    judge_mode: Literal["batch", "online"] | None = Field(
+        default=None,
+        description="How llm_judge calls are sent: batch (as batches of their own) or online; "
+        "omitted, as the action runs. batch needs run_mode: batch",
+    )
 
     @field_validator("repair", "structural")
     @classmethod
@@ -706,6 +711,21 @@ class ActionConfig(_RetryValidators):
     include_context: dict[str, Any] | None = Field(
         default=None, alias="_include", description="Branch origin injected by renderer"
     )
+    sends_elsewhere: bool | None = Field(
+        default=None,
+        alias="_sends_elsewhere",
+        description="A record the guard filters went to another branch, injected by renderer",
+    )
+    gathers: bool | None = Field(
+        default=None,
+        alias="_gathers",
+        description="Records sent elsewhere above come back here, injected by renderer",
+    )
+    builtin: dict[str, Any] | None = Field(
+        default=None,
+        alias="_builtin",
+        description="A tool agac runs itself (route, pick) and its settings, injected by renderer",
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -714,7 +734,27 @@ class ActionConfig(_RetryValidators):
             raise ValueError(f"HITL action '{self.name}' requires 'hitl' configuration block")
         if self.kind == ActionKind.TOOL and not self.impl:
             raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
+        if self.builtin is not None:
+            self._check_builtin()
         return self
+
+    def _check_builtin(self) -> None:
+        """Refuse a ``_builtin`` spec its tool cannot run, before the run starts."""
+        from agent_actions.llm.providers.tools.builtin_spec import checked_builtin
+
+        spec = checked_builtin(self.builtin)
+        expected = f"agac.{spec['tool']}"
+        if self.impl != expected:
+            raise ValueError(
+                f"Action '{self.name}' runs the built-in tool '{spec['tool']}', so its 'impl' "
+                f"must be '{expected}', not {self.impl!r}"
+            )
+        missing = [name for name in spec.get("of", []) if name not in self.dependencies]
+        if missing:
+            raise ValueError(
+                f"Action '{self.name}' picks from {', '.join(missing)}, which it does not "
+                "depend on. List each action of 'of' under 'dependencies'."
+            )
 
     @field_validator("context_scope")
     @classmethod
@@ -958,8 +998,17 @@ class WorkflowConfig(BaseModel):
                 base_names.add(action.version_context["base_name"])
         dangling = all_deps - seen - base_names
         if dangling:
+            hints = []
+            for name in sorted(dangling):
+                finals = sorted(final for final in seen if final.endswith(f"__{name}"))
+                if finals:
+                    hints.append(
+                        f"'{name}' is a short name inside an include with 'as:'; outside the "
+                        f"include, write the final name: {', '.join(repr(f) for f in finals)}"
+                    )
+            hint = f". {'. '.join(hints)}." if hints else ""
             raise ValueError(
-                f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
+                f"Dangling dependency references (not defined as actions): {sorted(dangling)}{hint}"
             )
 
         # Iterative DFS cycle detection (avoids RecursionError on deep chains)

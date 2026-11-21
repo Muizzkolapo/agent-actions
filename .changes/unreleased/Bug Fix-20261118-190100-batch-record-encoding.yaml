@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A batch request now encodes the record as the online request does. Batch wrote non-ASCII text as `\uXXXX` escapes, which take more tokens than the text, and wrote a `NaN` or an infinite number as `NaN` or `Infinity`, which is not JSON; online sends the text as written and `null`.'
+time: 2026-11-18T19:01:00Z

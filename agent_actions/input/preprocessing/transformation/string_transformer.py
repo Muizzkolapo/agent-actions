@@ -1,7 +1,6 @@
 """String processing, tokenization, and text chunking utilities."""
 
 import os
-import re
 
 import tiktoken
 
@@ -17,21 +16,9 @@ try:
 except ImportError:
     HAS_SPACY = False
 
-_BRACE_PATTERN = re.compile("({.*?})")
-
 
 class StringProcessor:
-    """String processing including placeholder escaping and user-defined function calls."""
-
-    @staticmethod
-    def process_as_string(input_text):
-        """Escape brace patterns so the string is not treated as a format template."""
-        if not isinstance(input_text, str):
-            return input_text
-        escaped_text = _BRACE_PATTERN.sub(
-            lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text
-        )
-        return escaped_text
+    """Calls user-defined functions from the tools folder."""
 
     @staticmethod
     def call_user_function(call_args, tools_path=None, context_data_str=None):

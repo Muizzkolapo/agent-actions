@@ -143,18 +143,23 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         assert "messages" in result["params"], "Anthropic requires messages in params"
         assert "model" in result["params"], "Anthropic requires model in params"
 
-    def test_anthropic_format_task_system_as_top_level(self, provider, sample_batch_task):
+    def test_anthropic_format_task_sends_the_prompt_in_the_user_message(
+        self, provider, sample_batch_task
+    ):
         """
-        Anthropic-specific: Verify system message is top-level param.
+        Anthropic-specific: the prompt goes in the one user message, as online sends it.
 
-        Anthropic puts system message at top level, not in messages array.
+        There is no top-level system prompt.
         """
         result = provider.format_task_for_provider(sample_batch_task, schema=None)
-        assert "system" in result["params"], "Anthropic requires system at top level"
-        assert result["params"]["system"] == "You are a helpful assistant"
+        assert "system" not in result["params"]
         messages = result["params"]["messages"]
         assert len(messages) == 1, "Only user message should be in messages array"
         assert messages[0]["role"] == "user"
+        assert messages[0]["content"].startswith(
+            "\n<|begin_of_user_instruction|>: You are a helpful assistant"
+            " :<|end_of_user_instruction|>\n<|begin_of_text|>: "
+        )
 
     def test_anthropic_format_task_with_schema_uses_tools(self, provider, sample_batch_task):
         """

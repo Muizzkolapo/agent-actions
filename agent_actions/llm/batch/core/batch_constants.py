@@ -53,6 +53,9 @@ class RecoveryType(str, Enum):
 
     RETRY = "retry"
     REPAIR = "repair"
+    # The side calls of a step over a returned batch, sent as a batch of their own;
+    # the registry entry names their kind (``side_kind``).
+    SIDE = "side"
 
     def __str__(self) -> str:
         return self.value
@@ -119,6 +122,9 @@ class ContextMetaKeys:
     PREP_ERROR = "_batch_prep_error"
     # The schema a ``schema: dispatch_task(...)`` chose for the row; a repair round reads it.
     OUTPUT_SCHEMA = "_batch_output_schema"
+    # The LLM context values the action's ``llm_judge`` rules reference, for the verdict
+    # passes that run once the answers are back.
+    JUDGE_CONTEXT = "_batch_judge_context"
 
     @classmethod
     def all_internal_keys(cls) -> set[str]:
@@ -130,4 +136,5 @@ class ContextMetaKeys:
             cls.SKIP_REASON,
             cls.PREP_ERROR,
             cls.OUTPUT_SCHEMA,
+            cls.JUDGE_CONTEXT,
         }

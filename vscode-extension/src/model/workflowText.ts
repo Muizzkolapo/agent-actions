@@ -4,6 +4,13 @@
 
 import { parse } from 'yaml';
 import type { ParsedWorkflowConfig, ParsedAction } from './types';
+import {
+    BranchLookup,
+    branchNames,
+    extractActionLocations,
+    normalizeOutputFields,
+    parseEntries,
+} from './workflowEntries';
 
 /** One action's source line, as the language server reports it. */
 export interface ActionSource {
@@ -18,28 +25,42 @@ export interface RenderedWorkflowResult {
     actionSources: Record<string, ActionSource>;
 }
 
-/** Factory function to avoid regex state sharing issues */
-function createActionNameRegex(): RegExp {
-    return /^\s*-\s*name:\s*([^\s#]+)\s*$/gm;
-}
-
 /**
  * Parse workflow YAML text. Throws on a YAML error, for example on raw Jinja.
  * Returns null when the document is not a mapping.
  */
-export function parseWorkflowText(content: string, fallbackName: string): ParsedWorkflowConfig | null {
-    // agac reads YAML with PyYAML, which keeps the last of two equal keys.
-    const doc = parse(content, { uniqueKeys: false }) as Record<string, unknown> | undefined;
-    if (!doc || typeof doc !== 'object') {
+export function parseWorkflowText(
+    content: string,
+    fallbackName: string,
+    branches: BranchLookup = () => undefined
+): ParsedWorkflowConfig | null {
+    const doc = parseDocument(content);
+    if (!doc) {
         return null;
     }
 
     const name = typeof doc.name === 'string' ? doc.name : fallbackName;
     return {
         name,
-        actions: parseActions(doc, content),
+        actions: parseActions(doc, content, branches),
         actionLocations: extractActionLocations(content),
     };
+}
+
+/** The branch files that the workflow agac loads includes; none when it does not parse. */
+export function loadedBranchNames(content: string, rendered: RenderedWorkflowResult | null): string[] {
+    const text = rendered && !rendered.error && rendered.text !== null ? rendered.text : content;
+    try {
+        return branchNames(parseDocument(text)?.actions);
+    } catch {
+        return [];
+    }
+}
+
+function parseDocument(content: string): Record<string, unknown> | null {
+    // agac reads YAML with PyYAML, which keeps the last of two equal keys.
+    const doc = parse(content, { uniqueKeys: false }) as Record<string, unknown> | undefined;
+    return doc && typeof doc === 'object' ? doc : null;
 }
 
 /**
@@ -51,20 +72,21 @@ export function parseLoadedWorkflow(
     content: string,
     fallbackName: string,
     configUri: string,
-    rendered: RenderedWorkflowResult | null
+    rendered: RenderedWorkflowResult | null,
+    branches: BranchLookup = () => undefined
 ): ParsedWorkflowConfig | null {
     if (rendered?.error) {
         throw new Error(rendered.error);
     }
     if (rendered && rendered.text !== null) {
-        const parsed = parseWorkflowText(rendered.text, fallbackName);
+        const parsed = parseWorkflowText(rendered.text, fallbackName, branches);
         if (parsed) {
             parsed.actionLocations = localActionLines(rendered.actionSources, configUri);
         }
         return parsed;
     }
     try {
-        return parseWorkflowText(content, fallbackName);
+        return parseWorkflowText(content, fallbackName, branches);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`${message} (A workflow that uses Jinja loads only through the language server.)`);
@@ -99,100 +121,17 @@ function normalizeFileUri(uri: string): string {
 /**
  * Extract action definitions from the parsed YAML
  */
-function parseActions(doc: Record<string, unknown>, content: string): ParsedAction[] {
+function parseActions(
+    doc: Record<string, unknown>,
+    content: string,
+    branches: BranchLookup
+): ParsedAction[] {
     const actionsValue = doc.actions;
     if (!Array.isArray(actionsValue)) {
         // Try plan-based format (from PR #822)
         return parsePlanBasedActions(doc, content);
     }
-
-    const actions: ParsedAction[] = [];
-    for (const entry of actionsValue) {
-        const expanded = parseActionEntry(entry);
-        if (expanded) {
-            actions.push(...expanded);
-        }
-    }
-    return actions;
-}
-
-/**
- * Parse a single action entry from the YAML, expanding versions if present
- * Returns array to handle version expansion (e.g., action with versions: {range: [1,2,3]}
- * becomes action_1, action_2, action_3)
- */
-function parseActionEntry(entry: unknown): ParsedAction[] | null {
-    if (!entry || typeof entry !== 'object') {
-        return null;
-    }
-
-    const action = entry as Record<string, unknown>;
-    const name = typeof action.name === 'string' ? action.name : undefined;
-    if (!name) {
-        return null;
-    }
-
-    const dependencies = normalizeDependencies(action.dependencies);
-    const outputFields = normalizeOutputFields(action.schema ?? action.output_fields);
-    const type = typeof action.kind === 'string' ? action.kind : undefined;
-
-    // Check for versions expansion
-    const versions = action.versions as Record<string, unknown> | undefined;
-    if (versions && typeof versions === 'object') {
-        const expanded = expandVersions(name, versions, dependencies, outputFields, type);
-        if (expanded.length > 0) {
-            return expanded;
-        }
-    }
-
-    return [{ name, dependencies, type, outputFields }];
-}
-
-/**
- * Expand a versioned action into multiple concrete actions.
- *
- * Supports two range formats (mirroring the core engine in expander.py):
- *   - Pair: [start, end] → expands to start..end inclusive
- *   - Explicit list: [1, 2, 3] → used as-is
- */
-function expandVersions(
-    baseName: string,
-    versions: Record<string, unknown>,
-    baseDependencies: string[],
-    outputFields: string[],
-    type: string | undefined
-): ParsedAction[] {
-    const range = versions.range;
-    if (!Array.isArray(range) || range.length === 0) {
-        return [];
-    }
-
-    // When range is a [start, end] pair, expand to the full sequence.
-    // This matches the core engine: range(start, end + 1).
-    let rangeValues: (number | string)[] = range;
-    if (range.length === 2 && typeof range[0] === 'number' && typeof range[1] === 'number') {
-        const [start, end] = range as [number, number];
-        rangeValues = [];
-        for (let v = start; v <= end; v++) {
-            rangeValues.push(v);
-        }
-    }
-
-    return rangeValues.map((version) => {
-        const versionSuffix = `_${version}`;
-        const versionedName = `${baseName}${versionSuffix}`;
-
-        // Version dependencies: if base depends on "foo", versioned depends on "foo"
-        // (the actual version resolution happens at runtime)
-        return {
-            name: versionedName,
-            dependencies: baseDependencies,
-            type,
-            outputFields,
-            baseName, // Track the base name for grouping
-            version: version as number | string,
-        };
-    });
+    return parseEntries(actionsValue, branches);
 }
 
 /**
@@ -255,55 +194,4 @@ function parsePlanEntry(entry: string): { name: string; dependencies: string[] }
         : [];
 
     return { name: namePart, dependencies };
-}
-
-/**
- * Extract line numbers for each action (for CodeLens navigation)
- */
-function extractActionLocations(content: string): Map<string, number> {
-    const locations = new Map<string, number>();
-    const actionNameRegex = createActionNameRegex();
-    let match: RegExpExecArray | null;
-
-    while ((match = actionNameRegex.exec(content)) !== null) {
-        const actionName = match[1];
-        const line = content.slice(0, match.index).split(/\r?\n/).length - 1;
-        if (!locations.has(actionName)) {
-            locations.set(actionName, line);
-        }
-    }
-
-    return locations;
-}
-
-/**
- * Normalize dependencies to string array
- */
-function normalizeDependencies(value: unknown): string[] {
-    if (!value) {
-        return [];
-    }
-    if (Array.isArray(value)) {
-        return value.map((d) => String(d)).filter(Boolean);
-    }
-    if (typeof value === 'string' && value.trim()) {
-        return [value.trim()];
-    }
-    return [];
-}
-
-/**
- * Normalize output fields from schema or output_fields
- */
-function normalizeOutputFields(value: unknown): string[] {
-    if (!value) {
-        return [];
-    }
-    if (Array.isArray(value)) {
-        return value.map((f) => String(f)).filter(Boolean);
-    }
-    if (typeof value === 'object') {
-        return Object.keys(value);
-    }
-    return [];
 }

@@ -185,6 +185,7 @@ The tables give each command, in groups by the purpose of the command:
 | [`records`](./records) | Print, as JSON, the records that an action stored, or the input of each failed record |
 | [`dispositions`](./dispositions) | Inspect the processing disposition of each record, for each action |
 | [`expect`](./expect) | Show the expectation rules that each action would run, and report the verdicts that a run stored |
+| [`usage`](./usage) | Show the tokens that the model calls of each action used, and an estimated cost |
 | [`retry`](./retry) | Retry the failed or exhausted records, from a specified action to the end of the workflow |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |

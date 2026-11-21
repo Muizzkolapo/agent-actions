@@ -46,6 +46,13 @@ endpoints:                  # OpenAI-compatible servers an action selects with m
     url: http://gpu-box:8000/v1
     auth: none
 
+prices:                     # per million tokens; `agac usage` estimates the cost from them
+  gpt-4o-mini:
+    input: 0.15
+    output: 0.60
+    cache_read: 0.075
+    batch_discount: 0.5
+
 logging:
   level: WARNING            # console level; the run log keeps every level
   module_levels:
@@ -63,6 +70,7 @@ logging:
 | `seed_data_path` | The directory for static reference data (default: `seed_data`) |
 | `seed_data_paths` | Shared seed folders, relative to the project root. Agent Actions searches them after the folder of the workflow and the folder of the project. See [Seed Data](../context/seed-data#shared-folders) |
 | `endpoints` | OpenAI-compatible servers with structured output. Each server has a `url`, an `auth` source and optional `headers`. An action selects one with `model_vendor: <name>`. See [Endpoints](./endpoints) |
+| `prices` | The price of one million tokens for each model. `input` and `output` are required. `cache_read`, `cache_write` and `batch_discount` are optional. `batch_discount` is the part, from 0 to 1, that the provider removes from the price of a batch call. Agent Actions has no built-in prices. [`agac usage`](../cli/usage#estimated-cost) reads this block to estimate a cost. A run does not read it. |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required, unless they are marked `optional: true`. When `false` (default), they are optional, unless they are marked `required: true`. This applies to the full project. A schema that declares its own `required_by_default` overrides it. |
 | `logging` | Logging for each command that runs in the project. `level` is the console level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, default `INFO`). `module_levels` maps Python logger names to levels. It is the only way to re-open a logger that the framework clamps (`httpx`, `openai`, ...), or to make another logger quiet. `file.max_bytes` and `file.backup_count` set the size and the rotation of the run log. The CLI loads this block when it boots, before any command runs. If an `AGENT_ACTIONS_*` variable is set, it overrides the matching key. `--debug` / `--verbose` / `--quiet` override both. A key under `logging:` that nothing reads (`file.path`, `file.enabled`, `file.level`, `file.format` and any other) configures nothing. The CLI reports such a key on stderr at boot. The run log always writes to `agent_io/logs/events.json` of the workflow. See [Logging](../architecture/logging). |
 
@@ -224,10 +232,20 @@ In JSON mode, an online Anthropic request offers the schema tool but does not fo
 :::
 
 :::note[An answer that the output budget cuts off]
-A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In an Anthropic batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. An Anthropic answer that the limit cuts off partway through its text is never completed by guessing the rest: online and in batch, the record fails with a parse error in JSON mode. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
+A model that thinks first can spend all of `max_tokens` before it writes an answer. The error then names the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`. The error is a `ResponseTruncatedError`, which [`retry`](../execution/retry.md) retries. Every vendor reports it the same way. In a batch, the record fails with the same message, and `retry` sends it again. In JSON mode, the record fails with a parse error that names the stop reason, and `expect: {repair: auto}` can regenerate it. A JSON answer that the limit cuts off partway through its text is never completed by guessing the rest. For every vendor, online and in batch, the record fails with a parse error that names the stop reason, for example `The answer was cut off at the output limit (stop_reason=length); raise max_tokens`. A JSON answer that the provider stops partway is also a parse error that names the stop reason, online and in batch. The stop can be a content filter, a Gemini `SAFETY` or `RECITATION` block, or an Anthropic `refusal`. An example is `The provider stopped the answer before its end (stop_reason=content_filter); the answer is not complete`. In text mode, the cut-off or stopped text is stored as the model wrote it. To fix the cause, raise `max_tokens`, or lower the thinking budget in `vendor_params`.
 :::
 
-An OpenAI model that declines to answer returns its reason instead of an answer. The error quotes the reason, for example `The model refused to answer: I can't help with that.`, online and in batch. In JSON mode, the record fails with a parse error, and the run log holds the reason.
+:::note[An answer that holds no content]
+A response can come back with no answer in it. The record ends in the same way online and in batch:
+
+- **A refusal (OpenAI).** The error quotes the reason, for example `The model refused to answer: I can't help with that.`
+- **A blocked prompt (Gemini).** The error names the block reason: `Gemini blocked the prompt (blockReason=SAFETY)`.
+- **A stop that is not the model's own.** Examples are a Gemini `SAFETY` stop before any text, and an Anthropic message that holds only a thinking block. The error names the stop reason.
+
+In text mode, the record fails with that error, and `retry` does not send it again. In JSON mode, Agent Actions stores the record with a parse error that holds the same reason, and `expect: {repair: auto}` can regenerate it.
+
+An Anthropic or Gemini answer that the model ended itself with no text in it is an empty answer. In text mode, [`on_empty`](#execution-fields) decides its result. In JSON mode, it is a parse error.
+:::
 
 ### Execution Fields
 
@@ -240,6 +258,7 @@ An OpenAI model that declines to answer returns its reason instead of an answer.
 | `on_empty` | string | The result of an empty answer. `warn` (default) fails the record, and the run continues. `error` fails the action. `skip` passes the record through as a tombstone |
 | `retry` | object | The retry configuration for transport-layer failures |
 | `record_concurrency` | integer | The number of records of an online LLM action that are sent at the same time (1-32, default 1: one at a time). You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Record concurrency](#record-concurrency) |
+| `batch_max_workers` | integer | The number of records that an Ollama action in `run_mode: batch` sends at the same time (1-32, default 1). No other action reads it. You can also set it in `defaults:`. See [Ollama batch](../execution/run-modes.md#ollama-batch) |
 | `request_timeout` | number | The number of seconds that one LLM request may take, greater than 0. If a request has no answer after that time, that attempt fails as a network error. [`retry`](../execution/retry.md) retries it like any other network error. When no attempts remain, the record fails and the run names the timeout. If unset (the default), each provider SDK keeps its own timeout. You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Request timeout](#request-timeout) |
 
 ### Request timeout
@@ -264,7 +283,7 @@ actions:
 
 - The OpenAI, Groq and Anthropic SDKs retry a timed-out request two times on their own before they report it. Thus, with those vendors, one attempt can last up to three times `request_timeout`, plus their short backoff.
 - On a [declared endpoint](./endpoints.md), the `request_timeout` of an action has priority over the `timeout_seconds` of the endpoint. If the action value is unset, `timeout_seconds` applies.
-- The value applies to online requests only. In `run_mode: batch`, the provider runs the batch on its side, and `request_timeout` does not apply. This includes the in-process batch for `ollama_local` and `ollama_cloud`.
+- The value applies to online requests only. In `run_mode: batch`, the provider runs the batch on its side, and `request_timeout` does not apply. The in-process batch for `ollama_local` and `ollama_cloud` is the exception: each of its requests waits `request_timeout`, or 600 seconds if the value is unset. See [Ollama batch](../execution/run-modes.md#ollama-batch).
 
 ### Record concurrency
 
@@ -279,8 +298,9 @@ defaults:
 
 - The maximum number of requests in flight is `--concurrency-limit` (actions at the same time) times `record_concurrency`, times `votes` for an `llm_judge` that sets it. Choose the value to suit the rate limit of your provider. If one record gets a 429, only that record retries, and the other records continue to send.
 - The load refuses it on a tool or hitl action, and on an action that runs in `run_mode: batch`. If one of those actions inherits it from `defaults:`, the action ignores it.
+- An Ollama action in `run_mode: batch` sends its records from the Agent Actions process, and does not read `record_concurrency` either. Its setting is `batch_max_workers`. See [Ollama batch](../execution/run-modes.md#ollama-batch).
 - It does not change any answer. Thus a change to it keeps the answers that an action holds.
-- Above 1, the token usage that the run records for the action is not the usage of that action. It is empty, or it is the usage of the previous action. Also, a `judge_budget` can be spent two times on one value, when two records judge that value at the same moment.
+- Above 1, a `judge_budget` can be spent two times on one value, when two records judge that value at the same moment.
 
 :::note[Granularity Constraints]
 - **File granularity** is supported for tool and HITL actions (`kind: tool`, `kind: hitl`)
@@ -434,6 +454,7 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 | `AGENT_ACTIONS_DEBUG` | 0 | Set to `1` to run the console at DEBUG level |
 | `AGENT_ACTIONS_LOG_MAX_BYTES` | 52428800 | The limit for the DEBUG rows written to each run log file. Past this limit, the DEBUG rows stop. `0` means no cap. Overrides `logging.file.max_bytes`. |
 | `AGENT_ACTIONS_LOG_RETAIN_RUNS` | 5 | The number of earlier run logs that are kept. Overrides `logging.file.backup_count`. |
+| `AGENT_ACTIONS_BATCH_MAX_REQUESTS` | the limit of the provider | The maximum number of requests in one [judge batch](../validation/expectations.md#judging-in-batch). It replaces the limit of each provider: 100,000 for Anthropic, 50,000 for OpenAI, Groq and each provider that states no limit. Only judge batches read it. A main batch does not. A value below 1, or a value that is not an integer, stops the run. This occurs when Agent Actions assembles the workflow, before it sends a batch. |
 | `AGAC_RECORD_LIMIT` | unset | Limits each action to this number of records for each input file. It overrides a larger `record_limit`, and it applies to actions that set none. If both are set, [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) has priority, and it can raise this value as well as lower it. It is for a cheap run of a project from outside the project, for example a smoke check or a quick sanity pass. On a workflow that you already ran, it is not read-only. A limit smaller than the number of records that a completed action already processed differs from the limit that the action stored. So the action runs again under this limit, and its output is rewritten to the smaller set. A value at or above the number that an untruncated run processed cannot cut anything, and does not change the action. That needs a run that can say what it processed. A run that completed before these counts existed, or a run that lost an input file to an error, keeps the coarse rule. Such a run runs again on any change. When the stored output matters, unset the variable or use a scratch project. An action that actually drops records logs a warning that names this variable, because a truncated run otherwise looks complete. An action that had nothing to drop logs no warning. A value below 1, or a value that is not an integer, fails. It is not ignored. The check occurs while the workflow is assembled. Thus it stops any command that loads the workflow, including read-only commands such as [`agac inspect`](../cli/inspect). An empty or blank value reads as unset, because that is what a shell means by `AGAC_RECORD_LIMIT=`. It never excludes a record that [`agac retry`](../cli/retry) runs again, because retry selects by id. |
 | `AGAC_FILE_LIMIT` | unset | Stops each action after this number of input files. It overrides a larger `file_limit`, and it applies to actions that set none. It counts the files that the action processed. Thus a file that fails does not use the budget. If both are set, [`--file-limit`](../cli/run#running-a-project-smaller-than-it-is) has priority, and it can raise this value as well as lower it. It is the other axis of the same job. `AGAC_RECORD_LIMIT` makes each file smaller, and this variable reduces the number of files that are read. A run is proportional to both. On a workflow that you already ran, it is not read-only, for the same reason. The limit that it applies differs from the limit that the completed actions stored, so they run again under it. The files that the shorter walk does not reach keep the output that the earlier run wrote there. Thus the result is the old output with the walked files replaced, not a smaller fresh copy. An action whose walk actually stops early logs a warning that names this variable. An action that reached each file logs no warning. A value below 1, or a value that is not an integer, fails. It is not ignored, and it fails before any action starts. The walk does not read a file limit until a file is processed. So the check occurs while the workflow is assembled, and it also stops read-only commands such as [`agac inspect`](../cli/inspect). An empty or blank value reads as unset. It never restricts [`agac retry`](../cli/retry), which walks each file that holds a record that it named. |
 

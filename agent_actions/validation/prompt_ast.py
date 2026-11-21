@@ -6,6 +6,7 @@ from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
 
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ class PromptASTAnalyzer:
 
     def __init__(self):
         """Initialize Jinja2 environment for AST parsing."""
-        self.env = Environment()
+        self.env = Environment(extensions=PROMPT_EXTENSIONS)
 
     def _parse(self, template_source: str) -> nodes.Template:
         """Parse template after escaping Jinja syntax in inline code spans."""

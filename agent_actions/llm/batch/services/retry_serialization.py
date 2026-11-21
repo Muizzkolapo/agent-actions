@@ -9,6 +9,9 @@ from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
     """Serialize BatchResult objects for JSON persistence.
 
+    ``text`` is left out: only the reading of a side batch uses it, in the pass that
+    retrieved it, and a record's text would otherwise be stored beside its content.
+
     Args:
         results: Batch results to serialize
 
@@ -29,6 +32,8 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             d["error"] = r.error
         if r.error_status is not None:
             d["error_status"] = r.error_status
+        if r.retriable is not None:
+            d["retriable"] = r.retriable
         if r.metadata:
             d["metadata"] = r.metadata
         if r.usage:
@@ -81,6 +86,7 @@ def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
             success=d["success"],
             error=d.get("error"),
             error_status=d.get("error_status"),
+            retriable=d.get("retriable"),
             metadata=d.get("metadata"),
             usage=d.get("usage"),
             exhausted=d.get("exhausted", False),

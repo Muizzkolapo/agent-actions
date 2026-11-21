@@ -14,7 +14,7 @@ from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
 # Patch targets:
-# - set_last_usage and fire_event (LLMResponseEvent) now live in response_builder
+# - record_usage and fire_event (LLMResponseEvent) are called from response_builder
 # - fire_event (LLMRequestEvent/LLMErrorEvent) still in each provider client
 _RB = "agent_actions.output.response.response_builder"
 
@@ -284,9 +284,8 @@ class TestCohereNullableTokens:
     def test_none_input_tokens_defaults_to_zero(self, method, text, extra):
         """When tokens.input_tokens is None, prompt_tokens defaults to 0.
 
-        Exercises the ``or 0`` coercion in ResponseBuilder._extract_cohere().
-        Because all tokens are zero, ``set_last_usage`` is intentionally
-        skipped; we verify the coercion via ``extract_usage`` directly.
+        Exercises the ``or 0`` coercion in ResponseBuilder._extract_cohere(); the
+        call is counted with no tokens.
         """
         mock_response = MagicMock()
         mock_response.message.content = [MagicMock(text=text)]
@@ -295,7 +294,7 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.record_usage") as mock_usage,
             patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
@@ -311,7 +310,8 @@ class TestCohereNullableTokens:
                 **extra,
             )
 
-        mock_usage.assert_not_called()
+        mock_usage.assert_called_once()
+        assert not any(mock_usage.call_args[0][0].values())
 
         usage = ResponseBuilder.extract_usage(mock_response, "cohere")
         assert usage.prompt_tokens == 0
@@ -326,7 +326,7 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.record_usage") as mock_usage,
             patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
@@ -346,8 +346,8 @@ class TestCohereNullableTokens:
         assert usage_dict["input_tokens"] == 100
         assert usage_dict["output_tokens"] == 50
 
-    def test_none_usage_object_skips_set_last_usage(self):
-        """When response.usage is None (no usage attr), set_last_usage is not called."""
+    def test_a_response_with_no_usage_is_counted_as_a_call_with_no_tokens(self):
+        """When the response has no usage attribute, the call is counted with no tokens."""
         mock_response = MagicMock(spec=[])  # no attributes by default
         mock_response.message = MagicMock()
         mock_response.message.content = [MagicMock(text='{"result": "ok"}')]
@@ -355,7 +355,7 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.record_usage") as mock_usage,
             patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
@@ -371,4 +371,5 @@ class TestCohereNullableTokens:
                 schema={"properties": {"result": {"type": "string"}}},
             )
 
-        mock_usage.assert_not_called()
+        mock_usage.assert_called_once()
+        assert not any(mock_usage.call_args[0][0].values())

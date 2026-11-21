@@ -22,6 +22,10 @@ except ImportError:
     genai = None  # type: ignore[assignment]
     types = None  # type: ignore[assignment]
 from agent_actions.config.defaults import LLMDefaults
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    is_unfinished,
+)
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
@@ -109,21 +113,28 @@ class GeminiBatchClient(BaseBatchClient):
             "request": {
                 "contents": [{
                     "parts": [{
-                        "text": "system prompt + user content"
+                        "text": "the prompt text online sends"
                     }]
                 }],
                 "generation_config": {
-                    "temperature": 0.1,
                     "max_output_tokens": 1000,
                     "response_mime_type": "application/json"
                 }
             }
         }
+
+        ``generation_config`` holds a temperature or ``max_output_tokens`` only when
+        the action sets one; unset, it is left to the model, as online.
         """
-        envelope = MessageBuilder.build_for_batch(
-            "gemini", batch_task.prompt, batch_task.user_content, schema=schema
+        # The text online sends: in JSON mode it carries the schema and its rule.
+        json_mode = batch_task.json_mode(schema)
+        envelope = MessageBuilder.build(
+            "gemini",
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            json_mode=json_mode,
         )
-        combined_text = envelope.messages[0].content
         generation_config: dict[str, Any] = {}
         if batch_task.model_config.get("temperature") is not None:
             generation_config["temperature"] = batch_task.model_config["temperature"]
@@ -135,9 +146,9 @@ class GeminiBatchClient(BaseBatchClient):
             )
         )
         # As online: JSON output, with the schema given in the prompt text.
-        if schema or batch_task.model_config.get("json_mode"):
+        if json_mode:
             generation_config["response_mime_type"] = "application/json"
-        request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
+        request: dict[str, Any] = {"contents": [{"parts": [{"text": envelope.prompt_body}]}]}
         if generation_config:
             request["generation_config"] = generation_config
         _join_vendor_params(request, batch_task.model_config.get("vendor_params"))
@@ -151,37 +162,45 @@ class GeminiBatchClient(BaseBatchClient):
         """Extract error from Gemini response."""
         if "error" in raw_response:
             return str(raw_response["error"])
-        # Check if content is missing (Gemini-specific error condition)
-        response_data = raw_response.get("response", {})
-        candidates = response_data.get("candidates", [])
-        if not candidates:
-            return "No candidates in response"
-        candidate = candidates[0]
-        candidate_content = candidate.get("content", {})
-        parts = candidate_content.get("parts", [])
-        if not parts or not parts[0].get("text"):
-            return "No content in response"
         return None
 
     def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
-        """The error's code; 200 for an answer with no candidate or no text, such as a blocked prompt."""
         error = raw_response.get("error")
-        if error is None:
-            return 200
         code = error.get("code") if isinstance(error, dict) else None
         return code if isinstance(code, int) else None
 
+    @staticmethod
+    def _first_candidate(raw_response: dict[str, Any]) -> dict[str, Any]:
+        candidates = (raw_response.get("response") or {}).get("candidates") or [{}]
+        return candidates[0] or {}
+
+    def _answer_text_of(self, raw_response: dict[str, Any]) -> str:
+        """The answer as the SDK's ``response.text`` reads it: its text parts joined, thoughts left out."""
+        parts = (self._first_candidate(raw_response).get("content") or {}).get("parts") or []
+        return "".join(
+            part["text"]
+            for part in parts
+            if isinstance(part.get("text"), str) and not part.get("thought")
+        )
+
+    def _no_answer(self, raw_response: dict[str, Any]) -> NoAnswer | None:
+        if self._answer_text_of(raw_response):
+            return None
+        from agent_actions.llm.providers.gemini.client import no_answer
+
+        response_data = raw_response.get("response") or {}
+        return no_answer(
+            (response_data.get("promptFeedback") or {}).get("blockReason"),
+            self._first_candidate(raw_response).get("finishReason"),
+            response_data.get("modelVersion") or "",
+        )
+
+    def _answer_was_cut_off(self, raw_response: dict[str, Any]) -> bool:
+        return is_unfinished(self._first_candidate(raw_response).get("finishReason"))
+
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""
-        response_data = raw_response.get("response", {})
-        candidates = response_data.get("candidates", [])
-        if candidates:
-            candidate = candidates[0]
-            candidate_content = candidate.get("content", {})
-            parts = candidate_content.get("parts", [])
-            if parts:
-                return parts[0].get("text", "")
-        return None
+        return self._answer_text_of(raw_response)
 
     def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from Gemini response."""
@@ -203,11 +222,15 @@ class GeminiBatchClient(BaseBatchClient):
         completion = (
             None if candidates is None and thoughts is None else (candidates or 0) + (thoughts or 0)
         )
-        return {
+        usage = {
             "total_tokens": usage_metadata.get("totalTokenCount"),
             "prompt_tokens": usage_metadata.get("promptTokenCount"),
             "completion_tokens": completion,
         }
+        cached = usage_metadata.get("cachedContentTokenCount")
+        if cached:
+            usage["prompt_tokens_details"] = {"cached_tokens": cached}
+        return usage
 
     def _get_default_model(self) -> str:
         """Return Gemini's default model."""

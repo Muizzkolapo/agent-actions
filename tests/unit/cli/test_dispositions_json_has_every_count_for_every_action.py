@@ -57,7 +57,7 @@ def test_the_document_holds_exactly_these_keys(backend):
     assert set(report) == {"workflow", "actions"}
     assert report["workflow"] == WORKFLOW
     (entry,) = report["actions"]
-    assert set(entry) == {"name", "counts", "total", "records", "action_level"}
+    assert set(entry) == {"name", "counts", "total", "sent_elsewhere", "records", "action_level"}
     assert set(entry["counts"]) == EVERY_COUNT == set(COUNT_KEYS)
 
 

@@ -276,11 +276,25 @@ class BatchLifecycleManager:
             groups.setdefault(awaiting[record_id], []).append(record_id)
 
         for where, ids in sorted(
-            groups.items(), key=lambda item: (str(item[0].recovery_type), item[0].failure or "")
+            groups.items(),
+            key=lambda item: (
+                str(item[0].recovery_type),
+                item[0].side_kind or "",
+                item[0].failure or "",
+            ),
         ):
             attempt, max_attempts, failure = where.attempt, where.max_attempts, where.failure
             sample = sorted(ids)[:10]
-            if where.recovery_type == RecoveryType.REPAIR:
+            if where.recovery_type == RecoveryType.SIDE:
+                logger.info(
+                    "[%s] %d record(s) wait on %s batch %d: %s",
+                    agent_name,
+                    len(ids),
+                    where.side_kind,
+                    attempt,
+                    sample,
+                )
+            elif where.recovery_type == RecoveryType.REPAIR:
                 logger.info(
                     "[%s] %d record(s) wait on repair round %d of %d: %s",
                     agent_name,

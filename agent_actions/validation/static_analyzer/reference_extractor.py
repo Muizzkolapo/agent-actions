@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from jinja2 import Environment, nodes
@@ -9,6 +10,8 @@ from jinja2.exceptions import TemplateSyntaxError
 
 logger = logging.getLogger(__name__)
 
+from agent_actions.prompt.aliases import header_names, prompt_aliases
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
@@ -54,7 +57,7 @@ class ReferenceExtractor:
 
     def __init__(self) -> None:
         """Initialize with a Jinja2 environment for AST parsing."""
-        self._env = Environment()
+        self._env = Environment(extensions=PROMPT_EXTENSIONS)
 
     def _parse(self, template: str) -> nodes.Template:
         """Parse template after escaping Jinja syntax in inline code spans."""
@@ -69,7 +72,11 @@ class ReferenceExtractor:
         if prompt:
             requirements.extend(
                 self._extract_from_template(
-                    prompt, agent_name, "prompt", self._promoted_reserved_names(agent_config)
+                    prompt,
+                    agent_name,
+                    "prompt",
+                    self._promoted_reserved_names(agent_config),
+                    header_names(agent_config),
                 )
             )
 
@@ -118,12 +125,13 @@ class ReferenceExtractor:
         _agent_name: str,
         location: str,
         on_the_record: set[str] | None = None,
+        names: Mapping[str, str] | None = None,
     ) -> list[InputRequirement]:
         """Extract references from Jinja2 template using AST parsing."""
         requirements: list[InputRequirement] = []
         seen: set[str] = set()
 
-        jinja_refs = self._extract_jinja_references(template, on_the_record or set())
+        jinja_refs = self._extract_jinja_references(template, on_the_record or set(), names)
         for source, field, raw_ref in jinja_refs:
             ref_key = f"{source}.{field}"
             if ref_key not in seen:
@@ -137,7 +145,7 @@ class ReferenceExtractor:
                     )
                 )
 
-        for match in self.SIMPLE_ACTION_PATTERN.finditer(template):
+        for match in self._single_brace_matches(self.SIMPLE_ACTION_PATTERN, template):
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
@@ -152,7 +160,7 @@ class ReferenceExtractor:
                     )
                 )
 
-        for match in self.SIMPLE_DIRECT_PATTERN.finditer(template):
+        for match in self._single_brace_matches(self.SIMPLE_DIRECT_PATTERN, template):
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
@@ -170,8 +178,23 @@ class ReferenceExtractor:
 
         return requirements
 
+    @staticmethod
+    def _single_brace_matches(pattern: re.Pattern[str], template: str) -> list[re.Match[str]]:
+        """The matches of *pattern* that are single-brace text, not the inside of `{{x.y}}`."""
+        return [
+            match
+            for match in pattern.finditer(template)
+            if not (
+                template[match.start() - 1 : match.start()] == "{"
+                and template[match.end() : match.end() + 1] == "}"
+            )
+        ]
+
     def _extract_jinja_references(
-        self, template: str, on_the_record: set[str] | None = None
+        self,
+        template: str,
+        on_the_record: set[str] | None = None,
+        names: Mapping[str, str] | None = None,
     ) -> list[tuple]:
         """Extract variable references from Jinja2 template using AST."""
         references: list[tuple] = []
@@ -187,7 +210,12 @@ class ReferenceExtractor:
             )
             raise
 
-        self._walk_ast(ast, references, local_vars=set(on_the_record or ()))
+        self._walk_ast(
+            ast,
+            references,
+            local_vars=set(on_the_record or ()),
+            aliases=prompt_aliases(ast, names or {}),
+        )
         return references
 
     def _walk_ast(
@@ -195,8 +223,14 @@ class ReferenceExtractor:
         node: nodes.Node,
         references: list[tuple],
         local_vars: set[str],
+        aliases: dict[str, str] | None = None,
     ) -> None:
-        """Recursively walk AST to extract variable references."""
+        """Recursively walk AST to extract variable references.
+
+        A name a top-level `{% set a = b %}` binds to the bare name `b` reads `b`: `a.x`
+        is reported as `b.x`.
+        """
+        aliases = aliases or {}
         if isinstance(node, nodes.For):
             new_locals = local_vars.copy()
             target = node.target
@@ -208,16 +242,18 @@ class ReferenceExtractor:
                         new_locals.add(item.name)
 
             for child in node.iter_child_nodes():
-                self._walk_ast(child, references, new_locals)
+                self._walk_ast(child, references, new_locals, aliases)
             return
 
         # {% set %} introduces a name at the current scope level — mutate in place
         # so subsequent siblings (processed by the parent's loop) see it
         if isinstance(node, nodes.Assign):
+            if _is_alias(node, aliases):
+                return
             if isinstance(node.target, nodes.Name):
                 local_vars.add(node.target.name)
             for child in node.iter_child_nodes():
-                self._walk_ast(child, references, local_vars)
+                self._walk_ast(child, references, local_vars, aliases)
             return
 
         if isinstance(node, nodes.Macro):
@@ -226,7 +262,7 @@ class ReferenceExtractor:
                 if isinstance(arg, nodes.Name):
                     new_locals.add(arg.name)
             for child in node.iter_child_nodes():
-                self._walk_ast(child, references, new_locals)
+                self._walk_ast(child, references, new_locals, aliases)
             return
 
         if (
@@ -234,7 +270,7 @@ class ReferenceExtractor:
             and isinstance(node.node, nodes.Getattr)
             and node.node.attr in _MAPPING_METHODS
         ):
-            self._walk_method_call(node, node.node, references, local_vars)
+            self._walk_method_call(node, node.node, references, local_vars, aliases)
             return
 
         if isinstance(node, nodes.Getattr):
@@ -243,7 +279,7 @@ class ReferenceExtractor:
                 source, field_path = ref
                 if source not in local_vars and source not in self.JINJA_BUILTINS:
                     raw_ref = f"{{{{ {source}.{field_path} }}}}"
-                    references.append((source, field_path, raw_ref))
+                    references.append((aliases.get(source, source), field_path, raw_ref))
             return
 
         # A name no record carries, read whole (`{{ action }}`, `action['x']`): any other
@@ -258,7 +294,7 @@ class ReferenceExtractor:
             return
 
         for child in node.iter_child_nodes():
-            self._walk_ast(child, references, local_vars)
+            self._walk_ast(child, references, local_vars, aliases)
 
     def _walk_method_call(
         self,
@@ -266,6 +302,7 @@ class ReferenceExtractor:
         method: nodes.Getattr,
         references: list[tuple],
         local_vars: set[str],
+        aliases: dict[str, str],
     ) -> None:
         """Read `x.items()` as a use of `x`, not of a field named `items`.
 
@@ -285,7 +322,7 @@ class ReferenceExtractor:
         else:
             root = namespace = ""
         if not namespace:
-            self._walk_ast(receiver, references, local_vars)
+            self._walk_ast(receiver, references, local_vars, aliases)
         elif root not in local_vars and root not in self.JINJA_BUILTINS:
             key = call.args[0] if method.attr == "get" and call.args else None
             written = namespace if root == namespace else f"{root}.{namespace}"
@@ -299,10 +336,10 @@ class ReferenceExtractor:
                 # `action.producer.items()`: the read is through `action`, of `producer`.
                 references.append((root, namespace, raw))
             else:
-                references.append((namespace, field, raw))
+                references.append((aliases.get(namespace, namespace), field, raw))
         for arg in (*call.args, *call.kwargs, call.dyn_args, call.dyn_kwargs):
             if arg is not None:
-                self._walk_ast(arg, references, local_vars)
+                self._walk_ast(arg, references, local_vars, aliases)
 
     def _extract_getattr_chain(self, node: nodes.Getattr) -> tuple | None:
         """Extract the full attribute chain from a Getattr node."""
@@ -481,3 +518,12 @@ class ReferenceExtractor:
             requirements[name] = self.extract_from_agent(action)
 
         return requirements
+
+
+def _is_alias(node: nodes.Assign, aliases: dict[str, str]) -> bool:
+    """Whether *node* is the `{% set a = b %}` that makes `a` an alias of `b`."""
+    return (
+        isinstance(node.target, nodes.Name)
+        and isinstance(node.node, nodes.Name)
+        and aliases.get(node.target.name) == node.node.name
+    )

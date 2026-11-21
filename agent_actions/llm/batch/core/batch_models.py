@@ -9,6 +9,7 @@ from agent_actions.llm.batch.core.batch_constants import (
     RecoveryType,
     coerce_recovery_type,
 )
+from agent_actions.llm.providers.usage_tracker import MAIN, REPAIR
 
 
 @dataclass
@@ -29,6 +30,8 @@ class BatchJobEntry:
     parent_file_name: str | None = None  # links to original batch's file_name key
     recovery_type: RecoveryType | None = None
     recovery_attempt: int | None = None  # attempt number (1, 2, 3...)
+    # The kind of side call a side batch (recovery_type "side") answers, e.g. "judge".
+    side_kind: str | None = None
     # When this batch's results were written, which `status` cannot answer:
     # a provider poll persists COMPLETED the moment the batch finishes, long
     # before anything is retrieved. Set by `finalize_batch_output`, and by the
@@ -65,6 +68,21 @@ class BatchJobEntry:
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return asdict(self)
+
+    @property
+    def recovery_name(self) -> str | None:
+        """What this recovery batch is called: a side batch by its kind, else its type."""
+        if self.recovery_type is None:
+            return None
+        return self.side_kind or str(self.recovery_type)
+
+    @property
+    def usage_kind(self) -> str:
+        """What the calls of this batch are counted as: a side batch as its kind, a
+        repair round as ``repair``, and the first batch or a retry of it as ``main``."""
+        if self.side_kind:
+            return self.side_kind
+        return REPAIR if self.recovery_type == RecoveryType.REPAIR else MAIN
 
     @property
     def is_terminal(self) -> bool:
@@ -152,6 +170,8 @@ class BatchTaskPreparationStats:
     phase2_filtered_items: int = 0
     phase2_skipped_items: int = 0
     error_items: int = 0
+    # Filtered by a guard that sends the record to another branch; not in total_filtered.
+    sent_elsewhere_items: int = 0
 
     @property
     def total_filtered(self) -> int:

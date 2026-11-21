@@ -27,6 +27,10 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     - Output: OpenAI response → BatchResult
     """
 
+    # The SDK's batches.create: an input file holds up to 50,000 requests.
+    max_batch_requests = 50_000
+    max_batch_bytes = 200_000_000
+
     # Every status of the SDK's Batch. One being cancelled has not ended yet. One that
     # ran out of its completion window has: the answers it finished are not read, so
     # its records are failed for `agac retry`.
@@ -65,8 +69,15 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
-        envelope = MessageBuilder.build_for_batch(
-            "openai", batch_task.prompt, batch_task.user_content, schema=schema
+        # The messages online sends; it measures only a JSON-mode prompt against the model.
+        json_mode = batch_task.json_mode(schema)
+        envelope = MessageBuilder.build(
+            "openai",
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            json_mode=json_mode,
+            model_name=model_name if json_mode else None,
         )
         body = {
             "model": model_name,
@@ -82,6 +93,8 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         body.update(self._sampling_params(batch_task.model_config, penalties=True))
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        elif batch_task.model_config.get("json_mode"):
+            body["response_format"] = {"type": "json_object"}
         from agent_actions.llm.providers.openai.client import OpenAIClient
 
         OpenAIClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))

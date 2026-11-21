@@ -8,7 +8,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.expectations.loader import (
@@ -26,6 +26,9 @@ from agent_actions.expectations.repair import (
 from agent_actions.expectations.runner import JudgeDispatch, run_suite
 from agent_actions.expectations.types import Expectation, Outcome, Suite, SuiteResult
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY, VERDICT_KEY
+
+if TYPE_CHECKING:
+    from agent_actions.llm.side_calls import SideCallExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -504,12 +507,17 @@ def create_expectation_service_from_config(
     agent_config: dict[str, Any] | None = None,
     project_root: Path | None = None,
     judge_budget_remaining: int | None = None,
+    judge_verdicts: dict[str, Any] | None = None,
+    side_calls: SideCallExecutor | None = None,
 ) -> ExpectationService | None:
     """Build a service from an action's ``expect:`` block, or None if absent.
 
     ``judge_budget_remaining`` replaces the configured budget for this
     construction. A deferred batch rebuilds the service each pass, so the caller
     carries the balance rather than letting every round start from full.
+
+    ``judge_verdicts`` seeds the judge cache with what a judge batch returned.
+    ``side_calls`` runs each judge call; none given, it is made online.
     """
     if expect_config is None:
         return None
@@ -587,17 +595,12 @@ def create_expectation_service_from_config(
 
     judge_dispatch: JudgeDispatch | None = None
     if any(expectation.type == "llm_judge" for expectation in suite.expectations):
-        from agent_actions.expectations.judge import CachedJudge, JudgeBudget
+        from agent_actions.expectations.judge import CachedJudge, JudgeBudget, call_failed
 
-        cached_judge = CachedJudge(config, action_name=action_name)
-        # judge_budget bounds the whole run, not one construction of the
-        # service. A deferred batch rebuilds the service on each pass, so the
-        # caller carries what is left and hands it back here.
-        budget = JudgeBudget(
-            judge_budget_remaining
-            if judge_budget_remaining is not None
-            else expect_config.get("judge_budget")
+        cached_judge = CachedJudge(
+            config, action_name=action_name, verdicts=judge_verdicts, calls=side_calls
         )
+        budget = JudgeBudget(JudgeBudget.at_start(expect_config, judge_budget_remaining))
 
         def judge_dispatch(
             expectation: Expectation, value: Any, context: dict[str, Any] | None
@@ -616,7 +619,7 @@ def create_expectation_service_from_config(
                     expectation.resolved_id,
                     exc_info=True,
                 )
-                return False, f"judge call failed: {exc}", False
+                return False, call_failed(exc), False
             return passed, detail, False
 
     service = ExpectationService(
@@ -628,5 +631,27 @@ def create_expectation_service_from_config(
         on_exhausted=expect_config.get("on_exhausted", "return_last"),
         structural=expect_config.get("structural", "retry"),
     )
-    service._judge_budget = budget if judge_dispatch is not None else None
+    if judge_dispatch is not None:
+        service._judge_budget = budget
     return service
+
+
+def judged_context_refs(agent_config: dict[str, Any]) -> list[str]:
+    """Each ``context:`` ref the action's ``llm_judge`` rules declare, once, in order.
+
+    Read from the suite the run resolves, wherever its rules are declared.
+    """
+    service = create_expectation_service_from_config(
+        agent_config.get("expect"),
+        action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
+        agent_config=agent_config,
+    )
+    if service is None:
+        return []
+    refs = [
+        ref
+        for expectation in service.suite.expectations
+        if expectation.type == "llm_judge"
+        for ref in expectation.params.get("context") or []
+    ]
+    return list(dict.fromkeys(refs))

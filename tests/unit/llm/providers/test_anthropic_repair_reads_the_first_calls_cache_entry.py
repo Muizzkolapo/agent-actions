@@ -25,6 +25,8 @@ MARK = {"type": "ephemeral"}
 STATIC = "Summarise the page."
 TEMPLATED = "Summarise the page {{ source.page_content }}."
 FEEDBACK_START = "\n\n## Your previous output failed validation"
+# The block every record of a static prompt shares, online and in batch.
+SHARED = f"\n<|begin_of_user_instruction|>: {STATIC}"
 FEEDBACK = "Your previous output failed: the summary is empty."
 PAGES = ("alpha", "beta")
 SUITE = Suite(
@@ -246,38 +248,44 @@ class TestBatchRepair:
             tmp_path, _config(STATIC), feedback={page: FEEDBACK for page in PAGES}
         )
 
-        assert [_marked_texts(p) for p in first] == [[STATIC], [STATIC]]
-        assert [_marked_texts(p) for p in repair] == [[STATIC], [STATIC]]
+        assert [_marked_texts(p) for p in first] == [[SHARED], [SHARED]]
+        assert [_marked_texts(p) for p in repair] == [[SHARED], [SHARED]]
 
-    def test_the_feedback_is_its_own_unmarked_system_block(self, tmp_path):
+    def test_the_feedback_starts_an_unmarked_block_after_the_marked_prompt(self, tmp_path):
         params = _anthropic_batch(
             tmp_path, _config(STATIC), feedback={page: FEEDBACK for page in PAGES}
         )
 
-        assert [p["system"] for p in params] == [
-            [
-                {"type": "text", "text": STATIC, "cache_control": MARK},
-                {"type": "text", "text": f"\n\n{FEEDBACK}"},
-            ]
-        ] * 2
+        for request in params:
+            assert "system" not in request
+            marked, rest = request["messages"][0]["content"]
+            assert marked == {"type": "text", "text": SHARED, "cache_control": MARK}
+            assert "cache_control" not in rest
+            assert rest["text"].startswith(f"\n\n{FEEDBACK} :<|end_of_user_instruction|>")
 
     def test_the_model_reads_the_same_repair_text_with_caching_on_or_off(self, tmp_path):
         feedback = {page: FEEDBACK for page in PAGES}
         on = _anthropic_batch(tmp_path, _config(STATIC), feedback=feedback)
         off = _anthropic_batch(tmp_path, _config(STATIC, caching=False), feedback=feedback)
 
-        assert [p["system"] for p in off] == [f"{STATIC}\n\n{FEEDBACK}"] * 2
-        assert [_joined(p["system"]) for p in on] == [p["system"] for p in off]
-        assert [p["messages"] for p in on] == [p["messages"] for p in off]
+        assert [
+            p["messages"][0]["content"].startswith(f"{SHARED}\n\n{FEEDBACK} :<|end_of") for p in off
+        ] == [True, True]
+        assert [_joined(p["messages"][0]["content"]) for p in on] == [
+            p["messages"][0]["content"] for p in off
+        ]
 
     def test_a_repair_round_of_a_prompt_that_reads_the_record_carries_no_mark(self, tmp_path):
         params = _anthropic_batch(
             tmp_path, _config(TEMPLATED), feedback={page: FEEDBACK for page in PAGES}
         )
 
-        assert [p["system"] for p in params] == [
-            f"Summarise the page {page}.\n\n{FEEDBACK}" for page in PAGES
-        ]
+        assert [
+            p["messages"][0]["content"].startswith(
+                f"\n<|begin_of_user_instruction|>: Summarise the page {page}.\n\n{FEEDBACK} :<|"
+            )
+            for p, page in zip(params, PAGES, strict=True)
+        ] == [True, True]
         assert [_marked_texts(p) for p in params] == [[], []]
 
     def test_another_provider_sends_the_joined_repair_prompt_with_no_mark(self, tmp_path):
@@ -288,7 +296,8 @@ class TestBatchRepair:
             {page: FEEDBACK for page in PAGES},
         )
 
-        assert [task["body"]["messages"][0] for task in tasks] == [
-            {"role": "system", "content": f"{STATIC}\n\n{FEEDBACK}"}
-        ] * 2
+        for task in tasks:
+            (message,) = task["body"]["messages"]
+            assert message["role"] == "user"
+            assert message["content"].startswith(f"{SHARED}\n\n{FEEDBACK} :<|end_of")
         assert [_marked_texts(task) for task in tasks] == [[], []]

@@ -7,8 +7,17 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
-from agent_actions.llm.providers.error_wrapper import empty_response_error, is_truncated
+from agent_actions.llm.providers.anthropic import (
+    PROMPT_CACHING_BETA_HEADER,
+    message_params,
+    server_busy_errors,
+)
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    is_stopped_by_provider,
+    is_unfinished,
+    stopped_parse_error,
+)
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -51,6 +60,10 @@ class AnthropicBatchClient(BaseBatchClient):
     - Proper error handling for API failures
     - Support for prompt caching (when enabled)
     """
+
+    # Message Batches API: up to 100,000 requests or 256 MB in one batch.
+    max_batch_requests = 100_000
+    max_batch_bytes = 256_000_000
 
     def __init__(
         self,
@@ -106,6 +119,9 @@ class AnthropicBatchClient(BaseBatchClient):
     def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
         return self.enable_prompt_caching and prompt_is_shared(agent_config)
 
+    def marks_cache_points(self) -> bool:
+        return self.enable_prompt_caching
+
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -124,21 +140,20 @@ class AnthropicBatchClient(BaseBatchClient):
             }
         }
         """
-        envelope = MessageBuilder.build_for_batch(
+        model_name = batch_task.model_config.get("model_name", self._get_default_model())
+        # The messages online sends: one user message, no system prompt.
+        envelope = MessageBuilder.build(
             "anthropic",
             batch_task.prompt,
             batch_task.user_content,
             schema=schema,
+            json_mode=schema is not None,
             enable_prompt_caching=batch_task.cache_prompt,
             shared_prompt_len=batch_task.shared_prompt_len,
+            model_name=model_name,
+            cache_points=batch_task.cache_points,
         )
-        # Anthropic batch: system is a top-level param, user content is the message
-        params = {
-            "model": batch_task.model_config.get("model_name", self._get_default_model()),
-            "messages": envelope.to_dicts(role="user"),
-        }
-        if any(m.content for m in envelope.messages if m.role == "system"):
-            params["system"] = envelope.to_dicts(role="system")[0]["content"]
+        params = {"model": model_name, "messages": message_params(envelope)}
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
@@ -165,7 +180,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
         result_type = self._get_attribute_or_key(result, "type")
         if result_type == "succeeded":
-            return self._no_answer_error(result)
+            return None
         if result_type == "errored":
             error_info = self._get_attribute_or_key(result, "error", {})
             return str(error_info) if error_info else "Batch processing errored"
@@ -183,33 +198,42 @@ class AnthropicBatchClient(BaseBatchClient):
         inner = self._get_attribute_or_key(error, "error") or error
         return _ERROR_TYPE_STATUS.get(self._get_attribute_or_key(inner, "type"))
 
-    def _no_answer_error(self, result: Any) -> str | None:
-        """The error for a message whose blocks hold no text or tool answer, as online raises.
+    def _no_answer(self, raw_response: Any) -> NoAnswer | None:
+        """A message whose blocks hold no tool answer and no text, as the online client ends it.
 
-        A thinking block alone (max_tokens spent while thinking) is not the answer. An
-        empty content list is left to the action's ``on_empty``.
+        A thinking block alone (max_tokens spent while thinking) is not the answer.
         """
+        result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
-        if not isinstance(content_list, list) or not content_list:
+        if not isinstance(content_list, list):
             return None
         if self._extract_tool_use_content(content_list) is not None:
             return None
-        if self._extract_text_content(content_list) is not None:
+        if self._extract_text_content(content_list):
             return None
-        error = empty_response_error(
-            "Anthropic",
+        from agent_actions.llm.providers.anthropic.client import no_answer
+
+        return no_answer(
             self._get_attribute_or_key(message, "stop_reason"),
+            only_text=all(
+                self._get_attribute_or_key(block, "type") == "text" for block in content_list
+            ),
             model_name=self._get_attribute_or_key(message, "model") or "",
-            vendor="anthropic",
             operation="messages.batches",
         )
-        return str(error)
+
+    def _cut_off_parse_error(self, stop_reason: Any, text: str) -> str:
+        from agent_actions.llm.providers.anthropic.client import no_tool_answer_message
+
+        if is_stopped_by_provider(stop_reason):
+            return stopped_parse_error(stop_reason)
+        return no_tool_answer_message(stop_reason, text)
 
     def _answer_was_cut_off(self, raw_response: Any) -> bool:
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
-        return is_truncated(self._get_attribute_or_key(message, "stop_reason"))
+        return is_unfinished(self._get_attribute_or_key(message, "stop_reason"))
 
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         """Extract content from Anthropic response."""
@@ -223,6 +247,27 @@ class AnthropicBatchClient(BaseBatchClient):
             if text is not None:
                 return text
         return self._parse_content_list(content_list)
+
+    def _answer_text(self, raw_response: Any) -> str | None:
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if (
+            not isinstance(content_list, list)
+            or self._extract_tool_use_content(content_list) is not None
+        ):
+            return None
+        return self._extract_text_content(content_list)
+
+    def _parse_json_content(self, content_str: str) -> Any:
+        """Read a text answer as online reads it: an object or a list of objects.
+
+        Any other text stays text, which JSON mode takes as a parse error.
+        """
+        from agent_actions.llm.providers.anthropic.client import json_answer_in
+
+        answer = json_answer_in(content_str)
+        return content_str if answer is None else answer
 
     def _parse_content_list(self, content_list: Any) -> Any:
         """

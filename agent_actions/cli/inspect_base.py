@@ -55,12 +55,19 @@ def render_title_row(
         console.print(line)
 
 
-def branch_of(action_config: dict[str, Any]) -> dict[str, str] | None:
-    """The branch name and branch file an included action comes from; None for a host action."""
+def branch_of(action_config: dict[str, Any]) -> dict[str, Any] | None:
+    """The branch name and branch file an included action comes from; None for a host action.
+
+    For an include with ``as:``, also its instance name and the map of its short names.
+    """
     origin = action_config.get("_include")
     if not isinstance(origin, dict):
         return None
-    return {"name": origin["branch"], "file": origin["branch_file"]}
+    branch: dict[str, Any] = {"name": origin["branch"], "file": origin["branch_file"]}
+    if isinstance(origin.get("names"), dict):
+        branch["instance"] = origin["instance"]
+        branch["names"] = dict(origin["names"])
+    return branch
 
 
 def collapse_version_groups(actions: list[str], action_configs: dict) -> list[str]:

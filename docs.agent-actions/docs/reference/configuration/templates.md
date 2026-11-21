@@ -41,6 +41,7 @@ The load then applies these rules:
 
 - A prompt in which all names are bound renders at load.
 - A prompt can read a name that a record or a version supplies (`source`, `seed`, an action of the workflow, `version`, `i`, `idx` or a version `param`). Such a prompt is kept whole and renders for each record, exactly as the same prompt in the prompt store does. This includes its own `{% if %}`, `is defined`, captures, macros and `{% raw %}` blocks. An action named by a tag, such as `name: {{ n }}` in a loop or a macro, counts after the file is parsed. If no action has the name, the load fails as for any undefined name. The prompt can have its own `{{ }}` tags outside its `{% %}` blocks that read only load-time names. Those tags render into the prompt at load. For example, with `{% for n in [1, 2] %}`, `Stage {{ n }} of {{ source.text }}` becomes `Stage 2 of {{ source.text }}`. Other tags of the prompt can read load-time data, for example a list that a `{% for %}` walks or a flag that an `{% if %}` tests. That data is set at the top of the prompt (`{% set fields = ["title", "body"] +%}`).
+- In both cases, a `{% cache_point %}` tag of a prompt stays in the prompt. The tag takes effect when the prompt renders for each record. See [Prompt Caching](../prompts/prompt-caching.md).
 - In both cases, the `{{ load_prompt("...") }}` tag of a prompt inserts the loaded prompt as written, after the file is parsed. Thus a loaded prompt of several lines keeps its line breaks in any YAML style, and needs no indentation. If a filter processes the tag first (`| indent(6)`), the result is pasted into the YAML text like any other output.
 - Other values of a versioned action (`model_vendor`, `model_name`, `intent`, …) can read a version variable. Such a value renders one time for each version, as if the variables of the version were set when the file loads. On an action without `versions:`, such a value fails the load, unless the variable is guarded with `is defined` or `default(...)`.
 
@@ -87,6 +88,10 @@ project/
 ## Macro Definition
 
 Define reusable action groups with Jinja2 macros. You can combine these macros into larger workflows:
+
+:::note
+A macro must write the full name of each action that it reads. To use one group of actions more than one time, write a [branch](./branches.md). Include the branch with `as:`.
+:::
 
 ```jinja2
 {# templates/thinkific_tools.jinja2 #}

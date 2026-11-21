@@ -1008,12 +1008,12 @@ class TestCallJsonDictWrapping:
 
 
 # ---------------------------------------------------------------------------
-# Ollama set_last_usage
+# Ollama usage
 # ---------------------------------------------------------------------------
 
 
-class TestOllamaSetLastUsage:
-    """Ollama calls set_last_usage() when token counts are available."""
+class TestOllamaCountsItsUsage:
+    """Each Ollama call is counted with the tokens its response reports."""
 
     @pytest.mark.parametrize(
         ("method", "content", "prompt_tokens", "completion_tokens", "total_tokens"),
@@ -1022,12 +1022,12 @@ class TestOllamaSetLastUsage:
             pytest.param("call_non_json", "Hello", 30, 15, 45, id="call-non-json"),
         ],
     )
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_calls_set_last_usage(
+    def test_a_call_is_counted_with_its_tokens(
         self,
         mock_get_client,
         mock_inject,
@@ -1057,16 +1057,18 @@ class TestOllamaSetLastUsage:
             {
                 "input_tokens": prompt_tokens,
                 "output_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            }
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            model="llama3",
         )
 
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_zero_tokens_skips_set_last_usage(
+    def test_a_call_that_reports_no_tokens_is_still_counted(
         self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
     ):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
@@ -1080,7 +1082,8 @@ class TestOllamaSetLastUsage:
 
         OllamaLocalClient.call_non_json(None, {"model_name": "llama3"}, "prompt", "data")
 
-        mock_set_usage.assert_not_called()
+        mock_set_usage.assert_called_once()
+        assert not any(mock_set_usage.call_args[0][0].values())
 
 
 # ---------------------------------------------------------------------------

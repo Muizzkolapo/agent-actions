@@ -125,16 +125,17 @@ async def test_a_lone_action_of_a_step_labels_its_model_calls(captured):
 
 
 def test_each_judge_vote_on_a_worker_thread_is_logged_against_the_action(captured, monkeypatch):
-    from agent_actions.expectations import judge
+    from agent_actions.llm.realtime.services.invocation import ClientInvocationService
+    from tests.unit.expectations.judging import invoke_judge
 
-    def one_vote(agent_config, rule, value, **kwargs):
+    def one_vote(**kwargs):
         _model_call("vote")
-        return True, ""
+        return [{"passed": True, "reason": ""}]
 
-    monkeypatch.setattr(judge, "invoke_judge", one_vote)
+    monkeypatch.setattr(ClientInvocationService, "invoke_client", one_vote)
 
     with EventManager.get().context(action_name="judged", action_index=3):
-        judge.invoke_judge_with_votes({}, "rule", "value", votes=3)
+        invoke_judge({"model_vendor": "v"}, "rule", "value", votes=3)
 
     calls = [event for event in captured if isinstance(event, LLMRequestEvent)]
     assert len(calls) == 3

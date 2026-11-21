@@ -5,9 +5,10 @@ Both vendors use the same in-process loop (no real batch API exists for
 either). The ``cloud`` flag controls client construction (Bearer auth)
 and whether the ``format`` param is passed to ``client.chat()``.
 
-Records are processed concurrently via ``ThreadPoolExecutor``.  Concurrency
-is controlled by ``OLLAMA_BATCH_MAX_WORKERS`` (env var) or the constructor
-``max_workers`` parameter.  Default is 1 (sequential, matching prior behavior).
+Records are processed concurrently via ``ThreadPoolExecutor``.  Its worker count
+is the action's ``batch_max_workers`` (the constructor's ``max_workers``), else
+``OLLAMA_BATCH_MAX_WORKERS``, else 1 (sequential).  ``record_concurrency`` is the
+online setting: it never sets these workers, and is refused on a batch action.
 
 When Ollama ships a real cloud batch API, add a
 ``_submit_to_cloud_batch_api`` branch inside ``_submit_to_provider_api``.
@@ -27,7 +28,14 @@ from ollama import Client
 
 from agent_actions.config.defaults import LLMDefaults, OllamaCloudDefaults, OllamaDefaults
 from agent_actions.errors import ConfigurationError, VendorAPIError
-from agent_actions.llm.providers.ollama.client import _VENDOR_PARAMS, _extract_ollama_schema
+from agent_actions.llm.providers.error_wrapper import wrap_vendor_error
+from agent_actions.llm.providers.ollama.client import (
+    _ERROR_MAPPING_CLOUD,
+    _ERROR_MAPPING_LOCAL,
+    _VENDOR_PARAMS,
+    _extract_ollama_schema,
+    read_json_reply,
+)
 from agent_actions.llm.providers.ollama.failure_injection import (
     failed_batch_id_for,
     is_injected_failed_batch,
@@ -61,6 +69,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     Parameterized by ``vendor_slug`` and ``cloud`` to serve both
     ``ollama_local`` and ``ollama_cloud`` from a single class.
     """
+
+    _vendor_label = "Ollama"
 
     def __init__(
         self,
@@ -103,8 +113,13 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     ) -> dict[str, Any]:
         """Format task as OpenAI-compatible JSONL (for consistency)."""
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
-        envelope = MessageBuilder.build_for_batch(
-            self.vendor_slug, batch_task.prompt, batch_task.user_content, schema=schema
+        # The messages online sends.
+        envelope = MessageBuilder.build(
+            self.vendor_slug,
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            json_mode=batch_task.json_mode(schema),
         )
         body: dict[str, Any] = {
             "model": model_name,
@@ -137,10 +152,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _get_default_model(self) -> str:
         return "llama2"
 
-    def _get_default_temperature(self) -> float | None:
-        # As online: an unset temperature is left to the model.
-        return None
-
     def _prepare_batch_input_file(
         self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
@@ -156,10 +167,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             else OllamaDefaults.BATCH_MAX_WORKERS
         )
 
+        setting = "batch_max_workers"
         if self._max_workers is not None:
             val = self._max_workers
         else:
-            env_val = os.getenv("OLLAMA_BATCH_MAX_WORKERS")
+            setting = "OLLAMA_BATCH_MAX_WORKERS"
+            env_val = os.getenv(setting)
             if env_val:
                 try:
                     val = int(env_val)
@@ -172,11 +185,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 return default
 
         if val < 1:
-            logger.warning("batch_max_workers=%s invalid (must be >= 1), using default", val)
+            logger.warning("%s=%s invalid (must be >= 1), using default", setting, val)
             return default
         if val > self._MAX_WORKERS_LIMIT:
             logger.warning(
-                "batch_max_workers=%s exceeds limit of %s, clamping",
+                "%s=%s exceeds limit of %s, clamping",
+                setting,
                 val,
                 self._MAX_WORKERS_LIMIT,
             )
@@ -236,6 +250,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         except Exception as e:
             logger.error("Error processing %s: %s", custom_id, e)
+            status = self._http_status(e)
             return {
                 "custom_id": custom_id,
                 "response": None,
@@ -243,8 +258,39 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     "message": str(e),
                     "type": f"{self.vendor_slug}_error",
                     "code": "inference_error",
+                    "status": status,
                 },
+                # Beside the error, not in it: the error dict becomes the record's error text.
+                "retriable": (
+                    self._online_retries(e, str(task.get("body", {}).get("model", "")))
+                    if status is None
+                    else None
+                ),
             }
+
+    @staticmethod
+    def _http_status(error: Exception) -> int | None:
+        """The status of an HTTP error answer; None for a failure that got no answer."""
+        status = getattr(error, "status_code", None)
+        if status is None:
+            status = getattr(getattr(error, "response", None), "status_code", None)
+        return status if isinstance(status, int) and status > 0 else None
+
+    def _online_retries(self, error: Exception, model: str) -> bool:
+        """Whether the online client retries *error*, classified as it classifies it."""
+        from agent_actions.processing.recovery.retry import is_retriable_error
+
+        mapping = _ERROR_MAPPING_CLOUD if self.cloud else _ERROR_MAPPING_LOCAL
+        return is_retriable_error(wrap_vendor_error(error, model, mapping))
+
+    def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
+        error = raw_response.get("error")
+        status = error.get("status") if isinstance(error, dict) else None
+        return status if isinstance(status, int) else None
+
+    def _extract_retriable(self, raw_response: dict[str, Any]) -> bool | None:
+        retriable = raw_response.get("retriable")
+        return retriable if isinstance(retriable, bool) else None
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch with concurrent workers (default: 1 = sequential)."""
@@ -317,6 +363,11 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _get_result_file_name(self, batch_id: str) -> str:
         return f"{batch_id}_results.jsonl"
+
+    def _parse_json_content(self, content_str: str) -> Any:
+        """Read a reply with the online client's ``read_json_reply``; text it refuses stays text."""
+        parsed = read_json_reply(content_str)
+        return content_str if parsed is None else parsed
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         raise NotImplementedError("Ollama uses custom file-based retrieve_results()")

@@ -26,6 +26,13 @@ from agent_actions.workflow import runner_file_processing
 from agent_actions.workflow.runner import ActionRunner, FileProcessParams
 from agent_actions.workflow.runner_file_processing import process_files
 
+
+def _configured(runner: ActionRunner) -> ActionRunner:
+    """A runner as a run sets it up: it reads stored input only with its action configs."""
+    runner.action_configs = {}
+    return runner
+
+
 ACTION = "flatten"
 UPSTREAM = "extract"
 
@@ -46,7 +53,7 @@ def backend(tmp_path):
 
 def _runner(backend, *, fail=()) -> ActionRunner:
     """A runner whose processing stores nothing and fails for the files named."""
-    runner = ActionRunner(use_tools=True, storage_backend=backend)
+    runner = _configured(ActionRunner(use_tools=True, storage_backend=backend))
 
     def process(params):
         if params.locations.item.name in fail:

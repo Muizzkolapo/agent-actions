@@ -162,7 +162,7 @@ class TestGeminiNonJsonResponseTextGuard:
     """response_temp.text=None doesn't propagate as None to the output."""
 
     # Patch targets:
-    # - set_last_usage and fire_event (LLMResponseEvent) now live in response_builder
+    # - record_usage and fire_event (LLMResponseEvent) are called from response_builder
     # - fire_event (LLMRequestEvent/LLMErrorEvent) still in gemini.client
     _RB = "agent_actions.output.response.response_builder"
     _GC = "agent_actions.llm.providers.gemini.client"
@@ -187,7 +187,7 @@ class TestGeminiNonJsonResponseTextGuard:
                 return_value=mock_client,
             ),
             patch(f"{self._GC}.fire_event"),
-            patch(f"{self._RB}.set_last_usage"),
+            patch(f"{self._RB}.record_usage"),
             patch(f"{self._RB}.fire_event"),
         ):
             return GeminiClient.call_non_json(
@@ -197,31 +197,23 @@ class TestGeminiNonJsonResponseTextGuard:
                 "some context",
             )
 
-    def test_none_response_text_becomes_empty_string(self):
-        """call_non_json with response.text=None must return "" in the output record."""
+    def test_none_response_text_is_an_empty_answer(self):
+        """call_non_json with response.text=None returns no record, never a None field."""
         result = self._call_non_json(text=None)
-        assert result == [{"raw_response": ""}], (
-            "None text must produce empty string in output record, not None"
-        )
+        assert result == [], "an answer with no text is the empty output on_empty decides"
 
     def test_non_none_text_preserved(self):
         """call_non_json with non-None text must return it unchanged."""
         result = self._call_non_json(text="hello world")
         assert result == [{"raw_response": "hello world"}]
 
-    def test_call_json_passes_empty_string_not_none_to_parser(self):
-        """call_json with response.text=None must pass "" to parse_json_response, not None."""
+    def test_call_json_with_no_text_is_a_parse_error_holding_an_empty_string(self):
+        """call_json with response.text=None stores "" as the raw response, not None."""
         from agent_actions.llm.providers.gemini.client import GeminiClient
 
         mock_response = self._make_mock_response(text=None)
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = mock_response
-
-        captured: list[str] = []
-
-        def capture_parse(response_content, **kwargs):
-            captured.append(response_content)
-            return [{}]
 
         with (
             patch(
@@ -229,11 +221,10 @@ class TestGeminiNonJsonResponseTextGuard:
                 return_value=mock_client,
             ),
             patch(f"{self._GC}.fire_event"),
-            patch(f"{self._RB}.set_last_usage"),
+            patch(f"{self._RB}.record_usage"),
             patch(f"{self._RB}.fire_event"),
-            patch.object(GeminiClient, "parse_json_response", side_effect=capture_parse),
         ):
-            GeminiClient.call_json(
+            (record,) = GeminiClient.call_json(
                 "fake-api-key",
                 {"model_name": "gemini-1.5-pro"},
                 "Classify the text",
@@ -241,10 +232,8 @@ class TestGeminiNonJsonResponseTextGuard:
                 '{"label": "string"}',
             )
 
-        assert captured, "parse_json_response was not called"
-        assert captured[0] == "", (
-            "call_json must pass '' (not None) to parse_json_response when response.text is None"
-        )
+        assert record["raw_response"] == ""
+        assert record["_parse_error"].startswith("Empty response from API")
 
 
 # ---------------------------------------------------------------------------

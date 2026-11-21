@@ -212,6 +212,9 @@ _ONE_RECORD_AT_A_TIME = {
     "hitl": "a hitl action reviews its records together",
 }
 
+# Vendors with no batch API: their batch is a loop in this process, with its own worker setting.
+_BATCHES_IN_THIS_PROCESS = frozenset({"ollama_local", "ollama_cloud"})
+
 
 def validate_record_concurrency(
     action: dict[str, Any], agent: dict[str, Any], kind: str, action_name: str
@@ -224,14 +227,20 @@ def validate_record_concurrency(
     if "record_concurrency" not in action:
         return
     reason = _ONE_RECORD_AT_A_TIME.get(kind)
+    remedy = f"Remove record_concurrency from '{action_name}'"
     if reason is None and agent.get("run_mode") == RunMode.BATCH:
         reason = "a batch action's records run at the provider"
+        if str(agent.get("model_vendor") or "").lower() in _BATCHES_IN_THIS_PROCESS:
+            reason = (
+                "an Ollama batch action sends its records from this process, "
+                "batch_max_workers at a time"
+            )
+            remedy += ", and set batch_max_workers on it to send more than one record at a time"
     if reason is None:
         return
     raise ConfigValidationError(
         "record_concurrency",
-        f"Action '{action_name}' sets record_concurrency, but {reason}.\n"
-        f"Remove record_concurrency from '{action_name}'.",
+        f"Action '{action_name}' sets record_concurrency, but {reason}.\n{remedy}.",
         context={"action": action_name, "kind": kind},
     )
 

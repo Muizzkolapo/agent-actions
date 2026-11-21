@@ -80,10 +80,19 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         return self._format_invalid_configuration(message, context)
 
     def _format_invalid_configuration(self, message: str, context: dict[str, Any]) -> UserError:
-        agent = context.get("agent")
+        config_file = context.get("config_file")
+        if config_file:
+            # A project file is no workflow's, whichever workflow the command was run for.
+            context = {key: value for key, value in context.items() if key != "agent"}
+            title = f"Invalid configuration in {config_file}"
+        else:
+            agent = context.get("agent")
+            title = (
+                f"Invalid configuration in agent '{agent}'" if agent else "Invalid configuration"
+            )
         return UserError(
             category="Configuration Error",
-            title=f"Invalid configuration in agent '{agent}'" if agent else "Invalid configuration",
+            title=title,
             details=message,
             fix=self._hint_or(context, "Check your agent configuration file for errors"),
             context=context,
