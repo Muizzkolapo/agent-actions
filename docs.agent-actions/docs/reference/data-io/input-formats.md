@@ -214,7 +214,7 @@ prompt: |
 
 1. **Use consistent structure**: All input files should have the same field structure.
 2. **Include metadata**: Add tracking fields, for example `id`, `source` and `timestamp`.
-3. **Analyze schemas**: Before you run the workflow, use `agac schema -a my_workflow` to check field dependencies.
+3. **Analyze schemas**: Before you run the workflow, use `agac schema -w my_workflow` to check field dependencies.
 
 ## See Also
 

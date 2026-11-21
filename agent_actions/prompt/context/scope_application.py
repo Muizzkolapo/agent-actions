@@ -2,6 +2,7 @@
 
 import logging
 from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 
 from agent_actions.errors import ConfigurationError, RecordContextError
@@ -11,7 +12,11 @@ from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
     ContextScopeAppliedEvent,
 )
-from agent_actions.prompt.context.null_namespace import is_null_namespace
+from agent_actions.prompt.context.null_namespace import (
+    ABSENT_NAMESPACE,
+    OptionalFieldsNamespace,
+    is_null_namespace,
+)
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.context.scope_namespace import _extract_content_data
 from agent_actions.prompt.context.scope_parsing import (
@@ -46,6 +51,8 @@ def _resolve_missing_field(
        - observe → raise RecordContextError (prevents None injection into prompts)
        - passthrough/drop → return None (match guard semantics)
     3. Namespace not in prompt_context at all → raise (config bug / typo)
+
+    An observe entry marked optional never reaches here: it takes its default.
     """
     if ns_name in prompt_context and is_null_namespace(prompt_context[ns_name]):
         logger.debug(
@@ -68,7 +75,8 @@ def _resolve_missing_field(
                     "directive": directive,
                     "operation": "apply_context_scope",
                     "hint": f"Namespace '{ns_name}' exists but field is missing. "
-                    f"Upstream action may have produced incomplete output.",
+                    f"Upstream action may have produced incomplete output. A field a "
+                    f"record may lack can be observed as optional ('{field_ref}?').",
                 },
             )
         logger.warning(
@@ -341,6 +349,9 @@ def apply_context_scope(
 
     # Process OBSERVE: Extract to llm_context, KEEP in prompt_context for template rendering
     observe_refs = context_scope.get("observe", [])
+    optional: Mapping[str, Any] = context_scope.get("optional") or {}
+    # What each optional field the record lacks resolved to, for the prompt to read too.
+    defaulted: dict[str, dict[str, Any]] = {}
     # Every missing explicit ref is gathered before the record is refused, so the error
     # names all of them and a record lacking two fields is not fixed one field at a time.
     missing: list[RecordContextError] = []
@@ -356,7 +367,11 @@ def apply_context_scope(
             else:
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
-                if value is _MISSING:
+                if field_ref in optional:
+                    if value is _MISSING or value is None:
+                        value = plain_copy(optional[field_ref])
+                        defaulted.setdefault(ns_name, {})[field_name] = value
+                elif value is _MISSING:
                     try:
                         _resolve_missing_field(
                             prompt_context, ns_name, field_ref, action_name, "observe"
@@ -416,6 +431,17 @@ def apply_context_scope(
                 filtered[ns] = data
             else:
                 filtered[ns] = {k: v for k, v in data.items() if k in allowed[ns]}
+
+    # A prompt reads an optional field as the scope resolved it. A null namespace stays
+    # null; a nested path is not written, as a nested field the record has is not kept.
+    for ns_name, fields in defaulted.items():
+        namespace = filtered.get(ns_name)
+        if isinstance(namespace, dict):
+            namespace.update({name: value for name, value in fields.items() if "." not in name})
+        elif is_null_namespace(namespace):
+            filtered[ns_name] = OptionalFieldsNamespace(
+                namespace if ns_name in filtered else ABSENT_NAMESPACE, fields
+            )
 
     excluded = set(prompt_context.keys()) - set(filtered.keys())
     if excluded:
@@ -592,11 +618,21 @@ def _expand_observed_fields(
     content: dict,
     resolved_observe: list[tuple[str, str, str]],
     qualify_wildcards: bool,
+    optional: Mapping[str, Any],
 ) -> list[tuple[str, str, str, Any, bool]]:
-    """(namespace, field, declared key, value, came-from-wildcard) per observed field."""
+    """(namespace, field, declared key, value, came-from-wildcard) per observed field.
+
+    An optional field is always among them, whatever the record holds of its namespace.
+    """
     expanded: list[tuple[str, str, str, Any, bool]] = []
     for ns, field, output_key in resolved_observe:
         ns_data = content.get(ns)
+        if f"{ns}.{field}" in optional:
+            value = extract_field_value(content, ns, field)
+            if value is None:
+                value = plain_copy(optional[f"{ns}.{field}"])
+            expanded.append((ns, field, output_key, value, False))
+            continue
         if not isinstance(ns_data, dict):
             continue
         if field == "*":
@@ -616,6 +652,7 @@ def plan_flat_observed_keys(
     *,
     reserved_names: frozenset[str] | set[str] = frozenset(),
     action_name: str = "unknown",
+    optional: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], set[str]]:
     """Map observed fields to the flat keys FILE mode delivers them under.
 
@@ -634,7 +671,7 @@ def plan_flat_observed_keys(
     flat: dict[str, Any] = {}
     announced: set[str] = set()
     for ns, field, key, value, from_wildcard in _expand_observed_fields(
-        content, resolved_observe, qualify_wildcards
+        content, resolved_observe, qualify_wildcards, optional or {}
     ):
         qualified = f"{ns}.{field}"
         if key != qualified:
@@ -670,6 +707,7 @@ def _inject_flat_observed_keys(
     qualify_wildcards: bool,
     action_name: str,
     reserved_namespaces: frozenset[str],
+    optional: Mapping[str, Any] | None = None,
 ) -> set[str]:
     """Inject flat observed keys into post-drop content for FILE mode enrichment.
 
@@ -685,6 +723,7 @@ def _inject_flat_observed_keys(
         qualify_wildcards,
         reserved_names=reserved_namespaces,
         action_name=action_name,
+        optional=optional,
     )
     content.update(flat)
     return announced
@@ -940,7 +979,12 @@ def apply_context_scope_for_records(
     qualified_keys: set[str] = set()
     for record, enriched_content, record_seed in prepared:
         qualified_keys |= _inject_flat_observed_keys(
-            enriched_content, resolved_observe, qualify_wildcards, action_name, namespace_union
+            enriched_content,
+            resolved_observe,
+            qualify_wildcards,
+            action_name,
+            namespace_union,
+            context_scope.get("optional"),
         )
         enriched.append(
             {

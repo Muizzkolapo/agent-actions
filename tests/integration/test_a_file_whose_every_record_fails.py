@@ -14,6 +14,7 @@ from contextlib import contextmanager
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
@@ -146,7 +147,7 @@ def test_a_file_whose_every_answer_fails_on_a_rerun_keeps_no_answer_from_before_
     with _unparsed():
         result = _run("--rerun", ACTION)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert f"Failed to process file {folder}{FAILING}" in result.output
     assert _status(online) == "completed_with_failures"
     assert _still_holding(before_the_edit, _stored(online)) == [], "an answer from before the edit"
@@ -169,7 +170,7 @@ def test_a_reader_whose_every_record_of_a_file_fails_on_a_rerun_keeps_nothing_ma
     with _answering_the_failing_file({"summary": BREAKS_THE_READER, "exam_density": "low"}):
         result = _run("--rerun", ACTION)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _status(online, READER) == "completed_with_failures"
     assert _still_holding(before_the_edit, _stored(online, READER)) == [], (
         "a row made from a replaced summary"
@@ -179,17 +180,17 @@ def test_a_reader_whose_every_record_of_a_file_fails_on_a_rerun_keeps_nothing_ma
 def test_a_batch_file_whose_every_answer_fails_on_a_rerun_keeps_no_answer_from_before_it(
     project,  # noqa: F811
 ):
-    assert _run("--fresh").exit_code == 0
+    assert _run("--fresh").exit_code == EXIT_PAUSED
     assert _run().exit_code == 0
     assert _status(project) == "completed"
     before_the_edit = _stored(project)
 
     _edit_prompt(project)
     with _batch_answers_unparsed():
-        assert _run("--rerun", ACTION).exit_code == 0
+        assert _run("--rerun", ACTION).exit_code == EXIT_PAUSED
         result = _run()
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _status(project) == "completed_with_failures"
     assert _still_holding(before_the_edit, _stored(project)) == [], "an answer from before the edit"
 
@@ -210,7 +211,7 @@ def test_a_first_run_whose_every_answer_for_a_file_fails_stores_nothing_for_it(
     with _unparsed():
         result = _run("--fresh")
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _status(online) == "completed_with_failures"
     assert _stored_files(online, ACTION) == ["pages2.json"]
     assert _stored_files(online, READER) == ["pages2.json"]
@@ -226,10 +227,10 @@ def test_a_retry_answers_the_file_again_and_its_reader_with_it(
     assert _run("--fresh").exit_code == 0
     _edit_prompt(online)
     with _unparsed():
-        assert _run("--rerun", ACTION).exit_code == 0
+        assert _run("--rerun", ACTION).exit_code == EXIT_RECORD_FAILURES
 
     provider.answers()
-    assert _run().exit_code == 0
+    assert _run().exit_code == EXIT_RECORD_FAILURES
     assert provider.pages() == []
     retried = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW])
 

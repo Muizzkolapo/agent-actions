@@ -17,6 +17,7 @@ from typing import Any, cast
 from agent_actions.config.types import RunMode
 from agent_actions.errors import (
     ConfigurationError,
+    ProviderQuotaStop,
     RecordContextError,
     mark_action_fatal,
     raised_by_exhaustion_policy,
@@ -284,7 +285,7 @@ class OnlineLLMStrategy:
             in_flight: dict[Future[ProcessingResult], int] = {}
             try:
                 self._fill_and_settle(pool, in_flight, records, context, limit, results, tally)
-            except (KeyboardInterrupt, SystemExit):
+            except (KeyboardInterrupt, SystemExit, ProviderQuotaStop):
                 self._keep_answers_in_flight(in_flight, context)
                 raise
 
@@ -348,7 +349,8 @@ class OnlineLLMStrategy:
     def _keep_answers_in_flight(
         self, in_flight: dict[Future[ProcessingResult], int], context: ProcessingContext
     ) -> None:
-        """On an interrupt, wait for the records already sent and checkpoint their answers.
+        """On an interrupt or a quota stop, wait for the records already sent and checkpoint
+        their answers.
 
         Nothing more is sent. An answer already paid for is kept, so the resumed run
         does not send that record again; one that raised is left for the resume. An

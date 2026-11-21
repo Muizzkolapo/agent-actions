@@ -4,6 +4,7 @@ import copy
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.input.context.normalizer import split_optional_observe
 from agent_actions.output.response.config_fields import get_default
 
 
@@ -30,6 +31,10 @@ def deep_merge_context_scope(
     if not action_scope:
         return defaults_scope or {}
 
+    # Plain references on both sides: a mapping entry cannot be deduplicated, and one
+    # field written `a.b` at one level and `a.b?` at the other is one field.
+    defaults_scope = split_optional_observe(defaults_scope)
+    action_scope = split_optional_observe(action_scope)
     merged = {**defaults_scope}
 
     for key, value in action_scope.items():
