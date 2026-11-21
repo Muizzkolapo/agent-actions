@@ -187,7 +187,14 @@ def test_dispositions_json_is_one_json_document_on_stdout(project, flag):
     assert report["workflow"] == WORKFLOW
     assert [entry["name"] for entry in report["actions"]] == ["summarize", "tag"]
     for entry in report["actions"]:
-        assert set(entry) == {"name", "counts", "total", "records", "action_level"}
+        assert set(entry) == {
+            "name",
+            "counts",
+            "total",
+            "sent_elsewhere",
+            "records",
+            "action_level",
+        }
         assert set(entry["counts"]) == COUNTS
         assert sum(entry["counts"].values()) == entry["total"] == len(PAGES)
 
