@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -154,6 +155,7 @@ class _BatchContext:
     workflow_root: Path
     storage_backend: StorageBackend
     action_name: str
+    project_root: Path
 
 
 def _prepare_batch_context(
@@ -179,7 +181,22 @@ def _prepare_batch_context(
         workflow_root=workflow_root,
         storage_backend=storage_backend,
         action_name=resolved_action,
+        project_root=root,
     )
+
+
+def _action_config(ctx: _BatchContext) -> dict[str, Any] | None:
+    """The action's config as `agac run` builds it, or None when the workflow has no such action."""
+    from agent_actions.cli.workflow_loader import load_workflow
+    from agent_actions.config.project_paths import ProjectPathsFactory
+
+    paths = ProjectPathsFactory.create_project_paths(
+        ctx.workflow_name, ctx.workflow_name, auto_create=False, project_root=ctx.project_root
+    )
+    workflow = load_workflow(
+        ctx.workflow_name, paths, ctx.project_root, sends_requests=False, read_only=True
+    )
+    return workflow.action_configs.get(ctx.action_name)
 
 
 def _workflow_action_options(f):
@@ -284,6 +301,7 @@ def retrieve(
         registry_manager_factory=registry_manager_factory,
         storage_backend=ctx.storage_backend,
         action_name=ctx.action_name,
+        agent_config=_action_config(ctx),
     )
     target_dir = ctx.workflow_root / "agent_io" / "target" / ctx.action_name
     target_dir.mkdir(parents=True, exist_ok=True)

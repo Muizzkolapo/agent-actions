@@ -86,6 +86,7 @@ cause (see `agent_actions/record/reasons.py`). Common values include:
 
 - `success`
 - `guard_filter`
+- `sent_elsewhere`: A `filtered` record that the guard of the action sent to another branch.
 - `guard_skip`
 - `guard_prefilter_skip`
 - `upstream_unprocessed`

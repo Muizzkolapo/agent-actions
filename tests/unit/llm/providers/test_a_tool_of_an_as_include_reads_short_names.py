@@ -32,6 +32,8 @@ def test_a_tool_outside_an_as_include_and_a_file_of_records_are_left_as_given():
     data = {"c2__write": {"text": "two"}}
     records = [{"c2__write": {"text": "two"}}]
 
-    assert ToolClient._with_short_names(data, {"_include": {"instance": "pair"}}) is data
-    assert ToolClient._with_short_names(data, {}) is data
-    assert ToolClient._with_short_names(records, CONFIG) is records
+    assert ToolClient._with_short_names(data, {"_include": {"instance": "pair"}}) == {
+        "c2__write": {"text": "two"}
+    }
+    assert ToolClient._with_short_names(data, {}) == {"c2__write": {"text": "two"}}
+    assert ToolClient._with_short_names(records, CONFIG) == [{"c2__write": {"text": "two"}}]

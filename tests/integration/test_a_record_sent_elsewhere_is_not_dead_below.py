@@ -222,9 +222,11 @@ def test_the_run_reports_no_record_sent_elsewhere_as_filtered(split):
 
     assert not re.search(r"[1-9]\d* filtered", flat), flat
     assert "records filtered by guard" not in flat
-    if "Guard pre-filter for" in flat:
-        assert "Guard pre-filter for 'left': 1 passed" in flat
-        assert "3 sent elsewhere" in flat
+    assert "✓ left 1 record " in flat, flat
+    if "(batch)" not in flat:
+        # Online, the pre-filter reports what the guard sent elsewhere.
+        assert "Guard pre-filter for 'left': 1 passed" in flat, flat
+        assert "3 sent elsewhere" in flat, flat
 
 
 def _table_row(output, action):
@@ -273,3 +275,132 @@ def test_retry_selects_no_record_sent_elsewhere(split):
     assert code == 0, output
     assert "Nothing to retry" in " ".join(output.split()), output
     assert {a: _dispositions(root, a) for a in ("left", "right")} == before
+
+
+PAGE_1 = 'source.page_content == "page 1"'
+FIRST_TWO = 'source.page_content == "page 0" or source.page_content == "page 1"'
+LAST_TWO = 'source.page_content == "page 2" or source.page_content == "page 3"'
+FIRST = ("source.page_content", "first.summary")
+
+
+def _summaries(project, action):
+    return sorted(row["source_guid"] for row in _rows(project, action))
+
+
+@RUN_MODES
+def test_a_record_no_branch_took_stays_dead_at_the_gatherer(tmp_path, run_mode):
+    """Pages 2 and 3 pass neither guard. The gatherer also reads the action above the
+    split, and they must not come back through it."""
+    root = _make(
+        tmp_path,
+        run_mode,
+        _action("first"),
+        _action("left", guard=FIRST_PAGE, dependencies=("first",), observe=FIRST, extra=SENDS),
+        _action("right", guard=PAGE_1, dependencies=("first",), observe=FIRST, extra=SENDS),
+        _action(
+            "joined",
+            dependencies=("left", "right", "first"),
+            observe=("source.page_content", "left.*", "right.*", "first.summary"),
+            extra=GATHERS,
+        ),
+    )
+
+    transcript = _run_to_the_end(root, "--fresh")
+
+    assert set(_statuses(root).values()) == {"completed"}, transcript
+    assert [_count(root, a) for a in ("first", "left", "right", "joined")] == [PAGES, 1, 1, 2]
+
+
+@RUN_MODES
+def test_a_record_of_another_branch_does_not_enter_this_one_at_an_inner_gatherer(
+    tmp_path, run_mode
+):
+    """Outer branch A takes pages 0 and 1, B pages 2 and 3; inside A, A1 takes page 0 and
+    A2 page 1. A's inner gatherer also reads the action above the outer split."""
+    root = _make(
+        tmp_path,
+        run_mode,
+        _action("first"),
+        _action("a", guard=FIRST_TWO, dependencies=("first",), observe=FIRST, extra=SENDS),
+        _action("b", guard=LAST_TWO, dependencies=("first",), observe=FIRST, extra=SENDS),
+        _action(
+            "a1",
+            guard=FIRST_PAGE,
+            dependencies=("a",),
+            observe=("source.page_content", "a.summary"),
+            extra=SENDS,
+        ),
+        _action(
+            "a2",
+            guard=PAGE_1,
+            dependencies=("a",),
+            observe=("source.page_content", "a.summary"),
+            extra=SENDS,
+        ),
+        _action(
+            "inner",
+            dependencies=("a1", "a2", "first"),
+            observe=("source.page_content", "a1.*", "a2.*", "first.summary"),
+            extra=GATHERS,
+        ),
+    )
+
+    transcript = _run_to_the_end(root, "--fresh")
+
+    assert set(_statuses(root).values()) == {"completed"}, transcript
+    assert [_count(root, x) for x in ("a", "b", "a1", "a2", "inner")] == [2, 2, 1, 1, 2]
+
+
+@RUN_MODES
+def test_an_action_below_the_gatherer_that_also_reads_above_the_split_keeps_every_record(
+    tmp_path, run_mode
+):
+    root = _make(
+        tmp_path,
+        run_mode,
+        _action("first"),
+        _action("left", guard=FIRST_PAGE, dependencies=("first",), observe=FIRST, extra=SENDS),
+        _action("right", guard=OTHER_PAGES, dependencies=("first",), observe=FIRST, extra=SENDS),
+        _gatherer("left", "right"),
+        _action(
+            "after",
+            dependencies=("joined", "first"),
+            observe=("source.page_content", "joined.summary", "first.summary"),
+        ),
+    )
+
+    transcript = _run_to_the_end(root, "--fresh")
+
+    assert set(_statuses(root).values()) == {"completed"}, transcript
+    assert [_count(root, a) for a in ("joined", "after")] == [PAGES, PAGES]
+
+
+@RUN_MODES
+def test_marking_a_split_and_its_gatherer_is_an_edit_of_each(tmp_path, run_mode):
+    """The keys change which records a reader gets, so adding them is an edit: the run
+    names it, and a rerun of the split gives the gatherer every record."""
+    plain = (
+        _action("left", guard=FIRST_PAGE),
+        _action("right", guard=OTHER_PAGES),
+        _action(
+            "joined",
+            dependencies=("left", "right"),
+            observe=("source.page_content", "left.*", "right.*"),
+        ),
+    )
+    root = _make(tmp_path, run_mode, *plain)
+    _run_to_the_end(root, "--fresh")
+    assert _count(root, "joined") == 0
+
+    config = _config(root)
+    head = config.read_text().split("\nactions:")[0]
+    config.write_text(head + "\nactions:\n" + "".join(SPLIT))
+    transcript = " ".join(_run_to_the_end(root).split())
+
+    for action in ("left", "right", "joined"):
+        assert f"--rerun {action}" in transcript, transcript
+    transcript = _run_to_the_end(root, "--rerun", "left", "--rerun", "right")
+
+    assert set(_statuses(root).values()) == {"completed"}, transcript
+    assert _count(root, "joined") == PAGES, transcript
+    assert _dispositions(root, "left").count((DISPOSITION_FILTERED, SENT_ELSEWHERE)) == PAGES - 1

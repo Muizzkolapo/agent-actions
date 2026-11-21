@@ -29,8 +29,7 @@ from agent_actions.llm.providers.error_wrapper import (
     NoAnswer,
     VendorErrorMapping,
     chat_no_answer,
-    cut_off_parse_error,
-    is_truncated,
+    unfinished_parse_error,
     unparsed_json_record,
     wrap_vendor_error,
 )
@@ -229,8 +228,8 @@ class OpenAIClient(BaseClient):
                 )
             return [{"raw_response": "", "_parse_error": ended.parse_error}]
         assert response_content is not None  # no content is no answer, ended above
-        if is_truncated(finish_reason):
-            parse_error = cut_off_parse_error(finish_reason)
+        parse_error = unfinished_parse_error(finish_reason)
+        if parse_error:
             logger.warning("%s (model=%s)", parse_error, model_name)
             return [{"raw_response": response_content, "_parse_error": parse_error}]
         from agent_actions.utils.json_parsing import parse_llm_json

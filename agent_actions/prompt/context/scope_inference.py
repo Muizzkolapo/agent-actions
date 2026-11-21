@@ -8,6 +8,7 @@ from agent_actions.logging.events.io_events import (
     ContextDependencyInferredEvent,
     ContextFieldSkippedEvent,
 )
+from agent_actions.prompt.aliases import header_names
 from agent_actions.prompt.context.scope_parsing import (
     extract_action_names_from_context_scope,
     extract_action_names_from_template,
@@ -118,7 +119,9 @@ def infer_dependencies(
     try:
         raw_prompt = PromptFormatter.get_raw_prompt(action_config)
         if raw_prompt:
-            template_actions = extract_action_names_from_template(raw_prompt)
+            template_actions = extract_action_names_from_template(
+                raw_prompt, header_names(action_config)
+            )
             # Only add template-referenced actions that are valid workflow actions
             valid_template_actions = template_actions & set(workflow_actions)
             if valid_template_actions - referenced_actions:

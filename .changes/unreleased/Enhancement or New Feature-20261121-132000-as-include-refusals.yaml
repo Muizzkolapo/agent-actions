@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: 'Inside an include with `as:`, a branch action that reads a bound workflow action by its workflow name, not through its input, is refused. A removal refusal names the include as `Include ''<branch>'' as ''<instance>''` and the reader by its short name.'
+time: 2026-11-21T13:20:00Z
