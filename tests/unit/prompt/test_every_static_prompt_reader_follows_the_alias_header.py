@@ -103,3 +103,44 @@ class TestAPromptOutsideAnInclude:
 
     def test_the_prompt_contract_check_does_not_read_it(self):
         assert _unguarded_refs(self.PROMPT, {}) == {("s", "missing_field")}
+
+
+class TestTheCallersPassTheMapOfTheAction:
+    PROMPT = HEADER + "{{ write.word }}"
+    REVIEW = {"name": "c2__review", "prompt": PROMPT, **INSTANCE}
+
+    def test_dependency_inference_reads_the_action_a_short_name_is_bound_to(self):
+        from agent_actions.prompt.context.scope_inference import infer_dependencies
+
+        actions = ["c2__write", "c2__review", "write"]
+
+        assert infer_dependencies(self.REVIEW, actions, "c2__review", validate=False) == (
+            [],
+            ["c2__write"],
+        )
+
+    def test_the_prompt_contract_check_of_pre_flight_names_the_bound_action(self, monkeypatch):
+        from agent_actions.services.preflight_service import PreflightService
+
+        found: list[tuple[str, list[str]]] = []
+        monkeypatch.setattr(
+            PreflightService,
+            "_warn_findings",
+            staticmethod(lambda label, f, **_: found.append((label, f))),
+        )
+        monkeypatch.setattr(
+            PreflightService,
+            "_collect_producing_schemas",
+            lambda self: {"c2__write": {"fields": [{"id": "word", "required": False}]}},
+        )
+        configs = {
+            "c2__write": {"name": "c2__write", "prompt": "Write."},
+            "c2__review": self.REVIEW,
+        }
+
+        PreflightService("wf", configs, None, "wf.yml")._warn_unguarded_prompt_refs()
+
+        ((label, findings),) = found
+        assert label == "prompt-contract"
+        assert len(findings) == 1
+        assert "c2__write.word" in findings[0]

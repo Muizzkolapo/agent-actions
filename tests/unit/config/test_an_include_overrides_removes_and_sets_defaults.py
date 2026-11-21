@@ -586,8 +586,9 @@ class TestEachInheritedKeyFollowsTheExpanderRule:
         )
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': reads 'z', "
-            "which is not a branch action or a declared input. Declare it under 'inputs:'."
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': reads 'z' "
+            "(from 'expect' under 'defaults:' of include 'pair'), which is not a branch action "
+            "or a declared input. Declare it under 'inputs:'."
         )
         declared = _pair([NOTE, B2], inputs={"a": "Holds the text", "z": "Holds more"})
         agents = _loaded(
