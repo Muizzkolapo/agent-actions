@@ -142,7 +142,7 @@ Static reference material (brand voice, marketplace rules) is defined once in `d
 ```bash
 pip install agent-actions-cli
 export OLLAMA_API_KEY=...
-agac run -a product_listing_enrichment
+agac run -w product_listing_enrichment
 ```
 
 The pipeline processes each product in `agent_io/staging/products.json` through all 7 actions and writes results to `agent_io/target/`.

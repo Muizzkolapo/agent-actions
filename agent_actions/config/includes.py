@@ -302,7 +302,7 @@ def _normalised_reads(scope: Any) -> dict[str, list[Any]] | None:
     return {
         directive: refs
         for directive, refs in normalised.items()
-        if DIRECTIVE_REGISTRY[directive]["type"] == "list"
+        if DIRECTIVE_REGISTRY.get(directive, {}).get("type") == "list"
     }
 
 

@@ -175,8 +175,8 @@ class CLI:
             self.logger.info("Operation aborted by user")
             return 130
         except click.UsageError as e:
-            self.logger.warning("Usage error: %s", e)
-            click.echo(f"Error: {str(e)}", err=True)
+            self.logger.warning("Usage error: %s", e.format_message())
+            click.echo(f"Error: {e.format_message()}", err=True)
             return 2
         except click.ClickException as e:
             click.echo(f"Error: {e.format_message()}", err=True)

@@ -51,6 +51,97 @@ The `observe` directive selects the upstream namespaces and fields that the acti
       - source.content  # Can include source data
 ```
 
+An entry that names a field (`action.field`) is explicit. If a record has the namespace of the action but not the field, the record fails with `RecordContextError`. The other records continue. One exception applies. If the namespace has none of the fields that the action names, the framework treats the namespace as null for that record. See [Troubleshooting](../../guides/troubleshooting.md#recordcontexterror-record-namespace). A wildcard entry (`action.*`) reads the fields that the record has, and does not fail.
+
+### Optional Fields
+
+Mark an `observe` entry as optional when a record may not have the field. Examples are a field of an action that a guard can skip (`on_false: skip`), and a field that an action returns only for some records.
+
+There are two forms. They mean the same:
+
+```yaml
+context_scope:
+  observe:
+    - write_spec.spec_text
+    - review.rejected_text?          # Suffix form
+    - field: review.reasons          # Mapping form
+      optional: true
+      default: []
+```
+
+| Key of the mapping form | Description |
+|-------------------------|-------------|
+| `field` | The reference, `action.field`. Required. |
+| `optional` | `true` marks the field as optional. A `default` without `optional` also marks it. |
+| `default` | The value that the field gets when the record does not have it. Without `default`, the value is null. |
+
+An optional field never fails the record. It gets its default (or null) in each of these cases:
+
+- The record has the namespace of the action, but not the field.
+- The field is null on the record.
+- The namespace is null, because a guard skipped the action for this record or the action wrote no output for it.
+
+This table shows what each reader gets. The behavior is the same in the online mode and in the batch mode.
+
+| Reader | What it gets for an optional field that the record does not have |
+|--------|------------------------------------------------------------------|
+| The LLM context | The field with its default, or `null` |
+| The prompt template | `{{ review.rejected_text }}` prints the default. A null prints as an empty string, as a null value of a field does. |
+| A tool at record granularity | `data["review"]["rejected_text"]` holds the default, or `None` |
+| A tool at file granularity | The item holds the key `rejected_text` with the default, or `None` |
+
+A namespace that is null stays null. Thus `{% if review %}` is still false for a record that the guard skipped. The prompt can read the optional fields of that namespace. A read of any other field of it still fails the record.
+
+Optional says that a record may not have the field. It does not say that the name may be wrong:
+
+- Pre-flight still refuses an optional entry that names an action that is not in the workflow. It also refuses a field that the schema of the action does not list.
+- The same field without the mark still fails a record that does not have it.
+- Pre-flight does not give the warning `'<action>.<field>' may be null at runtime` for an optional field. It still gives the warning for a field without the mark.
+
+These rules apply to the syntax:
+
+- The `?` goes one time, at the end of the entry. Agent Actions refuses the entry `review?.text` when it loads the workflow.
+- A wildcard cannot be optional. Agent Actions refuses `review.*?` when it loads the workflow, because a wildcard already reads only the fields that the record has.
+- Only `observe` has optional entries. Agent Actions refuses a `passthrough` or `drop` entry that is written as optional when it loads the workflow.
+- Do not observe a field as optional and also drop it. This rule applies to a drop of the field and to a drop of its namespace (`review.*`). It also applies to a drop of a field that holds it, for example `review.meta` for `review.meta.reason`. It also applies to a drop of the fields of one version, for example `ext_1.*` for `ext.x`. The `drop` directive removes the field before `observe` reads it. Thus each record gets the default. Agent Actions refuses this pair when it loads the workflow. It also refuses the pair when one entry is in `defaults` and the other entry is in the action.
+- Do not write a `context_scope.optional` block. Agent Actions keeps the optional entries in this block itself, and refuses the block in a workflow file when it loads the workflow.
+- An entry that ends in `?` reads the field without the `?`. To read a field whose name really ends in `?`, use a wildcard.
+- In an inline list or mapping (`[ ]` or `{ }`), YAML does not accept a bare `?`. Put the entry in quotes, or write the list with one entry on each line:
+
+  ```yaml
+  context_scope: { observe: [write_spec.spec_text, "review.rejected_text?"] }
+  ```
+
+An optional entry in `defaults` applies to each action that inherits it. If one level writes `review.text` and another level writes `review.text?`, the action observes the field one time, as optional.
+
+#### Load errors
+
+`agac inspect` and `agac run` stop with exit code 1 when an optional entry is not correct. The output gives the text below after `Value error,`, one time for each action that has the entry. For a pair of a `defaults` entry and an action entry, the output gives the text after `Problem:`.
+
+| What the workflow has | Error text |
+|-----------------------|------------|
+| `review?.text` | `context_scope.observe entry 'review?.text': '?' marks the whole entry optional and goes once, at the end of the reference ('action.field?').` |
+| `review.*?` | `context_scope.observe entry 'review.*?': a wildcard cannot be optional. It already resolves to whichever fields the record has; remove the optional form.` |
+| `review.text?` under `passthrough` or `drop` | `context_scope.passthrough entry 'review.text?' is written as optional, which only an observe entry can be. Write the plain reference ('action.field').` (or `context_scope.drop entry ...`) |
+| `review.text?` under `observe`, and `review.text` under `drop` | `context_scope.observe entry 'review.text?' is optional, and the drop entry 'review.text' removes the same field, so every record would get the default. Remove the drop entry to read the field, or the observe entry to withhold it.` |
+| `{field: review.text, optional: false, default: ""}`, or `optional: false` beside a `?` | `context_scope.observe entry {'field': 'review.text', 'optional': False, 'default': ''}: 'optional: false' contradicts the '?' or the 'default' beside it.` |
+| A mapping with a key that is not `field`, `optional` or `default` (here `fallback`) | `context_scope.observe entry {'field': 'review.text', 'fallback': ''}: unknown key fallback. An observe entry is a reference ('action.field') or a mapping of field, optional, default.` |
+| A mapping without `field` | `context_scope.observe entry {'optional': True}: 'field' must name the reference, as in {field: action.field}.` |
+| A mapping with an `optional` that is not `true` or `false` | `context_scope.observe entry {'field': 'review.text', 'optional': 'maybe'}: 'optional' must be true or false.` |
+| A `context_scope.optional` block | `context_scope.optional is not written by hand. Mark the observe entry instead: 'action.field?' or {field: action.field, optional: true}.` |
+
+A bare `?` in an inline list or mapping is a YAML syntax error. The output names the line and column, and gives the fix `Inside [ ] or { } a '?' must be quoted.`
+
+#### What inspect shows
+
+`agac inspect action` and `agac inspect context` show an optional field with its `?`, in the two forms of the entry. For example, `inspect action` shows `Reads  note_direct: kind, summary?`. With `--json`, the `context_scope.observe` list holds `note_direct.summary?`. The output does not show the default.
+
+#### Limits
+
+- A `context:` reference of an `llm_judge` rule does not take `?`. The judge reads `review.text?` as the full name of the reference. Thus the rule fails for each record, with `context reference 'review.text?' is not present in llm_context`. Observe the field as optional, and write the plain reference in `context:`.
+- `agac docs` lists an optional field as a plain input of the action, without the `?`.
+- A tool that copies an optional field into its output gets `None` for a record that does not have the field. If the output schema gives that field a type that is not null (for example `type: string`), the record fails the output schema check of the tool: `Output schema validation failed for UDF 'relay_input' (item 0) at handed: None is not of type 'string'`. Give the optional entry a `default` of the type that the output schema declares.
+
 ## Drop Directive
 
 The `drop` directive removes fields that `observe` selected from the context. Usually `observe` selects these fields with a wildcard, for example `source.*`. `drop` adds nothing. An action with only `drop` has no `source` namespace in its context, and a prompt that reads `source` fails.

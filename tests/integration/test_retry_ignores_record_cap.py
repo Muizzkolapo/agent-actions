@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
@@ -347,7 +348,7 @@ class TestTheRetriedRecordKeepsItsOutput:
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", late])
 
-        assert retry.exit_code == 0, retry.output
+        assert retry.exit_code == EXIT_RECORD_FAILURES, retry.output
         assert _disposition(chained, other, SECOND) == "exhausted"
 
 
@@ -373,7 +374,7 @@ class TestRetryRepairsWhatWasTried:
 
         retry = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", second[-1]])
 
-        assert retry.exit_code == 0, retry.output
+        assert retry.exit_code == EXIT_RECORD_FAILURES, retry.output
         assert _stored_records(chained, SECOND) == RECORDS
         assert _disposition(chained, second[0], SECOND) is not None
 

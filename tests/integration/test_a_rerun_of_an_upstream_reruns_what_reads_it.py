@@ -9,6 +9,7 @@ record of both again, and `flatten` writes five rows.
 
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests._support.agac_cli import run_agac
 from tests.integration.test_retry_ignores_record_cap import (
@@ -81,7 +82,7 @@ def test_a_repair_after_the_edit_touches_only_the_record_it_named(chained):  # n
 
     result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--from", SECOND, "--record", named])
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(chained, named, SECOND) == "success"
     assert _disposition(chained, other, SECOND) == "failed"
     assert len(_record_ids(chained, ACTION)) == RECORDS, "the edited action lost its records"

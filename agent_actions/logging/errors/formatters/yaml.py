@@ -136,6 +136,10 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
                 "File appears incomplete. Check for missing closing brackets or quotes."
             ),
             "found character '\\t'": "Remove tab characters. Use spaces for indentation.",
+            "but got '?'": (
+                "Inside [ ] or { } a '?' must be quoted. Quote an optional observe entry "
+                '("action.field?"), or write the list with one entry per line.'
+            ),
         }
 
         for pattern, suggestion in fix_suggestions.items():

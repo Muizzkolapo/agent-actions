@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.llm.providers.agac.client import AgacClient
@@ -174,7 +175,7 @@ class TestOnEmptyOnTheAction:
         """`warn` is the default, and an action that does not say keeps it."""
         result = _run(TOOL_WORKFLOW)
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert _records(project, TOOL_WORKFLOW, "flatten") == ["failed", "success"]
 
     def test_error_fails_a_file_tool_that_returns_nothing(self, project):
@@ -191,7 +192,7 @@ class TestOnEmptyOnTheAction:
 
     def test_a_retry_takes_the_on_empty_written_since_the_run(self, project):
         """`agac retry` loads the workflow afresh, so it reads the action's key too."""
-        assert _run(TOOL_WORKFLOW).exit_code == 0
+        assert _run(TOOL_WORKFLOW).exit_code == EXIT_RECORD_FAILURES
         _on_empty(project, TOOL_WORKFLOW, action="skip")
 
         result = CliRunner().invoke(cli, ["retry", "-a", TOOL_WORKFLOW])
@@ -291,7 +292,7 @@ def _submit_and_collect(monkeypatch):
         FakeDataGenerator, "generate_openai_response", classmethod(empty_for_the_blank_page)
     )
     submitted = _run(LLM_WORKFLOW)
-    assert submitted.exit_code == 0, submitted.output
+    assert submitted.exit_code == EXIT_PAUSED, submitted.output
     assert "run again" in submitted.output, "the fixture did not pause on submission"
 
     return CliRunner().invoke(cli, ["run", "-a", LLM_WORKFLOW])

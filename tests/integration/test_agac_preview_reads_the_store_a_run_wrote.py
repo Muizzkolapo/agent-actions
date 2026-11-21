@@ -90,19 +90,19 @@ def test_preview_lists_the_actions_with_data(project):
 
 
 def test_preview_of_an_action_shows_its_records(project):
-    output = _preview(project, "-a", ACTION)
+    output = _preview(project, "-A", ACTION)
 
     assert "Total Records: 3" in output
     assert all(f"T-{item}" in output for item in "abc")
 
 
 def test_preview_as_json_prints_the_action_fields(project):
-    result = run_agac(project, "preview", "-w", WORKFLOW, "-a", ACTION, "-f", "raw")
+    result = run_agac(project, "preview", "-w", WORKFLOW, "-A", ACTION, "-f", "raw")
     assert result.returncode == 0, result.stdout + result.stderr
     records = json.loads(result.stdout.splitlines()[-1])
 
     assert sorted(record["content"]["tag"] for record in records) == ["T-a", "T-b", "T-c"]
-    assert "T-a" in _preview(project, "-a", ACTION, "-f", "json")
+    assert "T-a" in _preview(project, "-A", ACTION, "-f", "json")
 
 
 def test_preview_stats_counts_the_stored_records(project):
@@ -114,7 +114,7 @@ def test_preview_stats_counts_the_stored_records(project):
 
 def test_preview_of_an_action_with_no_data_says_so(project):
     """Control: the same command over a name the store does not hold."""
-    output = _preview(project, "-a", "nothing_here")
+    output = _preview(project, "-A", "nothing_here")
 
     assert "No data found for action 'nothing_here'" in output
     assert "T-a" not in output

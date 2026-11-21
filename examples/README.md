@@ -20,7 +20,7 @@ pip install agent-actions
 
 # Pick any example and run it
 cd examples/review_analyzer
-agac run -a review_analyzer
+agac run -w review_analyzer
 ```
 
 All workflows default to `record_limit: 2` for quick testing. Remove or increase that setting in the workflow YAML to process full datasets.

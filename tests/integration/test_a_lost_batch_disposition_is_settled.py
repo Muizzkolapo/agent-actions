@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_retry_answers_what_a_split_writes_below_it import (
     WORKFLOW,
@@ -103,7 +104,7 @@ def _collected_with_the_fault(tmp_path: Path, *, leave_one_out: bool = False) ->
     site.mkdir()
     (site / "sitecustomize.py").write_text(STAND_IN)
     code, output = _agac(project, "run", "-a", WORKFLOW, "--fresh")
-    assert code == 0 and _status(project)["status"] == "batch_submitted", output
+    assert code == EXIT_PAUSED and _status(project)["status"] == "batch_submitted", output
     if leave_one_out:
         _left_out(project)
 
@@ -162,7 +163,7 @@ class TestARecordTheProviderLeftOut:
 
         code, output = _agac(project, "run", "-a", WORKFLOW)
 
-        assert code == 0, output
+        assert code == EXIT_RECORD_FAILURES, output
         held = _dispositions(project)
         assert held.pop(failed) == "failed", output
         assert sorted(held.values()) == ["success"] * 7, output
@@ -178,10 +179,10 @@ class TestARecordTheProviderLeftOut:
         batches = _batches(project)
         if first:
             code, output = _agac(project, *first)
-            assert code == 0, output
+            assert code == EXIT_RECORD_FAILURES, output
 
         code, output = _agac(project, "retry", "-a", WORKFLOW)
-        assert code == 0, output
+        assert code == EXIT_PAUSED, output
         assert "Records to retry: 1" in output, output
         (repair,) = set(_batches(project)) - set(batches)
         assert len(json.loads(repair.read_text())["tasks"]) == 1, output
