@@ -63,6 +63,19 @@ observe:
   - upstream_action.score
 ```
 
+An explicit field a record lacks fails that record. When a record may legitimately lack it (the upstream is behind a `skip` guard, or returns the field only sometimes), mark the entry optional instead of falling back to a wildcard:
+
+```yaml
+observe:
+  - upstream_action.key_field
+  - upstream_action.rejected_text?        # null when the record lacks it
+  - field: upstream_action.reasons        # or a stated default
+    optional: true
+    default: []
+```
+
+The prompt reads `{{ upstream_action.rejected_text }}` as null (or the default) on such a record, and preflight gives no "may be null at runtime" warning for it. In an inline list quote the entry: `observe: ["upstream_action.rejected_text?"]`.
+
 Never observe `source.raw_content` or other large fields in downstream actions. Distil first (extract the relevant passage), then observe the distilled field.
 
 ## Passthrough pattern

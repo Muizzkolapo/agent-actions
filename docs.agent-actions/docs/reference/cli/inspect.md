@@ -114,6 +114,11 @@ agac inspect context -a <workflow> <action_name> [--json]
 This subcommand shows the available namespaces, the applied context scope, and the template variables that the
 prompt of the action would see.
 
+`inspect action` and `inspect context` show an [optional observe field](../context/context-scope.md#optional-fields)
+with its `?`, for example `Reads  note_direct: kind, summary?`. With `--json`, the
+`context_scope.observe` list holds `note_direct.summary?`. The output does not show the
+default of the field.
+
 If you get "undefined variable" errors in your templates, use
 `inspect context`. It shows exactly which variables are available for that
 action.

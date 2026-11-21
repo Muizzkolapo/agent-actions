@@ -238,7 +238,7 @@ Preflight also rejects a constant condition that refers to no record fields, bec
 | `rule` (string) | *(required)* | The natural-language criterion that the judge evaluates |
 | `votes` (number) | `1` | The number of independent judge runs. The majority result is the verdict. A tie **fails closed**: an even split never counts as a pass |
 | `model` (string) | the `model_name` of the action | The model that judges the value, in place of the default |
-| `context` (list) | none | A list of `action.field` references. Agent Actions resolves them with the *same* `context_scope` mechanism as prompts. It sends them to the judge as grounding text |
+| `context` (list) | none | A list of `action.field` references. Agent Actions resolves them with the *same* `context_scope` mechanism as prompts. It sends them to the judge as grounding text. A reference does not take the optional mark `?` (see [Optional Fields](../context/context-scope.md#limits)) |
 
 ### Testing a judge offline
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection, Mapping
 
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
@@ -127,14 +128,19 @@ def _optional_field_names(schema: dict) -> set[str]:
     }
 
 
-def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dict]) -> list[str]:
+def find_unguarded_required_refs(
+    prompts: dict[str, str],
+    schemas: dict[str, dict],
+    optional: Mapping[str, Collection[str]] | None = None,
+) -> list[str]:
     """Return findings for unguarded prompt refs to non-required producer fields.
 
     A ref ``ns.field`` is flagged when ``ns`` has a producing schema, ``field``
     is declared by that schema but not marked required, and the ref is not inside
     the body of an ``{% if %}`` that guards ``ns.field``. Refs to an unknown
     namespace, to a field the schema does not declare, or to the action's own
-    output namespace belong to other checks and are left alone here.
+    output namespace belong to other checks and are left alone here. So is a ref
+    *optional* names for its action: observed as optional, it renders as its default.
     """
     if not prompts or not schemas:
         return []
@@ -142,8 +148,11 @@ def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dic
     findings: list[str] = []
     seen: set[tuple[str, str, str]] = set()
     for action_name, template in prompts.items():
+        observed_as_optional = (optional or {}).get(action_name, ())
         for ns, field in sorted(_unguarded_refs(template)):
             if ns == action_name or field not in optional_by_ns.get(ns, frozenset()):
+                continue
+            if f"{ns}.{field}" in observed_as_optional:
                 continue
             key = (action_name, ns, field)
             if key in seen:

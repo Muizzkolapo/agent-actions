@@ -27,6 +27,8 @@ context_scope:
     - extract_facts.candidate_facts_list
 ```
 
+An `observe` entry can end in `?`, for a field that a record may not have. See [Optional Fields](./context-scope.md#optional-fields). A guard condition has no such mark.
+
 ## Reference Structure
 
 A field reference has this structure:

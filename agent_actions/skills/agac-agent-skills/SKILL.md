@@ -283,7 +283,7 @@ You are a domain expert. Analyze the following data.
 {end_prompt}
 ```
 
-Every `{{ namespace.field }}` must have a matching observe entry. Use `{% if %}` for fields that may be null (from skipped guards).
+Every `{{ namespace.field }}` must have a matching observe entry. Observe a field that may be null (from a skipped guard) as optional (`namespace.field?`) and wrap its use in `{% if %}`.
 
 ## Context Scope
 
