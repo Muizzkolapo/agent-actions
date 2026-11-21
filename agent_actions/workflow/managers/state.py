@@ -8,6 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from agent_actions.errors import FileLoadError
 from agent_actions.utils.atomic_write import atomic_json_write
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,12 @@ KEPT_ANSWERS_UNDER = "kept_answers_under"
 ANSWERS_UNDER_MORE_THAN_ONE_CONFIG = "answers_under_more_than_one_config"
 
 
+_CORRUPTED_STATUS_FILE_HINT = (
+    "Edit the status file so that each action maps to an object such as "
+    '{"status": "completed"}, or start over with \'agac run --fresh\''
+)
+
+
 def _as_count(value: Any) -> int | None:
     """*value* as a record count, or None if it is not one."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -92,6 +99,7 @@ class ActionStateManager:
         self.status_file = status_file_path
         self.execution_order = execution_order
         self.action_status: dict[str, dict[str, Any]] = {}
+        self._loaded_a_file_that_is_not_an_object = False
         self._lock = threading.Lock()
         self._load_status()
 
@@ -100,13 +108,33 @@ class ActionStateManager:
         if self.status_file.exists():
             try:
                 with open(self.status_file, encoding="utf-8") as f:
-                    self.action_status = json.load(f)
-                logger.info("Loaded status for %d actions", len(self.action_status))
+                    loaded = json.load(f)
             except (OSError, json.JSONDecodeError, ValueError) as e:
                 logger.warning("Could not load status file: %s", e)
                 self._initialize_default_status()
+                return
+            if isinstance(loaded, dict):
+                self.action_status.update(loaded)
+                logger.info("Loaded status for %d actions", len(self.action_status))
+            else:
+                self._loaded_a_file_that_is_not_an_object = True
         else:
             self._initialize_default_status()
+
+    def refuse_an_entry_that_is_not_an_object(self) -> None:
+        """Raise if a hand-edited status file, or an action entry in it, is not an object."""
+        if self._loaded_a_file_that_is_not_an_object:
+            raise FileLoadError(
+                f"Status file has unexpected format (expected JSON object): {self.status_file}",
+                context={"hint": _CORRUPTED_STATUS_FILE_HINT},
+            )
+        for name, details in self.action_status.items():
+            if not isinstance(details, dict):
+                raise FileLoadError(
+                    f"Status file is corrupted: {self.status_file}\n"
+                    f"Action '{name}' is not an object: {details!r}",
+                    context={"hint": _CORRUPTED_STATUS_FILE_HINT},
+                )
 
     def reset(self) -> None:
         """Reset all actions to 'pending' status and persist."""
@@ -115,10 +143,12 @@ class ActionStateManager:
             self._save_status()
 
     def _initialize_default_status(self):
-        """Initialize all actions with 'pending' status."""
-        self.action_status = {
-            action: {"status": ActionStatus.PENDING} for action in self.execution_order
-        }
+        """Put every action back to 'pending', in the dict other managers already hold."""
+        self.action_status.clear()
+        self.action_status.update(
+            {action: {"status": ActionStatus.PENDING} for action in self.execution_order}
+        )
+        self._loaded_a_file_that_is_not_an_object = False
 
     def _save_status(self):
         """Persist current status to file. Raises on I/O failure."""

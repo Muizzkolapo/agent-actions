@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -157,7 +158,7 @@ def _rows(project: Path, action: str) -> dict[str, dict]:
 def _submitted(project: Path) -> Path:
     """The first run: the action above answers online, and this one sends its batch."""
     code, output = _run(project, "--fresh")
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     assert "run again" in output, "the fixture did not pause on its batch"
     (batch,) = _held_batches(project)
     return batch
@@ -167,7 +168,7 @@ def _collected(project: Path) -> tuple[list[list[str]], str]:
     """One run after a submission: the record ids of each batch it sent, and its output."""
     before = _held_batches(project)
     code, output = _run(project)
-    assert code == 0, output
+    assert code == EXIT_PAUSED, output
     sent = [
         [task["custom_id"] for task in _tasks(batch)] for batch in _held_batches(project) - before
     ]
@@ -178,7 +179,7 @@ def _run_to_the_end(project: Path) -> None:
     output = ""
     for _ in range(4):
         code, output = _run(project)
-        assert code == 0, output
+        assert code in (EXIT_SUCCESS, EXIT_PAUSED), output
         if "run again" not in output:
             return
     pytest.fail(f"the action never stopped asking to be run again:\n{output}")

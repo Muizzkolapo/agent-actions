@@ -10,6 +10,7 @@ own failed one, which the retry replaces.
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -96,7 +97,7 @@ def two_splits(project, monkeypatch):  # noqa: F811
 
     monkeypatch.setenv("RESPLIT_BREAKS_ON", BREAKS_ON)
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     monkeypatch.delenv("RESPLIT_BREAKS_ON")
     return project
 

@@ -4,9 +4,9 @@
 answer against the run, then returned success regardless — so a repair that fixed
 nothing read the same as one that worked to a script, a CI job, or a loop.
 
-Which outcomes count as failure is settled by `run` and not re-opened here: a
-record that failed inside an action that still completed leaves the action
-``completed_with_failures``, which both commands call success.
+Both commands read the code from one classifier: a record that failed inside an
+action that still completed leaves the action ``completed_with_failures``, which is
+exit 3 from both, and a failed action is exit 1.
 """
 
 import json
@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_FAILED, EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -183,14 +184,14 @@ class TestARepairThatFixedNothingIsNotSuccess:
 class TestARepairThatFailsAgainBesideStoredSuccessesIsNotAFailedAction:
     """The action still holds answers, so it reads as batch reads it: with failures."""
 
-    def test_it_exits_zero_and_leaves_the_action_completed_with_failures(self, project):
+    def test_it_exits_3_and_leaves_the_action_completed_with_failures(self, project):
         project.add_second_action()
         guid = project.mark_failed("page 0")[0]
         project.break_on("page 0")
 
         result = project.retry("--record", guid)
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert project.disposition(guid) == "failed"
         assert "Failed actions" not in result.output
         assert "Skipped actions" not in result.output
@@ -202,7 +203,7 @@ class TestARepairThatFailsAgainBesideStoredSuccessesIsNotAFailedAction:
 
         result = project.run()
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
 
 
 class TestItAgreesWithRunOnWhatFailureMeans:
@@ -214,16 +215,16 @@ class TestItAgreesWithRunOnWhatFailureMeans:
         retried = project.retry()
         ran = project.run("--fresh")
 
-        assert (retried.exit_code == 0) == (ran.exit_code == 0), (retried.output, ran.output)
+        assert retried.exit_code == ran.exit_code == EXIT_FAILED, (retried.output, ran.output)
 
-    def test_a_record_level_failure_inside_a_completed_action_still_exits_zero(self, project):
-        """``completed_with_failures`` is success to `run`, so it stays success here."""
+    def test_a_record_level_failure_inside_a_completed_action_exits_3(self, project):
+        """``completed_with_failures`` is exit 3 from `run`, so it is exit 3 here."""
         guids = project.mark_failed("page 0", "page 1")
         project.break_on("page 0")
 
         result = project.retry()
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert [project.disposition(g) for g in guids] == ["failed", "success"]
 
 
@@ -291,7 +292,7 @@ class TestARetryNarrowedToOneStagedFile:
 
         result = alone_in_its_file.retry()
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert alone_in_its_file.disposition(guid) == "failed"
         assert "Failed actions" not in result.output
         assert "Failed to process file" not in result.output

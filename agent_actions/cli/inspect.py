@@ -15,7 +15,11 @@ from typing import Any
 import click
 from rich.markup import escape
 
-from agent_actions.cli.cli_decorators import _format_project_root_display, handles_user_errors
+from agent_actions.cli.cli_decorators import (
+    _format_project_root_display,
+    handles_user_errors,
+    workflow_option,
+)
 from agent_actions.cli.inspect_base import branch_of, render_title_row
 from agent_actions.llm.providers.tools.builtin import PICK, ROUTE, builtin_tool
 from agent_actions.services.workflow_inspector import WorkflowInspector
@@ -79,7 +83,7 @@ def _note(config: dict[str, Any]) -> str | None:
 
 
 @click.group(name="inspect", invoke_without_command=True)
-@click.option("-a", "--agent", "agent_opt", required=False, help="Workflow name")
+@workflow_option("agent_opt", required=False)
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.pass_context
 @handles_user_errors("inspect")
@@ -121,7 +125,7 @@ def inspect(
 
     if not agent_opt:
         raise click.UsageError(
-            "Missing required option '-a' / '--agent'. Run 'agac inspect --help' for usage."
+            "Missing required option '-w' / '--workflow'. Run 'agac inspect --help' for usage."
         )
 
     project_root = ensure_in_project()

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
@@ -139,7 +140,7 @@ def _run(project: Path, *first: str) -> None:
     for _ in range(4):
         result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", *args, env=_ENV)
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
         if "run again" not in output:
             return
         args = ()
@@ -206,7 +207,7 @@ def test_a_retry_of_another_record_keeps_the_failed_row_of_a_record_with_no_sour
     repaired = _fail_one_answer(project)
 
     result = run_agac(project, "retry", "-a", WORKFLOW, env=_ENV)
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), result.stdout + result.stderr
     _run(project)
 
     held = _held(project)

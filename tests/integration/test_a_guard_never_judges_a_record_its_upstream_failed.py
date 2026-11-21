@@ -26,6 +26,7 @@ from typing import Any
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -228,7 +229,7 @@ class Project:
         self.stand_in.mkdir()
         (self.stand_in / "sitecustomize.py").write_text(_STAND_IN)
 
-    def agac(self, *args: str) -> str:
+    def agac(self, *args: str) -> tuple[int, str]:
         result = run_agac(
             self.root,
             *args,
@@ -238,23 +239,29 @@ class Project:
                 "COLUMNS": "240",
             },
         )
-        output = result.stdout + result.stderr
-        assert result.returncode == 0, output
-        return output
+        return result.returncode, result.stdout + result.stderr
 
-    def run_to_the_end(self, *args: str) -> None:
-        """`agac run` until nothing is in flight: once online, a run per batch level."""
-        output = self.agac("run", "-a", WORKFLOW, "-u", "tools", *args)
+    def run_to_the_end(self, *args: str, ends_with: int) -> None:
+        """`agac run` until nothing is in flight: once online, a run per batch level.
+
+        Each run that asks to be run again pauses for a batch; the last exits *ends_with*.
+        """
+        code, output = self.agac("run", "-a", WORKFLOW, "-u", "tools", *args)
         for _ in range(6):
             if "run again" not in output:
+                assert code == ends_with, output
                 return
-            output = self.agac("run", "-a", WORKFLOW, "-u", "tools")
+            assert code == EXIT_PAUSED, output
+            code, output = self.agac("run", "-a", WORKFLOW, "-u", "tools")
         pytest.fail(f"the workflow never stopped asking to be run again:\n{output}")
 
-    def retry_to_the_end(self) -> None:
-        output = self.agac("retry", "-a", WORKFLOW)
+    def retry_to_the_end(self, ends_with: int) -> None:
+        code, output = self.agac("retry", "-a", WORKFLOW)
         if "run again" in output:
-            self.run_to_the_end()
+            assert code == EXIT_PAUSED, output
+            self.run_to_the_end(ends_with=ends_with)
+        else:
+            assert code == ends_with, output
 
     def alpha_fails(self, on: bool = True) -> None:
         flag = self.root / FLAG
@@ -326,7 +333,7 @@ class Project:
 def _after_alpha_failed(tmp_path: Path, run_mode: str, publish: str, on_false: str) -> Project:
     project = Project(tmp_path, run_mode, publish, on_false)
     project.alpha_fails()
-    project.run_to_the_end("--fresh")
+    project.run_to_the_end("--fresh", ends_with=EXIT_RECORD_FAILURES)
     return project
 
 
@@ -366,7 +373,7 @@ def test_the_retry_answers_it_at_every_action(tmp_path, run_mode):
     alpha = project.alpha()
     project.alpha_fails(on=False)
 
-    project.retry_to_the_end()
+    project.retry_to_the_end(ends_with=EXIT_SUCCESS)
 
     for action in ("summarize", *BELOW):
         assert project.states(action)[alpha] == "processed", action
@@ -407,7 +414,7 @@ def test_a_tool_guard_below_the_failure_leaves_it_to_the_quarantine(
     assert len(upstream) == 3
 
     project.alpha_fails(on=False)
-    project.retry_to_the_end()
+    project.retry_to_the_end(ends_with=EXIT_SUCCESS)
 
     for action in ("summarize", *BELOW):
         assert project.dispositions(action)[alpha] == ("success", None), action

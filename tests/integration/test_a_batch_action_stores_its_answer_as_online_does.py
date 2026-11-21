@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
@@ -76,7 +77,7 @@ def _run(project, *, run_mode: str, json_mode: bool):
     config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(_CONFIG.format(run_mode=run_mode, json_mode=str(json_mode).lower()))
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    if run_mode == "batch" and result.exit_code == 0:
+    if run_mode == "batch" and result.exit_code == EXIT_PAUSED:
         assert "run again" in result.output, "the batch did not pause on submission"
         result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
     return result
@@ -145,7 +146,7 @@ def _submit(project, *, json_mode: bool) -> str:
     config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(_CONFIG.format(run_mode="batch", json_mode=str(json_mode).lower()))
     result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_PAUSED, result.output
     paths = ProjectPathsFactory.create_project_paths(
         WORKFLOW, WORKFLOW, auto_create=False, project_root=project
     )

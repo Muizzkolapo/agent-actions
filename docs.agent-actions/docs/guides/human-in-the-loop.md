@@ -439,7 +439,7 @@ The timeout applies to each input file separately. After a file times out:
   file. The run never sends them downstream as reviewed records. The action
   ends as completed with failures (`partial` in the run summary). If no file
   was reviewed, the action ends as failed.
-- `agac retry -a <workflow>` opens the UI again for those files only. Your
+- `agac retry -w <workflow>` opens the UI again for those files only. Your
   earlier decisions are restored, so you continue from the point where you
   stopped.
 
@@ -510,7 +510,7 @@ record and does not open the UI. This variable exists so that end-to-end smoke
 runs do not wait for a person.
 
 ```bash
-AGAC_HITL_AUTO_APPROVE=true agac run -a my_workflow --fresh
+AGAC_HITL_AUTO_APPROVE=true agac run -w my_workflow --fresh
 ```
 
 :::danger[WARNING]

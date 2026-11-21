@@ -7,7 +7,11 @@ from typing import Any
 import click
 from rich.console import Console
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.cli.renderers import SchemaRenderer
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
@@ -112,12 +116,7 @@ class SchemaCommand:
 
 
 @click.command(name="schema")
-@click.option(
-    "-a",
-    "--agent",
-    required=True,
-    help="Agent/workflow configuration name (without path or extension)",
-)
+@workflow_option()
 @click.option(
     "-u",
     "--user-code",
