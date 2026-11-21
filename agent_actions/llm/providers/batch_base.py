@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 # A task row's text sent as the user message verbatim, in place of its serialised content.
 RAW_USER_CONTENT_KEY = "_raw_user_content"
+
+# Replaces each provider's cap on the requests in one batch.
+BATCH_MAX_REQUESTS_ENV = "AGENT_ACTIONS_BATCH_MAX_REQUESTS"
 
 # What a provider stamps on a result carrying no correlation id. It is not an
 # identity: two of them are two records, so nothing may deduplicate on it.
@@ -104,10 +108,29 @@ class BatchResult:
     text: str | None = None
 
 
+def batch_request_cap(provider: BaseBatchClient) -> int:
+    """The most requests one batch to *provider* may hold."""
+    raw = os.environ.get(BATCH_MAX_REQUESTS_ENV, "").strip()
+    if not raw:
+        return provider.max_batch_requests
+    try:
+        cap = int(raw)
+    except ValueError:
+        cap = 0
+    if cap < 1:
+        raise ValueError(
+            f"{BATCH_MAX_REQUESTS_ENV} must be a whole number of 1 or more, not {raw!r}"
+        )
+    return cap
+
+
 class BaseBatchClient(ABC):
     """Abstract base class for batch processing clients."""
 
     _configured_model: str | None = None
+    # The most requests one batch may hold. A provider that documents no cap gets the
+    # lowest cap another provider documents (OpenAI and Groq: 50,000).
+    max_batch_requests: int = 50_000
     # The vendor's errors for a provider that could not answer now. A status check
     # raises them as ConnectionError, which its callers take as "ask again later".
     _transient_errors: tuple[type[Exception], ...] = ()
