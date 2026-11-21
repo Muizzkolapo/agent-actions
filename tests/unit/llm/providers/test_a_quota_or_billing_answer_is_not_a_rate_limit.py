@@ -1,10 +1,12 @@
-"""A provider's answer that the account's quota or credit is used up is not a rate limit.
+"""A provider's answer that the account's quota or credit is at its limit is not a rate limit.
 
 Sent as HTTP 429 it was retried with back-off as a rate limit, and with any other
 status it failed its record, so a run went on to fail or exhaust every record it had
-left. HTTP 402 from any provider, and a 429 or 403 whose body carries the provider's
-own words for a used-up quota, wrap as `QuotaExceededError`, which nothing retries.
-A 429 without those words is the rate limit it was.
+left. HTTP 402 from any provider, and an answer with the status and the words the
+provider sends for it (OpenAI and Ollama Cloud: a 429 or 403; Anthropic: a 400
+`invalid_request_error` that says the credit balance is too low), wrap as
+`QuotaExceededError`, which nothing retries. A 429 without those words is the rate
+limit it was.
 
 Each provider's own SDK answers the request, and the provider's error mapping wraps
 what it raises.
@@ -13,12 +15,13 @@ what it raises.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
 from agent_actions.errors import QuotaExceededError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.error_wrapper import (
-    QUOTA_PHRASES,
+    QUOTA_ANSWERS,
     error_for_status,
     find_quota_error,
     wrap_vendor_error,
@@ -40,9 +43,18 @@ OPENAI_QUOTA = {
         "code": "insufficient_quota",
     }
 }
-ANTHROPIC_BILLING = {
+# What Anthropic sends when the credit balance is too low: HTTP 400, not 402 or 429.
+ANTHROPIC_NO_CREDIT = {
     "type": "error",
-    "error": {"type": "billing_error", "message": "Your credit balance is too low."},
+    "error": {
+        "type": "invalid_request_error",
+        "message": "Your credit balance is too low to access the Anthropic API. "
+        "Please go to Plans & Billing to upgrade or purchase credits.",
+    },
+}
+ANTHROPIC_BAD_REQUEST = {
+    "type": "error",
+    "error": {"type": "invalid_request_error", "message": "max_tokens: Field required"},
 }
 OLLAMA_USAGE_LIMIT = {"error": "you have reached your monthly usage limit"}
 OLLAMA_USAGE_CREDITS = {"error": "add usage credits to continue"}
@@ -50,7 +62,6 @@ OLLAMA_USAGE_CREDITS = {"error": "add usage credits to continue"}
 # provider -> each body that says the quota is used up, in the provider's own words
 QUOTA_BODIES: dict[str, list[dict[str, Any]]] = {
     "openai": [OPENAI_QUOTA],
-    "anthropic": [ANTHROPIC_BILLING],
     "ollama_cloud": [OLLAMA_USAGE_LIMIT, OLLAMA_USAGE_CREDITS],
 }
 
@@ -86,6 +97,22 @@ def test_a_429_or_403_in_the_providers_words_for_a_used_up_quota_is_a_quota_stop
     assert not is_retriable_error(wrapped)
 
 
+def test_an_anthropic_400_that_says_the_credit_balance_is_too_low_is_a_quota_stop():
+    wrapped = _wrapped("anthropic", 400, ANTHROPIC_NO_CREDIT)
+
+    assert isinstance(wrapped, QuotaExceededError)
+    assert not is_retriable_error(wrapped)
+    assert "credit balance is too low" in wrapped.provider_message
+
+
+def test_any_other_anthropic_400_is_still_an_api_error():
+    assert type(_wrapped("anthropic", 400, ANTHROPIC_BAD_REQUEST)) is VendorAPIError
+
+
+def test_the_anthropic_credit_words_from_another_provider_are_not_a_quota_stop():
+    assert type(_wrapped("openai", 400, ANTHROPIC_NO_CREDIT)) is VendorAPIError
+
+
 @pytest.mark.parametrize("provider", sorted(ALL))
 def test_a_plain_429_is_still_a_rate_limit_and_is_retried(provider):
     wrapped = _wrapped(provider, 429)
@@ -104,7 +131,7 @@ def test_a_plain_403_is_still_an_api_error(provider):
 @pytest.mark.parametrize("provider", ["gemini", "groq", "cohere", "ollama"])
 def test_a_provider_with_no_known_words_reads_a_429_as_a_rate_limit_whatever_it_says(provider):
     """Only the 402 rule applies where no body of the provider's is known."""
-    assert provider not in QUOTA_PHRASES
+    assert provider not in QUOTA_ANSWERS
 
     wrapped = _wrapped(provider, 429, OPENAI_QUOTA)
 
@@ -156,14 +183,14 @@ class TestAQuotaAnswerWrappedByABatchClient:
     def test_it_is_found_in_the_cause_chain(self):
         call, _ = ALL["anthropic"]
         with pytest.raises(Exception) as raised:  # noqa: PT011 - the SDK's own status error
-            call(402, ANTHROPIC_BILLING)
+            call(400, ANTHROPIC_NO_CREDIT)
         outer = VendorAPIError("Anthropic API error during batch submission", cause=raised.value)
         outer.__cause__ = raised.value
 
         found = find_quota_error(outer, "anthropic")
 
         assert isinstance(found, QuotaExceededError)
-        assert "billing_error" in found.provider_message
+        assert "credit balance is too low" in found.provider_message
 
     def test_an_error_that_is_not_a_quota_answer_finds_nothing(self):
         call, _ = ALL["anthropic"]
@@ -174,7 +201,7 @@ class TestAQuotaAnswerWrappedByABatchClient:
 
 
 @pytest.mark.parametrize("status", [429, 403])
-def test_an_sdk_message_that_leaves_out_the_error_code_is_still_read_by_its_code(status):
+def test_an_sdk_message_that_leaves_out_the_error_code_is_still_read_by_its_type(status):
     """Newer OpenAI SDKs put only the body's message in the error text, not its code."""
     import httpx
     import openai
@@ -191,3 +218,55 @@ def test_an_sdk_message_that_leaves_out_the_error_code_is_still_read_by_its_code
 
     assert isinstance(wrapped, QuotaExceededError)
     assert find_quota_error(error, "openai") is not None
+
+
+@pytest.mark.parametrize("status", [429, 403])
+def test_an_sdk_error_whose_code_alone_holds_the_words_is_read_by_its_code(status):
+    """The message and the type say nothing of the quota; only the code (and the body) do."""
+    import httpx
+    import openai
+
+    from agent_actions.llm.providers.openai.client import _ERROR_MAPPING
+
+    body = {"message": "Request refused.", "type": "requests", "code": "insufficient_quota"}
+    error_class = openai.RateLimitError if status == 429 else openai.PermissionDeniedError
+    response = httpx.Response(status, request=httpx.Request("POST", "https://api.openai.com"))
+    error = error_class(f"Error code: {status} - Request refused.", response=response, body=body)
+    assert "insufficient_quota" not in str(error) and error.type == "requests"
+
+    assert isinstance(wrap_vendor_error(error, "m", _ERROR_MAPPING, "r"), QuotaExceededError)
+
+
+class TestTheOpenAiSdkSendsNoQuotaAnswerAgain:
+    """The SDK sends a 429 again, twice by default, before agac sees it; not a quota 429."""
+
+    def _requests(self, body: Any) -> int:
+        import httpx
+        import openai
+
+        from agent_actions.llm.providers.openai.client import without_quota_retries
+
+        sent = []
+
+        def answer(request: httpx.Request) -> httpx.Response:
+            sent.append(request)
+            return httpx.Response(429, json=body)
+
+        client = without_quota_retries(
+            openai.OpenAI(
+                api_key="k", http_client=httpx.Client(transport=httpx.MockTransport(answer))
+            ),
+            "openai",
+        )
+        with (
+            patch.object(openai._base_client.time, "sleep"),
+            pytest.raises(openai.RateLimitError),
+        ):
+            client.chat.completions.create(model="m", messages=[{"role": "user", "content": "hi"}])
+        return len(sent)
+
+    def test_a_quota_429_is_sent_once(self):
+        assert self._requests(OPENAI_QUOTA) == 1
+
+    def test_a_plain_429_is_still_sent_again_by_the_sdk(self):
+        assert self._requests({"error": {"message": "slow down", "type": "requests"}}) == 3

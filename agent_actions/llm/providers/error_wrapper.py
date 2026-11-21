@@ -44,16 +44,19 @@ TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-# What a vendor's answer says when the account's quota, credit or balance is used up,
-# which no wait clears, where the status alone (429 or 403) does not say it. Lower case.
-QUOTA_PHRASES: dict[str, tuple[str, ...]] = {
-    "openai": ("insufficient_quota",),
-    "anthropic": ("billing_error",),
-    "ollama_cloud": ("usage limit", "usage credits"),
+# What a vendor's answer says when the account's quota, credit or balance is at its
+# limit, which no wait clears, where the status alone does not say it: each answer is the
+# statuses it comes with and the words it holds, every one of them. Lower case.
+QUOTA_ANSWERS: dict[str, tuple[tuple[frozenset[int], tuple[str, ...]], ...]] = {
+    "openai": ((frozenset({429, 403}), ("insufficient_quota",)),),
+    "anthropic": ((frozenset({400}), ("invalid_request_error", "credit balance is too low")),),
+    "ollama_cloud": (
+        (frozenset({429, 403}), ("usage limit",)),
+        (frozenset({429, 403}), ("usage credits",)),
+    ),
 }
 
 _PAYMENT_REQUIRED = 402
-_QUOTA_PHRASE_STATUSES = (429, 403)
 
 
 def _status_code(e: BaseException) -> int | None:
@@ -82,14 +85,19 @@ def _error_words(e: BaseException, text: str) -> str:
     return " ".join(parts)
 
 
-def _says_quota_is_used_up(e: BaseException, text: str, vendor: str) -> bool:
-    status_code = _status_code(e)
+def is_quota_answer(vendor: str, status_code: int | None, words: str) -> bool:
+    """Whether an answer with this status and these words says the quota is at its limit."""
     if status_code == _PAYMENT_REQUIRED:
         return True
-    if status_code not in _QUOTA_PHRASE_STATUSES:
-        return False
-    lowered = _error_words(e, text).lower()
-    return any(phrase in lowered for phrase in QUOTA_PHRASES.get(vendor, ()))
+    lowered = words.lower()
+    return any(
+        status_code in statuses and all(word in lowered for word in needed)
+        for statuses, needed in QUOTA_ANSWERS.get(vendor, ())
+    )
+
+
+def _says_quota_is_used_up(e: BaseException, text: str, vendor: str) -> bool:
+    return is_quota_answer(vendor, _status_code(e), _error_words(e, text))
 
 
 def _quota_error(

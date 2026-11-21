@@ -16,8 +16,8 @@ A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or an
 
 A retry uses the same [exit codes](./run.md#exit-codes) as a run. The code is `0` when no action holds a failed or exhausted record. The code is `1` when an action failed. The code is `3` when a failed or exhausted record remains. The code is `4` when the retry submitted a batch, or stopped before every action ended. The code is `0` when there is nothing to retry, and for `--dry-run` and `--filter`.
 
-The code is `5` when a provider answers that its [quota is used up](./run.md#quota-stop). The retry stops as
-[an interrupted retry](#when-a-retry-is-interrupted) stops. After you add credits, run the retry again. The retry
+The code is `5` when a provider answers that its [quota is at its limit](./run.md#quota-stop). The retry stops in the same way as
+[an interrupted retry](#when-a-retry-is-interrupted). After you add credits, run the retry again. The retry
 resumes from where it stopped.
 
 ## Options
