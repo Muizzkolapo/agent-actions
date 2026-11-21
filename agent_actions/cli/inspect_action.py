@@ -8,7 +8,11 @@ from typing import Any
 import click
 from rich.text import Text
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
@@ -363,7 +367,7 @@ class ActionCommand(BaseInspectCommand):
 
 
 @click.command(name="action")
-@click.option("-a", "--agent", required=True, help="Workflow name")
+@workflow_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.argument("action_name", metavar="ACTION_NAME")
@@ -720,7 +724,7 @@ class ContextCommand(BaseInspectCommand):
 
 
 @click.command(name="context")
-@click.option("-a", "--agent", required=True, help="Workflow name")
+@workflow_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.argument("action_name", metavar="ACTION_NAME")

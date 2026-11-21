@@ -19,7 +19,7 @@ defaults:
 ```
 
 ```bash
-agac run -a my_workflow
+agac run -w my_workflow
 ```
 
 When `run_mode: batch` is set, Agent Actions submits the records asynchronously. Then it pauses the workflow with `Workflow paused - batch job(s) submitted for: <actions>`. The batch ID is in the `Batch <id> submitted: <n> requests to <provider>` line. Use the commands below to manage the batch from submission to retrieval.
@@ -53,8 +53,8 @@ agac batch status --batch-id <id>
 | Option | Description |
 |--------|-------------|
 | `--batch-id` | **Required.** The ID of the batch job. If you omit this option, the command raises `UsageError: --batch-id is required.` Get the batch ID from the `Batch <id> submitted` line of the run. |
-| `-a, --agent` | The workflow name. Required in a project with more than one workflow. |
-| `--action` | The action name. Required when the workflow has more than one batch action and the batch ID does not identify one action. |
+| `-w, --workflow` | The workflow name. Required in a project with more than one workflow. `-a` and `--agent` name the same option. |
+| `-A, --action` | The action name. Required when the workflow has more than one batch action and the batch ID does not identify one action. |
 
 **Example:**
 ```bash
@@ -76,8 +76,8 @@ agac batch retrieve --batch-id <id>
 | Option | Description |
 |--------|-------------|
 | `--batch-id` | **Required.** The ID of the batch job to retrieve. If you omit this option, the command raises `UsageError: --batch-id is required.` |
-| `-a, --agent` | The workflow name. Required in a project with more than one workflow. |
-| `--action` | The action name. Required when the workflow has more than one batch action and the batch ID does not identify one action. |
+| `-w, --workflow` | The workflow name. Required in a project with more than one workflow. `-a` and `--agent` name the same option. |
+| `-A, --action` | The action name. Required when the workflow has more than one batch action and the batch ID does not identify one action. |
 
 **Example:**
 ```bash

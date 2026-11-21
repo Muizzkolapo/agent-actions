@@ -132,7 +132,7 @@ The `clean` command removes the working directories of a workflow under `agent_i
 If `clean` finds something to remove during a run or a retry of the workflow, it removes nothing. It exits 1 with `Another run of workflow '<workflow>' is in progress` (see [Concurrent runs](./run.md#concurrent-runs)). `clean` holds the same lock from before it asks for confirmation until it finishes. It keeps the lock file. After `--all`, `agent_io/store/` holds only the empty `<workflow>.db.lock`.
 
 ```bash
-agac clean -a <workflow-name> [options]
+agac clean -w <workflow-name> [options]
 ```
 
 The command removes these items:
@@ -144,7 +144,7 @@ The command removes these items:
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The workflow name (required) |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
 | `-f, --force` | Skip the interactive confirmation |
 | `--target` | Also remove `agent_io/target/`, your generated output |
 | `--all` | Remove all directories, which include target, staging and the durable store. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
@@ -152,13 +152,13 @@ The command removes these items:
 **Examples:**
 ```bash
 # Remove regenerable preprocessed inputs (with confirmation)
-agac clean -a my_workflow
+agac clean -w my_workflow
 
 # Also remove generated output
-agac clean -a my_workflow --target
+agac clean -w my_workflow --target
 
 # Remove everything, including staging inputs and the durable store
-agac clean -a my_workflow --all
+agac clean -w my_workflow --all
 ```
 
 :::note[Run from Anywhere]
@@ -224,17 +224,17 @@ Show the execution status of a specified workflow. The status shows which action
 An action can fail as a whole, with the error in its status (`error_message` in `agent_io/.agent_status.json`). For such an action, an **Error** column shows the first line of that error next to the action. The command cuts the line to 200 characters. The column shows only when a failed action has an error message. This command does not list the failures of single records. For those, see [`agac dispositions`](./dispositions) or [`agac retry --dry-run`](./retry).
 
 ```bash
-agac status -a <workflow-name> [options]
+agac status -w <workflow-name> [options]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The workflow name (required) |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
 
 **Example:**
 ```bash
-agac status -a my_workflow
+agac status -w my_workflow
 ```
 
 :::note[Run from Anywhere]

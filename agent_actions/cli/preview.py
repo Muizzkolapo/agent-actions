@@ -12,7 +12,11 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    action_option,
+    handles_user_errors,
+    requires_project,
+)
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
 from agent_actions.storage import get_storage_backend
@@ -122,7 +126,7 @@ class PreviewCommand:
 
         self.console.print(table)
         self.console.print(
-            "\n[dim]Use [bold]agac preview -w WORKFLOW -a ACTION[/bold] to view records for a specific action.[/dim]"
+            "\n[dim]Use [bold]agac preview -w WORKFLOW -A ACTION[/bold] to view records for a specific action.[/dim]"
         )
 
     def _preview_action(self, backend) -> None:
@@ -256,10 +260,8 @@ class PreviewCommand:
 
 
 @click.command()
-@click.option("-w", "--workflow", required=True, help="Workflow configuration file name")
-@click.option(
-    "-a", "--action", default=None, help="Action name to preview (lists all if not specified)"
-)
+@click.option("-w", "--workflow", "--agent", "workflow", required=True, help="Workflow name")
+@action_option(help="Action name to preview (lists all if not specified)")
 @click.option(
     "-n",
     "--limit",
@@ -297,16 +299,16 @@ def preview(
         agac preview -w my_workflow
 
         # Preview data for a specific action
-        agac preview -w my_workflow -a classify_genre
+        agac preview -w my_workflow -A classify_genre
 
         # Show as JSON
-        agac preview -w my_workflow -a classify_genre -f json
+        agac preview -w my_workflow -A classify_genre -f json
 
         # Show storage stats
         agac preview -w my_workflow --stats
 
         # Pagination
-        agac preview -w my_workflow -a classify_genre -n 20 --offset 10
+        agac preview -w my_workflow -A classify_genre -n 20 --offset 10
     """
     command = PreviewCommand(
         workflow=workflow,

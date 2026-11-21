@@ -9,7 +9,7 @@ sidebar_position: 9
 The `retry` command runs the failed or exhausted records again, from one action through the actions after it. The command does not run the whole workflow again. Before you retry, use [`dispositions`](./dispositions) to see which records are stuck, and at which action.
 
 ```bash
-agac retry -a <workflow-name> [options]
+agac retry -w <workflow-name> [options]
 ```
 
 A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or another retry of the workflow is in progress, the retry exits 1 with `Another run of workflow '<workflow>' is in progress`. `--filter` also takes the lock, because `--filter` rewrites dispositions, stored rows, the status file and the retry manifest. `--dry-run` writes nothing and does not take the lock.
@@ -18,7 +18,7 @@ A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or an
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The name of the agent configuration file, without the path or the extension (required) |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` and `--agent` name the same option. |
 | `--from TEXT` | The action to start the retry from. If you do not give this option, the retry starts from the earliest failure. |
 | `--record TEXT` | Limit the retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what the command would retry, and do not execute |
@@ -33,7 +33,7 @@ A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or an
 This command is always safe. Nothing executes:
 
 ```bash
-agac retry -a my_workflow --dry-run
+agac retry -w my_workflow --dry-run
 ```
 
 Nothing is stuck when there is no failed record, no failed action, and no batch that waits for collection. In this case, the command reports `No failed or exhausted records found. Nothing to retry.`
@@ -41,19 +41,19 @@ Nothing is stuck when there is no failed record, no failed action, and no batch 
 ### Retry from the earliest failure
 
 ```bash
-agac retry -a my_workflow
+agac retry -w my_workflow
 ```
 
 ### Retry from a specific action
 
 ```bash
-agac retry -a my_workflow --from extract_facts
+agac retry -w my_workflow --from extract_facts
 ```
 
 ### Retry a single record
 
 ```bash
-agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
+agac retry -w my_workflow --from extract_facts --record 3f9a1c2e-...
 ```
 
 `--record` takes the identifier in the **Record ID** column of [`dispositions --quarantined`](./dispositions). The retry matches exactly that value.
@@ -66,7 +66,7 @@ for the context window of the model, and a source record with nothing to extract
 place of a retry. `--filter` does not change the other records:
 
 ```bash
-agac retry -a my_workflow --filter extract_facts:3f9a1c2e-... --reason "scanned page, no text"
+agac retry -w my_workflow --filter extract_facts:3f9a1c2e-... --reason "scanned page, no text"
 ```
 
 ```
@@ -492,7 +492,7 @@ stored file that a `--rerun` made stale. The two run modes differ:
 2. Batch: the retry sends the record again.
 
 ```bash
-agac retry -a my_workflow --from extract_facts
+agac retry -w my_workflow --from extract_facts
 ```
 
 A retry that names no record obeys the limits as `agac run` does. Each action obeys

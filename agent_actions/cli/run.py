@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING, Literal, cast
 import click
 
 from agent_actions.cli.args import RunCommandArgs
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.logging.factory import LoggerFactory
@@ -201,9 +205,7 @@ class RunCommand:
 
 
 @click.command()
-@click.option(
-    "-a", "--agent", required=True, help="Agent configuration file name without path or extension"
-)
+@workflow_option()
 @click.option(
     "-u",
     "--user-code",

@@ -17,7 +17,9 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. | `cli`, `shared` |
+| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. Every command takes the workflow as `-w/--workflow` and `-a/--agent` alike (`workflow_option`), and an action as `-A/--action` wherever it takes one. | `cli`, `shared` |
+| `workflow_option` | Function | The workflow option of a command: `-w/--workflow`, with `-a/--agent` as the same option. | - |
+| `action_option` | Function | `-A/--action` for `traces`, `records` and `preview`, which read the action from `-a`: `-a` still names it there, with a deprecation warning on stderr. The option is eager, so the warning is printed before `--help` and before an error in any other option. | - |
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `enter_project` | Function | The project check and banner `requires_project` applies, as a call: a group callback that Click runs before a subcommand's `--help` (`docs`) calls it only when the group itself runs. | - |
@@ -65,7 +67,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the list-udfs command. | - |
 | `list_udfs_cmd` | Function | List all discovered User-Defined Functions (UDFs). | - |
 | `args.py` | Module | Pydantic argument models for the CLI commands (run, retry, init, clean, status, batch). | `cli`, `validation` |
-| `main.py` | Module | Main entry point for the Agent Actions CLI. | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
+| `main.py` | Module | Main entry point for the Agent Actions CLI. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a' / '--agent'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
 | `CLI` | Class | Agent Actions CLI application. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |

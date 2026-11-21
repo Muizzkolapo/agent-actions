@@ -33,7 +33,7 @@ The execution layer runs the LLM calls and the data transformations, and it make
 To analyze the workflow schemas and the field dependencies before you make API calls, run this command:
 
 ```bash
-agac schema -a my_workflow
+agac schema -w my_workflow
 ```
 
 The command shows the input schema and the output schema of each action. It helps you find field reference errors.

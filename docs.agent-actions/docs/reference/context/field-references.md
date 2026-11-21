@@ -152,7 +152,7 @@ An action reads only the actions that are upstream of it through its `dependenci
 1. **Use explicit dependencies** - Each action that a reference names must be upstream of the action through its `dependencies`.
 2. **Use Jinja2 syntax** - Use `{{ action_name.field }}` in prompts.
 3. **Use selector syntax** - Use `action_name.field` in guards and context_scope.
-4. **Use the schema command** - Run `agac schema -a <workflow>` to see the fields that each action takes and produces.
+4. **Use the schema command** - Run `agac schema -w <workflow>` to see the fields that each action takes and produces.
 
 ## Version Field Patterns
 

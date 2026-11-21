@@ -9,7 +9,7 @@ sidebar_position: 2
 The `run` command is the primary way to run a workflow. It resolves dependencies, runs independent actions in parallel and finds tools automatically.
 
 ```bash
-agac run -a <workflow-name> [options]
+agac run -w <workflow-name> [options]
 ```
 
 :::note[Run from Anywhere]
@@ -22,13 +22,13 @@ These are the basic commands:
 
 ```bash
 # Run an agentic workflow
-agac run -a my_workflow
+agac run -w my_workflow
 
 # Run with custom tools
-agac run -a my_workflow -u ./user_code --use-tools
+agac run -w my_workflow -u ./user_code --use-tools
 
 # Force parallel execution
-agac run -a my_workflow --execution-mode parallel
+agac run -w my_workflow --execution-mode parallel
 ```
 
 The last line of the output counts actions, not records. A final action is an action that no other action reads.
@@ -46,7 +46,7 @@ The log line before the warning names the `agac dispositions` command that shows
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent NAME` | The workflow name (required) |
+| `-w, --workflow NAME` | The workflow name (required). `-a` and `--agent` name the same option. |
 | `-u, --user-code DIRECTORY` | The path to the folder of your code that contains the tools |
 | `--use-tools` | Let actions use tools |
 | `-e, --execution-mode` | The execution mode: `auto` (default), `parallel` or `sequential` |
@@ -63,7 +63,7 @@ The limits of a workflow are in the project configuration, for each action. To r
 limit the whole run from the command line. Examples are a smoke check, a quick pass over a real dataset, or one action under a debugger:
 
 ```bash
-agac run -a my_workflow --record-limit 2 --file-limit 1
+agac run -w my_workflow --record-limit 2 --file-limit 1
 ```
 
 The limit applies to **every** action, which includes the actions that configure no limit of their own.
@@ -187,14 +187,14 @@ To answer each record under the edit, use `--rerun` with the name of the action.
 action again, and each action that reads its output. Each other action keeps its answers:
 
 ```bash
-agac run -a my_agent --rerun classify
+agac run -w my_agent --rerun classify
 ```
 
 If more than one action was edited, give `--rerun` one time for each action. The run answers each named
 action and each action that reads one of them again. An action that reads more than one of them runs one time:
 
 ```bash
-agac run -a my_agent --rerun classify --rerun summarize
+agac run -w my_agent --rerun classify --rerun summarize
 ```
 
 An action that may hold answers from more than one configuration continues to report this, even after you change the
@@ -233,18 +233,18 @@ Agent Actions automatically finds independent actions and runs them concurrently
 
 ```bash
 # Auto-detect parallel execution (default)
-agac run -a my_workflow
+agac run -w my_workflow
 
 # Force parallel execution
-agac run -a my_workflow --execution-mode parallel
+agac run -w my_workflow --execution-mode parallel
 # Or using short form:
-agac run -a my_workflow -e parallel
+agac run -w my_workflow -e parallel
 
 # Force sequential execution
-agac run -a my_workflow --execution-mode sequential
+agac run -w my_workflow --execution-mode sequential
 
 # Limit concurrent actions to 10
-agac run -a my_workflow -e parallel --concurrency-limit 10
+agac run -w my_workflow -e parallel --concurrency-limit 10
 ```
 
 The diagram below shows how Agent Actions puts actions into levels. Actions at the same level run in parallel, because they do not depend on the outputs of each other:

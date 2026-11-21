@@ -316,7 +316,7 @@ Prompt traces exist only for **LLM actions**. Tool actions do not generate promp
 To read the traces of many records at one time, print them with `agac traces`. Add `--record <target_id>` for one record, or `--json` for a list:
 
 ```bash
-agac traces -w my_workflow -a classify_issue
+agac traces -w my_workflow -A classify_issue
 ```
 
 For the full table schema and query examples, see [Prompt Traces reference](../reference/data-io/prompt-traces.md).
@@ -330,7 +330,7 @@ When records fail or exhaust retries, the framework captures the input record at
 agac records -w <workflow> --snapshots
 
 # One action's, or one record's
-agac records -w <workflow> -a <action> --snapshots
+agac records -w <workflow> -A <action> --snapshots
 agac records -w <workflow> --snapshots --source-guid <source_guid>
 ```
 
@@ -364,10 +364,10 @@ Compare the data at each action. Select the same record at each action by its `s
 
 ```bash
 # Input to failing action — fetch the matching record
-agac records -w <workflow> -a <failing_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
+agac records -w <workflow> -A <failing_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
 
 # Previous action's output for the same record
-agac records -w <workflow> -a <previous_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
+agac records -w <workflow> -A <previous_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
 ```
 
 ### Step 4: Enable Debug Mode
@@ -375,7 +375,7 @@ agac records -w <workflow> -a <previous_action> --source-guid 37812c37-80a2-596b
 To get detailed tracebacks, run this command:
 
 ```bash
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 ```
 
 ### Step 5: Enable Prompt Debug
@@ -546,7 +546,7 @@ This section gives the commands and the patterns for debugging.
 
 ```bash
 # Debug mode (full tracebacks)
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w workflow
 ```
 
 ### Common Fixes Cheatsheet

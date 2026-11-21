@@ -8,7 +8,11 @@ from rich.console import Console
 from rich.table import Table
 
 from agent_actions.cli.args import StatusCommandArgs
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.config.project_paths import ProjectPathsFactory
 
 
@@ -68,9 +72,7 @@ def _failure_of(details: dict) -> str:
 
 
 @click.command()
-@click.option(
-    "-a", "--agent", required=True, help="Agent configuration file name without path or extension"
-)
+@workflow_option()
 @handles_user_errors("status")
 @requires_project
 def status(agent: str, project_root: Path | None = None) -> None:
