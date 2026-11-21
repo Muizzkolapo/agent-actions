@@ -85,22 +85,30 @@ def test_the_record_fails_with_the_error_online_raises_for_it(tmp_path):
     )
 
 
-def test_a_judge_request_too_large_for_the_model_is_raised_not_dropped(tmp_path):
+def test_a_judge_request_too_large_for_the_model_fails_its_call_and_the_rest_go_out(tmp_path):
     client = OpenAIBatchClient(api_key="k")
     client.submit_batch = MagicMock(return_value=("b1", "submitted"))
     # A judge call is a text call, measured against the default window of 128,000 tokens.
-    request = SimpleNamespace(prompt="x" * 600_000, model=None, votes=1)
+    large = SimpleNamespace(prompt="x" * 600_000, model=None, votes=1)
+    small = SimpleNamespace(prompt="Is it on topic?", model=None, votes=1)
 
-    with pytest.raises(PromptTooLargeError, match="exceeds model context window"):
-        submit_judge_batch(
-            client,
-            JudgeCollection({"key": request}, None),
-            CONFIG,
-            file_name="f",
-            attempt=1,
-            output_directory=str(tmp_path),
-        )
-    client.submit_batch.assert_not_called()
+    submission = submit_judge_batch(
+        client,
+        JudgeCollection({"large": large, "small": small}, None),
+        CONFIG,
+        file_name="f",
+        attempt=1,
+        output_directory=str(tmp_path),
+    )
+
+    (verdict,) = submission.failed.values()
+    assert list(submission.failed) == ["large"]
+    assert verdict[0] is False
+    assert verdict[1].startswith("judge call failed: Estimated prompt size")
+    assert "exceeds model context window (128000 tokens)" in verdict[1]
+    assert set(submission.requests.values()) == {"small"}
+    (sent,) = client.submit_batch.call_args.kwargs["tasks"]
+    assert "Is it on topic?" in str(sent["body"]["messages"])
 
 
 def test_a_queued_task_too_large_for_the_model_is_raised_not_dropped():
