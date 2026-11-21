@@ -171,3 +171,23 @@ class TestAQuotaAnswerWrappedByABatchClient:
             call(429)
 
         assert find_quota_error(raised.value, "anthropic") is None
+
+
+@pytest.mark.parametrize("status", [429, 403])
+def test_an_sdk_message_that_leaves_out_the_error_code_is_still_read_by_its_code(status):
+    """Newer OpenAI SDKs put only the body's message in the error text, not its code."""
+    import httpx
+    import openai
+
+    from agent_actions.llm.providers.openai.client import _ERROR_MAPPING
+
+    error_class = openai.RateLimitError if status == 429 else openai.PermissionDeniedError
+    response = httpx.Response(status, request=httpx.Request("POST", "https://api.openai.com"))
+    message = f"Error code: {status} - {OPENAI_QUOTA['error']['message']}"
+    error = error_class(message, response=response, body=OPENAI_QUOTA["error"])
+    assert "insufficient_quota" not in str(error)
+
+    wrapped = wrap_vendor_error(error, "m", _ERROR_MAPPING, "r")
+
+    assert isinstance(wrapped, QuotaExceededError)
+    assert find_quota_error(error, "openai") is not None
