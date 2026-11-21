@@ -241,7 +241,7 @@ def _handed(root: Path, action: str) -> list[dict]:
 def test_a_record_whose_upstream_gave_no_such_field_passes_every_reader(
     tmp_path, entry, missing, run_mode
 ):
-    """Verification 7.1, in both run modes and for both tool granularities."""
+    """Holds in online and batch mode, for a record tool and for a file tool."""
     root = _project(tmp_path, entry, run_mode)
 
     transcript = _run_to_the_end(root)
@@ -274,7 +274,7 @@ def test_a_record_a_guard_skipped_the_upstream_for_passes_every_reader(
 
 @MODES
 def test_the_same_field_without_the_mark_still_fails_the_record_that_lacks_it(tmp_path, run_mode):
-    """Verification 7.2."""
+    """Each of the three readers fails the record that lacks the field."""
     root = _project(tmp_path, REQUIRED, run_mode)
 
     _run_to_the_end(root)
@@ -288,7 +288,7 @@ def test_the_same_field_without_the_mark_still_fails_the_record_that_lacks_it(tm
 def test_inspect_gives_no_null_warning_for_an_optional_field_of_a_skipped_upstream(
     tmp_path, entry, missing
 ):
-    """Verification 7.3."""
+    """Neither the null warning nor the prompt-contract warning is given."""
     root = _project(tmp_path, entry, guard=GUARD)
 
     result = _agac(root, "inspect", "-a", WORKFLOW)

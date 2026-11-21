@@ -59,7 +59,7 @@ def _null_warnings(result) -> list[str]:
 class TestAFieldOfASkipGuardedUpstream:
     @pytest.mark.parametrize("entry", [SUFFIX, MAPPING], ids=["suffix", "mapping"])
     def test_an_optional_field_is_not_warned_about(self, entry):
-        """Verification 7.3, at the analyzer `agac inspect` and `agac run` share."""
+        """`agac inspect` and `agac run` both run this analyzer."""
         result = WorkflowStaticAnalyzer(_skip_workflow(entry)).analyze()
 
         assert _null_warnings(result) == []

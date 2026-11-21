@@ -38,7 +38,7 @@ def _context(review: object) -> dict:
 
 class TestTheFieldIsMissingFromItsNamespace:
     def test_it_resolves_to_none_and_the_record_is_not_refused(self):
-        """Verification 7.1."""
+        """The LLM context and the prompt context both hold the field as None."""
         prompt_context, llm_context, _ = apply_context_scope(
             _context({"verdict": "ok"}), OPTIONAL, action_name="retry"
         )
@@ -55,7 +55,7 @@ class TestTheFieldIsMissingFromItsNamespace:
         assert prompt_context["review"] == {"rejected_text": "nothing rejected"}
 
     def test_the_same_field_without_the_mark_still_fails_the_record(self):
-        """Verification 7.2."""
+        """The record fails with RecordContextError, which names the field."""
         with pytest.raises(RecordContextError) as raised:
             apply_context_scope(_context({"verdict": "ok"}), REQUIRED, action_name="retry")
 
