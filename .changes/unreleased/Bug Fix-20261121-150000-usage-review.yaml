@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The top-level `tokens` of `run_results.json` sums `input_tokens`, `output_tokens` and `total_tokens`, the keys each action''s `tokens` carry, so the three agree. A mistake in the `prices:` block names `agent_actions.yml`, and a missing key also names an unknown key beside it, as the typo `outptu`.'
+time: 2026-11-21T15:00:00Z

@@ -97,16 +97,28 @@ def parse_prices(raw: Any) -> dict[str, ModelPrice]:
 
 
 def _refuse_pydantic(key: str, exc: ValidationError) -> NoReturn:
-    error = exc.errors()[0]
+    errors = exc.errors()
+    unknown = [str(e["loc"][0]) for e in errors if e["type"] == "extra_forbidden" and e["loc"]]
+    missing = [str(e["loc"][0]) for e in errors if e["type"] == "missing" and e["loc"]]
+    if missing:
+        # An unknown key next to a missing one is often its typo, as `outptu` for `output`.
+        also = f"; unknown key {', '.join(repr(k) for k in unknown)}" if unknown else ""
+        _refuse(key, f"{', '.join(missing)} is required{also}")
+    if unknown:
+        _refuse(key, f"unknown key {', '.join(repr(k) for k in unknown)}")
+    error = errors[0]
     field = str(error["loc"][0]) if error["loc"] else ""
-    if error["type"] == "extra_forbidden":
-        _refuse(key, f"unknown key '{field}'")
-    if error["type"] == "missing":
-        _refuse(key, f"{field} is required")
     _refuse(f"{key}.{field}", _DISCOUNT_HINT if field == "batch_discount" else _PRICE_HINT)
 
 
 def _refuse(key: str, text: str) -> NoReturn:
     # `from None`: a pydantic error chained under the refusal would be rendered as its
     # root cause, and the user would read pydantic's text instead of the key and text here.
-    raise ConfigValidationError("prices", f"{key}: {text}") from None
+    raise ConfigValidationError(
+        "prices",
+        f"{key}: {text} (in agent_actions.yml)",
+        context={
+            "file": "agent_actions.yml",
+            "hint": "Fix the prices: block of agent_actions.yml.",
+        },
+    ) from None

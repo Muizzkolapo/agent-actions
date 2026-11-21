@@ -297,7 +297,7 @@ This file is a summary of the workflow execution, with the metrics of each actio
       "execution_time": 4.2,
       "output_folder": "/path/to/agent_workflow/product_pipeline/agent_io/target/extract_data",
       "record_count": 10,
-      "tokens": {"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500},
+      "tokens": {"input_tokens": 1000, "output_tokens": 500, "total_tokens": 1500},
       "error_message": null,
       "skip_reason": null,
       "empty_output_records": 0,
@@ -308,7 +308,7 @@ This file is a summary of the workflow execution, with the metrics of each actio
     }
   ],
   "elapsed_time": 12.5,
-  "tokens": {"prompt_tokens": 3000, "completion_tokens": 1500, "total_tokens": 4500}
+  "tokens": {"input_tokens": 3000, "output_tokens": 1500, "total_tokens": 4500}
 }
 ```
 
@@ -416,7 +416,7 @@ An action that has a guard also carries a `guard_stats` object. The object holds
 }
 ```
 
-An action that made model calls in the run has a `usage` object: the number of `calls` and the four token counts, summed over all the calls, with one entry in `by_kind` for each kind of call (`main`, `repair`, `judge`), pricing (`batch` is `true` for a call that a provider batch answered) and model. `input_tokens` in `usage` does not include the cached tokens. The `usage` of the execution is the sum over its actions. `tokens` and `total_tokens` keep their meaning: `tokens.input_tokens` is the full prompt, cached or not, and `total_tokens` is the prompt and the output of all the actions.
+An action that made model calls in the run has a `usage` object. The object holds the number of `calls` and the four token counts of all the calls. `by_kind` has one entry for each kind of call (`main`, `repair`, `judge`), pricing and model. `batch` is `true` for a call that a provider batch answered. `input_tokens` in `usage` does not include the cached tokens. The `usage` of the execution is the sum over its actions. `tokens` and `total_tokens` keep their meaning: `tokens.input_tokens` is the full prompt, cached or not, and `total_tokens` is the prompt and the output of all the actions.
 
 A run that only submits a batch reads no result, so it has no usage for that action. The run that reads the batch holds its usage. [`agac usage`](../cli/usage) adds the runs.
 
