@@ -20,7 +20,11 @@ from agent_actions.expectations.judge import (
     tally_votes,
     verdict_from_reply,
 )
-from agent_actions.llm.providers.batch_base import UNSENT_ERROR_KEY, batch_request_cap
+from agent_actions.llm.providers.batch_base import (
+    UNSENT_ERROR_KEY,
+    batch_request_cap,
+    batch_task_bytes,
+)
 
 if TYPE_CHECKING:
     from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
@@ -138,9 +142,10 @@ def submit_judge_batch(
 ) -> JudgeSubmission:
     """Send one request per vote of each pending call, as ``<file>_judge_<attempt>``.
 
-    A batch takes one model and at most the provider's cap of requests, so only the
-    calls of the first model met go out, up to that cap; the rest are still uncached
-    when the step runs again, and go out in the next round.
+    A batch takes one model and at most the provider's cap of requests and of bytes, so
+    only the calls of the first model met go out, up to those caps; the rest are still
+    uncached when the step runs again, and go out in the next round. The first value
+    always goes, as a batch of nothing would stall the step.
     """
     model = next(iter(collection.pending.values())).model
     cap = batch_request_cap(provider)
@@ -173,7 +178,9 @@ def submit_judge_batch(
         if UNSENT_ERROR_KEY in row:
             key = requests[row["target_id"]]
             failed.setdefault(key, [False, f"judge call failed: {row[UNSENT_ERROR_KEY]}"])
-    requests = {request_id: key for request_id, key in requests.items() if key not in failed}
+    sendable = {key: request for key, request in sent.items() if key not in failed}
+    kept, tasks = _within_byte_limit(provider, sendable, tasks)
+    requests = {request_id: key for request_id, key in requests.items() if key in kept}
     batch_id = None
     if requests:
         batch_id, _status = provider.submit_batch(
@@ -184,7 +191,7 @@ def submit_judge_batch(
             batch_id,
             batch_name,
             len(tasks),
-            len(sent) - len(failed),
+            len(kept),
         )
     for key, verdict in failed.items():
         logger.warning("Judge request for %s could not be sent: %s", key, verdict[1])
@@ -193,9 +200,34 @@ def submit_judge_batch(
         batch_id=batch_id,
         requests=requests,
         # Online charges a call before it is made, so one that cannot be sent costs a unit too.
-        budget_remaining=None if budget_before is None else budget_before - len(sent),
+        budget_remaining=None if budget_before is None else budget_before - len(kept) - len(failed),
         failed=failed,
     )
+
+
+def _within_byte_limit(
+    provider: BaseBatchClient, sent: dict[str, JudgeRequest], tasks: list[Any]
+) -> tuple[dict[str, JudgeRequest], list[Any]]:
+    """The values of *sent*, in order, whose tasks fit the provider's bytes per batch.
+
+    *tasks* holds each value's votes in turn, one task per vote; when it does not (a
+    value with only some votes unsent), no value is held back.
+    """
+    if len(tasks) != sum(request.votes for request in sent.values()):
+        return sent, tasks
+    limit = provider.max_batch_bytes
+    kept: dict[str, JudgeRequest] = {}
+    size = 0
+    start = 0
+    for key, request in sent.items():
+        group = tasks[start : start + request.votes]
+        group_size = sum(batch_task_bytes(task) for task in group)
+        if kept and size + group_size > limit:
+            break
+        kept[key] = request
+        size += group_size
+        start += request.votes
+    return kept, tasks[:start]
 
 
 def tally_judge_results(
