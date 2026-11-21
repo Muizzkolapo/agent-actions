@@ -21,7 +21,7 @@ Agent Actions gives error messages that tell you what to do. It also has many de
 To see the full context of an error, set the `AGENT_ACTIONS_LOG_LEVEL` environment variable:
 
 ```bash
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 ```
 
 Debug mode shows:
@@ -29,7 +29,7 @@ Debug mode shows:
 - Context information (file paths, action names, operations)
 - Complete Python tracebacks
 
-For complex problems, send the debug output to a file: `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow > debug.log 2>&1`
+For complex problems, send the debug output to a file: `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow > debug.log 2>&1`
 
 ## Environment Variables
 

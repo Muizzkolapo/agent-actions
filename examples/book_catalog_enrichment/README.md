@@ -327,7 +327,7 @@ cp .env.sample .env
 ### Run
 
 ```bash
-agac run -a book_catalog_enrichment
+agac run -w book_catalog_enrichment
 ```
 
 By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full 80-book sample in `agent_io/staging/`.

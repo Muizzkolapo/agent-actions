@@ -9,7 +9,7 @@ sidebar_position: 6
 The `schema` command analyzes your workflow configuration. It shows the fields that each action expects and the fields that each action produces. It does not make API calls.
 
 ```bash
-agac schema -a <workflow-name> [options]
+agac schema -w <workflow-name> [options]
 ```
 
 This command finds field reference errors before a run. For example, if you typed `extract_facts.fact` in place of `extract_facts.facts`, you would find the error at runtime. You would find it after the workflow processed hundreds of records. The schema command validates these references statically.
@@ -31,16 +31,16 @@ You can run this command from any subdirectory in your project.
 
 ```bash
 # Show schemas in table format
-agac schema -a my_workflow
+agac schema -w my_workflow
 
 # Output as JSON for programmatic use
-agac schema -a my_workflow --json
+agac schema -w my_workflow --json
 
 # Show detailed data flow tree
-agac schema -a my_workflow --verbose
+agac schema -w my_workflow --verbose
 
 # Include tool schemas from user code
-agac schema -a my_workflow -u ./tools
+agac schema -w my_workflow -u ./tools
 ```
 
 ## Output Reference

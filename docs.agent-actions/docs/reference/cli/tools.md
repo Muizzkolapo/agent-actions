@@ -47,7 +47,7 @@ Before you run your workflow, use this command to verify which tools it found in
 This command shows if your workflow will find all the tools that it needs. It validates that each `impl` reference in your configuration points to a real function that has the correct decorator.
 
 ```bash
-agac validate-udfs -a <agentic-workflow> -u <user-code-path> [options]
+agac validate-udfs -w <agentic-workflow> -u <user-code-path> [options]
 ```
 
 It finds misspelled function names or missing `@udf_tool` decorators before execution starts.
@@ -72,7 +72,7 @@ On failure, the command exits with code 1. It also prints warnings. Examples are
 
 ```bash
 # Validate agentic workflow config references
-agac validate-udfs -a my_workflow -u user_code/
+agac validate-udfs -w my_workflow -u user_code/
 ```
 
 Run this command before you deploy workflows, to find tool reference errors early. It is ideal for CI/CD pipelines in which you want a fast failure on configuration errors.
