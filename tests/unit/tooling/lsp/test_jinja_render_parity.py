@@ -302,3 +302,94 @@ def test_a_set_block_split_into_actions_keeps_their_line(tmp_path):
     assert [a["name"] for a in r.data["actions"]] == ["extract", "summarize"]
     assert r.action_sources["extract"].line == 6
     assert r.action_sources["summarize"].line == 6
+
+
+_BRANCH_ON_MODE = """\
+name: wf
+actions:
+{% if mode | trim == 'fast' %}
+  - name: summarize
+    kind: tool
+    impl: fast_tool
+{% else %}
+  - name: summarize_slow
+    kind: tool
+    impl: slow_tool
+{% endif %}
+"""
+
+
+@pytest.mark.parametrize(
+    "opener",
+    [
+        pytest.param("{% set vendor = 'x' %}\n{% set mode %}", id="after-an-inline-set"),
+        pytest.param("{%+ set mode %}", id="plus-modifier"),
+        pytest.param("{% set mode | replace('x', 'y', count=1) %}", id="filter-keyword-argument"),
+    ],
+)
+def test_every_spelling_of_a_set_block_is_read_as_the_render_reads_it(tmp_path, opener):
+    wf = _project(tmp_path, f"{opener}\nfast\n{{% endset %}}\n{_BRANCH_ON_MODE}")
+    offset = opener.count("\n")
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"summarize"}
+    assert idx.file_actions[wf]["summarize"].location.line == 6 + offset
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `fast_tool`."]
+
+
+def test_a_name_line_in_a_set_block_is_read_as_the_render_reads_it(tmp_path):
+    wf = _project(
+        tmp_path,
+        "{% set first %}\n- name: extract\n{% endset %}\n"
+        + _BRANCH_ON_MODE.replace("mode | trim == 'fast'", "first | trim == '- name: extract'"),
+    )
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"summarize"}
+    assert idx.file_actions[wf]["summarize"].location.line == 6
+
+
+def test_the_body_of_a_macro_never_called_gives_no_reference(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+            impl: real_tool
+        {% macro unused() %}
+            impl: ghost_tool
+        {% endmacro %}
+          - name: b
+            kind: tool
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert idx.file_actions[wf]["a"].impl_ref == "real_tool"
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `real_tool`."]
+
+
+def test_a_macro_in_the_workflow_file_maps_its_actions_to_its_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro step(p) -%}
+        - name: {{ p }}__step
+          kind: tool
+        {%- endmacro %}
+        actions:
+          {{ step('a') | indent(2) }}
+          {{ step('b') | indent(2) }}
+        """,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["a__step", "b__step"]
+    assert r.action_sources["a__step"].line == 1
+    assert r.action_sources["b__step"].line == 1
