@@ -25,9 +25,13 @@ _ANY_MARK = re.compile(r"  # @(?:src|at) (\S+?):(\d+)")
 # A tag that strips the whitespace after it would strip nothing once a mark follows it.
 _STRIPS_AFTER = ("-}}", "-%}", "-#}")
 _CONTROL_OPENERS = ("{%", "{#")
-# Blocks whose body is text a template can read back, not output in place.
-_CAPTURE_OPEN = re.compile(r"\{%-?\s*(set|macro|call|filter)\b(.*)", re.S)
-_CAPTURE_CLOSE = re.compile(r"\{%-?\s*end(set|macro|call|filter)\b")
+# Blocks whose body is text that is held, not output in place where it is written.
+_CAPTURE_OPEN = re.compile(r"\{%[-+]?\s*(set|macro|call|filter)\b(.*)", re.S)
+_CAPTURE_CLOSE = re.compile(r"\{%[-+]?\s*end(set|macro|call|filter)\b")
+# `{% set a, ns.b = ... %}` assigns and holds no body; `{% set a | f(k=1) %}` opens one.
+_SET_ASSIGNS = re.compile(r"\s*[\w.]+(?:\s*,\s*[\w.]+)*\s*=(?!=)")
+# A `name:` mark changes the text a value block holds; a macro or call body needs it.
+_VALUE_BLOCKS = frozenset({"set", "filter"})
 
 
 class WorkflowRenderError(Exception):
@@ -89,22 +93,21 @@ class MarkingLoadRender(LoadRender):
                 if in_workflow:
                     self.unmarked_output.add(i)
                 continue
+            block = next((kind for start, stop, kind in captures if start <= end < stop), None)
             match = _NAME_LINE.match(line)
-            if match:
+            if match and block not in _VALUE_BLOCKS:
                 column = match.end() + (line[match.end()] in "'\"")
                 lines[i] = f"{line.rstrip()}  # @src {origin}:{i}:{column}"
-            elif in_workflow and any(start <= end < stop for start, stop in captures):
-                # A mark would change the text a `{% set %}` block captures, and the branch
-                # a test of it takes; the line may still be output, so it stays live.
-                self.unmarked_output.add(i)
-            elif in_workflow:
+            elif in_workflow and block is None:
                 lines[i] = f"{line.rstrip()}  # @at {origin}:{i}"
+            # A line in a block body is left without a line mark, so it is not live: the
+            # text is held, and a mark would change what a test of it reads.
         return super().wrap("\n".join(lines), origin)
 
 
-def _capture_spans(source: str, tags: list[Any]) -> list[tuple[int, int]]:
+def _capture_spans(source: str, tags: list[Any]) -> list[tuple[int, int, str]]:
     """The body of each outermost `set`, `macro`, `call` or `filter` block, by offset."""
-    spans: list[tuple[int, int]] = []
+    spans: list[tuple[int, int, str]] = []
     stack: list[tuple[str, int]] = []
     for tag in tags:
         if tag.kind != "%":
@@ -112,15 +115,15 @@ def _capture_spans(source: str, tags: list[Any]) -> list[tuple[int, int]]:
         text = source[tag.start : tag.end]
         opened = _CAPTURE_OPEN.match(text)
         if opened:
-            if opened.group(1) == "set" and "=" in opened.group(2):
-                continue  # `{% set x = ... %}` holds no body
+            if opened.group(1) == "set" and _SET_ASSIGNS.match(opened.group(2)):
+                continue
             stack.append((opened.group(1), tag.end))
             continue
         closed = _CAPTURE_CLOSE.match(text)
         if closed and stack and stack[-1][0] == closed.group(1):
-            _, body_start = stack.pop()
+            kind, body_start = stack.pop()
             if not stack:
-                spans.append((body_start, tag.start))
+                spans.append((body_start, tag.start, kind))
     return spans
 
 
