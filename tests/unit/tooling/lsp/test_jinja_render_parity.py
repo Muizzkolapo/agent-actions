@@ -487,7 +487,7 @@ def test_raw_text_gives_references_only_where_it_renders(tmp_path):
     assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
 
 
-def test_text_that_a_call_or_filter_block_outputs_gives_its_references(tmp_path):
+def test_text_that_a_call_block_outputs_as_written_gives_its_references(tmp_path):
     wf = _project(
         tmp_path,
         """\
@@ -500,17 +500,11 @@ def test_text_that_a_call_or_filter_block_outputs_gives_its_references(tmp_path)
             impl: tool_i
             dependencies: [outer]
         {% endcall %}
-        {% filter replace('QQ', 'q') %}
-          - name: three
-            kind: tool
-            dependencies: [second]
-        {% endfilter %}
         """,
     )
 
     assert sorted(_messages(wf, tmp_path)) == [
         "Unresolved action reference `outer`.",
-        "Unresolved action reference `second`.",
         "Unresolved tool reference `tool_i`.",
     ]
 
@@ -823,3 +817,281 @@ def test_a_loop_after_an_action_gives_its_lines_to_no_literal_action(tmp_path):
 
     assert idx.file_actions[wf]["a"].impl_ref is None
     assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_c`."]
+
+
+_STEP = "{% macro step(n) -%}\n- name: {{ n }}\n  kind: tool\n{%- endmacro %}\n"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(
+            "  {% filter dedent %}\n    dependencies: [ghost]\n  {% endfilter %}\n",
+            id="filter-moves-the-text",
+        ),
+        pytest.param(
+            "  {% filter replace('ghost', 'a') %}\n  dependencies: [ghost]\n  {% endfilter %}\n",
+            id="filter-changes-the-text",
+        ),
+    ],
+)
+def test_a_filter_body_is_not_read_as_written(tmp_path, body):
+    wf = _project(tmp_path, "name: wf\nactions:\n- name: a\n  kind: tool\n  impl: tool_a\n" + body)
+
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_a`."]
+
+
+def test_a_filter_body_under_an_emitted_action_is_not_the_action_above(tmp_path):
+    wf = _project(
+        tmp_path,
+        "{% from 'm.jinja2' import emit %}\nname: wf\nactions:\n"
+        "- name: a\n  kind: tool\n  impl: tool_a\n  {{ emit('b') }}\n"
+        "  {% filter safe %}\n  impl: tool_b\n  {% endfilter %}\n",
+        {
+            "m.jinja2": "{% macro emit(n) -%}\nx_note: 1\n- name: {{ n }}\n  kind: tool\n{%- endmacro %}\n"
+        },
+    )
+
+    assert build_index(tmp_path).file_actions[wf]["a"].impl_ref == "tool_a"
+
+
+def test_a_name_line_in_a_filter_body_is_not_an_action_definition(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+        - name: b
+          kind: tool
+          impl: tool_b
+        - name: a
+          kind: tool
+          {% filter safe %}
+          inputs:
+            - name: b
+              note: x
+          {% endfilter %}
+          impl: tool_a
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert idx.file_actions[wf]["b"].location.line == 2
+    assert idx.duplicate_actions_by_file[wf] == set()
+    assert idx.file_actions[wf]["a"].impl_ref == "tool_a"
+
+
+def test_a_caller_filter_that_changes_the_body_gives_no_reference_from_it(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro rename(old, new) %}{{ caller() | replace(old, new) }}{% endmacro %}
+        name: wf
+        actions:
+        - name: a
+          kind: tool
+        {% call rename('ghost', 'real') %}
+          impl: ghost_tool
+          dependencies: [ghost_up]
+        {% endcall %}
+        - name: c
+          kind: tool
+          impl: tool_c
+        """,
+    )
+
+    assert render_workflow_source(wf, tmp_path).data["actions"][0]["impl"] == "real_tool"
+    assert build_index(tmp_path).file_actions[wf]["a"].impl_ref is None
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_c`."]
+
+
+def test_a_line_that_ends_a_dropped_branch_is_not_read(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set extra = false %}
+        name: wf
+        actions:
+        - name: a
+          kind: tool
+          {% if extra %}
+          schema: ghost_schema {% endif %}
+          impl: tool_a
+        """,
+    )
+
+    meta = build_index(tmp_path).file_actions[wf]["a"]
+
+    assert meta.schema_ref is None
+    assert meta.impl_ref == "tool_a"
+
+
+def test_a_filter_that_changes_a_name_mark_gives_no_source_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        "{% from 'my_steps.jinja2' import step %}\nname: wf\nactions:\n"
+        "{{ step('load_raw') | replace('_', '-') }}\n"
+        "{{ step('x') | replace('templates/', '') }}\n"
+        "{{ step('ok') }}\n",
+        {"my_steps.jinja2": _STEP},
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["load-raw", "x", "ok"]
+    assert {name: (loc.file_path.name, loc.line) for name, loc in r.action_sources.items()} == {
+        "ok": ("my_steps.jinja2", 1)
+    }
+
+
+def test_a_name_that_is_not_a_string_does_not_stop_the_index(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% from 'my_steps.jinja2' import step %}
+        {% set up = 'loader' %}
+        name: wf
+        actions:
+        - name: yes
+          kind: tool
+        - name: b
+          kind: tool
+          dependencies: [stage_{{ up }}]
+        {{ step('stage_loader') }}
+        - name: c
+          kind: tool
+          impl: tool_c
+        """,
+        {"my_steps.jinja2": _STEP},
+    )
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"b", "stage_loader", "c"}
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `tool_c`."]
+
+
+def test_a_template_blank_line_does_not_revive_a_dropped_workflow_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% from 't.jinja2' import m %}
+        actions:
+          - name: a
+            kind: tool
+        {% if false %}
+            impl: ghost_tool
+        {% endif %}
+            dependencies: [missing]
+        """,
+        {"t.jinja2": "{% macro m() %}\n\n\n\n\n\n{% endmacro %}\n"},
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+@pytest.mark.parametrize(
+    ("tail", "templates", "key"),
+    [
+        pytest.param(
+            "{% include 'tail.jinja2' %}\n    impl: ghost_tool\n",
+            {"tail.jinja2": "extra:\n"},
+            "extra",
+            id="include-opens-a-key",
+        ),
+        pytest.param(
+            "{% if true -%}\n    impl: ghost_tool\n{% endif %}\n",
+            {},
+            None,
+            id="strip-tag-joins-lines",
+        ),
+    ],
+)
+def test_a_line_the_render_puts_outside_the_last_action_is_not_its_text(
+    tmp_path, tail, templates, key
+):
+    wf = _project(
+        tmp_path,
+        "name: wf\nactions:\n  - name: a\n    kind: tool\n    dependencies: [missing]\n" + tail,
+        templates,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert "impl" not in r.data["actions"][0]
+    assert (r.data[key] if key else r.data)["impl"] == "ghost_tool"
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_comment_text_gives_no_reference(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool  {# impl: ghost_tool #}
+            dependencies: [missing]
+        """,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_a_tag_name_in_a_filter_body_ends_the_action_above(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set p = 'b' %}
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+        {% filter replace('QQ', 'q') %}
+          - name: {{ p }}
+            kind: tool
+            impl: tool_b
+        {% endfilter %}
+        """,
+    )
+
+    assert build_index(tmp_path).file_actions[wf]["a"].impl_ref is None
+
+
+def test_marks_that_add_lines_to_the_render_keep_the_actions(tmp_path):
+    wf = _project(
+        tmp_path,
+        "{% macro m() %}\n- name: q\n{% endmacro %}\n{% set x = m() %}\nname: wf\nactions:\n"
+        "  - name: a\n    kind: tool\n{% if x | trim != '- name: q' %}\n\nextra: 1{% endif %}",
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["a"]
+    assert r.action_sources == {}
+    assert set(build_index(tmp_path).file_actions[wf]) == {"a"}
+
+
+@pytest.mark.parametrize(
+    ("block", "b_line"),
+    [
+        pytest.param(
+            "    {% if flag -%}\n    dependencies: [missing]\n    {%- endif %}\n",
+            8,
+            id="strip-tags",
+        ),
+        pytest.param(
+            "{% filter upper %}\n    impl: x_tool\n{% endfilter %}\n", 8, id="upper-filter"
+        ),
+    ],
+)
+def test_a_block_that_changes_its_text_keeps_the_other_actions_mapped(tmp_path, block, b_line):
+    wf = _project(
+        tmp_path,
+        "{% set flag = true %}\nname: wf\nactions:\n  - name: a\n    kind: tool\n"
+        + block
+        + "  - name: b\n    kind: tool\n",
+    )
+
+    assert render_workflow_source(wf, tmp_path).action_sources["b"].line == b_line
