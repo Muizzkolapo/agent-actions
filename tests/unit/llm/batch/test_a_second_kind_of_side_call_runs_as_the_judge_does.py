@@ -198,6 +198,23 @@ class TestInABatchRun:
         assert echo.charged == [["r1"], ["r2"]]
         assert echo.heard == HEARD
 
+    def test_its_batch_holds_no_more_bytes_than_the_provider_takes(self, echo):
+        provider = EchoingProvider()
+        provider.max_batch_bytes = 1
+        run = Run(_plain_config(), provider)
+
+        assert run.main_batch_returns(answers(VALUES)) is False
+        out = None
+        for _pass in range(len(VALUES) + 1):
+            out = run.recovery_batch_returns()
+            if out is not None:
+                break
+
+        assert out == "/out.json"
+        assert provider.batches == [("f.json_echo_1", COPIES), ("f.json_echo_2", COPIES)]
+        assert echo.charged == [["r1"], ["r2"]]
+        assert echo.heard == HEARD
+
     @pytest.mark.parametrize("status", [BatchStatus.IN_PROGRESS, BatchStatus.COMPLETED])
     def test_a_resume_while_its_batch_is_unread_sends_nothing_new(self, echo, status):
         provider = EchoingProvider()
