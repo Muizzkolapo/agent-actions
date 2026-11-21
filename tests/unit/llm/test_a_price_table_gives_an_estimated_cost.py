@@ -126,3 +126,12 @@ def test_a_mistake_in_the_block_is_refused_with_its_key(block, refusal):
         parse_prices(block)
 
     assert refusal in str(refused.value)
+    assert "(in agent_actions.yml)" in str(refused.value)
+    assert refused.value.context["hint"] == "Fix the prices: block of agent_actions.yml."
+
+
+def test_a_missing_key_names_the_unknown_key_beside_it():
+    with pytest.raises(ConfigValidationError) as refused:
+        parse_prices({"m": {"input": 1, "outptu": 2}})
+
+    assert "prices.m: output is required; unknown key 'outptu'" in str(refused.value)

@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
-from agent_actions.llm.providers.batch_base import batch_request_cap, raise_unsent
+from agent_actions.llm.providers.batch_base import UNSENT_ERROR_KEY, batch_request_cap
 from agent_actions.llm.side_calls import SideCall, SideReplies
 
 if TYPE_CHECKING:
@@ -57,7 +57,10 @@ class SideRequester(Protocol):
         """The calls *step* would make that no returned batch has answered, by key."""
 
     def sent(self, step: SideStep, calls: dict[str, SideCall]) -> None:
-        """Told which of its collected calls went out, before the state is saved."""
+        """Told which of its collected calls a batch took, before the state is saved.
+
+        A call whose request could not be sent is among them: online makes it and it fails.
+        """
 
     def settle(self, key: str, replies: SideReplies) -> Any:
         """The result of the call under *key* from its replies, in a form JSON can store."""
@@ -111,11 +114,17 @@ def side_requester(kind: str) -> SideRequester:
 
 @dataclass(frozen=True)
 class SideSubmission:
-    """A side batch in flight: each request id to the key of the call it is a copy of."""
+    """A side batch in flight: each request id to the key of the call it is a copy of.
 
-    batch_id: str
+    ``sent`` holds every call the batch took, with those in ``unsent``: the error of
+    each call whose request could not be sent, which fails alone, as online fails it.
+    ``batch_id`` is None when no request could be sent.
+    """
+
+    batch_id: str | None
     requests: dict[str, str]
     sent: dict[str, SideCall]
+    unsent: dict[str, str]
 
 
 def _request_id(kind: str, key: str, copy: int) -> str:
@@ -163,7 +172,15 @@ def submit_side_batch(
     config.pop("compiled_schema", None)
     batch_name = f"{file_name}_{kind}_{attempt}"
     tasks = provider.prepare_tasks(rows, config)
-    raise_unsent(rows)
+    unsent: dict[str, str] = {}
+    for row in rows:
+        if UNSENT_ERROR_KEY in row:
+            unsent.setdefault(requests[row["target_id"]], str(row[UNSENT_ERROR_KEY]))
+    requests = {request_id: key for request_id, key in requests.items() if key not in unsent}
+    for key, error in unsent.items():
+        logger.warning("%s request for %s could not be sent: %s", kind.capitalize(), key, error)
+    if not requests:
+        return SideSubmission(batch_id=None, requests={}, sent=sent, unsent=unsent)
     batch_id, _status = provider.submit_batch(
         tasks=tasks, batch_name=batch_name, output_directory=output_directory
     )
@@ -173,9 +190,9 @@ def submit_side_batch(
         batch_id,
         batch_name,
         len(tasks),
-        len(sent),
+        len(sent) - len(unsent),
     )
-    return SideSubmission(batch_id=batch_id, requests=requests, sent=sent)
+    return SideSubmission(batch_id=batch_id, requests=requests, sent=sent, unsent=unsent)
 
 
 def read_side_batch(
@@ -183,8 +200,9 @@ def read_side_batch(
 ) -> dict[str, SideReplies]:
     """Each call's replies from a returned side batch, by key.
 
-    A request that errored, or that the batch returned no line for, fails its
-    whole call, as an online call fails when one copy raises.
+    A request that errored, that the batch returned no line for, or that came back
+    with no content and an error (a refusal), fails its whole call, as an online call
+    fails when one copy raises.
     """
     by_id = {str(result.custom_id): result for result in results}
     replies: dict[str, list[Any]] = {}
@@ -197,9 +215,12 @@ def read_side_batch(
         if not result.success:
             errors.setdefault(key, result.error or f"the {kind} request failed")
             continue
-        replies.setdefault(key, []).append(
-            result.text if result.text is not None else result.content
-        )
+        reply = result.text if result.text is not None else result.content
+        if reply is None and result.error:
+            # A refusal or a blocked prompt: the online call raises it.
+            errors.setdefault(key, result.error)
+            continue
+        replies.setdefault(key, []).append(reply)
 
     return {
         key: SideReplies(error=errors[key]) if key in errors else SideReplies(tuple(replies[key]))

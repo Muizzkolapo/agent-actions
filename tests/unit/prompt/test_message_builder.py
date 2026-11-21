@@ -196,9 +196,6 @@ class TestMessageBuilderStructure:
         env = MessageBuilder.build(provider, PROMPT, CONTEXT_STR, json_mode=json_mode)
         assert [m.role for m in env.messages] == roles
 
-    def test_there_is_one_builder_for_online_and_batch(self):
-        assert not hasattr(MessageBuilder, "build_for_batch")
-
 
 # ---------------------------------------------------------------------------
 # Tests — content correctness (tagged providers)

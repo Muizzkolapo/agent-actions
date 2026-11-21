@@ -77,9 +77,10 @@ class RunResultsCollector:
             "elapsed_time": 0.0,
             "status": "running",
         }
+        # The keys an action's `tokens` carry, so the run total sums them as written.
         self._total_tokens: dict[str, int] = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
             "total_tokens": 0,
         }
 
@@ -212,9 +213,8 @@ class RunResultsCollector:
         result.completed_at = event.meta.timestamp
 
         tokens = event.data.get("tokens", {})
-        self._total_tokens["prompt_tokens"] += tokens.get("prompt_tokens", 0)
-        self._total_tokens["completion_tokens"] += tokens.get("completion_tokens", 0)
-        self._total_tokens["total_tokens"] += tokens.get("total_tokens", 0)
+        for key in self._total_tokens:
+            self._total_tokens[key] += tokens.get(key, 0)
 
     def _handle_action_skip(self, event: BaseEvent) -> None:
         action_name = event.data.get("action_name", "")

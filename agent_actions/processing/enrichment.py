@@ -332,9 +332,7 @@ class MetadataEnricher(Enricher):
 
         # From the action's config, never from the answer: a schema field named ``id``
         # or ``model`` is the record's data, not the response's metadata.
-        metadata = MetadataExtractor.extract_from_response(
-            response=None, agent_config=cast(dict[str, Any], context.agent_config)
-        )
+        metadata = MetadataExtractor.from_config(cast(dict[str, Any], context.agent_config))
         metadata_dict = {**metadata.to_dict(), **(result.pre_extracted_metadata or {})}
         if result.output_schema:
             # The writer's schema, stored with the record it wrote.

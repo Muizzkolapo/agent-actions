@@ -43,15 +43,15 @@ The output has one row for each action, kind of call, pricing and model. The las
 | `Pricing` | `online` or `batch`. A call that a provider batch answered is `batch`. A judge call that a batch action sends as a batch is `judge` and `batch`. |
 | `Model` | The model that the call named. A judge with its own `model` has its own row. |
 | `Calls` | The number of calls that the provider answered. A call that failed before an answer is not in the count. |
-| `Input` | The prompt tokens that the vendor did not read from its cache and did not write to its cache. |
-| `Cache read` | The prompt tokens that the vendor read from its prompt cache |
-| `Cache write` | The prompt tokens that the vendor wrote to its prompt cache |
+| `Input` | The prompt tokens that the provider did not read from its cache and did not write to its cache. |
+| `Cache read` | The prompt tokens that the provider read from its prompt cache |
+| `Cache write` | The prompt tokens that the provider wrote to its prompt cache |
 | `Output` | The output tokens. For Gemini, this includes the thinking tokens. |
 | `Est. cost` | The estimated cost. The column shows only when `agent_actions.yml` has a `prices:` block. |
 
-`Input`, `Cache read` and `Cache write` add up to the full prompt. A vendor that reports no cached tokens shows 0 in the two cache columns. A vendor that reports no usage shows the calls with 0 tokens.
+The sum of `Input`, `Cache read` and `Cache write` is the full prompt. A provider that reports no cached tokens shows 0 in the two cache columns. A provider that reports no usage shows the calls with 0 tokens.
 
-### What the command adds up
+### Runs in the Sum
 
 Without `--run`, the command adds all the runs that the store holds. Thus a batch action shows one sum for the run that submitted the batch and the runs that collected it. The command counts each batch one time. If a later run reads a batch again, the batch stays in the sum of the run that read it first.
 
@@ -59,7 +59,7 @@ Without `--run`, the command adds all the runs that the store holds. Thus a batc
 
 ## Estimated cost
 
-Agent Actions has no built-in prices, because a vendor can change its prices. To get a cost, add the price of one million tokens for each model to `agent_actions.yml`:
+Agent Actions has no built-in prices, because a provider can change its prices. To get a cost, add the price of one million tokens for each model to `agent_actions.yml`:
 
 ```yaml
 prices:
@@ -75,7 +75,7 @@ prices:
 |-----|-------------|
 | `input`, `output` | Required. A number, 0 or more. |
 | `cache_read`, `cache_write` | Optional. Necessary only for a model whose calls use the prompt cache. |
-| `batch_discount` | Optional. A number from 0 to 1: the part that the vendor removes from the price of a batch call. Necessary only for a model that runs in batch. |
+| `batch_discount` | Optional. A number from 0 to 1: the part that the provider removes from the price of a batch call. Necessary only for a model that runs in batch. |
 
 The key of each entry is the `model_name` that the action uses. The `Model` column shows the name to use.
 
