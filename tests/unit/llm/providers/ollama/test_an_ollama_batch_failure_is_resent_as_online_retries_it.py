@@ -109,6 +109,4 @@ def test_the_retry_decision_survives_a_round_trip_through_the_results_file(case)
 
     result = client.parse_provider_response(line)
 
-    assert BatchResultReconciler.is_retriable(result) is is_retriable_error(
-        _online(FAILURES[case])
-    )
+    assert BatchResultReconciler.is_retriable(result) is is_retriable_error(_online(FAILURES[case]))
