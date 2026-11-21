@@ -162,6 +162,7 @@ def _index_workflow_file(
             default_output_field,
             action_lines=rendered.action_lines,
             live_lines=rendered.live_lines,
+            line_owners=rendered.line_owners,
         )
         _backfill_unseen_actions(
             index, yaml_file, lines, action_data_map, default_output_field, rendered.action_sources
@@ -267,6 +268,7 @@ def _index_workflow_lines(
     default_output_field: str | None = None,
     action_lines: frozenset[int] | None = None,
     live_lines: frozenset[int] | None = None,
+    line_owners: dict[int, str | None] | None = None,
 ) -> None:
     """Index action metadata and references from workflow lines.
 
@@ -275,8 +277,9 @@ def _index_workflow_lines(
     it only before the first action.
 
     The lines are the file as written, so a line the render drops (a false `{% if %}`
-    branch, a `{# #}` comment) is skipped by `live_lines`, and a `- name:` line is an
-    action only where the render defines one (`action_lines`).
+    branch, a `{# #}` comment) is skipped by `live_lines`, a `- name:` line is an
+    action only where the render defines one (`action_lines`), and a line belongs to the
+    action above it only when the render puts its text there (`line_owners`).
     """
     workflow_name = index.workflow_for_file(yaml_file)
     if workflow_name:
@@ -348,6 +351,13 @@ def _index_workflow_lines(
             context_scope_indent = None
             context_list_indent = None
             current_context_list = None
+            continue
+        if (
+            line_owners is not None
+            and line_owners.get(i, current_action.name) != current_action.name
+        ):
+            # A tag above this line output another action, and this line is its text. A
+            # line with no mark (a `filter` body) is output where it is written.
             continue
 
         # Prompt reference

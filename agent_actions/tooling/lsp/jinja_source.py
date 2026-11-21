@@ -6,7 +6,7 @@ import re
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import jinja2
 import yaml
@@ -49,7 +49,10 @@ class RenderedWorkflow:
 
     `action_lines` holds the workflow-file lines that define a parsed action. `live_lines`
     holds the workflow-file lines whose text reached the render; it is None when no tag
-    can remove a line. Both are None when the marked render could not be read.
+    can remove a line. When the marks cannot be trusted, both are empty for a file a tag
+    can remove a line from, so nothing is read from its lines. `line_owners` maps a
+    workflow-file line to the action whose text it became, or None when it became text of
+    no action or of more than one.
     """
 
     text: str
@@ -57,6 +60,15 @@ class RenderedWorkflow:
     action_sources: dict[str, Location]
     action_lines: frozenset[int] | None = None
     live_lines: frozenset[int] | None = None
+    line_owners: dict[int, str | None] | None = None
+
+
+class _ActionNode(NamedTuple):
+    name: str
+    name_line: int
+    start_line: int
+    end_line: int
+    end_column: int
 
 
 class MarkingLoadRender(LoadRender):
@@ -90,7 +102,10 @@ class MarkingLoadRender(LoadRender):
             offset += len(line) + 1
         if in_workflow:
             for body_start, close_start, kind in values:
-                if kind == "filter":
+                # A tag in the body can drop a body line, and no mark can show it.
+                if kind == "filter" and not any(
+                    body_start <= tag.start < close_start and tag.kind in "%#" for tag in tags
+                ):
                     self.filter_bodies.append(
                         (
                             range(
@@ -100,27 +115,37 @@ class MarkingLoadRender(LoadRender):
                             _line_of(line_starts, close_start),
                         )
                     )
+        # A name written as a `{{ }}` tag over more than one line: its mark goes after the
+        # tag, on the line where the tag ends, which renders onto the name line.
+        pending: str | None = None
         for i, line in enumerate(lines):
             end = line_starts[i] + len(line)
             tag = _tag_holding(tags, starts, end)
+            held = any(start <= end < stop for start, stop, _ in values)
+            match = _NAME_LINE.match(line)
             if tag is not None and tag.kind != "raw":
                 # A mark inside a tag would be Jinja, not a YAML comment. The text of a raw
                 # block is output as written, so a mark in it is a comment.
+                if match and tag.kind == "{" and not held and line_starts[i] < tag.start:
+                    column = match.end() + (line[match.end()] in "'\"")
+                    pending = f"  # @src {origin}:{i}:{column}"
                 continue
+            name_mark, pending = pending or "", None
             if not line.strip() or line.rstrip().endswith(_STRIPS_AFTER):
                 if in_workflow:
                     self.unmarked_output.add(i)
                 continue
-            if any(start <= end < stop for start, stop, _ in values):
+            if held:
                 continue
-            match = _NAME_LINE.match(line)
             if match:
                 column = match.end() + (line[match.end()] in "'\"")
                 lines[i] = f"{line.rstrip()}  # @src {origin}:{i}:{column}"
             elif in_workflow and not any(start <= end < stop for start, stop, _ in macros):
                 # A macro body is output where the macro is called, not where it is
                 # written, so it gets no line mark and is not live.
-                lines[i] = f"{line.rstrip()}  # @at {origin}:{i}"
+                lines[i] = f"{line.rstrip()}{name_mark}  # @at {origin}:{i}"
+            elif name_mark:
+                lines[i] = f"{line.rstrip()}{name_mark}"
         return super().wrap("\n".join(lines), origin)
 
 
@@ -169,24 +194,24 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
     except ConfigurationError as e:
         raise WorkflowRenderError(f"{e} ({raw.strip()})", 0) from e
     text, _ = _render(LoadRender, source, yaml_file, project_root)
-    data, name_lines = _parse(text, source)
+    data, nodes = _parse(text, source)
     if source != raw:
         # The workflow is a prompt store entry; its lines are not the lines of this file.
         return RenderedWorkflow(text=text, data=data, action_sources={})
     try:
         marked, load = _render(MarkingLoadRender, source, yaml_file, project_root)
     except WorkflowRenderError as e:
-        # The plain render passed, so only a mark broke this one; locations fall back.
+        # The plain render passed, so only a mark broke this one.
         logger.warning("Could not map actions of %s to source lines: %s", yaml_file, e.message)
-        return RenderedWorkflow(text=text, data=data, action_sources={})
+        return _unmapped(text, data, source)
     marked_lines = _LINE_BREAK.split(marked)
     if not _same_text(marked_lines, _LINE_BREAK.split(text)):
         # A mark changed what the render output, so no mark can be trusted.
         logger.warning("Could not map actions of %s to source lines: the renders differ", yaml_file)
-        return RenderedWorkflow(text=text, data=data, action_sources={})
+        return _unmapped(text, data, source)
 
     assert isinstance(load, MarkingLoadRender)
-    sources, action_lines = _action_sources(name_lines, marked_lines, yaml_file, project_root)
+    sources, action_lines = _action_sources(nodes, marked_lines, yaml_file, project_root)
     live_lines = None
     if any(opener in source for opener in _CONTROL_OPENERS):
         live = {
@@ -208,7 +233,37 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         action_sources=sources,
         action_lines=frozenset(action_lines),
         live_lines=live_lines,
+        line_owners=_line_owners(nodes, marked_lines, yaml_file.name),
     )
+
+
+def _unmapped(text: str, data: dict, source: str) -> RenderedWorkflow:
+    """The render with no source map; no line is read where a tag can remove one."""
+    if any(opener in source for opener in _CONTROL_OPENERS):
+        return RenderedWorkflow(text, data, {}, action_lines=frozenset(), live_lines=frozenset())
+    return RenderedWorkflow(text, data, {})
+
+
+def _line_owners(
+    nodes: list[_ActionNode], marked_lines: list[str], origin: str
+) -> dict[int, str | None]:
+    """Each marked workflow line, and the action whose text it became in the render."""
+    owners: dict[int, str | None] = {}
+    starts = [node.start_line for node in nodes]
+    for rendered_line, marked in enumerate(marked_lines):
+        index = bisect.bisect_right(starts, rendered_line) - 1
+        node = nodes[index] if index >= 0 else None
+        owner = None
+        if node is not None and (
+            rendered_line < node.end_line
+            or (rendered_line == node.end_line and node.end_column > 0)
+        ):
+            owner = node.name
+        for mark_origin, line in _ANY_MARK.findall(marked):
+            if mark_origin == origin:
+                key = int(line)
+                owners[key] = owner if owners.get(key, owner) == owner else None
+    return owners
 
 
 def _same_text(marked_lines: list[str], lines: list[str]) -> bool:
@@ -243,8 +298,8 @@ def _render(
         raise WorkflowRenderError(f"{type(e).__name__}: {e}", 0) from e
 
 
-def _parse(text: str, source: str) -> tuple[dict, list[tuple[int, str]]]:
-    """The data of *text*, read with the loader `agac` uses, and each action's name line."""
+def _parse(text: str, source: str) -> tuple[dict, list[_ActionNode]]:
+    """The data of *text*, read with the loader `agac` uses, and where each action sits in it."""
     loader = yaml.SafeLoader(text)
     try:
         root = loader.get_single_node()
@@ -257,7 +312,7 @@ def _parse(text: str, source: str) -> tuple[dict, list[tuple[int, str]]]:
         return {}, []
     if not isinstance(data, dict):
         raise WorkflowRenderError("Workflow is not a mapping", 0)
-    return data, _action_name_lines(root)
+    return data, _action_nodes(root)
 
 
 def _yaml_error(error: yaml.YAMLError, source: str) -> WorkflowRenderError:
@@ -272,7 +327,7 @@ def _yaml_error(error: yaml.YAMLError, source: str) -> WorkflowRenderError:
 
 
 def _action_sources(
-    name_lines: list[tuple[int, str]],
+    nodes: list[_ActionNode],
     marked_lines: list[str],
     yaml_file: Path,
     project_root: Path,
@@ -281,7 +336,8 @@ def _action_sources(
     sources: dict[str, Location] = {}
     action_lines: set[int] = set()
     seen_on_line: dict[int, int] = {}
-    for line_no, name in name_lines:
+    for node in nodes:
+        name, line_no = node.name, node.name_line
         marks = _NAME_MARK.findall(marked_lines[line_no])
         nth = seen_on_line.get(line_no, 0)
         seen_on_line[line_no] = nth + 1
@@ -301,7 +357,7 @@ def _action_sources(
     return sources, action_lines
 
 
-def _action_name_lines(root: Any) -> list[tuple[int, str]]:
+def _action_nodes(root: Any) -> list[_ActionNode]:
     actions = _value(root, "actions")
     if not isinstance(actions, yaml.SequenceNode):
         return []
@@ -311,7 +367,15 @@ def _action_name_lines(root: Any) -> list[tuple[int, str]]:
             continue
         for key, value in item.value:
             if key.value == "name" and isinstance(value, yaml.ScalarNode) and value.value:
-                found.append((key.start_mark.line, str(value.value)))
+                found.append(
+                    _ActionNode(
+                        name=str(value.value),
+                        name_line=key.start_mark.line,
+                        start_line=item.start_mark.line,
+                        end_line=item.end_mark.line,
+                        end_column=item.end_mark.column,
+                    )
+                )
                 break
     return found
 
