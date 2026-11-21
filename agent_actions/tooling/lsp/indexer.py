@@ -272,14 +272,10 @@ def _index_workflow_lines(
 ) -> None:
     """Index action metadata and references from workflow lines.
 
-    `default_output_field` comes from the parsed `defaults:` block rather than from these
-    lines, because a `defaults:` written after `actions:` is legal and a line scan reaches
-    it only before the first action.
-
-    The lines are the file as written, so a line the render drops (a false `{% if %}`
-    branch, a `{# #}` comment) is skipped by `live_lines`, a `- name:` line is an
-    action only where the render defines one (`action_lines`), and a line belongs to the
-    action above it only when the render puts its text there (`line_owners`).
+    `default_output_field` comes from the parsed `defaults:`, which may follow `actions:`.
+    The lines are the file as written: `live_lines` skips what the render drops,
+    `action_lines` says which `- name:` lines define an action, and `line_owners` says
+    which action the render puts each line in.
     """
     workflow_name = index.workflow_for_file(yaml_file)
     if workflow_name:
