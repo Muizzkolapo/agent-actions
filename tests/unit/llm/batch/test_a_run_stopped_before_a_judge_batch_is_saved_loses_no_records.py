@@ -65,6 +65,24 @@ def test_the_next_run_does_not_write_the_file_from_the_old_state():
     assert judge_2 not in provider.read, "the batch was read against the wrong state"
 
 
+def test_the_drop_says_what_happened_and_resets_the_judge_round_of_the_state(caplog):
+    run, _provider = _stopped_after_registering_judge_2()
+    judge_2 = run.live_entry().batch_id
+
+    with caplog.at_level("WARNING"):
+        run.recovery_batch_returns()
+
+    message = " ".join(record.getMessage() for record in caplog.records)
+    assert "No recovery state" not in message
+    assert f"Judge batch {judge_2}" in message
+    assert "stopped before it saved" in message
+    assert "billed" in message
+    state = run.state()
+    assert state is not None
+    assert (state.judge_attempt, state.judge_requests, state.judge_results) == (2, {}, [])
+    assert state.judge_resumes is None
+
+
 def test_the_file_processed_again_from_its_main_batch_keeps_every_record():
     run, provider = _stopped_after_registering_judge_2()
     run.recovery_batch_returns()
