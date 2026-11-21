@@ -59,23 +59,11 @@ def _render_prompt(tmp_path, text: str):
     )
 
 
-class TestAPromptThatReadsAShortName:
-    def test_the_refusal_says_it_is_a_short_name_and_gives_the_final_name(self, tmp_path):
-        with pytest.raises(ConfigurationError) as caught:
-            _render_prompt(tmp_path, "Say {{ write.text }}.")
+class TestAPromptOfAnInstance:
+    def test_it_reads_the_action_of_its_instance_through_the_alias_header(self, tmp_path):
+        rendered = _render_prompt(tmp_path, "Say {{ write.text }} about {{ spec.text }}.")
 
-        assert str(caught.value) == (
-            f"Branch 'round' (branches/round.yml), included in {WF} as 'c', action 'talk': "
-            "reads 'write', a short name of the branch. In an include with 'as:', a prompt "
-            "cannot read a short name yet. Write the final name 'c__write'."
-        )
-
-    def test_a_short_name_of_an_input_gives_the_action_it_binds(self, tmp_path):
-        with pytest.raises(ConfigurationError) as caught:
-            _render_prompt(tmp_path, "Say {{ c__write.text }} about {{ spec.text }}.")
-
-        assert "reads 'spec', a short name of the branch" in str(caught.value)
-        assert "Write the final name 'a'." in str(caught.value)
+        assert "{% set write = c__write %}{% set spec = a %}Say" in rendered
 
     def test_the_final_name_loads(self, tmp_path):
         assert "c__talk" in _render_prompt(tmp_path, "Say {{ c__write.text }}.")
@@ -195,3 +183,31 @@ def test_a_short_name_read_through_the_workflow_defaults_names_the_defaults_not_
     assert "a prompt" not in message
     assert "A default outside the include does not take the short names" in message
     assert "Write the final name 'c__write'." in message
+
+
+def test_a_short_name_read_through_a_defaults_expect_names_the_defaults(tmp_path):
+    import yaml
+
+    workflow = _project(tmp_path, [A, _use("c")], {"round": _round()})
+    data = yaml.safe_load(workflow.read_text())
+    data["defaults"]["expect"] = {
+        "expectations": [
+            {
+                "type": "llm_judge",
+                "field": "word",
+                "params": {"context": ["write.word"], "criteria": "ok"},
+            }
+        ]
+    }
+    workflow.write_text(yaml.safe_dump(data, sort_keys=False))
+    from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
+    with pytest.raises(ConfigurationError) as caught:
+        render_pipeline_with_templates(
+            workflow, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+        )
+
+    message = str(caught.value)
+    assert "reads 'write' (from 'expect' under the workflow's 'defaults:')" in message
+    assert "which the branch does not define" not in message
+    assert "A default outside the include does not take the short names" in message

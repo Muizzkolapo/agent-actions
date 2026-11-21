@@ -129,20 +129,60 @@ The load renames the short names in these keys of each action of the instance:
 
 - `dependencies`
 - the `observe`, `passthrough` and `drop` lists of `context_scope`
-- the guard clause (`guard:`, or `condition:` under `guard:`). Only the action at the start of a field path changes. Text in quotes, numbers, keywords and spaces stay as written. A UDF guard is not changed.
+- the guard clause (`guard:`, or `condition:` under `guard:`). Only the action at the start of a field path changes. Text in quotes, numbers, keywords and spaces stay as written. A UDF guard is not changed, and at run time its function gets its data with the final names, for example `data["c2__write"]`.
 - `version_consumption.source`
 - the `context` list of each `llm_judge` rule in the `expect:` block of the action
 - the same keys in the `defaults:` and the `override:` of the include entry
 
 A version of a branch action keeps its suffix: `vote_1` becomes `c2__vote_1`. An entry with a `?` at the end keeps the `?`.
 
-The prompts of the branch do not change, and they cannot read a branch action or an input by its short name. The load refuses such a read and gives the final name, for example: `reads 'write', a short name of the branch. In an include with 'as:', a prompt cannot read a short name yet. Write the final name 'c__write'.`
-
-:::note
-A tool of an instance gets its records with the final names, for example `c2__write`, and not with the short names. Thus the load refuses a tool that runs per record in an include with `as:`. A tool at `granularity: file` is permitted. Its records have the final names.
-:::
+The prompts, the tools and the schema files of the branch also use the short names (see [Short names at run time](#short-names-at-run-time)).
 
 The workflow reads the outputs of an instance by their final names, for example `c2__review`. The store, the logs and `agac inspect` also use the final names.
+
+### Short names at run time {/* #short-names-at-run-time */}
+
+One prompt, one tool function and one schema file serve all instances.
+
+**Prompts.** The load puts an alias header before the prompt of each action of an instance. The header has one `{% set %}` tag for each short name that the prompt reads, and the prompt text stays as written. For this prompt store block:
+
+```markdown
+{prompt Review}
+Review {{ write.question }} against {{ spec.text }}.
+{end_prompt}
+```
+
+the prompt of `c2__review` in the rendered workflow is:
+
+```jinja
+{% set write = c2__write %}{% set spec = draft_spec %}Review {{ write.question }} against {{ spec.text }}.
+```
+
+The header outputs nothing and is on the first line of the prompt. The rendered text and the line numbers in an error do not change. A short name is also visible inside a macro that the prompt defines. Text in single braces, for example `{item.name}`, renders as written. The checks report it as a reference, as in a workflow without an include: `Referenced action 'item' does not exist in workflow`. The checks of `agac inspect` and `agac run` read a short name as the action that it means. They follow only the header that the load writes. A `{% set %}` tag that you write in a prompt is a local variable, as in a workflow without an include. The context JSON that the model gets with the prompt keeps the final names, for example `c1__write`, and the prompt text uses the short names. For example, if the prompt of `c2__review` reads `write.question` and the action does not observe `write`, the error says: `template references namespace 'c2__write' which is not declared in context_scope.observe or passthrough`.
+
+**Tools.** A tool action of an instance gets its record under the short names. In instance `c2`, `data["write"]` holds the output of `c2__write`, and `data["spec"]` holds the output of `draft_spec`. The final names of these actions are not keys of `data`. Other keys, for example `source`, do not change. A tool at `granularity: file` gets its records with the final names.
+
+```python
+@udf_tool
+def check_question(data, *args):
+    question = data["write"]["question"]
+    ...
+```
+
+**Schema files.** The `context` list of each `llm_judge` rule uses the short names. This applies to a rule on a field and to a rule in the `expectations:` block of the schema file. Each instance gets its own copy of the compiled schema, with the final names. A rule in a named `suite:` is not renamed.
+
+```yaml
+# schema/review.yml
+name: review
+fields:
+  - id: verdict
+    type: string
+    expectations:
+      - type: llm_judge
+        params: {rubric: "The verdict fits the question", context: [write.question]}
+```
+
+`agac inspect` marks each action of an instance `from branch question_round as c2`. `agac inspect action` shows a `Names` row with the map of the instance, for example `write → c2__write, review → c2__review, spec → draft_spec`, and `--json` adds `instance` and `names` under `branch`.
 
 ### Inputs bind any action {/* #as-inputs */}
 
@@ -174,7 +214,6 @@ An input bound to an action of another instance must name an output of that bran
 | Two includes have the same instance name. An include without `as:` has the branch name as its instance name. | `Workflow 'quiz' (agent_config/quiz.yml) includes branch 'question_round' (branches/question_round.yml) twice with the instance name 'c'. Give each include its own instance name with 'as:'.` |
 | A branch action reads a short name that the branch does not define and that no input binds. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c2', action 'review': reads 'draft', which the branch does not define and no input of include 'c2' binds. Branch actions: write, review. Inputs: spec.` |
 | A short name of the branch is also the name of an action of the workflow. An input bound to the action of its own name is permitted. | `Include 'question_round' as 'c2' in agent_config/quiz.yml: the short name 'write' of branch 'question_round' (branches/question_round.yml) is also an action of workflow 'quiz'. Inside the include it means 'c2__write', so the branch could not tell the two apart. Rename one of them.` |
-| A tool of the branch runs per record. | `Branch 'question_round' (branches/question_round.yml), included in agent_config/quiz.yml as 'c', action 'write': a tool that runs per record cannot be in an include with 'as:'. ...` |
 
 One branch cannot have an include without `as:` and an include with `as:` in the same workflow. The load refuses this with the message for a short name that is also a workflow action.
 

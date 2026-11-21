@@ -35,9 +35,9 @@ from agent_actions.output.response.expander_merge import (
 )
 from agent_actions.output.response.expander_validation import (
     inherited_routing_kind,
-    is_file_granularity,
     resolved_granularity,
 )
+from agent_actions.prompt.aliases import with_alias_header
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 INCLUDE_KEYS = ("include", "as", "inputs", "defaults", "override", "remove")
@@ -204,6 +204,48 @@ def expand_workflow_includes(
     return {**data, "actions": expanded}, inclusions
 
 
+def instance_names(action: Any) -> dict[str, str]:
+    """The short names of the ``as:`` include *action* comes from, mapped to final names."""
+    origin = action.get(_ORIGIN_KEY) if isinstance(action, dict) else None
+    names = origin.get("names") if isinstance(origin, dict) else None
+    return dict(names) if isinstance(names, dict) else {}
+
+
+def alias_prompts(data: Any) -> None:
+    """Put before the prompt of each action of an ``as:`` include the alias header of the
+    short names it reads, so one prompt text serves every instance."""
+    for action in _included_actions(data):
+        names = instance_names(action)
+        if names and isinstance(action.get("prompt"), str):
+            action["prompt"] = with_alias_header(action["prompt"], names)
+
+
+def rename_schema_judge_contexts(data: Any) -> None:
+    """Rename the short names in the ``llm_judge`` contexts of the compiled schema of each
+    action of an ``as:`` include, on its fields and in its own ``expectations:`` block."""
+    for action in _included_actions(data):
+        names = instance_names(action)
+        if not names or not isinstance(action.get("schema"), dict):
+            continue
+        # One schema file can serve several instances, each with its own names.
+        schema = copy.deepcopy(action["schema"])
+        fields = schema.get("fields")
+        for owner in [schema, *(fields if isinstance(fields, list) else [])]:
+            rules = owner.get("expectations") if isinstance(owner, dict) else None
+            if isinstance(rules, list):
+                rename_judge_contexts(rules, names)
+        action["schema"] = schema
+
+
+def _included_actions(data: Any) -> list[dict[str, Any]]:
+    actions = data.get("actions") if isinstance(data, dict) else None
+    return [
+        action
+        for action in (actions if isinstance(actions, list) else [])
+        if isinstance(action, dict) and _ORIGIN_KEY in action
+    ]
+
+
 def check_include_reads(
     data: Any, inclusions: Sequence[Inclusion], project_root: Path | None = None
 ) -> None:
@@ -224,7 +266,6 @@ def check_include_reads(
         levels = _Levels.load(data, project_root)
         if levels is None:
             return
-        _refuse_record_tools(data, inclusions, levels)
         if any(inclusion.removed for inclusion in inclusions):
             _refuse_removed_reads(data, inclusions, levels)
         _refuse_unknown_dependencies(data, inclusions)
@@ -242,6 +283,7 @@ class _Levels:
     defaults: dict[str, Any]
     agent: dict[str, Any]
     workflow_scope: Any
+    workflow_expect: Any = None
 
     @classmethod
     def load(cls, data: dict[str, Any], project_root: Path | None) -> _Levels | None:
@@ -261,7 +303,8 @@ class _Levels:
         except (ValidationError, ConfigValidationError, ConfigurationError):
             return None
         scope = written.get("context_scope") if isinstance(written, dict) else None
-        return cls(defaults=defaults, agent=agent, workflow_scope=scope)
+        expect = written.get("expect") if isinstance(written, dict) else None
+        return cls(defaults=defaults, agent=agent, workflow_scope=scope, workflow_expect=expect)
 
     def of(self, action: dict[str, Any]) -> dict[str, Any]:
         """The defaults the expander gives *action*."""
@@ -393,34 +436,6 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                 )
 
 
-def _refuse_record_tools(
-    data: dict[str, Any], inclusions: Sequence[Inclusion], levels: _Levels
-) -> None:
-    """Refuse a tool that runs per record inside an ``as:`` include.
-
-    Its function would get each record keyed by the final names, not the short names
-    of the branch that it reads.
-    """
-    by_instance = {inclusion.instance: inclusion for inclusion in inclusions}
-    for action in data["actions"]:
-        origin = action.get(_ORIGIN_KEY) if isinstance(action, dict) else None
-        if not isinstance(origin, dict) or "names" not in origin:
-            continue
-        view = _repair_view(action, levels.of(action))
-        if view["kind"] != "tool" or is_file_granularity(view["granularity"]):
-            continue
-        reader = by_instance[origin["instance"]]
-        local = origin["local_name"]
-        where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
-        raise ConfigurationError(
-            f"{where}: a tool that runs per record cannot be in an include with 'as:'. "
-            "Its function would get the record keyed by the final names of the instance, "
-            "not by the short names of the branch. Include the branch without 'as:', or set "
-            "'granularity: file' on the tool.",
-            context=_context(reader, action_name=local),
-        )
-
-
 def _refuse_unknown_dependencies(data: dict[str, Any], inclusions: Sequence[Inclusion]) -> None:
     """Refuse a dependency, inside an ``as:`` include, on a name nothing in the include gives.
 
@@ -446,14 +461,11 @@ def _refuse_unknown_short_name(
     """Refuse a read, inside an ``as:`` include, of a name nothing in the include gives."""
     local = action[_ORIGIN_KEY]["local_name"]
     where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
-    if name in reader.names:
-        why = (
-            "A default outside the include does not take the short names of an include with 'as:'."
-            if via
-            else "In an include with 'as:', a prompt cannot read a short name yet."
-        )
+    if name in reader.names and via:
+        # A prompt reads a short name through its alias header; a default does not.
         raise ConfigurationError(
-            f"{where}: reads '{name}'{via}, a short name of the branch. {why} Write the final "
+            f"{where}: reads '{name}'{via}, a short name of the branch. A default outside the "
+            "include does not take the short names of an include with 'as:'. Write the final "
             f"name '{reader.names[name]}'.",
             context=_context(reader, action_name=local),
         )
@@ -474,25 +486,32 @@ def _scope_origin(
     workflow_file: str,
     levels: _Levels,
 ) -> str:
-    """Which defaults level gives *action* its read of *name* through ``context_scope``.
+    """Which defaults level gives *action* its read of *name*, through ``context_scope``
+    or an inherited ``expect`` block.
 
-    Empty when the action's own config reads it; else the most specific level whose
-    ``context_scope`` reads it.
+    Empty when the action's own config reads it; else the most specific level that reads it.
     """
     own = _normalised_reads(action.get("context_scope")) or {}
-    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
+    if name in _reads(action, extractor, workflow_file, {}, own):
         return ""
     found = action.get(_ORIGIN_KEY)
     origin: dict[str, Any] = found if isinstance(found, dict) else {}
     instance = origin.get("defaults")
     instance_scope = instance.get("context_scope") if isinstance(instance, dict) else None
+    agent_level = "'default_agent_config:' in agent_actions.yml"
     if name in _scope_reads(instance_scope, extractor):
-        level = f"'defaults:' of include '{origin['instance']}'"
-    elif name in _scope_reads(levels.workflow_scope, extractor):
-        level = "the workflow's 'defaults:'"
-    else:
-        level = "'default_agent_config:' in agent_actions.yml"
-    return f" (from 'context_scope' under {level})"
+        return f" (from 'context_scope' under 'defaults:' of include '{origin['instance']}')"
+    if name in _scope_reads(levels.workflow_scope, extractor):
+        return " (from 'context_scope' under the workflow's 'defaults:')"
+    instance_expect = {"expect": instance.get("expect") if isinstance(instance, dict) else None}
+    if name in _reads(action, extractor, workflow_file, instance_expect, own):
+        return f" (from 'expect' under 'defaults:' of include '{origin['instance']}')"
+    workflow_expect = {"expect": levels.workflow_expect}
+    if name in _reads(action, extractor, workflow_file, workflow_expect, own):
+        return " (from 'expect' under the workflow's 'defaults:')"
+    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
+        return f" (from 'expect' under {agent_level})"
+    return f" (from 'context_scope' under {agent_level})"
 
 
 def _scope_reads(scope: Any, extractor: Any) -> set[str]:
@@ -1400,11 +1419,16 @@ __all__ = [
     "Branch",
     "Inclusion",
     "action_defaults",
+    "alias_prompts",
     "branch_file",
     "check_include_reads",
     "expand_includes",
     "expand_workflow_includes",
     "has_include",
     "has_written_origin",
+    "instance_names",
     "parse_branch",
+    "rename_judge_contexts",
+    "rename_schema_judge_contexts",
+    "renamed_clause",
 ]

@@ -11,7 +11,12 @@ from typing import Any
 import jinja2
 import yaml
 
-from agent_actions.config.includes import check_include_reads, expand_includes
+from agent_actions.config.includes import (
+    alias_prompts,
+    check_include_reads,
+    expand_includes,
+    rename_schema_judge_contexts,
+)
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.schema import validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
@@ -703,6 +708,8 @@ def render_pipeline_with_templates(
         project_root=project_root,
         fill=lambda text, name: load.fill_store_prompt(text, f"store prompt {name}", folder_names),
     )
+    # Step 3a: A prompt of an `as:` include reads a short name through an alias header
+    alias_prompts(data)
 
     # Step 4: Expand versioned actions
     if data:
@@ -720,6 +727,7 @@ def render_pipeline_with_templates(
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
         _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
+    rename_schema_judge_contexts(data)
 
     # Step 6: Every name an action reads is final here, so the branch boundary is checked now
     check_include_reads(data, inclusions, project_root=project_root)
