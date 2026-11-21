@@ -27,6 +27,7 @@ from agent_actions.record.reasons import (
     EXPECTATIONS_FAILED,
     GUARD_SKIP_REASONS,
     HALTED_ON_EXHAUSTED,
+    SENT_ELSEWHERE,
 )
 from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
@@ -102,17 +103,21 @@ def dispositions_report(backend, workflow: str, actions: list[str]) -> dict[str,
     Scripts read this shape, so its keys stay as they are and every count is there,
     0 where the action holds none. ``records`` is None when the store cannot count
     them. An action's own row (``__node__``) is not a record: it is in ``action_level``.
+    A record the action sent to another branch is counted in ``sent_elsewhere``, outside
+    ``counts`` and ``total``, as the table shows it.
     """
     stored = DispositionsCommand._records_stored(backend)
     entries = []
     for action in actions:
         rows = backend.get_disposition(action, snapshots=False)
-        records = [row for row in rows if row.get("record_id") != NODE_LEVEL_RECORD_ID]
+        held = [row for row in rows if row.get("record_id") != NODE_LEVEL_RECORD_ID]
+        records = [row for row in held if not _sent_elsewhere(row)]
         entries.append(
             {
                 "name": action,
                 "counts": _counts(records),
                 "total": len(records),
+                "sent_elsewhere": len(held) - len(records),
                 "records": None if stored is None else stored.get(action, 0),
                 "action_level": [
                     {
@@ -178,15 +183,20 @@ class DispositionsCommand:
         table.add_column("Action", style="cyan")
         for header, style in TABLE_COUNTS.values():
             table.add_column(header, justify="right", style=style)
+        entries = dispositions_report(backend, self.agent_name, actions)["actions"]
+        show_sent = any(entry["sent_elsewhere"] for entry in entries)
+        if show_sent:
+            table.add_column("Sent elsewhere", justify="right", style="dim")
         table.add_column("Total", justify="right", style="bold")
         table.add_column("Records", justify="right", style="bold")
 
-        for entry in dispositions_report(backend, self.agent_name, actions)["actions"]:
-            if entry["total"] == 0:
+        for entry in entries:
+            if entry["total"] == 0 and not entry["sent_elsewhere"]:
                 continue
             table.add_row(
                 entry["name"],
                 *(str(entry["counts"][key]) for key in TABLE_COUNTS),
+                *([str(entry["sent_elsewhere"])] if show_sent else []),
                 str(entry["total"]),
                 "?" if entry["records"] is None else str(entry["records"]),
             )
@@ -206,7 +216,14 @@ class DispositionsCommand:
                 "them with that reason. Failed checks counts the records shipped "
                 "with a verdict that did not pass (on_exhausted: return_last, "
                 "repair: none): they are stored as successes, so nothing reading them "
-                "is blocked and retry does not re-run them.[/dim]"
+                "is blocked and retry does not re-run them."
+                + (
+                    " Sent elsewhere counts the records the action's guard sent to "
+                    "another branch: they are not the action's, so not in its Total."
+                    if show_sent
+                    else ""
+                )
+                + "[/dim]"
             )
         elif not action_level:
             self.console.print("[dim]No dispositions recorded. Has the workflow been run?[/dim]")
@@ -334,3 +351,7 @@ def dispositions(
         )
     command = DispositionsCommand(agent, action, quarantined, as_json)
     command.execute(project_root=project_root)
+
+
+def _sent_elsewhere(row: dict) -> bool:
+    return row.get("disposition") == DISPOSITION_FILTERED and row.get("reason") == SENT_ELSEWHERE

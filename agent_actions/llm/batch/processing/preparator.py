@@ -34,8 +34,9 @@ from agent_actions.processing.task_preparer import (
     write_trace_row,
 )
 from agent_actions.prompt.cache_scope import repair_call_scope
+from agent_actions.record.elsewhere import sends_elsewhere
 from agent_actions.record.envelope import RecordEnvelope
-from agent_actions.record.reasons import GUARD_SKIP
+from agent_actions.record.reasons import GUARD_SKIP, SENT_ELSEWHERE
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
 from agent_actions.utils.constants import SCHEMA_KEY
@@ -380,7 +381,11 @@ class BatchTaskPreparator:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.FILTERED
             )
-            stats.filtered_items += 1
+            if sends_elsewhere(prep_context.agent_config):
+                BatchContextMetadata.set_skip_reason(context_map_builder[custom_id], SENT_ELSEWHERE)
+                stats.sent_elsewhere_items += 1
+            else:
+                stats.filtered_items += 1
             logger.debug("Guard filtered item %s", custom_id)
             return None
 

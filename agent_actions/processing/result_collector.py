@@ -23,15 +23,16 @@ from agent_actions.logging.events import (
 from agent_actions.processing.disposition_gate import CARRY_FORWARD_REASON
 from agent_actions.processing.run_counts import add_collection
 from agent_actions.processing.types import ProcessingContext, ProcessingResult, ProcessingStatus
+from agent_actions.record.elsewhere import guard_filter_reason
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     CONSUMED_INTO_OUTPUT,
     EXPECTATIONS_FAILED,
-    GUARD_FILTER,
     GUARD_SKIP,
     GUARD_SKIP_REASONS,
     PARSE_ERROR,
     RETRY_EXHAUSTED,
+    SENT_ELSEWHERE,
     SUCCESS,
     UNPROCESSED,
 )
@@ -127,7 +128,7 @@ def _short_guid(source_guid: object) -> str:
     return text.split("-", 1)[0]
 
 
-_SUB_COUNTS = frozenset({"guard_skipped", "checks_failed"})
+_SUB_COUNTS = frozenset({"guard_skipped", "checks_failed", "sent_elsewhere"})
 
 
 @dataclass
@@ -153,6 +154,9 @@ class CollectionStats:
     # verdict (stored as success).
     guard_skipped: int = 0
     checks_failed: int = 0
+    # Records the guard sent to another branch: filtered here but not this action's,
+    # so neither among ``filtered`` nor in the total.
+    sent_elsewhere: int = 0
 
     @property
     def only_guard_outcomes(self) -> bool:
@@ -826,6 +830,10 @@ def collect_results_from_processing_results(
 
         elif status == ProcessingStatus.FILTERED:
             logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
+            filter_reason = result.skip_reason or guard_filter_reason(effective_config)
+            if filter_reason == SENT_ELSEWHERE:
+                stats[status_key] -= 1
+                stats["sent_elsewhere"] += 1
             fire_event(
                 ResultCollectedEvent(
                     action_name=action_name,
@@ -839,7 +847,7 @@ def collect_results_from_processing_results(
                         action_name,
                         result.source_guid,
                         DISPOSITION_FILTERED,
-                        result.skip_reason or GUARD_FILTER,
+                        filter_reason,
                         None,
                         None,
                         None,
@@ -853,7 +861,7 @@ def collect_results_from_processing_results(
                         action_name,
                         filtered_data,
                         DISPOSITION_FILTERED,
-                        reason=result.skip_reason or GUARD_FILTER,
+                        reason=filter_reason,
                     )
                 else:
                     logger.warning(
@@ -1003,6 +1011,7 @@ def collect_results_from_processing_results(
             total_unprocessed=stats["unprocessed"],
             total_guard_skipped=guard_skipped_count,
             total_deferred=stats["deferred"],
+            total_sent_elsewhere=stats["sent_elsewhere"],
             guard_condition=guard_condition,
             guard_on_false=guard_on_false,
             target_relative_path=(context.target_relative_path or "") if context else "",
@@ -1044,6 +1053,7 @@ def collect_results_from_processing_results(
         unprocessed=stats["unprocessed"],
         carry_forward=stats["carry_forward"],
         carried_success=stats["carried_success"],
+        sent_elsewhere=stats["sent_elsewhere"],
         guard_skipped=guard_skipped_count,
         checks_failed=len(failed_guids) + unidentified_failed,
     )

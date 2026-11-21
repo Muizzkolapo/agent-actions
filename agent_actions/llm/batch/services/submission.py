@@ -48,7 +48,7 @@ from agent_actions.processing.result_collector import (
     _safe_set_disposition,
     write_node_level_disposition,
 )
-from agent_actions.record.reasons import GUARD_FILTER
+from agent_actions.record.reasons import GUARD_FILTER, SENT_ELSEWHERE
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_FILTERED,
@@ -128,21 +128,25 @@ class BatchSubmissionService:
             source_data=source_data,
             workflow_metadata=workflow_metadata,
         )
+        sent = prepared.stats.sent_elsewhere_items
+        sent_note = f", {sent} sent elsewhere" if sent else ""
         if prepared.stats.error_items:
             logger.warning(
                 "Task preparation complete: %d tasks, %d filtered, %d skipped, "
-                "%d failed (prep errors)",
+                "%d failed (prep errors)%s",
                 prepared.task_count,
                 prepared.stats.total_filtered,
                 prepared.stats.total_skipped,
                 prepared.stats.error_items,
+                sent_note,
             )
         else:
             logger.debug(
-                "Task preparation complete: %d tasks, %d filtered, %d skipped",
+                "Task preparation complete: %d tasks, %d filtered, %d skipped%s",
                 prepared.task_count,
                 prepared.stats.total_filtered,
                 prepared.stats.total_skipped,
+                sent_note,
             )
         return prepared.tasks, prepared.context_map
 
@@ -459,9 +463,15 @@ class BatchSubmissionService:
             batch_inputs=run_input_guids or (),
             filtered=filtered_inputs(context_map),
         )
-        write_node_level_disposition(
-            self._storage_backend, action_name, DISPOSITION_PASSTHROUGH, "All records tombstoned"
-        )
+        # A file whose every record went to another branch is not the action's skip: it
+        # completes on no records, as online does.
+        if not _all_sent_elsewhere(context_map):
+            write_node_level_disposition(
+                self._storage_backend,
+                action_name,
+                DISPOSITION_PASSTHROUGH,
+                "All records tombstoned",
+            )
         # After the write, as finalize raises it: raised first, it takes the file too.
         if halt is not None:
             raise halt
@@ -737,3 +747,10 @@ class BatchSubmissionService:
                     )
                 )
             ) from e
+
+
+def _all_sent_elsewhere(context_map: dict[str, Any]) -> bool:
+    return bool(context_map) and all(
+        BatchContextMetadata.get_skip_reason(entry) == SENT_ELSEWHERE
+        for entry in context_map.values()
+    )

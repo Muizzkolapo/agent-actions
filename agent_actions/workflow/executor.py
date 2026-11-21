@@ -79,12 +79,17 @@ UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 WHERE_SKIP_REASON = "WHERE clause — action skipped"
 
 
+# Keys that change which records an action and its readers receive.
+ROUTING_KEYS = ("_sends_elsewhere", "_gathers")
+
+
 def _compute_action_config_hash(
     action_config: ActionConfigDict,
 ) -> str:
     """Compute a deterministic hash of semantically-meaningful action config.
 
-    Covers: prompt reference, schema reference, guard clause + behavior.
+    Covers: prompt reference, schema reference, guard clause + behavior, and the
+    routing keys (``ROUTING_KEYS``) when set.
     Cosmetic fields (description, tags) are excluded.
 
     NOT the model: the ``"model"`` key below is permanently ``""`` because
@@ -104,6 +109,11 @@ def _compute_action_config_hash(
         "guard_clause": guard.get("clause", ""),
         "guard_behavior": guard.get("behavior", ""),
     }
+    # Only when set, so the digest of an action without them does not rotate.
+    config: dict[str, Any] = action_config  # type: ignore[assignment]
+    routing = {key: config[key] for key in ROUTING_KEYS if config.get(key)}
+    if routing:
+        hash_input["routing"] = routing
 
     serialized = json.dumps(hash_input, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
