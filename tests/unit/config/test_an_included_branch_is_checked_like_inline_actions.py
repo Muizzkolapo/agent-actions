@@ -319,10 +319,13 @@ TWIN_INCLUDE = {"include": "twin", "inputs": {"a": "a"}}
     "bad, good, expected",
     [
         (
-            ([A, {**INCLUDE, "as": "left"}], None),
-            ([A, INCLUDE], None),
-            f"Include 'pair' in {WF}: key 'as' is not supported yet. "
-            "Include keys: include, inputs, defaults, override, remove.",
+            ([A, {**INCLUDE, "as": "left_"}], None),
+            (
+                [A, {**INCLUDE, "as": "left"}],
+                {"pair": _pair([_with(B1, granularity="file"), _with(B2, granularity="file")])},
+            ),
+            f"Include 'pair' in {WF}: 'as: left_': the name ends with '_'. "
+            "Use letters, digits and single underscores, starting with a letter.",
         ),
         (
             ([A, INCLUDE, TWIN_INCLUDE], {"pair": _pair(), "twin": TWIN}),
@@ -373,7 +376,7 @@ TWIN_INCLUDE = {"include": "twin", "inputs": {"a": "a"}}
         ),
     ],
     ids=[
-        "later-key",
+        "instance-name",
         "two-branches",
         "branch-name",
         "nested-include",
