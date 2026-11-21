@@ -254,9 +254,9 @@ def _raw_name_location(
         # written name is then the best guess.
         if live_lines:
             break
-        match = re.match(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$", line)
+        match = re.match(rf"^\s*-?\s*name:\s*['\"]?({re.escape(action_name)})['\"]?\s*$", line)
         if match:
-            line_no, column = i, line.index(action_name)
+            line_no, column = i, match.start(1)
             break
     return Location(
         file_path=yaml_file,

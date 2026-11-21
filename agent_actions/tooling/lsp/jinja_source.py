@@ -32,6 +32,9 @@ _STRIPS_AFTER = ("-}}", "-%}", "-#}")
 _CONTROL_OPENERS = ("{%", "{#")
 # A file with none of these renders each line as written.
 _JINJA_OPENERS = ("{{", *_CONTROL_OPENERS)
+# A key line, and its value when the value is on the line.
+_KEY_LINE = re.compile(r"^(\s*(?:-\s+)*)[^\s#][^:#]*?\s*:(?:[ \t]+(\S.*?))?\s*$")
+_DASH_LINE = re.compile(r"^(\s*)-[ \t]+(\S.*?)\s*$")
 _BLOCK_TAG = re.compile(r"\{%[-+]?\s*(end)?(set|filter|macro)\b")
 # A `set` block holds its body as a value; a `filter` block changes its body before output.
 # A mark in either body would change the text, so neither body gets a mark.
@@ -98,6 +101,8 @@ class MarkingLoadRender(LoadRender):
         for line in lines:
             line_starts.append(offset)
             offset += len(line) + 1
+        in_tag = [_tag_holding(tags, starts, start) is not None for start in line_starts]
+        plain = _multiline_plain_scalars(lines, in_tag)
         # A name written as a `{{ }}` tag over more than one line: its mark goes after the
         # tag, on the line where the tag ends, which renders onto the name line.
         pending: str | None = None
@@ -116,7 +121,8 @@ class MarkingLoadRender(LoadRender):
             name_mark, pending = pending or "", None
             if not line.strip() or line.rstrip().endswith(_STRIPS_AFTER):
                 continue
-            if held:
+            if held or i in plain:
+                # A comment mark would end a plain scalar that goes on to the next line.
                 continue
             if match:
                 column = match.end() + (line[match.end()] in "'\"")
@@ -128,6 +134,61 @@ class MarkingLoadRender(LoadRender):
             elif name_mark:
                 lines[i] = f"{line.rstrip()}{name_mark}"
         return super().wrap("\n".join(lines), origin)
+
+
+def _multiline_plain_scalars(lines: list[str], in_tag: list[bool]) -> set[int]:
+    """The lines of each plain scalar that goes on past one line.
+
+    A line that starts inside a tag is part of the tag, which renders onto the line above.
+    """
+    found: set[int] = set()
+    i = 0
+    while i < len(lines):
+        start = _plain_start(lines[i])
+        if start is None:
+            i += 1
+            continue
+        indent, on_key_line = start
+        run = []
+        j = i + 1
+        while j < len(lines):
+            line = lines[j]
+            if line.strip() and not in_tag[j]:
+                text = line.lstrip()
+                if len(line) - len(text) <= indent or _KEY_LINE.match(line):
+                    break
+                if text.startswith(("#", "- ")):
+                    break
+                run.append(j)
+            j += 1
+        if run and (on_key_line or len(run) > 1):
+            found.update(run)
+            if on_key_line:
+                found.add(i)
+            i = run[-1] + 1
+        else:
+            i += 1
+    return found
+
+
+def _plain_start(line: str) -> tuple[int, bool] | None:
+    """The indent a plain scalar must pass, and whether it starts on this line, if one can."""
+    key = _KEY_LINE.match(line)
+    if key:
+        value = key.group(2)
+        if value is None:
+            return len(key.group(1)), False
+        return (len(key.group(1)), True) if _plain_value(value) else None
+    dash = _DASH_LINE.match(line)
+    if dash and _plain_value(dash.group(2)):
+        return len(dash.group(1)), True
+    return None
+
+
+def _plain_value(value: str) -> bool:
+    if value.startswith("{{"):
+        return True
+    return not value.startswith(("|", ">", "'", '"', "[", "{", "&", "*", "!", "#"))
 
 
 def _block_spans(
@@ -321,7 +382,7 @@ def _parse(text: str, source: str) -> tuple[dict, list[_ActionNode], dict[int, t
         root = loader.get_single_node()
         data = loader.construct_document(root) if root is not None else None
     except yaml.YAMLError as e:
-        raise _yaml_error(e, source) from e
+        raise _yaml_error(e, source, text) from e
     finally:
         loader.dispose()
     if data is None:
@@ -331,7 +392,7 @@ def _parse(text: str, source: str) -> tuple[dict, list[_ActionNode], dict[int, t
     return data, _action_nodes(root), _rendered_paths(root)
 
 
-def _yaml_error(error: yaml.YAMLError, source: str) -> WorkflowRenderError:
+def _yaml_error(error: yaml.YAMLError, source: str, text: str) -> WorkflowRenderError:
     mark = getattr(error, "problem_mark", None)
     problem = getattr(error, "problem", None) or str(error)
     if mark is None:
@@ -339,7 +400,8 @@ def _yaml_error(error: yaml.YAMLError, source: str) -> WorkflowRenderError:
     if any(opener in source for opener in _JINJA_OPENERS):
         # Rendered lines do not match the file once a tag has rendered.
         return WorkflowRenderError(f"{problem} (line {mark.line + 1} of the rendered workflow)", 0)
-    return WorkflowRenderError(problem, mark.line)
+    # PyYAML counts U+2028 and U+0085 as line breaks; the editor counts only "\n".
+    return WorkflowRenderError(problem, text.count("\n", 0, mark.index))
 
 
 def _action_sources(
@@ -408,18 +470,23 @@ def _action_nodes(root: Any) -> list[_ActionNode]:
     for item in actions.value:
         if not isinstance(item, yaml.MappingNode):
             continue
-        for key, value in item.value:
-            if key.value == "name" and isinstance(value, yaml.ScalarNode) and value.value:
-                found.append(
-                    _ActionNode(
-                        name=str(value.value),
-                        name_line=key.start_mark.line,
-                        start_line=item.start_mark.line,
-                        end_line=item.end_mark.line,
-                        end_column=item.end_mark.column,
-                    )
+        # A `<<:` merge puts the merged keys first, so the action's own name is the last.
+        names = [
+            (key, value)
+            for key, value in item.value
+            if key.value == "name" and isinstance(value, yaml.ScalarNode) and value.value
+        ]
+        if names:
+            key, value = names[-1]
+            found.append(
+                _ActionNode(
+                    name=str(value.value),
+                    name_line=key.start_mark.line,
+                    start_line=item.start_mark.line,
+                    end_line=item.end_mark.line,
+                    end_column=item.end_mark.column,
                 )
-                break
+            )
     return found
 
 
