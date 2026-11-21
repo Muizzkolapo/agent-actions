@@ -60,7 +60,7 @@ def _after_a_retry(repair: str, *, retried: list[str], max_attempts: int) -> Run
         ),
     )
     assert run.recovery_batch_returns() is None, "the retry step sent no judge batch"
-    assert run.live_entry().recovery_type == "judge"
+    assert run.live_entry().side_kind == "judge"
     assert run.recovery_batch_returns() == "/out.json"
     return run
 

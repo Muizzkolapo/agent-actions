@@ -157,13 +157,17 @@ class BatchResultReconciler:
         """Whether an unanswered result is worth sending again, as online's retry policy decides.
 
         Online retries a rate limit, a server or network error and an answer cut off at the
-        output limit (``is_retriable_error``) and fails anything else at once. An answer with
-        no content (a refusal, a safety block) reads as online's empty answer, retried only
-        when cut off. A failure whose line gives no status is retried.
+        output limit (``is_retriable_error``) and fails anything else at once. A result whose
+        client classified the error online raises for it (``retriable``) is taken at its
+        word. Else an answer with no content is retried only when cut off, and a failure by
+        its status; one whose line gives no status is retried.
         """
         from agent_actions.llm.providers.error_wrapper import error_for_status, is_truncated
         from agent_actions.processing.recovery.retry import is_retriable_error
 
+        retriable = getattr(batch_result, "retriable", None)
+        if isinstance(retriable, bool):
+            return retriable
         if getattr(batch_result, "success", False):
             metadata = getattr(batch_result, "metadata", None) or {}
             return is_truncated(metadata.get("finish_reason") or metadata.get("stop_reason"))

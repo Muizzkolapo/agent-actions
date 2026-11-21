@@ -29,6 +29,7 @@ def _full_record() -> BatchResult:
         success=False,
         error="rate limited",
         error_status=429,
+        retriable=True,
         metadata={"model": "test-model"},
         usage={"input_tokens": 11, "output_tokens": 22},
         recovery_metadata=RecoveryMetadata(
@@ -48,6 +49,10 @@ class TestEveryFieldSurvivesTheRoundTrip:
             f"{sorted(missing)} never reach the persisted state, so they are gone by the time a "
             "deferred round finishes"
         )
+
+    def test_what_the_provider_said_of_retrying_survives(self):
+        restored = deserialize_results(serialize_results([_full_record()]))[0]
+        assert (restored.error_status, restored.retriable) == (429, True)
 
     def test_usage_survives(self):
         restored = deserialize_results(serialize_results([_full_record()]))[0]

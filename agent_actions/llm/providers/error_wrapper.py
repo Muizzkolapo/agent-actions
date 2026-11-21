@@ -386,6 +386,11 @@ def empty_parse_error(stop_reason: Any) -> str:
     return f"Empty response from API (stop_reason={stop_reason_name(stop_reason)})"
 
 
+def unparsed_json_record(text: str) -> dict[str, str]:
+    """What JSON mode stores for an answer no parse could read, online or in a batch."""
+    return {"raw_response": text, "_parse_error": "Failed to parse JSON from LLM response"}
+
+
 def cut_off_parse_error(stop_reason: Any) -> str:
     """The parse error for a JSON answer the output limit stopped.
 
@@ -425,6 +430,13 @@ class NoAnswer:
     parse_error: str
     error: VendorAPIError | None = None
 
+    @property
+    def retried(self) -> bool | None:
+        """Whether the retry policy retries ``error``; None when there is none to retry."""
+        from agent_actions.processing.recovery.retry import is_retriable_error
+
+        return is_retriable_error(self.error) if self.error is not None else None
+
 
 def empty_response_error(
     vendor_label: str, stop_reason: Any, *, model_name: str, vendor: str, operation: str
@@ -448,3 +460,43 @@ def empty_response_error(
             context=context,
         )
     return VendorAPIError(message, context=context)
+
+
+def chat_no_answer(
+    content: Any,
+    finish_reason: Any,
+    refusal: Any,
+    *,
+    vendor_label: str,
+    model_name: str,
+    vendor: str,
+    operation: str = "chat.completions.create",
+) -> NoAnswer | None:
+    """How a chat-completions message with no answer ends, online or in a batch.
+
+    None when it holds one. No answer is no content, or content the output limit
+    stopped before its first character. A refusal ends with the model's reason.
+    """
+    cut_off_at_once = content == "" and is_truncated(finish_reason)
+    if content is not None and not cut_off_at_once:
+        return None
+    if cut_off_at_once:
+        parse_error = cut_off_parse_error(finish_reason)
+    elif refusal:
+        parse_error = refusal_text(refusal)
+    else:
+        parse_error = empty_parse_error(finish_reason)
+    if refusal:
+        return NoAnswer(
+            parse_error=parse_error,
+            error=VendorAPIError(
+                refusal_text(refusal),
+                context={"model_name": model_name, "vendor": vendor, "api_operation": operation},
+            ),
+        )
+    return NoAnswer(
+        parse_error=parse_error,
+        error=empty_response_error(
+            vendor_label, finish_reason, model_name=model_name, vendor=vendor, operation=operation
+        ),
+    )

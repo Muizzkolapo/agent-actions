@@ -34,6 +34,7 @@ from agent_actions.llm.providers.ollama.client import (
     _ERROR_MAPPING_LOCAL,
     _VENDOR_PARAMS,
     _extract_ollama_schema,
+    read_json_reply,
 )
 from agent_actions.llm.providers.ollama.failure_injection import (
     failed_batch_id_for,
@@ -46,10 +47,6 @@ from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
 logger = logging.getLogger(__name__)
-
-# Written on the line of a request that failed with no HTTP answer in a way online does not
-# retry. A retry reads the status alone, and any client error reads as "fail it now".
-_NOT_RETRIED_STATUS = 400
 
 
 def _finish_reason(ollama_response: dict | object) -> str:
@@ -253,6 +250,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         except Exception as e:
             logger.error("Error processing %s: %s", custom_id, e)
+            status = self._http_status(e)
             return {
                 "custom_id": custom_id,
                 "response": None,
@@ -260,33 +258,39 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     "message": str(e),
                     "type": f"{self.vendor_slug}_error",
                     "code": "inference_error",
-                    "status": self._failure_status(e, str(task.get("body", {}).get("model", ""))),
+                    "status": status,
                 },
+                # Beside the error, not in it: the error dict becomes the record's error text.
+                "retriable": (
+                    self._online_retries(e, str(task.get("body", {}).get("model", "")))
+                    if status is None
+                    else None
+                ),
             }
 
-    def _failure_status(self, error: Exception, model: str) -> int | None:
-        """The status a failed request's line carries, which decides whether a retry resends it.
-
-        An HTTP error answer carries its own. Any other failure is classified as the online
-        client classifies it: one it retries carries no status and is resent, one it fails
-        at once carries a client error.
-        """
-        from agent_actions.processing.recovery.retry import is_retriable_error
-
+    @staticmethod
+    def _http_status(error: Exception) -> int | None:
+        """The status of an HTTP error answer; None for a failure that got no answer."""
         status = getattr(error, "status_code", None)
         if status is None:
             status = getattr(getattr(error, "response", None), "status_code", None)
-        if isinstance(status, int) and status > 0:
-            return status
+        return status if isinstance(status, int) and status > 0 else None
+
+    def _online_retries(self, error: Exception, model: str) -> bool:
+        """Whether the online client retries *error*, classified as it classifies it."""
+        from agent_actions.processing.recovery.retry import is_retriable_error
+
         mapping = _ERROR_MAPPING_CLOUD if self.cloud else _ERROR_MAPPING_LOCAL
-        if is_retriable_error(wrap_vendor_error(error, model, mapping)):
-            return None
-        return _NOT_RETRIED_STATUS
+        return is_retriable_error(wrap_vendor_error(error, model, mapping))
 
     def _extract_error_status(self, raw_response: dict[str, Any]) -> int | None:
         error = raw_response.get("error")
         status = error.get("status") if isinstance(error, dict) else None
         return status if isinstance(status, int) else None
+
+    def _extract_retriable(self, raw_response: dict[str, Any]) -> bool | None:
+        retriable = raw_response.get("retriable")
+        return retriable if isinstance(retriable, bool) else None
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch with concurrent workers (default: 1 = sequential)."""
@@ -361,18 +365,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return f"{batch_id}_results.jsonl"
 
     def _parse_json_content(self, content_str: str) -> Any:
-        """Read a reply as the online client reads one in JSON mode.
-
-        A list holding a non-object is one record, under ``response``. Text that is
-        neither an object nor a list stays text, which JSON mode takes as a parse error.
-        """
-        parsed = super()._parse_json_content(content_str)
-        if isinstance(parsed, dict):
-            return parsed
-        if isinstance(parsed, list):
-            whole = all(isinstance(item, dict) for item in parsed)
-            return parsed if whole else {"response": parsed}
-        return content_str
+        """Read a reply with the online client's ``read_json_reply``; text it refuses stays text."""
+        parsed = read_json_reply(content_str)
+        return content_str if parsed is None else parsed
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         raise NotImplementedError("Ollama uses custom file-based retrieve_results()")

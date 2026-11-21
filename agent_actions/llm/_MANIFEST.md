@@ -17,6 +17,12 @@ Cohere, etc.).
 | [providers](providers/_MANIFEST.md) | Provider-specific clients, failure injection, usage tracking, and tooling. |
 | [realtime](realtime/_MANIFEST.md) | Online runner utilities, context handlers, and invocation services. |
 
+## Modules
+
+| Name | Type | Description | Signals |
+|------|------|-------------|---------|
+| `side_calls.py` | Module | Side calls: the model requests an action makes besides its main one, whatever feature asks (`llm_judge` is one requester). `SideCall` is one request: its kind, a stable `key` naming what it decides, the prompt, an optional model and how many independent `copies` to run; `request_config` is the action's config as each copy is sent under it, online or in a batch (text mode, `_request_varies_per_record` so no prompt-cache mark, the model if given). `SideReplies` is what the copies answered, in order (None for one that answered nothing), or the `error` of a call a batch could not answer. A `SideCallExecutor` runs a call the way the action's run mode says, and the requester is handed one without knowing which: `OnlineSideCalls` makes each copy's call now through `ClientInvocationService.invoke_client` (as `<action>_<kind>`), copies in parallel, each on a pool thread in a copy of the caller's context so its model call is logged against the action that asked, and raises what the client raises; `HeldSideCalls` holds each call back by key and answers None, for a batch run to send (`llm.batch.services.side_batch`). | `llm.realtime`, `output` |
+
 ## Project Surface
 
 | Symbol | File | Interaction | Config Key |
@@ -43,6 +49,7 @@ Cohere, etc.).
 | Package | Direction | Why |
 |---------|-----------|-----|
 | `workflow` | inbound | Workflow executor invokes batch and online runners |
+| `expectations` | inbound | `expectations.judge` makes each `llm_judge` call as a `side_calls.SideCall` on a `SideCallExecutor` |
 | `cli` | inbound | CLI commands dispatch to batch_cli and realtime handlers |
 | `prompt` | outbound | Uses MessageBuilder and PromptPreparationService for prompt assembly |
 | `processing` | outbound | Uses UnifiedProcessor and BatchResultStrategy for result processing |

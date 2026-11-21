@@ -7,7 +7,8 @@ so two passing votes out of three passed the rule.
 
 import json
 
-from agent_actions.llm.batch.services.judge_ops import tally_judge_results
+from agent_actions.llm.batch.services.judge_ops import JudgeRequester
+from agent_actions.llm.batch.services.side_batch import read_side_batch
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 
 
@@ -29,7 +30,9 @@ def _passing(custom_id):
 def _tally(lines):
     client = OpenAIBatchClient(api_key="k")
     results = [client.parse_provider_response(line) for line in lines]
-    return tally_judge_results(results, {line["custom_id"]: "key" for line in lines})
+    requests = {line["custom_id"]: "key" for line in lines}
+    replies = read_side_batch(results, requests, "judge")
+    return {key: JudgeRequester().settle(key, reply) for key, reply in replies.items()}
 
 
 def test_one_refused_vote_and_two_passing_votes_fail_the_call():

@@ -48,6 +48,14 @@ NO_CONTENT: dict[str, tuple[str, dict[str, Any]]] = {
     "openai content filter": ("openai", chat_completion(None, "content_filter")),
     "openai cut off before any content": ("openai", chat_completion(None, "length")),
     "openai cut off at an empty string": ("openai", chat_completion("", "length")),
+    "openai refusal cut off before any content": (
+        "openai",
+        chat_completion(None, "length", refusal=REFUSAL),
+    ),
+    "openai refusal cut off at an empty string": (
+        "openai",
+        chat_completion("", "length", refusal=REFUSAL),
+    ),
     "groq no content": ("groq", chat_completion(None)),
     "groq cut off before any content": ("groq", chat_completion(None, "length")),
     "groq cut off at an empty string": ("groq", chat_completion("", "length")),
@@ -112,6 +120,20 @@ class TestARefusal:
         body = chat_completion(None, refusal=REFUSAL)
 
         assert batch_end("openai", body, json_mode=False) == End(error=REFUSED, resent=False)
+
+    @pytest.mark.parametrize("path", [online_end, batch_end], ids=["online", "batch"])
+    def test_cut_off_at_an_empty_string_in_json_mode_it_is_the_cut_off_parse_error(self, path):
+        body = chat_completion("", "length", refusal=REFUSAL)
+
+        assert path("openai", body, json_mode=True) == End(
+            stored=[
+                {
+                    "raw_response": "",
+                    "_parse_error": "The answer was cut off at the output limit "
+                    "(stop_reason=length); raise max_tokens",
+                }
+            ]
+        )
 
     def test_its_tokens_are_kept(self):
         """Online counts a refused call's tokens; a failed line reported none."""

@@ -12,7 +12,6 @@ import importlib
 import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -23,10 +22,10 @@ from google import genai
 from google.genai import types as genai_types
 
 from agent_actions.errors import PromptTooLargeError
-from agent_actions.expectations.judge import build_judge_prompt, invoke_judge
+from agent_actions.expectations.judge import judge_call
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.llm.batch.services.judge_ops import JudgeCollection, submit_judge_batch
+from agent_actions.llm.batch.services.side_batch import submit_side_batch
 from agent_actions.llm.providers import client_base
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
 from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
@@ -34,6 +33,7 @@ from agent_actions.llm.providers.groq.batch_client import GroqBatchClient
 from agent_actions.llm.providers.ollama.batch_client import OllamaBatchClient
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 from agent_actions.llm.realtime.builder import create_dynamic_agent
+from agent_actions.llm.side_calls import OnlineSideCalls
 from agent_actions.processing.helpers import run_dynamic_agent
 from tests._support.sdk_http import http_library
 
@@ -316,16 +316,18 @@ def test_a_judge_batch_line_carries_the_online_judge_request(vendor, tmp_path):
     config = _config(vendor, json_mode=True, schema=True, enable_prompt_caching=True)
     rule, value = "Every tag is one word.", {"tags": ["a b", "Café {x}"]}
 
+    call = judge_call(rule, value, key="key")
+
     with _online_wire(vendor) as sent:
-        invoke_judge(config, rule, value)
+        OnlineSideCalls(config).run(call)
     (online,) = sent
 
     client = _batch_client(vendor, caching=True)
-    request = SimpleNamespace(prompt=build_judge_prompt(rule, value, None), model=None, votes=1)
     with patch.object(client, "submit_batch", return_value=("b1", "submitted")) as submit:
-        submit_judge_batch(
+        submit_side_batch(
             client,
-            JudgeCollection({"key": request}, None),
+            call.kind,
+            {call.key: call},
             config,
             file_name="f",
             attempt=1,
