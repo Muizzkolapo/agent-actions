@@ -31,6 +31,13 @@ from agent_actions.workflow.runner_file_processing import (
 )
 from agent_actions.workflow.strategies import InitialStrategy, StandardStrategy
 
+
+def _configured(runner: ActionRunner) -> ActionRunner:
+    """A runner as a run sets it up: it reads stored input only with its action configs."""
+    runner.action_configs = {}
+    return runner
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -38,13 +45,13 @@ from agent_actions.workflow.strategies import InitialStrategy, StandardStrategy
 
 @pytest.fixture()
 def runner():
-    return ActionRunner(use_tools=True)
+    return _configured(ActionRunner(use_tools=True))
 
 
 @pytest.fixture()
 def runner_with_backend():
     backend = MagicMock()
-    return ActionRunner(use_tools=True, storage_backend=backend)
+    return _configured(ActionRunner(use_tools=True, storage_backend=backend))
 
 
 def _make_file(path: Path, content: str = "hello") -> Path:

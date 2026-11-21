@@ -177,8 +177,10 @@ def _router(
         router["dependencies"] = [field_action]
     if not has_default:
         listed = ", ".join(f'"{case}"' for case in cases)
+        # A value that is set and is no string (`>= ""` holds only for a string) passes, so
+        # the router fails its record naming the type rather than filtering it.
         router["guard"] = {
-            "condition": f"{on} IN [{listed}]",
+            "condition": f'{on} IN [{listed}] OR NOT ({on} IS NULL OR {on} >= "")',
             "on_false": "filter",
             "passthrough_on_error": False,
         }
@@ -375,18 +377,21 @@ def _check_cases_against_enum(
     declared = _field_spec(by_name.get(action_name, {}).get("schema"), field)
     kind = declared.get("type") if isinstance(declared, dict) else None
     enum = _field_enum(by_name.get(action_name, {}).get("schema"), field)
-    if (kind is not None and kind != "string") or any(
-        not isinstance(value, str) for value in enum or []
-    ):
+    # A null value goes to the default branch, or is filtered, so `null` may stand beside
+    # `string` in a type list and in an enum.
+    types = [t for t in (kind if isinstance(kind, list) else [kind]) if t != "null"]
+    bad_type = kind is not None and types != ["string"]
+    bad_values = [value for value in enum or [] if value is not None and not isinstance(value, str)]
+    if bad_type or bad_values:
+        cause = f"type {kind!r}" if bad_type else f"enum {enum!r}"
         raise ConfigurationError(
-            f"{where}: {spec['field']} is not a string field "
-            f"({'enum ' + repr(enum) if enum else 'type ' + repr(kind)}). A router matches "
+            f"{where}: {spec['field']} is not a string field ({cause}). A router matches "
             "string values only, so no record could enter a case.",
             context={"route": router["name"], "field": spec["field"]},
         )
     if enum is None:
         return
-    allowed = list(enum)
+    allowed = [value for value in enum if value is not None]
     for case in spec["cases"]:
         if case not in allowed:
             raise ConfigurationError(
@@ -470,10 +475,20 @@ def _warn_partial_joins(
     The records of a branch left out stop at the join, and the run still succeeds.
     """
     joins = [a for a in by_name.values() if (builtin_tool(a) or {}).get("tool") == PICK]
+    members_of = {router["name"]: _branch_members(router, by_name) for router in routers}
     for router in routers:
-        members = _branch_members(router, by_name)
+        members = members_of[router["name"]]
+        inside = set().union(*members.values()) if members else set()
         for join in joins:
             sources = set(join[BUILTIN_KEY]["of"])
+            if any(
+                name != router["name"]
+                and name in inside
+                and any(n & sources for n in inner.values())
+                for name, inner in members_of.items()
+            ):
+                # The join closes a router inside one branch of this one, not this router.
+                continue
             covered = [case for case, names in members.items() if names & sources]
             missing = [case for case in members if case not in covered]
             if covered and missing:
