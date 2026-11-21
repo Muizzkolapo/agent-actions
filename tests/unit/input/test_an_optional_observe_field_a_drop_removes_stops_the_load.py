@@ -71,3 +71,17 @@ def test_a_wildcard_drop_of_another_namespace_is_accepted():
     scope = {"observe": ["review.x?"], "drop": ["other.*"]}
 
     assert split_optional_observe(scope)["optional"] == {"review.x": None}
+
+
+def test_a_drop_of_a_parent_of_a_nested_optional_field_is_refused_naming_the_parent():
+    with pytest.raises(
+        ConfigurationError,
+        match=r"observe entry 'review\.meta\.reason\?'.*drop entry 'review\.meta'",
+    ):
+        split_optional_observe({"observe": ["review.meta.reason?"], "drop": ["review.meta"]})
+
+
+def test_a_drop_of_a_sibling_whose_name_starts_the_same_is_accepted():
+    scope = {"observe": ["review.meta.reason?"], "drop": ["review.meta_x"]}
+
+    assert split_optional_observe(scope)["optional"] == {"review.meta.reason": None}

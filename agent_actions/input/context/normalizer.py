@@ -131,7 +131,14 @@ def _refuse_dropped_optional(optional: dict[str, Any], drop: Any) -> None:
         return
     for ref in optional:
         namespace = ref.split(".", 1)[0]
-        match = next((d for d in drop if d in (ref, f"{namespace}.*")), None)
+        match = next(
+            (
+                d
+                for d in drop
+                if isinstance(d, str) and (d in (ref, f"{namespace}.*") or ref.startswith(f"{d}."))
+            ),
+            None,
+        )
         if match is None:
             continue
         raise ConfigurationError(
