@@ -154,14 +154,41 @@ def _index_workflow_file(
         workflow_default = defaults.get("output_field") if isinstance(defaults, dict) else None
         default_output_field = workflow_default or project_output_field
 
-        _index_workflow_lines(index, yaml_file, lines, action_data_map, default_output_field)
+        _index_workflow_lines(
+            index,
+            yaml_file,
+            lines,
+            action_data_map,
+            default_output_field,
+            action_lines=rendered.action_lines,
+            live_lines=rendered.live_lines,
+        )
         _backfill_unseen_actions(
             index, yaml_file, lines, action_data_map, default_output_field, rendered.action_sources
         )
+        _drop_jinja_line_references(index, yaml_file, lines)
         index.duplicate_actions_by_file[yaml_file].update(_repeated_names(actions))
 
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
+
+
+_TAGS_ONLY = re.compile(r"\s*(?:(?:\{%.*?%\}|\{#.*?#\})\s*)+")
+
+
+def _defines_action(
+    line_no: int, name: str, action_lines: frozenset[int] | None, action_data_map: dict
+) -> bool:
+    return name in action_data_map and (action_lines is None or line_no in action_lines)
+
+
+def _drop_jinja_line_references(index: ProjectIndex, yaml_file: Path, lines: list[str]) -> None:
+    """A line that holds a Jinja tag names what the render makes of it, not its literal words."""
+    index.references_by_file[yaml_file] = [
+        ref
+        for ref in index.references_by_file[yaml_file]
+        if not any(opener in lines[ref.location.line] for opener in ("{{", "{%", "{#"))
+    ]
 
 
 def _repeated_names(actions: Any) -> set[str]:
@@ -238,12 +265,18 @@ def _index_workflow_lines(
     lines: list[str],
     action_data_map: dict,
     default_output_field: str | None = None,
+    action_lines: frozenset[int] | None = None,
+    live_lines: frozenset[int] | None = None,
 ) -> None:
     """Index action metadata and references from workflow lines.
 
     `default_output_field` comes from the parsed `defaults:` block rather than from these
     lines, because a `defaults:` written after `actions:` is legal and a line scan reaches
     it only before the first action.
+
+    The lines are the file as written, so a line the render drops (a false `{% if %}`
+    branch, a `{# #}` comment) is skipped by `live_lines`, and a `- name:` line is an
+    action only where the render defines one (`action_lines`).
     """
     workflow_name = index.workflow_for_file(yaml_file)
     if workflow_name:
@@ -258,10 +291,17 @@ def _index_workflow_lines(
 
     for i, line in enumerate(lines):
         action_match = re.match(r"^(\s*)-\s*name:\s*['\"]?([^'\"#]+?)['\"]?\s*(?:#.*)?$", line)
-        if action_match and "{" in action_match.group(2):
-            # A name a tag renders: its actions come from the rendered text, not this line.
-            current_action = None
-            current_action_indent = None
+        if action_match and not _defines_action(
+            i, action_match.group(2), action_lines, action_data_map
+        ):
+            # Not an action of the render: a name a tag renders, a line in a dropped branch,
+            # or a `- name:` inside a prompt or schema. A sibling of the current action ends it.
+            if current_action_indent is None or len(action_match.group(1)) <= current_action_indent:
+                current_action = None
+                current_action_indent = None
+            continue
+        if (live_lines is not None and i not in live_lines) or _TAGS_ONLY.fullmatch(line):
+            # A dropped line, or a line of `{% %}` / `{# #}` tags that outputs no YAML.
             continue
         if action_match:
             action_name = action_match.group(2)

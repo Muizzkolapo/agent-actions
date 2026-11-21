@@ -1,13 +1,13 @@
 /**
  * YAML Workflow Config Parser
  *
- * Reads an agent_config file and parses it. A file that is not plain YAML (a workflow
- * that uses Jinja) is rendered by the language server, which runs the same render as agac.
+ * Reads an agent_config file and parses the text the language server renders from it,
+ * with the same Jinja step as agac. With no server running, it parses the raw text.
  */
 
 import * as vscode from 'vscode';
 import { ParsedWorkflowConfig } from './types';
-import { localActionLines, parseWorkflowText, RenderedWorkflowResult } from './workflowText';
+import { parseLoadedWorkflow, RenderedWorkflowResult } from './workflowText';
 
 export type RenderViaLsp = (uri: string) => Promise<RenderedWorkflowResult | null>;
 
@@ -26,26 +26,6 @@ export async function parseWorkflowConfig(
 ): Promise<ParsedWorkflowConfig | null> {
     const contentBytes = await vscode.workspace.fs.readFile(uri);
     const content = Buffer.from(contentBytes).toString('utf8');
-    const fallbackName = fallbackWorkflowName(uri);
-
-    try {
-        return parseWorkflowText(content, fallbackName);
-    } catch (rawError) {
-        const rawMessage = rawError instanceof Error ? rawError.message : String(rawError);
-        if (!renderViaLsp) {
-            throw new Error(rawMessage);
-        }
-        const rendered = await renderViaLsp(uri.toString());
-        if (!rendered) {
-            throw new Error(`Not plain YAML, and the language server is not running: ${rawMessage}`);
-        }
-        if (rendered.text === null) {
-            throw new Error(rendered.error ?? 'The language server has no project for this file');
-        }
-        const parsed = parseWorkflowText(rendered.text, fallbackName);
-        if (parsed) {
-            parsed.actionLocations = localActionLines(rendered.actionSources, uri.toString());
-        }
-        return parsed;
-    }
+    const rendered = renderViaLsp ? await renderViaLsp(uri.toString()) : null;
+    return parseLoadedWorkflow(content, fallbackWorkflowName(uri), uri.toString(), rendered);
 }

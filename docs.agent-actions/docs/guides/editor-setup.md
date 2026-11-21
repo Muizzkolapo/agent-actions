@@ -38,7 +38,7 @@ flowchart LR
 | **Go to Definition** | Ctrl+Click to jump to source | `$prompts.Extract` → prompt file, line 42 |
 | **Hover** | Preview content without leaving current file | Hover on `impl: flatten_questions` → see function signature |
 | **Autocomplete** | Suggestions as you type | Type `$prompts.` → list of available prompts |
-| **Outline** | Document symbols in sidebar | See all actions in a workflow, all prompts in a file |
+| **Outline** | Document symbols in sidebar | See the actions defined in a workflow file, all prompts in a file |
 | **Syntax Highlighting** | Colored `{prompt}` tags and Jinja2 | Visual distinction for template syntax |
 
 ## Navigation Reference

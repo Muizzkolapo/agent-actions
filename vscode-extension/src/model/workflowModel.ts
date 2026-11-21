@@ -36,6 +36,7 @@ import {
 } from './paths';
 import { readManifest, readAgentStatus } from './manifestReader';
 import { fallbackWorkflowName, parseWorkflowConfig, RenderViaLsp } from './yamlParser';
+import { uniqueWorkflowName } from './workflowText';
 import { logger } from '../utils/logger';
 
 const CONFIG_GLOB = '**/agent_config/**/*.{yml,yaml}';
@@ -293,6 +294,7 @@ export class WorkflowModel implements vscode.Disposable {
         try {
             const configFiles = await vscode.workspace.findFiles(CONFIG_GLOB, '**/node_modules/**');
             const workflows = new Map<string, WorkflowInfo>();
+            const failures: { configUri: vscode.Uri; error: unknown }[] = [];
 
             for (const configUri of configFiles) {
                 try {
@@ -304,11 +306,16 @@ export class WorkflowModel implements vscode.Disposable {
                     const workflow = await this.buildWorkflow(configUri, parsedConfig);
                     workflows.set(workflow.name, workflow);
                 } catch (error) {
-                    // Kept in the tree with its error, so a broken workflow does not vanish.
-                    const failed = this.failedWorkflow(configUri, error);
-                    logger.warn(`Workflow ${failed.name} did not load: ${failed.loadError}`);
-                    workflows.set(failed.name, failed);
+                    failures.push({ configUri, error });
                 }
+            }
+
+            // Kept in the tree with its error, so a broken workflow does not vanish, and
+            // added last under a name of its own, so it never replaces one that loaded.
+            for (const { configUri, error } of failures) {
+                const failed = this.failedWorkflow(configUri, error, new Set(workflows.keys()));
+                logger.warn(`Workflow ${failed.name} did not load: ${failed.loadError}`);
+                workflows.set(failed.name, failed);
             }
 
             this.workflows = workflows;
@@ -333,11 +340,12 @@ export class WorkflowModel implements vscode.Disposable {
     }
 
     /** A workflow whose config did not load: no actions, and the reason. */
-    private failedWorkflow(configUri: vscode.Uri, error: unknown): WorkflowInfo {
+    private failedWorkflow(configUri: vscode.Uri, error: unknown, taken: ReadonlySet<string>): WorkflowInfo {
         const configPath = configUri.fsPath;
+        const rootPath = getProjectRoot(configPath);
         return {
-            name: fallbackWorkflowName(configUri),
-            rootPath: getProjectRoot(configPath),
+            name: uniqueWorkflowName(fallbackWorkflowName(configUri), taken, path.relative(rootPath, configPath)),
+            rootPath,
             configPath,
             actions: [],
             executionOrder: [],
