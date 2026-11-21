@@ -36,7 +36,7 @@ READERS = {
     "staged source reads": _source_fields_every_render_reads,
     "prompt variables": lambda prompt: PromptASTAnalyzer().extract_variables(prompt),
     "prompt fields": scan_prompt_fields_ast,
-    "unguarded references": _unguarded_refs,
+    "unguarded references": lambda prompt: _unguarded_refs(prompt, {}),
     "upstream actions": extract_action_names_from_template,
     "field references": _references,
     "record reads": lambda prompt: record_reads_in_prompt({"prompt": prompt}),
