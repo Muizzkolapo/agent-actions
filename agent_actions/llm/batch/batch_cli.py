@@ -203,7 +203,8 @@ def _action_config(ctx: _BatchContext) -> dict[str, Any] | None:
         workflow = load_workflow(
             ctx.workflow_name, paths, ctx.project_root, sends_requests=False, read_only=True
         )
-    except (AgentActionsError, OSError) as e:
+    # ValueError: a limit variable, such as AGAC_RECORD_LIMIT, that is not an integer.
+    except (AgentActionsError, OSError, ValueError) as e:
         click.echo(f"Warning: workflow '{ctx.workflow_name}' did not load ({e}). {raw}", err=True)
         return None
     config = workflow.action_configs.get(ctx.action_name)
