@@ -76,8 +76,8 @@ def _warn_a_is_deprecated(
 def action_option(*, required: bool = False, help: str) -> Callable:
     """The action, as ``-A/--action``, for a command that used to read it from ``-a``.
 
-    ``-a`` still names the action there, with a warning on stderr. The warning is eager,
-    so it is printed although a missing ``-w`` then stops the command.
+    ``-a`` still names the action there, with a warning on stderr. The option is eager, so
+    the warning is printed before ``--help`` and before an error in any other option.
     """
 
     def decorator(func: Callable) -> Callable:
