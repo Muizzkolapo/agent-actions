@@ -11,6 +11,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useStoreApi,
   ReactFlowProvider,
   type NodeProps,
   type Node,
@@ -21,51 +22,59 @@ import "@xyflow/react/dist/style.css"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import {
   transformWorkflowToReactFlow,
+  initialViewport,
+  FIT_PADDING,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  NODE_HEIGHT,
+  NODE_WIDTH,
   type DAGNodeData,
 } from "@/lib/dag-transformer"
 import type { Action } from "@/lib/mock-data"
 
 // ─── DAG Node (expandable to show fields) ────────────────────────
 
-function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAGNodeData; isConnectable: boolean; isLlm: boolean; selected: boolean }) {
+function ExpandableDAGNode({ id, data, isConnectable, isLlm, selected }: { id: string; data: DAGNodeData; isConnectable: boolean; isLlm: boolean; selected: boolean }) {
   const [expanded, setExpanded] = useState(false)
+  const { updateNode } = useReactFlow()
   const hasFields = data.inputFields.length > 0 || data.outputFields.length > 0
 
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    // Rows sit 20px apart, so an open node must draw above its neighbours.
+    updateNode(id, { zIndex: expanded ? 0 : 10 })
+    setExpanded(!expanded)
+  }
+
   return (
-    <div className={`w-[320px] overflow-hidden rounded-card border bg-surface ${
-      selected ? "border-accent-a30" : "border-border"
-    }`}>
+    <div
+      style={{ width: NODE_WIDTH }}
+      title={data.description ? `${data.label}\n${data.description}` : data.label}
+      className={`overflow-hidden rounded-sm border bg-surface ${
+        selected ? "border-accent-a30 ring-1 ring-accent-a30" : "border-border-2"
+      }`}
+    >
       <Handle type="target" position={Position.Left} isConnectable={isConnectable}
-        className={`!h-2 !w-2 !border !border-surface ${isLlm ? "!bg-llm" : "!bg-tool"}`}
+        className={`!h-1.5 !w-1.5 !min-w-0 !border-0 ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
 
       {/* Header row — clicks bubble to React Flow's onNodeClick; only the chevron stops propagation */}
-      <div className="flex items-center">
-        <div className="flex items-center px-3 py-2.5 border-r border-border-soft">
-          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-sm ${
-            isLlm ? "bg-llm/10" : "bg-tool/[0.08]"
-          }`}>
-            <span className={`text-[8px] font-semibold ${isLlm ? "text-llm-t" : "text-tool-t"}`}>{isLlm ? "LLM" : "TOOL"}</span>
-          </div>
-        </div>
-        <div className="flex-1 px-3 py-2.5 min-w-0">
-          <div className="flex items-start justify-between gap-1">
-            <span className="text-xs font-mono font-medium text-foreground truncate" title={data.label}>{data.label}</span>
-            {hasFields && (
-              <button
-                type="button"
-                aria-label={expanded ? "Collapse fields" : "Expand fields"}
-                onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
-                className="shrink-0 rounded-sm p-0.5 hover:bg-hover"
-              >
-                {expanded
-                  ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                  : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-              </button>
-            )}
-          </div>
-          {data.description && (
-            <div className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">{data.description}</div>
+      <div className="flex items-center" style={{ height: NODE_HEIGHT - 2 }}>
+        <div className={`w-[3px] self-stretch ${isLlm ? "bg-llm" : "bg-tool"}`} />
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-foreground">{data.label}</span>
+          <span className={`shrink-0 font-mono text-[8.5px] font-semibold ${isLlm ? "text-llm-t" : "text-tool-t"}`}>{isLlm ? "LLM" : "TOOL"}</span>
+          {hasFields && (
+            <button
+              type="button"
+              aria-label={expanded ? "Collapse fields" : "Expand fields"}
+              onClick={toggle}
+              className="shrink-0 rounded-sm p-0.5 hover:bg-hover"
+            >
+              {expanded
+                ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+            </button>
           )}
         </div>
       </div>
@@ -111,23 +120,19 @@ function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAG
       )}
 
       <Handle type="source" position={Position.Right} isConnectable={isConnectable}
-        className={`!h-2 !w-2 !border !border-surface ${isLlm ? "!bg-llm" : "!bg-tool"}`}
+        className={`!h-1.5 !w-1.5 !min-w-0 !border-0 ${isLlm ? "!bg-llm" : "!bg-tool"}`}
       />
     </div>
   )
 }
 
-function ModelNode({ data, isConnectable, selected }: NodeProps<Node<DAGNodeData>>) {
-  return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} isLlm selected={selected ?? false} />
+function ModelNode({ id, data, isConnectable, selected }: NodeProps<Node<DAGNodeData>>) {
+  return <ExpandableDAGNode id={id} data={data} isConnectable={isConnectable ?? false} isLlm selected={selected ?? false} />
 }
 
-function ToolNode({ data, isConnectable, selected }: NodeProps<Node<DAGNodeData>>) {
-  return <ExpandableDAGNode data={data} isConnectable={isConnectable ?? false} isLlm={false} selected={selected ?? false} />
+function ToolNode({ id, data, isConnectable, selected }: NodeProps<Node<DAGNodeData>>) {
+  return <ExpandableDAGNode id={id} data={data} isConnectable={isConnectable ?? false} isLlm={false} selected={selected ?? false} />
 }
-
-// A 40+ action workflow lays out ~20,000px wide, so fitting it needs a zoom near 0.05.
-// A floor above that clips the graph at both edges and blocks zooming out.
-const MIN_ZOOM = 0.02
 
 // ─── DAG Content ────────────────────────────────────────────────────────────
 
@@ -142,7 +147,8 @@ function DAGContent({
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const { fitView } = useReactFlow()
+  const { fitView, setViewport } = useReactFlow()
+  const store = useStoreApi()
 
   const nodeTypes = useMemo(
     () => ({
@@ -159,13 +165,12 @@ function DAGContent({
     setEdges(transformed.edges)
 
     setTimeout(() => {
-      try {
-        fitView({ padding: 0.1, duration: 500 })
-      } catch {
-        // fitView can fail before render
-      }
+      const { width, height } = store.getState()
+      const view = initialViewport(transformed.nodes, width, height)
+      if (view === "fit") fitView({ padding: FIT_PADDING, duration: 500 })
+      else setViewport(view, { duration: 500 })
     }, 100)
-  }, [actions, workflowId, fitView, setNodes, setEdges])
+  }, [actions, workflowId, fitView, setViewport, store, setNodes, setEdges])
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -182,16 +187,15 @@ function DAGContent({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeClick={handleNodeClick}
-      fitView
       minZoom={MIN_ZOOM}
-      maxZoom={1.5}
+      maxZoom={MAX_ZOOM}
       nodesDraggable
       nodesConnectable={false}
       defaultEdgeOptions={{
-        type: "default",
+        type: "smoothstep",
         animated: false,
-        style: { stroke: "hsl(var(--border-2))", strokeWidth: 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "hsl(var(--border-2))" },
+        style: { stroke: "hsl(var(--muted-2))", strokeWidth: 1 },
+        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "hsl(var(--muted-2))" },
       }}
       className="rounded-card"
     >

@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: "The `agac docs` Graph tab is easier to read. Each action is now a compact box with its name, its type and a chevron that opens its fields, and edges are dark right-angle lines. The gap between stages is now 50px (it was 240px). A workflow too large to read at full fit now opens on its first stage at a readable zoom. The fit button still shows the whole graph."
+time: 2026-11-21T09:00:00Z
