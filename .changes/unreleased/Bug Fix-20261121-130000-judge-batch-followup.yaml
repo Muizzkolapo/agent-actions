@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A bad `AGENT_ACTIONS_BATCH_MAX_REQUESTS` stops the run when the workflow is assembled, before any batch is sent. A judge batch that a stopped run sent but did not save is dropped with a message that says its verdicts are lost and that it is billed, and the judge round of the file''s saved state is reset.'
+time: 2026-11-21T13:00:00Z
