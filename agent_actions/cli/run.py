@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 import traceback
 from collections.abc import Callable
@@ -85,34 +86,46 @@ class RunCommand:
         # Before anything loads, clears or submits: `--fresh` clears the store inside
         # load_workflow, so a later lock would wipe a run in progress before refusing.
         with hold_run_lock(paths.io_dir, self.agent_name):
+            started = time.monotonic()
             outcome = self._run_holding_the_lock(paths, project_root)
             if self.args.wait:
-                outcome = self._wait_for_batches(outcome, paths, project_root)
+                outcome = self._wait_for_batches(outcome, paths, project_root, started)
 
         if EXIT_CODES[outcome] != EXIT_SUCCESS:
             raise SystemExit(EXIT_CODES[outcome])
 
     def _wait_for_batches(
-        self, outcome: RunOutcome, paths: ProjectPaths, project_root: Path | None
+        self,
+        outcome: RunOutcome,
+        paths: ProjectPaths,
+        project_root: Path | None,
+        started: float,
     ) -> RunOutcome:
-        """Run again, as a second `agac run` does, until no batch is open or the time is up."""
+        """Run again, as a second `agac run` does, until no batch is open or the time is up.
+
+        The time limit counts from *started*, before the first pass.
+        """
         timeout = self.args.wait_timeout
-        deadline = None if timeout is None else time.monotonic() + timeout
+        deadline = None if timeout is None else started + timeout
         while outcome is RunOutcome.PAUSED_FOR_BATCH:
             pause = self.args.poll
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     click.echo(
-                        f"Stopped waiting after {timeout:g}s: batch job(s) still open for: "
-                        f"{', '.join(self._open_batches)}. Run again to check them and "
-                        f"continue: agac run -w {self.args.agent} --wait"
+                        f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
+                        f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
+                        f"to check them and continue: agac run -w {self.args.agent} --wait"
                     )
                     break
-                pause = min(pause, remaining)
-            click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
+                pause = min(pause, math.ceil(remaining))
+            click.echo(f"Waiting {pause:.0f}s before checking the batch job(s) again...")
             self._sleep(pause)
             outcome = self._run_holding_the_lock(paths, project_root, resuming=True)
+        if outcome is RunOutcome.PAUSED:
+            click.echo(
+                "--wait has no batch to wait for: the run stopped before every action ended."
+            )
         return outcome
 
     def _run_holding_the_lock(
@@ -317,11 +330,11 @@ class RunCommand:
 )
 @click.option(
     "--poll",
-    type=click.FloatRange(min=0),
+    type=click.FloatRange(min=1),
     default=None,
     metavar="SECONDS",
     help=(
-        "With --wait: seconds between two checks of the batch job(s) "
+        "With --wait: seconds between two checks of the batch job(s), at least 1 "
         f"(default: {DEFAULT_POLL_SECONDS:g})"
     ),
 )
@@ -331,8 +344,8 @@ class RunCommand:
     default=None,
     metavar="SECONDS",
     help=(
-        "With --wait: stop waiting after this many seconds and exit 4, leaving the batch "
-        "job(s) open for the next run (default: no limit)"
+        "With --wait: stop waiting this many seconds after the run started and exit 4, "
+        "leaving the batch job(s) open for the next run (default: no limit)"
     ),
 )
 @handles_user_errors("run")
@@ -357,7 +370,8 @@ def run(
 
     \b
     Exit codes: 0 success, 1 failed, 3 finished with failed or exhausted
-    records, 4 paused for a batch.
+    records, 4 paused: a batch is open, or the run stopped before every
+    action ended.
 
     \b
     Examples:

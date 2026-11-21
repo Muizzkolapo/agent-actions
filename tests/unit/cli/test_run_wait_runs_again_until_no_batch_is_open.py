@@ -162,3 +162,73 @@ def test_poll_and_wait_timeout_are_refused_without_wait(tmp_path, monkeypatch, f
 
     assert result.exit_code == 2
     assert "--wait" in result.output
+
+
+class _Clock:
+    """A monotonic clock that a pass and a sleep move forward."""
+
+    def __init__(self, passes: Passes, each_pass: float):
+        self.now = 1000.0
+        load = passes._load
+
+        def timed_load(*args, **kwargs):
+            self.now += each_pass
+            return load(*args, **kwargs)
+
+        passes._load = timed_load
+
+    def sleep(self, passes: Passes):
+        def sleep(seconds: float) -> None:
+            passes.slept.append(seconds)
+            self.now += seconds
+
+        return sleep
+
+
+def test_the_wait_timeout_counts_from_before_the_first_pass(tmp_path, capsys):
+    passes = Passes(tmp_path, OPEN, OPEN, OPEN, OPEN)
+    clock = _Clock(passes, each_pass=30)
+
+    with patch("agent_actions.cli.run.time.monotonic", side_effect=lambda: clock.now):
+        code = passes.run(sleep=clock.sleep(passes), wait=True, poll=10, wait_timeout=50)
+
+    assert code == EXIT_PAUSED
+    assert len(passes.loads) == 2
+    assert passes.slept == [10]
+    assert "Stopped waiting after 70s:" in capsys.readouterr().out
+
+
+def test_the_printed_wait_is_whole_seconds(tmp_path, capsys):
+    passes = Passes(tmp_path, OPEN, OPEN, OPEN)
+    clock = _Clock(passes, each_pass=0.4)
+
+    with patch("agent_actions.cli.run.time.monotonic", side_effect=lambda: clock.now):
+        passes.run(sleep=clock.sleep(passes), wait=True, poll=5, wait_timeout=7)
+
+    out = capsys.readouterr().out
+    assert passes.slept == [5, 2]
+    assert "Waiting 5s before" in out and "Waiting 2s before" in out
+
+
+@pytest.mark.parametrize("poll", ["0", "0.5"])
+def test_a_poll_below_one_second_is_refused(tmp_path, monkeypatch, poll):
+    (tmp_path / "agent_actions.yml").write_text("project_name: p\n")
+    monkeypatch.chdir(tmp_path)
+
+    result = CliRunner().invoke(run, ["-w", "wf", "--wait", "--poll", poll])
+
+    assert result.exit_code == 2
+    assert "--poll" in result.output
+
+
+def test_a_pause_with_no_open_batch_exits_4_and_says_wait_has_nothing_to_wait_for(tmp_path, capsys):
+    passes = Passes(tmp_path, (ActionStatus.COMPLETED, ActionStatus.PENDING))
+
+    code = passes.run(wait=True, poll=5)
+
+    assert code == EXIT_PAUSED
+    assert passes.slept == []
+    assert (
+        "--wait has no batch to wait for: the run stopped before every action ended."
+        in capsys.readouterr().out
+    )

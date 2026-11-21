@@ -262,7 +262,7 @@ RunCommand.execute()
   │                                                    (no --fresh/--rerun/--verify-keys), under
   │                                                    the same run lock, until --wait-timeout
   │
-  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← 1 failed, 3 record failures, 4 paused
+  └─ SystemExit(EXIT_CODES[outcome]) unless 0       ← 1 failed, 3 record failures, 4 paused (a batch is open, or not every action ended)
 ```
 
 ### `retry` -- Retry Failed Records
