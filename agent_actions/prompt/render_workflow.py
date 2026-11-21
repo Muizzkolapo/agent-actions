@@ -619,6 +619,20 @@ def _load_yaml_content(yaml_path, project_root: Path | None = None):
     return content
 
 
+def new_load_render(
+    yaml_content: str,
+    templates_folder: Path,
+    project_root: Path | None,
+    load_class: type[LoadRender] = LoadRender,
+) -> LoadRender:
+    """A load of *yaml_content* with the prompt loader, the filters and the templates/ globals."""
+    load = load_class(templates_folder, yaml_content)
+    load.env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
+    load.env.filters["dedent"] = textwrap.dedent
+    _load_template_globals(load, str(templates_folder))
+    return load
+
+
 def render_pipeline_with_templates(
     yaml_path: str | Path,
     templates_folder: str | Path,
@@ -657,11 +671,7 @@ def render_pipeline_with_templates(
     """
     yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
 
-    load = LoadRender(Path(templates_folder), yaml_content)
-    env = load.env
-    env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
-    env.filters["dedent"] = textwrap.dedent
-    _load_template_globals(load, str(templates_folder))
+    load = new_load_render(yaml_content, Path(templates_folder), project_root)
 
     # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
     # and a value that reads a version variable, are left for the stage that has them.
