@@ -68,7 +68,7 @@ Phase 1 sends a record again only if an online call retries the same failure:
 Each other failure fails its record immediately, with the message of the provider. Examples are
 an HTTP 400 and an HTTP 404, for example an Ollama model that is not pulled. An answer that holds
 no content also fails: a refusal, a prompt that Gemini blocked, or a message with only a thinking
-block.
+block. A refusal fails its record immediately, also when the output limit stopped it.
 
 In JSON mode, an answer with no content is not a failed request. It is the same parse-error
 record that an online call stores: `{"raw_response": "", "_parse_error": "<the reason>"}`. Phase 1
