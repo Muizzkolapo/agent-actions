@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.tooling.lsp.diagnostics import collect_diagnostics
 from agent_actions.tooling.lsp.indexer import build_index
 from agent_actions.tooling.lsp.jinja_source import WorkflowRenderError, render_workflow_source
@@ -325,6 +326,12 @@ actions:
         pytest.param("{% set vendor = 'x' %}\n{% set mode %}", id="after-an-inline-set"),
         pytest.param("{%+ set mode %}", id="plus-modifier"),
         pytest.param("{% set mode | replace('x', 'y', count=1) %}", id="filter-keyword-argument"),
+        pytest.param("{% set (a, b) = (1, 2) %}\n{% set mode %}", id="after-a-tuple-assignment"),
+        pytest.param("{% set a, b = 1, 2 %}\n{% set mode %}", id="after-a-pair-assignment"),
+        pytest.param(
+            "{% set ns = namespace(m='x') %}\n{% set ns.m = 'y' %}\n{% set mode %}",
+            id="after-a-namespace-assignment",
+        ),
     ],
 )
 def test_every_spelling_of_a_set_block_is_read_as_the_render_reads_it(tmp_path, opener):
@@ -393,3 +400,228 @@ def test_a_macro_in_the_workflow_file_maps_its_actions_to_its_line(tmp_path):
     assert [a["name"] for a in r.data["actions"]] == ["a__step", "b__step"]
     assert r.action_sources["a__step"].line == 1
     assert r.action_sources["b__step"].line == 1
+
+
+@pytest.mark.parametrize("closer", ["{%- endset %}", "{%+ endset %}"])
+def test_every_spelling_of_a_set_block_close_is_read_as_the_render_reads_it(tmp_path, closer):
+    wf = _project(tmp_path, f"{{% set mode %}}\nfast\n{closer}\n{_BRANCH_ON_MODE}")
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"summarize"}
+    assert idx.file_actions[wf]["summarize"].location.line == 6
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `fast_tool`."]
+
+
+def test_a_unicode_line_separator_in_a_value_keeps_every_reference(tmp_path):
+    wf = _project(
+        tmp_path,
+        'name: wf\ndescription: "first\u2028second"\nactions:\n'
+        "  - name: a\n    kind: tool\n    impl: ta\n"
+        "  - name: b\n    kind: tool\n    impl: tb\n    dependencies:\n      - a\n      - missing\n",
+    )
+
+    assert render_workflow_source(wf, tmp_path).action_sources["b"].line == 6
+    assert sorted(_messages(wf, tmp_path)) == [
+        "Unresolved action reference `missing`.",
+        "Unresolved tool reference `ta`.",
+        "Unresolved tool reference `tb`.",
+    ]
+
+
+def test_a_unicode_line_separator_before_a_last_name_line_keeps_the_actions(tmp_path):
+    wf = _project(
+        tmp_path,
+        'name: wf\ndescription: "first\u2028second"\nactions:\n  - name: a\n    kind: tool\n  - name: zed',
+    )
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"a", "zed"}
+    assert idx.file_actions[wf]["zed"].location.line == 5
+
+
+def test_a_workflow_from_the_prompt_store_loads_as_agac_loads_it(tmp_path):
+    wf = _project(tmp_path, "$wfbody.main\n")
+    (tmp_path / "prompt_store").mkdir()
+    (tmp_path / "prompt_store" / "wfbody.md").write_text(
+        "{prompt main}\nname: wf\nactions:\n  - name: a\n    kind: tool\n{end_prompt}\n"
+    )
+    agac = yaml.safe_load(
+        render_pipeline_with_templates(
+            wf, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+        )
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+    idx = build_index(tmp_path)
+
+    assert [a["name"] for a in agac["actions"]] == ["a"]
+    assert [a["name"] for a in r.data["actions"]] == ["a"]
+    assert idx.parse_errors == {}
+    assert set(idx.file_actions[wf]) == {"a"}
+
+
+def test_raw_text_gives_references_only_where_it_renders(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        name: wf
+        actions:
+          - name: a
+            kind: tool
+        {% if false %}
+        {% raw %}
+            impl: dead_tool
+            dependencies: [ghost]
+        {% endraw %}
+        {% endif %}
+          - name: b
+            kind: tool
+        {% raw %}
+            dependencies: [missing]
+        {% endraw %}
+        """,
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_text_that_a_call_or_filter_block_outputs_gives_its_references(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro wrap() %}{{ caller() }}{% endmacro %}
+        name: wf
+        actions:
+          - name: two
+            kind: tool
+        {% call wrap() %}
+            impl: tool_i
+            dependencies: [outer]
+        {% endcall %}
+        {% filter replace('QQ', 'q') %}
+          - name: three
+            kind: tool
+            dependencies: [second]
+        {% endfilter %}
+        """,
+    )
+
+    assert sorted(_messages(wf, tmp_path)) == [
+        "Unresolved action reference `outer`.",
+        "Unresolved action reference `second`.",
+        "Unresolved tool reference `tool_i`.",
+    ]
+
+
+_PICK_BY_HELD_VALUE = """\
+{% macro pick() %}
+{% set label %}
+- name: x
+{% endset %}
+{% if label | trim == '- name: x' %}
+  - name: a__yes
+    kind: tool
+{% else %}
+  - name: a__no
+    kind: tool
+{% endif %}
+{% endmacro %}
+"""
+
+
+def test_a_set_block_in_a_workflow_macro_is_read_as_the_render_reads_it(tmp_path):
+    wf = _project(tmp_path, _PICK_BY_HELD_VALUE + "name: wf\nactions:\n{{ pick() }}\n")
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["a__yes"]
+    assert r.action_sources["a__yes"].file_path == wf
+    assert r.action_sources["a__yes"].line == 5
+
+
+def test_a_set_block_in_a_template_macro_is_read_as_the_render_reads_it(tmp_path):
+    wf = _project(
+        tmp_path,
+        "{% from 'm.jinja2' import pick %}\nname: wf\nactions:\n{{ pick() }}\n",
+        {"m.jinja2": _PICK_BY_HELD_VALUE},
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["a__yes"]
+    assert r.action_sources["a__yes"].file_path == tmp_path / "templates" / "m.jinja2"
+    assert r.action_sources["a__yes"].line == 5
+
+
+def test_marks_that_change_the_render_give_no_wrong_source_line(tmp_path):
+    # The macro output is held and tested; its name mark would take the other branch.
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro m() %}
+        - name: q
+        {% endmacro %}
+        {% set x = m() %}
+        name: wf
+        actions:
+        {% if x | trim == '- name: q' %}
+          - name: shown
+            kind: tool
+        {% else %}
+          - name: hidden
+            kind: tool
+        {% endif %}
+        """,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["shown"]
+    assert r.action_sources.get("shown", None) is None or r.action_sources["shown"].line == 7
+    assert build_index(tmp_path).file_actions[wf]["shown"].location.line == 7
+
+
+def test_an_action_in_a_call_block_maps_to_its_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% macro wrap() %}{{ caller() }}{% endmacro %}
+        name: wf
+        actions:
+        {% call wrap() %}
+          - name: inner
+            kind: tool
+        {% endcall %}
+        {% if false %}
+          - name: inner
+            kind: tool
+        {% endif %}
+        """,
+    )
+
+    assert render_workflow_source(wf, tmp_path).action_sources["inner"].line == 4
+
+
+def test_a_template_name_line_does_not_make_a_workflow_prompt_line_an_action(tmp_path):
+    # The macro's name line and the prompt line that names the same action are both line 5.
+    wf = _project(
+        tmp_path,
+        "{% from 'm.jinja2' import m %}\n"
+        "actions:\n"
+        "  - name: writer\n"
+        "    kind: tool\n"
+        "    prompt: |\n"
+        "      - name: a__x\n"
+        "  {{ m('a') | indent(2) }}\n",
+        {
+            "m.jinja2": "{# pad #}\n" * 4
+            + "{% macro m(p) -%}\n- name: {{ p }}__x\n  kind: tool\n{%- endmacro %}\n"
+        },
+    )
+
+    location = build_index(tmp_path).file_actions[wf]["a__x"].location
+
+    assert location.file_path == tmp_path / "templates" / "m.jinja2"
+    assert location.line == 5
