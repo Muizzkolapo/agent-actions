@@ -349,3 +349,25 @@ def test_a_field_the_upstream_schema_does_not_declare_is_refused_though_optional
     assert result.returncode != 0, output
     assert "Field 'sumary' not found in action 'note_direct' output schema" in output
     assert "sumary?" not in output
+
+
+@pytest.mark.parametrize("command", ["inspect", "run"])
+def test_a_drop_in_the_defaults_of_a_field_an_action_observes_as_optional_stops_the_load(
+    tmp_path, command
+):
+    root = _project(tmp_path, SUFFIX)
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(
+        config.read_text().replace(
+            "  data_source:", "  context_scope: { drop: [note_direct.summary] }\n  data_source:"
+        )
+    )
+
+    result = _agac(root, command, "-a", WORKFLOW)
+    output = " ".join((result.stdout + result.stderr).split())
+
+    assert result.returncode != 0, output
+    assert (
+        "context_scope.observe entry 'note_direct.summary?' is optional, and the drop entry "
+        "'note_direct.summary' removes the same field" in output
+    )
