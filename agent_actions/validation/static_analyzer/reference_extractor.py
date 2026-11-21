@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from jinja2 import Environment, nodes
@@ -9,7 +10,7 @@ from jinja2.exceptions import TemplateSyntaxError
 
 logger = logging.getLogger(__name__)
 
-from agent_actions.prompt.aliases import prompt_aliases
+from agent_actions.prompt.aliases import header_names, prompt_aliases
 from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
@@ -70,7 +71,11 @@ class ReferenceExtractor:
         if prompt:
             requirements.extend(
                 self._extract_from_template(
-                    prompt, agent_name, "prompt", self._promoted_reserved_names(agent_config)
+                    prompt,
+                    agent_name,
+                    "prompt",
+                    self._promoted_reserved_names(agent_config),
+                    header_names(agent_config),
                 )
             )
 
@@ -119,12 +124,13 @@ class ReferenceExtractor:
         _agent_name: str,
         location: str,
         on_the_record: set[str] | None = None,
+        names: Mapping[str, str] | None = None,
     ) -> list[InputRequirement]:
         """Extract references from Jinja2 template using AST parsing."""
         requirements: list[InputRequirement] = []
         seen: set[str] = set()
 
-        jinja_refs = self._extract_jinja_references(template, on_the_record or set())
+        jinja_refs = self._extract_jinja_references(template, on_the_record or set(), names)
         for source, field, raw_ref in jinja_refs:
             ref_key = f"{source}.{field}"
             if ref_key not in seen:
@@ -184,7 +190,10 @@ class ReferenceExtractor:
         ]
 
     def _extract_jinja_references(
-        self, template: str, on_the_record: set[str] | None = None
+        self,
+        template: str,
+        on_the_record: set[str] | None = None,
+        names: Mapping[str, str] | None = None,
     ) -> list[tuple]:
         """Extract variable references from Jinja2 template using AST."""
         references: list[tuple] = []
@@ -201,7 +210,10 @@ class ReferenceExtractor:
             raise
 
         self._walk_ast(
-            ast, references, local_vars=set(on_the_record or ()), aliases=prompt_aliases(ast)
+            ast,
+            references,
+            local_vars=set(on_the_record or ()),
+            aliases=prompt_aliases(ast, names or {}),
         )
         return references
 
