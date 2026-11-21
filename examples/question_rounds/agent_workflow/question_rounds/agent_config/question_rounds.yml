@@ -1,0 +1,59 @@
+name: question_rounds
+description: "Write an exam question, check it, and write it again with the reasons until it passes"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider   # the offline mock; set your own vendor and model to use a real LLM
+  model_name: mock
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+  - name: spec
+    kind: tool
+    impl: read_spec
+    intent: "Read the topic and the checker's bar from the source record"
+    schema: spec
+    context_scope:
+      observe: [source.*]
+
+  # Up to three rounds of write -> check. A record leaves the loop at the first round whose
+  # check passed; the next round's writer reads the previous check as `prior`.
+  - loop: round
+    include: question_round
+    max_iterations: 3
+    inputs: { spec: spec }
+    feedback: { prior: check }
+    until: check.passed == true
+    result: check
+
+  # Downstream reads the loop's name only: the check of the last round that ran.
+  - route: verdict
+    on: round.outcome
+    cases:
+      passed: [publish]
+    default: [flag_for_review]
+
+  - name: publish
+    kind: tool
+    impl: publish_question
+    intent: "Publish a question that passed"
+    schema: published
+    context_scope:
+      observe: [round.question, round.tries, spec.topic]
+
+  - name: flag_for_review
+    kind: tool
+    impl: flag_question
+    intent: "Flag a question that never passed for a human"
+    schema: published
+    context_scope:
+      observe: [round.question, round.reasons, round.tries, spec.topic]
+
+  - join: bank
+    of: [publish, flag_for_review]

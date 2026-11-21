@@ -97,6 +97,8 @@ The load, and so `agac inspect` and `agac run`, refuse:
   ✓  bank           join of mc_write, m__finalize, fb_write, other_write
 ```
 
+`agac docs` lists the router and the join, also in a workflow with no include, and in the editor a read of the router's or the join's name resolves to its entry.
+
 ## Guards or a Router {/* #guards-or-router */}
 
 Guards with `on_false: filter` on parallel actions also send records down different paths, and a record may pass more than one of them. But a record that one guard filters is not in any action where the branches meet again ([Guards](../execution/guards.md#filtered-records-leave-only-what-is-below-the-filter)), so such branches cannot be joined. Use a router when each record enters exactly one branch and the branches meet again. To run one branch again for the records that failed its check, use a [loop](./loops.md).
