@@ -61,7 +61,7 @@ export class WorkflowStatusBar implements vscode.Disposable {
         if (runningAction) {
             icon = '$(sync~spin)';
             runningLabel = ` | [${runningAction.index}] ${runningAction.name}`;
-        } else if (summary.failed > 0) {
+        } else if (summary.failed > 0 || workflow.loadError) {
             icon = '$(error)';
         } else if (summary.completed === summary.total) {
             icon = '$(check-all)';

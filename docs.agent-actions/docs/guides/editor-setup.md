@@ -167,6 +167,8 @@ The Explorer sidebar shows all workflows and actions in execution order:
 - Expand actions to see output folders
 - Multi-workflow support for projects with multiple workflows
 - Status summary shows completed/total count
+- A workflow that uses Jinja (for example `{% from 'x.jinja2' import branch %}`) shows the actions it renders to. The language server renders it with the same step as `agac`, so the LSP must be running.
+- A workflow that does not load stays in the tree with an error row that gives the reason
 
 ### DAG Visualization
 
@@ -381,8 +383,9 @@ The extension provides syntax highlighting for prompt files (Markdown with agent
 Open the Outline view in the VS Code Explorer sidebar to see document symbols:
 
 **In YAML workflow files:**
-- All action names listed as symbols
+- The actions defined in the file listed as symbols
 - Quick jump to any action
+- An action that a template macro defines is not listed, because its line is in the template. Go to Definition on a reference to it opens the macro line.
 
 **In Markdown prompt files:**
 - All `{prompt}` blocks listed

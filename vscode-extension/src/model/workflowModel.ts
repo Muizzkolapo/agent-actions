@@ -35,9 +35,12 @@ import {
     manifestCandidatePaths,
 } from './paths';
 import { readManifest, readAgentStatus } from './manifestReader';
-import { parseWorkflowConfig } from './yamlParser';
+import { fallbackWorkflowName, parseWorkflowConfig, RenderViaLsp } from './yamlParser';
+import { logger } from '../utils/logger';
 
 const CONFIG_GLOB = '**/agent_config/**/*.{yml,yaml}';
+// A macro edit changes the actions of every workflow that imports it.
+const TEMPLATE_GLOB = '**/templates/**/*.{jinja2,j2}';
 
 /** Minimum polling interval to prevent excessive refreshes */
 const MIN_POLL_INTERVAL_MS = 1000;
@@ -186,10 +189,11 @@ export class WorkflowModel implements vscode.Disposable {
 
     readonly onDidChange = this._onDidChange.event;
 
-    constructor() {
+    constructor(private readonly renderViaLsp?: RenderViaLsp) {
         // Set up file watchers
         this.watchers.push(
             vscode.workspace.createFileSystemWatcher(CONFIG_GLOB),
+            vscode.workspace.createFileSystemWatcher(TEMPLATE_GLOB),
             vscode.workspace.createFileSystemWatcher(MANIFEST_GLOB),
             vscode.workspace.createFileSystemWatcher(AGENT_STATUS_GLOB)
         );
@@ -292,15 +296,18 @@ export class WorkflowModel implements vscode.Disposable {
 
             for (const configUri of configFiles) {
                 try {
-                const parsedConfig = await parseWorkflowConfig(configUri);
-                if (!parsedConfig || parsedConfig.actions.length === 0) {
-                    continue;
-                }
+                    const parsedConfig = await parseWorkflowConfig(configUri, this.renderViaLsp);
+                    if (!parsedConfig || parsedConfig.actions.length === 0) {
+                        continue;
+                    }
 
-                const workflow = await this.buildWorkflow(configUri, parsedConfig);
-                workflows.set(workflow.name, workflow);
-                } catch {
-                    // Skip malformed configs so other workflows still load
+                    const workflow = await this.buildWorkflow(configUri, parsedConfig);
+                    workflows.set(workflow.name, workflow);
+                } catch (error) {
+                    // Kept in the tree with its error, so a broken workflow does not vanish.
+                    const failed = this.failedWorkflow(configUri, error);
+                    logger.warn(`Workflow ${failed.name} did not load: ${failed.loadError}`);
+                    workflows.set(failed.name, failed);
                 }
             }
 
@@ -323,6 +330,32 @@ export class WorkflowModel implements vscode.Disposable {
                 void this.refresh();
             }
         }
+    }
+
+    /** A workflow whose config did not load: no actions, and the reason. */
+    private failedWorkflow(configUri: vscode.Uri, error: unknown): WorkflowInfo {
+        const configPath = configUri.fsPath;
+        return {
+            name: fallbackWorkflowName(configUri),
+            rootPath: getProjectRoot(configPath),
+            configPath,
+            actions: [],
+            executionOrder: [],
+            levels: new Map(),
+            statusSummary: {
+                total: 0,
+                pending: 0,
+                running: 0,
+                batch_submitted: 0,
+                checking_batch: 0,
+                completed: 0,
+                completed_with_failures: 0,
+                failed: 0,
+                skipped: 0,
+                interrupted: 0,
+            },
+            loadError: error instanceof Error ? error.message : String(error),
+        };
     }
 
     /**
