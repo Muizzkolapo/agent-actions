@@ -7,6 +7,7 @@ the reply as text, where the batch stored whatever JSON the reply happened to qu
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -180,3 +181,21 @@ def test_batch_retrieve_still_reads_json_out_of_a_json_answer(project, model_wri
     batch_id = _submit(project, json_mode=True)
 
     assert _retrieved_answers(project, batch_id) == [[1, 2, 3]]
+
+
+def test_batch_retrieve_warns_when_the_workflow_has_no_such_action(project, capsys):
+    from agent_actions.llm.batch.batch_cli import _action_config, _BatchContext
+
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(_CONFIG.format(run_mode="batch", json_mode="false"))
+    context = _BatchContext(
+        workflow_name=WORKFLOW,
+        workflow_root=project / "agent_workflow" / WORKFLOW,
+        storage_backend=None,  # type: ignore[arg-type]
+        action_name="renamed_away",
+        project_root=project,
+    )
+
+    assert _action_config(context) is None
+    assert "has no action 'renamed_away'" in capsys.readouterr().err
+    assert _action_config(replace(context, action_name="summarize")) is not None

@@ -39,13 +39,9 @@ def check_environment() -> None:
     limit is not consulted until a file has been walked — and failing there
     leaves that action unstamped. Called once while the run is being assembled.
     """
-    from agent_actions.llm.providers.batch_base import batch_request_cap_from_environment
-
     _refuse_retired_name()
     _from_environment(RECORD_LIMIT_ENV)
     _from_environment(FILE_LIMIT_ENV)
-    # Only judge batches read it, and they go out after the main batch is paid for.
-    batch_request_cap_from_environment()
 
 
 def _refuse_retired_name() -> None:
