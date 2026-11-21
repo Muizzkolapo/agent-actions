@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A record sent elsewhere comes back at a gathering action only through the branch it went to. A record that no branch took, or that another branch took, no longer comes back through an input above the split. Adding or removing the routing keys of an action is an edit of that action.'
+time: 2026-11-21T14:00:00Z

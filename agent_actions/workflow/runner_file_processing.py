@@ -28,7 +28,7 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.processing import SerializationError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
-from agent_actions.record.elsewhere import gathers
+from agent_actions.record.elsewhere import gathers, sends_elsewhere
 from agent_actions.record.reasons import SENT_ELSEWHERE
 from agent_actions.storage.backend import (
     DISPOSITION_FILTERED,
@@ -950,21 +950,17 @@ def _ancestor_action_names(
 
 
 def _gathered_above(
-    storage_backend: Any,
+    graph: dict[str, Any],
     action_name: str,
     ancestors: list[str],
-    action_configs: dict[str, Any] | None,
+    action_configs: dict[str, Any],
 ) -> set[str]:
-    """The ancestors whose records sent elsewhere have come back by ``action_name``.
+    """The ancestors whose records sent elsewhere may come back by ``action_name``.
 
-    Each gathering action, this one or one above it, takes back what every action
-    above it sent elsewhere.
+    Each gathering action, this one or one above it, can take back what an action above
+    it sent elsewhere.
     """
-    configs = action_configs or {}
-    gatherers = [name for name in [action_name, *ancestors] if gathers(configs.get(name))]
-    if not gatherers:
-        return set()
-    graph = _stored_ancestors(storage_backend) or {}
+    gatherers = [name for name in [action_name, *ancestors] if gathers(action_configs.get(name))]
     covered: set[str] = set()
     for gatherer in gatherers:
         above = graph.get(gatherer)
@@ -975,23 +971,59 @@ def _gathered_above(
     return covered
 
 
+@dataclass
+class _DeadRecords:
+    """What is dead above an action: *dead* for good, *elsewhere* unless it comes back.
+
+    A record sent elsewhere comes back only through an input in *carriers*, an input at or
+    below a sending action, which holds a row for it: the record went down that branch.
+    """
+
+    dead: set[str] = field(default_factory=set)
+    elsewhere: set[str] = field(default_factory=set)
+    carriers: set[str] = field(default_factory=set)
+
+    def for_inputs(self, sources: list[tuple[str, Any]]) -> set[str]:
+        """The guids to drop from *sources*, the rows of each input of one file."""
+        if not self.elsewhere:
+            return self.dead
+        came_back = {
+            record.get("source_guid")
+            for name, rows in sources
+            if name in self.carriers and isinstance(rows, list)
+            for record in rows
+            if isinstance(record, dict)
+        }
+        return self.dead | (self.elsewhere - came_back)
+
+
 def _collect_upstream_filtered_guids(
     storage_backend: Any,
     action_name: str,
     upstream_data_dirs: list[str],
-    action_configs: dict[str, Any] | None = None,
-) -> set[str]:
-    """Return source_guids a guard `filter` excluded anywhere upstream of ``action_name``.
+    action_configs: dict[str, Any],
+) -> _DeadRecords:
+    """The source_guids a guard `filter` excluded anywhere upstream of ``action_name``.
 
     A filtered record is dead (guards/ARCHITECTURE.md) but leaves a per-record
     FILTERED disposition, so it can re-enter via an unfiltered sibling — these
     guids are subtracted at fan-in.  A record sent elsewhere is dead the same way,
-    until an action that gathers it.  ``__node__`` markers are rerun signals, not
+    unless an action that gathers it is at or above this one and the record reaches
+    it down the branch it went to.  ``__node__`` markers are rerun signals, not
     record ids.  Fails open on storage errors (a safety net must not abort).
     """
-    filtered_guids: set[str] = set()
+    found = _DeadRecords()
     ancestors = _ancestor_action_names(storage_backend, action_name, upstream_data_dirs)
-    gathered = _gathered_above(storage_backend, action_name, ancestors, action_configs)
+    graph = _stored_ancestors(storage_backend) or {}
+    gathered = _gathered_above(graph, action_name, ancestors, action_configs)
+    senders = {name for name in gathered if sends_elsewhere(action_configs.get(name))}
+    inputs = [Path(d).name for d in upstream_data_dirs]
+    found.carriers = {
+        name
+        for name in inputs
+        if name in senders
+        or (isinstance(graph.get(name), list) and senders.intersection(graph[name]))
+    }
     for dep in ancestors:
         try:
             dispositions = storage_backend.get_disposition(
@@ -1009,10 +1041,12 @@ def _collect_upstream_filtered_guids(
             record_id = disp.get("record_id")
             if not record_id or record_id == NODE_LEVEL_RECORD_ID:
                 continue
-            if dep in gathered and disp.get("reason") == SENT_ELSEWHERE:
-                continue
-            filtered_guids.add(record_id)
-    return filtered_guids
+            if dep in senders and disp.get("reason") == SENT_ELSEWHERE:
+                found.elsewhere.add(record_id)
+            else:
+                found.dead.add(record_id)
+    found.elsewhere -= found.dead
+    return found
 
 
 def _drop_filtered_records(data: Any, filtered_guids: set[str]) -> tuple[Any, int]:
@@ -1132,11 +1166,11 @@ def process_from_storage_backend(
 
     # A guard `filter` anywhere upstream makes those records dead — they must not
     # re-enter here through an unfiltered sibling dependency.
-    filtered_guids = _collect_upstream_filtered_guids(
+    dead_above = _collect_upstream_filtered_guids(
         runner.storage_backend,
         params.action_name,
         params.upstream_data_dirs,
-        getattr(runner, "action_configs", None),
+        runner.action_configs or {},
     )
 
     for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):
@@ -1145,6 +1179,7 @@ def process_from_storage_backend(
             # Before the merge, so a fan-in pairs only records still alive in every branch.
             dropped = 0
             live_sources: list[tuple[str, Any]] = []
+            filtered_guids = dead_above.for_inputs(data_sources)
             for branch, source_data in data_sources:
                 kept, gone = _drop_filtered_records(source_data, filtered_guids)
                 live_sources.append((branch, kept))

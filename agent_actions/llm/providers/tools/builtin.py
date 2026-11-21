@@ -37,10 +37,16 @@ def runs_udf(config: Mapping[str, Any]) -> bool:
 
 
 def field_value(data: Mapping[str, Any], path: str) -> Any:
-    """The value at ``<action>.<field>[.<field>...]`` of a record's action-keyed data."""
+    """The value at ``<action>.<field>[.<field>...]`` of a record's action-keyed data.
+
+    Raises ``KeyError`` naming *path* when the record does not hold it: a field the router
+    does not read would send every record to the default branch.
+    """
     value: Any = data
     for part in path.split("."):
-        value = value.get(part) if isinstance(value, Mapping) else None
+        if not isinstance(value, Mapping) or part not in value:
+            raise KeyError(f"the record holds no '{path}'; observe it on the router")
+        value = value[part]
     return value
 
 
@@ -57,12 +63,16 @@ def route_case(spec: Mapping[str, Any], data: Mapping[str, Any]) -> str:
 
 
 def picked(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any]:
-    """The output of the first action of ``of`` the record holds one of."""
-    for source in spec["of"]:
-        output = data.get(source)
-        if isinstance(output, Mapping):
-            return dict(output)
-    return {}
+    """The output of the one action of ``of`` the record holds an output of.
+
+    Raises ``ValueError`` when more than one holds one: the record went down two branches.
+    """
+    held = [source for source in spec["of"] if isinstance(data.get(source), Mapping)]
+    if len(held) > 1:
+        raise ValueError(
+            f"the record holds an output of {', '.join(held)}; pick takes the output of one of them"
+        )
+    return dict(data[held[0]]) if held else {}
 
 
 def route_case_counts(

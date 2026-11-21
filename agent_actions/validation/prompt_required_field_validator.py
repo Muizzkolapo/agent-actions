@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
@@ -105,7 +106,7 @@ def _walk(node: nodes.Node, guarded: frozenset[str], locals_: frozenset[str], fo
         _walk(child, guarded, locals_, found)
 
 
-def _unguarded_refs(template: str) -> set[tuple[str, str]]:
+def _unguarded_refs(template: str, names: Mapping[str, str]) -> set[tuple[str, str]]:
     """Return the ``(root, field)`` refs used outside any guarding ``{% if %}``."""
     try:
         ast = _ENV.parse(escape_jinja_in_inline_code(template))
@@ -115,7 +116,7 @@ def _unguarded_refs(template: str) -> set[tuple[str, str]]:
     found: set[tuple[str, str]] = set()
     _walk(ast, frozenset(), frozenset(), found)
     # A short name the alias header binds reads the action it names.
-    aliases = prompt_aliases(ast)
+    aliases = prompt_aliases(ast, names)
     return {(aliases.get(root, root), field) for root, field in found}
 
 
@@ -130,7 +131,11 @@ def _optional_field_names(schema: dict) -> set[str]:
     }
 
 
-def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dict]) -> list[str]:
+def find_unguarded_required_refs(
+    prompts: dict[str, str],
+    schemas: dict[str, dict],
+    names: Mapping[str, Mapping[str, str]] | None = None,
+) -> list[str]:
     """Return findings for unguarded prompt refs to non-required producer fields.
 
     A ref ``ns.field`` is flagged when ``ns`` has a producing schema, ``field``
@@ -145,7 +150,7 @@ def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dic
     findings: list[str] = []
     seen: set[tuple[str, str, str]] = set()
     for action_name, template in prompts.items():
-        for ns, field in sorted(_unguarded_refs(template)):
+        for ns, field in sorted(_unguarded_refs(template, (names or {}).get(action_name, {}))):
             if ns == action_name or field not in optional_by_ns.get(ns, frozenset()):
                 continue
             key = (action_name, ns, field)

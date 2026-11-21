@@ -17,11 +17,12 @@ NAMES = {"write": "c2__write", "spec": "a", "same": "same"}
 HEADER = "{% set write = c2__write %}"
 
 
-def _reads(prompt: str) -> list[tuple[str, str]]:
-    return [
-        (r.source_agent, r.field_path)
-        for r in ReferenceExtractor().extract_from_agent({"name": "x", "prompt": prompt})
-    ]
+INSTANCE = {"_include": {"instance": "c2", "names": NAMES}}
+
+
+def _reads(prompt: str, action: dict | None = None) -> list[tuple[str, str]]:
+    config = {"name": "x", "prompt": prompt, **(INSTANCE if action is None else action)}
+    return [(r.source_agent, r.field_path) for r in ReferenceExtractor().extract_from_agent(config)]
 
 
 class TestTheHeader:
@@ -45,7 +46,13 @@ class TestTheHeader:
     def test_a_name_set_twice_at_the_top_level_is_no_alias(self):
         ast = Environment().parse(HEADER + "{% set spec = a %}{% set spec = b %}{{ x }}")
 
-        assert prompt_aliases(ast) == {"write": "c2__write"}
+        assert prompt_aliases(ast, {**NAMES, "spec": "a"}) == {"write": "c2__write"}
+
+    def test_a_set_tag_the_map_does_not_name_is_no_alias(self):
+        ast = Environment().parse(HEADER + "{% set s = spec_a %}{{ s.x }}")
+
+        assert prompt_aliases(ast, NAMES) == {"write": "c2__write"}
+        assert prompt_aliases(ast, {}) == {}
 
 
 class TestTheReferenceExtractor:
@@ -68,16 +75,31 @@ class TestTheReferenceExtractor:
 def test_the_template_scope_extractor_reads_the_action_a_short_name_is_bound_to():
     template = HEADER + "{{ write.text }} {% for write in rows %}{{ write.x }}{% endfor %}"
 
-    assert extract_action_names_from_template(template) == {"c2__write"}
+    assert extract_action_names_from_template(template, NAMES) == {"c2__write"}
 
 
 def test_the_prompt_contract_check_reads_the_action_a_short_name_is_bound_to():
     template = HEADER + "{{ write.text }}{% if write.note %}{{ write.note }}{% endif %}"
 
-    assert _unguarded_refs(template) == {("c2__write", "text"), ("c2__write", "note")}
+    assert _unguarded_refs(template, NAMES) == {("c2__write", "text"), ("c2__write", "note")}
 
 
 def test_the_prompt_cache_check_counts_a_short_name_as_a_per_record_read():
     reads = record_reads_in_prompt({"name": "x", "prompt": HEADER + "{{ write.text }}"})
 
     assert reads == ("c2__write",)
+
+
+class TestAPromptOutsideAnInclude:
+    """Its own `{% set s = spec_a %}` is a local variable, read as it was before the header."""
+
+    PROMPT = "{% set s = spec_a %}{{ s.missing_field }}"
+
+    def test_the_reference_extractor_does_not_read_the_set_value(self):
+        assert _reads(self.PROMPT, {}) == []
+
+    def test_the_template_scope_extractor_does_not_read_it(self):
+        assert extract_action_names_from_template(self.PROMPT) == set()
+
+    def test_the_prompt_contract_check_does_not_read_it(self):
+        assert _unguarded_refs(self.PROMPT, {}) == {("s", "missing_field")}

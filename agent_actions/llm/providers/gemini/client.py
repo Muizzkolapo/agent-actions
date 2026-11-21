@@ -25,11 +25,10 @@ from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     NoAnswer,
     VendorErrorMapping,
-    cut_off_parse_error,
     empty_parse_error,
     empty_response_error,
-    is_truncated,
     stop_reason_name,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -197,10 +196,10 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             logger.warning("Gemini model=%s: %s", model_name, parse_error)
             return [{"raw_response": "", "_parse_error": parse_error}]
         finish_reason = _finish_reason(response_temp)
-        if is_truncated(finish_reason):
-            parse_error = cut_off_parse_error(finish_reason)
-            logger.warning("Gemini model=%s: %s", model_name, parse_error)
-            return [{"raw_response": response_text, "_parse_error": parse_error}]
+        unfinished = unfinished_parse_error(finish_reason)
+        if unfinished:
+            logger.warning("Gemini model=%s: %s", model_name, unfinished)
+            return [{"raw_response": response_text, "_parse_error": unfinished}]
         result = GeminiClient.parse_json_response(
             response_content=response_text,
             vendor_name="Gemini",

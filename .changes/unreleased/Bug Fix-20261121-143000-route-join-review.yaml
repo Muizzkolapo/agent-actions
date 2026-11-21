@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A router on a field that does not hold strings is refused at load, where it filtered every record at run time. A join can name another join and a router can read a join. A join of an action that runs as versions is refused. A join that covers some but not all branches of a router is warned about. A route or join entry in a branch file is refused in one sentence. The editor knows a route and a join by their names.'
+time: 2026-11-21T14:30:00Z
