@@ -26,6 +26,11 @@ def builtin_tool(config: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return spec if isinstance(spec, dict) and spec.get("tool") in BUILTIN_TOOLS else None
 
 
+def is_router(config: Mapping[str, Any]) -> bool:
+    spec = builtin_tool(config)
+    return spec is not None and spec["tool"] == ROUTE
+
+
 def runs_udf(config: Mapping[str, Any]) -> bool:
     """Whether *config* is a tool action whose ``impl`` names a UDF of the project."""
     return config.get("kind") == "tool" and builtin_tool(config) is None

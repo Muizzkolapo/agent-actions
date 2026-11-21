@@ -45,7 +45,7 @@ The command does not cut a count or an action name short.
 | **Unprocessed** | The action never answered the record, for any other reason. An example is an upstream failure that cascaded |
 | **Passthrough** | The model or the tool gave no answer, and `on_empty: skip` kept the record as a tombstone |
 | **Filtered** | The action removed the record from the stream |
-| **Sent elsewhere** | The guard of the action sent the record to another branch. The store keeps it as `filtered` with reason `sent_elsewhere`. The record was never the action's, so it is not in **Filtered** or **Total**. The column shows only when some action sent a record elsewhere |
+| **Sent elsewhere** | The guard of the action sent the record to another branch. The store keeps it as `filtered` with reason `sent_elsewhere`. The record was never the action's, so it is not in **Filtered** or **Total**. The column shows only when some action sent a record elsewhere, as the first action of each branch of a [router](../configuration/routes.md) does |
 
 In the two run modes, the store keeps a guard skip as `unprocessed`. The reason is `guard_skip`.
 For an action of `granularity: file`, the reason is `guard_prefilter_skip`.

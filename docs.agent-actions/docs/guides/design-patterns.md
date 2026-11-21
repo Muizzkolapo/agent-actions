@@ -466,6 +466,24 @@ actions:
 **Limitations:**
 - Guard conditions must be deterministic.
 - Complex routing logic can be hard to debug.
+- A record that one handler filters stays out where the handlers meet again, so an action that depends on all three handlers receives no record.
+
+When each record goes to exactly one handler, write the same workflow with a router and join the handlers afterwards:
+
+```yaml
+  - route: by_status
+    on: classify_order.order_status
+    cases:
+      in_stock: [fulfill_order]
+      out_of_stock: [create_backorder]
+      cancelled: [process_refund]
+    default: filter
+  # fulfill_order, create_backorder, process_refund, without their guards
+  - join: order_outcome
+    of: [fulfill_order, create_backorder, process_refund]
+```
+
+The run output then counts the orders of each status on the router's line, and no handler reports the others as filtered. See [Routes and Joins](../reference/configuration/routes.md).
 
 **Use cases:** Order processing, content-type routing, priority-based handling
 

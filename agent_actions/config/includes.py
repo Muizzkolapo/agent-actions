@@ -26,6 +26,7 @@ from agent_actions.config.schema import (
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.errors.base import enrich_exception_context
 from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
+from agent_actions.llm.providers.tools.builtin import is_router
 from agent_actions.output.response.expander_merge import (
     adapt_inherited_expect,
     collect_judge_context_refs,
@@ -391,6 +392,8 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                 owner[name] = by_instance[origin["instance"]]
                 local[name] = origin["local_name"]
 
+    # A router's case is read by the first action of each of its branches, wherever it is.
+    routers = {action["name"] for action in actions if is_router(action)}
     extractor = ReferenceExtractor()
     for action in actions:
         origin = action.get(_ORIGIN_KEY)
@@ -411,6 +414,8 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
                     _refuse_unknown_short_name(action, name, reader, via)
                 continue
             source = owner.get(name)
+            if name in routers:
+                continue
             if reader is not None:
                 inputs = set(reader.bindings.values())
                 if source is reader or name in inputs or base_of.get(name) in inputs:
@@ -1294,6 +1299,11 @@ def _read_branch_file(folder: Path, name: str, workflow_file: str) -> Any:
             f"{getattr(e, 'problem', None) or e}.",
             context={"branch_file": branch_file(name)},
         ) from None
+
+
+def workflow_label(workflow_path: str | Path, project_root: Path | None = None) -> str:
+    """How a refusal names the workflow file: relative to the project root."""
+    return _workflow_label(Path(workflow_path), resolve_project_root(project_root))
 
 
 def _workflow_label(workflow_path: Path, root: Path) -> str:

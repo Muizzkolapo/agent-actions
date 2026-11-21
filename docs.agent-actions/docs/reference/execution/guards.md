@@ -285,7 +285,7 @@ When an action filters a record, the record is removed from that action. It is a
 that action, directly or through other actions. An action on another branch still receives the record, if it does not depend on
 the action that filters. An action under another start node also receives the record.
 The branches can meet again in an action that depends on the two branches. In that action, the record stays out. It
-does not come back through the branch that kept it.
+does not come back through the branch that kept it. To send each record to exactly one branch and gather the branches again, use a router and a join ([Routes and Joins](../configuration/routes.md)): a record a branch did not take comes back at the join.
 
 ### Upstream failures are short-circuited
 
