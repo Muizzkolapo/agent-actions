@@ -7,6 +7,7 @@ the reply as text, where the batch stored whatever JSON the reply happened to qu
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.output.response.response_builder import ResponseBuilder
@@ -136,3 +138,64 @@ def test_a_json_action_with_no_schema_runs_in_both_modes(project):
     assert "Schema is required" not in batch.output
     (stored,) = _stored(project)
     assert stored and "_parse_error" not in stored
+
+
+def _submit(project, *, json_mode: bool) -> str:
+    """Submit the batch and leave it uncollected; return its id."""
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(_CONFIG.format(run_mode="batch", json_mode=str(json_mode).lower()))
+    result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW, "--fresh"])
+    assert result.exit_code == 0, result.output
+    paths = ProjectPathsFactory.create_project_paths(
+        WORKFLOW, WORKFLOW, auto_create=False, project_root=project
+    )
+    backend = get_storage_backend(workflow_path=str(paths.io_dir.parent), workflow_name=WORKFLOW)
+    backend.initialize()
+    try:
+        (batch_id,) = BatchRegistryManager.batch_ids(backend, "summarize")
+    finally:
+        backend.close()
+    return batch_id
+
+
+def _retrieved_answers(project, batch_id: str) -> list:
+    """The answers `agac batch retrieve` writes to its results file."""
+    result = CliRunner().invoke(
+        cli, ["batch", "retrieve", "-a", WORKFLOW, "--action", "summarize", "--batch-id", batch_id]
+    )
+    assert result.exit_code == 0, result.output
+    results_file = Path(result.output.strip().splitlines()[-1])
+    lines = [json.loads(line) for line in results_file.read_text().splitlines()]
+    return [
+        json.loads(line["response"]["body"]["choices"][0]["message"]["content"]) for line in lines
+    ]
+
+
+def test_batch_retrieve_writes_a_text_answer_as_text(project, model_writes_the_reply):
+    batch_id = _submit(project, json_mode=False)
+
+    assert _retrieved_answers(project, batch_id) == [{"raw_response": REPLY}]
+
+
+def test_batch_retrieve_still_reads_json_out_of_a_json_answer(project, model_writes_the_reply):
+    batch_id = _submit(project, json_mode=True)
+
+    assert _retrieved_answers(project, batch_id) == [[1, 2, 3]]
+
+
+def test_batch_retrieve_warns_when_the_workflow_has_no_such_action(project, capsys):
+    from agent_actions.llm.batch.batch_cli import _action_config, _BatchContext
+
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(_CONFIG.format(run_mode="batch", json_mode="false"))
+    context = _BatchContext(
+        workflow_name=WORKFLOW,
+        workflow_root=project / "agent_workflow" / WORKFLOW,
+        storage_backend=None,  # type: ignore[arg-type]
+        action_name="renamed_away",
+        project_root=project,
+    )
+
+    assert _action_config(context) is None
+    assert "has no action 'renamed_away'" in capsys.readouterr().err
+    assert _action_config(replace(context, action_name="summarize")) is not None
