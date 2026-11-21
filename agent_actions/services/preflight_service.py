@@ -301,8 +301,16 @@ class PreflightService:
         action_names = set(self.action_configs) | {
             c["version_base_name"] for c in configs if c.get("version_base_name")
         }
-        # A tool of an `as:` include reads its siblings by their short names.
-        action_names |= {short for c in configs for short in instance_names(c)}
+        # A tool of an `as:` include reads its instance's actions by their short names
+        # only; a tool function that serves several actions must suit each of them.
+        tool_namespaces: dict[str, set[str]] = {}
+        for c in configs:
+            impl = c.get("model_name")
+            if c.get("kind") != "tool" or not isinstance(impl, str):
+                continue
+            names = instance_names(c)
+            allowed = (action_names - set(names.values())) | set(names)
+            tool_namespaces[impl] = tool_namespaces.get(impl, allowed) & allowed
         impl_refs = {
             c["model_name"]
             for c in configs
@@ -319,6 +327,7 @@ class PreflightService:
                 guard_refs,
                 action_names,
                 promoted_version_names(self.action_configs),
+                tool_namespaces,
             ),
         )
 
