@@ -168,7 +168,7 @@ def test_a_retry_after_one_that_finished_puts_nothing_back(every_record_failed):
     """Stopped after its run reached the end, before it deleted its snapshot: what each
     action holds is newer than that snapshot."""
     root = every_record_failed
-    with patch("agent_actions.cli.retry._classify_outcome", side_effect=KeyboardInterrupt):
+    with patch("agent_actions.cli.retry.classify_outcome", side_effect=KeyboardInterrupt):
         _retry()
     assert (_status(root, ACTION), _status(root, SECOND)) == ("completed", "completed")
     assert _manifest(root).exists()

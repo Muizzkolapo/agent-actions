@@ -46,7 +46,7 @@ _ROUTES = {
     "validate-udfs": ("validate-udfs", "-a", "{wf}", "-u", "tools"),
     "preview": ("preview", "-w", "{wf}"),
     "status": ("status", "-a", "{wf}"),
-    "traces": ("traces", "-w", "{wf}", "-a", "pick"),
+    "traces": ("traces", "-w", "{wf}", "-A", "pick"),
     "records": ("records", "-w", "{wf}"),
 }
 

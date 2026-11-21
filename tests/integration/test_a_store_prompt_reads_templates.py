@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 from tests.helpers.trace_store import trace_rows
 
@@ -86,7 +87,7 @@ def _run(project: Path) -> tuple[int, str]:
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        if result.returncode != 0 or "run again" not in output:
+        if result.returncode != EXIT_PAUSED:
             return result.returncode, " ".join("\n".join(outputs).split())
         args = ["run", "-a", WORKFLOW]
     pytest.fail("the workflow never stopped asking to be run again:\n" + "\n".join(outputs))

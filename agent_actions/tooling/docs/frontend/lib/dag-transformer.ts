@@ -1,5 +1,5 @@
 import dagre from "dagre"
-import type { Node, Edge } from "@xyflow/react"
+import { getViewportForBounds, type Node, type Edge, type Viewport } from "@xyflow/react"
 import type { Action } from "./mock-data"
 
 // ─── Provider detection ──────────────────────────────────────────────────────
@@ -141,8 +141,83 @@ export function applyDagreLayout<T extends Record<string, unknown>>(
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+export const NODE_WIDTH = 240
+export const NODE_HEIGHT = 56
+
 export function transformWorkflowToReactFlow(actions: Record<string, Action>, workflowId: string) {
   const { nodes, edges } = buildDAGNodesAndEdges(actions, workflowId)
-  return applyDagreLayout(nodes, edges, { nodeWidth: 320, nodeHeight: 100, nodesep: 120, ranksep: 240 })
+  return applyDagreLayout(nodes, edges, { nodeWidth: NODE_WIDTH, nodeHeight: NODE_HEIGHT, nodesep: 20, ranksep: 50 })
 }
 
+// ─── Initial viewport ───────────────────────────────────────────────────────
+
+export const MIN_ZOOM = 0.02
+export const MAX_ZOOM = 1.5
+export const FIT_PADDING = 0.1
+// A small workflow fits at full size; scaling it past 1 only makes the boxes big.
+export const FIT_MAX_ZOOM = 1
+// Below this fit zoom the labels cannot be read, so open on the first stage instead.
+export const MIN_READABLE_ZOOM = 0.5
+export const READABLE_ZOOM = 0.8
+const FIRST_STAGE_INSET = 40
+
+export function initialViewport(nodes: Node[], width: number, height: number): Viewport | "fit" {
+  if (nodes.length === 0 || width === 0 || height === 0) return "fit"
+
+  const xs = nodes.map((n) => n.position.x)
+  const ys = nodes.map((n) => n.position.y)
+  const minX = Math.min(...xs)
+  const minY = Math.min(...ys)
+  const bounds = {
+    x: minX,
+    y: minY,
+    width: Math.max(...xs) + NODE_WIDTH - minX,
+    height: Math.max(...ys) + NODE_HEIGHT - minY,
+  }
+  const fit = getViewportForBounds(bounds, width, height, MIN_ZOOM, FIT_MAX_ZOOM, FIT_PADDING)
+  if (fit.zoom >= MIN_READABLE_ZOOM) return "fit"
+
+  const firstStage = nodes.filter((n) => n.position.x < minX + 1).map((n) => n.position.y)
+  const centerY = (Math.min(...firstStage) + Math.max(...firstStage) + NODE_HEIGHT) / 2
+  return {
+    x: FIRST_STAGE_INSET - minX * READABLE_ZOOM,
+    y: height / 2 - centerY * READABLE_ZOOM,
+    zoom: READABLE_ZOOM,
+  }
+}
+
+
+// ─── Lineage ────────────────────────────────────────────────────────────────
+
+export interface Lineage {
+  nodes: Set<string>
+  edges: Set<string>
+}
+
+// Every node upstream and downstream of `id`, and only the edges on a path through it.
+export function traceLineage(id: string, edges: Edge[]): Lineage {
+  const walk = (from: "source" | "target", to: "source" | "target") => {
+    const seen = new Set<string>([id])
+    const queue = [id]
+    while (queue.length > 0) {
+      const current = queue.pop()!
+      for (const e of edges) {
+        if (e[to] === current && !seen.has(e[from])) {
+          seen.add(e[from])
+          queue.push(e[from])
+        }
+      }
+    }
+    return seen
+  }
+  const up = walk("source", "target")
+  const down = walk("target", "source")
+
+  const onPath = new Set<string>()
+  for (const e of edges) {
+    const upstream = up.has(e.source) && up.has(e.target)
+    const downstream = down.has(e.source) && down.has(e.target)
+    if (upstream || downstream) onPath.add(e.id)
+  }
+  return { nodes: new Set([...up, ...down]), edges: onPath }
+}

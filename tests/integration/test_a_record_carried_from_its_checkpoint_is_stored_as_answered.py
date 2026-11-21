@@ -15,6 +15,7 @@ import shutil
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.llm.providers.agac.client import AgacClient
 from tests.integration import test_a_resumed_run_keeps_every_row_of_an_expanded_record as tagging
 from tests.integration import (
@@ -188,7 +189,7 @@ def test_a_resumed_run_whose_one_answered_record_fails_counts_what_it_carried(ta
 
     result = tagging._run()
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _asked(tagged) == ["gamma"]
     assert tagging._status(tagged) == "completed_with_failures"
     assert tagging._status(tagged, tagging.READER) == "completed"
@@ -255,7 +256,7 @@ def test_an_answer_that_failed_to_parse_is_failed_though_the_run_stopped_after_i
 
     result = summarizing._run()
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert asked == ["Page delta."]
     assert summarizing._status(online) == "completed_with_failures"
     states = {_page(row): row.get("_state") for row in summarizing._stored_rows(online)}

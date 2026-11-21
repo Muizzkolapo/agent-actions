@@ -9,6 +9,7 @@ from typing import Any
 import openai
 from openai import OpenAI
 
+from agent_actions.llm.providers.openai.client import without_quota_retries
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import BaseBatchClient, BatchTask
@@ -46,7 +47,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def __init__(self, api_key: str | None = None):
         """Initialize OpenAI client."""
-        self.client = OpenAI(api_key=api_key)
+        self.client = without_quota_retries(OpenAI(api_key=api_key), "openai")
         self._transient_errors = (openai.APIConnectionError, openai.InternalServerError)
 
     def format_task_for_provider(

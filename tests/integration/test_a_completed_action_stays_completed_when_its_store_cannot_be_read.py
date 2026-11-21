@@ -20,6 +20,7 @@ from contextlib import contextmanager
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.llm.providers.tools import client as tool_client
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -99,7 +100,7 @@ def _executor_warnings():
 def one_record_failed(chained):  # noqa: F811
     """`flatten` completed with one failure, `enrich` completed without that record."""
     with _flatten_fails_on_one_page():
-        assert _run("--fresh").exit_code == 0
+        assert _run("--fresh").exit_code == EXIT_RECORD_FAILURES
     assert (_status(chained, ACTION), _status(chained, SECOND)) == (
         "completed_with_failures",
         "completed",
@@ -117,7 +118,7 @@ def test_a_plain_run_leaves_the_failed_record_to_retry(one_record_failed):
     with _the_first_read_of_flattens_output_fails(), _executor_warnings() as warnings:
         result = _run()
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     verifying = f"Could not read whether {ACTION} still holds its output"
     assert any(verifying in w for w in warnings), warnings
     assert _status(root, ACTION) == "completed_with_failures"

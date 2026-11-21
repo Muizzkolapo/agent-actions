@@ -105,7 +105,7 @@ These six keys are the full vocabulary. Agent Actions refuses, by name, any othe
 Rules come from three sources. Thus the block of an action does not always show which rules the action gets. [`agac expect list`](../cli/expect.md) resolves the rules in the same way as the runner. It prints the rules that would run:
 
 ```bash
-agac expect list -a my_workflow --action summarize
+agac expect list -w my_workflow -A summarize
 ```
 
 ## Deterministic expectation types
@@ -239,7 +239,7 @@ Preflight also rejects a constant condition that refers to no record fields, bec
 | `rule` (string) | *(required)* | The natural-language criterion that the judge evaluates |
 | `votes` (number) | `1` | The number of independent judge runs. The majority result is the verdict. A tie **fails closed**: an even split never counts as a pass |
 | `model` (string) | the `model_name` of the action | The model that judges the value, in place of the default |
-| `context` (list) | none | A list of `action.field` references. Agent Actions resolves them with the *same* `context_scope` mechanism as prompts. It sends them to the judge as grounding text |
+| `context` (list) | none | A list of `action.field` references. Agent Actions resolves them with the *same* `context_scope` mechanism as prompts. It sends them to the judge as grounding text. A reference does not take the optional mark `?` (see [Optional Fields](../context/context-scope.md#limits)) |
 
 ### Testing a judge offline
 
@@ -253,7 +253,7 @@ At load time, Agent Actions automatically adds each reference in `context:` to t
 
 - **Cache:** The key of a judge call is `(expectation, resolved value)`. Two records (or two rules) can produce byte-identical content for the same rule. Then Agent Actions gets the second result from the cache, and does not make another real LLM call. The `context:` of the rule is not part of the key. If two records hold the same value with different grounding context, the judge reads only the context of the first record. The second record gets the same verdict. This is the same online and in batch.
 - **Budget:** `judge_budget` on the `expect:` block sets the maximum number of real judge calls for all the records that the action processes in one run. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
-- **Failure isolation:** If the LLM call of the judge has an error (network, authentication, rate limit), only that outcome fails. The outcome has the error in its `detail`. The error does not stop the processing of the record.
+- **Failure isolation:** If the LLM call of the judge has an error (network, authentication, rate limit), only that outcome fails. The outcome has the error in its `detail`. The error does not stop the processing of the record. A quota or billing stop at a judge call stops the run (see [quota stop](../cli/run.md#quota-stop)).
 
 ### Judging in batch
 
@@ -469,7 +469,7 @@ The `skipped` list holds the rules with `error` severity that Agent Actions coul
 To read the verdicts of a full run, use [`agac expect report`](../cli/expect.md#expect-report). The report shows which rule fails most often, and on which action:
 
 ```bash
-agac expect report -a my_workflow
+agac expect report -w my_workflow
 ```
 
 To make CI fail when the quality decreases, give it a threshold. [`--fail-under`](../cli/expect.md#gating-ci-with-a-threshold) exits with a non-zero code when an action is below the threshold. It also exits non-zero when the expectations of an action were never checked.
@@ -599,7 +599,7 @@ A record that does not have `question_type` waives the rule. A record that has `
 - Preflight builds each suite in the same way as the runner. Thus preflight also checks the rules declared on the fields of a schema.
 
 ```bash
-agac inspect -a my_workflow
+agac inspect -w my_workflow
 ```
 
 If the command shows the action list, these checks passed.

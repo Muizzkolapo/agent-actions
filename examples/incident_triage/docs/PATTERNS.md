@@ -367,7 +367,7 @@ return {'result': 'value'}  # Only new fields
 python -c "from tools.aggregate_severity_votes import *; print(aggregate_severity_votes({...}))"
 
 # Test full workflow
-agac run -a incident_triage --input test_data.json
+agac run -w incident_triage --input test_data.json
 ```
 
 ### Output Validation
