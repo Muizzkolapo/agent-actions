@@ -570,10 +570,10 @@ For the full interface that you can browse, see [Documentation Site](../document
 
 ```bash
 # Set log level via environment variable
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 
 # Or use the --debug flag, which goes before the command
-agac --debug run -a my_workflow
+agac --debug run -w my_workflow
 ```
 
 The framework writes the events of each run to `agent_io/logs/events.json` and `errors.json` in the workflow folder (see above).
@@ -601,7 +601,7 @@ for k, v in counts.most_common():
 agac preview -w my_workflow -A extract_data
 
 # Check workflow status
-agac status -a my_workflow
+agac status -w my_workflow
 ```
 
 ## See Also

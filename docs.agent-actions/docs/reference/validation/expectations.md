@@ -104,7 +104,7 @@ These six keys are the full vocabulary. Agent Actions refuses, by name, any othe
 Rules come from three sources. Thus the block of an action does not always show which rules the action gets. [`agac expect list`](../cli/expect.md) resolves the rules in the same way as the runner. It prints the rules that would run:
 
 ```bash
-agac expect list -a my_workflow --action summarize
+agac expect list -w my_workflow -A summarize
 ```
 
 ## Deterministic expectation types
@@ -454,7 +454,7 @@ The `skipped` list holds the rules with `error` severity that Agent Actions coul
 To read the verdicts of a full run, use [`agac expect report`](../cli/expect.md#expect-report). The report shows which rule fails most often, and on which action:
 
 ```bash
-agac expect report -a my_workflow
+agac expect report -w my_workflow
 ```
 
 To make CI fail when the quality decreases, give it a threshold. [`--fail-under`](../cli/expect.md#gating-ci-with-a-threshold) exits with a non-zero code when an action is below the threshold. It also exits non-zero when the expectations of an action were never checked.
@@ -584,7 +584,7 @@ A record that does not have `question_type` waives the rule. A record that has `
 - Preflight builds each suite in the same way as the runner. Thus preflight also checks the rules declared on the fields of a schema.
 
 ```bash
-agac inspect -a my_workflow
+agac inspect -w my_workflow
 ```
 
 If the command shows the action list, these checks passed.
