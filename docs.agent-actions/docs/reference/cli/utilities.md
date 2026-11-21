@@ -276,7 +276,7 @@ The [exit code](./run.md#exit-codes) of `agac run` and of `agac retry` tells mor
 
 `run_status` is `PAUSED` also while a run is in progress. Thus `run_status` cannot tell a running workflow from a paused one. A monitor must read `actions[].status` for this, for example to find an action with the status `running`.
 
-If no action status is stored, the command prints this message and stops with exit code 0. An empty status file (`{}`) gives the same message. With `--json`, the message goes to stderr, and stdout has the document with `run_status` set to `null`. Without `--json`, the message goes to stdout:
+If the status file holds no action status, the command prints this message and stops with exit code 0. An empty status file (`{}`) gives the same message. With `--json`, the message goes to stderr, and stdout has the document with `run_status` set to `null`. Without `--json`, the message goes to stdout:
 
 ```text
 No action status is stored for workflow 'my_workflow'. Has it been run?
@@ -288,6 +288,15 @@ If the status file holds a status that is not in the list above, the command sto
 Error: Status file is corrupted: <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
 Action 'summarize' has an unknown status: 'weird'
 ```
+
+Each action entry in the status file must be a JSON object. If an entry is not an object, for example `"summarize": "completed"`, the command stops with exit code 1 and gives this error:
+
+```text
+Error: Status file is corrupted: <project>/agent_workflow/my_workflow/agent_io/.agent_status.json
+Action 'summarize' is not an object: 'completed'
+```
+
+`agac run` and the other commands that load the workflow also stop on such an entry, with the same two lines in their error. `agac run --fresh` does not stop: it clears the status file and starts again.
 
 The command reads only the status file. It does not read the workflow configuration. Thus an action that you removed from the configuration stays in the output until `agac run --fresh` clears the file.
 

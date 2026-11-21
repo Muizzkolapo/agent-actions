@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A status file whose action entry is not a JSON object (for example `"summarize": "completed"`) now stops `agac status` with exit code 1 and `Status file is corrupted`, naming the file and the action. `agac run` and the other commands that load the workflow stop with the same error, where `agac run` crashed with an `AttributeError` before. `agac run --fresh` still clears such a file and starts again. (#1830)'
+time: 2026-11-21T12:00:00Z

@@ -86,12 +86,18 @@ If one of these options is missing or wrong, the command prints an error on stde
 
 | Cause | Error |
 |-------|-------|
-| No workflow option, in a command that needs it, other than `traces`, `records`, `preview` and `inspect` | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
+| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `traces`, `records`, `preview` and `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
 | No workflow option, in `traces`, `records` or `preview` | `Error: Missing option '-w' / '--workflow' / '--agent'.` |
 | No action option, in `traces` | `Error: Missing option '-A' / '--action'.` |
 | `-a` and `-A` together, in `traces`, `records` or `preview` | `Error: -a and -A both name the action: give -A alone.` |
 
-[`inspect`](./inspect) gives its own error for a missing workflow option.
+[`agac inspect`](./inspect), with no subcommand, gives its own error for a missing workflow option:
+
+```text
+Error: Missing required option '-w' / '--workflow'. Run 'agac inspect --help' for usage.
+```
+
+Before each `Error:` line, the command also prints a log line on stderr in the form `HH:MM:SS | Usage error: <the same text>`.
 
 ## Working Directory
 
