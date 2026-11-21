@@ -91,7 +91,15 @@ def process_recovery_batch(
         effective_action_name,  # type: ignore[arg-type]
         parent_file_name,
     )
-    if not state:
+    # A judge batch is registered before its state is saved. A run that stopped between
+    # the two left the state of the round before, whose entry the registration replaced:
+    # read against it, the batch would write the file with no records.
+    judge_state_lost = (
+        state is not None
+        and entry.recovery_type == RecoveryType.JUDGE
+        and state.judge_attempt != entry.recovery_attempt
+    )
+    if not state or judge_state_lost:
         # Without state this entry can never be interpreted, and while it exists
         # it supersedes its parent — so leaving it registered wedges the action
         # on the same error every run. Dropping it hands the parent back to the
