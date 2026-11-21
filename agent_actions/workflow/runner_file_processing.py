@@ -27,6 +27,7 @@ from agent_actions.errors import (
     raised_by_terminal_failure,
 )
 from agent_actions.errors.processing import SerializationError
+from agent_actions.llm.providers.tools.builtin import builtin_tool
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.elsewhere import gathers, sends_elsewhere
 from agent_actions.record.reasons import SENT_ELSEWHERE
@@ -1024,6 +1025,10 @@ def _collect_upstream_filtered_guids(
         if name in senders
         or (isinstance(graph.get(name), list) and senders.intersection(graph[name]))
     }
+    # A loop's result names the branches it closes, the exit of each iteration among them.
+    spec = builtin_tool(action_configs.get(action_name))
+    if spec is not None and isinstance(spec.get("loop"), dict):
+        found.carriers.update(name for name in spec.get("of", []) if name in inputs)
     for dep in ancestors:
         try:
             dispositions = storage_backend.get_disposition(

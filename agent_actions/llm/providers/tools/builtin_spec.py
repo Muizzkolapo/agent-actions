@@ -36,6 +36,8 @@ class PickSpec(BaseModel):
 
     tool: Literal["pick"]
     of: list[str] = Field(min_length=1)
+    # Written by the load for the result action of a loop: its settings.
+    loop: dict[str, Any] | None = None
 
 
 _SPECS: dict[str, type[BaseModel]] = {ROUTE: RouteSpec, PICK: PickSpec}
