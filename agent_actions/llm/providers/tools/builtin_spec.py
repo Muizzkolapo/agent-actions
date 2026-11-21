@@ -18,6 +18,8 @@ class RouteSpec(BaseModel):
     field: str = Field(min_length=1)
     cases: list[str] = Field(min_length=1)
     default: bool
+    # Written by the load for `agac inspect`: each case to its entry actions.
+    branches: dict[str, Any] | None = None
 
     @field_validator("cases")
     @classmethod

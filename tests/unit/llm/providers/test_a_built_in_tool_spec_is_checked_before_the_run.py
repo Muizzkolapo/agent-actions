@@ -139,3 +139,15 @@ def test_pick_refuses_a_record_that_holds_two_outputs():
 
     with pytest.raises(ValueError, match="holds an output of on_a, on_b"):
         run_builtin(PICK, data)
+
+
+@pytest.mark.parametrize(("value", "type_name"), [(1, "int"), (1.5, "float"), (True, "bool")])
+def test_route_fails_a_record_whose_value_is_no_string_naming_its_type(value, type_name):
+    with pytest.raises(TypeError, match=rf"source.kind holds {value!r} \({type_name}\); a router"):
+        run_builtin(ROUTE, {"source": {"kind": value}})
+
+
+def test_route_sends_a_null_value_to_the_default_branch():
+    assert run_builtin({**ROUTE, "default": True}, {"source": {"kind": None}}) == {
+        "case": "default"
+    }

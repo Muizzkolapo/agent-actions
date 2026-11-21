@@ -26,6 +26,11 @@ def builtin_tool(config: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return spec if isinstance(spec, dict) and spec.get("tool") in BUILTIN_TOOLS else None
 
 
+def is_router(config: Mapping[str, Any]) -> bool:
+    spec = builtin_tool(config)
+    return spec is not None and spec["tool"] == ROUTE
+
+
 def runs_udf(config: Mapping[str, Any]) -> bool:
     """Whether *config* is a tool action whose ``impl`` names a UDF of the project."""
     return config.get("kind") == "tool" and builtin_tool(config) is None
@@ -47,6 +52,11 @@ def field_value(data: Mapping[str, Any], path: str) -> Any:
 
 def route_case(spec: Mapping[str, Any], data: Mapping[str, Any]) -> str:
     value = field_value(data, spec["field"])
+    if value is not None and not isinstance(value, str):
+        raise TypeError(
+            f"{spec['field']} holds {value!r} ({type(value).__name__}); "
+            "a router matches strings only"
+        )
     if isinstance(value, str) and value in spec["cases"]:
         return value
     if spec.get("default"):

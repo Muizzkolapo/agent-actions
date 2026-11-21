@@ -17,9 +17,14 @@ def test_route_writes_the_value_when_it_is_a_case():
     assert run_builtin(ROUTE, {"classify": {"format": "fill"}}) == {"case": "fill"}
 
 
-@pytest.mark.parametrize("value", ["matching", None, 3, "MC"])
-def test_route_writes_default_for_any_other_value(value):
+@pytest.mark.parametrize("value", ["matching", None, "MC"])
+def test_route_writes_default_for_any_other_string_or_null(value):
     assert run_builtin(ROUTE, {"classify": {"format": value}}) == {"case": "default"}
+
+
+def test_route_fails_a_value_that_is_no_string_rather_than_writing_default():
+    with pytest.raises(TypeError, match=r"classify.format holds 3 \(int\)"):
+        run_builtin(ROUTE, {"classify": {"format": 3}})
 
 
 def test_route_with_no_default_refuses_a_value_that_is_no_case():
