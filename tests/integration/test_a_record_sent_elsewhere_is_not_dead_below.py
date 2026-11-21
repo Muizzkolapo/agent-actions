@@ -18,6 +18,7 @@ import pytest
 
 from agent_actions.record.reasons import SENT_ELSEWHERE
 from agent_actions.storage.backend import DISPOSITION_FILTERED
+from tests._support.agac_cli import run_agac
 from tests.integration.test_a_reader_with_a_batch_out_follows_an_upstream_edit import (
     _config,
     _rows,
@@ -249,6 +250,20 @@ def test_agac_dispositions_counts_a_record_sent_elsewhere_apart_from_filtered(sp
     assert left["Filtered"] == "0", output
     assert left["Sent elsewhere"] == str(PAGES - 1), output
     assert left["Total"] == "1", output
+
+
+@SPLIT_MODES
+def test_agac_dispositions_json_counts_a_record_sent_elsewhere_as_the_table_does(split):
+    root, _ = split
+
+    result = run_agac(root, "dispositions", "-w", WORKFLOW, "--json")
+
+    assert result.returncode == 0, result.stderr
+    report = {entry["name"]: entry for entry in json.loads(result.stdout)["actions"]}
+    assert report["left"]["sent_elsewhere"] == PAGES - 1
+    assert report["left"]["counts"]["filtered"] == 0
+    assert report["left"]["total"] == 1
+    assert report["joined"]["sent_elsewhere"] == 0
 
 
 @RUN_MODES

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 from tests.helpers.store import stored_rows
 
@@ -91,7 +92,7 @@ class TestASubmittedBatchIsCollectableByTheNextRun:
     def test_the_second_run_does_not_report_an_unknown_batch(self, project):
         """The symptom: the provider is asked about a batch it no longer holds,
         and answers with a status the framework has no handling for."""
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
 
         _, output = _run(project)
 
@@ -100,7 +101,7 @@ class TestASubmittedBatchIsCollectableByTheNextRun:
     def test_the_workflow_completes(self, project):
         """Two runs is the contract a paused batch states: submit, then collect."""
         first_code, first = _run(project, "--fresh")
-        assert first_code == 0, first
+        assert first_code == EXIT_PAUSED, first
         assert "run again" in first, "the fixture did not pause on submission"
 
         code, output = _run(project)
@@ -116,9 +117,9 @@ class TestASubmittedBatchIsCollectableByTheNextRun:
         A count that restarted each run would sit at one forever.
         """
         env = {"AGAC_BATCH_POLLS_UNTIL_COMPLETE": "2", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "999"}
-        assert _run(project, "--fresh", env=env)[0] == 0
+        assert _run(project, "--fresh", env=env)[0] == EXIT_PAUSED
         second_code, second = _run(project, env=env)
-        assert second_code == 0, second
+        assert second_code == EXIT_PAUSED, second
         assert "paused" in second, "a threshold of two cannot be met by one poll"
 
         code, output = _run(project, env=env)
@@ -127,7 +128,7 @@ class TestASubmittedBatchIsCollectableByTheNextRun:
         assert "paused" not in output, output
 
     def test_it_produces_the_records_it_submitted(self, project):
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
         _run(project)
 
         assert _records(project), "the batch was submitted but nothing was ever collected"
@@ -259,29 +260,29 @@ class TestTheRecordHasAnEndOfLife:
 
     def test_an_abandoned_batch_is_reclaimed_by_a_fresh_run(self, project):
         """A batch nobody ever collects is what --fresh means by a clean slate."""
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
         abandoned = set(self._on_disk(project))
         assert abandoned, "the submit recorded nothing to reclaim"
 
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
 
         assert not abandoned & set(self._on_disk(project))
 
     def test_a_collected_batch_is_reclaimed_by_a_fresh_run(self, project):
         """--fresh drops the registry too, so nothing can be sent back to it."""
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
         assert _run(project)[0] == 0
         collected = set(self._on_disk(project))
         assert collected, "the cycle recorded nothing to reclaim"
 
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
 
         assert not collected & set(self._on_disk(project))
 
     def test_a_neighbours_fresh_run_does_not_take_this_batch(self, project):
         """One `.agac/batch_state` serves the whole project; --fresh is per
         workflow. A neighbour's clean slate must leave this batch collectable."""
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
         in_flight = set(self._on_disk(project))
         assert in_flight, "the submit recorded nothing"
 
@@ -295,7 +296,7 @@ class TestTheRecordHasAnEndOfLife:
     def test_clean_all_reclaims_the_records_it_would_orphan(self, project):
         """`agac clean --all` wipes the store holding the registry. Afterwards no
         entry names these batches, so nothing could ever find them to reclaim."""
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
         assert self._on_disk(project), "the submit recorded nothing"
 
         cleaned = run_agac(project, "clean", "-a", WORKFLOW, "--all", "-f")
@@ -332,11 +333,11 @@ class TestTheRecordHasAnEndOfLife:
         written before the registry entry was saved is named by nothing, so
         only a sweep can reach it. Backdated because a write in progress owns
         its temp file and a sweep has to leave that one alone."""
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
         orphan = project / ".agac" / "batch_state" / "mock_batch_abandoned_kj38fa.tmp"
         orphan.write_text('{"tasks": [{"user_content": "secret"}]}')
         os.utime(orphan, (1700000000, 1700000000))
 
-        assert _run(project, "--fresh")[0] == 0
+        assert _run(project, "--fresh")[0] == EXIT_PAUSED
 
         assert not orphan.exists()

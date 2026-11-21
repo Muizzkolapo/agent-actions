@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.processing.unified import UnifiedProcessor
 from tests.integration.test_retry_ignores_record_cap import (
@@ -121,7 +122,7 @@ class TestOneDroppedRecordDoesNotFailTheFile:
     def test_the_action_runs(self, one_unobservable):
         _project, _dropped, result = one_unobservable
 
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
 
     def test_the_length_mismatch_is_not_reported(self, one_unobservable):
         """Named because the mismatch is the symptom the issue reported, and a
@@ -282,7 +283,7 @@ class TestTheListHandedToTheGuardIsThePreObserveOne:
 
         with patch.object(UnifiedProcessor, "process", _capture):
             result = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == EXIT_RECORD_FAILURES, result.output
         assert seen, "the FILE-mode branch was never reached — nothing was captured"
         return seen
 

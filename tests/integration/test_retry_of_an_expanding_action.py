@@ -15,6 +15,7 @@ from collections import Counter
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from tests.integration.test_retry_ignores_record_cap import (
     ACTION,
@@ -499,7 +500,7 @@ Restate this summary verbatim.
 def _invoke(*args):
     """Run agac in-process, and once more when it leaves a batch to collect."""
     result = CliRunner().invoke(cli, list(args))
-    assert result.exit_code == 0, result.output
+    assert result.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), result.output
     output = result.output
     if "run again" in output.lower():
         again = CliRunner().invoke(cli, ["run", "-a", WORKFLOW])

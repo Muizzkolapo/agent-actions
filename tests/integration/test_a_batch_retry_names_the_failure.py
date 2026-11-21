@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests._support.agac_cli import run_agac
 
 SOURCE = Path(__file__).parent / "fixtures" / "expectation_authors"
@@ -72,11 +73,11 @@ def test_records_sent_to_a_retry_are_reported_with_their_failure(tmp_path):
     env = {"OLLAMA_API_KEY": "not-used", "COLUMNS": "400"}
 
     submitted = run_agac(root, "run", "-a", WORKFLOW, "--fresh", env=env)
-    assert submitted.returncode == 0, _text(submitted)
+    assert submitted.returncode == EXIT_PAUSED, _text(submitted)
 
     retried = run_agac(root, "run", "-a", WORKFLOW, env=env)
     output = _text(retried)
-    assert retried.returncode == 0, output
+    assert retried.returncode == EXIT_PAUSED, output
     assert "possible orphans" not in output, output
     assert "2 record(s) wait on retry attempt 2 of 2 after their last attempt failed" in output
     assert "Failed to connect to Ollama" in output.split("wait on retry attempt")[1], output

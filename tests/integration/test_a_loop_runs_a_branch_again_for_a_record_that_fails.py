@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 from tests._support.agac_cli import run_agac
@@ -183,14 +184,17 @@ def _agac(root: Path, *args: str) -> tuple[int, str]:
     return result.returncode, " ".join((result.stdout + result.stderr).split())
 
 
-def _run_to_the_end(root: Path, *first: str) -> str:
+def _run_to_the_end(root: Path, *first: str, ends: int = EXIT_SUCCESS) -> str:
+    """Run until the workflow stops asking to be run again; the last run exits *ends*."""
     code, output = _agac(root, "run", *first)
     transcript = [output]
-    while code == 0 and "run again" in transcript[-1]:
+    while code == EXIT_PAUSED:
+        assert "run again" in transcript[-1], transcript[-1]
         assert len(transcript) <= 12, "the workflow never stopped asking to be run again"
         code, output = _agac(root, "run")
         transcript.append(output)
-    assert code == 0, transcript[-1]
+    assert code == ends, transcript[-1]
+    assert "run again" not in transcript[-1], transcript[-1]
     return "\n".join(transcript)
 
 
@@ -323,7 +327,8 @@ def test_8_2_a_stop_after_iteration_1_resumes_at_iteration_2_in_batch(tmp_path):
     code, output = _agac(root, "run", "--fresh")
     stopped_after_iteration_1 = None
     runs = 0
-    while code == 0 and "run again" in output:
+    while code == EXIT_PAUSED:
+        assert "run again" in output, output
         runs += 1
         assert runs <= 12, output
         statuses = _statuses(root)
@@ -369,12 +374,13 @@ def test_8_2_a_stop_inside_iteration_2_resumes_there_and_does_not_run_iteration_
 def test_retry_after_a_failure_inside_an_iteration_runs_that_iteration_on(tmp_path, run_mode):
     root = _project(tmp_path, run_mode, {"early": 1, "late": 2, "never": 9})
     (root / FAULT).write_text(json.dumps({"topic": "late", "try": 2}))
-    transcript = _run_to_the_end(root, "--fresh")
+    transcript = _run_to_the_end(root, "--fresh", ends=EXIT_RECORD_FAILURES)
     assert sorted(_round(root)) == ["early", "never"], transcript
     (root / FAULT).unlink()
 
     code, output = _agac(root, "retry")
-    while code == 0 and "run again" in output:
+    while code == EXIT_PAUSED:
+        assert "run again" in output, output
         code, output = _agac(root, "run")
 
     assert code == 0, output

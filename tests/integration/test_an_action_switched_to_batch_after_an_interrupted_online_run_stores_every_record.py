@@ -7,6 +7,7 @@ read only the stored file and the record was left with a `success` disposition a
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED
 from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_answers import (
     ACTION,
     EVERY_PAGE,
@@ -32,7 +33,7 @@ def switched(online, provider):  # noqa: F811
 
 def _submit_and_collect():
     first, second = _run(), _run()
-    assert first.exit_code == 0, first.output
+    assert first.exit_code == EXIT_PAUSED, first.output
     assert second.exit_code == 0, second.output
     return second
 

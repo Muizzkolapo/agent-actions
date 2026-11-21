@@ -15,7 +15,11 @@ from agent_actions.config.schema import version_variant_names
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.base import AgentActionsError
-from agent_actions.input.context.normalizer import DIRECTIVE_REGISTRY, normalize_context_scope
+from agent_actions.input.context.normalizer import (
+    DIRECTIVE_REGISTRY,
+    OPTIONAL_DIRECTIVE,
+    normalize_context_scope,
+)
 from agent_actions.output.response.expander_merge import inherited_context_scope
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
@@ -105,8 +109,9 @@ def _normalise_known_directives(
     can rather than refusing to build. Per directive, not per block: normalising nothing when
     one key is unknown suppressed version expansion for every reference in the same workflow.
     """
-    known = {k: v for k, v in scope.items() if k in DIRECTIVE_REGISTRY}
-    unknown = {k: v for k, v in scope.items() if k not in DIRECTIVE_REGISTRY}
+    readable = {*DIRECTIVE_REGISTRY, OPTIONAL_DIRECTIVE}
+    known = {k: v for k, v in scope.items() if k in readable}
+    unknown = {k: v for k, v in scope.items() if k not in readable}
     try:
         normalised = normalize_context_scope(known, version_base_map)
     except ConfigurationError as e:
@@ -250,10 +255,13 @@ class WorkflowParser:
             # Inferring from the raw block reported a scope the dependency graph did not agree
             # with -- an inherited observe named an upstream the graph then omitted.
             inherited = action_defaults(action_data, defaults)
-            merged_scope = _normalise_known_directives(
-                inherited_context_scope(action_data, inherited) or {},
-                version_base_map,
-            )
+            try:
+                inherited_scope = inherited_context_scope(action_data, inherited) or {}
+            except ConfigurationError as e:
+                # An entry the loader refuses on a run; the catalog shows the action's own.
+                logger.debug("Context scope of %s not merged with its defaults: %s", action_name, e)
+                inherited_scope = action_data.get("context_scope") or {}
+            merged_scope = _normalise_known_directives(inherited_scope, version_base_map)
             inference_input = (
                 {**action_data, "context_scope": merged_scope} if merged_scope else action_data
             )

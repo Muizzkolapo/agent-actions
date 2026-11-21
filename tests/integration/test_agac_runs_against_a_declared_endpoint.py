@@ -431,5 +431,5 @@ def test_the_sample_project_probe_shows_each_endpoint_its_own_credential(tmp_pat
         assert "honour-secret-value-0001" not in output
         assert "ignore-secret-value-0002" not in output
 
-        stored = run_agac(root, "records", "-w", "ql_endpoint_probe", "-a", "on_honour").stdout
+        stored = run_agac(root, "records", "-w", "ql_endpoint_probe", "-A", "on_honour").stdout
         assert all(f"row-{i}" in stored for i in (1, 2, 3))

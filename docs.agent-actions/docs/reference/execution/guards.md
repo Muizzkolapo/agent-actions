@@ -279,6 +279,8 @@ actions:
     # Can define its own guard or process everything
 ```
 
+On a skipped record, the namespace of the action that skipped it is null. A prompt of a downstream action that reads a field of that namespace fails the record. Pre-flight warns about each such `observe` entry: `'extract_facts.facts' may be null at runtime`. To read the field safely, observe it as optional (`extract_facts.facts?`). The field is then null, or a default that you state, on a skipped record, and pre-flight gives no warning. See [Optional Fields](../context/context-scope.md#optional-fields).
+
 ### Filtered records leave only what is below the filter
 
 When an action filters a record, the record is removed from that action. It is also removed from each action that depends on

@@ -409,3 +409,23 @@ def test_a_guard_clause_renames_only_the_action_at_the_root_of_a_field_path(clau
         assert repr(after.ast.root).replace("c2__write.", "write.").replace(
             "'a.", "'spec."
         ) == repr(before.ast.root)
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "write.word?",
+        {"field": "write.word", "optional": True, "default": "none yet"},
+    ],
+    ids=["marked", "mapping"],
+)
+def test_an_optional_observe_entry_of_an_instance_reads_the_action_of_its_instance(entry):
+    review = {**copy.deepcopy(REVIEW), "context_scope": {"observe": [entry]}}
+
+    expanded = _expanded([A, _use("c")], _round([WRITE, review]))
+
+    (observed,) = expanded["c__review"]["context_scope"]["observe"]
+    if isinstance(entry, dict):
+        assert observed == {**entry, "field": "c__write.word"}
+    else:
+        assert observed == "c__write.word?"

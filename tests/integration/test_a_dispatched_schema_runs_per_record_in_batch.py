@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_dispatched_schema_runs_per_record import (
     keys_by_page,
@@ -23,7 +24,7 @@ def test_each_batch_task_carries_the_schema_its_record_was_given(tmp_path):
 
     submitted = run_agac(root, "run", "-a", "w", "--fresh", env=_BATCH_NOW)
 
-    assert submitted.returncode == 0, submitted.stdout + submitted.stderr
+    assert submitted.returncode == EXIT_PAUSED, submitted.stdout + submitted.stderr
     (batch,) = (root / ".agac" / "batch_state").glob("*.json")
     tasks = json.loads(batch.read_text())["tasks"]
     assert len(tasks) == 2
@@ -39,7 +40,7 @@ def test_each_batch_row_answers_in_the_schema_its_function_picked(tmp_path):
     for args in (("--fresh",), (), (), ()):
         result = run_agac(root, "run", "-a", "w", *args, env=_BATCH_NOW)
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
         if "run again" not in output:
             break
     assert "run again" not in output, output
@@ -68,7 +69,7 @@ def test_a_retry_round_in_a_new_process_uses_the_recorded_choice(tmp_path):
         )
     )
     submitted = run_agac(root, "run", "-a", "w", "--fresh", env=_BATCH_NOW)
-    assert submitted.returncode == 0, submitted.stdout + submitted.stderr
+    assert submitted.returncode == EXIT_PAUSED, submitted.stdout + submitted.stderr
     (batch,) = (root / ".agac" / "batch_state").glob("*.json")
     held = json.loads(batch.read_text())
     held["tasks"] = held["tasks"][1:]
@@ -79,7 +80,7 @@ def test_a_retry_round_in_a_new_process_uses_the_recorded_choice(tmp_path):
     for _ in range(4):
         result = run_agac(root, "run", "-a", "w", env=_BATCH_NOW)
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output
         if "run again" not in output:
             break
 

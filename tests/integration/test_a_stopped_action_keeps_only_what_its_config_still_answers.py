@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -254,7 +255,7 @@ def _collecting_fails_on(file_name):
 
 def _stop_collecting_after_the_first_file():
     """Submit both files, then collect the first and stop on the second."""
-    assert _run("--fresh").exit_code == 0
+    assert _run("--fresh").exit_code == EXIT_PAUSED
     with _collecting_fails_on("pages2.json"):
         assert _run().exit_code != 0
 
@@ -1069,7 +1070,7 @@ def test_an_interrupted_retry_of_an_edited_action_leaves_the_next_run_only_what_
     provider.answers()
     with pytest.MonkeyPatch.context() as patched:
         patched.setattr(AgacClient, "call_json", staticmethod(one_empty_answer))
-        assert _run("--fresh").exit_code == 0
+        assert _run("--fresh").exit_code == EXIT_RECORD_FAILURES
     assert _status(online) == "completed_with_failures"
     before_the_edit = _stored(online)
 

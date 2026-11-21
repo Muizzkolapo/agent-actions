@@ -20,6 +20,7 @@ from agent_actions.errors import (
     enrich_exception_context,
 )
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.input.context.normalizer import observe_entry_reference
 from agent_actions.llm.providers.tools.builtin import ROUTE, builtin_tool, runs_udf
 from agent_actions.models.action_schema import FieldSource
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
@@ -127,7 +128,8 @@ def _observes(config: dict[str, Any], path: str) -> bool:
     """Whether the run gives *config* the field *path* (``<action>.<field>[.<field>...]``).
 
     An observe gives a tool the top field it names, or every field with ``*``; a bare
-    action name or a deeper path gives it nothing it can read at *path*.
+    action name or a deeper path gives it nothing it can read at *path*. An optional
+    entry (``a.b?`` or a mapping) counts by the reference it names.
     """
     scope = config.get("context_scope")
     observed = scope.get("observe") if isinstance(scope, dict) else None
@@ -135,7 +137,8 @@ def _observes(config: dict[str, Any], path: str) -> bool:
         return False
     root, _, rest = path.partition(".")
     top = rest.split(".", 1)[0]
-    return any(ref in (f"{root}.{top}", f"{root}.*") for ref in observed if isinstance(ref, str))
+    references = (observe_entry_reference(entry) for entry in observed)
+    return any(ref in (f"{root}.{top}", f"{root}.*") for ref in references)
 
 
 class PreflightService:
@@ -349,7 +352,8 @@ class PreflightService:
             find_unguarded_required_refs(
                 self._collect_prompts(),
                 self._collect_producing_schemas(),
-                {name: header_names(config) for name, config in self.action_configs.items()},
+                self._collect_optional_observes(),
+                names={name: header_names(config) for name, config in self.action_configs.items()},
             ),
         )
 
@@ -364,6 +368,17 @@ class PreflightService:
             except (ConfigValidationError, PromptValidationError) as exc:
                 logger.debug("Skipping prompt cross-check for %s: %s", name, exc)
         return prompts
+
+    def _collect_optional_observes(self) -> dict[str, set[str]]:
+        """The references each action observes as optional, a version also by its base name."""
+        optional: dict[str, set[str]] = {}
+        for name, config in self.action_configs.items():
+            scope = config.get("context_scope")
+            for ref in (scope.get("optional") or {}) if isinstance(scope, dict) else {}:
+                namespace, _, field = ref.partition(".")
+                base = self.action_configs.get(namespace, {}).get("version_base_name")
+                optional.setdefault(name, set()).update({ref, f"{base}.{field}"} if base else {ref})
+        return optional
 
     def _collect_producing_schemas(self) -> dict[str, dict[str, Any]]:
         """Available (non-dropped) schema-source fields per producing action.

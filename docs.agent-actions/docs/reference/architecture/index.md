@@ -139,7 +139,7 @@ In batch mode, the two loops run as two sequential phases after the batch comple
 
 ## Execution Lifecycle
 
-When you run `agac run -a my_workflow`, Agent Actions does the steps in the subsections that follow.
+When you run `agac run -w my_workflow`, Agent Actions does the steps in the subsections that follow.
 
 ### 1. Configuration Loading
 

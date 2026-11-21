@@ -342,7 +342,7 @@ def test_agac_preview_and_dispositions_show_the_folded_record_unprocessed(tmp_pa
     _run(root, "--fresh")
     a = _source_of(root, "a")
 
-    preview = run_agac(root, "preview", "-w", WORKFLOW, "-a", "join", "-f", "json")
+    preview = run_agac(root, "preview", "-w", WORKFLOW, "-A", "join", "-f", "json")
     summary = run_agac(
         root, "dispositions", "-a", WORKFLOW, "--action", "join", env={"COLUMNS": "200"}
     )

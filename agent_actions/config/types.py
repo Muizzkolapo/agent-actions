@@ -43,6 +43,8 @@ class ContextScopeDict(TypedDict, total=False):
     passthrough: list[str]
     drop: list[str]
     seed: dict[str, Any]
+    # Each observe reference marked optional, with the value a record lacking it is given.
+    optional: dict[str, Any]
 
 
 class GuardConfigDict(TypedDict, total=False):
