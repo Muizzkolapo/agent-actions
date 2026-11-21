@@ -158,8 +158,9 @@ class UsageCommand:
         print_whole(self.console, table)
 
         self.console.print(
-            "[dim]Input counts the prompt tokens the vendor neither read from nor wrote to "
-            "its cache: the three input columns add up to the prompt. Kind is main for an "
+            "[dim]Input counts the prompt tokens that the provider did not read from its "
+            "cache and did not write to its cache. The sum of Input, Cache read and Cache "
+            "write is the full prompt. Kind is main for an "
             "action's own call, repair for a call an expect: repair made, and the name of "
             "the side call for any other (judge).[/dim]"
         )

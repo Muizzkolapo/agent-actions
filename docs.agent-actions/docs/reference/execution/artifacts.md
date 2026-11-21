@@ -416,7 +416,7 @@ An action that has a guard also carries a `guard_stats` object. The object holds
 }
 ```
 
-An action that made model calls in the run has a `usage` object. The object holds the number of `calls` and the four token counts of all the calls. `by_kind` has one entry for each kind of call (`main`, `repair`, `judge`), pricing and model. `batch` is `true` for a call that a provider batch answered. `input_tokens` in `usage` does not include the cached tokens. The `usage` of the execution is the sum over its actions. `tokens` and `total_tokens` keep their meaning: `tokens.input_tokens` is the full prompt, cached or not, and `total_tokens` is the prompt and the output of all the actions.
+An action that made model calls in the run has a `usage` object. The object holds the number of `calls` and the four token counts of all the calls. `by_kind` has one entry for each kind of call (`main`, `repair`, `judge`), pricing and model. `batch` is `true` for a call that a provider batch answered. `input_tokens` in `usage` does not include the cached tokens. The `usage` of the execution is the sum over its actions. `tokens` and `total_tokens` keep their meaning. `tokens.input_tokens` is the full prompt, cached or not. `total_tokens` is the prompt and the output of all the actions.
 
 A run that only submits a batch reads no result, so it has no usage for that action. The run that reads the batch holds its usage. [`agac usage`](../cli/usage) adds the runs.
 

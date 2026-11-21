@@ -287,4 +287,7 @@ def test_a_mistake_in_the_price_table_is_refused_by_its_key(finished, tmp_path):
     result = _usage(project)
 
     assert result.returncode != 0
-    assert f"prices.{MODEL}.input: must be a number, 0 or more" in result.stdout + result.stderr
+    shown = result.stdout + result.stderr
+    assert f"prices.{MODEL}.input: must be a number, 0 or more" in shown
+    assert "Invalid configuration in agent_actions.yml" in shown
+    assert "Agent:" not in shown
