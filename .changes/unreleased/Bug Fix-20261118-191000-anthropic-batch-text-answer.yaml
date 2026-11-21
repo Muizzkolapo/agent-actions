@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An Anthropic batch action in JSON mode whose model answers in text, not through the schema tool, is read as online reads it: an object or a list of objects is the answer, and any other reply fails its record as a parse error that keeps the text. Batch stored a list such as `["a", "b"]` as one `{value: ...}` record per item, a bare number as a record, and `null` as an empty answer.'
+time: 2026-11-18T19:10:00Z

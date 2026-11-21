@@ -260,11 +260,7 @@ class WorkflowResolutionService:
         for warning in seed_warnings:
             result.add_warning(warning)
 
-        run_mode_errors = self._check_vendor_run_mode_compatibility()
-        for error in run_mode_errors:
-            result.add_error(error)
-        no_batch = {error.referenced_agent for error in run_mode_errors}
-        for error in self._check_batch_json_mode_schema(skip=no_batch):
+        for error in self._check_vendor_run_mode_compatibility():
             result.add_error(error)
         for warning in self._check_runtime_json_object():
             result.add_warning(warning)
@@ -1051,37 +1047,6 @@ class WorkflowResolutionService:
                     )
                 )
 
-        return errors
-
-    def _check_batch_json_mode_schema(self, skip: set[str]) -> list[StaticTypeError]:
-        """Refuse a batch action in JSON mode with no schema, which batch submission refuses.
-
-        An action in *skip* cannot run in batch at all, which is refused on its own.
-        """
-        errors: list[StaticTypeError] = []
-        for action_name, config in self.action_configs.items():
-            if action_name in skip or not runs_in_batch(config):
-                continue
-            if not config.get("json_mode", True):
-                continue
-            if config.get(SCHEMA_KEY) or config.get("schema_name"):
-                continue
-            errors.append(
-                StaticTypeError(
-                    message=(
-                        f"Action '{action_name}': Schema is required for batch processing "
-                        "when json_mode is enabled."
-                    ),
-                    location=FieldLocation(
-                        agent_name=action_name,
-                        config_field="schema",
-                        raw_reference="run_mode=batch, json_mode=true",
-                    ),
-                    referenced_agent=action_name,
-                    referenced_field="schema",
-                    hint="Either provide a schema or set json_mode: false",
-                )
-            )
         return errors
 
     def _check_runtime_json_object(self) -> list[StaticTypeWarning]:

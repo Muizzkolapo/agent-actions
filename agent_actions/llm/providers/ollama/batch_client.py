@@ -318,6 +318,20 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _get_result_file_name(self, batch_id: str) -> str:
         return f"{batch_id}_results.jsonl"
 
+    def _parse_json_content(self, content_str: str) -> Any:
+        """Read a reply as the online client reads one in JSON mode.
+
+        A list holding a non-object is one record, under ``response``. Text that is
+        neither an object nor a list stays text, which JSON mode takes as a parse error.
+        """
+        parsed = super()._parse_json_content(content_str)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list):
+            whole = all(isinstance(item, dict) for item in parsed)
+            return parsed if whole else {"response": parsed}
+        return content_str
+
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         raise NotImplementedError("Ollama uses custom file-based retrieve_results()")
 

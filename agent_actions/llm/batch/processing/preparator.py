@@ -35,7 +35,7 @@ from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
-from agent_actions.utils.constants import JSON_MODE_KEY, SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
@@ -428,22 +428,7 @@ class BatchTaskPreparator:
         """
         if schema_dispatch_function(agent_config.get(SCHEMA_KEY)) is not None:
             return None
-        schema = self._prepare_schema(agent_config, provider, resolve_tools_path(agent_config))
-        self._require_schema(agent_config, schema)
-        return schema
-
-    @staticmethod
-    def _require_schema(agent_config: dict[str, Any], schema: dict[str, Any] | None) -> None:
-        json_mode = agent_config.get(JSON_MODE_KEY, True)
-        if not schema and json_mode:
-            raise ConfigurationError(
-                "Schema is required for batch processing when json_mode is enabled",
-                context={
-                    "agent_config": agent_config["agent_type"],
-                    "json_mode": json_mode,
-                    "hint": "Either provide a schema or set json_mode: false",
-                },
-            )
+        return self._prepare_schema(agent_config, provider, resolve_tools_path(agent_config))
 
     def _compile_row_schema(
         self,
@@ -486,7 +471,6 @@ class BatchTaskPreparator:
             Path(_pr) if _pr else None,
         )
         schema = self._prepare_schema({**agent_config, SCHEMA_KEY: loaded}, provider, tools_path)
-        self._require_schema(agent_config, schema)
         return schema, chosen
 
     def _prepare_schema(

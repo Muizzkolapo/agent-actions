@@ -13,5 +13,5 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `batch_cli.py` | Module | CLI commands for batch processing operations. `status` and `retrieve` take the workflow as `-w/--workflow` or `-a/--agent` and the action as `-A/--action`. | llm.batch |
+| `batch_cli.py` | Module | CLI commands for batch processing operations. `batch retrieve` loads the workflow config and passes the action's config to the retrieval service; a config that does not load (a limit variable that is not an integer included), or has no such action, gives a warning and the raw answers. `status` and `retrieve` take the workflow as `-w/--workflow` or `-a/--agent` and the action as `-A/--action`. | llm.batch |
 | `service.py` | Module | Shared batch utilities (registry manager factory). | llm.batch |

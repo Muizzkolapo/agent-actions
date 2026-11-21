@@ -515,7 +515,9 @@ class BaseBatchClient(ABC):
 
         from agent_actions.utils.json_parsing import parse_llm_json
 
-        return parse_llm_json(content_str)
+        parsed = parse_llm_json(content_str)
+        # A reply that is one JSON string parses to a str as well; it stays as written.
+        return content_str if isinstance(parsed, str) else parsed
 
     def _get_attribute_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
         """
