@@ -196,3 +196,109 @@ def test_a_yaml_error_in_a_jinja_file_names_the_rendered_line(tmp_path):
 
     assert e.value.line == 0
     assert "of the rendered workflow" in e.value.message
+
+
+_PROMPT_NAMES_AN_ACTION = """\
+actions:
+  - name: writer
+    kind: tool
+    prompt: |
+      Write YAML like this:
+      - name: other_action
+    dependencies: [missing]
+  - name: other_action
+    kind: tool
+"""
+
+
+def test_a_prompt_line_naming_an_action_is_not_indexed_as_one(tmp_path):
+    # Plain YAML, so no line is dropped: only the defined-line rule tells the two apart.
+    wf = _project(tmp_path, _PROMPT_NAMES_AN_ACTION)
+
+    idx = build_index(tmp_path)
+
+    assert idx.duplicate_actions_by_file[wf] == set()
+    assert idx.file_actions[wf]["other_action"].location.line == 7
+
+
+def test_a_prompt_line_naming_an_action_does_not_end_its_action(tmp_path):
+    wf = _project(tmp_path, _PROMPT_NAMES_AN_ACTION)
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_a_template_line_number_does_not_revive_a_dropped_workflow_line(tmp_path):
+    # The macro's name line and the dropped dependency line are both line 6.
+    wf = _project(
+        tmp_path,
+        "{% from 'm.jinja2' import m %}\n"
+        "actions:\n"
+        "  {{ m('a') | indent(2) }}\n"
+        "  - name: y\n"
+        "    kind: tool\n"
+        "    {% if false %}\n"
+        "    dependencies: [nope]\n"
+        "    {% endif %}\n"
+        "  - name: z\n"
+        "    kind: tool\n"
+        "    dependencies: [missing]\n",
+        {
+            "m.jinja2": "{# pad #}\n" * 5
+            + "{% macro m(p) -%}\n- name: {{ p }}__x\n  kind: tool\n{%- endmacro %}\n"
+        },
+    )
+
+    assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+
+
+def test_a_set_block_value_is_read_as_the_render_reads_it(tmp_path):
+    # A mark inside `{% set %}...{% endset %}` would change the captured value, and the
+    # marked render would take the other branch.
+    wf = _project(
+        tmp_path,
+        """\
+        {% set mode %}
+        fast
+        {% endset %}
+        name: wf
+        actions:
+        {% if mode | trim == 'fast' %}
+          - name: summarize
+            kind: tool
+            impl: fast_tool
+        {% else %}
+          - name: summarize_slow
+            kind: tool
+            impl: slow_tool
+        {% endif %}
+        """,
+    )
+
+    idx = build_index(tmp_path)
+
+    assert set(idx.file_actions[wf]) == {"summarize"}
+    assert idx.file_actions[wf]["summarize"].location.line == 6
+    assert _messages(wf, tmp_path) == ["Unresolved tool reference `fast_tool`."]
+
+
+def test_a_set_block_split_into_actions_keeps_their_line(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set stages %}
+        extract
+        summarize
+        {% endset %}
+        actions:
+        {% for s in stages.split() %}
+          - name: {{ s }}
+            kind: tool
+        {% endfor %}
+        """,
+    )
+
+    r = render_workflow_source(wf, tmp_path)
+
+    assert [a["name"] for a in r.data["actions"]] == ["extract", "summarize"]
+    assert r.action_sources["extract"].line == 6
+    assert r.action_sources["summarize"].line == 6
