@@ -30,6 +30,9 @@ jobs:
       - name: Type check
         run: task mypy
 
+      - name: Security scan
+        run: task security
+
   changelog:
     name: Changelog Entry
     if: github.event_name == 'pull_request'
