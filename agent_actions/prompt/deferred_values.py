@@ -24,6 +24,7 @@ record or a version supplies it, so nothing they decide is decided at load.
 from __future__ import annotations
 
 import bisect
+import json
 import math
 import re
 import string
@@ -478,6 +479,24 @@ class LoadRender:
             return region.text.strip()
 
         return self.fill_loaded(_strings(data, "", put))
+
+    def written_line(self, line: str) -> str:
+        """*line* with each left value that sits on one line put back as the file writes it."""
+
+        def put(match: re.Match[str]) -> str:
+            text = self._left[int(match.group(1))].region.text.rstrip("\n")
+            return match.group(0) if "\n" in text else text
+
+        return _LEFT.sub(put, line)
+
+    def written_text(self, text: str) -> str:
+        """*text* with each left value as one JSON line of the value the file writes."""
+
+        def put(match: re.Match[str]) -> str:
+            value = self.written(match.group(0).lstrip(" "))
+            return " " + json.dumps(value, ensure_ascii=False, default=str)
+
+        return _LEFT.sub(put, text)
 
     def explain(self, error: Exception) -> str:
         """Why a name the load found undefined is not there yet, when it is a later one."""

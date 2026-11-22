@@ -1639,8 +1639,21 @@ def test_a_value_that_reads_a_version_variable_shows_its_written_text(
     judge = build_index(tmp_path).file_actions[wf]["judge"]
     if key == "guard":
         assert judge.guard_condition == "up.score > {{ i }}"
+        assert judge.guard_line == 8
     else:
         assert judge.output_field == "out_{{ i }}"
+
+
+def test_the_text_for_the_tree_holds_each_version_value_as_written(tmp_path):
+    lines = "    dependencies: [\"up_{{ i }}\"]\n    guard: {condition: 'up.score > {{ i }}'}\n"
+    wf = _project(tmp_path, _VERSIONED + lines)
+
+    rendered = render_workflow_source(wf, tmp_path)
+
+    judge = yaml.safe_load(rendered.text)["actions"][1]
+    assert judge["dependencies"] == ["up_{{ i }}"]
+    assert judge["guard"] == {"condition": "up.score > {{ i }}"}
+    assert len(rendered.text.splitlines()) == len(textwrap.dedent(_VERSIONED).splitlines()) + 2
 
 
 def test_a_line_of_an_action_named_with_a_version_variable_is_owned_by_its_written_name(tmp_path):
@@ -1696,6 +1709,34 @@ def test_a_workflow_with_no_tag_is_read_as_yaml_when_the_templates_do_not_load(t
     assert set(idx.file_actions[wf]) == {"a", "b"}
     assert idx.file_actions[wf]["b"].location.line == 4
     assert _messages(wf, tmp_path) == ["Unresolved action reference `missing`."]
+    sources = render_workflow_source(wf, tmp_path).action_sources
+    assert {name: (loc.line, loc.column) for name, loc in sources.items()} == {
+        "a": (2, 10),
+        "b": (4, 10),
+    }
+
+
+@pytest.mark.parametrize(
+    "workflow, renders",
+    [
+        pytest.param("actions:\n  - name: a\n    kind: tool\n", True, id="no-tag"),
+        pytest.param("# {% set k = 1 %}\nactions:\n  - name: a\n    kind: tool\n", False, id="tag"),
+    ],
+)
+def test_a_templates_path_that_is_a_file_fails_only_a_workflow_with_a_tag(
+    tmp_path, workflow, renders
+):
+    wf = _project_without_templates_folder(tmp_path, workflow)
+    (tmp_path / "templates").write_text("not a folder\n")
+
+    idx = build_index(tmp_path)
+
+    if renders:
+        assert set(idx.file_actions[wf]) == {"a"}
+        assert wf not in idx.parse_errors
+    else:
+        assert idx.file_actions[wf] == {}
+        assert _messages(wf, tmp_path)[0].startswith("Workflow does not render: ")
 
 
 @pytest.mark.parametrize(

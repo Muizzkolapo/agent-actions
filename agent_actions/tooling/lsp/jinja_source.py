@@ -239,38 +239,41 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         # Only the templates/ load can fail a file with no tag, and such a file renders
         # as written, so it is read as YAML.
         logger.warning("Reading %s as plain YAML: %s", yaml_file, e.message)
-        text = textwrap.dedent(source.replace("\r\n", "\n").replace("\r", "\n"))
-        data, _, _ = _parse(text, source)
-        return _unmapped(text, data, source)
+        lines = source.replace("\r\n", "\n").replace("\r", "\n")
+        text = textwrap.dedent(lines)
+        data, nodes, _ = _parse(text, source)
+        sources = _literal_sources(nodes, lines.split("\n"), yaml_file) if source == raw else {}
+        return RenderedWorkflow(text, data, sources)
     data, nodes, rendered_paths = _parse(text, source)
     # A value left for a version or a record is shown as written, not as its token.
     data = load.written(data)
     nodes = _written_names(nodes, load)
+    shown = load.written_text(text)
     if source != raw:
         # The workflow is a prompt store entry; its lines are not the lines of this file.
-        return RenderedWorkflow(text=text, data=data, action_sources={})
+        return RenderedWorkflow(text=shown, data=data, action_sources={})
     try:
         marked, load = _render(MarkingLoadRender, source, yaml_file, project_root)
     except WorkflowRenderError as e:
         # The plain render passed, so only a mark broke this one.
         logger.warning("Could not map actions of %s to source lines: %s", yaml_file, e.message)
-        return _unmapped(text, data, source)
+        return _unmapped(shown, data, source)
     marked_lines = _LINE_BREAK.split(marked)
     if not _same_text(marked_lines, _LINE_BREAK.split(text)):
         # A mark changed what the render output, so no mark can be trusted.
         logger.warning("Could not map actions of %s to source lines: the renders differ", yaml_file)
-        return _unmapped(text, data, source)
+        return _unmapped(shown, data, source)
 
     source_lines = source.split("\n")
     sources, action_lines = _action_sources(
         nodes, marked_lines, yaml_file, project_root, source_lines
     )
-    written = _lines_as_written(marked_lines, source_lines, yaml_file.name)
+    written = _lines_as_written(marked_lines, source_lines, yaml_file.name, load)
     live_lines = None
     if any(opener in source for opener in _JINJA_OPENERS):
         live_lines = frozenset({line for _, line in written} | action_lines)
     return RenderedWorkflow(
-        text=text,
+        text=shown,
         data=data,
         action_sources=sources,
         action_lines=frozenset(action_lines),
@@ -285,6 +288,24 @@ def _written_names(nodes: list[_ActionNode], load: LoadRender) -> list[_ActionNo
     return [node._replace(name=name) for node, name in written if isinstance(name, str)]
 
 
+def _literal_sources(
+    nodes: list[_ActionNode], lines: list[str], yaml_file: Path
+) -> dict[str, Location]:
+    """Where each action's `name:` line writes its name, for a file read as plain YAML."""
+    sources: dict[str, Location] = {}
+    for node in nodes:
+        literal = (
+            _LITERAL_NAME.match(lines[node.name_line]) if node.name_line < len(lines) else None
+        )
+        if literal is None or literal.group(1) != node.name or node.name in sources:
+            continue
+        col = literal.start(1)
+        sources[node.name] = Location(
+            yaml_file, node.name_line, col, node.name_line, col + len(node.name)
+        )
+    return sources
+
+
 def _unmapped(text: str, data: dict, source: str) -> RenderedWorkflow:
     """The render with no source map; no line is read where a tag can change one."""
     if any(opener in source for opener in _JINJA_OPENERS):
@@ -293,7 +314,7 @@ def _unmapped(text: str, data: dict, source: str) -> RenderedWorkflow:
 
 
 def _lines_as_written(
-    marked_lines: list[str], source_lines: list[str], origin: str
+    marked_lines: list[str], source_lines: list[str], origin: str, load: LoadRender
 ) -> list[tuple[int, int]]:
     """Each (rendered line, workflow line) where the render output the workflow line as written.
 
@@ -302,6 +323,8 @@ def _lines_as_written(
     """
     found = []
     for rendered_line, marked in enumerate(marked_lines):
+        # A value left for a version or a record is put back as written, with its mark.
+        marked = load.written_line(marked)
         text = _MARK_TEXT.sub("", marked).rstrip()
         for mark_origin, line in _LINE_MARK.findall(marked):
             i = int(line)
@@ -376,6 +399,8 @@ def _render(
         load, _ = new_load_render(
             source, project_root / "templates", project_root, load_class, yaml_file
         )
+    except OSError as e:
+        raise WorkflowRenderError(f"{type(e).__name__}: {e} (templates/)", 0) from e
     except TemplateRenderingError as e:
         context = getattr(e, "context", None) or {}
         detail = context.get("message") or str(e)
