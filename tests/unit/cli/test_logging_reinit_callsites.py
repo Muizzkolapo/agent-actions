@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-REINIT_MODULES = ["agent_actions/cli/run.py", "agent_actions/cli/retry.py"]
+REINIT_MODULES = ["agent_actions/cli/run.py"]
 
 
 def _reinit_calls(module_path: str) -> list[set[str]]:
@@ -37,3 +37,10 @@ def test_the_run_reinit_passes_neither_verbose_nor_quiet(module_path):
     for keywords in calls:
         assert "verbose" not in keywords
         assert "quiet" not in keywords
+
+
+def test_retry_reinitializes_through_the_run_helper():
+    from agent_actions.cli import retry, run
+
+    assert retry.start_tracked_run is run.start_tracked_run
+    assert _reinit_calls("agent_actions/cli/retry.py") == []
