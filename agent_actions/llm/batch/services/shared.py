@@ -59,6 +59,10 @@ def retrieve_and_reconcile(
             for result in batch_results:
                 if result.text is not None:
                     (result.content,) = ResponseBuilder.wrap_non_json(result.text, agent_config)
+                elif result.no_text is not None:
+                    result.content = None
+                    result.error = str(result.no_text.error) if result.no_text.error else None
+                    result.retriable = result.no_text.retried
         settle_unanswered(batch_results, json_mode=json_mode)
     for result in batch_results:
         if BatchResultReconciler.is_answered(result):

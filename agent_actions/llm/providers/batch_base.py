@@ -130,6 +130,9 @@ class BatchResult:
     # Whether online's retry policy retries what this record ended with, where the client
     # knows the error online raises for it; None is decided from ``error_status``.
     retriable: bool | None = None
+    # How online's text-mode call ends this answer, which holds no text (an Anthropic tool
+    # answer alone); None when it holds text or the client does not say. Not persisted.
+    no_text: NoAnswer | None = None
 
 
 def raise_unsent(rows: list[dict[str, Any]]) -> None:
@@ -442,6 +445,7 @@ class BaseBatchClient(ABC):
             usage=usage,
             text=text,
             parse_error=parse_error,
+            no_text=None if text is not None else self._no_text_answer(raw_response),
         )
 
     def _no_answer(self, _raw_response: Any) -> NoAnswer | None:
@@ -454,6 +458,10 @@ class BaseBatchClient(ABC):
 
     def _answer_text(self, raw_response: Any) -> str | None:
         """The answer's text, for a provider whose content extraction already parsed it."""
+        return None
+
+    def _no_text_answer(self, _raw_response: Any) -> NoAnswer | None:
+        """How online's text-mode call ends an answer that holds no text; None keeps it."""
         return None
 
     def _extract_custom_id(self, raw_response: Any) -> str:

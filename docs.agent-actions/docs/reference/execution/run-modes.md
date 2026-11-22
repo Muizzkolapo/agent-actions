@@ -107,7 +107,10 @@ actions:
 A batch action reads each answer as the same action reads the answer online:
 
 - With `json_mode: false`, the action stores the answer as text in its `output_field`. The action
-  also stores an answer that contains JSON as text.
+  also stores an answer that contains JSON as text. The request does not offer the schema as a
+  tool. If an Anthropic answer holds a tool call (from a tool in `vendor_params`), the action
+  stores only the text of the answer, as the online action does. An answer that holds a tool call
+  and no text fails the record, as the online action does.
 - With `json_mode: true` and no schema, the action runs. For OpenAI, Groq, Gemini and Ollama, the
   request asks for JSON output, as the online request does. For Anthropic, the action reads the
   text answer as JSON, as the online action does.
