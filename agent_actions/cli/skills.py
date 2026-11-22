@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 import click
+import yaml
 
 from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.errors import ConfigurationError
@@ -141,6 +142,31 @@ def install(tool: str, force: bool):
     click.echo(f"Skills installed to: {target_dir}")
 
 
+def _skill_description(content: str) -> str:
+    """The front matter's ``description``, else the first line that is not a heading."""
+    lines = content.split("\n")
+    if lines and lines[0].strip() == "---":
+        try:
+            end = next(i for i, line in enumerate(lines[1:], 1) if line.strip() == "---")
+        except StopIteration:
+            end = None
+        if end is not None:
+            try:
+                front = yaml.safe_load("\n".join(lines[1:end]))
+            except yaml.YAMLError:
+                front = None
+            if isinstance(front, dict) and front.get("description"):
+                return str(front["description"]).strip()
+            lines = lines[end + 1 :]
+    else:
+        lines = lines[1:]
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith("#"):
+            return line
+    return ""
+
+
 @skills.command(name="list")
 @handles_user_errors("skills list")
 def list_skills():
@@ -163,15 +189,9 @@ def list_skills():
         skill_path = bundled_skills / skill_name
         skill_md = skill_path / "SKILL.md"
 
-        description = ""
-        if skill_md.exists():
-            content = skill_md.read_text()
-            lines = content.split("\n")
-            for line in lines[1:]:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    description = line[:60] + "..." if len(line) > 60 else line
-                    break
+        description = _skill_description(skill_md.read_text()) if skill_md.exists() else ""
+        if len(description) > 60:
+            description = description[:60] + "..."
 
         click.echo(f"  {click.style(skill_name, fg='cyan', bold=True)}")
         if description:

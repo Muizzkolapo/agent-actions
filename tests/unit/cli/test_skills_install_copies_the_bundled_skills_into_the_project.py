@@ -138,14 +138,6 @@ def test_list_with_no_bundled_skills_says_so(bundle):
     assert result.output == "No bundled skills available.\n"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "list takes the first non-heading line after line 1 as the description, so a "
-        "SKILL.md with YAML front matter (as the bundled one has) is listed with its "
-        "'name: ...' line instead of its description"
-    ),
-)
 def test_list_shows_the_description_from_the_skill_front_matter(bundle):
     (bundle / "demo").mkdir()
     (bundle / "demo" / "SKILL.md").write_text(
