@@ -1643,6 +1643,27 @@ def test_a_value_that_reads_a_version_variable_shows_its_written_text(
         assert judge.output_field == "out_{{ i }}"
 
 
+def test_a_line_of_an_action_named_with_a_version_variable_is_owned_by_its_written_name(tmp_path):
+    wf = _project(
+        tmp_path,
+        """\
+        {% set k = 'tool' %}
+        actions:
+          - name: up
+            kind: {{ k }}
+          - name: "v_{{ i }}"
+            kind: tool
+            dependencies: [up]
+            versions: {param: i, range: [1, 3]}
+        """,
+    )
+
+    rendered = render_workflow_source(wf, tmp_path)
+
+    assert rendered.line_owners[5] == "v_{{ i }}"
+    assert rendered.line_owners[6] == "v_{{ i }}"
+
+
 def _second_workflow(tmp_path: Path, workflow: str) -> Path:
     config = tmp_path / "agent_workflow" / "wf2" / "agent_config"
     config.mkdir(parents=True)
@@ -1680,9 +1701,9 @@ def test_a_workflow_with_no_tag_is_read_as_yaml_when_the_templates_do_not_load(t
 @pytest.mark.parametrize(
     "tag_line",
     [
-        pytest.param("description: {{ 'x' }}", id="expression"),
-        pytest.param("{% set k = 'x' %}", id="statement"),
-        pytest.param("{# a note #}", id="comment"),
+        pytest.param("description: \"{{ 'x' }}\"", id="expression"),
+        pytest.param("# {% set k = 1 %}", id="statement"),
+        pytest.param("# {# a note #}", id="comment"),
     ],
 )
 def test_a_workflow_with_a_tag_does_not_render_when_the_templates_do_not_load(tmp_path, tag_line):
