@@ -141,14 +141,14 @@ def _validate_against_schema(
         SchemaValidationError: On validation failure with path details.
     """
     import jsonschema  # type: ignore[import-untyped]
-    from jsonschema import ValidationError as JsonSchemaValidationError
 
     from agent_actions.errors import SchemaValidationError
+    from agent_actions.utils import jsonschema_cache
 
     try:
-        jsonschema.validate(instance=data, schema=compiled_schema)
+        jsonschema_cache.validate(data, compiled_schema)
 
-    except JsonSchemaValidationError as e:
+    except jsonschema.ValidationError as e:
         error_path = " -> ".join(str(p) for p in e.path) if e.path else "root"
         item_info = f" (item {item_index})" if item_index is not None else ""
         type_info = f"{validation_type.capitalize()} schema"
