@@ -2,6 +2,7 @@
 splitter, and ``dispatch_task`` calls a user function from the tools folder.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -53,14 +54,6 @@ class TestCallUserFunction:
         with pytest.raises(ConfigurationError, match="Could not find function 'absent'"):
             StringProcessor.call_user_function("udf_has_d.absent", str(tools), "x")
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "load_module_from_directory returns None for a module it cannot import, so "
-            "the ImportError branch is dead and a missing module is reported as "
-            "'Could not find function ... in its module'"
-        ),
-    )
     def test_a_module_missing_from_the_tools_folder_is_reported_as_not_importable(self, tools):
         with pytest.raises(ConfigurationError, match="Could not import module"):
             StringProcessor.call_user_function("udf_nowhere_e.fn", str(tools), "x")
@@ -91,20 +84,33 @@ class TestSplitByCharacters:
     def test_empty_text_has_no_chunks(self):
         assert Tokenizer.split_text_content("", 4, 1, split_method="chars") == []
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "the split loop steps by chunk_size - overlap until the start passes the end, "
-            "so once a chunk reaches the end of the text one more chunk holding only the "
-            "overlap is emitted"
-        ),
-    )
     def test_no_chunk_holds_only_the_overlap_of_the_one_before(self):
         chunks = Tokenizer.split_text_content("abcdefghij", 4, 1, split_method="chars")
 
         assert chunks == ["abcd", "defg", "ghij"]
 
 
+class _WordEncoding:
+    """Stands in for a tiktoken encoding offline: one token per word with its leading space."""
+
+    def encode(self, text):
+        return re.findall(r"\s*\S+", text)
+
+    def decode(self, tokens):
+        return "".join(tokens)
+
+
+@pytest.fixture
+def word_tokens(monkeypatch):
+    def get_encoding(name):
+        if name != "cl100k_base":
+            raise ValueError(f"Unknown encoding {name}")
+        return _WordEncoding()
+
+    monkeypatch.setattr(string_transformer.tiktoken, "get_encoding", get_encoding)
+
+
+@pytest.mark.usefixtures("word_tokens")
 class TestSplitByTokens:
     def test_token_chunks_cover_the_text_with_overlap(self):
         text = "one two three four five six seven"
@@ -121,15 +127,6 @@ class TestSplitByTokens:
         with pytest.raises(ConfigurationError, match="Invalid tiktoken encoding name 'nope'"):
             Tokenizer.num_tokens_from_string("x", "nope")
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "split_text_content does not wrap the ValueError tiktoken raises for an "
-            "unknown tokenizer_model, so a typo in chunk_config.tokenizer_model surfaces "
-            "as a bare ValueError instead of a ConfigurationError like "
-            "num_tokens_from_string gives"
-        ),
-    )
     def test_an_unknown_tokenizer_model_is_a_configuration_error(self):
         with pytest.raises(ConfigurationError):
             Tokenizer.split_text_content("some text", 3, 1, tokenizer_model="nope")

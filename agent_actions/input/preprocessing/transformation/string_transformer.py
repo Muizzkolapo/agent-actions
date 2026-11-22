@@ -39,6 +39,8 @@ class StringProcessor:
                     },
                 )
             module = load_module_from_directory(module_name, tools_path)
+            if module is None:
+                raise ImportError(f"No module named '{module_name}' in {tools_path}")
             function = getattr(module, function_name)
 
             if context_data_str:
@@ -74,18 +76,21 @@ class Tokenizer:
     """Text tokenization and chunking with multiple split strategies."""
 
     @staticmethod
-    def num_tokens_from_string(string: str, encoding_name: str) -> int:
-        """Return the number of tokens in a text string."""
+    def _encoding(encoding_name: str) -> tiktoken.Encoding:
         try:
-            encoding = tiktoken.get_encoding(encoding_name)
-            num_tokens = len(encoding.encode(string))
-            return num_tokens
+            return tiktoken.get_encoding(encoding_name)
         except ValueError as e:
             raise ConfigurationError(
                 f"Invalid tiktoken encoding name '{encoding_name}'",
-                context={"encoding_name": encoding_name, "operation": "num_tokens_from_string"},
+                context={"encoding_name": encoding_name, "operation": "get_encoding"},
                 cause=e,
             ) from e
+
+    @staticmethod
+    def num_tokens_from_string(string: str, encoding_name: str) -> int:
+        """Return the number of tokens in a text string."""
+        try:
+            return len(Tokenizer._encoding(encoding_name).encode(string))
         except KeyError as e:
             string_preview = string[:100] if len(string) > 100 else string
             raise AgentActionsError(
@@ -155,7 +160,7 @@ class Tokenizer:
     def _split_with_tiktoken(
         text: str, chunk_size: int, overlap: int, tokenizer_model: str
     ) -> list[str]:
-        encoding = tiktoken.get_encoding(tokenizer_model)
+        encoding = Tokenizer._encoding(tokenizer_model)
         try:
             tokens = encoding.encode(text)
         except ValueError as e:
@@ -171,6 +176,8 @@ class Tokenizer:
             chunk = tokens[start_idx:end_idx]
             decoded_chunk = encoding.decode(chunk)
             chunks.append(decoded_chunk)
+            if end_idx == len(tokens):
+                break
             start_idx += chunk_size - overlap
         return chunks
 
@@ -181,6 +188,8 @@ class Tokenizer:
         while start_idx < len(text):
             end_idx = min(start_idx + chunk_size, len(text))
             chunks.append(text[start_idx:end_idx])
+            if end_idx == len(text):
+                break
             start_idx += chunk_size - overlap
         return chunks
 
@@ -205,7 +214,7 @@ class Tokenizer:
                 context={"operation": "_split_with_spacy", "model": "en_core_web_sm"},
                 cause=e,
             ) from e
-        encoding = tiktoken.get_encoding(tokenizer_model)
+        encoding = Tokenizer._encoding(tokenizer_model)
         doc = nlp(text)
         sentences = [sent.text for sent in doc.sents]
         chunks = []
