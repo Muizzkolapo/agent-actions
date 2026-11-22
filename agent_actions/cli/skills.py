@@ -141,6 +141,27 @@ def install(tool: str, force: bool):
     click.echo(f"Skills installed to: {target_dir}")
 
 
+def skill_description(content: str) -> str:
+    """The ``description:`` of a SKILL.md frontmatter, else its first line of text.
+
+    The frontmatter is the block between a first line ``---`` and the next ``---``.
+    """
+    lines = content.split("\n")
+    body = lines[1:]
+    if lines and lines[0].strip() == "---":
+        for index, line in enumerate(body):
+            if line.strip() == "---":
+                body = body[index + 1 :]
+                break
+            if line.startswith("description:"):
+                return line[len("description:") :].strip().strip("\"'")
+    for line in body:
+        text = line.strip()
+        if text and not text.startswith("#"):
+            return text
+    return ""
+
+
 @skills.command(name="list")
 @handles_user_errors("skills list")
 def list_skills():
@@ -150,7 +171,7 @@ def list_skills():
     if not bundled_skills.exists():
         raise click.ClickException("Bundled skills not found.")
 
-    available_skills = [d.name for d in bundled_skills.iterdir() if d.is_dir()]
+    available_skills = sorted(d.name for d in bundled_skills.iterdir() if d.is_dir())
 
     if not available_skills:
         click.echo("No bundled skills available.")
@@ -160,18 +181,10 @@ def list_skills():
     click.echo()
 
     for skill_name in available_skills:
-        skill_path = bundled_skills / skill_name
-        skill_md = skill_path / "SKILL.md"
-
-        description = ""
-        if skill_md.exists():
-            content = skill_md.read_text()
-            lines = content.split("\n")
-            for line in lines[1:]:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    description = line[:60] + "..." if len(line) > 60 else line
-                    break
+        skill_md = bundled_skills / skill_name / "SKILL.md"
+        description = skill_description(skill_md.read_text()) if skill_md.exists() else ""
+        if len(description) > 60:
+            description = description[:60] + "..."
 
         click.echo(f"  {click.style(skill_name, fg='cyan', bold=True)}")
         if description:

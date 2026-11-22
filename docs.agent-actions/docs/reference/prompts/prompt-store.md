@@ -46,7 +46,15 @@ project/
             └── my_prompts.md
 ```
 
-Agent Actions searches recursively. Thus, use unique filenames across your project.
+Agent Actions searches only these folders, with their subfolders: `prompt_store/` at the project root, and `agent_workflow/*/prompt_store/`. It does not read a prompt file in another folder.
+
+A prompt file name must be unique across these folders. If two folders hold a file with the same name, the workflow does not load:
+
+```text
+Prompt file 'my_prompts.md' is in 2 places. A prompt file name must be unique across <project>/prompt_store and <project>/agent_workflow/*/prompt_store. Rename or remove all but one:
+```
+
+The error lists the paths of the files below this line. Rename or remove all but one of them.
 
 ## Creating Prompts
 

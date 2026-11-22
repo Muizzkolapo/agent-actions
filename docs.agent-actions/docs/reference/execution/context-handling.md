@@ -109,6 +109,10 @@ A prompt that is too large for the context window of the model fails its record 
 
 Agent Actions estimates the size of a prompt as its number of characters divided by 4. It compares the estimate with the context window of the model. For OpenAI in text mode, Gemini, Groq, Ollama and a judge call, Agent Actions uses a window of 128,000 tokens. If the prompt has more than about 512,000 characters, Agent Actions does not send it.
 
+The estimate counts every message of the request: the rendered prompt and the context block. A field that the prompt renders and that the action also observes is in the request two times, so the estimate counts it two times.
+
+Agent Actions takes the window of a model from a fixed list of model names (in `agent_actions/prompt/message_builder.py`). A model name that is not in the list gets 128,000 tokens, also when the model accepts more. The configuration has no setting for the window. If a large record fails with `Estimated prompt size (N tokens) exceeds model context window (128000 tokens)`, split the record before staging, or observe a shorter field. See [Chunking](../data-io/chunking).
+
 :::note
 In the release after 3.0.0, Agent Actions changes the prompt of each online request. This applies to OpenAI, Anthropic, Gemini, Groq and Cohere. Before, the record JSON in the prompt had double braces. Now Agent Actions sends the JSON with no change. Thus an answer can change. The Anthropic prompt cache misses one time after the update.
 :::

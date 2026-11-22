@@ -76,6 +76,12 @@ Detailed guidance — loaded on demand:
 - [references/pooling-approach.md](references/pooling-approach.md) — sequential vs parallel pooling, selection action design, pooling vs versioning
 - [references/prompt-engineering.md](references/prompt-engineering.md) — one unit of outcome, distil before generating, seed data, output contracts, version diversity
 
+Related skills:
+
+- `agac-operations` — run a large workflow, recover it without paying twice, and check its output counts
+- `agac-expectations` — `expect:` rules, judges and their calibration
+- `agac-blind-verification` — verifiers that never see the reference
+
 ## Action Types
 
 ### LLM Action

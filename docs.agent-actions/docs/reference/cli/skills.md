@@ -63,14 +63,25 @@ agac skills install --claude --force
 
 ## Installed Files {/* #what-gets-installed */}
 
-Each skill contains these files:
+agent-actions ships four skills. `install` copies all of them:
+
+| Skill | What it teaches |
+|-------|-----------------|
+| `agac-agent-skills` | Build, run, inspect and debug workflows: actions, context scope, guards, versions, schemas, prompts, HITL |
+| `agac-operations` | Run large workflows safely: batch or online, resume, `--rerun`, `retry --all`, exit codes, `agac usage`, scale limits, and a health check of the output counts |
+| `agac-expectations` | Declare output-quality rules with `expect:` blocks, and calibrate a rule before it may block records |
+| `agac-blind-verification` | Check outputs with independent verifiers that never see the reference |
+
+Each skill has this layout:
 
 ```
-.claude/skills/agac-agent-skills/
+.claude/skills/<skill>/
 ├── SKILL.md           # Main skill documentation
-├── references/        # Pattern guides, context scoping, prompt engineering
-└── scripts/           # Helper scripts (inspect_action, reset_workflow)
+├── references/        # Longer guides that SKILL.md links to
+└── scripts/           # Helper scripts, where the skill has them
 ```
+
+`agac skills list` shows each skill with the `description:` of its `SKILL.md` frontmatter.
 
 Skills have a project scope. You can install skills in each agent-actions project. The AI assistant reads the skills when you open that project.
 
