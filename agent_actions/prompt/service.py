@@ -23,6 +23,11 @@ from agent_actions.errors import (
 )
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
+from agent_actions.prompt.cache_point import (
+    PROMPT_EXTENSIONS,
+    has_cache_point,
+    take_cache_points,
+)
 from agent_actions.prompt.context.builder import LLMContextBuilder
 from agent_actions.prompt.context.null_namespace import (
     REASON_NO_OUTPUT,
@@ -187,6 +192,23 @@ class PromptPreparationResult:
     passthrough_fields: dict[str, Any]
     metadata: dict[str, Any]
     prompt_context: dict[str, Any] | None = None
+    cache_points: tuple[int, ...] = ()
+    """The length of the prompt text before each `{% cache_point %}` the render reached."""
+
+
+def reads_seed_only(context_scope: dict[str, Any] | None) -> bool:
+    """Whether *context_scope* neither drops nor passes through a seed field.
+
+    Such a scope only reads the seed, so every record can share one parsed copy. A
+    drop removes fields from the record's copy, and a passed-through field is written
+    into the output, so those records get a copy of their own.
+    """
+    scope = context_scope or {}
+    return not any(
+        str(ref).startswith("seed.")
+        for directive in ("drop", "passthrough")
+        for ref in scope.get(directive) or ()
+    )
 
 
 class PromptPreparationService:
@@ -258,7 +280,11 @@ class PromptPreparationService:
         if "seed" in field_context:
             field_context = {k: v for k, v in field_context.items() if k != "seed"}
         static_data = PromptPreparationService.load_seed_data(
-            agent_config, context_scope, agent_name, source=field_context.get("source")
+            agent_config,
+            context_scope,
+            agent_name,
+            source=field_context.get("source"),
+            shared=reads_seed_only(context_scope),
         )
 
         if not context_scope:
@@ -287,6 +313,11 @@ class PromptPreparationService:
         formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
             formatted_prompt, llm_context, agent_config, tools_path
         )
+        formatted_prompt, cache_points = (
+            take_cache_points(formatted_prompt)
+            if has_cache_point(raw_prompt)
+            else (formatted_prompt, ())
+        )
 
         metadata = {
             "mode": mode,
@@ -304,6 +335,7 @@ class PromptPreparationService:
             passthrough_fields=passthrough_fields,
             metadata=metadata,
             prompt_context=prompt_context,
+            cache_points=cache_points,
         )
 
     @staticmethod
@@ -347,6 +379,7 @@ class PromptPreparationService:
             context_scope,
             request.agent_name,
             source=field_context.get("source"),
+            shared=reads_seed_only(context_scope),
         )
 
         if not context_scope:
@@ -389,6 +422,11 @@ class PromptPreparationService:
         formatted_prompt = PromptPreparationService._resolve_and_inject_dispatch(
             formatted_prompt, llm_context, request.agent_config, request.tools_path
         )
+        formatted_prompt, cache_points = (
+            take_cache_points(formatted_prompt)
+            if has_cache_point(raw_prompt)
+            else (formatted_prompt, ())
+        )
 
         metadata: dict[str, Any] = {
             "mode": request.mode,
@@ -413,6 +451,7 @@ class PromptPreparationService:
             passthrough_fields=passthrough_fields,
             metadata=metadata,
             prompt_context=prompt_context,
+            cache_points=cache_points,
         )
 
     @staticmethod
@@ -429,7 +468,8 @@ class PromptPreparationService:
         Raises:
             TemplateVariableError: If template syntax is invalid or rendering fails.
         """
-        if not prompt_context:
+        # A cache point is a tag, which only a render turns into no text.
+        if not prompt_context and not has_cache_point(raw_prompt):
             logger.debug("No prompt_context, using raw prompt")
             return raw_prompt
 
@@ -441,6 +481,7 @@ class PromptPreparationService:
                 keep_trailing_newline=True,
                 finalize=lambda x: "" if is_null_namespace(x) else x,
                 place_of=lambda obj: _place_in(prompt_context, obj, raw_prompt),
+                extensions=PROMPT_EXTENSIONS,
             )
 
             raw_prompt = escape_jinja_in_inline_code(raw_prompt)
@@ -497,7 +538,14 @@ class PromptPreparationService:
             # text is the detail.
             attribute_read = False
             detail: str | None = None
-            if isinstance(e, MissingFieldError):
+            if isinstance(e, MissingFieldError) and isinstance(
+                prompt_context.get(e.place), NullNamespace
+            ):
+                # A null namespace answers only for its optional fields; a read of any
+                # other is the read off a null namespace it was without them.
+                missing.append(e.field)
+                attribute_read = True
+            elif isinstance(e, MissingFieldError):
                 missing.append(f"{e.place}.{e.field}")
                 detail = error_str
             elif "has no attribute" in error_str or "is undefined" in error_str:
@@ -617,9 +665,10 @@ class PromptPreparationService:
                                 f" Other namespaces present: "
                                 f"{', '.join(sorted(other_ns)) if other_ns else '(none)'}."
                                 f" Consider adding a guard to '{agent_name}' to "
-                                f"exclude these records, or using "
+                                f"exclude these records, using "
                                 f"'{blamed_ns}.*' (null-safe) instead of "
-                                f"specific fields."
+                                f"specific fields, or observing the field as optional "
+                                f"('{blamed_ns}.{attribute_name}?')."
                             )
                         null_namespace_hints[blamed_ns] = {
                             "alternate_deps": other_ns,

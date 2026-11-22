@@ -93,7 +93,7 @@ Each element of the JSON array in `data` is a record. This example record comes 
 | `root_target_id`     | The `target_id` of the record of the first action for this source record (absent on the records of the first action) |
 | `content`            | Fields by namespace. The staged input is under `source`. The output of each upstream action is under the name of that action. The output of this action (schema-validated) is under its own name. |
 | `lineage`            | An array that tracks the processing chain |
-| `metadata`           | Execution metadata, for example `model` and `provider` |
+| `metadata`           | Execution metadata: the `model` and `provider` that the configuration of the action names. A batch record also holds `finish_reason`, the reason that the provider gave for the end of the answer. The system does not read a field of the answer of the model into `metadata` |
 
 ### Metadata Fields
 
@@ -207,13 +207,13 @@ The `data` column is compressed in the store. Thus you read the records themselv
 ### Dump every record for one action
 
 ```bash
-agac records -w <workflow> -a extract_facts
+agac records -w <workflow> -A extract_facts
 ```
 
 ### Extract one field across all records for an action
 
 ```bash
-agac records -w <workflow> -a extract_facts --field content.headline
+agac records -w <workflow> -A extract_facts --field content.headline
 ```
 
 ### Locate the records for one source record {/* #locate-the-rows-for-one-source-record */}
@@ -228,7 +228,7 @@ agac records -w <workflow> --source-guid <source_guid>
 Remove the previous outputs before a fresh run:
 
 ```bash
-agac run -a my_workflow --fresh
+agac run -w my_workflow --fresh
 ```
 
 `--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`). It does not delete the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the database in the store. It asks for confirmation unless `--force` is set. The store folder stays. It holds only the empty run lock file `<workflow>.db.lock`.

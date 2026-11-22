@@ -17,7 +17,7 @@ from agent_actions.config.manager import ConfigManager
 from agent_actions.config.schema import ChunkConfig, WorkflowConfig
 from agent_actions.errors import ConfigurationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _chunk_settings
-from agent_actions.output.response.expander_merge import CHUNK_SETTINGS
+from agent_actions.output.response.expander_merge import CHUNK_SETTINGS, SPLIT_FIELD
 
 # A value distinct from every default, per declared type.
 SENTINELS = {
@@ -61,16 +61,17 @@ def _manager(root):
 
 
 def test_the_schema_and_the_expander_name_the_same_settings():
-    assert set(ChunkConfig.model_fields) == set(CHUNK_SETTINGS)
+    # `field` names what to split, not how; tests of the field split check its wiring.
+    assert set(ChunkConfig.model_fields) == {*CHUNK_SETTINGS, SPLIT_FIELD}
 
 
 def test_every_name_the_schema_declares_has_a_sentinel_here():
     """Guard on the guard: a new field with no sentinel would skip the round-trip
     below rather than fail it."""
-    assert set(SENTINELS) == set(ChunkConfig.model_fields)
+    assert set(SENTINELS) == set(ChunkConfig.model_fields) - {SPLIT_FIELD}
 
 
-@pytest.mark.parametrize("setting", sorted(ChunkConfig.model_fields))
+@pytest.mark.parametrize("setting", sorted(CHUNK_SETTINGS))
 def test_every_declared_name_changes_what_the_chunker_is_given(setting):
     """A declared name the reader never looks up leaves the split on its default."""
     baseline = _chunk_settings({"chunk_config": {}})

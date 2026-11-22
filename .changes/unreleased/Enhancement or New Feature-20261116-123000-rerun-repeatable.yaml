@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: '`agac run --rerun` can be given more than once (`--rerun classify --rerun summarize`) to answer several actions, and every action reading one of them, again in one run. Given twice before, only the last name was rerun. A single `--rerun ACTION` works as before, and every name the workflow does not have is listed before any state is touched.'
+time: 2026-11-16T12:30:00Z

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "An Ollama batch record whose request fails is sent again by `retry:` only when the online call would retry the same failure. Every failure was written with no status, and a failure with no status is resent, so a 404 for a model that is not pulled or a 400 for a bad request was retried until `max_attempts` was spent. The record's line now carries the HTTP status of the error. A rate limit (429), a server error (500, 502, 503, 504) and a connection failure or timeout are still sent again; any other failure fails its record at once with the server's message."
+time: 2026-11-18T19:01:00Z

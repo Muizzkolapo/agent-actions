@@ -107,7 +107,9 @@ agac masks the credential in log messages, events, record reasons and the error 
 A server cannot report whether it honours `json_schema`. Only a request proves it. `agac run --verify-keys` sends one small request to each endpoint that the workflow uses. The request uses the first `model_name` named for the endpoint, `max_tokens: 16` and a one-field schema. These results are errors: a credential that the server refuses, a server that agac cannot reach, and a reply that does not match the schema:
 
 - `endpoint 'azure-gpt' refused the credential (HTTP 401)` (or 403)
-- `endpoint 'lab-vllm' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (a reply that is not the object of the probe, or a server that rejects the request with HTTP 400 or 422. HTTP 400 or 422 is the usual way that a server declines `response_format`.)
+- `endpoint 'lab-vllm' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (a reply that is not the object of the probe, or a server that rejects the request with HTTP 400 or 422 and names `response_format` or `json_schema` in its text.)
+- `endpoint 'lab-vllm' rejected the probe request (HTTP 400: ...)` (an HTTP 400 or 422 for another reason, for example a parameter or a model name. The message holds the text of the server.)
+- `endpoint 'lab-vllm' gave no answer to the probe: ...` (a reply with no text: a refusal, which the message quotes, or a model that spent the 16 tokens before it answered.)
 - `endpoint 'lab-vllm' answered HTTP 404: ...` (any other status that the server answered with, including 5xx)
 - `endpoint 'lab-vllm' could not be reached: ...` (no answer at all)
 - the failure of the auth command, for example `endpoint 'vertex-gemini' auth command 'gcloud' exited with 1`

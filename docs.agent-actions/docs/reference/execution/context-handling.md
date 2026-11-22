@@ -99,12 +99,26 @@ actions:
 
 The same configuration works identically in the two modes.
 
+## The Request to the Model
+
+The two modes also send the same request. For the same prompt, record, schema and `json_mode`, a batch request holds the messages that the online request holds. The prompt, the record and the schema instructions are in the same places.
+
+Agent Actions sends the record to the model as JSON. It does not escape text that is not ASCII. A `NaN` or an infinite number becomes `null`. A field that the prompt prints is not sent again in that JSON, unless the action sets `context_block: all`. See [The context block](../context/context-scope.md#the-context-block).
+
+A prompt that is too large for the context window of the model fails its record in the two modes. In batch mode, Agent Actions does not send that record. It sends the other records of the batch. A judge request that is too large fails only its judge call, with `judge call failed: <error>`, as online. Agent Actions sends the other judge requests.
+
+Agent Actions estimates the size of a prompt as its number of characters divided by 4. It compares the estimate with the context window of the model. For OpenAI in text mode, Gemini, Groq, Ollama and a judge call, Agent Actions uses a window of 128,000 tokens. If the prompt has more than about 512,000 characters, Agent Actions does not send it. The [`context_window`](../configuration/index.md#context-window) of the action replaces the window for every vendor and every call.
+
+:::note
+In the release after 3.0.0, Agent Actions changes the prompt of each online request. This applies to OpenAI, Anthropic, Gemini, Groq and Cohere. Before, the record JSON in the prompt had double braces. Now Agent Actions sends the JSON with no change. Thus an answer can change. The Anthropic prompt cache misses one time after the update.
+:::
+
 ## Best Practices
 
 1. **Always put a namespace on the fields in a template** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never use a bare `{{ field }}`.
 2. **Select a mode for cost or latency, not for templates** — `run_mode: batch` changes when the LLM calls occur. It does not change the context that the prompt sees.
 3. **Use seed data for static content** — seed data works identically in the two modes.
-4. **Examine the rendered prompts** — `agac traces -w <workflow> -a <action>` shows the exact text that the LLM received.
+4. **Examine the rendered prompts** — `agac traces -w <workflow> -A <action>` shows the exact text that the LLM received.
 
 ## See Also
 

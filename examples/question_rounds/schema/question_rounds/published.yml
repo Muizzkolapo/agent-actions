@@ -1,0 +1,4 @@
+name: published
+fields:
+  - {id: status, type: string, required: true}
+  - {id: summary, type: string, required: true}

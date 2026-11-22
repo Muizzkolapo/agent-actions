@@ -28,12 +28,14 @@
 | `UDFLoadError` | Class | Raised when a UDF module fails to load. `DISCOVERY_SENTINEL` class attribute marks failures of the user-code directory itself (vs. a specific module import), so formatters can render directory-appropriate messages. | - |
 | `AgentNotFoundError` | Class | Raised when a specified agent cannot be found. | - |
 | `ProjectNotFoundError` | Class | Raised when a command requires being in a project but agent_actions.yml is not found. | - |
-| `external_services.py` | Module | External service and vendor API errors. `ExternalServiceError.__init__` guards `endpoint` with `endpoint or "<unknown>"` before interpolation. `ResponseTruncatedError` (a `VendorAPIError`) is a response the output budget cut off before any answer; the retry policy retries it. | `errors` |
+| `external_services.py` | Module | External service and vendor API errors. `ExternalServiceError.__init__` guards `endpoint` with `endpoint or "<unknown>"` before interpolation. `ResponseTruncatedError` (a `VendorAPIError`) is a response the output budget cut off before any answer; the retry policy retries it. `QuotaExceededError` (a `VendorAPIError`) is a provider's answer that the account's quota, credit or balance is used up, which nothing retries; `ProviderQuotaStop` is what a run raises on it. | `errors` |
 | `ExternalServiceError` | Class | Base exception for external service interactions. | - |
 | `VendorAPIError` | Class | Raised when an error occurs during a call to a vendor's API. | - |
 | `AnthropicError` | Class | Specific error for Anthropic API failures. | - |
 | `NetworkError` | Class | Raised when network-related errors occur (timeout, connection, etc). | - |
 | `RateLimitError` | Class | Raised when API rate limits are exceeded. | - |
+| `QuotaExceededError` | Class | Raised when the provider says the account's quota, credit or balance is used up. Not retriable. `provider_message` is the provider's own text. | - |
+| `ProviderQuotaStop` | Class | A `BaseException`, not an `Exception`, that ends the run when a provider's quota is used up, as an interrupt ends it: the handlers that fail a record, a file or an action on an error do not see it, so a record without an answer keeps no disposition and the next run resumes it. Carries `provider` and `provider_message`; its text is the one message the run ends with. | - |
 | `filesystem.py` | Module | File system operation errors. | `errors` |
 | `FileSystemError` | Class | Base exception for file system operations. | - |
 | `FileLoadError` | Class | Raised when a file cannot be loaded. | - |
@@ -62,6 +64,7 @@
 | `WorkflowError` | Class | Raised when an error occurs in workflow processing. | - |
 | `SerializationError` | Class | Raised when serialization/deserialization fails. | - |
 | `GuardNotAppliedError` | Class | Raised when a guard could not be put to a record, so the record has no verdict and is not passed to the action. | - |
+| `GuardNotEvaluatedError` | Class | A `RecordContextError`: a condition guard gave no verdict on one record within its time. Online, batch and file mode fail that record alone with the message as its reason. | - |
 | `EmptyOutputError` | Class | Raised when an action produces empty output and on_empty=error. | - |
 | `DispositionsNotStoredError` | Class | Raised, marked action-fatal, when the store refused the failure dispositions of an online run's records, so `agac retry` could not find them; the action fails with the store error instead. | - |
 | `resources.py` | Module | Resource-related errors (memory, dependencies, etc). | `errors` |
@@ -86,9 +89,9 @@ No direct project surface. Consumed internally by config, validation, workflow, 
 | `agent_actions/config` | inbound | Config module raises `ConfigurationError`, `ConfigValidationError`, `FileSystemError`. |
 | `agent_actions/validation` | inbound | Validators raise `SchemaValidationError`, `ValidationError`, and preflight errors. |
 | `agent_actions/workflow` | inbound | Workflow execution raises `WorkflowError`, `AgentExecutionError`, `ProcessingError`, and the online pipelines `DispositionsNotStoredError`. |
-| `agent_actions/llm` | inbound | LLM providers raise `VendorAPIError`, `AnthropicError`, `RateLimitError`, `NetworkError`. |
+| `agent_actions/llm` | inbound | LLM providers raise `VendorAPIError`, `AnthropicError`, `RateLimitError`, `QuotaExceededError`, `NetworkError`; the client call and batch submission raise `ProviderQuotaStop`. |
 | `agent_actions/prompt` | inbound | Prompt rendering raises `TemplateRenderingError`, `TemplateVariableError`. |
-| `agent_actions/input` | inbound | Loaders raise `FileLoadError`, `UDFLoadError`, `DuplicateFunctionError`. The guard evaluator raises `GuardNotAppliedError`. |
+| `agent_actions/input` | inbound | Loaders raise `FileLoadError`, `UDFLoadError`, `DuplicateFunctionError`. The guard evaluator raises `GuardNotAppliedError` and `GuardNotEvaluatedError`. |
 | `agent_actions/output` | inbound | Output processing raises `SerializationError`, `TransformationError`, `EmptyOutputError`. |
 | `agent_actions/cli` | inbound | CLI catches and formats all error types. |
 | `agent_actions/logging` | inbound | Error translator and formatters consume error hierarchy. |

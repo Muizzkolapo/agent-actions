@@ -8,12 +8,16 @@ from typing import Any
 import click
 from rich.text import Text
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
-from .inspect_base import BaseInspectCommand
+from .inspect_base import BaseInspectCommand, branch_of, observe_as_written
 from .workflow_loader import validate_action_exists
 
 logger = logging.getLogger(__name__)
@@ -26,6 +30,19 @@ def _escape_markup(text: str) -> str:
     from rich.markup import escape
 
     return escape(text)
+
+
+def _describe_branch(branch: dict[str, Any]) -> str:
+    named = f" as {_escape_markup(branch['instance'])}" if "instance" in branch else ""
+    return f"{_escape_markup(branch['name'])}{named}  [dim]({_escape_markup(branch['file'])})[/dim]"
+
+
+def _describe_names(branch: dict[str, Any]) -> str:
+    """The short names of an ``as:`` include, each with the action it means."""
+    return ", ".join(
+        f"{_escape_markup(short)} → {_escape_markup(final)}"
+        for short, final in branch["names"].items()
+    )
 
 
 class ActionCommand(BaseInspectCommand):
@@ -69,6 +86,9 @@ class ActionCommand(BaseInspectCommand):
                 action_schema=self._get_action_schema(self.action_name),
             ),
         }
+        branch = branch_of(action_config)
+        if branch is not None:
+            output["branch"] = branch
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(
@@ -114,7 +134,13 @@ class ActionCommand(BaseInspectCommand):
         )
         self.console.print()
 
-        fields: list[tuple[str, object]] = [
+        fields: list[tuple[str, object]] = []
+        branch = branch_of(action_config)
+        if branch is not None:
+            fields.append(("Branch", _describe_branch(branch)))
+            if "names" in branch:
+                fields.append(("Names", _describe_names(branch)))
+        fields += [
             ("Kind", kind),
             ("Model", model),
             ("Granularity", granularity),
@@ -352,7 +378,7 @@ class ActionCommand(BaseInspectCommand):
 
 
 @click.command(name="action")
-@click.option("-a", "--agent", required=True, help="Workflow name")
+@workflow_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.argument("action_name", metavar="ACTION_NAME")
@@ -454,12 +480,14 @@ class ContextCommand(BaseInspectCommand):
         if seed_keys and "seed" not in namespaces:
             namespaces["seed"] = seed_keys
 
+        branch = branch_of(action_config)
         return {
             "action_name": self.target_action_name,
             "workflow": self.agent_name,
+            **({"branch": branch} if branch is not None else {}),
             "namespaces": namespaces,
             "context_scope": {
-                "observe": context_scope.get("observe", []),
+                "observe": observe_as_written(context_scope),
                 "passthrough": context_scope.get("passthrough", []),
                 "drop": context_scope.get("drop", []),
             },
@@ -590,6 +618,13 @@ class ContextCommand(BaseInspectCommand):
         )
         self.console.print()
 
+        branch = context_data.get("branch")
+        if branch is not None:
+            self.console.print(
+                f"  [bold]Branch:[/bold]  {_describe_branch(branch)}\n",
+                highlight=False,
+            )
+
         # Group by namespace so a long observe list reads as `foo: a, b, c, …`
         # rather than many single-field lines.
         scope_kinds = [(kind, scope.get(kind) or []) for kind in ("observe", "passthrough", "drop")]
@@ -700,7 +735,7 @@ class ContextCommand(BaseInspectCommand):
 
 
 @click.command(name="context")
-@click.option("-a", "--agent", required=True, help="Workflow name")
+@workflow_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.argument("action_name", metavar="ACTION_NAME")

@@ -2,6 +2,7 @@
 
 import json
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests.integration.test_a_deeply_nested_record_runs_in_batch import (
     ACTION,
     WORKFLOW,
@@ -14,7 +15,7 @@ from tests.integration.test_a_deeply_nested_record_runs_in_batch import (
 def _run_until_settled():
     for _ in range(4):
         result = _invoke("run", "-a", WORKFLOW)
-        assert result.exit_code == 0, result.output
+        assert result.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), result.output
         if "run again" not in result.output:
             return
 
@@ -22,7 +23,7 @@ def _run_until_settled():
 def test_a_file_staged_during_the_batch_is_answered_by_a_later_run(tmp_path, monkeypatch):
     root = _project(tmp_path, monkeypatch, 1)
     submitted = _invoke("run", "-a", WORKFLOW, "--fresh")
-    assert submitted.exit_code == 0, submitted.output
+    assert submitted.exit_code == EXIT_PAUSED, submitted.output
     staging = root / "agent_workflow" / WORKFLOW / "agent_io" / "staging"
     staging.joinpath("more.json").write_text(
         json.dumps([{"page_id": "p9", "page_content": "page 9"}])

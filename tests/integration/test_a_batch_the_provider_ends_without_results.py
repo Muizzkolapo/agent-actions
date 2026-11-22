@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_batch_the_provider_refuses import (
     CLI_ACTION,
@@ -98,7 +99,7 @@ class TestABatchTheProviderEndsBesideOneItFinishes:
         )
 
     def test_the_run_that_finds_it_completes_the_action_with_failures(self, runs):
-        assert runs.ended.code == 0, runs.ended.output
+        assert runs.ended.code == EXIT_RECORD_FAILURES, runs.ended.output
         assert runs.ended.status == "completed_with_failures", runs.ended.output
 
     def test_the_records_of_its_file_are_marked_failed_naming_the_batch(self, runs):
@@ -117,11 +118,11 @@ class TestABatchTheProviderEndsBesideOneItFinishes:
         )
 
     def test_the_run_after_it_does_not_wait_on_it(self, runs):
-        assert runs.after.code == 0, runs.after.output
+        assert runs.after.code == EXIT_RECORD_FAILURES, runs.after.output
         assert runs.after.status == "completed_with_failures", runs.after.output
 
     def test_agac_retry_sends_its_records_again_and_every_record_ends_answered(self, runs):
-        assert runs.retried.code == 0, runs.retried.output
+        assert runs.retried.code == EXIT_PAUSED, runs.retried.output
         assert "Nothing to retry" not in runs.retried.output
         assert runs.collected[-1].status == "completed", runs.collected[-1].output
         assert _stored_rows(runs.project) == _answered("a", "b")

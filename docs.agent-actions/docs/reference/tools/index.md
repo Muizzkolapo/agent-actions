@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Tool Actions
 
-A tool action runs your own Python function in a workflow, beside the LLM actions. Use a tool for logic that an LLM cannot perform. Examples are to deduplicate records, call an external API or apply deterministic business rules. These tasks need deterministic logic, not prompts.
+A tool action runs a Python function in a workflow, beside the LLM actions. Usually the function is your own. Agent Actions also has built-in tools (`agac.route` and `agac.pick`), which a router and a join use. Use a tool for logic that an LLM cannot perform. Examples are to deduplicate records, call an external API or apply deterministic business rules. These tasks need deterministic logic, not prompts.
 
 When you need guaranteed, repeatable behavior, use a tool.
 
@@ -113,6 +113,8 @@ are never the `impl:` values. For example, an action has `- name: compile_input`
 `impl: m_compile_input`. Read `data["compile_input"]`. `data.get("m_compile_input")` finds
 nothing and returns its default with no message.
 
+A tool action of a branch included with `as:` is the exception. Its keys are the short names of the branch: in instance `c2`, `data["write"]` holds the output of `c2__write`. See [Short names at run time](../configuration/branches.md#short-names-at-run-time).
+
 A tool or guard UDF can read a literal key that is not the name of an action. Before it runs
 anything, `agac run` writes a warning for each such key. `agac validate-udfs` does the same:
 
@@ -156,6 +158,7 @@ Only tool actions support file granularity. LLM actions must use record granular
   - The action observes several actions by wildcard.
 
   Neither `content` nor an action name encloses the fields.
+- **A named field that a record does not have is not in its item**, and the record fails. A field that you observe as [optional](../context/context-scope.md#optional-fields) is always in the item. It holds its default, or `None`, when the record does not have it.
 - **To pass a record through, return the item that you received** (filter, dedup, sort, transform). The item keeps its identity and lineage.
 - **For aggregation, return `FileUDFResult` with `source_index: None`.** This value says that no single input produced the row. The framework gives the row a new identity and fresh lineage. From each upstream namespace, the row carries only the fields whose value is the same on every input of the file. When the file holds one input, the row carries all fields. The row has none of the history of any one input. A field that differs between inputs is not on the row. If a retry writes the row again exactly as it was, it is the same row and keeps its identity. Thus the downstream actions keep their answers for the row. The framework rejects a plain new dict in a list.
 - **A position is a non-negative built-in `int`.** `source_index` takes one position, a list of positions for a many-to-one output, or `None`. The framework refuses a negative value, a bool, or a `None` inside the list. A numpy or pandas index is not an `int`. Cast it with `int(idx)`. To say that no single input produced the row, use `None`. Never use an empty list.
@@ -262,7 +265,7 @@ Tool registration is thread-safe. The framework loads a module only one time.
 agac list-udfs -u ./tools
 
 # Validate tool references in workflow
-agac validate-udfs -a my_workflow -u ./tools
+agac validate-udfs -w my_workflow -u ./tools
 ```
 
 ## Import Rules

@@ -1,7 +1,7 @@
 """A stub OpenAI-compatible chat server that records what it was handed.
 
 `honour` replies match the schema the request carried, `ignore` replies match none,
-`prose` is not JSON; a status queue answers first. As a program (`--honour PORT
+`prose` is not JSON, `empty` holds no content; a status queue answers first. As a program (`--honour PORT
 --ignore PORT`) it serves the sample project's probe and prints each request's headers.
 """
 
@@ -51,8 +51,15 @@ class FakeEndpoint:
         self.content: str | None = None
         # When set, every error reply carries exactly this message.
         self.error_message: str | None = None
+        # When set, every 200 reply declines: no content, this refusal.
+        self.refusal: str | None = None
+        # The finish_reason every 200 reply carries; "length" with `empty` is a cut-off.
+        self.finish_reason = "stop"
         # The Retry-After header every 429 reply carries.
         self.retry_after = "0"
+        # When False, every error reply tells the SDK not to retry on its own, so each
+        # error is one attempt of agac's.
+        self.sdk_retries = True
         # Seconds every request is held before its reply, and the most held at once.
         self.delay = 0.0
         self.peak_in_flight = 0
@@ -115,7 +122,10 @@ class FakeEndpoint:
         model = body.get("model") if isinstance(body, dict) else None
         response_format = body.get("response_format") if isinstance(body, dict) else None
         schema = (response_format or {}).get("json_schema")
-        if self.content is not None:
+        content: str | None
+        if self.refusal is not None or self.mode == "empty":
+            content = None
+        elif self.content is not None:
             content = self.content
         elif self.mode == "honour":
             content = json.dumps(reply_for_schema(schema, str(model)))
@@ -133,8 +143,12 @@ class FakeEndpoint:
             "choices": [
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": content},
-                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": content,
+                        "refusal": self.refusal,
+                    },
+                    "finish_reason": self.finish_reason,
                 }
             ],
             "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
@@ -177,6 +191,8 @@ def _handler_for(endpoint: FakeEndpoint) -> type[BaseHTTPRequestHandler]:
             self.send_header("content-type", "application/json")
             if status == 429:
                 self.send_header("retry-after", endpoint.retry_after)
+            if status != 200 and not endpoint.sdk_retries:
+                self.send_header("x-should-retry", "false")
             self.send_header("content-length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

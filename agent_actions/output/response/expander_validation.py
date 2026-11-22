@@ -38,6 +38,38 @@ def routing_kind(agent: dict[str, Any]) -> str:
     return "llm"
 
 
+def inherited_routing_kind(action: dict[str, Any], defaults: dict[str, Any]) -> str:
+    """The ``routing_kind`` of *action* once it inherits ``kind`` and ``model_vendor``."""
+    return routing_kind(
+        {
+            key: action.get(key, defaults.get(key, get_default(key)))
+            for key in ("kind", "model_vendor")
+        }
+    )
+
+
+def resolved_granularity(
+    kind: str, action: dict[str, Any], defaults: dict[str, Any]
+) -> tuple[Any, bool]:
+    """The granularity an action of *kind* runs at, and whether a FILE default was set aside.
+
+    A HITL review sees the whole file, so it defaults to FILE. An LLM action runs per
+    record, so a FILE default, which is written for the workflow's tools, does not apply.
+    """
+    if kind == "hitl":
+        return action.get("granularity", "file"), False
+    if kind == "tool":
+        return action.get(
+            "granularity", defaults.get("granularity", get_default("granularity"))
+        ), False
+    if action.get("granularity") is not None:
+        return action["granularity"], False
+    inherited = defaults.get("granularity", get_default("granularity"))
+    if is_file_granularity(inherited):
+        return get_default("granularity"), True
+    return inherited, False
+
+
 def validate_granularity_for_kind(kind: str, granularity: Any, action_name: str) -> None:
     """Refuse a granularity an action sets that the runtime cannot run it at.
 
@@ -180,6 +212,9 @@ _ONE_RECORD_AT_A_TIME = {
     "hitl": "a hitl action reviews its records together",
 }
 
+# Vendors with no batch API: their batch is a loop in this process, with its own worker setting.
+_BATCHES_IN_THIS_PROCESS = frozenset({"ollama_local", "ollama_cloud"})
+
 
 def validate_record_concurrency(
     action: dict[str, Any], agent: dict[str, Any], kind: str, action_name: str
@@ -192,14 +227,20 @@ def validate_record_concurrency(
     if "record_concurrency" not in action:
         return
     reason = _ONE_RECORD_AT_A_TIME.get(kind)
+    remedy = f"Remove record_concurrency from '{action_name}'"
     if reason is None and agent.get("run_mode") == RunMode.BATCH:
         reason = "a batch action's records run at the provider"
+        if str(agent.get("model_vendor") or "").lower() in _BATCHES_IN_THIS_PROCESS:
+            reason = (
+                "an Ollama batch action sends its records from this process, "
+                "batch_max_workers at a time"
+            )
+            remedy += ", and set batch_max_workers on it to send more than one record at a time"
     if reason is None:
         return
     raise ConfigValidationError(
         "record_concurrency",
-        f"Action '{action_name}' sets record_concurrency, but {reason}.\n"
-        f"Remove record_concurrency from '{action_name}'.",
+        f"Action '{action_name}' sets record_concurrency, but {reason}.\n{remedy}.",
         context={"action": action_name, "kind": kind},
     )
 

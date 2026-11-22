@@ -25,9 +25,10 @@ from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
     VendorErrorMapping,
-    empty_response_error,
-    is_truncated,
+    chat_no_answer,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -65,6 +66,13 @@ _ERROR_MAPPING = VendorErrorMapping(
 )
 
 
+def _no_answer(content: Any, finish_reason: Any, model_name: str) -> NoAnswer | None:
+    # Groq's message carries no refusal.
+    return chat_no_answer(
+        content, finish_reason, None, vendor_label="Groq", model_name=model_name, vendor="groq"
+    )
+
+
 class GroqClient(BaseClient, JSONResponseMixin):
     """Groq API client for JSON and non-JSON LLM invocations."""
 
@@ -89,7 +97,12 @@ class GroqClient(BaseClient, JSONResponseMixin):
         client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build(
-            "groq", prompt_config, context_data, schema=schema, json_mode=True
+            "groq",
+            prompt_config,
+            context_data,
+            schema=schema,
+            json_mode=True,
+            context_window=agent_config.get("context_window"),
         )
 
         # Generate request ID for correlation
@@ -152,6 +165,16 @@ class GroqClient(BaseClient, JSONResponseMixin):
         ResponseBuilder.record_usage_and_event(llm, "groq", model_name, latency_ms, request_id)
 
         response_temp = llm.choices[0].message.content
+        finish_reason = llm.choices[0].finish_reason
+        ended = _no_answer(response_temp, finish_reason, model_name)
+        if ended is not None:
+            if response_temp is not None:
+                logger.warning("%s (model=%s)", ended.parse_error, model_name)
+            return [{"raw_response": "", "_parse_error": ended.parse_error}]
+        parse_error = unfinished_parse_error(finish_reason)
+        if parse_error:
+            logger.warning("%s (model=%s)", parse_error, model_name)
+            return [{"raw_response": response_temp, "_parse_error": parse_error}]
         response_data = GroqClient.parse_json_response(
             response_temp, "Groq", "call_json", model_name
         )
@@ -163,13 +186,17 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         client = get_or_create_client(Groq, api_key)
         model_name = agent_config[MODEL_NAME_KEY]
-        envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
-        params = extract_generation_params(agent_config)
-        params.setdefault("max_tokens", 1000)
+        envelope = MessageBuilder.build(
+            "groq",
+            prompt_config,
+            context_data,
+            json_mode=False,
+            context_window=agent_config.get("context_window"),
+        )
         completion_kwargs = {
             "messages": envelope.to_dicts(),
             "model": model_name,
-            **params,
+            **extract_generation_params(agent_config),
             **connect_limited_timeout_kwargs(agent_config, groq),
         }
 
@@ -200,14 +227,13 @@ class GroqClient(BaseClient, JSONResponseMixin):
         ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)
 
         choice = response.choices[0] if getattr(response, "choices", None) else None
-        if choice is not None and not choice.message.content and is_truncated(choice.finish_reason):
-            raise empty_response_error(
-                "Groq",
-                choice.finish_reason,
-                model_name=model_name,
-                vendor="groq",
-                operation="chat.completions.create",
-            )
+        ended = (
+            _no_answer(choice.message.content, choice.finish_reason, model_name)
+            if choice is not None
+            else None
+        )
+        if ended is not None and ended.error is not None:
+            raise ended.error
         try:
             response_content = response.choices[0].message.content
             return ResponseBuilder.wrap_non_json(response_content, agent_config)

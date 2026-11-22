@@ -55,16 +55,20 @@ The examples on this page omit the lines that are not the subject of the example
 | `run_mode` | string | `online` (default) or `batch` execution |
 | `on_empty` | string | The result of an empty answer: `warn` (default), `error` or `skip`. See [Execution Fields](./index.md#execution-fields) |
 | `context_scope` | object | The default context visibility: `observe`, `drop`, `passthrough`, `seed` |
+| `context_block` | string | Which observed fields the request sends in its context block: `auto` (default), `all` or `none`. See [The context block](../context/context-scope.md#the-context-block) |
 | `temperature` | float | The LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | The maximum number of response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | The stop sequence or sequences that end the generation |
 | `vendor_params` | object | Other request parameters of the vendor SDK. An action's `vendor_params` merge over these key by key. See [Vendor parameters](./index.md#vendor-parameters) |
 | `record_concurrency` | integer | The number of records of an online LLM action that are sent at the same time (1-32). If unset, the value is 1. Tool, hitl and batch actions ignore this field. See [Record concurrency](./index.md#record-concurrency) |
+| `batch_max_workers` | integer | The number of records that an Ollama action in `run_mode: batch` sends at the same time (1-32). If unset, the `OLLAMA_BATCH_MAX_WORKERS` environment variable gives the value, or else the value is 1. No other action reads this field. See [Ollama batch](../execution/run-modes.md#ollama-batch) |
 | `request_timeout` | number | The number of seconds that one LLM request may take (greater than 0). If a request takes longer, that attempt fails and `retry` retries it. If unset, each provider SDK keeps its own timeout. See [Request timeout](./index.md#request-timeout) |
+| `context_window` | integer | The number of tokens of prompt that the model reads (greater than 0). A larger prompt fails its record before it is sent. If unset, Agent Actions uses the window that it knows for the model, or 128,000 tokens. See [Context window](./index.md#context-window) |
+| `guard_timeout` | number | The number of seconds that the condition of each guard may take on one record (greater than 0, default 5). A guard's own `timeout` wins. A UDF guard does not read it. See [Guards](../execution/guards.md#timeouts) |
 | `record_limit` | integer | The maximum number of records in each file (default: unlimited). `AGAC_RECORD_LIMIT` caps this value from the environment |
 | `file_limit` | integer | The maximum number of files that each action walks (default: unlimited). `AGAC_FILE_LIMIT` limits this value from the environment. This limit does not restrict [`agac retry`](../cli/retry). That command walks the files that hold the records it named, and does not stop after `file_limit` files |
-| `enable_prompt_caching` | boolean | Enables Anthropic prompt caching, to reduce the costs of repeated prompts (default: `false`) |
+| `enable_prompt_caching` | boolean | Enables Anthropic prompt caching, to reduce the costs of repeated prompts (default: `false`). A prompt that every record shares is marked at its end. A prompt with `{% cache_point %}` tags is marked at each tag. See [Prompt Caching](../prompts/prompt-caching.md) |
 
 The table lists the common keys. A `defaults:` block accepts each key that [Unrecognized Default Key](#unrecognized-default-key) lists. These keys include `api_key`, `base_url`, `retry`, `expect`, `data_source`, `chunk_config` and `prompt_debug`.
 
@@ -353,7 +357,7 @@ defaults:
 To make a run smaller without a change to the project, pass [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) or [`--file-limit`](../cli/run#running-a-project-smaller-than-it-is) to `agac run`. Alternatively, set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` where a variable is more suitable. If both are set, the flag wins. Each one limits the same axis as its config key: records for each input file, and input files for each action. Both apply to each action, including the actions that configure no limit. Thus you can use them on a project that you do not own:
 
 ```bash
-AGAC_RECORD_LIMIT=2 AGAC_FILE_LIMIT=1 agac run -a my_workflow
+AGAC_RECORD_LIMIT=2 AGAC_FILE_LIMIT=1 agac run -w my_workflow
 ```
 
 `record_limit` applies at any action: start actions, actions in the middle of the workflow, or leaf actions. Use it to test a single downstream action without a new run of the full workflow. `file_limit` applies at all stages.
@@ -416,7 +420,7 @@ defaults.granularity
   Input should be 'record' or 'file' [type=enum, input_value='invalid', input_type=str]
 ```
 
-To validate and run your workflow, run `agac run -a my_workflow`. The command catches configuration errors automatically, before any LLM calls.
+To validate and run your workflow, run `agac run -w my_workflow`. The command catches configuration errors automatically, before any LLM calls.
 
 ## See Also
 

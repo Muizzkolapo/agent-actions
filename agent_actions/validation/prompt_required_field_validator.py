@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection, Mapping
 
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
+from agent_actions.prompt.aliases import prompt_aliases
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
@@ -17,7 +20,7 @@ _NON_ACTION_ROOTS = frozenset(
     {"loop", "range", "dict", "lipsum", "cycler", "joiner", "namespace", "true", "false", "none"}
 )
 
-_ENV = Environment()
+_ENV = Environment(extensions=PROMPT_EXTENSIONS)
 
 
 def _chain_root_and_field(node: nodes.Node) -> tuple[str, str] | None:
@@ -104,7 +107,7 @@ def _walk(node: nodes.Node, guarded: frozenset[str], locals_: frozenset[str], fo
         _walk(child, guarded, locals_, found)
 
 
-def _unguarded_refs(template: str) -> set[tuple[str, str]]:
+def _unguarded_refs(template: str, names: Mapping[str, str]) -> set[tuple[str, str]]:
     """Return the ``(root, field)`` refs used outside any guarding ``{% if %}``."""
     try:
         ast = _ENV.parse(escape_jinja_in_inline_code(template))
@@ -113,7 +116,9 @@ def _unguarded_refs(template: str) -> set[tuple[str, str]]:
         return set()
     found: set[tuple[str, str]] = set()
     _walk(ast, frozenset(), frozenset(), found)
-    return found
+    # A short name the alias header binds reads the action it names.
+    aliases = prompt_aliases(ast, names)
+    return {(aliases.get(root, root), field) for root, field in found}
 
 
 def _optional_field_names(schema: dict) -> set[str]:
@@ -127,14 +132,20 @@ def _optional_field_names(schema: dict) -> set[str]:
     }
 
 
-def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dict]) -> list[str]:
+def find_unguarded_required_refs(
+    prompts: dict[str, str],
+    schemas: dict[str, dict],
+    optional: Mapping[str, Collection[str]] | None = None,
+    names: Mapping[str, Mapping[str, str]] | None = None,
+) -> list[str]:
     """Return findings for unguarded prompt refs to non-required producer fields.
 
     A ref ``ns.field`` is flagged when ``ns`` has a producing schema, ``field``
     is declared by that schema but not marked required, and the ref is not inside
     the body of an ``{% if %}`` that guards ``ns.field``. Refs to an unknown
     namespace, to a field the schema does not declare, or to the action's own
-    output namespace belong to other checks and are left alone here.
+    output namespace belong to other checks and are left alone here. So is a ref
+    *optional* names for its action: observed as optional, it renders as its default.
     """
     if not prompts or not schemas:
         return []
@@ -142,8 +153,11 @@ def find_unguarded_required_refs(prompts: dict[str, str], schemas: dict[str, dic
     findings: list[str] = []
     seen: set[tuple[str, str, str]] = set()
     for action_name, template in prompts.items():
-        for ns, field in sorted(_unguarded_refs(template)):
+        observed_as_optional = (optional or {}).get(action_name, ())
+        for ns, field in sorted(_unguarded_refs(template, (names or {}).get(action_name, {}))):
             if ns == action_name or field not in optional_by_ns.get(ns, frozenset()):
+                continue
+            if f"{ns}.{field}" in observed_as_optional:
                 continue
             key = (action_name, ns, field)
             if key in seen:

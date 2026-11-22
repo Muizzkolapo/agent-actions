@@ -28,6 +28,10 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     - Completion windows: 24h to 7 days
     """
 
+    _vendor_label = "Groq"
+    max_batch_requests = 50_000
+    max_batch_bytes = 100_000_000
+
     # Every status of the SDK's batch types. One being cancelled has not ended yet.
     STATUS_MAPPING = {
         "validating": "validating",
@@ -89,8 +93,14 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
-        envelope = MessageBuilder.build_for_batch(
-            "groq", batch_task.prompt, batch_task.user_content, schema=schema
+        # The messages online sends.
+        envelope = MessageBuilder.build(
+            "groq",
+            batch_task.prompt,
+            batch_task.user_content,
+            schema=schema,
+            json_mode=batch_task.json_mode(schema),
+            context_window=batch_task.model_config.get("context_window"),
         )
         body: dict[str, Any] = {
             "model": model_name,
@@ -100,9 +110,12 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         # Add optional parameters
         self._add_optional_param(body, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(body, "max_tokens", batch_task.model_config.get("max_tokens"))
+        body.update(self._sampling_params(batch_task.model_config, penalties=True))
 
         if schema:
             body["response_format"] = {"type": "json_schema", "json_schema": schema}
+        elif batch_task.model_config.get("json_mode"):
+            body["response_format"] = {"type": "json_object"}
         from agent_actions.llm.providers.groq.client import GroqClient
 
         GroqClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))

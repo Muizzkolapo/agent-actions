@@ -5,8 +5,9 @@ that can flow through the shared enrich/collect pipeline.
 """
 
 import logging
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
@@ -16,12 +17,19 @@ from agent_actions.llm.batch.core.batch_constants import FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.llm.providers.error_wrapper import stop_reason_name, unparsed_json_record
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.dispatch_injection import schema_dispatch_function
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.helpers import _empty_warn_reason, _is_empty_output
+from agent_actions.processing.helpers import (
+    _empty_warn_reason,
+    _is_empty_output,
+    warn_on_schema_mismatch,
+    with_dispatch_results,
+)
 from agent_actions.processing.record_helpers import (
     build_exhausted_tombstone,
     build_tombstone,
@@ -44,6 +52,7 @@ from agent_actions.record.reasons import (
     GUARD_SKIP,
     PREP_FAILED,
 )
+from agent_actions.utils.constants import SCHEMA_KEY
 from agent_actions.utils.content import (
     get_existing_content,
     is_version_merge,
@@ -52,7 +61,11 @@ from agent_actions.utils.content import (
 from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
-from agent_actions.utils.transformation.passthrough import merge_passthrough_namespaces
+from agent_actions.utils.transformation.passthrough import (
+    PassthroughTransformer,
+    merge_passthrough_namespaces,
+)
+from agent_actions.utils.transformation.strategies.base import ensure_dict_output
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +73,96 @@ logger = logging.getLogger(__name__)
 # Sentinel: None is a real answer here (the action has no expect: block), so
 # "not yet built" needs its own value.
 _UNSET = object()
+
+
+def dispatch_results(agent_config: dict[str, Any] | None, row: Any) -> dict[str, Any]:
+    """What online's ``add_dispatch`` puts on each item of this record's answer.
+
+    The schema the record's dispatch chose, under the function's name. Empty when the
+    action keeps none, or the context-map *row* has no recorded choice.
+    """
+    if not agent_config or not agent_config.get("add_dispatch") or not isinstance(row, dict):
+        return {}
+    function = schema_dispatch_function(agent_config.get(SCHEMA_KEY))
+    chosen = BatchContextMetadata.get_output_schema(row)
+    return {function: chosen} if function and chosen else {}
+
+
+def _response_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    """What a row keeps of a provider's own metadata: why the model stopped.
+
+    The rest differs by vendor; the model and provider are written from the config, as online.
+    """
+    reason = (metadata or {}).get("finish_reason") or (metadata or {}).get("stop_reason")
+    return {"finish_reason": stop_reason_name(reason)} if reason else {}
+
+
+class WrittenAnswer(NamedTuple):
+    """One answered result's content as the writer goes on to validate and store it."""
+
+    content: Any
+    # A JSON-mode answer no parse could read, now a ``_parse_error`` record.
+    unparsed: bool
+    # The model returned its schema in place of an answer, now a ``_parse_error`` record.
+    schema_echo: bool
+
+    @property
+    def empty(self) -> bool:
+        return _is_empty_output(self.content)
+
+    @property
+    def items(self) -> list[Any]:
+        """What the writer validates: nothing of an empty answer."""
+        return [] if self.empty else list(DataTransformer.ensure_list(self.content))
+
+
+def written_answer(
+    content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
+) -> WrittenAnswer:
+    """Read one answered result's *content* as the writer does; *dispatch* is its ``dispatch_results``."""
+    unparsed = isinstance(content, str) and json_mode
+    if isinstance(content, str):
+        content = unparsed_json_record(content) if json_mode else {output_field: content}
+    # Already on an answer read from the provider; a text answer is an object only now.
+    content = with_dispatch_results(content, dispatch or {})
+    schema_echo = _is_schema_echo(content)
+    if schema_echo:
+        content = _make_schema_echo_error(content)
+    return WrittenAnswer(content, unparsed, schema_echo)
+
+
+def validated_items(
+    content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
+) -> list[Any]:
+    """What the writer runs a ``repair: none`` suite over, for one answered result.
+
+    Lets a step ahead of the writer see the values it will validate.
+    """
+    return written_answer(
+        content, json_mode=json_mode, output_field=output_field, dispatch=dispatch
+    ).items
+
+
+def _dispatched_schema(agent_config: dict[str, Any], name: str) -> dict[str, Any] | None:
+    """The schema a dispatch chose at submission, in the form online checks an answer against."""
+    from agent_actions.errors.processing import SchemaDispatchError
+    from agent_actions.output.response.context_data import load_chosen_schema
+    from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+    from agent_actions.output.response.loader import SchemaLoader
+    from agent_actions.utils.schema_utils import is_compiled_schema
+
+    project_root = agent_config.get("_project_root")
+    function = schema_dispatch_function(agent_config.get(SCHEMA_KEY))
+    try:
+        loaded = load_chosen_schema(
+            str(function), name, Path(project_root) if project_root else None
+        )
+    except SchemaDispatchError as e:
+        logger.debug("Schema '%s' could not be loaded to check an answer against: %s", name, e)
+        return None
+    if is_compiled_schema(loaded):
+        return loaded
+    return SchemaLoader.construct_schema_from_dict(loaded)  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -85,6 +188,10 @@ class BatchProcessingContext:
     # The action's expectation service, built lazily on first use. None is a
     # real answer (no expect: block), so _UNSET marks "not yet built".
     expectation_service: Any = _UNSET
+
+    # Each schema a dispatch chose for a record of this batch, by name; None for one
+    # that no longer loads.
+    dispatched_schemas: dict[str, dict[str, Any] | None] = field(default_factory=dict)
 
 
 class BatchResultStrategy:
@@ -340,15 +447,19 @@ class BatchResultStrategy:
         is what the judge cache and the per-run budget need.
         """
         if ctx.expectation_service is _UNSET:
+            from agent_actions.expectations.judge import BATCH_JUDGE_KEY
             from agent_actions.expectations.service import (
                 create_expectation_service_from_config,
             )
 
             agent_config = ctx.agent_config or {}
+            batch_judge = agent_config.get(BATCH_JUDGE_KEY) or {}
             service = create_expectation_service_from_config(
                 agent_config.get("expect"),
                 action_name=agent_config.get("action_name") or agent_config.get("name", "unknown"),
                 agent_config=agent_config,
+                judge_budget_remaining=batch_judge.get("budget_remaining"),
+                judge_verdicts=batch_judge.get("verdicts"),
             )
             # Under a repair policy the verdict is already on the record: the
             # repair loop wrote the one it regenerated against. Re-validating
@@ -359,6 +470,22 @@ class BatchResultStrategy:
             )
         return ctx.expectation_service
 
+    @staticmethod
+    def _warn_on_schema_mismatch(
+        ctx: BatchProcessingContext, custom_id: str, answer: list[Any]
+    ) -> None:
+        """Warn of an answer that does not match the action's schema, as each online call does.
+
+        A record whose schema a dispatch chose is checked against that schema.
+        """
+        agent_config = ctx.agent_config or {}
+        chosen = BatchContextMetadata.get_output_schema(ctx.context_map.get(custom_id, {}))
+        if chosen is not None:
+            if chosen not in ctx.dispatched_schemas:
+                ctx.dispatched_schemas[chosen] = _dispatched_schema(agent_config, chosen)
+            agent_config = {**agent_config, SCHEMA_KEY: ctx.dispatched_schemas[chosen]}
+        warn_on_schema_mismatch(answer, agent_config, agent_config.get("action_name", "unknown"))
+
     def _process_successful_result(
         self,
         ctx: BatchProcessingContext,
@@ -366,38 +493,33 @@ class BatchResultStrategy:
         custom_id: str,
     ) -> ProcessingResult:
         """Parse a successful batch result into a ProcessingResult."""
-        generated_obj = batch_result.content
-        if isinstance(generated_obj, str):
-            if ctx.json_mode:
-                # JSON mode but content is still a string — parsing failed.
-                # Wrap in _parse_error dict so the repair loop can detect and
-                # retry, matching the online-path convention.
-                logger.warning(
-                    "Batch result for %s is unparsed string in json_mode; "
-                    "wrapping as _parse_error for repair",
-                    custom_id,
-                )
-                generated_obj = {
-                    "raw_response": generated_obj,
-                    "_parse_error": "Failed to parse JSON from LLM response",
-                }
-            else:
-                generated_obj = {ctx.output_field: generated_obj}
-
-        # Schema-echo guard: replace with _parse_error so the repair loop can regenerate
-        if _is_schema_echo(generated_obj):
+        answer = written_answer(
+            batch_result.content,
+            json_mode=ctx.json_mode,
+            output_field=ctx.output_field,
+            dispatch=dispatch_results(ctx.agent_config, ctx.context_map.get(custom_id)),
+        )
+        if answer.unparsed:
+            # Wrapped as a _parse_error record so the repair loop can detect and retry it,
+            # matching the online-path convention.
+            logger.warning(
+                "Batch result for %s is unparsed string in json_mode; "
+                "wrapping as _parse_error for repair",
+                custom_id,
+            )
+        if answer.schema_echo:
             logger.warning(
                 "[%s] Schema-echo detected in batch result — replacing with "
                 "_parse_error for custom_id=%s.",
                 ctx.agent_config.get("action_name", "unknown") if ctx.agent_config else "unknown",
                 custom_id,
             )
-            generated_obj = _make_schema_echo_error(generated_obj)
 
-        if _is_empty_output(generated_obj):
-            return self._empty_answer(ctx, batch_result, custom_id, generated_obj)
+        if answer.empty:
+            return self._empty_answer(ctx, batch_result, custom_id, answer.content)
 
-        generated_list = DataTransformer.ensure_list(generated_obj)
+        generated_list = answer.items
+        self._warn_on_schema_mismatch(ctx, custom_id, generated_list)
 
         original_row = ctx.reconciler.get_record_by_id(custom_id)
         original_source_guid = ctx.reconciler.get_source_guid(custom_id)
@@ -436,15 +558,34 @@ class BatchResultStrategy:
 
         expectation_service = self._expectation_service(ctx)
 
-        structured_items = []
+        # What online takes from the record's task: the context a judged rule's refs read.
+        judge_context = BatchContextMetadata.get_judge_context(ctx.context_map.get(custom_id))
+        answers = []
         for item in generated_list:
-            item_dict = item if isinstance(item, dict) else {}
             if expectation_service is not None:
                 from agent_actions.expectations.service import attach_verdict
 
-                verdict = expectation_service.validate(item_dict)
+                # The answer as given: online validates it before wrapping, and a non-object
+                # item gets no verdict.
+                verdict = expectation_service.validate(item, judge_context)
                 if verdict is not None:
-                    item_dict = attach_verdict(item_dict, verdict)
+                    item = attach_verdict(item, verdict)
+            answers.append(item)
+
+        # Read by online's own strategies, handed what online hands them: the record at
+        # the first stage, its content below it.
+        row_content = original_row.get("content")
+        outputs = PassthroughTransformer().action_outputs(
+            answers,
+            original_row if is_first_stage or row_content is None else row_content,
+            original_source_guid or "",
+            ctx.agent_config,
+            stored_passthrough,
+        )
+
+        structured_items = []
+        for output in outputs:
+            item_dict = ensure_dict_output(output)
             if is_tool_version_merge:
                 content = merge_version_content(existing_content, item_dict, action_name)
                 record: dict[str, Any] = {"source_guid": original_source_guid, "content": content}
@@ -472,7 +613,7 @@ class BatchResultStrategy:
         processing_result = BatchContextAdapter.to_processing_result(
             data=structured_items,
             source_guid=original_source_guid,
-            pre_extracted_metadata=batch_result.metadata,
+            pre_extracted_metadata=_response_metadata(batch_result.metadata),
             recovery_metadata=batch_result.recovery_metadata,
             output_schema=BatchContextMetadata.get_output_schema(
                 ctx.context_map.get(custom_id, {})
@@ -565,7 +706,7 @@ class BatchResultStrategy:
             action_name, original_input, error_message, source_guid=source_guid
         )
         failed_row["error"] = error_message
-        failed_row["metadata"] = {**(metadata or {}), **failed_row["metadata"]}
+        failed_row["metadata"] = {**_response_metadata(metadata), **failed_row["metadata"]}
 
         if raw_content is not None:
             failed_row["raw_content"] = raw_content

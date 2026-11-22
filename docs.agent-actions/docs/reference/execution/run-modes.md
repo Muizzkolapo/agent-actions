@@ -71,14 +71,65 @@ defaults:
 | Anthropic | Yes | ~50% |
 | Google Gemini | Yes | Varies |
 | Groq | Yes | Varies |
-| Ollama | Yes (local) | N/A |
+| Ollama | No. Agent Actions runs the batch in its own process | N/A |
+
+### Ollama batch
+
+Ollama has no batch API. For `ollama_local` and `ollama_cloud`, a `run_mode: batch` action sends its records from the Agent Actions process, when the run submits the batch. The run then collects the answers as it collects the answers of any batch. The records, the rules of an `expect:` block and the stored output are those of a batch action.
+
+Two settings control how many records Agent Actions sends at the same time. Each setting applies to one run mode only:
+
+| Setting | Applies to | Default |
+|---------|------------|---------|
+| [`record_concurrency`](../configuration/index.md#record-concurrency) | An online LLM action, of any vendor | 1 |
+| `batch_max_workers` | An Ollama action in `run_mode: batch` | 1 |
+
+```yaml
+defaults:
+  model_vendor: ollama_local
+  run_mode: batch
+  batch_max_workers: 4     # every Ollama batch action sends 4 records at a time
+
+actions:
+  - name: classify
+    batch_max_workers: 8   # this action sends 8
+```
+
+- `batch_max_workers` is an integer from 1 to 32. Set it on an action or in `defaults:`.
+- If no action or default sets it, the `OLLAMA_BATCH_MAX_WORKERS` environment variable gives the value. If the variable is unset, is not an integer or is below 1, the value is 1. A value above 32 from the variable becomes 32.
+- An Ollama batch action does not read `record_concurrency`. The load refuses `record_concurrency` on a batch action. On an Ollama batch action, the message names `batch_max_workers`. If the action inherits `record_concurrency` from `defaults:`, the action ignores it.
+- An online Ollama action does not read `batch_max_workers`. A batch action of another vendor does not read it either, because the provider runs the batch.
+- Agent Actions sends the judge batch of an Ollama batch action (see [Judging in batch](../validation/expectations.md#judging-in-batch)) in the same way, `batch_max_workers` requests at a time.
+- Each request of an Ollama batch waits the [`request_timeout`](../configuration/index.md#request-timeout) of the action, or 600 seconds if the action sets none.
+
+### How a batch reads an answer
+
+A batch action reads each answer as the same action reads the answer online:
+
+- With `json_mode: false`, the action stores the answer as text in its `output_field`. The action
+  also stores an answer that contains JSON as text. The request does not offer the schema as a
+  tool. If an Anthropic answer holds a tool call (from a tool in `vendor_params`), the action
+  stores only the text of the answer, as the online action does. An answer that holds a tool call
+  and no text fails the record, as the online action does.
+- With `json_mode: true` and no schema, the action runs. For OpenAI, Groq, Gemini and Ollama, the
+  request asks for JSON output, as the online request does. For Anthropic, the action reads the
+  text answer as JSON, as the online action does.
+- If an answer does not match the schema of the action, the action stores the answer and the run
+  log shows a `Schema validation warning` line. To enforce the schema, add an `expect:` block.
+- The action applies the passthrough rules of the online action. The action stores an answer item
+  that holds `source_guid` and `content` as its `content`. A dropped passthrough field that has
+  the name of a namespace copies that namespace.
 
 ### When the provider refuses a batch
 
 Agent Actions sends each input file as a separate batch. The provider can refuse a batch (a
-quota, a network error, a request that the provider rejects). If the provider refuses a batch,
+network error, a request that the provider rejects). If the provider refuses a batch,
 the run fails the action after the run walks all files. The run fails the action even when the
 provider took the batches of the other files of the action.
+
+There is one exception. If the provider refuses a batch because the quota of the account is at its limit, the run stops at that file.
+The run exits with code `5` and fails no record (see [quota stop](../cli/run.md#quota-stop)).
+After you add credits, the next run sends that file and the files after it.
 
 Run the workflow again. The next run sends again the records of the refused file that have no
 answer yet. The run keeps the records that the action already answered, in that file or in any
@@ -174,7 +225,7 @@ agac batch status --batch-id batch_abc123
 agac batch retrieve --batch-id batch_abc123
 
 # Retry failed records
-agac retry -a my_workflow
+agac retry -w my_workflow
 ```
 
 For the complete CLI reference, see [batch Commands](../cli/batch).

@@ -53,6 +53,7 @@ class TestPreflightRefusal:
                 "summarize_cloud": {
                     "model_vendor": "openai",
                     "model_name": "gpt-4o-mini",
+                    "schema": "summary",
                     "run_mode": "batch",
                 }
             }
@@ -80,6 +81,7 @@ class TestPreflightRefusal:
                 "summarize_cloud": {
                     "model_vendor": "openai",
                     "model_name": "gpt-4o-mini",
+                    "schema": "summary",
                     "run_mode": "batch",
                 },
                 "classify_local": {
@@ -133,6 +135,7 @@ class TestExpandedConfigShape:
                 "summarize_cloud": {
                     "model_vendor": "openai",
                     "model_name": "gpt-4o-mini",
+                    "schema": "summary",
                     "base_url": None,
                     "run_mode": "batch",
                 }
@@ -182,6 +185,7 @@ class TestResolverForwardsTheUrl:
                 "agent_type": "summarize_cloud",
                 "model_vendor": "openai",
                 "model_name": "gpt-4o-mini",
+                "schema": "summary",
                 "api_key": "CLOUD_KEY",
                 "base_url": None,
             }

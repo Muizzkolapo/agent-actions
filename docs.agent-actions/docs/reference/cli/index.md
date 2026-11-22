@@ -25,7 +25,7 @@ agac --version
 Enable debug mode. Debug mode gives verbose logging and the source file and line references.
 
 ```bash
-agac --debug run -a my_workflow
+agac --debug run -w my_workflow
 ```
 
 ### `-v` / `--verbose`
@@ -33,7 +33,7 @@ agac --debug run -a my_workflow
 Enable verbose output.
 
 ```bash
-agac --verbose run -a my_workflow
+agac --verbose run -w my_workflow
 ```
 
 ### `-q` / `--quiet`
@@ -41,7 +41,7 @@ agac --verbose run -a my_workflow
 Show only warnings and errors. This flag is useful for scripts and CI/CD pipelines when you want to see only the problems.
 
 ```bash
-agac --quiet run -a my_workflow
+agac --quiet run -w my_workflow
 ```
 
 ### `--help`
@@ -52,6 +52,52 @@ Show the help message and the available commands.
 agac --help
 agac run --help
 ```
+
+## The Workflow and the Action
+
+Each command that reads a workflow takes its name as `-w` or `--workflow`. `-a` and `--agent` name the same option:
+
+```bash
+agac run -w my_workflow
+agac dispositions -w my_workflow
+agac run -a my_workflow          # the same as -w
+```
+
+Each command that reads one action takes its name as `-A` or `--action`:
+
+```bash
+agac traces -w my_workflow -A classify_issue
+agac dispositions -w my_workflow -A classify_issue
+```
+
+[`traces`](./traces), [`records`](./records) and [`preview`](./preview) are the exception for `-a`. In these three commands, `-a` still names the action. In these three commands, `--agent` names the workflow. In a later release, `-a` will name the workflow in these commands too.
+
+When you type `-a` in one of these three commands, the command prints a warning on stderr. The warning tells you to type `-A` for the action and `-w` for the workflow. This is the warning for `traces`:
+
+```text
+Warning: -a is deprecated in 'agac traces', where it names the action, and will name the workflow as it does in the other commands. Type -A or --action for the action, and -w or --workflow for the workflow.
+```
+
+The warning names the command that you typed. If `-a` is in front of `--help`, the command prints the warning before the help output. The command also prints the warning before the error of an option that is in front of `-a` on the command line. An example is a bad `-n` value in `agac preview -w my_workflow -n abc -a extract_data`.
+
+### Errors in the Workflow and the Action
+
+If one of these options is missing or wrong, the command prints an error on stderr and stops with exit code 2:
+
+| Cause | Error |
+|-------|-------|
+| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `traces`, `records`, `preview` and `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
+| No workflow option, in `traces`, `records` or `preview` | `Error: Missing option '-w' / '--workflow' / '--agent'.` |
+| No action option, in `traces` | `Error: Missing option '-A' / '--action'.` |
+| `-a` and `-A` together, in `traces`, `records` or `preview` | `Error: -a and -A both name the action: give -A alone.` |
+
+[`agac inspect`](./inspect), with no subcommand, gives its own error for a missing workflow option:
+
+```text
+Error: Missing required option '-w' / '--workflow'. Run 'agac inspect --help' for usage.
+```
+
+Before each `Error:` line, the command also prints a log line on stderr in the form `HH:MM:SS | Usage error: <the same text>`.
 
 ## Working Directory
 
@@ -75,16 +121,16 @@ my-project/
 
 # From project root
 cd my-project
-agac run -a my_workflow
+agac run -w my_workflow
 
 # From subdirectory
 cd my-project/src/utils
-agac run -a my_workflow
+agac run -w my_workflow
 # 📁 Project root: /path/to/my-project
 
 # From any depth
 cd my-project/src/agents/helpers
-agac run -a my_workflow
+agac run -w my_workflow
 # 📁 Project root: /path/to/my-project
 ```
 
@@ -96,7 +142,7 @@ If you are outside a project directory, the command stops with a `ProjectNotFoun
 
 ```bash
 $ cd /tmp
-$ agac inspect -a my_workflow
+$ agac inspect -w my_workflow
 
 Error: Operation Failed: command
 
@@ -139,6 +185,7 @@ The tables give each command, in groups by the purpose of the command:
 | [`records`](./records) | Print, as JSON, the records that an action stored, or the input of each failed record |
 | [`dispositions`](./dispositions) | Inspect the processing disposition of each record, for each action |
 | [`expect`](./expect) | Show the expectation rules that each action would run, and report the verdicts that a run stored |
+| [`usage`](./usage) | Show the tokens that the model calls of each action used, and an estimated cost |
 | [`retry`](./retry) | Retry the failed or exhausted records, from a specified action to the end of the workflow |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |

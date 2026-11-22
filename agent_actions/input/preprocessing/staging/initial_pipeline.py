@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from agent_actions.config.schema import split_field_name
 from agent_actions.config.types import RunMode
 from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
@@ -37,6 +38,8 @@ _DELIMITED_FILE_TYPES = frozenset({".csv", ".tsv"})
 # Staged formats read as text and split into chunks, each staged as {"content": <chunk>}.
 _TEXT_FILE_TYPES = frozenset({".txt", ".md", ".pdf", ".docx", ".html"})
 _TEXT_CHUNK_FIELD = "content"
+# What each part of a record split by chunk_config.field adds to it.
+_PART_FIELDS = ("chunk_index", "chunk_count")
 
 
 @dataclass
@@ -572,6 +575,56 @@ def _text_chunk_payloads(content: str, agent_config: dict[str, Any]) -> list[dic
     return [{_TEXT_CHUNK_FIELD: chunk} for chunk in chunks]
 
 
+def _split_records(rows: Any, ctx: "DataPreparationContext") -> Any:
+    """Each staged record as the parts ``chunk_config.field`` splits it into, or as it is."""
+    field = (ctx.agent_config.get(CHUNK_CONFIG_KEY) or {}).get("field")
+    if not field:
+        return rows
+    _refuse_rows_that_are_not_records(rows, ctx.file_path, ctx.agent_name)
+    name = split_field_name(field)
+    chunk_size, chunk_overlap, tokenizer_model, split_method = _chunk_settings(ctx.agent_config)
+    parts: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        where = {"file_path": ctx.file_path, "agent_name": ctx.agent_name, "row_index": index}
+        taken = [key for key in _PART_FIELDS if key in row]
+        if taken:
+            raise AgentActionsError(
+                f"A staged record already holds '{taken[0]}', which a split by "
+                f"chunk_config.field '{field}' adds to each part. Rename that field",
+                context=where,
+            )
+        value = row.get(name)
+        if value is not None and not isinstance(value, str):
+            raise AgentActionsError(
+                f"chunk_config.field '{field}' must be text to split; this record's "
+                f"'{name}' is {type(value).__name__}",
+                context={**where, "field": field},
+            )
+        pieces: list[Any] = (
+            Tokenizer.split_text_content(
+                value,
+                chunk_size,
+                chunk_overlap,
+                tokenizer_model=tokenizer_model,
+                split_method=split_method,
+            )
+            if value
+            else []
+        )
+        if not pieces:
+            parts.append({**row, "chunk_index": 0, "chunk_count": 1})
+            continue
+        parts.extend(
+            {**row, name: piece, "chunk_index": i, "chunk_count": len(pieces)}
+            for i, piece in enumerate(pieces)
+        )
+    if len(parts) > len(rows):
+        logger.info(
+            "Split '%s' of %d staged record(s) into %d record(s)", name, len(rows), len(parts)
+        )
+    return parts
+
+
 def _prepare_text_chunks_batch(
     content: str,
     agent_config: dict[str, Any],
@@ -684,7 +737,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
 
     elif ctx.file_type == ".json":
         data_chunk = _prepare_json_batch(
-            ctx.content,
+            _split_records(ctx.content, ctx),
             local_batch_id,
             node_id,
             ctx.file_path,
@@ -697,7 +750,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     elif ctx.file_type in (".csv", ".tsv"):
         # Tabular: let TabularLoader read the file itself (FileReader returns list[list], not str).
         # TabularLoader handles both comma- and tab-separated by routing on extension.
-        rows = tabular_loader.process(content=None, file_path=ctx.file_path)
+        rows = _split_records(tabular_loader.process(content=None, file_path=ctx.file_path), ctx)
         data_chunk = _add_batch_metadata(
             rows, local_batch_id, node_id, ctx.storage_backend, ctx.relative_path
         )
@@ -706,7 +759,11 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     elif ctx.file_type == ".xlsx":
         _refuse_rows_that_are_not_records(ctx.content, ctx.file_path, ctx.agent_name)
         data_chunk = _add_batch_metadata(
-            ctx.content, local_batch_id, node_id, ctx.storage_backend, ctx.relative_path
+            _split_records(ctx.content, ctx),
+            local_batch_id,
+            node_id,
+            ctx.storage_backend,
+            ctx.relative_path,
         )
         src_text = []
 
@@ -775,16 +832,18 @@ def _prepare_online_data(ctx: DataPreparationContext):
     elif ctx.file_type == ".json":
         raw_items: Any = json_loader.process(ctx.content, ctx.file_path)
         _refuse_rows_that_are_not_records(raw_items, ctx.file_path, ctx.agent_name)
-        data_chunk = src_text = _wrap_online_rows(raw_items, ctx.storage_backend, ctx.relative_path)
+        data_chunk = src_text = _wrap_online_rows(
+            _split_records(raw_items, ctx), ctx.storage_backend, ctx.relative_path
+        )
 
     elif ctx.file_type in (".csv", ".tsv"):
-        rows = tabular_loader.process(content=None, file_path=ctx.file_path)
+        rows = _split_records(tabular_loader.process(content=None, file_path=ctx.file_path), ctx)
         data_chunk = src_text = _wrap_online_rows(rows, ctx.storage_backend, ctx.relative_path)
 
     elif ctx.file_type == ".xlsx":
         _refuse_rows_that_are_not_records(ctx.content, ctx.file_path, ctx.agent_name)
         data_chunk = src_text = _wrap_online_rows(
-            ctx.content, ctx.storage_backend, ctx.relative_path
+            _split_records(ctx.content, ctx), ctx.storage_backend, ctx.relative_path
         )
 
     elif ctx.file_type == ".xml":
@@ -1013,12 +1072,11 @@ def _process_online_mode_with_record_processor(
         ctx.agent_name, processing_context.target_relative_path
     )
     if ctx.retried_records and processing_context.target_relative_path:
-        from agent_actions.processing.repair_lineage import note_rewritten_by_repair
-        from agent_actions.workflow.pipeline import _actions_below
+        from agent_actions.processing.repair_lineage import actions_below, note_rewritten_by_repair
 
         note_rewritten_by_repair(
             ctx.storage_backend,
-            _actions_below(ctx.storage_backend, ctx.agent_name),
+            actions_below(ctx.storage_backend, ctx.agent_name),
             stored_before,
             _stored_rows(
                 ctx.storage_backend, ctx.agent_name, processing_context.target_relative_path

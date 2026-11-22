@@ -10,6 +10,7 @@ from agent_actions.expectations.service import (
     create_expectation_service_from_config,
 )
 from agent_actions.expectations.types import Suite
+from tests.unit.expectations.judging import SIDE_CALL, voted
 
 SUITE = Suite(
     name="s",
@@ -259,7 +260,7 @@ def test_factory_builds_a_judge_dispatcher_for_a_suite_with_llm_judge():
     assert service._judge is not None
 
 
-def test_factory_judge_dispatcher_calls_through_to_invoke_judge_with_votes():
+def test_factory_judge_dispatcher_calls_through_to_the_side_call_executor():
     judge_inline = [
         {"id": "on_topic", "type": "llm_judge", "field": "ideas", "params": {"rule": "on topic"}}
     ]
@@ -268,20 +269,18 @@ def test_factory_judge_dispatcher_calls_through_to_invoke_judge_with_votes():
         action_name="brainstorm",
         agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
     )
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ) as mock_invoke:
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))) as mock_invoke:
         result = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
     assert result.suite_result.overall_pass is True
     mock_invoke.assert_called_once()
 
 
 def test_a_judge_reply_in_another_dialect_still_scores_the_record():
-    """End of the chain: service -> runner -> CachedJudge -> invoke_judge -> parse.
+    """End of the chain: service -> runner -> CachedJudge -> side call -> parse.
 
-    Every other judge test here patches `invoke_judge_with_votes`, which is the
-    function that reads the reply — so a parsing regression is invisible to them.
-    This one patches the provider call instead and hands back the Python-literal
+    Every other judge test here stubs the executor's `run` with a reply in
+    well-formed JSON — so a reply in another dialect is invisible to them. This
+    one patches the provider call instead and hands back the Python-literal
     verdict real judge models produce.
     """
     judge_inline = [
@@ -311,9 +310,7 @@ def test_factory_judge_budget_is_shared_across_every_record_the_service_processe
         action_name="brainstorm",
         agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
     )
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ):
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))):
         first = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
         second = service.execute(lambda p: ({"ideas": ["b"]}, True), "PROMPT")
     assert first.suite_result.overall_pass is True
@@ -330,9 +327,7 @@ def test_a_cache_hit_bypasses_an_already_exhausted_budget():
         action_name="brainstorm",
         agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
     )
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ) as mock_invoke:
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))) as mock_invoke:
         first = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
         # Same record content as the first call -- same cache key, budget already spent.
         second = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
@@ -352,7 +347,7 @@ def test_factory_judge_dispatcher_survives_a_network_error_without_crashing_the_
         agent_config={"model_vendor": "anthropic", "model_name": "claude-sonnet-5"},
     )
     with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes",
+        SIDE_CALL,
         side_effect=ConnectionError("provider unreachable"),
     ):
         result = service.execute(lambda p: ({"ideas": ["a"]}, True), "PROMPT")
@@ -803,9 +798,7 @@ def test_a_repair_that_keeps_a_judged_field_identical_reuses_the_cached_verdict(
         agent_config=JUDGE_AGENT,
     )
     responses = iter([{"ideas": ["a"], "title": "T"}, {"ideas": ["a", "b"], "title": "T"}])
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ) as mock_invoke:
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))) as mock_invoke:
         result = service.execute(lambda p: (next(responses), True), "P")
     assert result.suite_result.overall_pass is True
     assert result.iterations == 2
@@ -824,9 +817,7 @@ def test_a_budget_exhausted_mid_loop_never_produces_a_false_green():
         agent_config=JUDGE_AGENT,
     )
     titles = iter(["T1", "T2", "T3", "T4"])
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ):
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))):
         first = service.execute(lambda p: ({"title": next(titles)}, True), "P")
         second = service.execute(lambda p: ({"title": next(titles)}, True), "P")
     assert first.suite_result.overall_pass is True
@@ -841,9 +832,7 @@ def test_a_deterministic_failure_does_not_short_circuit_judged_rules():
         action_name="a",
         agent_config=JUDGE_AGENT,
     )
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ) as mock_invoke:
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))) as mock_invoke:
         result = service.execute(lambda p: ({"ideas": ["a"], "title": "T"}, True), "P")
     mock_invoke.assert_called_once()
     assert [(o.id, o.passed) for o in result.suite_result.outcomes] == [
@@ -865,9 +854,7 @@ def test_a_budget_skipped_judged_rule_still_lets_the_loop_repair_the_others():
         action_name="a",
         agent_config=JUDGE_AGENT,
     )
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ):
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))):
         service.execute(lambda p: ({"ideas": ["a", "b"], "title": "T0"}, True), "P")
         responses = iter(
             [
@@ -899,9 +886,7 @@ def test_a_budget_skipped_rule_can_still_pass_from_cache_on_a_later_iteration():
         agent_config=JUDGE_AGENT,
     )
     responses = iter([{"ideas": ["A", "B", "C"]}, {"ideas": ["A", "B"]}])
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ) as mock_invoke:
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))) as mock_invoke:
         result = service.execute(lambda p: (next(responses), True), "P")
     assert result.suite_result.overall_pass is True
     assert result.iterations == 2
@@ -920,9 +905,7 @@ def test_a_suite_failing_only_on_skipped_rules_stops_generating():
     )
     titles = iter(["T1", "T2", "T3", "T4", "T5"])
     calls = []
-    with patch(
-        "agent_actions.expectations.judge.invoke_judge_with_votes", return_value=(True, "ok")
-    ):
+    with patch(SIDE_CALL, return_value=voted((True, "ok"))):
         service.execute(lambda p: ({"title": next(titles)}, True), "P")
         after = service.execute(lambda p: (calls.append(p) or {"title": next(titles)}, True), "P")
     assert len(calls) == 1

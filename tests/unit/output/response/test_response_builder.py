@@ -135,6 +135,31 @@ class TestExtractUsage:
     def test_reads_each_provider_shape(self, resp, provider, expected):
         assert ResponseBuilder.extract_usage(resp, provider) == expected
 
+    def test_anthropic_prompt_tokens_include_the_cached_prompt(self):
+        from anthropic.types import Usage
+
+        usage = Usage(
+            input_tokens=12,
+            output_tokens=20,
+            cache_read_input_tokens=3000,
+            cache_creation_input_tokens=500,
+        )
+
+        result = ResponseBuilder.extract_usage(SimpleNamespace(usage=usage), "anthropic")
+
+        assert result == UsageResult(
+            3512, 20, 3532, cache_read_tokens=3000, cache_creation_tokens=500
+        )
+
+    def test_anthropic_cache_fields_left_unset_count_nothing(self):
+        from anthropic.types import Usage
+
+        usage = Usage(input_tokens=12, output_tokens=20)
+
+        result = ResponseBuilder.extract_usage(SimpleNamespace(usage=usage), "anthropic")
+
+        assert result == UsageResult(12, 20, 32)
+
 
 # ---------------------------------------------------------------------------
 # Tests — extract_usage edge cases (missing/None usage)
@@ -180,9 +205,9 @@ class TestExtractUsageEdgeCases:
 class TestRecordUsageAndEvent:
     """Test the combined usage + storage + event method."""
 
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
-    def test_stores_usage_and_fires_event(self, mock_fire, mock_set):
+    def test_counts_usage_and_fires_event(self, mock_fire, mock_set):
         resp = _openai_response(10, 20, 30)
         usage = ResponseBuilder.record_usage_and_event(resp, "openai", "gpt-4", 150.0, "req-123")
         assert usage == UsageResult(10, 20, 30)
@@ -190,8 +215,10 @@ class TestRecordUsageAndEvent:
             {
                 "input_tokens": 10,
                 "output_tokens": 20,
-                "total_tokens": 30,
-            }
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            model="gpt-4",
         )
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
@@ -203,14 +230,15 @@ class TestRecordUsageAndEvent:
         assert event.latency_ms == 150.0
         assert event.request_id == "req-123"
 
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
-    def test_skips_set_last_usage_for_zero_tokens(self, mock_fire, mock_set):
+    def test_a_call_with_no_tokens_is_still_counted(self, mock_fire, mock_set):
         usage = ResponseBuilder.record_usage_and_event(
             None, "agac-fake-provider", "mock", 0.0, "req-0"
         )
         assert usage == UsageResult(0, 0, 0)
-        mock_set.assert_not_called()
+        mock_set.assert_called_once()
+        assert not any(mock_set.call_args[0][0].values())
         # Event still fires with zero tokens
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
@@ -219,7 +247,7 @@ class TestRecordUsageAndEvent:
         assert event.total_tokens == 0
         assert event.provider == "agac-fake-provider"
 
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     def test_returns_usage_result(self, mock_fire, mock_set):
         resp = _anthropic_response(5, 15)

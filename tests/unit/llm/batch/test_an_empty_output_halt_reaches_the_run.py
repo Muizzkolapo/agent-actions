@@ -111,8 +111,7 @@ def test_the_executor_records_the_action_as_failed(wrapped):
 
 
 def test_a_polling_failure_is_still_re_raised():
-    executor = object.__new__(ActionExecutor)
-    executor.deps = MagicMock()
+    executor = ActionExecutor(MagicMock())
     executor._handle_run_failure = MagicMock()
 
     with pytest.raises(OSError, match="provider unreachable"):

@@ -253,13 +253,18 @@ DATA        A field referenced in the condition does not exist in this
             applies. Missing fields in namespaced content may be
             reclassified (see reclassify_missing_field_error).
 
-TIMEOUT     Evaluation exceeded the time limit (default 5 seconds).
-            Treated like a DATA error for passthrough_on_error purposes.
+TIMEOUT     Evaluation exceeded the time limit (default 5 seconds; the
+            guard's `timeout`, or `defaults: guard_timeout`). Counted from
+            the start of the evaluation, not from the submit. Bypasses
+            passthrough_on_error: a filter or skip guard raises
+            GuardNotEvaluatedError, so the record fails alone with the
+            clause and the reason; a warn guard runs the record. Fires
+            G001 with the record id and the action.
 ```
 
 ### passthrough_on_error
 
-A per-guard config flag (default: `true`). When `true`, DATA and TIMEOUT errors cause the record to pass through as if the guard matched. When `false`, the configured behavior (filter/skip/warn) applies on error.
+A per-guard config flag (default: `true`). When `true`, DATA errors cause the record to pass through as if the guard matched. When `false`, the configured behavior (filter/skip/warn) applies on error. A TIMEOUT does not read it: its result would depend on the machine's load.
 
 SEMANTIC errors **always bypass** `passthrough_on_error` — a broken condition is a config bug, not a data issue, and should not silently pass records through.
 
@@ -278,6 +283,12 @@ Guard not matched:
 ```
 
 In batch mode, filtered records are marked in the context_map during preparation and never submitted to the provider. The disposition must be explicitly written during batch finalization. In online mode, the disposition is written immediately by the result collector.
+
+### Sent elsewhere
+
+A filtered record is dead below the filtering action: the storage walk drops it at every fan-in (`_collect_upstream_filtered_guids`). An action marked with the internal key `_sends_elsewhere` (`record/elsewhere.py`) filters a record because it went to another branch. The row is still `filtered`, so the disposition gate and `agac retry` treat it as any filter, but its reason is `sent_elsewhere` (batch sets it as the record's skip reason at preparation). Below the action the record stays dead, so it cannot come back into the branch through another input, except at an action marked `_gathers` and below it: there a record that an action above the gatherer sent elsewhere is live again only when an input at or below a sending action holds a row for it, that is, when it arrives down the branch it went to. A record that every branch sent away, or that another branch took, stays dead. A filter with any other reason stays dead at a gatherer.
+
+Records sent elsewhere are not the action's: the collector counts them in `sent_elsewhere`, apart from `filtered` and outside the total, so an action whose every record went elsewhere writes no node-level skip (batch: no node-level `passthrough`) and completes on no records, and its readers run on nothing. The pre-filter log line, `ResultCollectionCompleteEvent` and `agac dispositions` count them as sent elsewhere, never as filtered.
 
 ---
 
@@ -414,7 +425,7 @@ Two consequences worth stating:
 
 8. **Missing fields are reclassified, not failed.** `reclassify_missing_field_error()` in `evaluator.py` handles two cases: (a) a flat field reference that exists inside a namespace is reclassified as SEMANTIC (config error); (b) a genuinely missing field is treated as "condition not matched" rather than an error. This prevents `passthrough_on_error` from accidentally passing records that should be filtered.
 
-9. **GuardFilter uses a ThreadPoolExecutor for timeout protection.** Each evaluation runs in a thread with a configurable timeout (default 5 seconds). This prevents runaway AST evaluation from blocking the pipeline. The executor has 4 worker threads and is cleaned up via `atexit`.
+9. **GuardFilter uses a ThreadPoolExecutor for timeout protection.** Each evaluation runs in a thread with a configurable timeout (default 5 seconds; the guard's `timeout` key or `defaults: guard_timeout`). The time starts when a worker starts the evaluation, so the wait for one of the 4 shared workers does not count. The executor is cleaned up via `atexit`.
 
 10. **Legacy UDF path (conditional_clause) is separate from the guard dict path.** When a UDF guard is expanded, it sets `agent["conditional_clause"]` instead of `agent["guard"]`. The evaluator handles this in `_evaluate_conditional_clause()`, which swallows the UDF's exceptions and proceeds (never skips on UDF error), except a write the read-only view refused (11). The read-only view the UDF is handed is built before that handler, and a failure to build it is not a UDF error: it raises `GuardNotAppliedError`, because a record the UDF was never shown has not been judged and is not passed. The SQL guard path goes through `_evaluate_guard()` with full error classification.
 

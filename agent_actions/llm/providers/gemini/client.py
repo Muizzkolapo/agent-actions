@@ -12,6 +12,7 @@ import logging
 import math
 import time
 import uuid
+from enum import Enum
 from typing import Any, ClassVar
 
 from google import genai
@@ -22,9 +23,12 @@ from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
+    NoAnswer,
     VendorErrorMapping,
+    empty_parse_error,
     empty_response_error,
-    is_truncated,
+    stop_reason_name,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -60,6 +64,43 @@ _ERROR_MAPPING = VendorErrorMapping(
 def _build_client(api_key: str) -> genai.Client:
     """Build a google-genai Client instance."""
     return genai.Client(api_key=api_key)
+
+
+def _reason_name(reason: Any) -> str | None:
+    """A block or finish reason as text; None when the response sets none."""
+    return stop_reason_name(reason) if isinstance(reason, str | Enum) else None
+
+
+def no_answer(block_reason: Any, finish_reason: Any, model_name: str) -> NoAnswer:
+    """How a response with no text ends, read alike from an SDK response and a batch line.
+
+    A blocked prompt and a stop that is not the model's own are errors naming the reason.
+    An answer the model ended with nothing in it is left to the action's ``on_empty``.
+    """
+    context = {"model_name": model_name, "vendor": "gemini", "api_operation": "generate_content"}
+    block = _reason_name(block_reason)
+    if block:
+        message = f"Gemini blocked the prompt (blockReason={block})"
+        return NoAnswer(parse_error=message, error=VendorAPIError(message, context=context))
+    reason = _reason_name(finish_reason)
+    if reason is None or reason == "STOP":
+        return NoAnswer(parse_error=empty_parse_error(reason))
+    return NoAnswer(
+        parse_error=empty_parse_error(reason),
+        error=empty_response_error(
+            "Gemini", reason, model_name=model_name, vendor="gemini", operation="generate_content"
+        ),
+    )
+
+
+def _finish_reason(response: Any) -> Any:
+    candidates = getattr(response, "candidates", None) or []
+    return getattr(candidates[0], "finish_reason", None) if candidates else None
+
+
+def _no_answer_in(response: Any, model_name: str) -> NoAnswer:
+    block_reason = getattr(getattr(response, "prompt_feedback", None), "block_reason", None)
+    return no_answer(block_reason, _finish_reason(response), model_name)
 
 
 def _timeout_options(agent_config: dict[str, Any]) -> dict[str, Any]:
@@ -120,7 +161,12 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 )
             )
             envelope = MessageBuilder.build(
-                "gemini", prompt_config, context_data, schema=schema, json_mode=True
+                "gemini",
+                prompt_config,
+                context_data,
+                schema=schema,
+                json_mode=True,
+                context_window=agent_config.get("context_window"),
             )
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config
@@ -149,8 +195,18 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             response_temp, "gemini", model_name, latency_ms, request_id
         )
 
+        response_text = response_temp.text or ""
+        if not response_text:
+            parse_error = _no_answer_in(response_temp, model_name).parse_error
+            logger.warning("Gemini model=%s: %s", model_name, parse_error)
+            return [{"raw_response": "", "_parse_error": parse_error}]
+        finish_reason = _finish_reason(response_temp)
+        unfinished = unfinished_parse_error(finish_reason)
+        if unfinished:
+            logger.warning("Gemini model=%s: %s", model_name, unfinished)
+            return [{"raw_response": response_text, "_parse_error": unfinished}]
         result = GeminiClient.parse_json_response(
-            response_content=response_temp.text or "",
+            response_content=response_text,
             vendor_name="Gemini",
             operation="call_json",
             model_name=model_name,
@@ -186,7 +242,13 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     {**gen_params, **_timeout_options(agent_config)}, agent_config
                 )
             )
-            envelope = MessageBuilder.build("gemini", prompt_config, context_data, json_mode=False)
+            envelope = MessageBuilder.build(
+                "gemini",
+                prompt_config,
+                context_data,
+                json_mode=False,
+                context_window=agent_config.get("context_window"),
+            )
             response_temp = client.models.generate_content(
                 model=model_name, contents=envelope.prompt_body, config=config
             )
@@ -230,16 +292,10 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         response_text = response_temp.text or ""
         if not response_text:
-            candidates = getattr(response_temp, "candidates", None) or []
-            finish_reason = getattr(candidates[0], "finish_reason", None) if candidates else None
-            if is_truncated(finish_reason):
-                raise empty_response_error(
-                    "Gemini",
-                    finish_reason,
-                    model_name=model_name,
-                    vendor="gemini",
-                    operation="generate_content",
-                )
+            unanswered = _no_answer_in(response_temp, model_name)
+            if unanswered.error is not None:
+                raise unanswered.error
+            return []
 
         logger.debug(
             "Gemini non-JSON response retrieved successfully",

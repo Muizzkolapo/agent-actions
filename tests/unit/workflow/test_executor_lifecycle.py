@@ -99,10 +99,9 @@ class TestExecuteAgentSync:
         mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor.execute_action_sync(
-                "agent_a", action_idx=0, action_config={}, is_last_action=False
-            )
+        result = executor.execute_action_sync(
+            "agent_a", action_idx=0, action_config={}, is_last_action=False
+        )
 
         assert result.success is True
         mock_deps.state_manager.reopen.assert_called_once_with(["agent_a"])
@@ -126,10 +125,9 @@ class TestExecuteAgentSync:
         mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor.execute_action_sync(
-                "agent_a", action_idx=0, action_config={}, is_last_action=False
-            )
+        result = executor.execute_action_sync(
+            "agent_a", action_idx=0, action_config={}, is_last_action=False
+        )
 
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
@@ -236,10 +234,9 @@ class TestExecuteAgentSync:
         mock_deps.output_manager.resolve_correlated_input.return_value = None
         mock_deps.batch_manager.check_batch_submission.return_value = None
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor.execute_action_sync(
-                "agent_a", action_idx=0, action_config={}, is_last_action=False
-            )
+        result = executor.execute_action_sync(
+            "agent_a", action_idx=0, action_config={}, is_last_action=False
+        )
 
         assert result.success is True
         assert result.status == ActionStatus.COMPLETED
@@ -331,6 +328,8 @@ class TestHandleRunSuccess:
             generation_hash=ANY,
             udf_source_hash=ANY,
             schema_options_hash=ANY,
+            output_settings_hash=ANY,
+            endpoint_hash=ANY,
             records_processed=None,
             truncated=None,
             staged_input=None,
@@ -340,14 +339,17 @@ class TestHandleRunSuccess:
         """Normal completion should capture tokens and model info."""
         params = self._make_params(action_config={"model_vendor": "openai", "model_name": "gpt-4"})
         mock_deps.action_runner.storage_backend.get_storage_stats.return_value = {"nodes": {}}
-        with patch(
-            "agent_actions.workflow.executor.get_last_usage",
-            return_value={"total_tokens": 100},
-        ):
-            result = executor._handle_run_success(params, "/out", 2.5, None, pre_run_count=0)
+        executor._ledger(params.action_name).add(
+            "main", "gpt-4", {"input_tokens": 60, "output_tokens": 40}
+        )
+        result = executor._handle_run_success(params, "/out", 2.5, None, pre_run_count=0)
 
         assert result.status == ActionStatus.COMPLETED
-        assert result.metrics.tokens == {"total_tokens": 100}
+        assert result.metrics.tokens == {
+            "input_tokens": 60,
+            "output_tokens": 40,
+            "total_tokens": 100,
+        }
         assert result.metrics.model_vendor == "openai"
         assert result.metrics.model_name == "gpt-4"
 
@@ -460,8 +462,7 @@ class TestExecuteAgentRun:
             start_time=datetime.now(),
         )
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            result = executor._execute_action_run(params)
+        result = executor._execute_action_run(params)
 
         assert result.success is True
         statuses = [call.args for call in mock_deps.state_manager.update_status.call_args_list]
@@ -498,8 +499,7 @@ class TestExecuteAgentRun:
             start_time=datetime.now(),
         )
 
-        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
-            executor._execute_action_run(params)
+        executor._execute_action_run(params)
 
         # Correlated input passed as keyword arg, not via monkey-patching
         mock_deps.action_runner.run_action.assert_called_once_with(
@@ -629,6 +629,8 @@ class TestHandleAgentSkip:
             generation_hash=ANY,
             udf_source_hash=ANY,
             schema_options_hash=ANY,
+            output_settings_hash=ANY,
+            endpoint_hash=ANY,
             # A WHERE-skip never slices, so it has no count to report.
             records_processed=None,
             truncated=None,

@@ -443,7 +443,6 @@ class TestRecordActionComplete:
                 action_name="act1",
                 status="success",
                 duration_seconds=2.5,
-                tokens={"total_tokens": 100, "prompt_tokens": 60},
                 files_processed=3,
             )
         )
@@ -455,10 +454,8 @@ class TestRecordActionComplete:
         action = run["actions"]["act1"]
         assert action["status"] == "success"
         assert action["duration_seconds"] == 2.5
-        assert action["tokens"]["total_tokens"] == 100
         assert action["files_processed"] == 3
         assert run["successful_actions"] == 1
-        assert run["total_tokens"] == 100
 
     def test_records_failed_action(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)
@@ -539,7 +536,7 @@ class TestRecordActionComplete:
         real_run = next(r for r in data["executions"] if r["id"] == run_id)
         assert "whatever" not in real_run.get("actions", {})
 
-    def test_no_tokens_field_when_none(self, tmp_path):
+    def test_no_tokens_field_for_an_action_that_made_no_call(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)
         run_id = tracker.start_workflow_run(workflow_id="wf1", workflow_name="WF", actions_total=1)
         tracker.record_action_start(
@@ -552,7 +549,6 @@ class TestRecordActionComplete:
                 action_name="act1",
                 status="success",
                 duration_seconds=1.0,
-                tokens=None,
             )
         )
 
@@ -560,6 +556,7 @@ class TestRecordActionComplete:
             data = json.load(f)
 
         assert "tokens" not in data["executions"][0]["actions"]["act1"]
+        assert "usage" not in data["executions"][0]["actions"]["act1"]
 
     def test_zero_files_processed_not_added(self, tmp_path):
         tracker = RunTracker(artefact_dir=tmp_path)

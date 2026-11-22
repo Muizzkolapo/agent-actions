@@ -1,0 +1,7 @@
+name: verdict
+fields:
+  - {id: passed, type: boolean, required: true}
+  - {id: outcome, type: string, required: true, enum: [passed, failed]}
+  - {id: reasons, type: string, required: true}
+  - {id: tries, type: integer, required: true}
+  - {id: question, type: string, required: true}

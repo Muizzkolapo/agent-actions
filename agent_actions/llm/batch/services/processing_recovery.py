@@ -3,6 +3,9 @@
 State machine:
     Initial batch → retry (if missing_ids) → repair (if expect:) → finalize
 
+A step that would make side calls (an `llm_judge` is one kind) first sends them
+as a side batch and resumes once it returns.
+
 Entry points:
     process_recovery_batch() — dispatches on recovery_type
     finalize_batch_output() — convert, write, event, status
@@ -33,7 +36,7 @@ from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
 )
-from agent_actions.llm.batch.services.shared import keep_text_output, retrieve_and_reconcile
+from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
@@ -66,7 +69,7 @@ def process_recovery_batch(
     action_name: str | None = None,
     workflow_metadata: dict[str, Any] | None = None,
 ) -> str | None:
-    """Process a recovery batch (retry or repair).
+    """Process a recovery batch (retry, repair, or side).
 
     Returns output file path if complete, None if more recovery is needed.
     """
@@ -85,6 +88,45 @@ def process_recovery_batch(
         effective_action_name,  # type: ignore[arg-type]
         parent_file_name,
     )
+    # A side batch is registered before its state is saved. A run that stopped between
+    # the two left the state of the round before, whose entry the registration replaced:
+    # read against it, the batch would write the file with no records.
+    side_state_lost = (
+        state is not None
+        and entry.recovery_type == RecoveryType.SIDE
+        and (
+            state.side_kind != entry.side_kind
+            or state.side_attempts.get(entry.side_kind or "", 0) != entry.recovery_attempt
+        )
+    )
+    if side_state_lost:
+        assert state is not None
+        kind = entry.side_kind or ""
+        logger.warning(
+            "%s batch %s for %s was sent by a run that stopped before it saved the "
+            "state of the file. Its replies cannot be read, and the provider has billed "
+            "it. Dropping it so %s is processed again from its main batch",
+            kind.capitalize() or "Side",
+            entry.batch_id,
+            parent_file_name,
+            parent_file_name,
+        )
+        if entry.recovery_attempt:
+            state.side_attempts[kind] = entry.recovery_attempt
+        state.side_kind = None
+        state.side_requests = {}
+        state.side_waiting = []
+        state.side_resumes = None
+        RecoveryStateManager.save(
+            service._storage_backend,  # type: ignore[arg-type]
+            effective_action_name,  # type: ignore[arg-type]
+            parent_file_name,
+            state,
+        )
+        manager.remove_batch_job(file_name)
+        if entry.batch_id:
+            release_local_batch_record(entry.batch_id)
+        return None
     if not state:
         # Without state this entry can never be interpreted, and while it exists
         # it supersedes its parent — so leaving it registered wedges the action
@@ -142,26 +184,30 @@ def process_recovery_batch(
         )
         recovery_results: list[BatchResult] = []
     else:
+        answers_side_calls = entry.recovery_type == RecoveryType.SIDE
         recovery_results = retrieve_and_reconcile(
             provider,
             batch_id,
             output_directory,
-            context_map=context_map,
+            # A side batch answers side calls, not the records of the map, and its
+            # replies are read by their requester's own rules, not the action's mode.
+            context_map=None if answers_side_calls else context_map,
             record_count=entry.record_count,
             file_name=file_name,
-            agent_config=agent_config,
+            agent_config=None if answers_side_calls else agent_config or {},
+            usage_kind=entry.usage_kind,
+            model=(state.side_model if answers_side_calls else None)
+            or (agent_config or {}).get("model_name"),
         )
 
     accumulated = deserialize_results(state.accumulated_results)
-    # A state an earlier version wrote holds plain-text answers unwrapped; wrap them as
-    # the results just retrieved are, so one output never mixes the two shapes.
-    keep_text_output(accumulated, agent_config)
 
-    # One wrapper for all three: a halt parked inside any handler must not be
+    # One wrapper for all of them: a halt parked inside any handler must not be
     # lost to an unrelated failure on the way to the finaliser.
     handlers = {
         RecoveryType.RETRY: handle_retry_recovery,
         RecoveryType.REPAIR: handle_repair_recovery,
+        RecoveryType.SIDE: handle_side_recovery,
     }
     handler = handlers.get(entry.recovery_type) if entry.recovery_type else None
     if handler is not None:
@@ -200,7 +246,9 @@ def handle_retry_recovery(
         record_failure_counts=state.record_failure_counts,
         missing_ids=set(state.missing_ids),
     )
-    still_missing = BatchResultReconciler.resendable_ids(still_missing, context_map)
+    still_missing = BatchResultReconciler.resendable_ids(
+        BatchResultReconciler.retriable_ids(still_missing, merged), context_map
+    )
 
     submission_impossible = False
     left = retries_left(state.retry_attempt, state.retry_max_attempts)
@@ -247,6 +295,10 @@ def handle_retry_recovery(
         exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
             still_missing, updated_counts
         )
+        # The repair finaliser rebuilds exhaustion from missing_ids: a record failed for
+        # good this round is failed, not exhausted.
+        state.missing_ids = list(still_missing)
+        state.record_failure_counts = updated_counts
     elif still_missing:
         # A transient submission failure with attempts left. These records are not
         # exhausted, and the id set must be cleared as well as the stamp withheld:
@@ -261,6 +313,9 @@ def handle_retry_recovery(
             state.retry_max_attempts,
             len(still_missing),
         )
+    else:
+        # Every record came back, so nothing is exhausted for the finaliser to rebuild.
+        state.missing_ids = []
 
     if not check_and_submit_repair(
         context, identity, batch_results=merged, context_map=context_map, recovery_state=state
@@ -425,8 +480,12 @@ def cleanup_recovery(
 _ROUND_ENDED_WITHOUT_RESULTS = frozenset({BatchStatus.FAILED, BatchStatus.CANCELLED})
 
 
-def _repair_round_in_flight(context: RecoveryContext, identity: BatchIdentity) -> bool:
-    """Whether a repair round for this file still owns its records.
+def _repair_round_in_flight(
+    context: RecoveryContext,
+    identity: BatchIdentity,
+    recovery_type: RecoveryType = RecoveryType.REPAIR,
+) -> bool:
+    """Whether a repair round (or a round of *recovery_type*) for this file still owns its records.
 
     The provider is asked, not the registry. A recovery entry is written
     SUBMITTED and only marked COMPLETED inside `finalize_batch_output`, so its
@@ -447,15 +506,16 @@ def _repair_round_in_flight(context: RecoveryContext, identity: BatchIdentity) -
         entry
         for entry in jobs.values()
         if entry.parent_file_name == identity.file_name
-        and entry.recovery_type == RecoveryType.REPAIR
+        and entry.recovery_type == recovery_type
         and entry.batch_id
     ]
     for entry in rounds:
         if context.provider.check_status(entry.batch_id) in _ROUND_ENDED_WITHOUT_RESULTS:
             logger.warning(
-                "[%s] Repair round %s ended at the provider without results (%s); "
+                "[%s] %s round %s ended at the provider without results (%s); "
                 "its records are back in play",
                 identity.file_name,
+                str(entry.recovery_name).capitalize(),
                 entry.recovery_attempt,
                 entry.batch_id,
             )
@@ -509,6 +569,7 @@ def check_and_submit_repair(
     original batch arrives with the results it produced before any repair round,
     so anything the loop has since rewritten is folded in over them.
     """
+    from agent_actions.llm.batch.services.judge_ops import judge_verdicts, with_judge_results
     from agent_actions.llm.batch.services.repair_ops import (
         build_repair_strategy,
         carry_forward,
@@ -534,11 +595,37 @@ def check_and_submit_repair(
             identity.file_name,
         )
 
+    # The original batch's entry is never retired, so a resume can arrive here
+    # while the side batch this step waits on is still out. That batch owns the
+    # step: sending another pays for every call twice.
+    if (
+        recovery_state is not None
+        and recovery_state.side_requests
+        and _repair_round_in_flight(context, identity, RecoveryType.SIDE)
+    ):
+        kind = recovery_state.side_kind or ""
+        logger.info(
+            "[%s] %s batch %d is still out; deferring to it",
+            identity.file_name,
+            kind.capitalize(),
+            recovery_state.side_attempts.get(kind, 0),
+        )
+        return False
+
     strategy = build_repair_strategy(
         context.agent_config,
         recovery_state.repair_judge_budget_remaining if recovery_state else None,
+        judge_verdicts(recovery_state),
+        context_map,
     )
     if strategy is None:
+        if _send_side_batch(
+            context, identity, recovery_state, batch_results, "evaluate", context_map
+        ):
+            return False
+        recovery_state = recovery_state or _stored_state(context, identity)
+        # Observe mode validates in the result writer, so the verdicts go with the config.
+        context.agent_config = with_judge_results(context.agent_config, recovery_state)
         return True
 
     # The original batch's registry entry is never retired, so a resume
@@ -552,6 +639,18 @@ def check_and_submit_repair(
                 deserialize_results(recovery_state.graduated_results),
             )
         )
+
+    if _send_side_batch(context, identity, recovery_state, batch_results, "evaluate", context_map):
+        return False
+    recovery_state = recovery_state or _stored_state(context, identity)
+    # A call that could not be sent has its result in the state now.
+    strategy = build_repair_strategy(
+        context.agent_config,
+        recovery_state.repair_judge_budget_remaining if recovery_state else None,
+        judge_verdicts(recovery_state),
+        context_map,
+    )
+    assert strategy is not None
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(batch_results)
@@ -664,6 +763,7 @@ def handle_repair_recovery(
     context_map: dict[str, Any],
 ) -> str | None:
     """Continue the repair loop when a repair batch comes back."""
+    from agent_actions.llm.batch.services.judge_ops import judge_verdicts
     from agent_actions.llm.batch.services.repair_ops import (
         apply_exhaustion_policy,
         build_repair_strategy,
@@ -673,7 +773,12 @@ def handle_repair_recovery(
     )
     from agent_actions.processing.evaluation import EvaluationLoop
 
-    strategy = build_repair_strategy(context.agent_config, state.repair_judge_budget_remaining)
+    strategy = build_repair_strategy(
+        context.agent_config,
+        state.repair_judge_budget_remaining,
+        judge_verdicts(state),
+        context_map,
+    )
 
     if strategy is None:
         return _finalize_and_cleanup(
@@ -684,6 +789,18 @@ def handle_repair_recovery(
             ),
             context_map=context_map,
         )
+
+    if _send_side_batch(context, identity, state, recovery_results, "repair", context_map):
+        raise_pending_exhaustion(context)
+        return None
+    # A call that could not be sent has its result in the state now.
+    strategy = build_repair_strategy(
+        context.agent_config,
+        state.repair_judge_budget_remaining,
+        judge_verdicts(state),
+        context_map,
+    )
+    assert strategy is not None
 
     loop = EvaluationLoop(strategy)
     graduated, still_failing, _failure_types = loop.split(recovery_results)
@@ -804,6 +921,166 @@ def handle_repair_recovery(
     )
 
 
+def _send_side_batch(
+    context: RecoveryContext,
+    identity: BatchIdentity,
+    state: RecoveryState | None,
+    results: list[BatchResult],
+    resumes: str,
+    context_map: dict[str, Any],
+) -> bool:
+    """Send the side calls the step reading *results* would make, as a side batch.
+
+    Each registered requester is asked in turn, and the first with calls to make
+    has them sent; another kind's go out when the step runs again. True when a
+    batch went out and the step must defer: *results* are saved with the state,
+    and `handle_side_recovery` runs the step named by *resumes* again once the
+    batch returns, with those calls answered. A call whose request cannot be sent
+    fails alone, its result saved with the state; when False comes back after that,
+    the caller reads the results from the stored state.
+    """
+    from agent_actions.llm.batch.services.side_batch import (
+        SideStep,
+        side_requesters,
+        submit_side_batch,
+    )
+    from agent_actions.llm.side_calls import SideReplies
+
+    step = SideStep(
+        context.agent_config,
+        results,
+        state if state is not None else RecoveryState(),
+        context_map,
+    )
+    action_name = context.service._resolve_action_name(context.action_name)
+    for requester in side_requesters():
+        kind = requester.kind
+        while True:
+            calls = requester.collect(step)
+            if not calls:
+                break
+            # Registering a side batch retires the file's live round; one still regenerating
+            # these records is left to finish, and this step makes its calls as it always did.
+            if (
+                resumes == "evaluate"
+                and state is not None
+                and state.repair_submitted_ids
+                and _repair_round_in_flight(context, identity)
+            ):
+                return False
+
+            attempt = step.state.side_attempts.get(kind, 0) + 1
+            submission = submit_side_batch(
+                context.provider,
+                kind,
+                calls,
+                context.agent_config,
+                file_name=identity.file_name,
+                attempt=attempt,
+                output_directory=context.output_directory,
+            )
+            requester.sent(step, submission.sent)
+            settled = step.state.side_results.setdefault(kind, {})
+            for key, error in submission.unsent.items():
+                settled[key] = requester.settle(key, SideReplies(error=error))
+            if submission.batch_id is None:
+                RecoveryStateManager.save(
+                    context.service._storage_backend, action_name, identity.file_name, step.state
+                )
+                continue
+
+            register_recovery_batch(
+                context.manager,
+                (submission.batch_id, len(submission.requests)),
+                identity.file_name,
+                identity.entry.provider,
+                RecoveryType.SIDE,
+                attempt,
+                side_kind=kind,
+            )
+            saved = step.state
+            saved.side_attempts[kind] = attempt
+            saved.side_kind = kind
+            saved.side_requests = submission.requests
+            saved.side_model = next(iter(submission.sent.values())).model
+            saved.side_waiting = serialize_results(results)
+            saved.side_resumes = resumes
+            RecoveryStateManager.save(
+                context.service._storage_backend, action_name, identity.file_name, saved
+            )
+            logger.info(
+                "[%s] %s batch %d submitted for %d record(s); deferring",
+                identity.file_name,
+                kind.capitalize(),
+                attempt,
+                len(results),
+            )
+            return True
+    return False
+
+
+def _stored_state(context: RecoveryContext, identity: BatchIdentity) -> RecoveryState | None:
+    return RecoveryStateManager.load(
+        context.service._storage_backend,
+        context.service._resolve_action_name(context.action_name),
+        identity.file_name,
+    )
+
+
+def handle_side_recovery(
+    context: RecoveryContext,
+    identity: BatchIdentity,
+    state: RecoveryState,
+    recovery_results: list[BatchResult],
+    accumulated: list[BatchResult],
+    context_map: dict[str, Any],
+) -> str | None:
+    """Hand a returned side batch's replies to its requester, then run the step that waited on it."""
+    from agent_actions.llm.batch.services.side_batch import read_side_batch, side_requester
+
+    kind = state.side_kind or ""
+    requester = side_requester(kind)
+    settled = state.side_results.setdefault(kind, {})
+    for key, replies in read_side_batch(recovery_results, state.side_requests, kind).items():
+        settled[key] = requester.settle(key, replies)
+    waiting = deserialize_results(state.side_waiting)
+    resumes = state.side_resumes
+    state.side_kind = None
+    state.side_requests = {}
+    state.side_model = None
+    state.side_waiting = []
+    state.side_resumes = None
+
+    if resumes == "repair":
+        return handle_repair_recovery(
+            context,
+            identity,
+            state=state,
+            recovery_results=waiting,
+            accumulated=accumulated,
+            context_map=context_map,
+        )
+
+    if not check_and_submit_repair(
+        context, identity, batch_results=waiting, context_map=context_map, recovery_state=state
+    ):
+        raise_pending_exhaustion(context)
+        return None
+
+    exhausted_recovery = None
+    if state.missing_ids:
+        exhausted_recovery = context.service._retry_service.build_exhausted_recovery(
+            set(state.missing_ids), state.record_failure_counts
+        )
+    return _finalize_and_cleanup(
+        context,
+        identity,
+        batch_results=waiting,
+        context_map=context_map,
+        exhausted_recovery=exhausted_recovery,
+    )
+
+
 def raise_pending_exhaustion(context: HaltCarrier) -> None:
     """Halt the run for `on_exhausted: raise`, once nothing is left to lose.
 
@@ -859,8 +1136,11 @@ def register_recovery_batch(
     provider: str,
     recovery_type: RecoveryType,
     attempt: int,
+    side_kind: str | None = None,
 ) -> None:
     """Register a new recovery batch entry, replacing the attempt it supersedes.
+
+    A side batch is filed under its *side_kind*: ``<file>_<kind>_<attempt>``.
 
     One recovery state per parent means one live recovery batch per parent. Left
     in place, a spent attempt is still COMPLETED, so the next run re-processes it
@@ -871,7 +1151,7 @@ def register_recovery_batch(
         batch_id, record_count = submission
     else:
         batch_id, record_count = submission.batch_id, submission.record_count
-    recovery_file_name = f"{parent_file_name}_{recovery_type}_{attempt}"
+    recovery_file_name = f"{parent_file_name}_{side_kind or recovery_type}_{attempt}"
     recovery_entry = BatchJobEntry(
         batch_id=batch_id,
         status=BatchStatus.SUBMITTED,
@@ -882,6 +1162,7 @@ def register_recovery_batch(
         parent_file_name=parent_file_name,
         recovery_type=recovery_type,
         recovery_attempt=attempt,
+        side_kind=side_kind,
     )
     # A retried attempt number lands on the key its predecessor holds, and saving
     # over it is the fourth way an entry stops naming a batch.

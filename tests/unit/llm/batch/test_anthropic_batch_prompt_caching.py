@@ -19,7 +19,11 @@ httpx = http_library(anthropic)
 
 PROMPT = "Summarise the page."
 CONTENT = {"page": "alpha"}
-USER_TEXT = json.dumps(CONTENT)
+# The one user message online sends: the prompt, then the record.
+INSTRUCTION = f"\n<|begin_of_user_instruction|>: {PROMPT}"
+RECORD = (
+    f" :<|end_of_user_instruction|>\n<|begin_of_text|>: {json.dumps(CONTENT)} :<|end_of_text|>\n"
+)
 MARK = {"type": "ephemeral"}
 ROW = {"target_id": "r1", "content": CONTENT, "prompt": PROMPT}
 # anthropic 1.x's params type dropped the sampling fields; a batch line still carries the
@@ -71,11 +75,19 @@ def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @ROUTES
 class TestEachRouteMarksTheRequestForCaching:
-    def test_caching_on_marks_the_system_prompt_and_not_the_record(self, route):
+    def test_caching_on_marks_the_prompt_and_not_the_record(self, route):
         params = _params(route(BatchClientResolver(), _action(enable_prompt_caching=True)))
 
-        assert params["system"] == [{"type": "text", "text": PROMPT, "cache_control": MARK}]
-        assert params["messages"] == [{"role": "user", "content": USER_TEXT}]
+        assert "system" not in params
+        assert params["messages"] == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": INSTRUCTION, "cache_control": MARK},
+                    {"type": "text", "text": RECORD},
+                ],
+            }
+        ]
 
     def test_caching_on_sends_only_fields_a_batch_request_takes(self, route):
         params = _params(route(BatchClientResolver(), _action(enable_prompt_caching=True)))
@@ -86,8 +98,8 @@ class TestEachRouteMarksTheRequestForCaching:
     def test_caching_off_sends_plain_text(self, route):
         params = _params(route(BatchClientResolver(), _action(enable_prompt_caching=False)))
 
-        assert params["system"] == PROMPT
-        assert params["messages"] == [{"role": "user", "content": USER_TEXT}]
+        assert "system" not in params
+        assert params["messages"] == [{"role": "user", "content": INSTRUCTION + RECORD}]
         assert "extra_headers" not in params
 
 
@@ -163,7 +175,11 @@ class TestTheSubmittedBatch:
         (line,) = json.loads(request.content)["requests"]
 
         assert request.headers.get("anthropic-beta") == "prompt-caching-2024-07-31"
-        assert line["params"]["system"][0]["cache_control"] == MARK
+        assert line["params"]["messages"][0]["content"][0] == {
+            "type": "text",
+            "text": INSTRUCTION,
+            "cache_control": MARK,
+        }
         assert "extra_headers" not in line["params"]
 
     def test_caching_off_sends_neither(self, tmp_path):
@@ -171,4 +187,4 @@ class TestTheSubmittedBatch:
         (line,) = json.loads(request.content)["requests"]
 
         assert request.headers.get("anthropic-beta") is None
-        assert line["params"]["system"] == PROMPT
+        assert line["params"]["messages"] == [{"role": "user", "content": INSTRUCTION + RECORD}]

@@ -22,6 +22,7 @@ from agent_actions.llm.providers.error_wrapper import (
     TRANSPORT_ERRORS,
     VendorErrorMapping,
     empty_response_error,
+    unfinished_parse_error,
     wrap_vendor_error,
 )
 from agent_actions.llm.providers.generation_params import (
@@ -52,6 +53,16 @@ _ERROR_MAPPING = VendorErrorMapping(
     status_code_error_types=(cohere_errors.ApiError,),
     supports_retry_after=False,
 )
+
+
+def _answer_text(response: Any) -> str | None:
+    """The first text item of the reply; a thinking item, which has no text, can come first."""
+    message = getattr(response, "message", None)
+    for item in getattr(message, "content", None) or []:
+        text = getattr(item, "text", None)
+        if isinstance(text, str):
+            return text
+    return None
 
 
 class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
@@ -106,14 +117,21 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         try:
             co = cohere.ClientV2(api_key=api_key, **request_timeout_kwargs(agent_config))
             envelope = MessageBuilder.build(
-                "cohere", prompt_config, context_data, schema=schema, json_mode=True
+                "cohere",
+                prompt_config,
+                context_data,
+                schema=schema,
+                json_mode=True,
+                context_window=agent_config.get("context_window"),
             )
             messages = envelope.to_dicts()
             chat_kwargs = {
                 "model": model_name,
                 "messages": messages,
                 "response_format": (
-                    {"type": "json_object", "schema": schema} if schema else {"type": "json_object"}
+                    {"type": "json_object", "json_schema": schema}
+                    if schema
+                    else {"type": "json_object"}
                 ),
                 **extract_generation_params(
                     agent_config,
@@ -146,8 +164,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             response, "cohere", model_name, latency_ms, request_id
         )
 
-        # Guard against empty or missing content in Cohere v2 response
-        if not hasattr(response, "message") or not response.message or not response.message.content:
+        answer = _answer_text(response)
+        if answer is None:
             raise empty_response_error(
                 "Cohere",
                 getattr(response, "finish_reason", None),
@@ -155,10 +173,13 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 vendor="cohere",
                 operation="chat",
             )
-        intermediate_json = response.message.content[0].text  # type: ignore[union-attr]
-
+        finish_reason = getattr(response, "finish_reason", None)
+        parse_error = unfinished_parse_error(finish_reason)
+        if parse_error:
+            logger.warning("%s (model=%s)", parse_error, model_name)
+            return [{"raw_response": answer, "_parse_error": parse_error}]
         result = CohereClient.parse_json_response(
-            response_content=intermediate_json,
+            response_content=answer,
             vendor_name="Cohere",
             operation="call_json",
             model_name=model_name,
@@ -184,7 +205,13 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = time.perf_counter()
         try:
             co = cohere.ClientV2(api_key=api_key, **request_timeout_kwargs(agent_config))
-            envelope = MessageBuilder.build("cohere", prompt_config, context_data, json_mode=False)
+            envelope = MessageBuilder.build(
+                "cohere",
+                prompt_config,
+                context_data,
+                json_mode=False,
+                context_window=agent_config.get("context_window"),
+            )
             messages = envelope.to_dicts()
             non_json_kwargs = {
                 "model": model_name,
@@ -234,8 +261,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             response, "cohere", model_name, latency_ms, request_id
         )
 
-        # Guard against empty or missing content in Cohere v2 response
-        if not hasattr(response, "message") or not response.message or not response.message.content:
+        answer = _answer_text(response)
+        if answer is None:
             raise empty_response_error(
                 "Cohere",
                 getattr(response, "finish_reason", None),
@@ -243,15 +270,13 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 vendor="cohere",
                 operation="chat",
             )
-        response_message = response.message.content[0].text  # type: ignore[union-attr]
-
         logger.debug(
             "Cohere non-JSON response retrieved successfully",
             extra={
                 "operation": "cohere_call_non_json",
                 "model": model_name,
-                "response_length": len(response_message) if response_message else 0,
+                "response_length": len(answer),
                 "request_id": request_id,
             },
         )
-        return ResponseBuilder.wrap_non_json(response_message, agent_config)
+        return ResponseBuilder.wrap_non_json(answer, agent_config)

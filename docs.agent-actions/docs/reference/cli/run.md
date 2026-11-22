@@ -9,7 +9,7 @@ sidebar_position: 2
 The `run` command is the primary way to run a workflow. It resolves dependencies, runs independent actions in parallel and finds tools automatically.
 
 ```bash
-agac run -a <workflow-name> [options]
+agac run -w <workflow-name> [options]
 ```
 
 :::note[Run from Anywhere]
@@ -22,13 +22,13 @@ These are the basic commands:
 
 ```bash
 # Run an agentic workflow
-agac run -a my_workflow
+agac run -w my_workflow
 
 # Run with custom tools
-agac run -a my_workflow -u ./user_code --use-tools
+agac run -w my_workflow -u ./user_code --use-tools
 
 # Force parallel execution
-agac run -a my_workflow --execution-mode parallel
+agac run -w my_workflow --execution-mode parallel
 ```
 
 The last line of the output counts actions, not records. A final action is an action that no other action reads.
@@ -46,16 +46,113 @@ The log line before the warning names the `agac dispositions` command that shows
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent NAME` | The workflow name (required) |
+| `-w, --workflow NAME` | The workflow name (required). `-a` and `--agent` name the same option. |
 | `-u, --user-code DIRECTORY` | The path to the folder of your code that contains the tools |
 | `--use-tools` | Let actions use tools |
 | `-e, --execution-mode` | The execution mode: `auto` (default), `parallel` or `sequential` |
 | `--concurrency-limit` | The maximum number of concurrent actions (default: 5, range: 1-50) |
 | `--record-limit N` | Limit each action to N records **per input file**, whatever the workflow configuration sets. This is the same unit that `record_limit` uses. The flag applies to actions that set no limit of their own. It takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, and names this flag and the counts. The reason is that a truncated run otherwise looks complete |
 | `--file-limit N` | Stop each action after N input files, whatever the workflow configuration sets. This is the same unit that `file_limit` uses. The flag counts the files that the action processed successfully. Thus a file that fails does not use the budget, and the action attempts each file in a directory of unreadable files. The flag applies to actions that set no limit of their own. It takes precedence over `AGAC_FILE_LIMIT`. An action whose walk through its input files actually stops says so, and names this flag. The reason is that a shortened run otherwise looks complete. This flag never limits `agac retry` |
-| `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
-| `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have the name, the run stops before it starts |
+| `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status, the stored token usage and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
+| `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Give the flag more than one time to run more than one action again in the same run (`--rerun classify --rerun summarize`). Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have a name, the run stops before it starts, and names each name that it does not have |
 | `--verify-keys` | Verify the API keys before execution. The command probes each vendor one time for each endpoint. For an `openai` action with `base_url`, the probe uses `models.list()` at that URL. For an action without `base_url`, the probe uses the OpenAI endpoint. If a server does not answer, the command logs a warning and the run continues. A local server may serve `/v1/models` without a check of the key (llamafile 0.10.6 does this). Thus a passing probe there shows that the server is reachable, not that the key is correct. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) that the workflow uses also gets one structured-output request. For that request, three conditions are errors. They are a refused credential, a server that cannot be reached, and a reply that does not match the schema of the probe |
+| `--wait` | While the run is paused for a batch, wait and run the workflow again until no batch is open. Then exit with the code of the final status. See [Wait for batch jobs](#wait-for-batch-jobs) |
+| `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs, in whole seconds. The minimum is 1 (default: 60) |
+| `--wait-timeout SECONDS` | With `--wait`: stop the wait when this time after the start of the run is over, and exit 4. The batch jobs stay open for the next run (default: no limit) |
+
+## Exit Codes {/* #exit-codes */}
+
+The exit code of `agac run` and of [`agac retry`](./retry) tells how the command ended. A script
+or a CI job can read the code. It does not have to read the text that the command prints.
+
+| Code | Status | Meaning |
+|------|--------|---------|
+| `0` | Success | Each action completed or was skipped, and no action holds a failed or exhausted record |
+| `1` | Failed | An action failed, or an error ended the command |
+| `2` | Usage error | The command line is not valid. Nothing ran |
+| `3` | Finished with failures | The workflow finished, but an action holds a record with the disposition `failed` or `exhausted`. The command names these actions. [`agac dispositions --quarantined`](./dispositions) lists the records, and [`agac retry`](./retry) repairs them |
+| `4` | Paused | A batch is open, or the run stopped before every action ended. Run the workflow again to continue. For a batch, you can also use `--wait` |
+| `5` | Quota or billing stop | A provider answered that the quota or the credit of the account is at its limit. The run stopped and failed nothing. Add credits. Then run the workflow again. See [When the quota of a provider is at its limit](#quota-stop) |
+| `130` | Interrupted | The user stopped the command (Ctrl+C). The batch jobs stay open |
+
+The code comes from the statuses of the actions in `agent_io/.agent_status.json`, which
+[`agac status`](./utilities#status) shows. An action that holds no successful record
+has the status `failed`. Thus the code is `1`, not `3`, when each record of an action failed.
+A failed action has priority: when one action failed and another action holds failed records, the code is `1`.
+A filtered record, a record that a guard skipped, or a record below a failed record does not change the code.
+
+:::warning[CAUTION]
+In earlier versions, a paused run and a run that finished with failed or exhausted records
+exited `0`. They now exit `4` and `3`. A script that stops on each non-zero code (`set -e`)
+must accept `4` after it submits a batch, or use `--wait`.
+:::
+
+## When the Quota of a Provider Is at Its Limit {/* #quota-stop */}
+
+A provider can answer that the quota, the credit or the balance of the account is at its limit. A wait clears a rate limit.
+A wait does not clear this answer. Each record that the run did not send yet gets the same answer.
+Thus the run stops:
+
+- The run does not retry the request, and sends no new request for that action. The OpenAI SDK also does not send the request again.
+- The records of the action that are already sent finish, and the run keeps their answers.
+- The record that got the answer, and each record that was not sent, keep no disposition. They are not `failed` and not `exhausted`.
+- The actions that run at the same time in the same step finish. The run starts no later action.
+- The action shows `interrupted` in [`agac status`](./utilities#status).
+- The run prints one message and exits with code `5`. The message says that the run stopped, and gives the provider and the text of its answer:
+
+```text
+■ my_workflow stopped — Provider quota or billing stop (ollama_cloud): you have reached your monthly usage limit (status code: 429). Add credits, then run again to resume.
+```
+
+After you add credits, run the workflow again with a plain `agac run`. The run answers only the records
+that have no answer, then continues with the later actions. You do not need `agac retry`. Do not use `--fresh`.
+If the quota is still at its limit, the run stops again in the same way.
+
+Agent Actions reads these answers as a quota or billing stop:
+
+| Answer | Providers |
+|--------|-----------|
+| HTTP 402 | Each provider and each [declared endpoint](../configuration/endpoints.md) |
+| HTTP 429 or 403 with `insufficient_quota` in its text | OpenAI |
+| HTTP 400 `invalid_request_error` with `credit balance is too low` in its text | Anthropic |
+| HTTP 429 or 403 with `usage limit` or `usage credits` in its text | Ollama Cloud |
+
+Each other HTTP 429 is a rate limit. The [retry policy](../execution/retry.md) retries a rate limit.
+
+In batch mode, the same rule applies when the provider refuses a batch at submission with one of these answers.
+The run stops at that file. A batch that another file already has at the provider stays, and the next run collects it.
+A billing error that a provider reports for one record inside the results of a finished batch fails that record.
+
+## Wait for Batch Jobs {/* #wait-for-batch-jobs */}
+
+A run that submits a batch job pauses and exits `4`. The next `agac run` checks the batch job,
+collects the results when they are ready, and continues with the next actions. To submit, check and collect the batch with one command, use `agac run --wait`:
+
+```bash
+agac run -w my_workflow --wait --poll 60 --wait-timeout 86400
+```
+
+While the run is paused for a batch, `--wait` sleeps for the `--poll` time. Then it runs the workflow again,
+as a second `agac run` does. It repeats this until no batch is open. The command then exits with the code
+of the final status: `0`, `1`, `3` or `5`.
+
+`--fresh`, `--rerun` and `--verify-keys` apply to the first pass only. The later passes clear nothing.
+
+The `--wait-timeout` time starts before the first pass. If less than the `--poll` time stays before the timeout, the command sleeps only until the timeout. Each wait line gives the time that the command sleeps. No pass starts after the timeout. When this time is over and a batch is still open, the command stops, names the actions
+that wait, and exits `4`. The message gives the time that the command waited, in whole seconds. The batch jobs stay at the provider. To continue, run the command again:
+
+```
+Stopped waiting after 86400s: batch job(s) still open for: classify. Run again to check them and continue: agac run -w my_workflow --wait
+```
+
+A run can also stop before every action ended when no batch is open. Then `--wait` does not wait. The command exits `4` and prints this line:
+
+```
+--wait has no batch to wait for: the run stopped before every action ended.
+```
+
+The command holds the [run lock](#concurrent-runs) from the first pass to the last pass. Thus no other
+`agac run` or `agac retry` of the workflow can start during the wait.
 
 ## Run a Smaller Version of a Project {/* #running-a-project-smaller-than-it-is */}
 
@@ -63,7 +160,7 @@ The limits of a workflow are in the project configuration, for each action. To r
 limit the whole run from the command line. Examples are a smoke check, a quick pass over a real dataset, or one action under a debugger:
 
 ```bash
-agac run -a my_workflow --record-limit 2 --file-limit 1
+agac run -w my_workflow --record-limit 2 --file-limit 1
 ```
 
 The limit applies to **every** action, which includes the actions that configure no limit of their own.
@@ -132,6 +229,13 @@ If you edit an action in the configuration, the edit does not run anything again
   (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty`, `vendor_params`,
   in the action, in `defaults` or in `default_agent_config`)
 - The code of a tool or a UDF guard: the full file that defines it, but not the modules that the file imports
+- The output settings: `granularity`, `on_empty`, the `expect:` block, and for an LLM action `json_mode`,
+  `output_field` and `run_mode` (online or batch)
+- The provider endpoint of an LLM action: `base_url`, or the `url` of the declared endpoint that its `model_vendor` names
+
+A change to `request_timeout`, `retry`, `api_key` or `enable_prompt_caching` is not an edit. These settings
+change how a request gets to the provider, not what the request asks. A `{% cache_point %}` tag in a prompt is
+also not an edit, for the same reason: Agent Actions removes the tag before it compares the prompt.
 
 The records that the action already answered keep their
 answers. The actions that read these records also keep their answers. The action answers the records that it did not answer yet
@@ -143,6 +247,16 @@ Each run that finds an edited action reports the edit, and names what changed:
 ```
 classify was edited since it completed (model): its answers stand, and only records it has
 not answered use the edit. Run again with --rerun classify to answer every record under the edit
+```
+
+The warning also names each action that reads the output of the edited action, directly or through
+other actions. The input of these actions is the output from before the edit:
+
+```
+classify was edited since it completed (output settings): its answers stand, and only records
+it has not answered use the edit. What reads it was answered from its output before the edit:
+summarize, report. Run again with --rerun classify to answer every record under the edit, there
+and at what reads it
 ```
 
 An action can stop before it is complete: it was killed, interrupted or stopped by an error. Such an action keeps the
@@ -171,7 +285,14 @@ To answer each record under the edit, use `--rerun` with the name of the action.
 action again, and each action that reads its output. Each other action keeps its answers:
 
 ```bash
-agac run -a my_agent --rerun classify
+agac run -w my_agent --rerun classify
+```
+
+If more than one action was edited, give `--rerun` one time for each action. The run answers each named
+action and each action that reads one of them again. An action that reads more than one of them runs one time:
+
+```bash
+agac run -w my_agent --rerun classify --rerun summarize
 ```
 
 An action that may hold answers from more than one configuration continues to report this, even after you change the
@@ -210,18 +331,18 @@ Agent Actions automatically finds independent actions and runs them concurrently
 
 ```bash
 # Auto-detect parallel execution (default)
-agac run -a my_workflow
+agac run -w my_workflow
 
 # Force parallel execution
-agac run -a my_workflow --execution-mode parallel
+agac run -w my_workflow --execution-mode parallel
 # Or using short form:
-agac run -a my_workflow -e parallel
+agac run -w my_workflow -e parallel
 
 # Force sequential execution
-agac run -a my_workflow --execution-mode sequential
+agac run -w my_workflow --execution-mode sequential
 
 # Limit concurrent actions to 10
-agac run -a my_workflow -e parallel --concurrency-limit 10
+agac run -w my_workflow -e parallel --concurrency-limit 10
 ```
 
 The diagram below shows how Agent Actions puts actions into levels. Actions at the same level run in parallel, because they do not depend on the outputs of each other:
@@ -296,6 +417,7 @@ Runs of different workflows do not block each other. Read-only commands (`inspec
 `records`, `status`, `traces`, `preview`, `dispositions`, `retry --dry-run`) never take the
 lock. The operating system releases the lock when the run exits or when something kills the run. Thus no lock
 stays after the run. A run that submits a batch job exits. Thus the next run can collect the batch job.
+A run with [`--wait`](#wait-for-batch-jobs) keeps the lock while it waits for its batch jobs.
 
 `agac clean` and the `reset_workflow.py --full` script of the skills also take the lock.
 `agac clean` takes the lock in each mode, when it finds something to remove.

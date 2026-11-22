@@ -26,6 +26,20 @@ def get_parse_error_marker(response: Any) -> str | None:
     return None
 
 
+def with_dispatch_results(content: Any, results: dict[str, Any]) -> Any:
+    """*content* with an ``add_dispatch`` action's *results* on each object it holds.
+
+    An answer is a list of items online and may be one object in a batch.
+    """
+    if not results:
+        return content
+    if isinstance(content, dict):
+        return {**content, **results}
+    if isinstance(content, list):
+        return [{**item, **results} if isinstance(item, dict) else item for item in content]
+    return content
+
+
 def run_dynamic_agent(
     agent_config: dict[str, Any],
     agent_name: str,
@@ -38,12 +52,14 @@ def run_dynamic_agent(
     llm_context: Any | None = None,
     dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
     rendered_prompt: str | None = None,
+    cache_points: tuple[int, ...] = (),
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
     ``dispatched`` is the record's resolved schema, so a retry or repair call writes the
     schema the record was first given. ``rendered_prompt`` is the record's prepared prompt;
-    a call whose prompt differs from it is a repair call.
+    a call whose prompt differs from it is a repair call. ``cache_points`` are that
+    prompt's.
     Every path here has already evaluated the guard, so ``was_executed`` is always
     ``True``; callers keep it because other producers set it ``False``. The LLM sees
     ``llm_context`` (``context`` with ``context_scope.drop`` applied) when it is given.
@@ -59,6 +75,10 @@ def run_dynamic_agent(
         from agent_actions.prompt.cache_scope import repair_call_scope
 
         record_config = {**record_config, **repair_call_scope(formatted_prompt, rendered_prompt)}
+    if cache_points:
+        from agent_actions.prompt.cache_scope import CACHE_POINTS_KEY
+
+        record_config = {**record_config, CACHE_POINTS_KEY: cache_points}
 
     response = agent_builder.create_dynamic_agent(
         record_config,
@@ -68,10 +88,7 @@ def run_dynamic_agent(
         tool_args=tool_args,
         source_content=source_content,
     )
-    if dispatch_results:
-        response = [
-            {**item, **dispatch_results} if isinstance(item, dict) else item for item in response
-        ]
+    response = with_dispatch_results(response, dispatch_results)
 
     response = _validate_llm_output_schema(response, record_config, agent_name)
 
@@ -237,16 +254,21 @@ def _validate_llm_output_schema(
     """
     # Unconditional schema-echo rejection — runs even when validation is skipped
     response = _reject_schema_echo_items(response, agent_name)
+    warn_on_schema_mismatch(response, agent_config, agent_name)
+    return response
 
+
+def warn_on_schema_mismatch(response: Any, agent_config: dict[str, Any], agent_name: str) -> None:
+    """Log a warning when *response* does not match the schema *agent_config* holds."""
     schema = agent_config.get(SCHEMA_KEY)
     if not schema or not isinstance(schema, dict):
-        return response
+        return
 
     # Empty output is the on_empty handler's domain, not schema validation's:
     # an empty response has no fields to check, so rejecting it here would
     # pre-empt the on_empty policy (skip/warn/error) with a hard failure.
     if _is_empty_output(response):
-        return response
+        return
 
     try:
         from agent_actions.validation.schema_output_validator import (
@@ -268,8 +290,6 @@ def _validate_llm_output_schema(
         logger.warning("Schema output validator not available, skipping validation")
     except ValueError as e:
         logger.warning("Schema validation failed with error: %s", e, exc_info=True)
-
-    return response
 
 
 def transform_with_passthrough(

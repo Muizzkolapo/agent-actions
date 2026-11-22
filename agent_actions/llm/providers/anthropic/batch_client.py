@@ -7,7 +7,17 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.llm.providers.anthropic import PROMPT_CACHING_BETA_HEADER, server_busy_errors
+from agent_actions.llm.providers.anthropic import (
+    PROMPT_CACHING_BETA_HEADER,
+    message_params,
+    server_busy_errors,
+)
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    is_stopped_by_provider,
+    is_unfinished,
+    stopped_parse_error,
+)
 from agent_actions.prompt.cache_scope import prompt_is_shared
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.atomic_write import atomic_json_write
@@ -15,6 +25,21 @@ from agent_actions.utils.atomic_write import atomic_json_write
 from ..batch_base import BaseBatchClient, BatchTask
 
 logger = logging.getLogger(__name__)
+
+
+# The HTTP status of each error type the Anthropic API names in an error response.
+_ERROR_TYPE_STATUS = {
+    "invalid_request_error": 400,
+    "authentication_error": 401,
+    "billing_error": 402,
+    "permission_error": 403,
+    "not_found_error": 404,
+    "request_too_large": 413,
+    "rate_limit_error": 429,
+    "api_error": 500,
+    "timeout_error": 504,
+    "overloaded_error": 529,
+}
 
 
 class AnthropicBatchClient(BaseBatchClient):
@@ -35,6 +60,10 @@ class AnthropicBatchClient(BaseBatchClient):
     - Proper error handling for API failures
     - Support for prompt caching (when enabled)
     """
+
+    # Message Batches API: up to 100,000 requests or 256 MB in one batch.
+    max_batch_requests = 100_000
+    max_batch_bytes = 256_000_000
 
     def __init__(
         self,
@@ -90,6 +119,9 @@ class AnthropicBatchClient(BaseBatchClient):
     def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
         return self.enable_prompt_caching and prompt_is_shared(agent_config)
 
+    def marks_cache_points(self) -> bool:
+        return self.enable_prompt_caching
+
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -108,37 +140,36 @@ class AnthropicBatchClient(BaseBatchClient):
             }
         }
         """
-        envelope = MessageBuilder.build_for_batch(
+        model_name = batch_task.model_config.get("model_name", self._get_default_model())
+        # The messages online sends: one user message, no system prompt.
+        envelope = MessageBuilder.build(
             "anthropic",
             batch_task.prompt,
             batch_task.user_content,
             schema=schema,
+            json_mode=schema is not None,
             enable_prompt_caching=batch_task.cache_prompt,
             shared_prompt_len=batch_task.shared_prompt_len,
+            model_name=model_name,
+            cache_points=batch_task.cache_points,
+            context_window=batch_task.model_config.get("context_window"),
         )
-        # Anthropic batch: system is a top-level param, user content is the message
-        params = {
-            "model": batch_task.model_config.get("model_name", self._get_default_model()),
-            "messages": envelope.to_dicts(role="user"),
-        }
-        if any(m.content for m in envelope.messages if m.role == "system"):
-            params["system"] = envelope.to_dicts(role="system")[0]["content"]
+        params = {"model": model_name, "messages": message_params(envelope)}
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096
         )
+        params.update(
+            self._sampling_params(
+                batch_task.model_config, key_map={"stop": "stop_sequences"}, stop_as_list=True
+            )
+        )
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         vendor_params = batch_task.model_config.get("vendor_params") or {}
+        # The compiled schema is the tool, offered and not forced, as online sends it.
         if schema:
-            tools = self._create_json_tool_from_schema(schema)
-            if tools:
-                params["tools"] = tools
-                tool_choice = AnthropicClient._schema_tool_choice(
-                    tools, {"vendor_params": vendor_params}
-                )
-                if tool_choice is not None:
-                    params["tool_choice"] = tool_choice
+            params["tools"] = schema
         AnthropicClient.VENDOR_PARAMS.apply_to_body(params, vendor_params)
         return {"custom_id": batch_task.custom_id, "params": params}
 
@@ -160,33 +191,101 @@ class AnthropicBatchClient(BaseBatchClient):
             return "Batch result was canceled"
         return f"Unknown result type: {result_type}"
 
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status of an errored result's error type; None for an expired or canceled one."""
+        result = self._get_attribute_or_key(raw_response, "result")
+        error = self._get_attribute_or_key(result, "error")
+        # An errored result holds the API's error response: {type: error, error: {type, message}}.
+        inner = self._get_attribute_or_key(error, "error") or error
+        return _ERROR_TYPE_STATUS.get(self._get_attribute_or_key(inner, "type"))
+
+    def _no_answer(self, raw_response: Any) -> NoAnswer | None:
+        """A message whose blocks hold no tool answer and no text, as the online client ends it.
+
+        A thinking block alone (max_tokens spent while thinking) is not the answer.
+        """
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if not isinstance(content_list, list):
+            return None
+        if self._extract_tool_use_content(content_list) is not None:
+            return None
+        if self._extract_text_content(content_list):
+            return None
+        from agent_actions.llm.providers.anthropic.client import no_answer
+
+        return no_answer(
+            self._get_attribute_or_key(message, "stop_reason"),
+            only_text=all(
+                self._get_attribute_or_key(block, "type") == "text" for block in content_list
+            ),
+            model_name=self._get_attribute_or_key(message, "model") or "",
+            operation="messages.batches",
+        )
+
+    def _cut_off_parse_error(self, stop_reason: Any, text: str) -> str:
+        from agent_actions.llm.providers.anthropic.client import no_tool_answer_message
+
+        if is_stopped_by_provider(stop_reason):
+            return stopped_parse_error(stop_reason)
+        return no_tool_answer_message(stop_reason, text)
+
+    def _answer_was_cut_off(self, raw_response: Any) -> bool:
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        return is_unfinished(self._get_attribute_or_key(message, "stop_reason"))
+
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         """Extract content from Anthropic response."""
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
+        # Cut-off text stays as written; a tool answer is read as online reads it.
+        cut_off = self._answer_was_cut_off(raw_response) and isinstance(content_list, list)
+        if cut_off and self._extract_tool_use_content(content_list) is None:
+            text = self._extract_text_content(content_list)
+            if text is not None:
+                return text
         return self._parse_content_list(content_list)
 
-    def _extract_content_and_text(self, raw_response: Any) -> tuple[Any, str | None]:
-        """The content and the text block, in one pass over the content list.
-
-        A tool answer has no text. A text block is returned unparsed as both content and
-        text (the base parses the content). An answer with no text block (thinking only, as
-        when max_tokens ran out while thinking) gets the fallback content and no text: the
-        fallback stringifies the block, which is not text the model wrote.
-        """
+    def _answer_text(self, raw_response: Any) -> str | None:
+        """The first text block, which online's text-mode call reads beside any tool answer."""
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
         content_list = self._get_attribute_or_key(message, "content", [])
-        if not content_list or not isinstance(content_list, list):
-            return content_list, None
-        tool_use_content = self._extract_tool_use_content(content_list)
-        if tool_use_content is not None:
-            return tool_use_content, None
-        text_content = self._extract_text_content(content_list)
-        if text_content is not None:
-            return text_content, text_content
-        return self._fallback_content_extraction(content_list[0]), None
+        if not isinstance(content_list, list):
+            return None
+        return self._extract_text_content(content_list)
+
+    def _no_text_answer(self, raw_response: Any) -> NoAnswer | None:
+        """A tool answer with no text fails in text mode, as online's text-mode call raises."""
+        result = self._get_attribute_or_key(raw_response, "result")
+        message = self._get_attribute_or_key(result, "message", {})
+        content_list = self._get_attribute_or_key(message, "content", [])
+        if (
+            not isinstance(content_list, list)
+            or self._extract_tool_use_content(content_list) is None
+        ):
+            return None
+        from agent_actions.llm.providers.anthropic.client import no_answer
+
+        return no_answer(
+            self._get_attribute_or_key(message, "stop_reason"),
+            only_text=False,
+            model_name=self._get_attribute_or_key(message, "model") or "",
+            operation="messages.batches",
+        )
+
+    def _parse_json_content(self, content_str: str) -> Any:
+        """Read a text answer as online reads it: an object or a list of objects.
+
+        Any other text stays text, which JSON mode takes as a parse error.
+        """
+        from agent_actions.llm.providers.anthropic.client import json_answer_in
+
+        answer = json_answer_in(content_str)
+        return content_str if answer is None else answer
 
     def _parse_content_list(self, content_list: Any) -> Any:
         """
@@ -392,53 +491,6 @@ class AnthropicBatchClient(BaseBatchClient):
             else:
                 lines.append(json.dumps(entry))
         return ("\n".join(lines) + "\n").encode("utf-8")
-
-    def _create_json_tool_from_schema(self, schema: dict[str, Any]) -> list[dict[str, Any]]:
-        """
-        Create an Anthropic tool definition from a JSON schema to force structured output.
-
-        Args:
-            schema: JSON schema dictionary or list of schema objects from BatchService
-
-        Returns:
-            List containing tool definition for structured JSON response
-        """
-        actual_schema = None
-        tool_name = "json_response"
-        schema_description = "Provide a structured JSON response"
-        if isinstance(schema, list) and len(schema) > 0:  # type: ignore[unreachable]
-            schema_obj = schema[0]  # type: ignore[unreachable]
-            if isinstance(schema_obj, dict):
-                actual_schema = schema_obj.get("input_schema", {})
-                tool_name = (
-                    schema_obj.get("name", "json_response").lower().replace("schema", "_response")
-                )
-                schema_description = schema_obj.get("description", schema_description)
-        elif isinstance(schema, dict) and ("properties" in schema or "type" in schema):
-            actual_schema = schema
-            schema_description = schema.get("description", schema_description)
-        else:
-            return []
-        if not actual_schema:
-            return []
-        properties = actual_schema.get("properties", {})
-        required = actual_schema.get("required", [])
-        if not properties:
-            tool_schema = {
-                "type": "object",
-                "properties": {
-                    "response": {"type": "string", "description": "The response content"}
-                },
-                "required": ["response"],
-            }
-        else:
-            tool_schema = {"type": "object", "properties": properties, "required": required}
-        tool_definition = {
-            "name": tool_name,
-            "description": f"Provide structured JSON output: {schema_description}",
-            "input_schema": tool_schema,
-        }
-        return [tool_definition]
 
     def _validate_provider_specific_config(
         self, agent_config: dict[str, Any]

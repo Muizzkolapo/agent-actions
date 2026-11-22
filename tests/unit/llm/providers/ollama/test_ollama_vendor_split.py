@@ -633,11 +633,11 @@ class TestOllamaBatchClientVendorSplit:
     @patch("agent_actions.llm.providers.ollama.batch_client.Client")
     @patch("agent_actions.llm.providers.ollama.batch_client.MessageBuilder")
     def test_vendor_slug_used_in_format_task(self, mock_mb, mock_client_cls):
-        """format_task_for_provider passes vendor_slug to MessageBuilder.build_for_batch."""
+        """format_task_for_provider passes vendor_slug to MessageBuilder.build, as online does."""
         mock_client_cls.return_value = MagicMock()
         mock_envelope = MagicMock()
         mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
-        mock_mb.build_for_batch.return_value = mock_envelope
+        mock_mb.build.return_value = mock_envelope
 
         batch_client = OllamaBatchClient(cloud=False, vendor_slug="ollama_local")
 
@@ -651,8 +651,8 @@ class TestOllamaBatchClientVendorSplit:
         )
         batch_client.format_task_for_provider(task)
 
-        # MessageBuilder.build_for_batch should receive the vendor_slug
-        build_call = mock_mb.build_for_batch.call_args
+        # MessageBuilder.build should receive the vendor_slug
+        build_call = mock_mb.build.call_args
         assert build_call.args[0] == "ollama_local"
 
     @patch("agent_actions.llm.providers.ollama.batch_client.Client")
@@ -662,7 +662,7 @@ class TestOllamaBatchClientVendorSplit:
         mock_client_cls.return_value = MagicMock()
         mock_envelope = MagicMock()
         mock_envelope.to_dicts.return_value = [{"role": "user", "content": "hi"}]
-        mock_mb.build_for_batch.return_value = mock_envelope
+        mock_mb.build.return_value = mock_envelope
 
         batch_client = OllamaBatchClient(cloud=True, vendor_slug="ollama_cloud", api_key="key-123")
 
@@ -676,7 +676,7 @@ class TestOllamaBatchClientVendorSplit:
         )
         batch_client.format_task_for_provider(task)
 
-        build_call = mock_mb.build_for_batch.call_args
+        build_call = mock_mb.build.call_args
         assert build_call.args[0] == "ollama_cloud"
 
     @patch("agent_actions.llm.providers.ollama.batch_client.Client")

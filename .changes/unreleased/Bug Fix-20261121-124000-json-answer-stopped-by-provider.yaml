@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A JSON answer that a content filter, a Gemini `SAFETY` or `RECITATION` block, or an Anthropic `refusal` stopped partway is a parse error that names the stop reason, online and in batch, as a cut-off answer is. Before, the partial JSON was completed into an object and stored as a success.'
+time: 2026-11-21T12:40:00Z

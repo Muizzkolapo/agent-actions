@@ -238,7 +238,7 @@ The store keeps records compressed. Thus read them with [`agac records`](../cli/
 Every record carries `source_guid`, `target_id` and `lineage`. Records downstream of the first action also carry `parent_target_id` and `root_target_id`:
 
 ```bash
-agac records -w <workflow> -a merge
+agac records -w <workflow> -A merge
 ```
 
 ### Verify Sibling Relationships
@@ -248,7 +248,7 @@ Check that parallel branches share the same parent:
 ```bash
 # All three should print the same parent_target_id
 for branch in branch_a branch_b branch_c; do
-  agac records -w <workflow> -a "$branch" --field parent_target_id
+  agac records -w <workflow> -A "$branch" --field parent_target_id
 done
 ```
 
@@ -257,7 +257,7 @@ done
 For Map-Reduce with a splitting tool downstream of the first action, make sure that all chunks of one record trace back to the same root:
 
 ```bash
-agac records -w <workflow> -a process_chunk --field root_target_id
+agac records -w <workflow> -A process_chunk --field root_target_id
 # Every value for chunks of one record should be the same UUID
 ```
 

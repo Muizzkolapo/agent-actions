@@ -114,7 +114,11 @@ is asked also has a digest: `generation_hash` over the generation settings that 
 (`temperature`, `max_tokens`, `top_p`, `stop`, `frequency_penalty`, `presence_penalty` and `vendor_params`).
 `generation_hash` is empty for a tool or hitl action, because such an action sends no generation settings. The code that the action runs also has a digest:
 `udf_source_hash`. It covers the files that its tool (`impl`) and its UDF guard were loaded from, as
-they were when the run loaded them. The model and these four digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change
+they were when the run loaded them. `output_settings_hash` covers the settings that decide what an answer is and how
+it is stored: `granularity`, `on_empty` and the `expect:` block, and for an LLM action `json_mode`, `output_field` and
+the run mode that the action runs in. `endpoint_hash` covers where an LLM action sends its requests: its `base_url`, or the
+`url` of the declared endpoint that its `model_vendor` names. It is empty for a tool or hitl action. The model and these
+digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change
 all stored digests at the same time. They also could not name each completed action as edited after an upgrade.
 
 A change to one of these items counts as an edit to a completed action:
@@ -125,12 +129,19 @@ A change to one of these items counts as an edit to a completed action:
 - Its dependencies
 - Its generation settings
 - The code of its tool or of its UDF guard
+- Its output settings
+- Its provider endpoint
+
+A change to `request_timeout`, `retry`, `api_key` or `enable_prompt_caching` is not an edit, because it does not
+change what a request asks.
 
 An answer is the output that an action gives for a record. An edit re-runs nothing. The action keeps its
 answers, and each action that reads it also keeps its answers. Each run names the edit, for example
 `recap was edited since it completed (context scope): its answers stand, and only records
 it has not answered use the edit. Run again with --rerun recap to answer every record under
 the edit`, until `agac run --rerun recap` answers the action and its readers under the new config.
+The warning also names each action that reads the output of `recap`, directly or through other actions, because
+the input of that action is the output from before the edit.
 See [When you edit the workflow](../cli/run#when-you-edit-the-workflow).
 
 If you reorder or repeat the entries of an `observe`, `passthrough` or `drop` list, that change is not
@@ -170,10 +181,11 @@ not change that stamp until the action completes again.
 
 When an action starts work, it also records the config that the work is answered under.
 This is `answered_under`, which holds the same `config_hash`, `model_name`, `model_vendor`,
-`context_scope_hash`, `dependencies_hash`, `generation_hash` and `udf_source_hash`. A run can stop partway
+`context_scope_hash`, `dependencies_hash`, `generation_hash`, `udf_source_hash`, `output_settings_hash` and
+`endpoint_hash`. A run can stop partway
 through an action because it is killed, interrupted or stopped by an error. That run leaves the records that it
 finished, and the next run keeps them. Between the two runs, the prompt, schema, guard, model, context scope,
-dependencies, generation settings or tool or guard code can be edited. These are the same edits as for a completed action, above.
+dependencies, generation settings, tool or guard code, output settings or provider endpoint can be edited. These are the same edits as for a completed action, above.
 After such an edit, the next run names the edit and answers only the remaining records under it.
 
 If the action kept any
@@ -285,7 +297,7 @@ This file is a summary of the workflow execution, with the metrics of each actio
       "execution_time": 4.2,
       "output_folder": "/path/to/agent_workflow/product_pipeline/agent_io/target/extract_data",
       "record_count": 10,
-      "tokens": {"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500},
+      "tokens": {"input_tokens": 1000, "output_tokens": 500, "total_tokens": 1500},
       "error_message": null,
       "skip_reason": null,
       "empty_output_records": 0,
@@ -296,9 +308,11 @@ This file is a summary of the workflow execution, with the metrics of each actio
     }
   ],
   "elapsed_time": 12.5,
-  "tokens": {"prompt_tokens": 3000, "completion_tokens": 1500, "total_tokens": 4500}
+  "tokens": {"input_tokens": 3000, "output_tokens": 1500, "total_tokens": 4500}
 }
 ```
+
+For an Anthropic batch, the prompt-token count includes the cached prompt tokens, as for an online Anthropic call.
 
 An action that has a guard also carries a `guard_stats` object. The object holds the `condition`, the counts `passed` and `filtered`, and `on_false`.
 
@@ -329,7 +343,14 @@ An action that has a guard also carries a `guard_stats` object. The object holds
       "successful_actions": 5,
       "failed_actions": 0,
       "skipped_actions": 0,
-      "total_tokens": 0,
+      "total_tokens": 9360,
+      "usage": {
+        "calls": 12,
+        "input_tokens": 1560,
+        "output_tokens": 1800,
+        "cache_read_input_tokens": 6000,
+        "cache_creation_input_tokens": 0
+      },
       "error_message": null,
       "actions": {
         "extract_data": {
@@ -339,6 +360,45 @@ An action that has a guard also carries a `guard_stats` object. The object holds
           "duration_seconds": 74.0,
           "type": "tool",
           "impl": "extract_data"
+        },
+        "summarize": {
+          "status": "success",
+          "started_at": "2026-03-24T10:01:15+00:00",
+          "ended_at": "2026-03-24T10:02:29+00:00",
+          "duration_seconds": 74.0,
+          "type": "llm",
+          "vendor": "anthropic",
+          "model": "claude-haiku-5-5",
+          "tokens": {"input_tokens": 7560, "output_tokens": 1800, "total_tokens": 9360},
+          "usage": {
+            "calls": 12,
+            "input_tokens": 1560,
+            "output_tokens": 1800,
+            "cache_read_input_tokens": 6000,
+            "cache_creation_input_tokens": 0,
+            "by_kind": [
+              {
+                "kind": "main",
+                "batch": false,
+                "model": "claude-haiku-5-5",
+                "calls": 2,
+                "input_tokens": 360,
+                "output_tokens": 800,
+                "cache_read_input_tokens": 6000,
+                "cache_creation_input_tokens": 0
+              },
+              {
+                "kind": "judge",
+                "batch": false,
+                "model": "claude-haiku-5-5",
+                "calls": 10,
+                "input_tokens": 1200,
+                "output_tokens": 1000,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            ]
+          }
         }
       }
     }
@@ -348,13 +408,17 @@ An action that has a guard also carries a `guard_stats` object. The object holds
       "total_runs": 8,
       "successful_runs": 7,
       "failed_runs": 1,
-      "total_tokens": 0,
+      "total_tokens": 74880,
       "success_rate": 0.875,
       "avg_duration_seconds": 142.3
     }
   }
 }
 ```
+
+An action that made model calls in the run has a `usage` object. The object holds the number of `calls` and the four token counts of all the calls. `by_kind` has one entry for each kind of call (`main`, `repair`, `judge`), pricing and model. `batch` is `true` for a call that a provider batch answered. `input_tokens` in `usage` does not include the cached tokens. The `usage` of the execution is the sum over its actions. `tokens` and `total_tokens` keep their meaning. `tokens.input_tokens` is the full prompt, cached or not. `total_tokens` is the prompt and the output of all the actions.
+
+A run that only submits a batch reads no result, so it has no usage for that action. The run that reads the batch holds its usage. [`agac usage`](../cli/usage) adds the runs.
 
 The file keeps the 100 most recent executions. When new runs occur, the framework removes the oldest entries. The authoritative summary of each run is still `agent_io/logs/run_results.json`. That file holds the full data of each action for the one run that made it.
 
@@ -409,7 +473,7 @@ same string as `category`.
 | D | `data` | `DataParsingErrorEvent` (D001), `DataLoadingErrorEvent` (D002) |
 | V | `validation` | `ValidationStartEvent` (V001), `ValidationCompleteEvent` (V002), `ValidationErrorEvent` (V003), `ValidationWarningEvent` (V004) |
 | DV | `validation` | `DataValidationStartedEvent` (DV001), `DataValidationPassedEvent` (DV002), `DataValidationFailedEvent` (DV003) |
-| G | `guard` | `GuardEvaluationTimeoutEvent` (G001), `GuardEvaluationErrorEvent` (G002) |
+| G | `guard` | `GuardEvaluationTimeoutEvent` (G001: the condition, the time limit, the record and the action), `GuardEvaluationErrorEvent` (G002) |
 | R | `recovery` | `RetryExhaustedEvent` (R001) |
 | SO | `schema` | `SchemaConstructionStartedEvent` (SO001), `SchemaConstructionCompleteEvent` (SO002) |
 | FIO | `file_io` | `SourceDataSavingEvent` (FIO001), `SchemaLoadedEvent` (FIO004), `FileWriteStartedEvent` (FIO005), `FileWriteCompleteEvent` (FIO006), `FileWriteFailedEvent` (FIO007), `LogFileCapReachedEvent` (FIO008) |
@@ -491,11 +555,11 @@ SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
 SELECT action_name, disposition, COUNT(*) FROM record_disposition GROUP BY action_name, disposition;
 ```
 
-The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -a extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
+The `data` column is compressed in the store. To print the records of an action, use `agac records -w my_workflow -A extract_data` (see [records](../cli/records)). You can also use the CLI preview command:
 
 ```bash
 agac preview -w my_workflow
-agac preview -w my_workflow -a extract_data -f json
+agac preview -w my_workflow -A extract_data -f json
 agac preview -w my_workflow --stats
 ```
 
@@ -558,10 +622,10 @@ For the full interface that you can browse, see [Documentation Site](../document
 
 ```bash
 # Set log level via environment variable
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 
 # Or use the --debug flag, which goes before the command
-agac --debug run -a my_workflow
+agac --debug run -w my_workflow
 ```
 
 The framework writes the events of each run to `agent_io/logs/events.json` and `errors.json` in the workflow folder (see above).
@@ -586,10 +650,10 @@ for k, v in counts.most_common():
 "
 
 # Preview action output via CLI
-agac preview -w my_workflow -a extract_data
+agac preview -w my_workflow -A extract_data
 
 # Check workflow status
-agac status -a my_workflow
+agac status -w my_workflow
 ```
 
 ## See Also

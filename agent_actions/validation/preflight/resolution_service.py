@@ -31,6 +31,8 @@ from agent_actions.llm.config.vendor import (
     ONLINE_ONLY_VENDORS,
     api_key_env_var,
     canonical_vendor,
+    openai_model_reasons,
+    runs_in_batch,
     vendor_needs_api_key,
 )
 from agent_actions.llm.providers.client_base import api_key_env_name
@@ -48,6 +50,10 @@ from agent_actions.validation.static_analyzer.errors import (
 logger = logging.getLogger(__name__)
 
 _VENDORS_WITHOUT_ENDPOINT = NON_LLM_VENDORS
+
+# vendor_params keys an online request sends that a batch line has nowhere to put
+# (VendorParamSpec.apply_to_body drops them).
+_BATCH_UNSENT_VENDOR_PARAMS = ("extra_headers", "extra_query")
 
 
 _HEADER_ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -185,6 +191,16 @@ def _nested_key_exists(data: Any, path: str) -> bool:
     return True
 
 
+_VENDOR_PARAMS_KEY_HINT = (
+    "vendor_params takes the keyword arguments of the vendor SDK's request; a parameter "
+    "newer than the installed SDK goes under extra_body where the SDK has it."
+)
+_VENDOR_PARAMS_CONFLICT_HINT = (
+    "The vendor's API refuses these settings together: change one, or turn the "
+    "vendor_params setting off."
+)
+
+
 class WorkflowResolutionService:
     """Performs unified pre-flight resolution checks."""
 
@@ -220,6 +236,8 @@ class WorkflowResolutionService:
         for warning in endpoint_warnings:
             result.add_warning(warning)
         for error in self._check_vendor_params():
+            result.add_error(error)
+        for error in self._check_reasoning_model_temperature():
             result.add_error(error)
 
         if os.environ.get("AA_SKIP_ENV_VALIDATION") != "1":
@@ -286,14 +304,26 @@ class WorkflowResolutionService:
 
     def _verify_endpoints(self, result: StaticValidationResult) -> None:
         """Send the structured-output probe to each endpoint the workflow uses."""
-        from agent_actions.llm.providers.openai.endpoint_probe import probe_endpoint
+        from agent_actions.llm.providers.openai.endpoint_probe import (
+            PROBE_MAX_TOKENS,
+            probe_endpoint,
+        )
 
         hints = {
             "refused": "Check the credential in endpoints.{name}.auth.",
             "not_honoured": (
                 "Use a server that honours response_format json_schema, or put one "
-                "(vLLM, TGI, a LiteLLM proxy) in front of this one. A 400 can also mean "
-                "a wrong model name or parameter: read the server's text in the message."
+                "(vLLM, TGI, a LiteLLM proxy) in front of this one."
+            ),
+            "rejected": (
+                "The server refused the request for another reason than response_format: "
+                "read its text in the message. The probe sends the model name, the messages, "
+                "response_format and max_tokens."
+            ),
+            "no_answer": (
+                "The model returned no text: read the reason in the message. A reasoning "
+                f"model can spend the probe's limit of {PROBE_MAX_TOKENS} output tokens "
+                "before it answers."
             ),
             "answered": (
                 "The server answered, but not with a completion: check endpoints.{name}.url, "
@@ -834,7 +864,11 @@ class WorkflowResolutionService:
     # ── Vendor request parameters ──────────────────────────────────────
 
     def _check_vendor_params(self) -> list[StaticTypeError]:
-        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets."""
+        """Refuse a ``vendor_params`` key the vendor's request does not take, or agac sets.
+
+        Also refuse settings the vendor's API refuses beside a ``vendor_params`` value, as
+        the client's ``vendor_params_conflicts`` names them (Anthropic's thinking).
+        """
         from agent_actions.errors import DependencyError
         from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
         from agent_actions.llm.realtime.services.invocation import _resolve_client
@@ -846,13 +880,22 @@ class WorkflowResolutionService:
             if not vendor_params or not vendor:
                 continue
             try:
-                spec = getattr(_resolve_client(vendor), "VENDOR_PARAMS", None)
+                client = _resolve_client(vendor)
             except DependencyError:
                 continue  # A missing SDK is reported on its own.
+            spec = getattr(client, "VENDOR_PARAMS", None)
             # A tool or hitl action sends no request; it may inherit the block from defaults.
             if spec is None:
                 continue
-            for problem in spec.defects(vendor_params):
+            problems = [
+                (problem, _VENDOR_PARAMS_KEY_HINT) for problem in spec.defects(vendor_params)
+            ]
+            conflicts = getattr(client, "vendor_params_conflicts", None)
+            if conflicts is not None:
+                problems += [
+                    (problem, _VENDOR_PARAMS_CONFLICT_HINT) for problem in conflicts(config)
+                ]
+            for problem, hint in problems:
                 errors.append(
                     StaticTypeError(
                         message=f"Action '{action_name}': vendor_params for '{vendor}': {problem}.",
@@ -863,14 +906,84 @@ class WorkflowResolutionService:
                         ),
                         referenced_agent=action_name,
                         referenced_field=VENDOR_PARAMS_KEY,
-                        hint=(
-                            "vendor_params takes the keyword arguments of the vendor SDK's "
-                            "request; a parameter newer than the installed SDK goes under "
-                            "extra_body where the SDK has it."
-                        ),
+                        hint=hint,
                     )
                 )
+            if runs_in_batch(config):
+                errors.extend(self._unsent_in_batch(action_name, vendor_params, spec.allowed()))
         return errors
+
+    # ── OpenAI reasoning models ────────────────────────────────────────
+
+    def _check_reasoning_model_temperature(self) -> list[StaticTypeError]:
+        """Refuse a temperature other than 1 on an OpenAI model that reasons.
+
+        OpenAI refuses it on every record; dropping it would change what the author asked
+        for without a word. A server at a ``base_url`` is not OpenAI and is not checked.
+        """
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+
+        errors: list[StaticTypeError] = []
+        for action_name, config in self.action_configs.items():
+            vendor = (config.get("model_vendor") or "").lower()
+            temperature = config.get("temperature")
+            model_name = config.get("model_name")
+            if vendor != "openai" or config.get("base_url") or not isinstance(model_name, str):
+                continue
+            if temperature is None or temperature == 1:
+                continue
+            effort = (config.get(VENDOR_PARAMS_KEY) or {}).get("reasoning_effort")
+            if not openai_model_reasons(model_name, effort):
+                continue
+            errors.append(
+                StaticTypeError(
+                    message=(
+                        f"Action '{action_name}': model '{model_name}' is a reasoning model "
+                        f"and takes only the default temperature (1), not {temperature}."
+                    ),
+                    location=FieldLocation(
+                        agent_name=action_name,
+                        config_field="temperature",
+                        raw_reference=f"temperature={temperature}, model_name={model_name}",
+                    ),
+                    referenced_agent=action_name,
+                    referenced_field="temperature",
+                    hint="Set temperature: 1 on this action, or use a model that does not reason.",
+                )
+            )
+        return errors
+
+    @staticmethod
+    def _unsent_in_batch(
+        action_name: str, vendor_params: dict[str, Any], allowed: list[str] | None
+    ) -> list[StaticTypeError]:
+        """Refuse each vendor_params key a batch line cannot carry, on a batch action.
+
+        A key the vendor does not take at all is refused by ``defects`` already.
+        """
+        from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+
+        return [
+            StaticTypeError(
+                message=(
+                    f"Action '{action_name}': vendor_params '{key}' cannot be sent in "
+                    "run_mode: batch."
+                ),
+                location=FieldLocation(
+                    agent_name=action_name,
+                    config_field=VENDOR_PARAMS_KEY,
+                    raw_reference=f"run_mode=batch, {VENDOR_PARAMS_KEY}.{key}",
+                ),
+                referenced_agent=action_name,
+                referenced_field=VENDOR_PARAMS_KEY,
+                hint=(
+                    "A batch request line is a JSON body with no headers or query string "
+                    f"of its own. Set run_mode: online, or remove '{key}'."
+                ),
+            )
+            for key in _BATCH_UNSENT_VENDOR_PARAMS
+            if key in vendor_params and (allowed is None or key in allowed)
+        ]
 
     # ── Vendor run-mode compatibility ──────────────────────────────────
 

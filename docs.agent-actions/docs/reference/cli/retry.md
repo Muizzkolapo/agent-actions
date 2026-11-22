@@ -9,22 +9,30 @@ sidebar_position: 9
 The `retry` command runs the failed or exhausted records again, from one action through the actions after it. The command does not run the whole workflow again. Before you retry, use [`dispositions`](./dispositions) to see which records are stuck, and at which action.
 
 ```bash
-agac retry -a <workflow-name> [options]
+agac retry -w <workflow-name> [options]
 ```
 
 A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or another retry of the workflow is in progress, the retry exits 1 with `Another run of workflow '<workflow>' is in progress`. `--filter` also takes the lock, because `--filter` rewrites dispositions, stored rows, the status file and the retry manifest. `--dry-run` writes nothing and does not take the lock.
+
+A retry uses the same [exit codes](./run.md#exit-codes) as a run. The code is `0` when no action holds a failed or exhausted record. The code is `1` when an action failed. The code is `3` when a failed or exhausted record remains. The code is `4` when the retry submitted a batch, or stopped before every action ended. The code is `0` when there is nothing to retry, and for `--dry-run` and `--filter`.
+
+The code is `5` when a provider answers that its [quota is at its limit](./run.md#quota-stop). The retry stops in the same way as
+[an interrupted retry](#when-a-retry-is-interrupted). After you add credits, run the retry again. The retry
+resumes from where it stopped.
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `-a, --agent TEXT` | The name of the agent configuration file, without the path or the extension (required) |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` and `--agent` name the same option. |
 | `--from TEXT` | The action to start the retry from. If you do not give this option, the retry starts from the earliest failure. |
 | `--record TEXT` | Limit the retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what the command would retry, and do not execute |
 | `--abandon-in-flight` | Retry even when a batch was not collected, and abandon the results of that batch |
 | `--filter ACTION:RECORD_ID` | Mark a failed record as filtered at `ACTION`, in place of a retry. Thus no retry selects the record again. You can give this option more than one time. The command records the exclusion and exits. The command runs nothing again and calls no LLM. See [Keep a record out for good](#keep-a-record-out-for-good) |
 | `--reason TEXT` | The reason why the `--filter` records are filtered (required with `--filter`). The command stores this reason as the disposition reason of the records. |
+| `--all` | Retry from the earliest failure. Then retry again while a pass closes an open failure. See [Retry until no failure is left](#retry-all) |
+| `--max-passes N` | With `--all`: stop after N passes (default: no limit) |
 
 ## Examples
 
@@ -33,7 +41,7 @@ A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or an
 This command is always safe. Nothing executes:
 
 ```bash
-agac retry -a my_workflow --dry-run
+agac retry -w my_workflow --dry-run
 ```
 
 Nothing is stuck when there is no failed record, no failed action, and no batch that waits for collection. In this case, the command reports `No failed or exhausted records found. Nothing to retry.`
@@ -41,19 +49,74 @@ Nothing is stuck when there is no failed record, no failed action, and no batch 
 ### Retry from the earliest failure
 
 ```bash
-agac retry -a my_workflow
+agac retry -w my_workflow
 ```
+
+A retry starts at one action. A failure of a different record in another action stays, for example in
+a sibling action that does not read the output of the first action. The plan names these actions:
+
+```
+Note: failures also exist at: verify_b. Run 'retry' again after this completes to address them, or use --all.
+```
+
+### Retry until no failure is left {/* #retry-all */}
+
+```bash
+agac retry -w my_workflow --all
+agac retry -w my_workflow --all --max-passes 5
+```
+
+`--all` repeats the retry. Each pass is one retry from the earliest action that holds a failed or
+exhausted record, as a retry without `--from` selects it. After each pass, the command reads the failures again
+and prints how many are open:
+
+```
+Pass 1: 2 open failure(s) left
+```
+
+An open failure is a record with the disposition `failed` or `exhausted` at an action, or an action that
+failed as a whole. A pass helps when it closes an open failure, also when the record then fails at a later action.
+Thus the count of open failures can stay the same from one pass to the next. The command stops in one of these cases:
+
+- No failure is left. The exit code is `0`.
+- A pass closed none of the open failures. The command prints the count before and after the pass.
+- A pass left the same open failures as an earlier pass. One more pass would not change them.
+- The command made `--max-passes` passes.
+- A pass submitted a batch. The records of that pass wait for the batch, and no retry runs while a batch
+  is not collected. The exit code is `4`. Collect the batch with `agac run`. Then run `retry --all` again.
+- A pass stopped before every action ended, with no open batch. The exit code is `4`.
+- A provider answered that its [quota is at its limit](./run.md#quota-stop). The exit code is `5`.
+
+When failures are left, the exit code is `3`. It is `1` when an action failed as a whole in the last pass
+(see [Exit codes](./run.md#exit-codes)).
+
+Each pass starts at the earliest action that holds a failure. If the failures of that action cannot be repaired,
+a pass can stop the command. The command then does not retry the failures of a later action.
+Keep such a record out with [`--filter`](#keep-a-record-out-for-good), or retry the later action with `--from`.
+
+`--all` holds the [run lock](./run.md#concurrent-runs) from the first pass to the last pass.
+
+`--all` with other options:
+
+| Option | With `--all` |
+|--------|--------------|
+| `--dry-run` | Shows the plan of the first pass and the count of open failures. Changes nothing |
+| `--abandon-in-flight` | Applies to each pass |
+| `--max-passes N` | Limits the passes. Without `--all`, the command refuses this option |
+| `--from` | Refused. `--all` selects the start action of each pass |
+| `--record` | Refused. `--all` retries each failed record |
+| `--filter` | Refused. `--filter` retries nothing |
 
 ### Retry from a specific action
 
 ```bash
-agac retry -a my_workflow --from extract_facts
+agac retry -w my_workflow --from extract_facts
 ```
 
 ### Retry a single record
 
 ```bash
-agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
+agac retry -w my_workflow --from extract_facts --record 3f9a1c2e-...
 ```
 
 `--record` takes the identifier in the **Record ID** column of [`dispositions --quarantined`](./dispositions). The retry matches exactly that value.
@@ -61,12 +124,16 @@ agac retry -a my_workflow --from extract_facts --record 3f9a1c2e-...
 ## Exclude a record permanently {/* #keep-a-record-out-for-good */}
 
 Some records fail in the same way on each attempt. Examples are a prompt that is too large
-for the context window of the model, and a source record with nothing to extract. Each
+for the context window of the model, and a source record with nothing to extract. (If the
+model reads more than Agent Actions assumes, set
+[`context_window`](../configuration/index.md#context-window) instead. To split one long field
+of a record into parts, see
+[Split one field of a record](../data-io/chunking.md#split-one-field-of-a-record).) Each
 `retry` selects such a record again. `--filter` removes the record from the workflow in
 place of a retry. `--filter` does not change the other records:
 
 ```bash
-agac retry -a my_workflow --filter extract_facts:3f9a1c2e-... --reason "scanned page, no text"
+agac retry -w my_workflow --filter extract_facts:3f9a1c2e-... --reason "scanned page, no text"
 ```
 
 ```
@@ -492,7 +559,7 @@ stored file that a `--rerun` made stale. The two run modes differ:
 2. Batch: the retry sends the record again.
 
 ```bash
-agac retry -a my_workflow --from extract_facts
+agac retry -w my_workflow --from extract_facts
 ```
 
 A retry that names no record obeys the limits as `agac run` does. Each action obeys
@@ -593,7 +660,7 @@ that `--dry-run` shows counts what a retry would restore.
 
 The retry repairs an action configured with [`run_mode: batch`](../execution/run-modes.md)
 in the same way, with one difference in timing. The retry submits a new batch that holds only
-the records that it named. Then the retry pauses and asks to be run again. The next run
+the records that it named. Then the retry pauses, exits `4` and asks to be run again. The next run
 collects the batch. The records that the retry did not name are not in that batch. Thus
 nothing answers them again.
 

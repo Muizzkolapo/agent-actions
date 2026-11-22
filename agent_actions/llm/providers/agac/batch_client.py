@@ -114,7 +114,8 @@ class AgacBatchClient(BaseBatchClient):
             "custom_id": batch_task.custom_id,
             "prompt": batch_task.prompt,
             "user_content": batch_task.user_content,
-            "model_config": batch_task.model_config,
+            # Only what the action sets, as a provider's request line holds it.
+            "model_config": {k: v for k, v in batch_task.model_config.items() if v is not None},
             "schema": schema,
         }
 
@@ -308,6 +309,15 @@ class AgacBatchClient(BaseBatchClient):
             openai_response = FakeDataGenerator.generate_openai_response(
                 custom_id, task.get("schema"), task.get("prompt"), attempt
             )
+            # A text-mode request that ends by offering its answer's shapes, as a side
+            # call's may (a judge's does), gets one of them, seeded by the request alone.
+            request = task.get("user_content") or ""
+            text_mode = not (task.get("model_config") or {}).get("json_mode", True)
+            shapes = FakeDataGenerator.offered_answer_shapes(request) if text_mode else None
+            if shapes:
+                openai_response["choices"][0]["message"]["content"] = (
+                    FakeDataGenerator.generate_offered_answer(shapes, request)
+                )
 
             # Wrap in batch result format
             result = {

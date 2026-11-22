@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.trace_store import trace_rows
 
@@ -165,7 +166,7 @@ def _run_to_the_end(project: Path) -> str:
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode == 0, "\n".join(outputs)
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
         if "run again" not in output:
             return "\n".join(outputs)
         args = ["run", "-a", WORKFLOW]
@@ -302,7 +303,7 @@ def _parses_in_process(project: Path, monkeypatch) -> int:
     try:
         for _ in range(4):
             result = CliRunner().invoke(cli, args, catch_exceptions=False)
-            assert result.exit_code == 0, result.output
+            assert result.exit_code in (EXIT_SUCCESS, EXIT_PAUSED), result.output
             if "run again" not in result.output:
                 break
             args = ["run", "-a", WORKFLOW]
@@ -311,25 +312,22 @@ def _parses_in_process(project: Path, monkeypatch) -> int:
     return len(parses)
 
 
-# What the prompt alone parses for two records, measured on the code before guards read
-# seed: one per record online; batch also renders the first record to check it.
-PROMPT_PARSES = {"online": 2, "batch": 3}
-
-
 @pytest.mark.parametrize("mode", ["online", "batch"])
 @pytest.mark.parametrize(
-    ("condition", "guard_parses"),
+    "condition",
     [
-        # A guard that does not read seed parses nothing.
-        ("source.page_content != ''", 0),
-        # One that does parses each file once for the process, not once per record.
-        ("seed.conf.mode == 'on'", 1),
+        # A guard that does not read seed.
+        "source.page_content != ''",
+        # One that does reads the copy the prompt reads.
+        "seed.conf.mode == 'on'",
     ],
 )
-def test_a_guard_adds_at_most_one_seed_parse(tmp_path, monkeypatch, mode, condition, guard_parses):
+def test_the_prompt_and_the_guard_parse_a_seed_file_once_in_all(
+    tmp_path, monkeypatch, mode, condition
+):
     project = _project(tmp_path, condition, mode, prompt_extra=" in {{ seed.conf.mode }}")
 
-    assert _parses_in_process(project, monkeypatch) == PROMPT_PARSES[mode] + guard_parses
+    assert _parses_in_process(project, monkeypatch) == 1
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])

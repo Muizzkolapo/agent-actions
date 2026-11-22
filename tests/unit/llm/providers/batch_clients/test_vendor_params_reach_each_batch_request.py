@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
+from agent_actions.llm.providers.anthropic.client import AnthropicClient
 from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
 from agent_actions.llm.providers.groq.batch_client import GroqBatchClient
 from agent_actions.llm.providers.ollama.batch_client import OllamaBatchClient
@@ -27,8 +28,10 @@ def _bare(cls: type, **attrs: Any) -> Any:
     return client
 
 
-def _line(client: Any, vendor_params: dict | None, schema: Any = None) -> dict[str, Any]:
-    config: dict[str, Any] = {"model_name": "m", "json_mode": schema is not None}
+def _line(
+    client: Any, vendor_params: dict | None, schema: Any = None, **extra: Any
+) -> dict[str, Any]:
+    config: dict[str, Any] = {"model_name": "m", "json_mode": schema is not None, **extra}
     if schema is not None:
         config["compiled_schema"] = schema
     if vendor_params is not None:
@@ -66,10 +69,23 @@ class TestAnthropicBatch:
 
         assert (params["thinking"], params["top_k"]) == ({"type": "disabled"}, 5)
 
-    def test_the_schema_tool_is_forced(self):
+    def test_the_schema_tool_is_offered_and_not_forced(self):
         params = _line(self._client(), None, TOOL)["params"]
 
-        assert params["tool_choice"] == {"type": "tool", "name": "quiz"}
+        assert "tool_choice" not in params
+
+    def test_the_tool_is_the_one_an_online_request_sends(self):
+        schema = [
+            {
+                "name": "QuizSchema",
+                "description": "A quiz",
+                "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+            }
+        ]
+
+        params = _line(self._client(), None, schema)["params"]
+
+        assert params["tools"] == AnthropicClient._build_api_args("m", [], schema)["tools"]
 
     def test_thinking_leaves_the_tool_choice_to_the_model(self):
         params = _line(
@@ -108,11 +124,11 @@ class TestOllamaBatch:
             "message": {"role": "assistant", "content": "ok"},
             "done": True,
         }
-        task = _line(client, {"think": False, "options": {"num_ctx": 8192}})
+        task = _line(client, {"think": False, "options": {"num_ctx": 8192}}, temperature=0.4)
 
         client._process_single_task(task, 0, 1)
 
         sent = client.client.chat.call_args.kwargs
         assert sent["think"] is False
         assert sent["options"]["num_ctx"] == 8192
-        assert "temperature" in sent["options"]
+        assert sent["options"]["temperature"] == 0.4

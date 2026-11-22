@@ -13,6 +13,8 @@ In JSON mode (the default), each action uses a **schema** to define its output f
 
 In non-JSON mode, the framework does not inject schemas. Each action uses **`output_field`** to name one field. The LLM returns plain text, and the framework maps the raw response to that field name.
 
+Online mode and batch mode store the same value. If the reply contains JSON, the framework does not parse the JSON. The framework stores the full reply as text. An action that also has a schema does not send it to the model, in either mode. A rule on the `output_field`, such as an `llm_judge`, reads that text.
+
 | | JSON Mode (`true`) | Non-JSON Mode (`false`) |
 |---|---|---|
 | Output definition | `schema: my_schema` | `output_field: field_name` |

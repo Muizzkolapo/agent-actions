@@ -16,7 +16,7 @@ Every time an action processes a record, Agent Actions captures a **prompt trace
 | Field | Description |
 |-------|-------------|
 | `compiled_prompt` | The fully rendered Jinja template sent to the LLM |
-| `llm_context` | The context dict, serialized to JSON (template variables) |
+| `llm_context` | The context block sent to the model, serialized to JSON. Under `context_block: auto` it leaves out a field that the prompt prints. See [The context block](../context/context-scope.md#the-context-block) |
 | `response_text` | The raw response text of the LLM |
 | `model_name` | The model identifier (for example, `llama3.2:latest`, `gpt-4o-mini`) |
 | `model_vendor` | The provider name (for example, `ollama_local`, `openai`) |
@@ -132,13 +132,13 @@ The store keeps the prompt, context and response text in compressed form. Read t
 
 ```bash
 # Every trace of an action, as plain text
-agac traces -w <workflow> -a classify_issue
+agac traces -w <workflow> -A classify_issue
 
 # One record's traces (its target_id, or its parent_target_id if an expansion produced it)
-agac traces -w <workflow> -a classify_issue --record <target_id>
+agac traces -w <workflow> -A classify_issue --record <target_id>
 
 # The same traces as a JSON list
-agac traces -w <workflow> -a classify_issue --json
+agac traces -w <workflow> -A classify_issue --json
 ```
 
 ## Querying Trace Metadata

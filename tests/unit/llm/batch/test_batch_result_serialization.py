@@ -16,6 +16,11 @@ from agent_actions.llm.batch.services.retry_serialization import (
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
+# Read only in the pass that retrieved the result: a judge batch's reply text is
+# tallied there, and persisting every record's text would double the stored state.
+# parse_error and no_text are settled into the content at retrieval, before anything is persisted.
+NOT_PERSISTED = {"text", "parse_error", "no_text"}
+
 
 def _full_record() -> BatchResult:
     return BatchResult(
@@ -23,13 +28,14 @@ def _full_record() -> BatchResult:
         content={"answer": "kept"},
         success=False,
         error="rate limited",
+        error_status=429,
+        retriable=True,
         metadata={"model": "test-model"},
         usage={"input_tokens": 11, "output_tokens": 22},
         recovery_metadata=RecoveryMetadata(
             retry=RetryMetadata(attempts=2, failures=1, succeeded=False, reason="rate_limit")
         ),
         exhausted=True,
-        raw_text='{"answer": "kept"}',
     )
 
 
@@ -38,15 +44,15 @@ class TestEveryFieldSurvivesTheRoundTrip:
         """Names the fields, so adding one to BatchResult fails here first."""
         serialized = serialize_results([_full_record()])[0]
         declared = {f.name for f in dataclasses.fields(BatchResult)}
-        missing = declared - set(serialized)
+        missing = declared - set(serialized) - NOT_PERSISTED
         assert not missing, (
             f"{sorted(missing)} never reach the persisted state, so they are gone by the time a "
             "deferred round finishes"
         )
 
-    def test_the_raw_text_survives(self):
+    def test_what_the_provider_said_of_retrying_survives(self):
         restored = deserialize_results(serialize_results([_full_record()]))[0]
-        assert restored.raw_text == '{"answer": "kept"}'
+        assert (restored.error_status, restored.retriable) == (429, True)
 
     def test_usage_survives(self):
         restored = deserialize_results(serialize_results([_full_record()]))[0]

@@ -255,10 +255,11 @@ class BatchLifecycleManager:
             )
 
     def _report_records_awaiting_recovery(self, agent_name: str, record_ids: set[str]) -> set[str]:
-        """Report the records a pending recovery batch holds; return the rest.
+        """Report the records a pending recovery batch holds or waits for; return the rest.
 
         A record a retry or repair batch was sent for waits on it, and is reported
-        with the failure recorded for its last attempt rather than as an orphan.
+        with the failure recorded for its last attempt rather than as an orphan. The
+        other records of its file are reported as waiting for that file.
         """
         from agent_actions.llm.batch.infrastructure.recovery_state import (
             AwaitingRecovery,
@@ -276,11 +277,41 @@ class BatchLifecycleManager:
             groups.setdefault(awaiting[record_id], []).append(record_id)
 
         for where, ids in sorted(
-            groups.items(), key=lambda item: (str(item[0].recovery_type), item[0].failure or "")
+            groups.items(),
+            key=lambda item: (
+                item[0].for_its_file,
+                str(item[0].recovery_type),
+                item[0].side_kind or "",
+                item[0].failure or "",
+                item[0].attempt,
+            ),
         ):
             attempt, max_attempts, failure = where.attempt, where.max_attempts, where.failure
             sample = sorted(ids)[:10]
-            if where.recovery_type == RecoveryType.REPAIR:
+            if where.for_its_file:
+                if where.recovery_type == RecoveryType.SIDE:
+                    round_name = f"{where.side_kind} batch {attempt}"
+                elif where.recovery_type == RecoveryType.REPAIR:
+                    round_name = f"repair round {attempt} of {max_attempts}"
+                else:
+                    round_name = f"retry attempt {attempt} of {max_attempts}"
+                logger.info(
+                    "[%s] %d record(s) wait for their file, which waits on %s: %s",
+                    agent_name,
+                    len(ids),
+                    round_name,
+                    sample,
+                )
+            elif where.recovery_type == RecoveryType.SIDE:
+                logger.info(
+                    "[%s] %d record(s) wait on %s batch %d: %s",
+                    agent_name,
+                    len(ids),
+                    where.side_kind,
+                    attempt,
+                    sample,
+                )
+            elif where.recovery_type == RecoveryType.REPAIR:
                 logger.info(
                     "[%s] %d record(s) wait on repair round %d of %d: %s",
                     agent_name,

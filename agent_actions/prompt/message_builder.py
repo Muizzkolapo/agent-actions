@@ -7,22 +7,21 @@ and produces a provider-agnostic ``LLMMessageEnvelope`` that the provider
 converts to its SDK-specific format in the last mile.
 
 Architecture invariant: all prompt-to-message assembly MUST go through
-``MessageBuilder.build()`` so that formatting changes are made in one place.
+``MessageBuilder.build()``, online and in batch, so that a batch line asks the
+model what the online request asks and formatting changes are made in one place.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from textwrap import dedent
 from typing import Any
 
 from agent_actions.errors import PromptTooLargeError
-from agent_actions.input.preprocessing.transformation.string_transformer import (
-    StringProcessor,
-)
 from agent_actions.utils import deep_json
 from agent_actions.utils.json_safety import ensure_json_safe
 
@@ -55,21 +54,44 @@ _MODEL_CONTEXT_LIMITS: dict[str, int] = {
     "o3": 200_000,
     "o3-mini": 200_000,
     "o4-mini": 200_000,
-    # Anthropic
+    # Anthropic, as its model overview documents them
     "claude-3-haiku-20240307": 200_000,
     "claude-3-sonnet-20240229": 200_000,
     "claude-3-opus-20240229": 200_000,
     "claude-3-5-sonnet-20241022": 200_000,
-    "claude-sonnet-4-6": 200_000,
     "claude-sonnet-4-20250514": 200_000,
-    "claude-opus-4-6": 200_000,
     "claude-opus-4-20250514": 200_000,
+    "claude-haiku-4-5": 200_000,
+    "claude-haiku-4-5-20251001": 200_000,
+    "claude-opus-4-6": 1_000_000,
+    "claude-opus-4-7": 1_000_000,
+    "claude-opus-4-8": 1_000_000,
+    "claude-opus-5": 1_000_000,
+    "claude-opus-5-5": 1_000_000,
+    "claude-sonnet-4-6": 1_000_000,
+    "claude-sonnet-5": 1_000_000,
+    "claude-sonnet-5-5": 1_000_000,
+    "claude-haiku-5-5": 1_000_000,
+    "claude-fable-5": 1_000_000,
+    "claude-fable-5-1": 1_000_000,
+    "claude-fable-5-2": 1_000_000,
+    "claude-mythos-5": 1_000_000,
+    "claude-mythos-5-1": 1_000_000,
+    "claude-mythos-5-2": 1_000_000,
     # Groq
     "llama-3.3-70b-versatile": 128_000,
     "llama-3.1-8b-instant": 128_000,
     "mixtral-8x7b-32768": 32_768,
     "gemma2-9b-it": 8_192,
 }
+
+
+def _context_limit(model_name: str | None, context_window: int | None) -> int:
+    if context_window is not None:
+        return context_window
+    if model_name is None:
+        return _DEFAULT_CONTEXT_LIMIT
+    return _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
 
 
 # ---------------------------------------------------------------------------
@@ -138,18 +160,34 @@ class LLMMessage:
 
     role: str
     content: str
-    cache_control: dict[str, str] | None = None
     static_len: int = 0
-    """Length of the leading prompt text, before any record content; a cache mark sits
-    at its end."""
+    """Length of the leading prompt text, before any record content."""
+    cache_boundaries: tuple[int, ...] = ()
+    """Lengths of leading content, ascending, that other requests begin with too. A
+    vendor with cache marks puts one at each; any other sends the content."""
 
     def __post_init__(self) -> None:
         if not 0 <= self.static_len <= len(self.content):
             raise ValueError(
                 f"static_len {self.static_len} is outside a content of length {len(self.content)}"
             )
-        if self.cache_control is not None and self.static_len == 0:
-            raise ValueError("A cache mark needs prompt text before it; static_len is 0")
+        ends = (0, *self.cache_boundaries)
+        if any(a >= b for a, b in zip(ends, ends[1:], strict=False)) or ends[-1] > self.static_len:
+            raise ValueError(
+                f"Cache boundaries {self.cache_boundaries} must ascend within the prompt text, "
+                f"whose length is {self.static_len}"
+            )
+
+    def segments(self) -> list[tuple[str, bool]]:
+        """The content in order, as (text, whether a cache boundary ends it) pairs."""
+        parts = []
+        start = 0
+        for end in self.cache_boundaries:
+            parts.append((self.content[start:end], True))
+            start = end
+        if start < len(self.content) or not parts:
+            parts.append((self.content[start:], False))
+        return parts
 
 
 @dataclass
@@ -158,9 +196,9 @@ class LLMMessageEnvelope:
 
     messages: list[LLMMessage]
     prompt_body: str = ""
-    """The assembled prompt text *before* role wrapping.  Gemini online uses
-    this directly; all other providers use ``messages``.  Empty for Ollama
-    (RAW style)."""
+    """The assembled prompt text *before* role wrapping.  Gemini sends this
+    as its one text part; all other providers use ``messages``.  Empty for
+    Ollama (RAW style)."""
     rules: list[str] = field(default_factory=list)
 
     def to_dicts(self, *, role: str | None = None) -> list[dict[str, Any]]:
@@ -170,22 +208,7 @@ class LLMMessageEnvelope:
             role: If set, only include messages with this role.
         """
         msgs = self.messages if role is None else [m for m in self.messages if m.role == role]
-        result: list[dict[str, Any]] = []
-        for m in msgs:
-            d: dict[str, Any] = {"role": m.role, "content": m.content}
-            if m.cache_control is not None:
-                blocks: list[dict[str, Any]] = [
-                    {
-                        "type": "text",
-                        "text": m.content[: m.static_len],
-                        "cache_control": m.cache_control,
-                    }
-                ]
-                if m.static_len < len(m.content):
-                    blocks.append({"type": "text", "text": m.content[m.static_len :]})
-                d["content"] = blocks
-            result.append(d)
-        return result
+        return [{"role": m.role, "content": m.content} for m in msgs]
 
 
 # ---------------------------------------------------------------------------
@@ -298,19 +321,27 @@ class MessageBuilder:
         enable_prompt_caching: bool = False,
         shared_prompt_len: int | None = None,
         model_name: str | None = None,
+        cache_points: Sequence[int] = (),
+        context_window: int | None = None,
     ) -> LLMMessageEnvelope:
-        """Build a message envelope for a realtime (online) provider call.
+        """Build the message envelope of one provider request, online or a batch line.
 
         ``shared_prompt_len`` is the length of the leading part of ``prompt_config`` every
-        record is sent; None means all of it. A cache mark sits at its end.
+        record is sent; None means all of it. ``enable_prompt_caching`` puts a cache
+        boundary at its end. ``cache_points`` are lengths of leading ``prompt_config``
+        the template marked as shared by some records; each is a cache boundary.
+        ``context_window`` is the action's setting; it outranks the model table.
         """
         MessageBuilder._check_shared_len(shared_prompt_len, prompt_config)
+        MessageBuilder._check_cache_points(
+            cache_points, _shared_len(prompt_config, shared_prompt_len)
+        )
         config = MessageBuilder._get_config(provider)
         style = config.json_prompt_style if json_mode else config.non_json_prompt_style
         role = config.json_role if json_mode else config.non_json_role
         rules_tuple = config.json_rules if json_mode else config.non_json_rules
 
-        context_str = MessageBuilder._serialise_context(context_data, provider)
+        context_str = MessageBuilder._serialise_context(context_data)
         rules = list(rules_tuple)
 
         schema_injection = config.schema_injection if json_mode else SchemaInjection.NONE
@@ -351,21 +382,21 @@ class MessageBuilder:
             shared_prompt_len=shared_prompt_len,
         )
 
-        if enable_prompt_caching:
-            messages = MessageBuilder._mark_for_caching(provider, messages)
+        if enable_prompt_caching or cache_points:
+            messages = MessageBuilder._place_cache_boundaries(
+                messages,
+                cache_points,
+                _shared_len(prompt_config, shared_prompt_len),
+                at_prompt_end=enable_prompt_caching,
+            )
 
-        # Token overflow pre-flight guard — always runs.
-        # When model_name is unknown, falls back to _DEFAULT_CONTEXT_LIMIT.
         estimated_tokens = sum(len(m.content) for m in messages) // 4
-        model_limit = (
-            _MODEL_CONTEXT_LIMITS.get(model_name, _DEFAULT_CONTEXT_LIMIT)
-            if model_name is not None
-            else _DEFAULT_CONTEXT_LIMIT
-        )
+        model_limit = _context_limit(model_name, context_window)
         if estimated_tokens > model_limit:
             raise PromptTooLargeError(
                 f"Estimated prompt size ({estimated_tokens} tokens) exceeds "
-                f"model context window ({model_limit} tokens)",
+                f"model context window ({model_limit} tokens). If the model reads more, "
+                "set context_window on the action or in defaults",
                 context={
                     "estimated_tokens": estimated_tokens,
                     "model_limit": model_limit,
@@ -380,63 +411,6 @@ class MessageBuilder:
             rules=rules,
         )
 
-    @staticmethod
-    def build_for_batch(
-        provider: str,
-        prompt: str,
-        user_content: str,
-        *,
-        schema: dict[str, Any] | None = None,
-        enable_prompt_caching: bool = False,
-        shared_prompt_len: int | None = None,
-    ) -> LLMMessageEnvelope:
-        """Build a message envelope for a batch provider call.
-
-        Most providers use system + user messages.  Anthropic uses a
-        separate ``system`` param plus a single user message.  Gemini
-        combines prompt and content into one text string. ``shared_prompt_len``
-        is as for ``build``.
-        """
-        MessageBuilder._check_shared_len(shared_prompt_len, prompt)
-        # Inject schema into prompt for providers using SchemaInjection.PROMPT
-        # (e.g., ollama_cloud — no native structured output support).
-        effective_prompt = prompt
-        config = PROVIDER_MESSAGE_CONFIGS.get(provider)
-        if config and config.schema_injection == SchemaInjection.PROMPT and schema is not None:
-            clean_schema = MessageBuilder._strip_schema_metadata(schema)
-            schema_text = json.dumps(clean_schema, indent=2, ensure_ascii=False)
-            effective_prompt = (
-                f"{prompt}\n\n"
-                f"You MUST respond with valid JSON matching this schema:\n"
-                f"{schema_text}\n\n"
-                f"Return ONLY the JSON object, no extra text."
-            )
-
-        if provider == "gemini":
-            # Gemini batch: single combined text
-            combined = f"{effective_prompt}\n\n{user_content}"
-            static_len = (
-                len(effective_prompt) + 2 if shared_prompt_len is None else shared_prompt_len
-            )
-            messages = [LLMMessage(role="user", content=combined, static_len=static_len)]
-        else:
-            # Standard (including Anthropic): system + user messages.
-            # Anthropic batch consumers split system out as a top-level param.
-            messages = [
-                LLMMessage(
-                    role="system",
-                    content=effective_prompt,
-                    static_len=_shared_len(effective_prompt, shared_prompt_len),
-                ),
-                LLMMessage(role="user", content=user_content),
-            ]
-        if enable_prompt_caching:
-            messages = MessageBuilder._mark_for_caching(provider, messages)
-        return LLMMessageEnvelope(
-            messages=messages,
-            prompt_body=prompt,
-        )
-
     # -- internals -----------------------------------------------------------
 
     @staticmethod
@@ -447,16 +421,29 @@ class MessageBuilder:
             )
 
     @staticmethod
-    def _mark_for_caching(provider: str, messages: list[LLMMessage]) -> list[LLMMessage]:
-        """Put one cache mark at the end of the prompt text; only Anthropic reads it.
+    def _check_cache_points(cache_points: Sequence[int], shared_len: int) -> None:
+        ends = (0, *cache_points)
+        if any(a > b for a, b in zip(ends, ends[1:], strict=False)) or ends[-1] > shared_len:
+            raise ValueError(
+                f"Cache points {tuple(cache_points)} must ascend within the shared prompt, "
+                f"whose length is {shared_len}"
+            )
 
-        Record content is never marked. A caller asks for the mark only when the prompt
-        is the same for every record: a mark on text that changes per record writes a
-        cache entry no other request reads. No mark is placed where either text block it
-        splits into would be blank, a block the API refuses.
+    @staticmethod
+    def _place_cache_boundaries(
+        messages: list[LLMMessage],
+        cache_points: Sequence[int],
+        shared_len: int,
+        *,
+        at_prompt_end: bool,
+    ) -> list[LLMMessage]:
+        """Put a cache boundary at each cache point and, asked to, at the end of the prompt text.
+
+        Record content is never behind a boundary. A caller asks for the one at the end
+        only when the prompt is the same for every record: a mark on text that changes
+        per record writes a cache entry no other request reads. No boundary is placed
+        where a text block it splits off would be blank, a block the API refuses.
         """
-        if provider != "anthropic":
-            return messages
         last_shared: int | None = None
         for index, message in enumerate(messages):
             if message.static_len:
@@ -466,12 +453,22 @@ class MessageBuilder:
         if last_shared is None:
             return messages
         message = messages[last_shared]
-        head, tail = message.content[: message.static_len], message.content[message.static_len :]
-        if not head.strip() or (tail and not tail.strip()):
+        prompt_start = message.static_len - shared_len
+        wanted = [prompt_start + point for point in cache_points]
+        if at_prompt_end:
+            wanted.append(message.static_len)
+        boundaries: list[int] = []
+        for end in wanted:
+            if message.content[boundaries[-1] if boundaries else 0 : end].strip():
+                boundaries.append(end)
+        tail = message.content[boundaries[-1] :] if boundaries else ""
+        if tail and not tail.strip():
+            boundaries.pop()
+        if not boundaries:
             return messages
-        marked = list(messages)
-        marked[last_shared] = replace(messages[last_shared], cache_control={"type": "ephemeral"})
-        return marked
+        placed = list(messages)
+        placed[last_shared] = replace(message, cache_boundaries=tuple(boundaries))
+        return placed
 
     @staticmethod
     def _get_config(provider: str) -> ProviderMessageConfig:
@@ -484,19 +481,11 @@ class MessageBuilder:
         return config
 
     @staticmethod
-    def _serialise_context(
-        context_data: str | dict[str, Any],
-        provider: str,
-    ) -> str:
-        """Convert context_data to a string for prompt embedding."""
-        if provider in {"ollama_local", "ollama_cloud"}:
-            if isinstance(context_data, str):
-                return context_data
-            return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
-
-        if isinstance(context_data, dict):
-            return str(ensure_json_safe(context_data))
-        return str(StringProcessor.process_as_string(context_data))
+    def _serialise_context(context_data: str | dict[str, Any]) -> str:
+        """The context as the prompt embeds it: a string as written, a dict as JSON."""
+        if isinstance(context_data, str):
+            return context_data
+        return deep_json.dumps(ensure_json_safe(context_data), ensure_ascii=False)
 
     _SCHEMA_META_KEYS = frozenset({"name", "title", "description"})
 
@@ -579,18 +568,9 @@ class MessageBuilder:
             f"<|begin_of_text|>: {str(context_str)} :<|end_of_text|>",
         ]
 
-        # Schema injection (only in json mode) — strip metadata keys to
-        # prevent schema-echo (model returning the definition as content)
-        if schema_injection == SchemaInjection.INLINE_FULL and schema is not None:
-            clean = MessageBuilder._strip_schema_metadata(schema)
-            parts.append(f"<|begin_of_output_schema|> : {clean} : <|end_of_output_schema|>")
-        elif schema_injection == SchemaInjection.INLINE_FULL_LIST and schema is not None:
-            clean = MessageBuilder._strip_schema_metadata(schema)
-            parts.append(
-                f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
-            )
-        elif schema_injection == SchemaInjection.INLINE_FIELDS:
-            parts.append(MessageBuilder._build_field_schema_instruction(schema))
+        schema_text = MessageBuilder._inline_schema_text(schema_injection, schema)
+        if schema_text is not None:
+            parts.append(schema_text)
 
         # Rules
         if rules:
@@ -602,6 +582,24 @@ class MessageBuilder:
         # prompt, before the closing tag: a repair call's feedback goes between the two.
         joined = "\n".join(parts)
         return f"\n{joined}\n", 1 + len(_OPENING) + _shared_len(prompt_config, shared_prompt_len)
+
+    @staticmethod
+    def _inline_schema_text(
+        schema_injection: SchemaInjection, schema: dict[str, Any] | None
+    ) -> str | None:
+        """The schema block an inline-injecting provider's prompt carries, if any.
+
+        Metadata keys are stripped so the model does not echo the definition back.
+        """
+        if schema_injection == SchemaInjection.INLINE_FULL and schema is not None:
+            clean = MessageBuilder._strip_schema_metadata(schema)
+            return f"<|begin_of_output_schema|> : {clean} : <|end_of_output_schema|>"
+        if schema_injection == SchemaInjection.INLINE_FULL_LIST and schema is not None:
+            clean = MessageBuilder._strip_schema_metadata(schema)
+            return f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
+        if schema_injection == SchemaInjection.INLINE_FIELDS:
+            return MessageBuilder._build_field_schema_instruction(schema)
+        return None
 
     @staticmethod
     def _build_field_schema_instruction(schema: dict[str, Any] | None) -> str:

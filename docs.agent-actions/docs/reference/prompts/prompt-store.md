@@ -167,6 +167,31 @@ When you use [versioned actions](../execution/versions), these variables are ava
 You are evaluator {{ i }} of {{ version.length }}.
 ```
 
+### Cache Points
+
+`{% cache_point %}` marks the end of a long part of the prompt that many records share, for example the text of one source page. The tag renders to no text. A tag on a line of its own removes the line. A tag after text on a line keeps the line break after it. Thus the prompt is the text that the template gives without the tag:
+
+```markdown
+## PAGE
+{{ source.page_content }}
+{% cache_point %}
+## THE SLOT
+{{ slots.fact }}
+```
+
+An Anthropic action with `enable_prompt_caching: true` sends the text before the tag with a cache mark. The other actions send the prompt without the tag, and nothing else changes. A template may hold at most 3 tags, outside each loop and macro. See [Prompt Caching](./prompt-caching.md) for the rules and the limits of the provider.
+
+### Macros and Variables of templates/
+
+A store prompt can read the macros and variables of the project `templates/` folder, as a prompt in the workflow file can. A `{{ }}` tag that reads only these names renders when the workflow loads. The other tags render for each record:
+
+```markdown
+{{ voice('calm') }}
+Describe {{ source.title }} in a {{ tone }} voice.
+```
+
+A macro of `templates/` cannot get a value that a record supplies, for example `{{ voice(source.tone) }}`. The load fails and names the store prompt. Define that macro in the prompt itself instead. See [What Renders When](../configuration/templates#what-renders-when).
+
 ### Load Other Prompts
 
 `{{ load_prompt("file.Prompt") }}` inserts another store prompt, as written, when the workflow loads. The tags of the inserted prompt then render for each record, like the rest of the prompt. A loaded prompt may load other prompts in turn. Write each call as a separate tag, with the name of the prompt as a quoted string. The load fails on any other form. The load also fails on prompts that load each other in a cycle, and names those prompts.

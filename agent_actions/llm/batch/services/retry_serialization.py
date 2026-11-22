@@ -1,6 +1,5 @@
 """Serialization/deserialization utilities for batch results."""
 
-import json
 from typing import Any
 
 from agent_actions.llm.providers.batch_base import BatchResult
@@ -9,6 +8,9 @@ from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 
 def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
     """Serialize BatchResult objects for JSON persistence.
+
+    ``text`` is left out: only the reading of a side batch uses it, in the pass that
+    retrieved it, and a record's text would otherwise be stored beside its content.
 
     Args:
         results: Batch results to serialize
@@ -28,6 +30,10 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             # error=None and reports a generic "Batch processing failed" instead
             # of what the provider actually said.
             d["error"] = r.error
+        if r.error_status is not None:
+            d["error_status"] = r.error_status
+        if r.retriable is not None:
+            d["retriable"] = r.retriable
         if r.metadata:
             d["metadata"] = r.metadata
         if r.usage:
@@ -36,26 +42,8 @@ def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
             d["recovery_metadata"] = r.recovery_metadata.to_dict()
         if r.exhausted:
             d["exhausted"] = True
-        if r.raw_text is not None:
-            d["raw_text"] = r.raw_text
-        # Written by every serializer that keeps raw_text, so a reader can tell a state
-        # an earlier version wrote (no text kept) from a result that has no text.
-        d["text_kept"] = True
         serialized.append(d)
     return serialized
-
-
-def _text_of_an_earlier_state(d: dict[str, Any]) -> str | None:
-    """The answer text of a result an earlier version persisted, which kept no text.
-
-    That version parsed every text answer as JSON and stored the parsed content, so the
-    text is the content itself, or its JSON. A state this version wrote has `text_kept`,
-    and a result in it without `raw_text` had no text.
-    """
-    if d.get("text_kept") or not d.get("success") or d.get("content") is None:
-        return None
-    content = d["content"]
-    return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
 
 
 def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
@@ -97,10 +85,11 @@ def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
             content=d["content"],
             success=d["success"],
             error=d.get("error"),
+            error_status=d.get("error_status"),
+            retriable=d.get("retriable"),
             metadata=d.get("metadata"),
             usage=d.get("usage"),
             exhausted=d.get("exhausted", False),
-            raw_text=d.get("raw_text", _text_of_an_earlier_state(d)),
         )
         result.recovery_metadata = recovery
         results.append(result)

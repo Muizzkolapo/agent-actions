@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Batch Recovery
 
-Batch recovery handles two problems of a batch API, in a process with two phases, when you turn it on. Phase 1 needs a `retry:` block. Phase 2 needs an `expect:` block with a `repair` policy other than `none`. In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
+Batch recovery handles two problems of a batch API, in a process with two phases, when you turn it on. Phase 1 needs a `retry:` block. Phase 2 needs an `expect:` block with a `repair` policy other than `none`. An `expect:` block with an `llm_judge` rule also adds judge rounds, with any `repair` policy. See [Judge rounds](#judge-rounds). In the first problem, the provider does not answer some records. For example, you submit 1,000 records to a batch API and only 985 come back. In the second problem, some outputs fail validation. For example, 40 of those 985 records have outputs that fail validation.
 
 ## The Two Phases
 
@@ -20,16 +20,22 @@ flowchart TD
     D --> E[Submit a Retry Batch]
     E --> F[Collected by a Later Run]
     F --> G{Expectations Configured?}
-    G -->|Yes| H[Phase 2: Validate All Results]
+    G -->|Yes| M{Values Not Judged Yet?}
     G -->|No| L[Done]
+    M -->|Yes| N[Submit a Judge Batch]
+    N --> O[Collected by a Later Run]
+    O --> M
+    M -->|No| H[Phase 2: Validate All Results]
     H --> I{Failures?}
     I -->|Yes| J[Append Feedback + Resubmit]
     J --> K[Merge Results]
-    K --> H
+    K --> M
     I -->|No| L
 ```
 
-**Phase 1 (Retry)** recovers the records that the provider did not answer. The provider dropped some of these records completely (network errors, timeouts, silent failures). The provider returned the other records with an error for each record and no content. Phase 1 submits the same request again, with no change.
+The judge round runs only for an `llm_judge` rule on an action whose `judge_mode` is not `online`.
+
+**Phase 1 (Retry)** recovers the records that the provider did not answer. The provider dropped some of these records completely (network errors, timeouts, silent failures). The provider returned the other records with an error for each record and no content. Phase 1 submits the same request again, with no change, for each failure that an online call retries. See [The records that Phase 1 sends again](#the-records-that-phase-1-sends-again).
 
 **Phase 2 (Repair)** repairs the records that the LLM answered with output that fails the `expect:` suite of the action (schema violations, failed rules). Before Phase 2 submits a record again, Phase 2 changes the prompt to include the failure feedback.
 
@@ -48,6 +54,26 @@ After the system gets the batch results, it compares the expected record IDs wit
    - The next run collects that batch and merges the results. Each result replaces any earlier answer for the same record.
    - Update the set of missing records.
 5. If records are still missing after all attempts, mark these records with exhaustion metadata.
+
+### The records that Phase 1 sends again
+
+Phase 1 sends a record again only if an online call retries the same failure:
+
+- A rate limit (HTTP 429), a server error (HTTP 5xx) or a transient HTTP 400.
+- A request that got no answer, for example a connection error or an expired request. Its result
+  line gives no HTTP status.
+- In text mode (`json_mode: false`), an answer that the output limit cut off before its first
+  character.
+
+Each other failure fails its record immediately, with the message of the provider. Examples are
+an HTTP 400 and an HTTP 404, for example an Ollama model that is not pulled. An answer that holds
+no content also fails: a refusal, a prompt that Gemini blocked, or a message with only a thinking
+block. A refusal fails its record immediately, also when the output limit stopped it.
+
+In JSON mode, an answer with no content is not a failed request. It is the same parse-error
+record that an online call stores: `{"raw_response": "", "_parse_error": "<the reason>"}`. Phase 1
+does not send it again. The record fails with the reason `parse_error`, or
+[Phase 2](#phase-2-validate-and-repair) regenerates it.
 
 If the system cannot build a retry at all, the loop stops immediately for those records. The loop also stops in this way when no attempts remain. The cause is that preparation admits no task for the records: a guard rejects each of the records when the system evaluates the guard again. The records are exhausted under `on_exhausted`, and the system stores the file.
 
@@ -144,6 +170,21 @@ After Phase 1 makes sure that all recoverable records are present, Phase 2 check
 outputs are valid. Phase 2 runs when the action has an [`expect:`](../validation/expectations.md)
 block with a repair policy.
 
+### Judge rounds
+
+An `llm_judge` rule adds a judge round before each validation. The judge round runs with any
+`repair` policy, `repair: none` included:
+
+1. Agent Actions finds the values that the judge must check and that it did not judge yet.
+2. Agent Actions sends the judge calls for these values as a judge batch, named
+   `<file>_judge_<n>`, and the run defers. A later run collects the judge batch.
+3. Agent Actions validates the records with the verdicts of the judge batch.
+
+Each repair round adds a judge round for the values that the repair round returns. A judge
+batch holds one model and at most the number of requests that the provider accepts in one
+batch. If some values do not fit, the next judge round sends them. Set `judge_mode: online` to
+call the judge online. See [Judging in batch](../validation/expectations.md#judging-in-batch).
+
 ### How It Works
 
 A repair round is a full provider batch. Thus a repair round defers, and does not block:
@@ -161,8 +202,15 @@ A repair round is a full provider batch. Thus a repair round defers, and does no
 The system does not submit a round that has nothing to send. If a guard rejects each failing record when the guard is evaluated again, no empty batch goes to the provider. The system abandons those records under `on_exhausted`, as it does when no rounds remain. If the guard rejects some of the failing records, the round goes to the provider with the other records. The system abandons the records that it did not send in the same way, in that pass. The system does not count these records as sent. Thus, when the round comes back without these records, the system does not interpret their absence as records that the provider dropped.
 
 The system reconstructs a record that the provider never returns as a failure. The system does
-not let the record become a silent passthrough. A record with no content at all failed at the
-provider, not at its expectations. Thus that record keeps its own error.
+not let the record become a silent passthrough. A record whose request failed (an HTTP error,
+an expired request) failed at the provider, not at its expectations. Thus that record keeps its
+own error, and Phase 2 does not regenerate it.
+
+In JSON mode, the system stores a parse-error record, as online does. This occurs for an answer
+with no content and for an answer that the output limit cut off. Phase 2 regenerates this record when the
+suite rejects it, which the schema gate does for an action with a schema. The `structural:`
+mode sets the prompt of the regeneration, as it does online. In text mode, a refused or cut-off
+answer fails its record before any expectation runs, as it does online.
 
 ## Recovery Metadata
 
@@ -240,6 +288,12 @@ Final output:
    5 records — _recovery.retry present (recovered in Phase 1)
    1 record  — _recovery.expectations present (exhausted in Phase 2)
 ```
+
+## Token Counts
+
+In batch, the run does not count the tokens of a generation that a retry or a repair round
+replaces later. Online, the run counts the tokens of each call. Thus the token totals of a batch
+run and of an online run can be different.
 
 ## See Also
 

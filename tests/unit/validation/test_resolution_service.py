@@ -301,7 +301,7 @@ class TestVendorRunModeCompatibility:
     def test_supported_mode_and_vendor_pair_passes(self, vendor, run_mode):
         svc = WorkflowResolutionService(
             action_configs={
-                "my_action": {"model_vendor": vendor, "run_mode": run_mode},
+                "my_action": {"model_vendor": vendor, "run_mode": run_mode, "schema": "s"},
             },
         )
         result = svc.resolve_all()

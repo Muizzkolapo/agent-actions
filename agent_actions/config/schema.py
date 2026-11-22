@@ -17,6 +17,11 @@ from pydantic import (
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardParser, parse_guard_config
+from agent_actions.input.context.normalizer import (
+    OPTIONAL_DIRECTIVE,
+    hand_written_optional_error,
+    split_optional_observe,
+)
 
 # Measured: a transposition or a dropped letter scores 0.667 and above, a
 # spelling belonging to no field 0.600 and below. Distinct names still collide,
@@ -59,6 +64,19 @@ def refuse_context_scope_siblings(data: Any, surface: str) -> Any:
         f"    {_CONTEXT_SCOPE_LIST_DIRECTIVES[stray[0]]}:\n"
         "      - source.*"
     )
+
+
+def _plain_observe_references(context_scope: Any) -> Any:
+    """Read both optional observe forms into the one shape the run reads.
+
+    Only the normaliser writes ``optional``, and it never hands its output back here.
+    """
+    try:
+        if isinstance(context_scope, dict) and OPTIONAL_DIRECTIVE in context_scope:
+            raise hand_written_optional_error()
+        return split_optional_observe(context_scope)
+    except ConfigurationError as e:
+        raise ValueError(str(e)) from e
 
 
 # Version fan-out puts each version in the dependency graph as its own action, so
@@ -288,6 +306,21 @@ def version_variant_names(action_name: str, version_config: Any) -> list[str]:
     return [f"{action_name}_{value}" for value in values]
 
 
+def branch_origins(origins: dict[str, dict[str, Any]]) -> str:
+    """A sentence per branch naming the actions of *origins* it defines; empty for none.
+
+    *origins* maps an action name to its ``_include`` metadata.
+    """
+    by_branch: dict[tuple[str, str], list[str]] = {}
+    for name, origin in origins.items():
+        by_branch.setdefault((origin["branch"], origin["branch_file"]), []).append(name)
+    return " ".join(
+        f"{', '.join(repr(n) for n in members)} "
+        f"{'comes' if len(members) == 1 else 'come'} from branch '{branch}' ({file})."
+        for (branch, file), members in by_branch.items()
+    )
+
+
 def validate_version_block(version_config: Any, action_name: str) -> VersionConfig:
     """Validate a `versions:` block and return it, for the expansion to read.
 
@@ -341,6 +374,28 @@ class ChunkConfig(BaseModel):
     )
     tokenizer_model: str | None = Field(default=None, description="Tokenizer used to measure size")
     split_method: str | None = Field(default=None, description="How text is split into chunks")
+    field: str | None = Field(
+        default=None,
+        description="The field of each staged record to split into parts, as source.<name>",
+    )
+
+    @field_validator("field")
+    @classmethod
+    def _one_top_level_field(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        name = split_field_name(value)
+        if not name or "." in name:
+            raise ValueError(
+                f"field '{value}' must name one top-level field of the staged record, "
+                "as source.<name> or <name>"
+            )
+        return value
+
+
+def split_field_name(field: str) -> str:
+    """The staged record's key that ``chunk_config.field`` names."""
+    return field.removeprefix("source.")
 
 
 class MergePattern(str, Enum):
@@ -482,6 +537,11 @@ class ExpectConfig(BaseModel):
         description="Max real judge LLM calls this action's suite may make across the run; "
         "None is uncapped",
     )
+    judge_mode: Literal["batch", "online"] | None = Field(
+        default=None,
+        description="How llm_judge calls are sent: batch (as batches of their own) or online; "
+        "omitted, as the action runs. batch needs run_mode: batch",
+    )
 
     @field_validator("repair", "structural")
     @classmethod
@@ -605,6 +665,11 @@ class ActionConfig(_RetryValidators):
     json_mode: bool | None = Field(default=None, description="JSON mode setting")
     prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
     output_field: str | None = Field(default=None, description="Output field name")
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None,
+        description="Observed fields sent in the context block: auto (those the prompt does "
+        "not print), all, or none",
+    )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Generation temperature"
     )
@@ -615,6 +680,12 @@ class ActionConfig(_RetryValidators):
         gt=0,
         allow_inf_nan=False,
         description="Seconds one LLM request may take before it fails as a retriable error",
+    )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Tokens of prompt the model reads; outranks agac's table of models",
     )
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
@@ -670,6 +741,24 @@ class ActionConfig(_RetryValidators):
     version_context: dict[str, Any] | None = Field(
         default=None, alias="_version_context", description="Version context injected by renderer"
     )
+    include_context: dict[str, Any] | None = Field(
+        default=None, alias="_include", description="Branch origin injected by renderer"
+    )
+    sends_elsewhere: bool | None = Field(
+        default=None,
+        alias="_sends_elsewhere",
+        description="A record the guard filters went to another branch, injected by renderer",
+    )
+    gathers: bool | None = Field(
+        default=None,
+        alias="_gathers",
+        description="Records sent elsewhere above come back here, injected by renderer",
+    )
+    builtin: dict[str, Any] | None = Field(
+        default=None,
+        alias="_builtin",
+        description="A tool agac runs itself (route, pick) and its settings, injected by renderer",
+    )
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -678,7 +767,32 @@ class ActionConfig(_RetryValidators):
             raise ValueError(f"HITL action '{self.name}' requires 'hitl' configuration block")
         if self.kind == ActionKind.TOOL and not self.impl:
             raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
+        if self.builtin is not None:
+            self._check_builtin()
         return self
+
+    def _check_builtin(self) -> None:
+        """Refuse a ``_builtin`` spec its tool cannot run, before the run starts."""
+        from agent_actions.llm.providers.tools.builtin_spec import checked_builtin
+
+        spec = checked_builtin(self.builtin)
+        expected = f"agac.{spec['tool']}"
+        if self.impl != expected:
+            raise ValueError(
+                f"Action '{self.name}' runs the built-in tool '{spec['tool']}', so its 'impl' "
+                f"must be '{expected}', not {self.impl!r}"
+            )
+        missing = [name for name in spec.get("of", []) if name not in self.dependencies]
+        if missing:
+            raise ValueError(
+                f"Action '{self.name}' picks from {', '.join(missing)}, which it does not "
+                "depend on. List each action of 'of' under 'dependencies'."
+            )
+
+    @field_validator("context_scope")
+    @classmethod
+    def _plain_observe(cls, v: Any) -> Any:
+        return _plain_observe_references(v)
 
     @field_validator("guard")
     @classmethod
@@ -711,6 +825,11 @@ class DefaultsConfig(_RetryValidators):
             "defaults",
         )
 
+    @field_validator("context_scope")
+    @classmethod
+    def _plain_observe(cls, v: Any) -> Any:
+        return _plain_observe_references(v)
+
     model_vendor: str | None = Field(default=None, description="Default model vendor")
     model_name: str | None = Field(default=None, description="Default model name")
     json_mode: bool | None = Field(default=None, description="Default JSON mode setting")
@@ -726,6 +845,13 @@ class DefaultsConfig(_RetryValidators):
         le=3600,
         description="Default HITL timeout in seconds for all hitl actions",
     )
+    guard_timeout: float | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        allow_inf_nan=False,
+        description="Default seconds a condition guard may take on one record (default 5)",
+    )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
     api_key: SecretStr | None = Field(default=None, description="Default API key")
@@ -740,6 +866,9 @@ class DefaultsConfig(_RetryValidators):
     )
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None, description="Default observed fields sent in the context block"
+    )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Default temperature"
     )
@@ -750,6 +879,12 @@ class DefaultsConfig(_RetryValidators):
         gt=0,
         allow_inf_nan=False,
         description="Default seconds one LLM request may take before it fails",
+    )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Default tokens of prompt the model reads; outranks agac's table of models",
     )
     top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
     frequency_penalty: float | None = Field(
@@ -802,6 +937,13 @@ class DefaultsConfig(_RetryValidators):
         le=32,
         description="Default records of an online LLM action in flight at once (1-32)",
     )
+
+
+def dump_defaults(defaults: DefaultsConfig | None) -> dict[str, Any]:
+    """The keys a ``defaults:`` block sets, as the expander reads them."""
+    if defaults is None:
+        return {}
+    return defaults.model_dump(mode="python", exclude_unset=True, by_alias=True)
 
 
 class StorageConfig(BaseModel):
@@ -905,8 +1047,17 @@ class WorkflowConfig(BaseModel):
                 base_names.add(action.version_context["base_name"])
         dangling = all_deps - seen - base_names
         if dangling:
+            hints = []
+            for name in sorted(dangling):
+                finals = sorted(final for final in seen if final.endswith(f"__{name}"))
+                if finals:
+                    hints.append(
+                        f"'{name}' is a short name inside an include with 'as:'; outside the "
+                        f"include, write the final name: {', '.join(repr(f) for f in finals)}"
+                    )
+            hint = f". {'. '.join(hints)}." if hints else ""
             raise ValueError(
-                f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
+                f"Dangling dependency references (not defined as actions): {sorted(dangling)}{hint}"
             )
 
         # Iterative DFS cycle detection (avoids RecursionError on deep chains)
@@ -936,12 +1087,25 @@ class WorkflowConfig(BaseModel):
                     idx = cycle.index(dep)
                     cycle = cycle[idx:]
                     cycle.append(dep)
-                    raise ValueError(f"Circular dependency detected: {' -> '.join(cycle)}")
+                    raise ValueError(
+                        f"Circular dependency detected: {' -> '.join(cycle)}"
+                        f"{self._branch_origins(cycle[:-1])}"
+                    )
                 elif color[dep] == WHITE:
                     color[dep] = GRAY
                     stack.append((dep, iter(dep_graph.get(dep, []))))
 
         return self
+
+    def _branch_origins(self, names: list[str]) -> str:
+        """A sentence per branch naming which of *names* it defines; empty for none."""
+        origins: dict[str, dict[str, Any]] = {}
+        for name in dict.fromkeys(names):
+            action = self.get_action(name)
+            if action and action.include_context:
+                origins[name] = action.include_context
+        sentences = branch_origins(origins)
+        return f". {sentences}" if sentences else ""
 
     def get_action(self, name: str) -> ActionConfig | None:
         """Get an action by name."""
@@ -968,4 +1132,6 @@ __all__ = [
     "StorageConfig",
     "DefaultsConfig",
     "WorkflowConfig",
+    "branch_origins",
+    "dump_defaults",
 ]

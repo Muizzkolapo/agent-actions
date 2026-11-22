@@ -140,7 +140,7 @@ def _stopped_and_edited(label: str) -> str:
     )
 
 
-PROMPT_EDIT = "action config (prompt/schema/guard)"
+PROMPT_EDIT = "action config (prompt/schema/guard/routing)"
 
 
 STOPS = pytest.mark.parametrize(

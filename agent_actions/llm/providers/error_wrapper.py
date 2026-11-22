@@ -19,6 +19,7 @@ import httpx
 
 from agent_actions.errors import (
     NetworkError,
+    QuotaExceededError,
     RateLimitError,
     ResponseTruncatedError,
     VendorAPIError,
@@ -41,6 +42,90 @@ TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
     httpx.TimeoutException,
     httpx.RemoteProtocolError,
 )
+
+
+# What a vendor's answer says when the account's quota, credit or balance is at its
+# limit, which no wait clears, where the status alone does not say it: each answer is the
+# statuses it comes with and the words it holds, every one of them. Lower case.
+QUOTA_ANSWERS: dict[str, tuple[tuple[frozenset[int], tuple[str, ...]], ...]] = {
+    "openai": ((frozenset({429, 403}), ("insufficient_quota",)),),
+    "anthropic": ((frozenset({400}), ("invalid_request_error", "credit balance is too low")),),
+    "ollama_cloud": (
+        (frozenset({429, 403}), ("usage limit",)),
+        (frozenset({429, 403}), ("usage credits",)),
+    ),
+}
+
+_PAYMENT_REQUIRED = 402
+
+
+def _status_code(e: BaseException) -> int | None:
+    """The HTTP status an SDK error carries, wherever the SDK keeps it."""
+    for holder, name in (
+        (e, "status_code"),
+        (e, "code"),
+        (getattr(e, "response", None), "status_code"),
+    ):
+        status = getattr(holder, name, None)
+        if isinstance(status, int) and not isinstance(status, bool):
+            return status
+    return None
+
+
+def _error_words(e: BaseException, text: str) -> str:
+    """The error's text with the code, type and body the SDK keeps beside it.
+
+    Some SDK versions leave the error code (``insufficient_quota``) out of the message.
+    """
+    parts = [text]
+    for name in ("code", "type", "body"):
+        value = getattr(e, name, None)
+        if value is not None and not isinstance(value, int):
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def is_quota_answer(vendor: str, status_code: int | None, words: str) -> bool:
+    """Whether an answer with this status and these words says the quota is at its limit."""
+    if status_code == _PAYMENT_REQUIRED:
+        return True
+    lowered = words.lower()
+    return any(
+        status_code in statuses and all(word in lowered for word in needed)
+        for statuses, needed in QUOTA_ANSWERS.get(vendor, ())
+    )
+
+
+def _says_quota_is_used_up(e: BaseException, text: str, vendor: str) -> bool:
+    return is_quota_answer(vendor, _status_code(e), _error_words(e, text))
+
+
+def _quota_error(
+    text: str, vendor: str, model_name: str, cause: BaseException
+) -> QuotaExceededError:
+    return QuotaExceededError(
+        f"{vendor} quota or billing stop: {text}",
+        context={"vendor": vendor, "model": model_name, "provider_message": text},
+        cause=cause if isinstance(cause, Exception) else None,
+    )
+
+
+def find_quota_error(e: BaseException, vendor: str) -> QuotaExceededError | None:
+    """The quota or billing stop *e* is or was raised from, or None.
+
+    Searches the cause chain: a batch client raises its own error with the SDK's as the cause.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = e
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, QuotaExceededError):
+            return current
+        text = _redact_sensitive_data(str(current))
+        if _says_quota_is_used_up(current, text, vendor):
+            return _quota_error(text, vendor, "", current)
+        current = current.__cause__
+    return None
 
 
 def _extract_retry_after(e: Exception) -> float | None:
@@ -116,8 +201,9 @@ def wrap_vendor_error(
 ) -> Exception:
     """Wrap a vendor SDK exception into a unified agent-actions error type.
 
-    Fires appropriate LLM events (RateLimitEvent / LLMErrorEvent) and returns
-    one of RateLimitError, NetworkError, or VendorAPIError.
+    Fires appropriate LLM events (RateLimitEvent / LLMErrorEvent; none for a quota
+    stop) and returns one of QuotaExceededError, RateLimitError, NetworkError, or
+    VendorAPIError.
 
     Args:
         e: The vendor SDK exception.
@@ -126,14 +212,20 @@ def wrap_vendor_error(
         request_id: Request correlation ID.
 
     Returns:
-        A unified exception (RateLimitError, NetworkError, or VendorAPIError),
-        or the original exception if it doesn't match any known category.
+        A unified exception (QuotaExceededError, RateLimitError, NetworkError, or
+        VendorAPIError), or the original exception if it doesn't match any known category.
     """
     vendor = mapping.vendor_name
     context: dict[str, object] = {"vendor": vendor, "model": model_name}
     # A server body can echo the request headers; masked by value and key shape only,
     # since the key-name rules would mangle the server's own text ("api_key: expected").
     text = _redact_sensitive_data(str(e))
+
+    # --- Quota or billing stop, before the rate limit a 429 would otherwise read as ---
+    # No event: the run it stops reports it once, where an event for each request in
+    # flight would print the provider's answer once per record.
+    if _says_quota_is_used_up(e, text, vendor):
+        return _quota_error(text, vendor, model_name, e)
 
     # --- Type-based rate-limit detection ---
     if mapping.rate_limit_types and isinstance(e, mapping.rate_limit_types):
@@ -164,13 +256,8 @@ def wrap_vendor_error(
 
     # --- Status-code-based classification (Cohere, Ollama HTTP) ---
     if mapping.status_code_error_types and isinstance(e, mapping.status_code_error_types):
-        status_code = getattr(e, "status_code", None)
-        # google-genai uses .code instead of .status_code
-        if status_code is None:
-            status_code = getattr(e, "code", None)
-        # Some SDKs put status_code on e.response
-        if status_code is None and hasattr(e, "response"):
-            status_code = getattr(e.response, "status_code", None)
+        # google-genai keeps it as .code, some SDKs on e.response
+        status_code = _status_code(e)
 
         if status_code == 429:
             context["retry_after"] = None
@@ -239,6 +326,22 @@ def wrap_vendor_error(
     return e
 
 
+def error_for_status(status_code: int, message: str) -> VendorAPIError | NetworkError:
+    """The error online raises for an answer with *status_code*, for a caller that has no exception.
+
+    402 is a quota or billing stop, 429 a rate limit and any 5xx a network error, as the
+    type-based mappings classify them (the SDKs' ``InternalServerError`` is every 5xx);
+    any other status is an API error.
+    """
+    if status_code == _PAYMENT_REQUIRED:
+        return QuotaExceededError(message, context={"provider_message": message})
+    if status_code == 429:
+        return RateLimitError(message)
+    if status_code >= 500:
+        return NetworkError(message)
+    return VendorAPIError(message)
+
+
 # Each vendor's word for "the output budget ran out" (Gemini and Cohere write it in capitals).
 _TRUNCATED_STOP_REASONS = frozenset({"max_tokens", "length"})
 
@@ -256,6 +359,83 @@ def is_truncated(reason: Any) -> bool:
     """Whether the model stopped because the output budget ran out."""
     name = stop_reason_name(reason)
     return name is not None and name.lower() in _TRUNCATED_STOP_REASONS
+
+
+# Stops the provider made, not the model: a content filter, a safety or recitation block, a refusal.
+_PROVIDER_STOP_REASONS = frozenset({"content_filter", "safety", "recitation", "refusal"})
+
+
+def is_stopped_by_provider(reason: Any) -> bool:
+    """Whether a filter or a block, not the model, ended the answer."""
+    name = stop_reason_name(reason)
+    return name is not None and name.lower() in _PROVIDER_STOP_REASONS
+
+
+def is_unfinished(reason: Any) -> bool:
+    """Whether the answer ended before the model finished it: cut off, or stopped by the provider."""
+    return is_truncated(reason) or is_stopped_by_provider(reason)
+
+
+def refusal_text(refusal: str) -> str:
+    """The error for an answer the model declined to give, quoting its reason."""
+    return f"The model refused to answer: {refusal}"
+
+
+def empty_parse_error(stop_reason: Any) -> str:
+    """The parse error for a JSON-mode response that holds no text, naming why the model stopped."""
+    return f"Empty response from API (stop_reason={stop_reason_name(stop_reason)})"
+
+
+def unparsed_json_record(text: str) -> dict[str, str]:
+    """What JSON mode stores for an answer no parse could read, online or in a batch."""
+    return {"raw_response": text, "_parse_error": "Failed to parse JSON from LLM response"}
+
+
+def cut_off_parse_error(stop_reason: Any) -> str:
+    """The parse error for a JSON answer the output limit stopped.
+
+    Reading it would mean guessing its end, so it is never repaired into an object.
+    """
+    return (
+        f"The answer was cut off at the output limit (stop_reason={stop_reason_name(stop_reason)})"
+        "; raise max_tokens"
+    )
+
+
+def stopped_parse_error(stop_reason: Any) -> str:
+    """The parse error for a JSON answer that a filter or a block stopped partway."""
+    return (
+        f"The provider stopped the answer before its end (stop_reason={stop_reason_name(stop_reason)})"
+        "; the answer is not complete"
+    )
+
+
+def unfinished_parse_error(stop_reason: Any) -> str | None:
+    """The parse error for a JSON answer that ended before the model finished it; None otherwise."""
+    if is_truncated(stop_reason):
+        return cut_off_parse_error(stop_reason)
+    if is_stopped_by_provider(stop_reason):
+        return stopped_parse_error(stop_reason)
+    return None
+
+
+@dataclass(frozen=True)
+class NoAnswer:
+    """A response that holds no answer, as each mode of a client ends it.
+
+    ``parse_error`` is the ``_parse_error`` a JSON-mode call stores. ``error`` is what a
+    text-mode call raises; None hands the empty answer to the action's ``on_empty``.
+    """
+
+    parse_error: str
+    error: VendorAPIError | None = None
+
+    @property
+    def retried(self) -> bool | None:
+        """Whether the retry policy retries ``error``; None when there is none to retry."""
+        from agent_actions.processing.recovery.retry import is_retriable_error
+
+        return is_retriable_error(self.error) if self.error is not None else None
 
 
 def empty_response_error(
@@ -280,3 +460,43 @@ def empty_response_error(
             context=context,
         )
     return VendorAPIError(message, context=context)
+
+
+def chat_no_answer(
+    content: Any,
+    finish_reason: Any,
+    refusal: Any,
+    *,
+    vendor_label: str,
+    model_name: str,
+    vendor: str,
+    operation: str = "chat.completions.create",
+) -> NoAnswer | None:
+    """How a chat-completions message with no answer ends, online or in a batch.
+
+    None when it holds one. No answer is no content, or content the output limit
+    stopped before its first character. A refusal ends with the model's reason.
+    """
+    cut_off_at_once = content == "" and is_truncated(finish_reason)
+    if content is not None and not cut_off_at_once:
+        return None
+    if cut_off_at_once:
+        parse_error = cut_off_parse_error(finish_reason)
+    elif refusal:
+        parse_error = refusal_text(refusal)
+    else:
+        parse_error = empty_parse_error(finish_reason)
+    if refusal:
+        return NoAnswer(
+            parse_error=parse_error,
+            error=VendorAPIError(
+                refusal_text(refusal),
+                context={"model_name": model_name, "vendor": vendor, "api_operation": operation},
+            ),
+        )
+    return NoAnswer(
+        parse_error=parse_error,
+        error=empty_response_error(
+            vendor_label, finish_reason, model_name=model_name, vendor=vendor, operation=operation
+        ),
+    )

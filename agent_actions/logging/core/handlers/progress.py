@@ -102,9 +102,13 @@ class ProgressRenderer(ConsoleEventHandler):
         return line
 
     def _workflow_failed(self, event: BaseEvent) -> str:
-        icon = self._icon("✗", "FAILED", "red")
         name = self._escape(event.data.get("workflow_name", ""))
         message = self._escape(event.data.get("error_message", ""))
+        # A quota stop fails nothing: the next run resumes where it stopped.
+        if event.data.get("error_type") == "ProviderQuotaStop":
+            icon = self._icon("■", "STOPPED", "yellow")
+            return f"\n{icon} {self._style(name, 'bold')} stopped — {message}"
+        icon = self._icon("✗", "FAILED", "red")
         return f"\n{icon} {self._style(name, 'bold')} failed — {message}"
 
     # ── steps ─────────────────────────────────────────────────────────
@@ -189,6 +193,9 @@ class ProgressRenderer(ConsoleEventHandler):
         )
         line = f"  {icon} {self._subject(event)}{' '.join(detail)}"
         notes = []
+        cases = event.data.get("cases") or {}
+        if cases:
+            notes.append(", ".join(f"{self._escape(str(c))} {n}" for c, n in cases.items()))
         guard_skipped = event.data.get("guard_skipped", 0)
         if guard_skipped:
             notes.append(f"{guard_skipped} skipped by guard")

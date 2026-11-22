@@ -54,6 +54,10 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  a workflow text already rendered by the caller is      │     │
 │  │  parsed as given, not rendered again                    │     │
 │  │  yaml.safe_load() → raw dicts                           │     │
+│  │  Expand each `- include:` entry into the actions of     │     │
+│  │  branches/<name>.yml, with the entry's override and     │     │
+│  │  remove applied (before prompts, versions, schemas);    │     │
+│  │  check the branch reads after schemas                   │     │
 │  │  Resolve tool_path (workflow > default > project)       │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
 │                             │                                    │
@@ -70,6 +74,8 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  WorkflowConfig.model_validate() ← Pydantic stage 1    │     │
 │  │  model_dump(exclude_unset=True) per action              │     │
 │  │  Merge: project_defaults ← workflow_defaults            │     │
+│  │  An included action: instance defaults (its             │     │
+│  │  _include) over those, by layered_defaults              │     │
 │  │  ActionExpander.expand_actions_to_agents()              │     │
 │  │    → chunks etc.; versions already expanded at Step 1   │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
@@ -218,12 +224,19 @@ PathType.TARGET            → {agent_name}/agent_io/target/{action_name}
 PathType.SCHEMA            → schema
 PathType.PROMPT_STORE      → prompt_store
 PathType.TEMPLATES         → templates
+PathType.BRANCHES          → branches
 PathType.RENDERED_WORKFLOWS → artefact/rendered_workflows
 PathType.BATCH             → batch
 PathType.SEED_DATA         → seed_data
 ```
 
 All relative to project root.
+
+`branches/` holds the branch files that a workflow includes with `- include: <name>`. Unlike `prompt_store/` and `schema/`, which are also searched in each `agent_workflow/<workflow>/` folder, it is read only at the project root: a branch exists to be shared by several workflows, and one folder gives one file per name.
+
+An include entry changes its copy of the branch in three ways. `override:` replaces whole keys of a branch action (`null` removes a key), and `remove:` leaves branch actions out; both are applied before the render's later steps, so the branch read checks see the final actions. `defaults:` is not copied onto the actions: it rides on each action's `_include`, and the expander lays it over the workflow defaults with `layered_defaults`, so every per-kind rule that reads "the action does not set this key" still holds. Precedence, lowest first: project `default_agent_config`, workflow `defaults:`, instance `defaults:`, the branch action, `override:`. The branch read checks see what each action gets from these levels: the inherited `expect` and the inherited `context_scope` (merged by `inherited_context_scope`, as the expander merges it) count as reads, so a `defaults:` block cannot carry a read across the branch boundary.
+
+`as: <instance>` makes an include an instance of its branch, so one branch can be included several times. Each branch action is renamed `<instance>__<name>` before the collision and binding checks, which therefore see final names. After the bindings are checked, `_bound` builds the instance's name map (short name to final name: the branch actions and their version names, then each input to the action it binds and, for a versioned target, each version name) and renames the structured references of each action and of the include's `defaults:` by it. The guard clause is renamed token by token rather than through the parser's `format_node`, which does not escape a quote inside a string literal and rewrites the text (`BETWEEN a AND b` as `BETWEEN [a, b]`, `1.5e3` as `1500.0`). The map rides as `_include.names`. The read check then holds an `as:` include closed: a name that is no action, binding or framework namespace is refused, where for an include without `as:` the later validation reports it.
 
 ---
 

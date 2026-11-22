@@ -105,6 +105,8 @@ guard:
   on_false: filter
 ```
 
+Agent Actions reads each seed file one time in a run. Every record of a prompt or a guard reads that one copy, online and in batch. Thus a large seed file costs its memory once, not once for each record of a batch. An action whose `context_scope` drops or passes through a seed field (`drop: [seed.rules.internal_notes]`, `passthrough: [seed.rules]`) gets a copy for each record, because it changes or stores that value.
+
 A prompt or a guard that reads a seed key that its action does not declare is refused before the run.
 Pre-flight also shows a warning when a field such as `seed.rubric.criteria` is missing from a JSON or
 YAML mapping. Pre-flight does not check past a list, for example the rows of a CSV file or a JSON array.
@@ -156,7 +158,7 @@ Rules:
 Seed 'syllabus' in action 'generate_question': record value 'snowflak' for 'source.exam' is not in the file map. Known values: dbt, snowflake. (staging/pages.json, record 3)
 ```
 
-For a record, a guard reads the same file as the prompt. Thus `seed.syllabus.domains` in a guard clause is the syllabus of that record. There is no default file. A value that the map does not name is an error, never a silent fallback. `agac inspect context -a <workflow> <action>` shows the file that each value gets.
+For a record, a guard reads the same file as the prompt. Thus `seed.syllabus.domains` in a guard clause is the syllabus of that record. There is no default file. A value that the map does not name is an error, never a silent fallback. `agac inspect context -w <workflow> <action>` shows the file that each value gets.
 
 ## Seed Data vs Source Data
 

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'A batch result now says outright whether online would retry what it ended with (`BatchResult.retriable`), where its client knows the error online raises. The Ollama batch client no longer writes a stand-in HTTP 400 on a failure that had no HTTP answer, and an answer with no content carries the retry verdict of the error its online call raises. The field is stored with a result between passes, so a later retry round classifies it the same way.'
+time: 2026-11-18T20:05:00Z

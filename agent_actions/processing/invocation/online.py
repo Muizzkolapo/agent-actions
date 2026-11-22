@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from agent_actions.llm.providers.usage_tracker import MAIN, REPAIR, counted_as
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
@@ -76,12 +77,13 @@ class OnlineStrategy(InvocationStrategy):
             # Shipped metadata must describe the generation that ships, not a
             # discarded earlier one.
             recovery_metadata.retry = None
-            if retry_service:
-                response, executed, _ = self._invoke_with_retry(
-                    task, context, recovery_metadata, retry_service, prompt, dispatched
-                )
-            else:
-                response, executed = self._call_llm(task, context, prompt, dispatched)
+            with counted_as(REPAIR if attempt else MAIN):
+                if retry_service:
+                    response, executed, _ = self._invoke_with_retry(
+                        task, context, recovery_metadata, retry_service, prompt, dispatched
+                    )
+                else:
+                    response, executed = self._call_llm(task, context, prompt, dispatched)
             # On this attempt's row, so a response the loop discards is kept beside
             # the prompt that drew it.
             if executed and response is not None:
@@ -190,6 +192,7 @@ class OnlineStrategy(InvocationStrategy):
             llm_context=task.llm_context,
             dispatched=dispatched,
             rendered_prompt=task.formatted_prompt,
+            cache_points=task.cache_points,
         )
 
     def _track_retry_metadata(

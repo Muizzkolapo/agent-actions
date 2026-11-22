@@ -25,6 +25,7 @@ from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills
 from agent_actions.cli.status import status
 from agent_actions.cli.traces import traces
+from agent_actions.cli.usage import usage
 from agent_actions.config.path_config import find_project_root_dir, load_project_config
 from agent_actions.errors import ConfigValidationError, ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
@@ -95,6 +96,7 @@ class CLI:
         self.click_group.add_command(skills)
         self.click_group.add_command(traces)
         self.click_group.add_command(records)
+        self.click_group.add_command(usage)
 
     def _register_signal_handlers(self) -> None:
         try:
@@ -175,8 +177,8 @@ class CLI:
             self.logger.info("Operation aborted by user")
             return 130
         except click.UsageError as e:
-            self.logger.warning("Usage error: %s", e)
-            click.echo(f"Error: {str(e)}", err=True)
+            self.logger.warning("Usage error: %s", e.format_message())
+            click.echo(f"Error: {e.format_message()}", err=True)
             return 2
         except click.ClickException as e:
             click.echo(f"Error: {e.format_message()}", err=True)

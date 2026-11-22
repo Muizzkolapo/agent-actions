@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "An Anthropic batch answer that holds only a thinking block, as when thinking spends all of `max_tokens`, now fails its record with the stop reason, for example `Empty response content from Anthropic API (stop_reason=max_tokens)`, as the online call does. Before, the thinking block itself became the record's content, a success row like `{type: thinking, ...}`."
+time: 2026-11-16T11:00:00Z

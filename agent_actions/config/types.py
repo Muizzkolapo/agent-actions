@@ -43,6 +43,8 @@ class ContextScopeDict(TypedDict, total=False):
     passthrough: list[str]
     drop: list[str]
     seed: dict[str, Any]
+    # Each observe reference marked optional, with the value a record lacking it is given.
+    optional: dict[str, Any]
 
 
 class GuardConfigDict(TypedDict, total=False):
@@ -55,6 +57,7 @@ class GuardConfigDict(TypedDict, total=False):
     on_false: str  # "skip" | "filter"
     passthrough_on_error: bool
     passthrough_on_empty: bool
+    timeout: float  # seconds the condition may take on one record; unset means 5
 
 
 class HitlConfigDict(TypedDict, total=False):
@@ -110,6 +113,7 @@ class ActionConfigDict(TypedDict, total=False):
     is_operational: bool
     json_mode: bool
     output_field: str
+    context_block: str  # "auto" | "all" | "none"
 
     # Prompt & Schema
     prompt: str
@@ -124,6 +128,7 @@ class ActionConfigDict(TypedDict, total=False):
     max_tokens: int
     request_timeout: float  # seconds per LLM request; unset means the default
     record_concurrency: int  # online LLM records in flight at once; unset is 1
+    context_window: int  # tokens the prompt-size guard allows; unset reads the model table
     vendor_params: dict[str, Any]  # passed to the vendor SDK request as written
 
     # Dependencies & flow
@@ -148,6 +153,7 @@ class ActionConfigDict(TypedDict, total=False):
     is_versioned_agent: bool
     version_base_name: str
     _version_context: dict[str, Any]  # runtime-injected versioning metadata
+    _include: dict[str, Any]  # branch origin of an included action, set by the render step
     version_consumption_config: dict[str, Any]  # controls version iteration
 
     # Runtime-injected by coordinator (subscript-assigned)

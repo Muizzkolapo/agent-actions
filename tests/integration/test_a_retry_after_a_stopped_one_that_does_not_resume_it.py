@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.integration.test_a_retry_resumed_after_a_stop_below_a_split import (
     ALL_FINAL,
@@ -37,7 +38,7 @@ def _stopped(tmp_path: Path, finalize: str) -> Path:
     """Fail alpha, then stop the retry that repairs it after the split has re-run."""
     project = _project(tmp_path, finalize)
     (project / "FAIL_AT").write_text("flatten")
-    _run(project, "--fresh")
+    _run(project, "--fresh", ends_with=EXIT_RECORD_FAILURES)
     (project / "FAIL_AT").unlink()
     (project / "STOP").write_text("")
     stopped = _agac(project, "retry", "-a", WORKFLOW, code=130)
@@ -54,9 +55,11 @@ def _try(project: Path, *args: str) -> tuple[int, str]:
 
 
 def _resume(project: Path, finalize: str) -> str:
-    output = _agac(project, "retry", "-a", WORKFLOW)
+    output = _agac(
+        project, "retry", "-a", WORKFLOW, code=EXIT_PAUSED if finalize == "batch" else EXIT_SUCCESS
+    )
     if finalize == "batch":
-        output += _run(project)
+        output += _run(project, ends_with=EXIT_SUCCESS)
     return output
 
 

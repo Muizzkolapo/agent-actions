@@ -39,6 +39,7 @@ class BatchRetrievalService:
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         storage_backend: "StorageBackend | None" = None,
         action_name: str | None = None,
+        agent_config: dict[str, Any] | None = None,
     ):
         """Initialize retrieval service with dependencies.
 
@@ -48,6 +49,7 @@ class BatchRetrievalService:
             registry_manager_factory: Factory function to create registry managers
             storage_backend: Storage backend for metadata persistence
             action_name: Action name for backend lookups (required)
+            agent_config: The action's config, so its answers are read as `agac run` reads them
         """
         if not action_name:
             raise ConfigurationError(
@@ -59,13 +61,13 @@ class BatchRetrievalService:
         self._registry_manager_factory = registry_manager_factory
         self._storage_backend = storage_backend
         self._action_name = action_name
+        self._agent_config = agent_config
 
     def retrieve_results(
         self,
         batch_id: str,
         output_dir: str,
         file_path: str | None = None,
-        agent_config: dict[str, Any] | None = None,
     ) -> Path:
         """Retrieve and save results from a completed batch job.
 
@@ -73,8 +75,6 @@ class BatchRetrievalService:
             batch_id: ID of the batch job to retrieve results for
             output_dir: Directory to save results to
             file_path: Optional original file path for naming output
-            agent_config: The action's config; a `json_mode: false` action gets its
-                answers as text under its `output_field`, as `agac run` does
 
         Returns:
             Path to the saved results file
@@ -105,7 +105,7 @@ class BatchRetrievalService:
                 context_map=context_map,
                 record_count=entry.record_count if entry else None,
                 file_name=file_name,
-                agent_config=agent_config,
+                agent_config=self._agent_config,
             )
 
             output_path = Path(output_dir)

@@ -1,6 +1,7 @@
 """Namespace enrichment and field filtering."""
 
 import logging
+from collections.abc import Collection
 from typing import Any
 
 from agent_actions.errors import ConfigurationError, RecordContextError
@@ -66,6 +67,7 @@ def _filter_and_store_fields(
     source_type: str = "FIELD",
     fail_on_missing: bool = False,
     metadata_collector: dict | None = None,
+    optional_fields: Collection[str] = (),
 ) -> None:
     """
     Filter data by allowed_fields and store in field_context.
@@ -77,6 +79,7 @@ def _filter_and_store_fields(
         allowed_fields: Fields to include (None = wildcard, all fields)
         source_type: Log prefix for debug messages (e.g., "INPUT SOURCE")
         fail_on_missing: If True, raise ConfigurationError when declared fields are missing
+        optional_fields: Declared fields that may be missing without failing
         metadata_collector: Optional dict to record stored vs loaded field metadata.
             When provided, records {name: {stored_fields, loaded_fields, stored_count, loaded_count}}
             for downstream diagnostics (e.g. detecting fields produced by tools but not in schema).
@@ -113,7 +116,7 @@ def _filter_and_store_fields(
         if fail_on_missing:
             missing_fields = set()
             for field in allowed_fields:
-                if field in data:
+                if field in data or field in optional_fields:
                     continue
                 if "." in field and field.split(".")[0] in data:
                     continue

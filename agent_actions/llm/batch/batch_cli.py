@@ -6,7 +6,11 @@ from typing import Any
 
 import click
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    workflow_option,
+)
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
@@ -155,6 +159,7 @@ class _BatchContext:
     workflow_root: Path
     storage_backend: StorageBackend
     action_name: str
+    project_root: Path
 
 
 def _prepare_batch_context(
@@ -180,44 +185,51 @@ def _prepare_batch_context(
         workflow_root=workflow_root,
         storage_backend=storage_backend,
         action_name=resolved_action,
+        project_root=root,
     )
 
 
-def _action_config(
-    project_root: Path | None, workflow_name: str, action_name: str
-) -> dict[str, Any] | None:
-    """The action's config as `agac run` sees it, or None (with a warning) when it cannot load.
+def _action_config(ctx: _BatchContext) -> dict[str, Any] | None:
+    """The action's config as `agac run` builds it, or None when it cannot be had.
 
-    `batch retrieve` needs it to give a `json_mode: false` action its answers as text under
-    its `output_field`. Without it the results are written as the provider's parsed content.
+    The batch is already paid for, so a workflow that does not load, or that has no such
+    action, does not stop the command: it warns that the file holds the raw answers.
     """
-    from agent_actions.services.workflow_inspector import WorkflowInspector
+    from agent_actions.cli.workflow_loader import load_workflow
+    from agent_actions.config.project_paths import ProjectPathsFactory
+    from agent_actions.errors.base import AgentActionsError
 
+    raw = "The results file holds the raw answers of the provider, not the stored records."
     try:
-        configs = WorkflowInspector(
-            workflow_name, project_root=resolve_project_root(project_root)
-        ).load()
-    except Exception as e:  # the config may not load here; retrieval still writes the results
+        paths = ProjectPathsFactory.create_project_paths(
+            ctx.workflow_name, ctx.workflow_name, auto_create=False, project_root=ctx.project_root
+        )
+        workflow = load_workflow(
+            ctx.workflow_name, paths, ctx.project_root, sends_requests=False, read_only=True
+        )
+    # ValueError: a limit variable, such as AGAC_RECORD_LIMIT, that is not an integer.
+    except (AgentActionsError, OSError, ValueError) as e:
+        click.echo(f"Warning: workflow '{ctx.workflow_name}' did not load ({e}). {raw}", err=True)
+        return None
+    config = workflow.action_configs.get(ctx.action_name)
+    if config is None:
         click.echo(
-            f"Warning: could not load the config of {workflow_name} ({e}); a json_mode: false "
-            "action's answers are written as the provider's parsed content.",
+            f"Warning: workflow '{ctx.workflow_name}' has no action '{ctx.action_name}'. {raw}",
             err=True,
         )
-        return None
-    return configs.get(action_name)
+    return config
 
 
 def _workflow_action_options(f):
-    """Add -a/--agent and --action options to a batch subcommand."""
+    """Add the workflow and ``-A/--action`` options to a batch subcommand."""
     f = click.option(
+        "-A",
         "--action",
         "action_name",
         required=False,
         help="Action name (required when a workflow has multiple batch actions).",
     )(f)
-    f = click.option(
-        "-a",
-        "--agent",
+    f = workflow_option(
         "agent_name",
         required=False,
         help="Workflow name (required in multi-workflow projects).",
@@ -309,9 +321,9 @@ def retrieve(
         registry_manager_factory=registry_manager_factory,
         storage_backend=ctx.storage_backend,
         action_name=ctx.action_name,
+        agent_config=_action_config(ctx),
     )
     target_dir = ctx.workflow_root / "agent_io" / "target" / ctx.action_name
     target_dir.mkdir(parents=True, exist_ok=True)
-    agent_config = _action_config(project_root, ctx.workflow_name, ctx.action_name)
-    result = service.retrieve_results(args.batch_id, str(target_dir), agent_config=agent_config)
+    result = service.retrieve_results(args.batch_id, str(target_dir))
     click.echo(result)

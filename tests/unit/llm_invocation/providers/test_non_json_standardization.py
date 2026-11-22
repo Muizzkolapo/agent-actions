@@ -14,6 +14,7 @@ import typing
 from unittest.mock import MagicMock, patch
 
 import pytest
+from anthropic.types import Usage
 
 from agent_actions.output.response.schema import compile_unified_schema
 
@@ -56,6 +57,7 @@ def _make_openai_style_mocks(text, prompt_tokens=10, completion_tokens=5, total_
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
     mock_response.choices[0].message.content = text
+    mock_response.choices[0].message.refusal = None
     mock_response.usage.prompt_tokens = prompt_tokens
     mock_response.usage.completion_tokens = completion_tokens
     mock_response.usage.total_tokens = total_tokens
@@ -78,8 +80,7 @@ def _make_anthropic_mocks(text, input_tokens=10, output_tokens=20):
     text_block.text = text
     mock_response = MagicMock()
     mock_response.content = [text_block]
-    mock_response.usage.input_tokens = input_tokens
-    mock_response.usage.output_tokens = output_tokens
+    mock_response.usage = Usage(input_tokens=input_tokens, output_tokens=output_tokens)
     mock_response.stop_reason = "end_turn"
     return mock_response
 
@@ -260,11 +261,10 @@ class TestGroqCallNonJson:
 
     @patch("agent_actions.llm.providers.groq.client.fire_event")
     @patch("agent_actions.llm.providers.groq.client.Groq")
-    def test_none_temperature_and_max_tokens_use_defaults(self, mock_groq_cls, mock_fire):
-        """When config has temperature=None / max_tokens=None, fall back to defaults.
+    def test_none_temperature_and_max_tokens_are_not_sent(self, mock_groq_cls, mock_fire):
+        """When config has temperature=None / max_tokens=None, neither is sent.
 
-        Groq does not inject a temperature default (parity with other providers).
-        Only max_tokens has a default (required by the Groq API).
+        Groq injects no default for either, as its JSON mode and batch do not.
         """
         from agent_actions.llm.providers.groq.client import GroqClient
 
@@ -279,7 +279,7 @@ class TestGroqCallNonJson:
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert "temperature" not in call_kwargs
-        assert call_kwargs["max_tokens"] == 1000
+        assert "max_tokens" not in call_kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -382,8 +382,7 @@ class TestAnthropicCallNonJson:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 0
+        mock_response.usage = Usage(input_tokens=10, output_tokens=0)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -423,8 +422,7 @@ class TestAnthropicCallJsonNormalization:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
+        mock_response.usage = Usage(input_tokens=10, output_tokens=20)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -447,8 +445,7 @@ class TestAnthropicCallJsonNormalization:
 
         mock_response = MagicMock()
         mock_response.content = [tool_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
+        mock_response.usage = Usage(input_tokens=10, output_tokens=20)
         mock_response.stop_reason = "end_turn"
 
         mock_client = MagicMock()
@@ -760,7 +757,7 @@ class TestOpenAITopPStopForwarding:
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert call_kwargs["temperature"] == 0.3
-        assert call_kwargs["max_tokens"] == 500
+        assert call_kwargs["max_completion_tokens"] == 500
         assert call_kwargs["top_p"] == 0.95
         assert call_kwargs["stop"] == ["\\n"]
         assert call_kwargs["frequency_penalty"] == 0.5
@@ -1011,12 +1008,12 @@ class TestCallJsonDictWrapping:
 
 
 # ---------------------------------------------------------------------------
-# Ollama set_last_usage
+# Ollama usage
 # ---------------------------------------------------------------------------
 
 
-class TestOllamaSetLastUsage:
-    """Ollama calls set_last_usage() when token counts are available."""
+class TestOllamaCountsItsUsage:
+    """Each Ollama call is counted with the tokens its response reports."""
 
     @pytest.mark.parametrize(
         ("method", "content", "prompt_tokens", "completion_tokens", "total_tokens"),
@@ -1025,12 +1022,12 @@ class TestOllamaSetLastUsage:
             pytest.param("call_non_json", "Hello", 30, 15, 45, id="call-non-json"),
         ],
     )
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_calls_set_last_usage(
+    def test_a_call_is_counted_with_its_tokens(
         self,
         mock_get_client,
         mock_inject,
@@ -1060,16 +1057,18 @@ class TestOllamaSetLastUsage:
             {
                 "input_tokens": prompt_tokens,
                 "output_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            }
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            model="llama3",
         )
 
-    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_zero_tokens_skips_set_last_usage(
+    def test_a_call_that_reports_no_tokens_is_still_counted(
         self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
     ):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
@@ -1083,7 +1082,8 @@ class TestOllamaSetLastUsage:
 
         OllamaLocalClient.call_non_json(None, {"model_name": "llama3"}, "prompt", "data")
 
-        mock_set_usage.assert_not_called()
+        mock_set_usage.assert_called_once()
+        assert not any(mock_set_usage.call_args[0][0].values())
 
 
 # ---------------------------------------------------------------------------

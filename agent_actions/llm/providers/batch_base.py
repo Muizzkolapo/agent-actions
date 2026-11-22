@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -12,17 +13,38 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.errors import PromptTooLargeError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
-from agent_actions.llm.providers.generation_params import VENDOR_PARAMS_KEY
+from agent_actions.llm.providers.error_wrapper import (
+    NoAnswer,
+    cut_off_parse_error,
+    unfinished_parse_error,
+)
+from agent_actions.llm.providers.generation_params import (
+    VENDOR_PARAMS_KEY,
+    extract_generation_params,
+)
 from agent_actions.output.response.config_fields import get_default
-from agent_actions.prompt.cache_scope import SHARED_PROMPT_LEN_KEY
-from agent_actions.utils import deep_json
+from agent_actions.prompt.cache_scope import (
+    CACHE_POINTS_KEY,
+    REQUEST_VARIES_PER_RECORD_KEY,
+    SHARED_PROMPT_LEN_KEY,
+    cache_points_of,
+)
+from agent_actions.prompt.context_block import context_block
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
 
 logger = logging.getLogger(__name__)
+
+# Set by ``prepare_tasks`` on a row it built no request for: the error online raises for
+# that record's call. Whoever prepared the row fails the record with it, alone.
+UNSENT_ERROR_KEY = "_unsent_error"
+
+# Replaces each provider's cap on the requests in one batch.
+BATCH_MAX_REQUESTS_ENV = "AGENT_ACTIONS_BATCH_MAX_REQUESTS"
 
 # What a provider stamps on a result carrying no correlation id. It is not an
 # identity: two of them are two records, so nothing may deduplicate on it.
@@ -30,6 +52,10 @@ logger = logging.getLogger(__name__)
 UNIDENTIFIED_RECORD = "__agac_unidentified__"
 
 _KNOWN_STATUSES = frozenset(status.value for status in BatchStatus)
+
+# The generation settings past temperature and max_tokens, by their canonical names.
+_SAMPLING_PARAMS = ("top_p", "stop")
+_PENALTY_PARAMS = ("frequency_penalty", "presence_penalty")
 
 
 def retry(
@@ -71,6 +97,12 @@ class BatchTask:
     cache_prompt: bool = False
     shared_prompt_len: int | None = None
     """The length of the leading part of ``prompt`` every record shares; None means all of it."""
+    cache_points: tuple[int, ...] = ()
+    """The length of ``prompt`` before each cache point its request marks."""
+
+    def json_mode(self, schema: dict[str, Any] | None) -> bool:
+        """Whether the task's online twin is a JSON-mode call: it has a schema or asks for JSON."""
+        return bool(schema or self.model_config.get("json_mode"))
 
 
 @dataclass
@@ -81,21 +113,73 @@ class BatchResult:
     content: Any
     success: bool
     error: str | None = None
+    # The HTTP status the provider answered this record's request with, when its line
+    # says; what a retry reads to resend only what online would retry.
+    error_status: int | None = None
     metadata: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
     recovery_metadata: RecoveryMetadata | None = None  # From agent_actions.core.types
     # The expectation loop gave up on this record. Not a provider failure: it
     # reads as an exhausted record, as online's does.
     exhausted: bool = False
-    # The answer as the model wrote it, before any JSON parse. A `json_mode: false`
-    # action keeps this text under its `output_field` (see keep_text_output).
-    raw_text: str | None = None
+    # The answer as the model wrote it, before any JSON parse; None when it was not text.
+    text: str | None = None
+    # What a JSON-mode read of this line is, where the line cannot be read as an answer:
+    # it holds none (content is None), or the output limit cut it off. In text mode a
+    # line with no answer fails with ``error``, or with none goes to ``on_empty``.
+    parse_error: str | None = None
+    # Whether online's retry policy retries what this record ended with, where the client
+    # knows the error online raises for it; None is decided from ``error_status``.
+    retriable: bool | None = None
+    # How online's text-mode call ends this answer, which holds no text (an Anthropic tool
+    # answer alone); None when it holds text or the client does not say. Not persisted.
+    no_text: NoAnswer | None = None
+
+
+def raise_unsent(rows: list[dict[str, Any]]) -> None:
+    """Raise the first error ``prepare_tasks`` left on *rows*, for a caller that cannot fail one row."""
+    for row in rows:
+        if UNSENT_ERROR_KEY in row:
+            raise row[UNSENT_ERROR_KEY]
+
+
+def batch_task_bytes(task: Any) -> int:
+    """The bytes *task* takes in a batch: its JSON line, newline included."""
+    return len(json.dumps(task, default=str).encode("utf-8")) + 1
+
+
+def batch_request_cap(provider: BaseBatchClient) -> int:
+    """The most requests one batch to *provider* may hold."""
+    cap = batch_request_cap_from_environment()
+    return provider.max_batch_requests if cap is None else cap
+
+
+def batch_request_cap_from_environment() -> int | None:
+    """The cap ``AGENT_ACTIONS_BATCH_MAX_REQUESTS`` sets, None when it is unset or blank."""
+    raw = os.environ.get(BATCH_MAX_REQUESTS_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        cap = int(raw)
+    except ValueError:
+        cap = 0
+    if cap < 1:
+        raise ValueError(
+            f"{BATCH_MAX_REQUESTS_ENV} must be a whole number of 1 or more, not {raw!r}"
+        )
+    return cap
 
 
 class BaseBatchClient(ABC):
     """Abstract base class for batch processing clients."""
 
     _configured_model: str | None = None
+    # The most requests one batch may hold. A provider that documents no cap gets the
+    # lowest cap another provider documents (OpenAI and Groq: 50,000).
+    max_batch_requests: int = 50_000
+    # The most bytes one batch may hold. A provider that documents no limit gets the
+    # lowest limit another provider documents (Groq: 100 MB).
+    max_batch_bytes: int = 100_000_000
     # The vendor's errors for a provider that could not answer now. A status check
     # raises them as ConnectionError, which its callers take as "ask again later".
     _transient_errors: tuple[type[Exception], ...] = ()
@@ -104,6 +188,8 @@ class BaseBatchClient(ABC):
         self, data: list[dict[str, Any]], agent_config: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """Convert agent-actions data format to provider-specific task format (Template Method)."""
+        from agent_actions.llm.realtime.services import ContextService
+
         self._configured_model = agent_config.get("model_name", self._get_default_model())
 
         tasks = []
@@ -112,6 +198,7 @@ class BaseBatchClient(ABC):
             warn_schema_without_json_mode(agent_config)
         schema = agent_config.get("compiled_schema") if json_mode else None
         cache_prompt = self._caches_prompt(agent_config)
+        marks_cache_points = self.marks_cache_points()
 
         for row in data:
             if "content" not in row:
@@ -122,39 +209,81 @@ class BaseBatchClient(ABC):
             # A row of an action whose schema is chosen per record carries its own.
             row_schema = row.pop("compiled_schema", None)
             shared_prompt_len = row.pop(SHARED_PROMPT_LEN_KEY, None)
+            cache_points = cache_points_of(row) if marks_cache_points else ()
+            row.pop(CACHE_POINTS_KEY, None)
+            varies_per_record = row.pop(REQUEST_VARIES_PER_RECORD_KEY, False)
+            prompt = row.get("prompt", agent_config.get("prompt", ""))
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
-                prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=deep_json.dumps(row["content"]),
+                prompt=prompt,
+                # Encoded by the function online's call uses, so both send the same text.
+                user_content=str(
+                    ContextService.prepare_context_data(
+                        context_block(row["content"], agent_config, prompt), is_tool=False
+                    )
+                ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
-                    "temperature": agent_config.get("temperature", self._get_default_temperature()),
+                    # None when the action sets none: each client then sends none, as online.
+                    "temperature": agent_config.get("temperature"),
                     "max_tokens": agent_config.get("max_tokens"),
+                    "context_window": agent_config.get("context_window"),
+                    "json_mode": json_mode,
                     VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
+                    **{
+                        key: agent_config[key]
+                        for key in (*_SAMPLING_PARAMS, *_PENALTY_PARAMS)
+                        if agent_config.get(key) is not None
+                    },
                 },
                 metadata=row,
-                cache_prompt=cache_prompt,
+                cache_prompt=cache_prompt and not varies_per_record,
                 shared_prompt_len=shared_prompt_len,
+                cache_points=cache_points,
             )
             task_schema = row_schema if row_schema is not None else schema
-            provider_task = self.format_task_for_provider(
-                batch_task, task_schema if json_mode else None
-            )
+            try:
+                provider_task = self.format_task_for_provider(
+                    batch_task, task_schema if json_mode else None
+                )
+            except PromptTooLargeError as error:
+                row[UNSENT_ERROR_KEY] = error
+                continue
             tasks.append(provider_task)
 
         return tasks
+
+    @staticmethod
+    def _sampling_params(
+        model_config: dict[str, Any],
+        *,
+        key_map: dict[str, str] | None = None,
+        stop_as_list: bool = False,
+        penalties: bool = False,
+    ) -> dict[str, Any]:
+        """The task's top_p and stop (and penalties) under the names the vendor's online client sends.
+
+        Takes that client's ``extract_generation_params`` arguments; unset settings are left out.
+        """
+        names = (*_SAMPLING_PARAMS, *(_PENALTY_PARAMS if penalties else ()))
+        return extract_generation_params(
+            {key: model_config.get(key) for key in names},
+            key_map=key_map,
+            stop_as_list=stop_as_list,
+            extra_params=_PENALTY_PARAMS if penalties else (),
+        )
 
     def _caches_prompt(self, agent_config: dict[str, Any]) -> bool:
         """Whether this call's tasks mark their prompt for prompt caching."""
         return False
 
+    def marks_cache_points(self) -> bool:
+        """Whether this client's requests mark the cache points a prompt template holds."""
+        return False
+
     @abstractmethod
     def _get_default_model(self) -> str:
         """Return provider's default model name."""
-
-    def _get_default_temperature(self) -> float:
-        """Return provider's default temperature (0.1)."""
-        return 0.1
 
     @abstractmethod
     def format_task_for_provider(
@@ -273,17 +402,44 @@ class BaseBatchClient(ABC):
 
         error = self._extract_error_from_response(raw_response)
         if error:
-            return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
-
-        # Extract successful response data
-        content, raw_text = self._extract_content_and_text(raw_response)
-
-        # Parse JSON content if it's a string
-        if isinstance(content, str):
-            content = self._parse_json_content(content)
+            return BatchResult(
+                custom_id=custom_id,
+                content=None,
+                success=False,
+                error=error,
+                error_status=self._extract_error_status(raw_response),
+                retriable=self._extract_retriable(raw_response),
+            )
 
         metadata = self._extract_metadata_from_response(raw_response)
         usage = self._extract_usage_from_response(raw_response)
+
+        no_answer = self._no_answer(raw_response)
+        if no_answer is not None:
+            return BatchResult(
+                custom_id=custom_id,
+                content=None,
+                success=True,
+                error=str(no_answer.error) if no_answer.error is not None else None,
+                metadata=metadata,
+                usage=usage,
+                parse_error=no_answer.parse_error,
+                retriable=no_answer.retried,
+            )
+
+        # Extract successful response data
+        content = self._extract_content_from_response(raw_response)
+        text = content if isinstance(content, str) else self._answer_text(raw_response)
+
+        # Parse JSON content if it's a string
+        parse_error = None
+        if isinstance(content, str):
+            if self._answer_was_cut_off(raw_response):
+                reasons = metadata or {}
+                stop_reason = reasons.get("finish_reason") or reasons.get("stop_reason")
+                parse_error = self._cut_off_parse_error(stop_reason, content)
+            else:
+                content = self._parse_json_content(content)
 
         return BatchResult(
             custom_id=custom_id,
@@ -292,17 +448,26 @@ class BaseBatchClient(ABC):
             error=None,
             metadata=metadata,
             usage=usage,
-            raw_text=raw_text,
+            text=text,
+            parse_error=parse_error,
+            no_text=None if text is not None else self._no_text_answer(raw_response),
         )
 
-    def _extract_content_and_text(self, raw_response: Any) -> tuple[Any, str | None]:
-        """The answer content, and the text the model wrote (None when it wrote none).
+    def _no_answer(self, _raw_response: Any) -> NoAnswer | None:
+        """How online ends a line the provider answered with no answer in it; None when it has one."""
+        return None
 
-        The content is parsed as JSON afterwards when it is a string. A client whose
-        extraction parses or reshapes the text overrides this, so the text is read once.
-        """
-        content = self._extract_content_from_response(raw_response)
-        return content, content if isinstance(content, str) else None
+    def _cut_off_parse_error(self, stop_reason: Any, _text: str) -> str:
+        """The parse error online's JSON-mode call stores for an answer cut off at *stop_reason*."""
+        return unfinished_parse_error(stop_reason) or cut_off_parse_error(stop_reason)
+
+    def _answer_text(self, raw_response: Any) -> str | None:
+        """The answer's text, for a provider whose content extraction already parsed it."""
+        return None
+
+    def _no_text_answer(self, _raw_response: Any) -> NoAnswer | None:
+        """How online's text-mode call ends an answer that holds no text; None keeps it."""
+        return None
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, or the sentinel if it carries none."""
@@ -313,6 +478,14 @@ class BaseBatchClient(ABC):
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Extract error message from response, or None if no error."""
+
+    def _extract_error_status(self, raw_response: Any) -> int | None:
+        """The HTTP status a failed line's request was answered with; None when it does not say."""
+        return None
+
+    def _extract_retriable(self, raw_response: Any) -> bool | None:
+        """Whether online retries a failed line's failure; None when its status decides."""
+        return None
 
     @abstractmethod
     def _extract_content_from_response(self, raw_response: Any) -> Any:
@@ -408,6 +581,14 @@ class BaseBatchClient(ABC):
         elif default is not None:
             target[key] = default
 
+    def _answer_was_cut_off(self, _raw_response: Any) -> bool:
+        """Whether the output limit or the provider stopped the answer; its text is kept unparsed.
+
+        Parsing would guess the end of a half-written JSON. In JSON mode the unparsed
+        text becomes a parse error, as online refuses to read such an answer.
+        """
+        return False
+
     def _parse_json_content(self, content_str: str) -> Any:
         """Parse JSON string from an LLM response.
 
@@ -422,7 +603,9 @@ class BaseBatchClient(ABC):
 
         from agent_actions.utils.json_parsing import parse_llm_json
 
-        return parse_llm_json(content_str)
+        parsed = parse_llm_json(content_str)
+        # A reply that is one JSON string parses to a str as well; it stays as written.
+        return content_str if isinstance(parsed, str) else parsed
 
     def _get_attribute_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
         """

@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: 'A field that the prompt prints as `{{ ns.field }}` is no longer sent a second time in the context block, online and in batch, so its input tokens are paid once and the prompt-size check counts it once. The new `context_block` setting, on an action or in `defaults:`, chooses: `auto` (default) leaves out a field the prompt prints, `all` sends every observed field as before, `none` sends none. Under `auto`, Ollama keeps every field in the user message that holds the record. The `llm_context` of a prompt trace is the context block that was sent.'
+time: 2026-11-21T17:00:00Z

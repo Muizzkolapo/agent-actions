@@ -31,6 +31,9 @@ class DefaultAgentConfig(BaseModel):
     record_concurrency: int | None = Field(
         default=None, strict=True, ge=1, le=32, description="Default record concurrency"
     )
+    context_window: int | None = Field(
+        default=None, strict=True, gt=0, description="Default context window, in tokens"
+    )
     vendor_params: dict[str, Any] | None = Field(
         default=None, description="Default request parameters passed to the vendor SDK"
     )
@@ -90,11 +93,20 @@ class AgentConfig(BaseModel):
         le=32,
         description="Records of an online LLM action in flight at once",
     )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Tokens of prompt the model reads; outranks agac's table of models",
+    )
     vendor_params: dict[str, Any] | None = Field(
         default=None, description="Request parameters passed to the vendor SDK as written"
     )
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn", description="What an empty answer does to its record or action"
+    )
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None, description="Observed fields sent in the context block"
     )
     context_scope: dict[str, Any] | None = Field(
         default=None,

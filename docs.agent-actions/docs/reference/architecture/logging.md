@@ -170,6 +170,12 @@ does not show this text when there are no skipped records:
   ✓ repaired  4 records in 0.2s (agac-provider/mock) — 1 skipped by guard
 ```
 
+The line of a built-in router ends with the number of records of each case, in the order of the cases. A case with no record shows 0:
+
+```
+  ✓ router  6 records in 0.0s — a 2, b 3, default 1
+```
+
 Some actions ship records with a failing [expectations](../validation/expectations.md) verdict
 (`on_exhausted: return_last`, `repair: none`). The line of such an action turns to `⚠` (`WARN` without color). The line also gives
 the number of these records. The workflow line counts every such record that the actions of the workflow hold. It reads the count from the
@@ -262,8 +268,8 @@ Collects data about the workflow run and writes a `run_results.json` artifact.
       "output_folder": "/path/to/project/agent_workflow/support_resolution/agent_io/target/extract_raw_qa",
       "record_count": 100,
       "tokens": {
-        "prompt_tokens": 800,
-        "completion_tokens": 400,
+        "input_tokens": 800,
+        "output_tokens": 400,
         "total_tokens": 1200
       },
       "error_message": null,
@@ -277,8 +283,8 @@ Collects data about the workflow run and writes a `run_results.json` artifact.
   ],
   "elapsed_time": 119.456,
   "tokens": {
-    "prompt_tokens": 10000,
-    "completion_tokens": 2500,
+    "input_tokens": 10000,
+    "output_tokens": 2500,
     "total_tokens": 12500
   }
 }
@@ -463,16 +469,16 @@ You can control the verbosity of the console:
 
 ```bash
 # Default: INFO level, workflow/action/batch categories
-agac run -a my_workflow
+agac run -w my_workflow
 
 # Verbose: all categories, diagnostic events included
-agac --verbose run -a my_workflow
+agac --verbose run -w my_workflow
 
 # DEBUG level, same categories as the default
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 
 # Quiet: warnings and errors only
-agac --quiet run -a my_workflow
+agac --quiet run -w my_workflow
 ```
 
 ### File Handler
@@ -531,7 +537,7 @@ Put data that a machine reads in the `data` dict:
 fire_event(ActionCompleteEvent(
     action_name="extract_data",
     execution_time=15.2,
-    tokens={"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
+    tokens={"input_tokens": 800, "output_tokens": 400, "total_tokens": 1200},
 ))
 ```
 
@@ -544,7 +550,7 @@ The event class builds the `message` and the `data` dict from its fields. The `d
   "execution_time": 15.2,
   "output_path": "",
   "record_count": 0,
-  "tokens": {"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200},
+  "tokens": {"input_tokens": 800, "output_tokens": 400, "total_tokens": 1200},
   "mode": "",
   "model_vendor": "",
   "model_name": "",

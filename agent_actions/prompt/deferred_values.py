@@ -43,6 +43,8 @@ from jinja2.runtime import Context, LoopContext, Macro
 from jinja2.utils import Namespace, missing
 
 from agent_actions.errors import TemplateRenderingError
+from agent_actions.input.context.normalizer import observe_entry_reference
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS, KeptCachePointExtension
 from agent_actions.prompt.context.scope_application import FRAMEWORK_NAMESPACES
 from agent_actions.prompt.context.scope_builder import VersionNamespaceBuilder
 from agent_actions.prompt.jinja_env import DictKeyFirstEnvironment
@@ -205,12 +207,13 @@ class LoadRender:
 
         # Jinja leaves an environment's globals out of a template's undeclared names, so
         # names are read with one that has none, and the load's filters and tests.
-        self._names_env = Environment()
+        self._names_env = Environment(extensions=PROMPT_EXTENSIONS)
         self._names_env.globals.clear()
+        # A cache point stays a tag: it marks a place in the text a record renders.
         self.env = DictKeyFirstEnvironment(
             loader=_Loader(str(templates_folder), self),
             undefined=_undefined_class(self),
-            extensions=[_LeaveExtension],
+            extensions=[_LeaveExtension, KeptCachePointExtension],
         )
         self.env.template_class = _ImportingTemplate
         self.env.context_class = _FolderContext
@@ -326,6 +329,31 @@ class LoadRender:
         anchor = properties.group(1) if properties else ""
         return " " + anchor + token + ("\n" if region.text.endswith("\n") else "")
 
+    def fill_store_prompt(self, text: str, origin: str, folder_names: frozenset[str]) -> str:
+        """*text*, a prompt-store prompt, as a prompt written in the workflow file would be.
+
+        Only a prompt reading a name of *folder_names*, which templates/ sets, is rendered:
+        the per-record render has no templates/, so any other is left exactly as it was.
+        """
+        try:
+            free = self._read(text)[1]
+        except jinja2.TemplateError:
+            return text
+        if not free & folder_names:
+            return text
+        body = text.rstrip("\n")
+        # An explicit indentation keeps a first line that starts with spaces as written.
+        document = "prompt: |2-\n" + "".join(f"  {line}" for line in body.splitlines(True))
+        # A render that retries clears the names it missed; the file's must reach check().
+        held, self._missed = self._missed, []
+        try:
+            rendered = self.render(document + "\n", origin)
+        finally:
+            self._missed = held + self._missed
+        data = yaml.safe_load(rendered)
+        filled = self.fill_prompts(self.fill_loaded(data))["prompt"]
+        return str(filled) + text[len(body) :]
+
     # ── after the YAML is parsed ───────────────────────────────────────────
 
     def fill_loaded(self, data: Any) -> Any:
@@ -406,8 +434,9 @@ class LoadRender:
             scope = action.get("context_scope")
             for refs in scope.values() if isinstance(scope, dict) else []:
                 for ref in refs if isinstance(refs, list) else []:
-                    if isinstance(ref, str):
-                        later.add(ref.split(".", 1)[0])
+                    reference = observe_entry_reference(ref)
+                    if reference:
+                        later.add(reference.split(".", 1)[0])
         missed = [name for name in dict.fromkeys(self._missed) if name in later]
         if missed:
             quoted = ", ".join(repr(name) for name in missed)

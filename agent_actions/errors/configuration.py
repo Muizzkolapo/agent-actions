@@ -137,3 +137,9 @@ class RecordContextError(ConfigurationError):
     """Raised when a record's context data is incomplete (per-record recoverable)."""
 
     pass
+
+
+class GuardNotEvaluatedError(RecordContextError):
+    """Raised when a guard gave no verdict on one record in its time; that record fails alone."""
+
+    pass

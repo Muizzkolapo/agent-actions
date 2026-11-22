@@ -1,0 +1,23 @@
+branch: question_round
+description: Write one exam question, then check it
+inputs:
+  spec: the topic of the record and the checker's bar
+  prior: the check of the previous round (none in the first round)
+outputs: [check]
+actions:
+  - name: write
+    intent: Write one exam question on the topic, fixing what the last check found
+    prompt: $question_rounds.Write
+    schema: draft
+    dependencies: [spec]
+    context_scope:
+      observe: [spec.topic, prior.*]
+
+  - name: check
+    kind: tool
+    impl: check_question
+    intent: Check the question and say why it fails
+    schema: verdict
+    dependencies: [write]
+    context_scope:
+      observe: [write.question, spec.topic, spec.bar, prior.*]

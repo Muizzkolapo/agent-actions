@@ -1,9 +1,11 @@
 """Field reference parsing and action name extraction utilities."""
 
 import logging
+from collections.abc import Mapping
 
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
+from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
@@ -129,12 +131,16 @@ def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
     return referenced_actions
 
 
-def extract_action_names_from_template(template: str | None) -> set:
+def extract_action_names_from_template(
+    template: str | None, names: Mapping[str, str] | None = None
+) -> set:
     """
     Extract unique action names referenced in a Jinja2 template.
 
     Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. Logs a warning and
+    by {% for %}, {% set %}, and {% macro %} constructs. A name a top-level
+    {% set a = b %} of the alias header binds to b, as *names* (the action's ``as:``
+    map) agrees, reads b. Logs a warning and
     returns empty set on Jinja2 syntax errors (syntax errors are caught at
     render time; this function is a best-effort dependency extractor).
 
@@ -155,10 +161,12 @@ def extract_action_names_from_template(template: str | None) -> set:
     from jinja2 import Environment, nodes
     from jinja2.exceptions import TemplateSyntaxError
 
+    from agent_actions.prompt.aliases import prompt_aliases
+
     _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
     try:
-        env = Environment()
+        env = Environment(extensions=PROMPT_EXTENSIONS)
         ast = env.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError as e:
         logger.warning(
@@ -171,6 +179,7 @@ def extract_action_names_from_template(template: str | None) -> set:
         raise
 
     referenced_actions: set[str] = set()
+    aliases = prompt_aliases(ast, names or {})
 
     def _walk(node: nodes.Node, local_vars: set[str]) -> None:
         # {% for %} and {% macro %} create child scopes — copy the set
@@ -198,8 +207,12 @@ def extract_action_names_from_template(template: str | None) -> set:
         # {% set %} introduces a name at the current scope level — mutate in place
         # so subsequent siblings (processed by the parent's loop) see it
         if isinstance(node, nodes.Assign):
-            if isinstance(node.target, nodes.Name):
-                local_vars.add(node.target.name)
+            target, value = node.target, node.node
+            if isinstance(target, nodes.Name) and isinstance(value, nodes.Name):
+                if aliases.get(target.name) == value.name:
+                    return
+            if isinstance(target, nodes.Name):
+                local_vars.add(target.name)
             for child in node.iter_child_nodes():
                 _walk(child, local_vars)
             return
@@ -210,6 +223,8 @@ def extract_action_names_from_template(template: str | None) -> set:
                 current = current.node
             if isinstance(current, nodes.Name):
                 root = current.name
+                if root not in local_vars:
+                    root = aliases.get(root, root)
                 if (
                     root not in local_vars
                     and root not in SPECIAL_NAMESPACES

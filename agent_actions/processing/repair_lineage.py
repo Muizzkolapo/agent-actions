@@ -40,6 +40,27 @@ _KEPT_AT: WeakKeyDictionary[Any, tuple[Path, str]] = WeakKeyDictionary()
 _NOTING = threading.Lock()
 
 
+def actions_below(storage_backend: StorageBackend, action_name: str) -> list[str]:
+    """Every action whose input derives from *action_name*'s output, per the stored graph."""
+    raw = storage_backend.load_metadata("dependency_graph")
+    try:
+        graph = json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        graph = None
+    if not isinstance(graph, dict):
+        logger.warning(
+            "Action '%s': no dependency graph is stored, so the actions reading it keep "
+            "what they hold for a file it rewrote",
+            action_name,
+        )
+        return []
+    return [
+        name
+        for name, upstream in graph.items()
+        if isinstance(upstream, list) and action_name in upstream
+    ]
+
+
 def note_rewritten_by_repair(
     storage_backend: Any,
     below: Iterable[str],

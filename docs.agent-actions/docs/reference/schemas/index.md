@@ -247,7 +247,7 @@ Before any action runs, `agac inspect` and `agac run` do these checks:
 3. Find the function in the same way as the run. The function is in `select_question_schema.py` under the tool path of the project. The file defines a function of the same name.
 4. Refuse a `dispatch_task()` call inside the fields of a fixed schema. If the schema is chosen for each record, the full schema must be chosen.
 
-The value must be exactly one `dispatch_task()` call. The call works under `run_mode: online` and `run_mode: batch`. In batch mode, Agent Actions sends each record with its own schema. A batch run keeps no `add_dispatch` results. Thus, under `run_mode: batch`, `agac inspect` refuses `add_dispatch: true` on such an action.
+The value must be exactly one `dispatch_task()` call. The call works under `run_mode: online` and `run_mode: batch`. In batch mode, Agent Actions sends each record with its own schema.
 
 ### The Function
 
@@ -425,8 +425,8 @@ Agent Actions sends `minimum`, `maximum`, `minLength` and `maxLength` to the pro
 | `groq` | `response_format` `json_schema`, not strict | Sent as guidance |
 | `anthropic` | Tool `input_schema` | Sent as guidance |
 | `ollama_local`, `llamafile` | JSON schema turned into a grammar by llama.cpp | `minLength`/`maxLength` and integer `minimum`/`maximum` are enforced. `minimum`/`maximum` on a `number` are ignored |
-| `gemini` | Written into the prompt text in an online run. `response_schema` in a batch | Sent as guidance |
-| `cohere` | `response_format` `json_object` with the schema. Only the field names are in the prompt | [Cohere's structured-output docs](https://docs.cohere.com/docs/structured-outputs) list these keys as unsupported |
+| `gemini` | Written into the prompt text, online and in a batch, with `response_mime_type` `application/json` | Sent as guidance |
+| `cohere` | `response_format` `json_object` with the schema in `json_schema`. Only the field names are in the prompt | [Cohere's structured-output docs](https://docs.cohere.com/docs/structured-outputs) list these keys as unsupported |
 | `ollama_cloud` | Written into the prompt text | Sent as guidance |
 | `agac-provider` (mock) | Read by the mock | Generated values stay inside `minimum`/`maximum` and `minLength`/`maxLength`. These bounds win over the field-name rules of the mock. For example, a field named `email` with `minLength: 40` gets text, not an address. Inside the `items` of an array or the `properties` of an object, the mock keeps `format`. There, a known `format` wins over a length bound |
 
@@ -647,8 +647,10 @@ To print the data that Agent Actions sends to the model, use `prompt_debug`:
 ```yaml
 - name: my_action
   schema: my_schema
-  prompt_debug: true  # Online runs print the prompt, context preview and schema sent to the model
+  prompt_debug: true  # Prints the prompt, context preview and schema sent to the model
 ```
+
+An online action prints them for each call. A batch action prints them for each record when Agent Actions prepares the batch. Each call's prompt, context preview and schema print as one block, so the blocks of actions that run in parallel do not mix.
 
 ## Schema Discovery
 
@@ -661,7 +663,7 @@ ls schema/*.yml schema/*.yaml schema/*.json agent_workflow/*/schema/*
 Agent Actions checks a schema file when it loads the workflow that names the file. To check a schema file and not run the workflow, use this command:
 
 ```bash
-agac inspect -a my_workflow
+agac inspect -w my_workflow
 ```
 
-If the command shows the action list, pre-flight passed. This includes the check for malformed schemas. To see what the schema of each action declares and how the fields go between actions, run `agac schema -a my_workflow`.
+If the command shows the action list, pre-flight passed. This includes the check for malformed schemas. To see what the schema of each action declares and how the fields go between actions, run `agac schema -w my_workflow`.

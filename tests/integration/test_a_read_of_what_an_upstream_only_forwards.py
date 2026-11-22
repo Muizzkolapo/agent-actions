@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from tests._support.agac_cli import run_agac
 from tests.helpers.trace_store import trace_rows
 
@@ -146,7 +147,7 @@ def _run_to_the_end(project: Path) -> str:
         result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
         output = result.stdout + result.stderr
         outputs.append(output)
-        assert result.returncode == 0, "\n".join(outputs)
+        assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
         if "run again" not in output:
             return "\n".join(outputs)
         args = ["run", "-a", WORKFLOW]
@@ -231,8 +232,11 @@ def test_a_field_an_open_schema_admits_unlisted_still_runs(tmp_path, mode, promp
     _run_to_the_end(project)
 
     assert _dispositions(project, "consumer") == ["success", "success"]
-    traces = [c for (c,) in trace_rows(project, "select llm_context from prompt_trace")]
-    assert any('"produce": {' in c and '"page_content": "two"' in c for c in traces), traces
+    traces = trace_rows(project, "select compiled_prompt, llm_context from prompt_trace")
+    # A field the prompt prints reaches the model in the prompt, not again in the context block.
+    assert any(
+        ('"produce": {' in c and '"page_content": "two"' in c) or p == "Say two" for p, c in traces
+    ), traces
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])

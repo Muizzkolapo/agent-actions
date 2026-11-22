@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, DirectoryPath, Field
 
+DEFAULT_POLL_SECONDS = 60
+
 
 class BatchCommandArgs(BaseModel):
     """Pydantic model for the batch command arguments."""
@@ -26,6 +28,7 @@ class StatusCommandArgs(BaseModel):
     agent: str = Field(
         ..., min_length=1, description="Agent configuration file name without path or extension"
     )
+    as_json: bool = Field(False, description="Print each action's status and the run's as JSON.")
 
 
 class InitCommandArgs(BaseModel):
@@ -69,6 +72,13 @@ class RetryCommandArgs(BaseModel):
         default=None,
         description="Why the records given to filters are filtered; stored as their reason.",
     )
+    all: bool = Field(
+        default=False,
+        description="Retry again while a pass closes an open failure.",
+    )
+    max_passes: int | None = Field(
+        default=None, ge=1, description="The most passes --all makes; None is no limit."
+    )
 
 
 class RunCommandArgs(BaseModel):
@@ -99,9 +109,16 @@ class RunCommandArgs(BaseModel):
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
-    rerun: str | None = Field(
-        None, description="Answer every record of this action and what reads it again"
+    rerun: tuple[str, ...] = Field(
+        (), description="Answer every record of these actions and what reads them again"
     )
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
+    )
+    wait: bool = Field(False, description="Run again while paused for a batch, until none is open")
+    poll: int = Field(
+        DEFAULT_POLL_SECONDS, description="Whole seconds between two passes of --wait", ge=1
+    )
+    wait_timeout: float | None = Field(
+        None, description="Seconds after which --wait stops and leaves the batches open", ge=0
     )

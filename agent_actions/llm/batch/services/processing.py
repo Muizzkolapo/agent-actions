@@ -85,15 +85,16 @@ logger = logging.getLogger(__name__)
 
 
 def _is_dead_retry(entry: BatchJobEntry) -> bool:
-    """A retry recovery the provider terminally failed.
+    """A retry or side batch the provider terminally failed.
 
-    It holds the live recovery state, and the failure path continues it: the
-    spent attempt is counted and the next one submitted, or exhaustion applies.
-    Repair recoveries are excluded — their in-flight records' last responses
-    are not recoverable from state, so their dead batches keep the
-    processed-from-scratch path.
+    It holds the live recovery state, and the failure path continues it: for a
+    retry, the spent attempt is counted and the next one submitted, or exhaustion
+    applies; for a side batch, each call it held fails, as an online side call
+    that raises does. Repair recoveries are excluded — their in-flight
+    records' last responses are not recoverable from state, so their dead batches
+    keep the processed-from-scratch path.
     """
-    return entry.recovery_type == RecoveryType.RETRY and entry.status in (
+    return entry.recovery_type in (RecoveryType.RETRY, RecoveryType.SIDE) and entry.status in (
         BatchStatus.FAILED,
         BatchStatus.CANCELLED,
     )
@@ -712,7 +713,8 @@ class BatchProcessingService:
             context_map=context_map,
             record_count=entry.record_count,
             file_name=file_name,
-            agent_config=agent_config,
+            agent_config=agent_config or {},
+            usage_kind=entry.usage_kind,
         )
 
         retry_config = (agent_config or {}).get("retry")
@@ -722,7 +724,11 @@ class BatchProcessingService:
 
         if retry_enabled:
             missing_ids = BatchResultReconciler.resendable_ids(
-                BatchResultReconciler.find_missing_ids(context_map, batch_results), context_map
+                BatchResultReconciler.retriable_ids(
+                    BatchResultReconciler.find_missing_ids(context_map, batch_results),
+                    batch_results,
+                ),
+                context_map,
             )
 
             if missing_ids:

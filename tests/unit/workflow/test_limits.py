@@ -884,6 +884,8 @@ class TestTheCompletionStamp:
             "generation_hash",
             "udf_source_hash",
             "schema_options_hash",
+            "output_settings_hash",
+            "endpoint_hash",
             "records_processed",
             "truncated",
             "staged_input",
@@ -1042,6 +1044,8 @@ class TestALimitAcrossTheBatchPause:
             "generation_hash",
             "udf_source_hash",
             "schema_options_hash",
+            "output_settings_hash",
+            "endpoint_hash",
             "records_processed",
             "truncated",
             "staged_input",
@@ -1221,7 +1225,7 @@ class TestAFileLimitMeetingAConfigChange:
             pytest.param(
                 {"file_limit": 1, "prompt": "new"},
                 {"record_limit": None, "file_limit": 1, "config_hash": "stale"},
-                "action config (prompt/schema/guard)",
+                "action config (prompt/schema/guard/routing)",
                 id="config_change",
             ),
             pytest.param(

@@ -215,7 +215,7 @@ export GEMINI_API_KEY=...
 Run the agent:
 
 ```bash
-agac run -a product_listing_enrichment
+agac run -w product_listing_enrichment
 ```
 
 By default the workflow processes 2 records (`record_limit: 2` in the config). Remove or increase that setting to process the full dataset.

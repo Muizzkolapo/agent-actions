@@ -4,7 +4,8 @@ import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -23,10 +24,17 @@ from agent_actions.errors import (
 )
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.llm.providers.usage_tracker import get_last_usage
+from agent_actions.llm.providers.tools.builtin import runs_udf
+from agent_actions.llm.providers.usage_tracker import (
+    UsageLedger,
+    accounting,
+    prompt_and_completion,
+    summarised,
+)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import (
@@ -34,6 +42,7 @@ from agent_actions.logging.events import (
     BatchCompleteEvent,
 )
 from agent_actions.processing.run_counts import RunCounts, counting
+from agent_actions.prompt.cache_point import without_cache_points
 from agent_actions.record.reasons import (
     ALL_VERSIONS_FILTERED,
     EVERY_INPUT_FAILED,
@@ -78,12 +87,17 @@ UPSTREAM_SKIP_PREFIX = "Upstream dependency"
 WHERE_SKIP_REASON = "WHERE clause — action skipped"
 
 
+# Keys that change which records an action and its readers receive.
+ROUTING_KEYS = ("_sends_elsewhere", "_gathers", "_builtin")
+
+
 def _compute_action_config_hash(
     action_config: ActionConfigDict,
 ) -> str:
     """Compute a deterministic hash of semantically-meaningful action config.
 
-    Covers: prompt reference, schema reference, guard clause + behavior.
+    Covers: prompt reference, schema reference, guard clause + behavior, and the
+    routing keys (``ROUTING_KEYS``) when set.
     Cosmetic fields (description, tags) are excluded.
 
     NOT the model: the ``"model"`` key below is permanently ``""`` because
@@ -96,13 +110,20 @@ def _compute_action_config_hash(
         {"clause": raw_guard, "behavior": "skip"} if isinstance(raw_guard, str) else raw_guard
     )
 
+    prompt = action_config.get("prompt", "")
     hash_input = {
-        "prompt": action_config.get("prompt", ""),
+        # A cache point changes how a request reaches the provider, not the text sent.
+        "prompt": without_cache_points(prompt) if isinstance(prompt, str) else prompt,
         "model": action_config.get("model", ""),  # frozen empty — see docstring
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", ""),
         "guard_behavior": guard.get("behavior", ""),
     }
+    # Only when set, so the digest of an action without them does not rotate.
+    config: dict[str, Any] = action_config  # type: ignore[assignment]
+    routing = {key: config[key] for key in ROUTING_KEYS if config.get(key)}
+    if routing:
+        hash_input["routing"] = routing
 
     serialized = json.dumps(hash_input, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -172,7 +193,7 @@ def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
     """
     cfg: dict[str, Any] = action_config  # type: ignore[assignment]
     names = [cfg.get("conditional_clause")]
-    if cfg.get("kind") == "tool":
+    if runs_udf(cfg):
         names.append(cfg.get("model_name"))
     digests: dict[str, str] = {}
     for name in filter(None, names):
@@ -183,6 +204,42 @@ def _compute_udf_source_hash(action_config: ActionConfigDict) -> str | None:
     return _digest(digests) if digests else ""
 
 
+def _compute_output_settings_hash(action_config: ActionConfigDict) -> str:
+    """A digest of the settings that shape what an answer is and how it is stored.
+
+    The transport settings (timeout, retry, credential, prompt caching) are left out: they
+    change how a request travels, not what it asks for. ``json_mode``, ``output_field`` and
+    the run mode only for an LLM action, the only kind that reads them.
+    """
+    cfg: dict[str, Any] = action_config  # type: ignore[assignment]
+    granularity = cfg.get("granularity")
+    settings: dict[str, Any] = {
+        "granularity": granularity.lower() if isinstance(granularity, str) else granularity,
+        "on_empty": cfg.get("on_empty"),
+        "expect": cfg.get("expect"),
+    }
+    if (cfg.get("kind") or DEFAULT_ACTION_KIND) == DEFAULT_ACTION_KIND:
+        settings.update(
+            json_mode=cfg.get("json_mode"),
+            output_field=cfg.get("output_field"),
+            run_mode=effective_run_mode(action_config).value,
+        )
+    return _digest(settings)
+
+
+def _compute_endpoint_hash(action_config: ActionConfigDict) -> str:
+    """A digest of where an LLM action's requests go; empty for any other kind."""
+    if (action_config.get("kind") or DEFAULT_ACTION_KIND) != DEFAULT_ACTION_KIND:
+        return ""
+    endpoint = project_endpoint(str(action_config.get("model_vendor")))
+    return _digest(
+        {
+            "base_url": action_config.get("base_url"),
+            "endpoint_url": endpoint.url if endpoint is not None else None,
+        }
+    )
+
+
 # What an action reads and how it is asked, each stamped under its own key and named
 # by its label when an edit is logged.
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], ...] = (
@@ -191,6 +248,8 @@ _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], 
     ("generation_hash", "generation settings", _compute_generation_hash),
     ("udf_source_hash", "tool/guard code", _compute_udf_source_hash),
     ("schema_options_hash", "schema options", _compute_schema_options_hash),
+    ("output_settings_hash", "output settings", _compute_output_settings_hash),
+    ("endpoint_hash", "provider endpoint", _compute_endpoint_hash),
 )
 
 
@@ -239,7 +298,7 @@ INPUT_AT_START = "staged_input_at_start"
 
 
 MODEL_EDIT = "model"
-CONFIG_EDIT = "action config (prompt/schema/guard)"
+CONFIG_EDIT = "action config (prompt/schema/guard/routing)"
 
 
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:
@@ -289,17 +348,6 @@ def config_in_force(action_config: ActionConfigDict) -> dict[str, Any]:
         "model_vendor": cfg.get("model_vendor"),
         **{key: compute(action_config) for key, _, compute in _READS_STAMPS},
     }
-
-
-def _warn_of_an_edit(action_name: str, edits: list[str]) -> None:
-    logger.warning(
-        "%s was edited since it completed (%s): its answers stand, and only records "
-        "it has not answered use the edit. Run again with --rerun %s to answer every "
-        "record under the edit",
-        action_name,
-        ", ".join(edits),
-        action_name,
-    )
 
 
 def _limit_cannot_reach_the_records(details: dict[str, Any], record_limit: int | None) -> bool:
@@ -360,6 +408,8 @@ class ExecutionMetrics:
     # Records this execution shipped carrying a verdict whose overall_pass is false
     # (on_exhausted: return_last, repair: none). Stored as successes.
     checks_failed: int = 0
+    # A built-in router's rows per case this execution.
+    cases: dict[str, int] | None = None
 
 
 @dataclass
@@ -517,6 +567,54 @@ class ActionExecutor:
         self.console = console or Console()
         self.run_tracker: Any | None = None
         self.run_id: str | None = None
+        self._usage: dict[str, UsageLedger] = {}
+
+    def _ledger(self, action_name: str) -> UsageLedger:
+        """What the action's model calls used in this run, over every execution of it."""
+        ledger = self._usage.get(action_name)
+        if ledger is None:
+            ledger = self._usage[action_name] = UsageLedger(
+                action_name,
+                self.run_id,
+                getattr(self.deps.action_runner, "storage_backend", None),
+            )
+        return ledger
+
+    @contextmanager
+    def _counted(self, action_name: str) -> Iterator[RunCounts]:
+        """Count what one execution of the action collects and what its model calls use.
+
+        The usage is stored and put in the run history as the block ends, however it
+        ends: a failed or interrupted action has still paid for its calls.
+        """
+        ledger = self._ledger(action_name)
+        try:
+            with counting() as counts, accounting(ledger):
+                yield counts
+        finally:
+            self._save_usage(ledger)
+
+    def _save_usage(self, ledger: UsageLedger) -> None:
+        ledger.save()
+        rows = ledger.rows()
+        if not rows or self.run_tracker is None or self.run_id is None:
+            return
+        try:
+            self.run_tracker.record_action_usage(
+                run_id=self.run_id,
+                action_name=ledger.action_name,
+                usage=summarised(rows),
+                tokens=prompt_and_completion(rows),
+            )
+        except Exception as error:
+            logger.warning(
+                "Could not add the token usage of %s to the run history: %s",
+                ledger.action_name,
+                error,
+            )
+
+    def _tokens_used(self, action_name: str) -> dict[str, int] | None:
+        return prompt_and_completion(self._ledger(action_name).rows())
 
     def __eq__(self, other):
         if not isinstance(other, ActionExecutor):
@@ -761,7 +859,7 @@ class ActionExecutor:
                 self.deps.state_manager.mark_mixed_answers([action_name])
             return ActionStatus.PENDING
         if edits:
-            _warn_of_an_edit(action_name, edits)
+            self._warn_of_an_edit(action_name, edits)
         elif details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG):
             logger.warning(
                 "%s may hold answers given under more than one config. Run again with --rerun "
@@ -770,6 +868,22 @@ class ActionExecutor:
                 action_name,
             )
         return current_status
+
+    def _warn_of_an_edit(self, action_name: str, edits: list[str]) -> None:
+        """Name the edit, and every action whose input is the output the edit left standing."""
+        readers = self.readers_of(action_name)
+        logger.warning(
+            "%s was edited since it completed (%s): its answers stand, and only records "
+            "it has not answered use the edit.%s Run again with --rerun %s to answer every "
+            "record under the edit%s",
+            action_name,
+            ", ".join(edits),
+            f" What reads it was answered from its output before the edit: {', '.join(readers)}."
+            if readers
+            else "",
+            action_name,
+            ", there and at what reads it" if readers else "",
+        )
 
     def rerun(self, action_names: Iterable[str]) -> list[str]:
         """Answer every record of *action_names* and of what reads them again (``--rerun``).
@@ -845,7 +959,7 @@ class ActionExecutor:
                 mixed.append(name)
             edits = _edits_since(details, configs[name]) if name in configs else []
             if edits:
-                _warn_of_an_edit(name, edits)
+                self._warn_of_an_edit(name, edits)
                 held[name] = {key: details.get(key) for key in config_in_force(configs[name])}
         self.deps.state_manager.reopen(names)
         for name, stamp in held.items():
@@ -1336,8 +1450,7 @@ class ActionExecutor:
             execution_time=duration,
             **self._completion_metadata(params.action_name, params.action_config),
         )
-        tokens = get_last_usage()
-        self._track_action_complete(params.action_name, duration, final_status, tokens=tokens)
+        self._track_action_complete(params.action_name, duration, final_status)
 
         return ActionExecutionResult(
             success=True,
@@ -1345,13 +1458,14 @@ class ActionExecutor:
             status=final_status,
             metrics=ExecutionMetrics(
                 duration=duration,
-                tokens=tokens,
+                tokens=self._tokens_used(params.action_name),
                 model_vendor=params.action_config.get("model_vendor"),
                 model_name=params.action_config.get("model_name"),
                 files_processed=0,
                 record_count=record_count,
                 guard_skipped=guard_skipped,
                 checks_failed=checks_failed,
+                cases=counts.cases,
             ),
         )
 
@@ -1502,7 +1616,6 @@ class ActionExecutor:
         duration: float,
         status: ActionStatus,
         *,
-        tokens: dict[str, int] | None = None,
         skip_reason: str | None = None,
     ) -> None:
         """Record action completion in run_tracker if available."""
@@ -1521,7 +1634,6 @@ class ActionExecutor:
             action_name=action_name,
             status=tracker_status,
             duration_seconds=duration,
-            tokens=tokens,
             skip_reason=skip_reason,
             files_processed=0,
         )
@@ -2137,6 +2249,7 @@ class ActionExecutor:
             or raised_by_terminal_failure(error)
         ):
             self._write_failed_disposition(action_name, str(error))
+            self._track_failure(action_name, (datetime.now() - start_time).total_seconds(), error)
             raise error
         return self._handle_run_failure(
             ActionRunParams(
@@ -2160,11 +2273,16 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_before_the_check(
-            action_name, action_idx, action_config, start_time
+        params = ActionRunParams(
+            action_name=action_name,
+            action_idx=action_idx,
+            action_config=action_config,
+            is_last_action=False,
+            start_time=start_time,
         )
+        pre_run_count = self._count_before_the_check(params)
         try:
-            with counting() as counts:
+            with self._counted(action_name) as counts:
                 output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
                     action_name,
                     output_directory,
@@ -2199,11 +2317,16 @@ class ActionExecutor:
         self.deps.state_manager.update_status(action_name, ActionStatus.CHECKING_BATCH)
         output_directory = self._batch_output_directory(action_name)
 
-        pre_run_count = self._count_before_the_check(
-            action_name, action_idx, action_config, start_time
+        params = ActionRunParams(
+            action_name=action_name,
+            action_idx=action_idx,
+            action_config=action_config,
+            is_last_action=False,
+            start_time=start_time,
         )
+        pre_run_count = self._count_before_the_check(params)
         try:
-            with counting() as counts:
+            with self._counted(action_name) as counts:
                 output_folder, batch_status = await asyncio.to_thread(
                     self.deps.batch_manager.handle_batch_agent,
                     action_name,
@@ -2228,29 +2351,16 @@ class ActionExecutor:
             counts,
         )
 
-    def _count_before_the_check(
-        self,
-        action_name: str,
-        action_idx: int,
-        action_config: ActionConfigDict,
-        start_time: datetime,
-    ) -> int:
-        """The action's row count before its batch is checked, as ``_begin`` counts it.
+    def _count_before_the_check(self, params: ActionRunParams) -> int:
+        """Track the check's start and return the action's row count before it, as ``_begin`` does.
 
-        An error here ends the run (see ``_record_store_failure``); the check never
-        tracked a start, so the failure is recorded with one.
+        An error here ends the run (see ``_record_store_failure``).
         """
         try:
-            return self._count_records_for_action(action_name)
+            self._track_action_start(params)
+            return self._count_records_for_action(params.action_name)
         except Exception as error:
-            params = ActionRunParams(
-                action_name=action_name,
-                action_idx=action_idx,
-                action_config=action_config,
-                is_last_action=False,
-                start_time=start_time,
-            )
-            self._record_store_failure(action_name, _elapsed(params), error, start=params)
+            self._record_store_failure(params.action_name, _elapsed(params), error, start=params)
             raise
 
     def _batch_output_directory(self, action_name: str) -> str:
@@ -2354,12 +2464,14 @@ class ActionExecutor:
             # per input file with the real ids and counts. The no_batches
             # passthrough branch reaches "completed" without it and is covered
             # by BatchPassthroughEvent and ActionCompleteEvent.
+            self._track_action_complete(action_name, wall_clock, final_status)
             return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status=final_status,
                 metrics=ExecutionMetrics(
                     duration=wall_clock,
+                    tokens=self._tokens_used(action_name),
                     record_count=record_count,
                     guard_skipped=guard_skipped,
                     checks_failed=checks_failed,
@@ -2380,6 +2492,7 @@ class ActionExecutor:
         # Failed
         self.deps.state_manager.update_status(action_name, ActionStatus.FAILED)
         self._write_failed_disposition(action_name, f"Batch job for {action_name} failed")
+        self._track_action_complete(action_name, duration, ActionStatus.FAILED)
         # One event per job, matching the success path: finalize_batch_output
         # fires per input file, so an action with several files reports each of
         # them by id. Aggregating into one event would leave batch_id blank for
@@ -2512,6 +2625,17 @@ class ActionExecutor:
                 unrecorded,
                 error,
             )
+        self._track_failure(action_name, duration, error, start=start)
+
+    def _track_failure(
+        self,
+        action_name: str,
+        duration: float,
+        error: Exception,
+        *,
+        start: ActionRunParams | None = None,
+    ) -> None:
+        """Add the action's failure to the run history, never replacing *error* with another."""
         if self.run_tracker is None or self.run_id is None:
             return
         try:
@@ -2546,7 +2670,7 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-            with counting() as counts:
+            with self._counted(params.action_name) as counts:
                 output_folder = self.deps.action_runner.run_action(
                     params.action_config,
                     params.action_name,
@@ -2579,7 +2703,7 @@ class ActionExecutor:
 
         try:
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
-            with counting() as counts:
+            with self._counted(params.action_name) as counts:
                 output_folder = await asyncio.to_thread(
                     self.deps.action_runner.run_action,
                     params.action_config,

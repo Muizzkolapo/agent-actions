@@ -41,7 +41,6 @@ def _result_without_metrics():
 
 
 def _make_executor_with_backend(rows_collected=0, has_backend=True):
-    executor = ActionExecutor.__new__(ActionExecutor)
     deps = MagicMock()
     if has_backend:
         backend = MagicMock()
@@ -49,8 +48,7 @@ def _make_executor_with_backend(rows_collected=0, has_backend=True):
         deps.action_runner.storage_backend = backend
     else:
         del deps.action_runner.storage_backend
-    executor.deps = deps
-    return executor
+    return ActionExecutor(deps)
 
 
 RESULTS = pytest.mark.parametrize(

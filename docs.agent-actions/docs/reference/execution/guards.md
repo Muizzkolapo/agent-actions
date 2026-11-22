@@ -20,14 +20,15 @@ A guard examines a condition for each record. The result decides if the action r
 |-------|------|---------|-------------|
 | `condition` | string | Required | The expression that the guard examines against the upstream data |
 | `on_false` | string | `filter` (SQL) / `skip` (UDF) | The result when the condition is false. **The default depends on the guard type.** The default for SQL-style guards is `filter`. The default for UDF guards is `skip`. |
-| `passthrough_on_error` | boolean | `true` | If the evaluation fails, let the record continue |
+| `passthrough_on_error` | boolean | `true` | If the evaluation fails, let the record continue. A timeout does not obey it. See [Timeouts](#timeouts) |
+| `timeout` | number | `5` | The number of seconds that the condition may take on one record (greater than 0). The time counts the evaluation only, not the wait for a free worker. Not allowed on a UDF guard. `defaults: guard_timeout` sets it for every guard of the workflow |
 
 ## on_false Options
 
 | Value | Description |
 |----------|-------------|
 | `skip` | The action does not run. The record continues to the downstream actions, with its original content. |
-| `filter` | The framework removes the record from the action output fully. The downstream actions never see it. |
+| `filter` | The framework removes the record from the action output fully. The downstream actions do not see it. The exception is the first action of a branch of a [router](../configuration/routes.md): a record that it sends elsewhere returns at the join. |
 | `warn` | The record continues to LLM processing as usual. The framework logs a warning. |
 
 ## Condition Expressions
@@ -252,9 +253,9 @@ This table shows how guard results change the downstream actions in a workflow t
 | on_false | Output record | Downstream actions |
 |----------|--------------|-------------------|
 | `skip` | The original content stays, `metadata.reason: "guard_skip"` | **Process as usual** — each action examines its own guard independently |
-| `filter` | The framework removes the record from the output | **Never see the record** — the framework removes the record from each action downstream of the filter |
+| `filter` | The framework removes the record from the output | **Do not see the record** — the framework removes the record from each action downstream of the filter. A record that the first action of a router branch sends elsewhere returns at the join. |
 
-If a guard filters all of the records of its action, the action holds no record. The framework skips that action and each action that depends on it. With several input files, a filter on all records of one file is not sufficient. These results occur in the two run modes:
+If a guard filters all of the records of its action, the action holds no record. The framework skips that action and each action that depends on it. The exception is a branch of a router: a branch that takes no record completes with 0 records, and the join still runs. With several input files, a filter on all records of one file is not sufficient. These results occur in the two run modes:
 
 - An action that keeps records from another file completes.
 - The actions that depend on it run on the records that it kept. They hold nothing for the file that it filtered.
@@ -279,13 +280,15 @@ actions:
     # Can define its own guard or process everything
 ```
 
+On a skipped record, the namespace of the action that skipped it is null. A prompt of a downstream action that reads a field of that namespace fails the record. Pre-flight warns about each such `observe` entry: `'extract_facts.facts' may be null at runtime`. To read the field safely, observe it as optional (`extract_facts.facts?`). The field is then null, or a default that you state, on a skipped record, and pre-flight gives no warning. See [Optional Fields](../context/context-scope.md#optional-fields).
+
 ### Filtered records leave only what is below the filter
 
 When an action filters a record, the record is removed from that action. It is also removed from each action that depends on
 that action, directly or through other actions. An action on another branch still receives the record, if it does not depend on
 the action that filters. An action under another start node also receives the record.
-The branches can meet again in an action that depends on the two branches. In that action, the record stays out. It
-does not come back through the branch that kept it.
+The branches can meet again in an action that depends on the two branches. In that action, the record is not present. It
+does not return through the branch that kept it. To send each record to one branch, use a router and a join ([Routes and Joins](../configuration/routes.md)). A record that a branch did not take returns at the join.
 
 ### Upstream failures are short-circuited
 
@@ -302,11 +305,11 @@ The framework puts guard evaluation errors into three categories: semantic, data
 | **Semantic** | A registered function raises `ValueError` for a value in the record | No — always uses `on_false` | The condition is broken. Preflight already refuses an unquoted string (`status == approved`) before the run, so this error is a backstop. The framework caches the result after the first occurrence. |
 | **Missing field** (a data error) | `upstream_action.field` is not in this record | No — the condition is not met, so `on_false` applies | The framework logs a `G002` event. |
 | **Data** | Any other error that occurs while the guard examines this record | Yes | A failure that applies only to this record |
-| **Timeout** | The evaluation took more time than the time limit | Yes | A transient failure |
+| **Timeout** | The evaluation took more time than the time limit | No | The record fails. See [Timeouts](#timeouts) |
 
 **Semantic errors** ignore `passthrough_on_error`, because the condition is fully broken. If the records continued, the results would be wrong for all records, not only for one record. The framework logs these errors one time (circuit breaker), not for each record.
 
-**Data errors and timeout errors** obey `passthrough_on_error` (default: `true`). To apply the configured `on_false` behavior, set it to `false`:
+**Data errors** obey `passthrough_on_error` (default: `true`). To apply the configured `on_false` behavior, set it to `false`:
 
 ```yaml
 guard:
@@ -320,6 +323,32 @@ Each `G002` event in `agent_io/logs/errors.json` is an evaluation failure, and a
 :::
 
 When a guard does not do what you expect, look for `G002` events in `agent_io/logs/errors.json` in the workflow folder.
+
+### Timeouts
+
+The guard of each record has 5 seconds by default. The time starts when the evaluation of the record starts. A record that waits for a free worker on a busy machine does not use its time. Thus the same record gets the same result on a busy machine and on an idle one.
+
+A guard that still has no result after its time does not pass the record, and does not filter or skip it:
+
+- With `on_false: filter` or `on_false: skip`, the record fails. Its disposition is `failed`, and the reason names the condition, the record and the time limit. `agac retry` runs the record again.
+- With `on_false: warn`, the record runs, as it runs for either result of the condition.
+
+In both cases the run logs a `G001` event. The event names the condition, the time limit, the record and the action.
+
+To give a slow condition more time, set `timeout` on the guard, or `guard_timeout` in `defaults:` for every guard of the workflow. The guard's own `timeout` wins:
+
+```yaml
+defaults:
+  guard_timeout: 10
+
+actions:
+  - name: summarize
+    dependencies: [check]
+    guard:
+      condition: 'check.n_accepted > 0'
+      on_false: skip
+      timeout: 30   # this guard may take up to 30 seconds on one record
+```
 
 ### UDF Guards
 

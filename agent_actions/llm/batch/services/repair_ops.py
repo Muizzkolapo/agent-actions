@@ -76,13 +76,17 @@ class RepairSubmission:
 def build_repair_strategy(
     agent_config: dict[str, Any] | None,
     judge_budget_remaining: int | None = None,
+    judge_verdicts: dict[str, Any] | None = None,
+    context_map: dict[str, Any] | None = None,
 ) -> ExpectationStrategy | None:
     """The action's repair strategy, or None when it does not repair.
 
     Each deferred round rebuilds this, so the judge budget left from the
     previous round is handed back in — otherwise the budget would bound a round
     instead of the run, and `max_iterations` rounds could spend that many times
-    the configured cap.
+    the configured cap. The verdicts the judge batches returned are handed back
+    the same way. *context_map* gives each record the judge context its
+    preparation kept, which a rule's ``context:`` refs resolve against.
     """
     from agent_actions.expectations.service import create_expectation_service_from_config
     from agent_actions.processing.evaluation.strategies import ExpectationStrategy
@@ -93,10 +97,11 @@ def build_repair_strategy(
         action_name=config.get("action_name") or config.get("name", "unknown"),
         agent_config=config,
         judge_budget_remaining=judge_budget_remaining,
+        judge_verdicts=judge_verdicts,
     )
     if service is None or service.repair == "none":
         return None
-    return ExpectationStrategy(service)
+    return ExpectationStrategy(service, BatchContextMetadata.judge_contexts(context_map))
 
 
 def stamp_exhausted(
@@ -378,6 +383,8 @@ def carry_forward(
     state.on_exhausted = prior.on_exhausted
     state.accumulated_results = list(prior.accumulated_results)
     state.failure_type_counts = dict(prior.failure_type_counts)
+    state.side_attempts = dict(prior.side_attempts)
+    state.side_results = {kind: dict(results) for kind, results in prior.side_results.items()}
     return state
 
 

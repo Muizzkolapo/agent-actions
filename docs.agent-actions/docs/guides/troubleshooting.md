@@ -56,6 +56,8 @@ If none of the declared fields exist in the upstream output, the framework logs 
 | Empty object | The LLM returned `{}`. | Use the same fix. The framework rejects an empty object when the schema declares fields. |
 | Existing poison | Bad data from a previous run is already in `target_data`. | Run the upstream action again with a repair policy. Or clean the SQLite row manually. |
 
+If the upstream action returns the field only for some records, observe the field as optional (`generate_optimal_code.explanation?`). The record then gets null, or a default that you state, and does not fail. See [Optional Fields](../reference/context/context-scope.md#optional-fields).
+
 **Behavior:** If one record has incomplete namespace data, the framework logs a WARNING (`Record <source_guid> prep failed (context incomplete)`). The framework stores that record as failed, and continues with the remaining records in the file. One bad record does not fail a full file of valid records.
 
 ### AgentActionsError
@@ -278,7 +280,9 @@ This table gives the messages that occur most often for the `endpoints:` block o
 | `endpoint '<name>' refused the credential (HTTP 401)` | `--verify-keys` | Check the credential in `endpoints.<name>.auth`. At record time, a 401 shows as the error text of the vendor. With `command` auth, the framework runs the command one more time before the record fails. |
 | `endpoint '<name>' could not be reached: ...` | `--verify-keys` | Check `endpoints.<name>.url`. Make sure that the server is running. |
 | `endpoint '<name>' answered HTTP 404: ...` | `--verify-keys` | The server answered, but not with a completion. Check the url, the model name and the log of the server. |
-| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` if the server rejected the request) | `--verify-keys` | Use a server that honours `json_schema`. Or put such a server (vLLM, TGI, a LiteLLM proxy) in front of this server. A 400 can also mean a wrong model name or parameter. Read the text of the server. |
+| `endpoint '<name>' does not honour response_format json_schema; agac supports only endpoints with OpenAI structured output` (with ` (HTTP 400: ...)` if the server rejected `response_format`) | `--verify-keys` | Use a server that honours `json_schema`. Or put such a server (vLLM, TGI, a LiteLLM proxy) in front of this server. |
+| `endpoint '<name>' rejected the probe request (HTTP 400: ...)` | `--verify-keys` | The server refused a parameter or the model name, not `response_format`. Read the text of the server. The probe sends the model name, the messages, `response_format` and `max_tokens: 16`. |
+| `endpoint '<name>' gave no answer to the probe: ...` | `--verify-keys` | The model returned no text. Read the reason in the message: a refusal, or a stop reason such as `length`. A reasoning model can spend the 16 tokens of the probe before it answers. |
 | `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed. Run the command manually from the project root. Then correct `endpoints.<name>.auth`. The framework never shows the stderr of the command, because the stderr can hold the secret. |
 | `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The record gets the disposition `failed` with the reason `parse_error`. Check the model and the schema. |
 
@@ -312,7 +316,7 @@ Prompt traces exist only for **LLM actions**. Tool actions do not generate promp
 To read the traces of many records at one time, print them with `agac traces`. Add `--record <target_id>` for one record, or `--json` for a list:
 
 ```bash
-agac traces -w my_workflow -a classify_issue
+agac traces -w my_workflow -A classify_issue
 ```
 
 For the full table schema and query examples, see [Prompt Traces reference](../reference/data-io/prompt-traces.md).
@@ -326,7 +330,7 @@ When records fail or exhaust retries, the framework captures the input record at
 agac records -w <workflow> --snapshots
 
 # One action's, or one record's
-agac records -w <workflow> -a <action> --snapshots
+agac records -w <workflow> -A <action> --snapshots
 agac records -w <workflow> --snapshots --source-guid <source_guid>
 ```
 
@@ -360,10 +364,10 @@ Compare the data at each action. Select the same record at each action by its `s
 
 ```bash
 # Input to failing action — fetch the matching record
-agac records -w <workflow> -a <failing_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
+agac records -w <workflow> -A <failing_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
 
 # Previous action's output for the same record
-agac records -w <workflow> -a <previous_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
+agac records -w <workflow> -A <previous_action> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f
 ```
 
 ### Step 4: Enable Debug Mode
@@ -371,7 +375,7 @@ agac records -w <workflow> -a <previous_action> --source-guid 37812c37-80a2-596b
 To get detailed tracebacks, run this command:
 
 ```bash
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w my_workflow
 ```
 
 ### Step 5: Enable Prompt Debug
@@ -542,7 +546,7 @@ This section gives the commands and the patterns for debugging.
 
 ```bash
 # Debug mode (full tracebacks)
-AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -w workflow
 ```
 
 ### Common Fixes Cheatsheet
