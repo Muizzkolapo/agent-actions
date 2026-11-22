@@ -13,15 +13,15 @@ from functools import lru_cache
 from typing import Any
 
 from agent_actions.logging.core.manager import fire_event
-from agent_actions.logging.events.validation_events import (
-    GuardEvaluationErrorEvent,
-    GuardEvaluationTimeoutEvent,
-)
+from agent_actions.logging.events.validation_events import GuardEvaluationErrorEvent
 
 from ..parsing.ast_nodes import GuardSemanticError
 from ..parsing.parser import ParseResult, WhereClauseParser
 
 logger = logging.getLogger(__name__)
+
+# Seconds a guard may take on one record when neither the guard nor the defaults set it.
+DEFAULT_GUARD_TIMEOUT = 5
 
 
 class ErrorCategory(Enum):
@@ -63,7 +63,7 @@ class FilterItemRequest:
 
     data: dict[str, Any]
     condition: str
-    timeout: int | None = None
+    timeout: float | None = None
     functions: dict[str, Any] | None = None
 
 
@@ -71,7 +71,10 @@ class GuardFilter:
     """Thread-safe guard filter with AST-based evaluation, caching, and timeout protection."""
 
     def __init__(
-        self, cache_size: int = 1000, default_timeout: int = 5, enable_metrics: bool = True
+        self,
+        cache_size: int = 1000,
+        default_timeout: float = DEFAULT_GUARD_TIMEOUT,
+        enable_metrics: bool = True,
     ):
         self.parser = WhereClauseParser()
         self.cache_size = cache_size
@@ -103,15 +106,19 @@ class GuardFilter:
                 error_category=ErrorCategory.SEMANTIC,
             )
 
-        try:
-            future = self.executor.submit(
-                contextvars.copy_context().run,
-                self._evaluate_guard_condition,
-                request.data,
-                request.condition,
-                request.functions,
+        started = threading.Event()
+
+        def evaluate() -> bool:
+            started.set()
+            return self._evaluate_guard_condition(
+                request.data, request.condition, request.functions
             )
 
+        try:
+            future = self.executor.submit(contextvars.copy_context().run, evaluate)
+            # The limit counts the evaluation, not its wait for one of the shared workers,
+            # so a busy machine cannot turn the same record's verdict into a timeout.
+            started.wait()
             matched = future.result(timeout=timeout)
             execution_time = time.time() - start_time
 
@@ -122,15 +129,7 @@ class GuardFilter:
 
         except FutureTimeoutError:
             execution_time = time.time() - start_time
-            error_msg = f"Guard condition evaluation timed out after {timeout} seconds"
-            logger.warning(error_msg)
-
-            fire_event(
-                GuardEvaluationTimeoutEvent(
-                    guard_clause=request.condition,
-                    timeout_seconds=timeout,
-                )
-            )
+            error_msg = f"Guard condition evaluation took more than {timeout}s"
 
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)

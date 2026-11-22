@@ -120,6 +120,7 @@ class TaskPreparer:
                 conditional_clause,
                 field_context,
                 conditional_clause_passthrough_on_error,
+                source_guid,
             )
             if not guard_result.should_execute:
                 return PreparedTask(
@@ -195,6 +196,7 @@ class TaskPreparer:
             conditional_clause,
             field_context,
             conditional_clause_passthrough_on_error,
+            source_guid,
         )
         return GuardStatus.PASSED if result.should_execute else _turned_away_as(result.behavior)
 
@@ -316,6 +318,7 @@ class TaskPreparer:
         conditional_clause: str | None,
         field_context: dict[str, Any],
         conditional_clause_passthrough_on_error: bool = True,
+        source_guid: str | None = None,
     ):
         """Evaluate guard with full context; wraps non-dict content as ``{"_raw": content}``."""
         from agent_actions.input.preprocessing.filtering.evaluator import (
@@ -332,6 +335,7 @@ class TaskPreparer:
             context=field_context,
             conditional_clause=conditional_clause,
             conditional_clause_passthrough_on_error=conditional_clause_passthrough_on_error,
+            record_id=source_guid,
         )
 
     @staticmethod

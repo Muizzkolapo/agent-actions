@@ -273,7 +273,7 @@ class TestTheIncludeDefaultsAreRefusedInFull:
             "— did you mean 'record_limit'?; valid defaults keys are api_key, base_url, "
             "batch_max_workers, chunk_config, chunk_overlap, chunk_size, context_scope, "
             "data_source, enable_prompt_caching, expect, file_limit, frequency_penalty, "
-            "granularity, hitl_timeout, is_operational, json_mode, kind, max_tokens, model_name, "
+            "granularity, guard_timeout, hitl_timeout, is_operational, json_mode, kind, max_tokens, model_name, "
             "model_vendor, on_empty, output_field, presence_penalty, prompt_debug, "
             "record_concurrency, record_limit, request_timeout, retry, run_mode, split_method, "
             "stop, temperature, tokenizer_model, top_p, vendor_params"

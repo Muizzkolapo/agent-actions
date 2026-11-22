@@ -1,5 +1,6 @@
 """Consolidated guard configuration with explicit behavior control."""
 
+import math
 from enum import StrEnum
 from typing import Any
 
@@ -20,7 +21,9 @@ class GuardBehavior(StrEnum):
 _UNSUPPORTED_GUARD_BEHAVIORS: frozenset[str] = frozenset({"write_to", "reprocess"})
 
 # Only keys whose values reach the runtime; expander synthesizes the rest.
-_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset({"condition", "on_false", "passthrough_on_error"})
+_ALLOWED_GUARD_KEYS: frozenset[str] = frozenset(
+    {"condition", "on_false", "passthrough_on_error", "timeout"}
+)
 
 
 class GuardConfig:
@@ -32,10 +35,12 @@ class GuardConfig:
         on_false: GuardBehavior | str,
         passthrough_on_error: bool = True,
         _parsed: "GuardExpression | None" = None,
+        timeout: float | None = None,
     ):
         """Initialize guard configuration."""
         self.condition = condition
         self.passthrough_on_error = passthrough_on_error
+        self.timeout = timeout
         if isinstance(on_false, GuardBehavior):
             self.on_false = on_false
         elif isinstance(on_false, str):
@@ -118,6 +123,16 @@ class GuardConfig:
                 },
             )
         parsed = GuardParser.parse(condition)
+        timeout = None
+        if "timeout" in config_dict:
+            timeout = _checked_timeout(config_dict["timeout"])
+            if parsed.type == GuardType.UDF:
+                raise ConfigValidationError(
+                    "timeout",
+                    "a UDF guard runs with no time limit, so 'timeout' does not apply to it; "
+                    "remove the key, or use a condition guard",
+                    context={"operation": "parse_guard_config"},
+                )
         if on_false is None:
             on_false = GuardBehavior.SKIP if parsed.type == GuardType.UDF else GuardBehavior.FILTER
         return cls(
@@ -125,6 +140,7 @@ class GuardConfig:
             on_false=on_false,
             passthrough_on_error=passthrough_on_error,
             _parsed=parsed,
+            timeout=timeout,
         )
 
     @classmethod
@@ -138,6 +154,23 @@ class GuardConfig:
 
     def __repr__(self):
         return f"GuardConfig(condition='{self.condition}', on_false={self.on_false})"
+
+
+def _checked_timeout(value: Any) -> float:
+    """*value* as the seconds a guard may take, refused unless a positive finite number."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ConfigValidationError(
+            "timeout",
+            f"must be a positive number of seconds, got {value!r}",
+            context={"timeout_value": repr(value), "operation": "parse_guard_config"},
+        )
+    seconds: float = value
+    return seconds
 
 
 def parse_guard_config(guard_data: str | dict[str, Any]) -> GuardConfig:
