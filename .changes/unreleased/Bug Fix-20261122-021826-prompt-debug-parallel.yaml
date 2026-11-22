@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: '`prompt_debug` prints each prompt, with its context preview and schema, as one block. When two actions ran in parallel, their lines could mix, so a printed block could show an empty prompt or another action''s prompt.'
+time: 2026-11-22T02:18:26Z
