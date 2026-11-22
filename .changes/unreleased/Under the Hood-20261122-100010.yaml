@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  The SQLite store now runs with `synchronous=NORMAL` alongside WAL, SQLite's recommended pairing.
+  Each commit stops paying for an fsync (about 7x cheaper per commit on a local disk); a commit
+  still survives a crash of the process, and an OS crash or power loss can at most roll back the
+  last few commits without corrupting the store. Per-record checkpoints are unchanged.
+time: 2026-11-22T10:00:10Z

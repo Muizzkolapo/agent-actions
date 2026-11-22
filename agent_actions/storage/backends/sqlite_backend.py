@@ -325,6 +325,9 @@ class SQLiteBackend(StorageBackend):
             timeout=StorageDefaults.SQLITE_LOCK_TIMEOUT_SECONDS,
         )
         self._connection.execute("PRAGMA journal_mode=WAL")
+        # Under WAL, NORMAL still survives a process crash; only an OS crash or power
+        # loss can drop the last commits, and the database stays consistent either way.
+        self._connection.execute("PRAGMA synchronous=NORMAL")
         self._connection.execute("PRAGMA foreign_keys=ON")
         self._connection.row_factory = sqlite3.Row
 
