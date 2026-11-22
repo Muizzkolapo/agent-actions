@@ -487,7 +487,7 @@ class CatalogGenerator:
             )
             enriched_action = self._enrich_action_with_fields(action, action_schema)
 
-            if action.get("kind") == "tool" and tool_functions_data:
+            if action.get("type") == "tool" and tool_functions_data:
                 impl_name = action.get("implementation")
                 if impl_name and impl_name in tool_functions_data:
                     enriched_action["tool_function"] = tool_functions_data[impl_name]

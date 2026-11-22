@@ -1,6 +1,7 @@
 """Agent Actions framework entry point."""
 
 import importlib
+import importlib.util
 import os
 from typing import TYPE_CHECKING, Any
 
@@ -32,9 +33,14 @@ _LAZY_EXPORTS = {
 
 def __getattr__(name: str) -> Any:
     module_name = _LAZY_EXPORTS.get(name)
-    if module_name is None:
+    if module_name is not None:
+        value = getattr(importlib.import_module(module_name), name)
+    elif not name.startswith("_") and importlib.util.find_spec(f"{__name__}.{name}"):
+        # Subpackages stay reachable as attributes after a bare ``import agent_actions``,
+        # as they were when the eager imports above loaded them as a side effect.
+        value = importlib.import_module(f"{__name__}.{name}")
+    else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    value = getattr(importlib.import_module(module_name), name)
     globals()[name] = value
     return value
 

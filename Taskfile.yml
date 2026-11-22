@@ -31,12 +31,18 @@ tasks:
     cmds:
       - uv run mypy {{.PACKAGE}}
 
+  security:
+    desc: Security scan (bandit, medium severity and up)
+    cmds:
+      - uv run bandit -c pyproject.toml -r {{.PACKAGE}} -ll -q
+
   check:
-    desc: Run all checks (lint + types + format)
+    desc: Run all checks (lint + types + format + security)
     cmds:
       - task: lint
       - task: mypy
       - task: format:check
+      - task: security
 
   # Testing
   test:

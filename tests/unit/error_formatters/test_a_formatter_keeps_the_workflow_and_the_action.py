@@ -126,7 +126,7 @@ def _yaml_error(tmp_path: Path) -> Exception:
     config.write_text("name: w\nactions:\n  - name: a\n    prompt: [unclosed\n")
     return _raised(
         lambda: ConfigRenderingService().render_and_load_config(
-            "w", config, tmp_path, tmp_path / "out"
+            "w", config, tmp_path, tmp_path / "out", project_root=tmp_path
         )
     )
 

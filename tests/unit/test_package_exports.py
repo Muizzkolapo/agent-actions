@@ -48,3 +48,26 @@ def test_the_pydantic_build_default_is_set_on_import():
     )
     repo_root = Path(agent_actions.__file__).resolve().parents[1]
     subprocess.run([sys.executable, "-c", code], check=True, cwd=repo_root)
+
+
+def _run_fresh(code: str) -> None:
+    repo_root = Path(agent_actions.__file__).resolve().parents[1]
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=repo_root)
+
+
+def test_importing_the_package_does_not_load_the_expectation_checks():
+    _run_fresh(
+        "import sys\n"
+        "import agent_actions\n"
+        "assert 'agent_actions.expectations.registry' not in sys.modules\n"
+        "assert 'agent_actions.expectations.judge' not in sys.modules\n"
+    )
+
+
+def test_subpackages_stay_reachable_after_a_bare_package_import():
+    _run_fresh(
+        "import agent_actions\n"
+        "for name in ('config', 'errors', 'utils', 'llm', 'prompt', 'storage'):\n"
+        "    assert getattr(agent_actions, name).__name__ == 'agent_actions.' + name\n"
+        "assert not hasattr(agent_actions, 'no_such_subpackage')\n"
+    )
