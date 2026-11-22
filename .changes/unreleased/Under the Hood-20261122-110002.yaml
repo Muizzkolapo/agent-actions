@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  Split `WorkflowStaticAnalyzer` into per-concern mixin modules (scope, FILE-mode, schema, guard,
+  lineage and prompt-cache checks, and graph views), keeping `analyze()` and its check order in
+  `workflow_static_analyzer.py`, which still exports every name it did. No behavior change.
+time: 2026-11-22T11:00:02Z
