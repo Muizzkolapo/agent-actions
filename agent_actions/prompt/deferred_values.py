@@ -24,6 +24,7 @@ record or a version supplies it, so nothing they decide is decided at load.
 from __future__ import annotations
 
 import bisect
+import json
 import math
 import re
 import string
@@ -56,6 +57,15 @@ _HELD_OPEN, _HELD_CLOSE = "\ue002", "\ue003"
 _TOKEN = re.compile(f"{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
 # A token as `leave` writes it in place of a value.
 _LEFT = re.compile(f" ?{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
+# The same, with the anchor or tag `leave` keeps before it.
+_LEFT_WITH_PROPERTIES = re.compile(f" ((?:[&!]\\S*[ \\t]+)*){_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
+# A character YAML does not keep as written in a quoted scalar, which JSON does not escape.
+_NOT_YAML_PRINTABLE = re.compile("[\\x7f-\\x9f\\u2028\\u2029\\ud800-\\udfff\\ufffe\\uffff]")
+# A Jinja tag held out of a value while YAML reads it, and the Jinja text it stands for.
+_TAG_OPEN, _TAG_CLOSE = "\ue006", "\ue007"
+_TAG = re.compile(f"{_TAG_OPEN}(\\d+){_TAG_CLOSE}")
+_JINJA_TAG = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
+_JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.DOTALL)
 _HELD = re.compile(f"{_HELD_OPEN}(\\d+){_HELD_CLOSE}")
 # A loaded prompt that a prompt's tag outputs, put in once the YAML is parsed.
 _LOADED_OPEN, _LOADED_CLOSE = "\ue004", "\ue005"
@@ -172,6 +182,38 @@ class _Left:
     text: str = ""
     names: Mapping[str, Any] | None = None
     while_importing: bool = False
+
+
+def _read_with_tags_held(region: _Region) -> Any:
+    """The value *region* writes, read by YAML with each Jinja tag held out of the way.
+
+    A `{{ }}` tag starts a flow mapping in YAML, so a value that begins with one does not
+    parse as written; agac reads it only once rendered, when its comment is gone.
+    """
+    tags: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        tags.append(match.group(0))
+        return f"{_TAG_OPEN}{len(tags) - 1}{_TAG_CLOSE}"
+
+    text = _JINJA_COMMENT.sub("", region.text)
+    try:
+        parsed = yaml.safe_load(region.document(_JINJA_TAG.sub(hold, text)))
+    except yaml.YAMLError:
+        return text.strip()
+    if not (isinstance(parsed, dict) and list(parsed) == ["k"]):
+        return text.strip()
+
+    def put_back(value: Any) -> Any:
+        if isinstance(value, str):
+            return _TAG.sub(lambda m: tags[int(m.group(1))], value)
+        if isinstance(value, dict):
+            return {put_back(key): put_back(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [put_back(item) for item in value]
+        return value
+
+    return put_back(parsed["k"])
 
 
 class _NotData(Exception):
@@ -458,6 +500,44 @@ class LoadRender:
             return f" <the value at {region.where}, {stage}>"
 
         return _LOADED.sub("<a prompt load_prompt loaded>", _LEFT.sub(name, text))
+
+    def written(self, data: Any) -> Any:
+        """*data* with each left value as the file writes it, and each loaded prompt put in."""
+
+        def put(text: str, _path: str) -> Any:
+            match = _TOKEN.search(text)
+            if match is None:
+                return text
+            if text.strip() != match.group(0):
+                return self.readable(text)
+            region = self._left[int(match.group(1))].region
+            try:
+                parsed = yaml.safe_load(region.document(region.text))
+            except yaml.YAMLError:
+                return _read_with_tags_held(region)
+            if isinstance(parsed, dict) and list(parsed) == ["k"]:
+                return parsed["k"]
+            return _read_with_tags_held(region)
+
+        return self.fill_loaded(_strings(data, "", put))
+
+    def written_line(self, line: str) -> str:
+        """*line* with each left value put back as the file writes its first line."""
+
+        def put(match: re.Match[str]) -> str:
+            return self._left[int(match.group(2))].region.text.split("\n", 1)[0]
+
+        return _LEFT_WITH_PROPERTIES.sub(put, line)
+
+    def written_text(self, text: str) -> str:
+        """*text* with each left value as one JSON line of the value the file writes."""
+
+        def put(match: re.Match[str]) -> str:
+            value = self.written(match.group(0).lstrip(" "))
+            dumped = json.dumps(value, ensure_ascii=False, default=str)
+            return " " + _NOT_YAML_PRINTABLE.sub(lambda c: f"\\u{ord(c.group()):04x}", dumped)
+
+        return _LEFT.sub(put, text)
 
     def explain(self, error: Exception) -> str:
         """Why a name the load found undefined is not there yet, when it is a later one."""

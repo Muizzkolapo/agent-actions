@@ -46,6 +46,16 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
     references = index.references_by_file.get(file_path, [])
     actions = index.file_actions.get(file_path, {})
 
+    parse_error = index.parse_errors.get(file_path)
+    if parse_error:
+        diagnostics.append(
+            _build_diagnostic(
+                parse_error.location,
+                f"Workflow does not render: {parse_error.message}",
+                lsp.DiagnosticSeverity.Error,
+            )
+        )
+
     for reference in references:
         if reference.type in {
             ReferenceType.PROMPT,
@@ -110,15 +120,17 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
             action_meta = actions.get(action_name)
             if not action_meta:
                 continue
+            location, where = _in_this_file(action_meta.location, file_path, index)
             diagnostics.append(
                 _build_diagnostic(
-                    action_meta.location,
-                    f"Duplicate action name `{action_name}` defined in this workflow.",
+                    location,
+                    f"Duplicate action name `{action_name}` defined in this workflow{where}.",
                     lsp.DiagnosticSeverity.Warning,
                 )
             )
 
     for action in actions.values():
+        anchor, where = _in_this_file(action.location, file_path, index)
         if action.guard_condition and action.guard_variables:
             for variable in action.guard_variables:
                 if _guard_is_unresolvable(action, index, file_path, variable):
@@ -157,10 +169,10 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                         _build_diagnostic(
                             Location(
                                 file_path=file_path,
-                                line=action.guard_line or action.location.line,
+                                line=action.guard_line or anchor.line,
                                 column=0,
                             ),
-                            message,
+                            message + where,
                             lsp.DiagnosticSeverity.Warning,
                         )
                     )
@@ -169,10 +181,10 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                 _build_diagnostic(
                     Location(
                         file_path=file_path,
-                        line=action.versions_line or action.location.line,
+                        line=action.versions_line or anchor.line,
                         column=0,
                     ),
-                    "Duplicate versions.param entries detected.",
+                    f"Duplicate versions.param entries detected{where}.",
                     lsp.DiagnosticSeverity.Warning,
                 )
             )
@@ -346,6 +358,24 @@ def _dotted_suggestions(action, index: ProjectIndex, file_path: Path, field: str
         if "." in ref and ref.rsplit(".", 1)[1] == field:
             matches.add(ref)
     return sorted(matches)
+
+
+def _in_this_file(location: Location, file_path: Path, index: ProjectIndex) -> tuple[Location, str]:
+    """Where a diagnostic about *location* sits in *file_path*, and words naming its real place.
+
+    An action a template macro defines has its line in the template, which means nothing
+    in the workflow file the diagnostic is published for.
+    """
+    if location.file_path == file_path:
+        return location, ""
+    return Location(file_path=file_path, line=0), f" (defined at {_shown(location, index)})"
+
+
+def _shown(location: Location, index: ProjectIndex) -> str:
+    path = location.file_path
+    if path.is_relative_to(index.root):
+        path = path.relative_to(index.root)
+    return f"{path} line {location.line + 1}"
 
 
 def _build_diagnostic(

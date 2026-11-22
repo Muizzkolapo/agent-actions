@@ -85,6 +85,8 @@ export interface WorkflowInfo {
     levels: Map<number, ActionInfo[]>;
     /** Summary of action statuses */
     statusSummary: StatusSummary;
+    /** Why the config did not load; the workflow then has no actions */
+    loadError?: string;
 }
 
 /**

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: The language server and the VS Code tree view now show every action of a workflow that uses Jinja, and Go to Definition on a reference to an action that a template macro defines opens the macro line. A guard or output_field that reads a version variable shows its text as written, not a placeholder. When a templates/ file does not load, a workflow with no Jinja tag still shows its actions; a workflow with a tag shows "Workflow does not render".
+time: 2026-11-21T15:00:00Z

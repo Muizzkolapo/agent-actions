@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
@@ -28,11 +29,14 @@ from .handlers import (
     semantic_tokens_legend,
 )
 from .indexer import build_index, find_all_project_roots, find_project_root
+from .jinja_source import WorkflowRenderError, render_workflow_source
 from .models import ProjectIndex
 from .resolver import get_reference_at_position, resolve_reference
 from .utils import is_in_dependencies_context, uri_to_path
 
 logger = logging.getLogger(__name__)
+
+RENDERED_WORKFLOW = "agentActions/renderedWorkflow"
 
 
 class AgentActionsLanguageServer(LanguageServer):
@@ -322,6 +326,9 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
     if file_path in index.file_actions:
         for name, action_meta in index.file_actions[file_path].items():
             location = action_meta.location
+            if location.file_path != file_path:
+                # A macro's action: its line is in the template, not in this outline.
+                continue
             symbols.append(
                 lsp.DocumentSymbol(
                     name=name,
@@ -570,6 +577,24 @@ def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
 # ---------------------------------------------------------------------------
 
 
+@server.feature(RENDERED_WORKFLOW)
+def rendered_workflow(params: Any) -> dict[str, Any]:
+    """A workflow file as `agac` renders it, for the extension, which cannot run Jinja."""
+    file_path = uri_to_path(params.uri)
+    index = _index_for_file(file_path)
+    if index is None:
+        return {"text": None, "error": None, "actionSources": {}}
+    try:
+        rendered = render_workflow_source(file_path, index.root)
+    except WorkflowRenderError as e:
+        return {"text": None, "error": e.message, "actionSources": {}}
+    sources = {
+        name: {"uri": location.file_path.as_uri(), "line": location.line}
+        for name, location in rendered.action_sources.items()
+    }
+    return {"text": rendered.text, "error": None, "actionSources": sources}
+
+
 def _publish_diagnostics(uri: str) -> None:
     """Publish diagnostics for a file."""
     publish_diagnostics(
@@ -640,6 +665,8 @@ def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
         "agent_workflow/*/agent_config/*.yml",
         "prompt_store/**/*.md",
         "agent_workflow/*/prompt_store/**/*.md",
+        "templates/**/*.jinja2",
+        "templates/**/*.j2",
     ):
         watchers.append(
             lsp.FileSystemWatcher(

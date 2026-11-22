@@ -40,7 +40,7 @@ flowchart LR
 | **Go to Definition** | A Ctrl+Click opens the source. | `$prompts.Extract` → the prompt file, line 42 |
 | **Hover** | Shows a preview of the content. You stay in the current file. | Hover on `impl: flatten_questions` → the signature of the tool function |
 | **Autocomplete** | Gives suggestions while you type. | Type `$prompts.` → a list of the available prompts |
-| **Outline** | Shows the document symbols in the sidebar. | All actions in a workflow, all prompts in a file |
+| **Outline** | Shows the document symbols in the sidebar. | The actions defined in a workflow file, all prompts in a file |
 | **Syntax Highlighting** | Gives colors to `{prompt}` tags and Jinja2. | The template syntax looks different from the other text. |
 
 ## Navigation Reference
@@ -173,6 +173,8 @@ The Explorer sidebar shows all workflows and actions in the order of execution:
 - Expand an action to see its output folders.
 - A project with more than one workflow shows all of its workflows.
 - A status summary shows the count of completed actions and the total count.
+- A workflow that uses Jinja (for example `{% from 'x.jinja2' import branch %}`) shows the actions that it renders to. The language server renders the workflow with the same step as `agac`, so the LSP must run.
+- A workflow that does not load stays in the tree. An error row gives the reason.
 
 ### DAG Visualization
 
@@ -387,8 +389,9 @@ The extension gives syntax highlighting for prompt files (Markdown with agent-ac
 To see the document symbols, open the Outline view in the VS Code Explorer sidebar.
 
 **In YAML workflow files:**
-- The view shows all action names as symbols.
+- The view shows the actions defined in the file as symbols.
 - You can go quickly to an action.
+- The view does not show an action that a template macro defines, because its line is in the template. Go to Definition on a reference to the action opens the macro line.
 
 **In Markdown prompt files:**
 - The view shows all `{prompt}` blocks.
