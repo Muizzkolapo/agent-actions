@@ -59,8 +59,13 @@ _TOKEN = re.compile(f"{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
 _LEFT = re.compile(f" ?{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
 # The same, with the anchor or tag `leave` keeps before it.
 _LEFT_WITH_PROPERTIES = re.compile(f" ((?:[&!]\\S*[ \\t]+)*){_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
-# A character YAML does not accept as written, which JSON does not escape.
-_NOT_YAML_PRINTABLE = re.compile("[\\x7f-\\x84\\x86-\\x9f\\ud800-\\udfff\\ufffe\\uffff]")
+# A character YAML does not keep as written in a quoted scalar, which JSON does not escape.
+_NOT_YAML_PRINTABLE = re.compile("[\\x7f-\\x9f\\u2028\\u2029\\ud800-\\udfff\\ufffe\\uffff]")
+# A Jinja tag held out of a value while YAML reads it, and the Jinja text it stands for.
+_TAG_OPEN, _TAG_CLOSE = "\ue006", "\ue007"
+_TAG = re.compile(f"{_TAG_OPEN}(\\d+){_TAG_CLOSE}")
+_JINJA_TAG = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
+_JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.DOTALL)
 _HELD = re.compile(f"{_HELD_OPEN}(\\d+){_HELD_CLOSE}")
 # A loaded prompt that a prompt's tag outputs, put in once the YAML is parsed.
 _LOADED_OPEN, _LOADED_CLOSE = "\ue004", "\ue005"
@@ -179,21 +184,28 @@ class _Left:
     while_importing: bool = False
 
 
-def _without_comments(text: str) -> str:
-    """*text*, YAML that does not parse on its own, with each line's comment cut off."""
-    lines = []
-    for line in text.split("\n"):
-        quote = ""
-        for i, char in enumerate(line):
-            if quote:
-                quote = "" if char == quote else quote
-            elif char in "'\"":
-                quote = char
-            elif char == "#" and (i == 0 or line[i - 1] in " \t"):
-                line = line[:i]
-                break
-        lines.append(line.rstrip())
-    return "\n".join(lines).strip()
+def _read_with_tags_held(region: _Region) -> Any:
+    """The value *region* writes, read by YAML with each Jinja tag held out of the way.
+
+    A `{{ }}` tag starts a flow mapping in YAML, so a value that begins with one does not
+    parse as written; agac reads it only once rendered, when its comment is gone.
+    """
+    tags: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        tags.append(match.group(0))
+        return f"{_TAG_OPEN}{len(tags) - 1}{_TAG_CLOSE}"
+
+    text = _JINJA_COMMENT.sub("", region.text)
+    try:
+        parsed = yaml.safe_load(region.document(_JINJA_TAG.sub(hold, text)))
+    except yaml.YAMLError:
+        return text.strip()
+    if not (isinstance(parsed, dict) and list(parsed) == ["k"]):
+        return text.strip()
+    return _strings(
+        parsed["k"], "", lambda held, _path: _TAG.sub(lambda m: tags[int(m.group(1))], held)
+    )
 
 
 class _NotData(Exception):
@@ -494,10 +506,10 @@ class LoadRender:
             try:
                 parsed = yaml.safe_load(region.document(region.text))
             except yaml.YAMLError:
-                return _without_comments(region.text)
+                return _read_with_tags_held(region)
             if isinstance(parsed, dict) and list(parsed) == ["k"]:
                 return parsed["k"]
-            return _without_comments(region.text)
+            return _read_with_tags_held(region)
 
         return self.fill_loaded(_strings(data, "", put))
 

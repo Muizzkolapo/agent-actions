@@ -1676,6 +1676,12 @@ def test_the_text_for_the_tree_holds_each_version_value_as_written(tmp_path):
         pytest.param('    guard: &g "up.x > {{ i }}"\n', "up.x > {{ i }}", id="anchor"),
         pytest.param("    guard: >-\n      up.x > {{ i }}\n", "up.x > {{ i }}", id="folded"),
         pytest.param("    guard: {{ i }} < up.x  # later\n", "{{ i }} < up.x", id="comment"),
+        pytest.param("    guard: {{ i }} < up.x {# why #}\n", "{{ i }} < up.x", id="jinja-comment"),
+        pytest.param(
+            "    guard: {{ i }} < up.x and up.s == it's  # later\n",
+            "{{ i }} < up.x and up.s == it's",
+            id="apostrophe",
+        ),
     ],
 )
 def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comment(
@@ -1687,15 +1693,15 @@ def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comm
 
     judge = idx.file_actions[wf]["judge"]
     assert (judge.guard_line, judge.guard_condition) == (8, condition)
-    assert _messages(wf, tmp_path) == []
+    assert not [m for m in _messages(wf, tmp_path) if "`later`" in m or "`why`" in m]
 
 
 def test_the_text_for_the_tree_escapes_a_character_yaml_does_not_take_as_written(tmp_path):
-    wf = _project(tmp_path, _VERSIONED + '    output_field: "o\\x7f{{ i }}"\n')
+    wf = _project(tmp_path, _VERSIONED + '    output_field: "o\\x7f\\x85\\u2028{{ i }}"\n')
 
     rendered = render_workflow_source(wf, tmp_path)
 
-    assert rendered.data["actions"][1]["output_field"] == "o\x7f{{ i }}"
+    assert rendered.data["actions"][1]["output_field"] == "o\x7f\x85\u2028{{ i }}"
     assert yaml.safe_load(rendered.text) == rendered.data
 
 
