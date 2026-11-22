@@ -196,6 +196,21 @@ class PromptPreparationResult:
     """The length of the prompt text before each `{% cache_point %}` the render reached."""
 
 
+def reads_seed_only(context_scope: dict[str, Any] | None) -> bool:
+    """Whether *context_scope* neither drops nor passes through a seed field.
+
+    Such a scope only reads the seed, so every record can share one parsed copy. A
+    drop removes fields from the record's copy, and a passed-through field is written
+    into the output, so those records get a copy of their own.
+    """
+    scope = context_scope or {}
+    return not any(
+        str(ref).startswith("seed.")
+        for directive in ("drop", "passthrough")
+        for ref in scope.get(directive) or ()
+    )
+
+
 class PromptPreparationService:
     """Single point of truth for prompt preparation across batch and online modes."""
 
@@ -265,7 +280,11 @@ class PromptPreparationService:
         if "seed" in field_context:
             field_context = {k: v for k, v in field_context.items() if k != "seed"}
         static_data = PromptPreparationService.load_seed_data(
-            agent_config, context_scope, agent_name, source=field_context.get("source")
+            agent_config,
+            context_scope,
+            agent_name,
+            source=field_context.get("source"),
+            shared=reads_seed_only(context_scope),
         )
 
         if not context_scope:
@@ -360,6 +379,7 @@ class PromptPreparationService:
             context_scope,
             request.agent_name,
             source=field_context.get("source"),
+            shared=reads_seed_only(context_scope),
         )
 
         if not context_scope:

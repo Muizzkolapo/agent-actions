@@ -312,25 +312,22 @@ def _parses_in_process(project: Path, monkeypatch) -> int:
     return len(parses)
 
 
-# What the prompt alone parses for two records, measured on the code before guards read
-# seed: one per record online; batch also renders the first record to check it.
-PROMPT_PARSES = {"online": 2, "batch": 3}
-
-
 @pytest.mark.parametrize("mode", ["online", "batch"])
 @pytest.mark.parametrize(
-    ("condition", "guard_parses"),
+    "condition",
     [
-        # A guard that does not read seed parses nothing.
-        ("source.page_content != ''", 0),
-        # One that does parses each file once for the process, not once per record.
-        ("seed.conf.mode == 'on'", 1),
+        # A guard that does not read seed.
+        "source.page_content != ''",
+        # One that does reads the copy the prompt reads.
+        "seed.conf.mode == 'on'",
     ],
 )
-def test_a_guard_adds_at_most_one_seed_parse(tmp_path, monkeypatch, mode, condition, guard_parses):
+def test_the_prompt_and_the_guard_parse_a_seed_file_once_in_all(
+    tmp_path, monkeypatch, mode, condition
+):
     project = _project(tmp_path, condition, mode, prompt_extra=" in {{ seed.conf.mode }}")
 
-    assert _parses_in_process(project, monkeypatch) == PROMPT_PARSES[mode] + guard_parses
+    assert _parses_in_process(project, monkeypatch) == 1
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])

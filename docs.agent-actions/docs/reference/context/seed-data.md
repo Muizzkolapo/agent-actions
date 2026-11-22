@@ -105,6 +105,8 @@ guard:
   on_false: filter
 ```
 
+Agent Actions reads each seed file one time in a run. Every record of a prompt or a guard reads that one copy, online and in batch. Thus a large seed file costs its memory once, not once for each record of a batch. An action whose `context_scope` drops or passes through a seed field (`drop: [seed.rules.internal_notes]`, `passthrough: [seed.rules]`) gets a copy for each record, because it changes or stores that value.
+
 A prompt or a guard that reads a seed key that its action does not declare is refused before the run.
 Pre-flight also shows a warning when a field such as `seed.rubric.criteria` is missing from a JSON or
 YAML mapping. Pre-flight does not check past a list, for example the rows of a CSV file or a JSON array.
