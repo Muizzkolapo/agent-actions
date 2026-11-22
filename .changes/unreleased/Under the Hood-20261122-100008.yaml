@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  Split the result collector's single collection function into one helper per result status,
+  plus helpers that write the queued dispositions and report the collection, with a test that
+  pins everything one collection does. No behavior change.
+time: 2026-11-22T10:00:08Z
