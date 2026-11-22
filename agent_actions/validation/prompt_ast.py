@@ -1,7 +1,6 @@
 """Jinja2 AST-based prompt template analysis."""
 
 import logging
-from dataclasses import dataclass
 from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
@@ -10,15 +9,6 @@ from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class FieldUsage:
-    """Information about how a field is used in the template."""
-
-    variable_name: str  # Full variable path: 'seed.exam_syllabus.platform_name'
-    used_in_context: str  # Where it's used: 'variable', 'filter', 'test', 'block'
-    line_number: int | None = None
 
 
 class PromptASTAnalyzer:

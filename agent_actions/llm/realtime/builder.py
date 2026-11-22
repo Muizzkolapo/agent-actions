@@ -34,7 +34,7 @@ def create_dynamic_agent(
         agent_config: Agent configuration with model/prompt settings.
         context_data_str: Context data for LLM (may be transformed with
             context_scope.drop applied).
-        formatted_prompt: Pre-formatted prompt (optional, from DataGenerator).
+        formatted_prompt: Pre-formatted prompt (optional, from PromptPreparationService).
         tools_path: Path to tool functions (optional).
         tool_args: Tool arguments (optional).
         source_content: Source content for tool handler (optional).

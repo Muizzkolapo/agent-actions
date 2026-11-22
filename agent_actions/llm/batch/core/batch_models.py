@@ -1,7 +1,7 @@
 """Data models for batch processing registry entries and task preparation."""
 
 import dataclasses
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from agent_actions.llm.batch.core.batch_constants import (
@@ -147,16 +147,6 @@ class BatchRegistryStats:
 
 
 # Phase 4 Models: Task Preparation
-
-
-@dataclass
-class BatchFilterResult:
-    """Result of filtering a single item."""
-
-    status: str
-    should_include: bool
-    reason: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

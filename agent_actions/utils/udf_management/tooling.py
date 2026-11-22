@@ -1,46 +1,9 @@
-"""Loading and execution of user-defined functions from specified modules."""
+"""Execution of registered user-defined functions and validation of their output."""
 
-from collections.abc import Callable
 from typing import Any
 
-from agent_actions.errors import AgentActionsError, ConfigurationError, SchemaValidationError
-from agent_actions.utils.module_loader import load_module_from_path
+from agent_actions.errors import AgentActionsError, SchemaValidationError
 from agent_actions.utils.safe_format import safe_format_error
-
-
-def load_user_defined_function(module_name: str, function_name: str) -> Callable:
-    """Load a user-defined function from a specified module.
-
-    Delegates module loading to :func:`~agent_actions.utils.module_loader.load_module_from_path`
-    which handles file-based loading with caching and fallback to standard import.
-
-    Raises:
-        ConfigurationError: If the module or function cannot be found.
-    """
-    module = load_module_from_path(
-        module_name,
-        module_path=None,
-        execute=True,
-        fallback_import=False,
-        cache=True,
-    )
-    if module is None:
-        raise ConfigurationError(
-            f"Module '{module_name}' for UDF not found",
-            context={"module_name": module_name},
-        )
-    try:
-        function = getattr(module, function_name)
-    except AttributeError as e:
-        raise ConfigurationError(
-            f"Function '{function_name}' not found in module '{module_name}'",
-            context={
-                "function_name": function_name,
-                "module_name": module_name,
-            },
-            cause=e,
-        ) from e
-    return function  # type: ignore[no-any-return]
 
 
 def execute_user_defined_function(
