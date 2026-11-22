@@ -1,3 +1,3 @@
-kind: Fixed
+kind: Bug Fix
 body: 'Token and character chunking no longer emits a final chunk that holds only the overlap of the one before (one fewer record, and one fewer model call, per split text). An unknown `tokenizer_model` is now a configuration error instead of a bare ValueError. A UDF module missing from the tools folder is reported as not importable, not as a missing function. `agac skills list` reads the description from SKILL.md front matter.'
 time: 2026-11-22T13:00:00.000000+00:00
